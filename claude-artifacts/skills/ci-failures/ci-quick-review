@@ -180,6 +180,131 @@ echo ""
 echo -e "${BOLD}Total Failures:${NC} ${RED}$TOTAL${NC}"
 echo ""
 
+# ============================================================================
+# Error Log Extraction Functions
+# ============================================================================
+
+extract_error_from_logs() {
+    local run_id="$1"
+
+    # Validate run_id parameter
+    if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
+        return 1
+    fi
+
+    # Validate run_id is numeric (workflow run IDs are always numeric)
+    if ! [[ "$run_id" =~ ^[0-9]+$ ]]; then
+        return 1
+    fi
+
+    # Fetch logs for the run and extract errors
+    # Use gh run view with --log to get full logs
+    local logs
+    logs=$(gh run view "$run_id" --log 2>/dev/null | grep -A 10 -B 2 -i "error\|fatal\|failed" | head -20 || echo "")
+
+    if [ -z "$logs" ]; then
+        return 1
+    fi
+
+    echo "$logs"
+}
+
+detect_error_pattern() {
+    local error_text="$1"
+
+    # Validate error_text parameter
+    # Return 2 for empty input to distinguish from "no pattern matched" (return 1)
+    if [ -z "$error_text" ]; then
+        return 2
+    fi
+
+    # Docker build errors
+    if echo "$error_text" | grep -qi "fatal: could not read Username"; then
+        echo "🔧 Missing GitHub PAT for private repos"
+        echo "   Root Cause: Docker build needs GH_PAT for private GitHub dependencies"
+        echo "   Fix: Pass --build-arg GH_PAT=\${{ secrets.GH_PAT }} to docker build"
+        return 0
+    fi
+
+    if echo "$error_text" | grep -qi "authentication required\|Authentication failed"; then
+        echo "🔧 Authentication failure"
+        echo "   Root Cause: Missing or invalid credentials for private resources"
+        echo "   Fix: Check GitHub tokens, Docker credentials, or API keys"
+        return 0
+    fi
+
+    # Poetry/Python dependency errors
+    if echo "$error_text" | grep -qi "poetry.*failed\|poetry install.*error"; then
+        echo "🔧 Poetry dependency installation failed"
+        echo "   Root Cause: Check pyproject.toml dependencies or lock file"
+        echo "   Fix: Run 'poetry lock --no-update' or check for incompatible versions"
+        return 0
+    fi
+
+    # Python module errors
+    if echo "$error_text" | grep -qi "ModuleNotFoundError\|ImportError"; then
+        local module
+        module=$(echo "$error_text" | grep -oP "(?<=No module named ')[^']+(?=')" | head -1 || echo "unknown")
+        echo "🔧 Missing Python dependency: $module"
+        echo "   Root Cause: Module not in requirements or not installed"
+        echo "   Fix: Add '$module' to pyproject.toml dependencies"
+        return 0
+    fi
+
+    # Test failures
+    if echo "$error_text" | grep -qi "FAILED.*test_\|AssertionError\|pytest.*failed"; then
+        echo "🔧 Test failures detected"
+        echo "   Root Cause: Test assertions failing"
+        echo "   Fix: Run 'pytest -v' locally to reproduce and debug"
+        return 0
+    fi
+
+    # Type checking errors
+    if echo "$error_text" | grep -qi "mypy.*error\|type.*error"; then
+        echo "🔧 Type checking errors"
+        echo "   Root Cause: Type annotations or type mismatches"
+        echo "   Fix: Run 'mypy .' locally to see all type errors"
+        return 0
+    fi
+
+    # Linting errors
+    if echo "$error_text" | grep -qi "ruff.*found\|lint.*error"; then
+        echo "🔧 Linting errors detected"
+        echo "   Root Cause: Code style or lint rule violations"
+        echo "   Fix: Run 'ruff check . --fix' to auto-fix"
+        return 0
+    fi
+
+    # Docker service connection errors
+    if echo "$error_text" | grep -qi "connection refused\|connection timeout"; then
+        echo "🔧 Service connection failure"
+        echo "   Root Cause: Service not ready or network issue"
+        echo "   Fix: Add health checks or increase timeout in CI config"
+        return 0
+    fi
+
+    # Generic error with snippet
+    local error_line
+    error_line=$(echo "$error_text" | grep -i "error\|fatal\|failed" | head -1 | sed 's/^[[:space:]]*//' | cut -c1-80)
+    if [ -n "$error_line" ]; then
+        echo "❌ Error: $error_line"
+        return 0
+    fi
+
+    # Fallback: error text exists but no recognizable pattern found
+    # Provide first non-empty line as context instead of failing silently
+    local first_line
+    first_line=$(echo "$error_text" | grep -v '^[[:space:]]*$' | head -1 | sed 's/^[[:space:]]*//' | cut -c1-80)
+    if [ -n "$first_line" ]; then
+        echo "❓ Unrecognized error pattern. First log line:"
+        echo "   $first_line"
+        return 0
+    fi
+
+    # No useful content found in error text
+    return 1
+}
+
 # Display failed jobs grouped by workflow
 echo -e "${BOLD}Failed Jobs:${NC}"
 echo ""
@@ -198,23 +323,47 @@ while IFS= read -r workflow; do
     echo "$CI_JSON" | jq -r --arg workflow "$workflow" '
         .failures[] |
         select(.workflow == $workflow) |
-        "\(.severity)\t\(.job)\t\(.step)"
-    ' | while IFS=$'\t' read -r severity job step; do
+        "\(.severity)\t\(.workflow_id)\t\(.job)\t\(.step)"
+    ' | while IFS=$'\t' read -r severity run_id job step; do
         # Color code by severity
         case $severity in
             critical)
-                echo -e "    ${RED}●${NC} ${job} → ${step}"
+                echo -e "    ${RED}🔴 CRITICAL:${NC} ${job} → ${step}"
                 ;;
             major)
-                echo -e "    ${YELLOW}●${NC} ${job} → ${step}"
+                echo -e "    ${YELLOW}🟠 MAJOR:${NC} ${job} → ${step}"
                 ;;
             minor)
-                echo -e "    ${BLUE}●${NC} ${job} → ${step}"
+                echo -e "    ${BLUE}🟡 MINOR:${NC} ${job} → ${step}"
                 ;;
             *)
                 echo -e "    ${NC}●${NC} ${job} → ${step}"
                 ;;
         esac
+
+        # Fetch and display error logs for this failure
+        if [ -n "$run_id" ] && [ "$run_id" != "null" ]; then
+            # Extract errors from logs
+            error_logs=$(extract_error_from_logs "$run_id" 2>/dev/null || echo "")
+
+            if [ -n "$error_logs" ]; then
+                # Detect error pattern and provide diagnosis
+                diagnosis=$(detect_error_pattern "$error_logs" 2>/dev/null || echo "")
+
+                if [ -n "$diagnosis" ]; then
+                    echo "$diagnosis" | while IFS= read -r line; do
+                        echo -e "       ${MAGENTA}${line}${NC}"
+                    done
+                else
+                    # Show first few lines of error log
+                    echo -e "       ${MAGENTA}Error snippet:${NC}"
+                    # Use -E for extended regex (portable BSD/GNU) and character classes for case-insensitivity
+                    echo "$error_logs" | head -3 | sed 's/^/         /' | sed -E "s/([Ee][Rr][Rr][Oo][Rr]|[Ff][Aa][Tt][Aa][Ll]|[Ff][Aa][Ii][Ll][Ee][Dd])/${RED}\1${MAGENTA}/g"
+                fi
+            fi
+        fi
+
+        echo ""
     done
 
     echo ""

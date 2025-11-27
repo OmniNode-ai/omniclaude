@@ -207,11 +207,7 @@ class PatternFeedbackCollector:
         # Recall: correct / (correct + false_negatives)
         # This requires tracking what patterns were missed
         recall = None  # TODO: Implement recall tracking in future iteration
-
-        # F1 Score (if recall available)
-        f1_score = None
-        if recall is not None and precision > 0 and recall > 0:
-            f1_score = 2 * (precision * recall) / (precision + recall)
+        f1_score = None  # F1 score requires recall (not yet implemented)
 
         # Identify common false positives
         all_false_positives: List[str] = []
@@ -506,7 +502,7 @@ class PatternFeedbackCollector:
         # Ensure threshold is reasonable (0.65 - 0.90)
         threshold = max(0.65, min(0.90, threshold))
 
-        return threshold
+        return float(threshold)
 
     async def _get_pattern_feedback_details(
         self, pattern_name: str
@@ -517,6 +513,8 @@ class PatternFeedbackCollector:
         This is a helper that fetches raw feedback records from the database.
         """
         pool = await self.persistence._ensure_pool()
+        if pool is None:
+            return []
         async with pool.acquire() as conn:
             rows = await conn.fetch(
                 """
@@ -539,6 +537,8 @@ class PatternFeedbackCollector:
         function doesn't handle them.
         """
         pool = await self.persistence._ensure_pool()
+        if pool is None:
+            return
         async with pool.acquire() as conn:
             await conn.execute(
                 """

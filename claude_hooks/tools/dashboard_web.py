@@ -12,7 +12,8 @@ from typing import Any, AsyncGenerator, Dict, Optional
 import requests
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
-from system_dashboard_md import SystemDashboard
+
+from ..system_dashboard_md import SystemDashboard
 
 
 logger = logging.getLogger(__name__)

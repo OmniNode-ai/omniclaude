@@ -172,6 +172,11 @@ class RouterMetricsCollector:
         # Initialize thresholds
         self._load_thresholds()
 
+    @property
+    def threshold_count(self) -> int:
+        """Return the number of configured performance thresholds."""
+        return len(self._thresholds)
+
     def _load_thresholds(self):
         """Load performance thresholds from configuration."""
         # These are the 33 thresholds from performance-thresholds.yaml
@@ -924,7 +929,7 @@ class RouterMetricsCollector:
         """
         start_time = time.time()
 
-        report = {
+        report: Dict[str, Any] = {
             "generated_at": datetime.now().isoformat(),
             "cache_statistics": self.get_cache_statistics(),
             "routing_statistics": self.get_routing_statistics(),
@@ -934,6 +939,8 @@ class RouterMetricsCollector:
             "optimization_recommendations": [],
             "generation_time_ms": 0,
         }
+        performance_trends: Dict[str, Any] = report["performance_trends"]
+        optimization_recommendations: List[str] = report["optimization_recommendations"]
 
         # Analyze trends for each metric type
         for metric_type in [
@@ -944,7 +951,7 @@ class RouterMetricsCollector:
         ]:
             trend = await self.analyze_trends(metric_type)
             if trend:
-                report["performance_trends"][metric_type.value] = {
+                performance_trends[metric_type.value] = {
                     "current_mean": trend.current_mean,
                     "baseline_mean": trend.baseline_mean,
                     "degradation_percent": trend.degradation_percent,
@@ -955,7 +962,7 @@ class RouterMetricsCollector:
 
                 # Add to overall recommendations if degrading
                 if trend.trend_direction == "degrading":
-                    report["optimization_recommendations"].extend(trend.recommendations)
+                    optimization_recommendations.extend(trend.recommendations)
 
         # Get recent violations
         violations = await self.get_recent_violations(count=10)
@@ -973,10 +980,11 @@ class RouterMetricsCollector:
         ]
 
         # Add cache-specific recommendations
-        cache_stats = report["cache_statistics"]
-        if cache_stats["hit_rate_percent"] < 60:
-            report["optimization_recommendations"].append(
-                f"Cache hit rate ({cache_stats['hit_rate_percent']:.1f}%) below target (60%) - review caching strategy"
+        cache_stats: Dict[str, Any] = report["cache_statistics"]
+        hit_rate_percent: float = cache_stats["hit_rate_percent"]
+        if hit_rate_percent < 60:
+            optimization_recommendations.append(
+                f"Cache hit rate ({hit_rate_percent:.1f}%) below target (60%) - review caching strategy"
             )
 
         # Calculate report generation time

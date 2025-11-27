@@ -92,7 +92,7 @@ def get_correlation_id() -> str:
 
         context = get_correlation_context()
         if context and "correlation_id" in context:
-            return context["correlation_id"]
+            return str(context["correlation_id"])
     except Exception:
         pass
 
@@ -118,7 +118,7 @@ def get_agent_name() -> str:
 
         context = get_correlation_context()
         if context and "agent_name" in context:
-            return context["agent_name"]
+            return str(context["agent_name"])
     except Exception:
         pass
 
@@ -303,7 +303,7 @@ def log_success(
     correlation_id = correlation_id or get_correlation_id()
 
     # Build success details JSON
-    success_details = {
+    success_details: Dict[str, Any] = {
         "success_type": success_type,
         "success_message": success_message,
         "success_context": success_context or {},

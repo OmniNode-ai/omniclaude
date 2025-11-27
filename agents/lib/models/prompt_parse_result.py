@@ -6,7 +6,6 @@ This module defines the data structures used to represent parsed prompt metadata
 for autonomous node generation.
 """
 
-from typing import List
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, field_validator
@@ -42,11 +41,11 @@ class PromptParseResult(BaseModel):
         ..., description="Business description of what the node does", min_length=1
     )
 
-    functional_requirements: List[str] = Field(
+    functional_requirements: list[str] = Field(
         default_factory=list, description="Extracted functional requirements"
     )
 
-    external_systems: List[str] = Field(
+    external_systems: list[str] = Field(
         default_factory=list,
         description="Detected external system dependencies (e.g., 'PostgreSQL', 'Redis')",
     )

@@ -18,12 +18,12 @@ Setup:
 import asyncio
 import tempfile
 import time
+from typing import Any
 from uuid import uuid4
 
-from lib.codegen_workflow import CodegenWorkflow
-from lib.simple_prd_analyzer import PRDAnalyzer
-
-from tests.fixtures.phase4_fixtures import EFFECT_NODE_PRD
+from agents.lib.codegen_workflow import CodegenWorkflow
+from agents.lib.simple_prd_analyzer import PRDAnalyzer
+from agents.tests.fixtures.phase4_fixtures import EFFECT_NODE_PRD
 
 
 async def benchmark_sequential_generation(num_nodes: int = 6) -> float:
@@ -131,15 +131,15 @@ async def run_comprehensive_benchmark():
         {"num_nodes": 9, "workers": 3, "name": "Large (9 nodes)"},
     ]
 
-    results = []
+    results: list[dict[str, Any]] = []
 
     for config in configurations:
         print(f"\n\n{'=' * 60}")
         print(f"Configuration: {config['name']}")
         print(f"{'=' * 60}")
 
-        num_nodes = config["num_nodes"]
-        workers = config["workers"]
+        num_nodes: int = config["num_nodes"]  # type: ignore[assignment]
+        workers: int = config["workers"]  # type: ignore[assignment]
 
         # Sequential
         sequential_time = await benchmark_sequential_generation(num_nodes)
@@ -192,8 +192,9 @@ async def run_comprehensive_benchmark():
     print("=" * 60)
 
     target_speedup = 3.0
-    best_speedup = max(r["speedup"] for r in results)
-    avg_speedup = sum(r["speedup"] for r in results) / len(results)
+    speedups: list[float] = [float(r["speedup"]) for r in results]
+    best_speedup = max(speedups)
+    avg_speedup = sum(speedups) / len(speedups)
 
     print(f"Target Speedup:  {target_speedup:.1f}x")
     print(

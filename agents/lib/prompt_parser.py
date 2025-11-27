@@ -331,9 +331,9 @@ class PromptParser:
         # Strategy 3: Generate from node type and context
         # Extract key noun from prompt
         prompt_lower = prompt.lower()
-        for system, patterns in self.EXTERNAL_SYSTEM_PATTERNS.items():
-            for pattern in patterns:
-                if re.search(pattern, prompt_lower):
+        for system, system_patterns in self.EXTERNAL_SYSTEM_PATTERNS.items():
+            for sys_pattern in system_patterns:
+                if re.search(sys_pattern, prompt_lower):
                     # Generate name from system
                     base_name = system.replace(" ", "")
                     # Add action verb if EFFECT

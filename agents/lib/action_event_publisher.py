@@ -44,7 +44,9 @@ from uuid import UUID, uuid4
 
 # Import Pydantic Settings for type-safe configuration
 try:
-    from config import settings
+    from config import settings as _settings_instance
+
+    settings: Any = _settings_instance
 except ImportError:
     settings = None
 
@@ -70,7 +72,7 @@ logger = logging.getLogger(__name__)
 KAFKA_PUBLISH_TIMEOUT_SECONDS = 10.0
 
 # Lazy-loaded Kafka producer (singleton)
-_kafka_producer = None
+_kafka_producer: Optional[Any] = None
 _producer_lock: Optional[asyncio.Lock] = None
 
 # Threading lock for thread-safe asyncio.Lock creation
@@ -107,27 +109,31 @@ async def get_producer_lock():
 def _get_kafka_bootstrap_servers() -> str:
     """Get Kafka bootstrap servers from environment or settings."""
     # Try Pydantic settings first (if available)
-    if settings:
+    if settings is not None:
         try:
-            servers = settings.get_effective_kafka_bootstrap_servers()
+            servers: str = settings.get_effective_kafka_bootstrap_servers()
             return servers
         except Exception as e:
             logger.debug(f"Failed to get Kafka servers from settings: {e}")
 
     # Fall back to environment variable
-    servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS")
-    if not servers:
-        # Use production external endpoint as last resort (matches Pydantic settings default for host)
-        # Note: For Docker contexts, KAFKA_BOOTSTRAP_SERVERS should be explicitly set to internal endpoint
-        servers = "192.168.86.200:29092"
-        logger.warning(
-            f"KAFKA_BOOTSTRAP_SERVERS not configured. Using production external endpoint: {servers}. "
-            f"For Docker containers, set KAFKA_BOOTSTRAP_SERVERS=omninode-bridge-redpanda:9092"
-        )
-    return servers
+    env_servers: Optional[str] = os.getenv("KAFKA_BOOTSTRAP_SERVERS")
+    if env_servers:
+        return env_servers
+
+    # Use localhost as safe default - works in most development environments
+    # Production deployments should always set KAFKA_BOOTSTRAP_SERVERS explicitly
+    fallback_host = os.getenv("KAFKA_FALLBACK_HOST", "localhost")
+    fallback_port = os.getenv("KAFKA_FALLBACK_PORT", "9092")
+    default_servers = f"{fallback_host}:{fallback_port}"
+    logger.warning(
+        f"KAFKA_BOOTSTRAP_SERVERS not configured. Using fallback: {default_servers}. "
+        f"Set KAFKA_BOOTSTRAP_SERVERS environment variable for production use."
+    )
+    return default_servers
 
 
-async def _get_kafka_producer():
+async def _get_kafka_producer() -> Any:
     """
     Get or create Kafka producer (async singleton pattern).
 
@@ -136,14 +142,18 @@ async def _get_kafka_producer():
     """
     global _kafka_producer
 
-    if _kafka_producer is not None:
-        return _kafka_producer
+    # Check if producer already exists - use local reference for type narrowing
+    producer = _kafka_producer
+    if producer is not None:
+        return producer
 
     # Get the lock (created lazily under running event loop)
-    async with await get_producer_lock():
+    lock = await get_producer_lock()
+    async with lock:
         # Double-check after acquiring lock
-        if _kafka_producer is not None:
-            return _kafka_producer
+        producer = _kafka_producer
+        if producer is not None:
+            return producer
 
         try:
             from aiokafka import AIOKafkaProducer

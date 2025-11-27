@@ -18,10 +18,14 @@ ONEX v2.0 Compliance:
 import ast
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, cast
 
 from ..models.model_quality_gate import EnumQualityGate, ModelQualityGateResult
 from .base_quality_gate import BaseQualityGate
+
+
+# Type alias for status literal
+StatusLiteral = Literal["passed", "failed", "skipped"]
 
 
 class ONEXStandardsValidator(BaseQualityGate):
@@ -119,6 +123,7 @@ class ONEXStandardsValidator(BaseQualityGate):
         self._check_node_types(tree, issues, warnings)
 
         # Determine status
+        status: StatusLiteral
         if issues:
             status = "failed"
             message = f"ONEX standards violations: {len(issues)} issues found"
@@ -332,6 +337,7 @@ class AntiYOLOComplianceValidator(BaseQualityGate):
                     )
 
         # Determine status
+        status: StatusLiteral
         if issues:
             status = "failed"
             message = f"Anti-YOLO violations: {len(issues)} issues found"
@@ -449,6 +455,7 @@ class TypeSafetyValidator(BaseQualityGate):
             )
 
         # Determine status
+        status: StatusLiteral
         if issues:
             status = "failed"
             message = f"Type safety violations: {len(issues)} issues found"
@@ -660,6 +667,7 @@ class ErrorHandlingValidator(BaseQualityGate):
         self._check_finally_blocks(tree, warnings)
 
         # Determine status
+        status: StatusLiteral
         if issues:
             status = "failed"
             message = f"Error handling violations: {len(issues)} issues found"
@@ -731,7 +739,7 @@ class ErrorHandlingValidator(BaseQualityGate):
         """Check if code block allocates resources (files, connections, etc)."""
         resource_keywords = ["open", "connect", "acquire", "allocate", "session"]
 
-        for node in ast.walk(ast.Module(body=body)):
+        for node in ast.walk(ast.Module(body=body, type_ignores=[])):
             if isinstance(node, ast.Call):
                 if (
                     isinstance(node.func, ast.Name)

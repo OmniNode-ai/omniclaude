@@ -23,42 +23,37 @@ import os
 import re
 import subprocess
 import sys
+import threading
+import traceback
 from datetime import datetime, timezone
 from importlib import import_module
 from pathlib import Path
 from time import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 from uuid import UUID, uuid4
 
-# Load environment variables from .env file
+# Load environment variables from .env file BEFORE importing omnibase_core modules
+# which may depend on environment variables for configuration
 from dotenv import load_dotenv
 
 
 load_dotenv()  # Load .env file automatically
 
-# Import from omnibase_core  # noqa: E402 (must load .env first)
+# All imports below MUST come after load_dotenv() - omnibase_core requires env vars
 from omnibase_core.errors import EnumCoreErrorCode, OnexError  # noqa: E402
 
-# Import interactive validation  # noqa: E402
 from ..parallel_execution.interactive_validator import (  # noqa: E402
     CheckpointType,
     UserChoice,
     create_validator,
 )
 from .aggregators.gate_result_aggregator import GateResultAggregator  # noqa: E402
-
-# Import code refinement components  # noqa: E402
 from .code_refiner import CodeRefiner  # noqa: E402
-from .dashboard.quality_dashboard import QualityDashboard  # noqa: E402
 
-# Import contract building components  # noqa: E402
+# QualityDashboard lazy-loaded to avoid Rich import overhead (~50-150ms)
 from .generation.contract_builder_factory import ContractBuilderFactory  # noqa: E402
-
-# Import existing components  # noqa: E402
 from .intelligence_gatherer import IntelligenceGatherer  # noqa: E402
 from .models.intelligence_context import IntelligenceContext  # noqa: E402
-
-# Import performance tracking and quality gates  # noqa: E402
 from .models.model_performance_tracking import (  # noqa: E402
     MetricsCollector,
 )
@@ -67,8 +62,6 @@ from .models.model_quality_gate import (  # noqa: E402
     ModelQualityGateResult,
     QualityGateRegistry,
 )
-
-# Import pipeline models  # noqa: E402
 from .models.pipeline_models import (  # noqa: E402
     GateType,
     PipelineResult,
@@ -109,7 +102,7 @@ from .validators.quality_compliance_validators import (  # noqa: E402
     TypeSafetyValidator,
 )
 
-# Import quality gate validators  # noqa: E402
+# Import quality gate validators
 from .validators.sequential_validators import (  # noqa: E402
     InputValidationValidator,
     IntegrationTestingValidator,
@@ -119,20 +112,29 @@ from .validators.sequential_validators import (  # noqa: E402
 from .warning_fixer import apply_automatic_fixes  # noqa: E402
 
 
-# Import quorum validation (optional dependency)
+# Import types under TYPE_CHECKING for proper type hints without runtime dependency
+if TYPE_CHECKING:
+    from ..parallel_execution.quorum_validator import (
+        QuorumResult as _QuorumResultType,
+        QuorumValidator as _QuorumValidatorType,
+    )
+    from .dashboard.quality_dashboard import QualityDashboard as _QualityDashboardType
+
+# Runtime import for quorum validation (optional dependency)
+QUORUM_AVAILABLE = False
+QuorumResult: type | None = None
+QuorumValidator: type | None = None
+ValidationDecision: type | None = None
+
 try:
     from ..parallel_execution.quorum_validator import (
-        QuorumResult,
+        QuorumResult,  # noqa: F401 - needed for availability pattern
         QuorumValidator,
         ValidationDecision,
     )
 
     QUORUM_AVAILABLE = True
 except ImportError as e:
-    QUORUM_AVAILABLE = False
-    QuorumResult = None
-    QuorumValidator = None
-    ValidationDecision = None
     logging.warning(f"Quorum validation not available: {e}")
 
 logger = logging.getLogger(__name__)
@@ -165,12 +167,12 @@ class GenerationPipeline:
 
     def __init__(
         self,
-        template_engine: Optional[OmniNodeTemplateEngine] = None,
+        template_engine: OmniNodeTemplateEngine | None = None,
         enable_compilation_testing: bool = True,
         enable_intelligence_gathering: bool = True,
         interactive_mode: bool = False,
-        session_file: Optional[Path] = None,
-        quorum_config: Optional[QuorumConfig] = None,
+        session_file: Path | None = None,
+        quorum_config: QuorumConfig | None = None,
     ):
         """
         Initialize generation pipeline.
@@ -201,17 +203,17 @@ class GenerationPipeline:
         )
 
         # Lazy-initialize intelligence gatherer (only if needed)
-        self._intelligence_gatherer: Optional[IntelligenceGatherer] = None
+        self._intelligence_gatherer: IntelligenceGatherer | None = None
 
         # Lazy-initialize quorum validator (only if needed and available)
-        self._quorum_validator: Optional[QuorumValidator] = None
+        self._quorum_validator: "_QuorumValidatorType | None" = None
 
         # Lazy-initialize code refiner (only if needed)
-        self._code_refiner: Optional[CodeRefiner] = None
+        self._code_refiner: CodeRefiner | None = None
 
         # Track written files for rollback
-        self.written_files: List[Path] = []
-        self.temp_files: List[Path] = []
+        self.written_files: list[Path] = []
+        self.temp_files: list[Path] = []
 
         # Performance tracking and quality gates (Week 1 Day 5)
         self.metrics_collector = MetricsCollector()
@@ -219,7 +221,7 @@ class GenerationPipeline:
 
         # Quality gate aggregation and dashboard (Week 2 Poly-J)
         self.gate_aggregator = GateResultAggregator(self.quality_gate_registry)
-        self.quality_dashboard = QualityDashboard()
+        self._quality_dashboard: "_QualityDashboardType | None" = None  # Lazy-loaded
 
         # Pattern extraction and storage (Week 2 Poly-E, Poly-I)
         from .patterns.pattern_extractor import PatternExtractor
@@ -228,8 +230,10 @@ class GenerationPipeline:
         self.pattern_extractor = PatternExtractor(min_confidence=0.6)
         self.pattern_storage = PatternStorage(use_in_memory=True)  # In-memory for now
 
-        # Register quality gate validators (POLY-F, POLY-I)
-        self._register_quality_validators()
+        # Lazy-load quality gate validators (POLY-F, POLY-I)
+        # Deferred until first quality gate check to save ~50-100ms on initialization
+        self._validators_registered = False
+        self._validator_lock = threading.Lock()  # Thread-safe validator registration
 
         # Configure performance thresholds for all stages
         self._configure_performance_thresholds()
@@ -240,6 +244,15 @@ class GenerationPipeline:
         self.logger.info(
             "✅ Pipeline initialization complete with framework integration"
         )
+
+    @property
+    def quality_dashboard(self) -> "_QualityDashboardType":
+        """Lazy-load quality dashboard to avoid Rich import overhead (~50-150ms)."""
+        if self._quality_dashboard is None:
+            from .dashboard.quality_dashboard import QualityDashboard
+
+            self._quality_dashboard = QualityDashboard()
+        return self._quality_dashboard
 
     def _find_project_root(self, start_path: Optional[Path] = None) -> Optional[Path]:
         """
@@ -361,6 +374,30 @@ class GenerationPipeline:
             "KV-001 to KV-002, FV-001 to FV-002, QC-001 to QC-004, PF-001 to PF-002)"
         )
 
+    def _ensure_validators_registered(self) -> None:
+        """
+        Lazy-register validators only when needed.
+
+        This defers the import of 8 validator modules and instantiation of 23 validators
+        until the first quality gate check, saving ~50-100ms on pipeline initialization.
+
+        Thread-safe: Uses double-checked locking pattern to prevent race conditions
+        while minimizing lock contention. The first check (without lock) provides a
+        fast path for the common case where validators are already registered.
+        """
+        # Fast path: check without lock (most calls after first registration)
+        if self._validators_registered:
+            return
+
+        # Slow path: acquire lock and double-check
+        with self._validator_lock:
+            # Double-check after acquiring lock to handle race condition
+            # where another thread registered between our check and lock acquisition
+            if self._validators_registered:
+                return
+            self._register_quality_validators()
+            self._validators_registered = True
+
     async def _check_quality_gate(
         self, gate: EnumQualityGate, context: Dict[str, Any]
     ) -> ModelQualityGateResult:
@@ -374,6 +411,8 @@ class GenerationPipeline:
         Returns:
             Quality gate result
         """
+        # Lazy-load validators on first quality gate check
+        self._ensure_validators_registered()
         return await self.quality_gate_registry.check_gate(gate, context)
 
     async def _extract_and_validate_patterns(
@@ -419,7 +458,7 @@ class GenerationPipeline:
                             "confidence_score": pattern.confidence_score,
                             "source_context": pattern.source_context or {},
                             "reuse_conditions": pattern.reuse_conditions or [],
-                            "examples": pattern.examples or [],
+                            "examples": pattern.example_usage or [],
                         }
                     )
             except Exception as e:
@@ -438,7 +477,7 @@ class GenerationPipeline:
                     "confidence_score": 0.8,
                     "source_context": metadata,
                     "reuse_conditions": [stage_name],
-                    "examples": [{"stage": stage_name, "metadata": metadata}],
+                    "examples": [f"Stage: {stage_name}"],
                 }
             )
 
@@ -489,13 +528,14 @@ class GenerationPipeline:
         stages: List[PipelineStage] = []
         status = "failed"
         output_path = None
-        generated_files = []
+        generated_files: List[str] = []
         node_type = None
         service_name = None
         domain = None
         validation_passed = False
         compilation_passed = False
-        error_summary = None
+        error_summary: Optional[str] = None
+        error_traceback: Optional[str] = None
 
         # POLY-I: Framework Integration (FV-002) - Validates framework setup is correct
         gate_fv002 = await self._check_quality_gate(
@@ -676,7 +716,7 @@ class GenerationPipeline:
                     "required_stages": required_stages,
                     "planning_completed": True,  # Stage 2 contract building = planning
                     "quality_gates_executed": [
-                        g.gate_name for s in stages for g in s.validation_gates
+                        g.name for s in stages for g in s.validation_gates
                     ],
                     "skipped_stages": [
                         s.stage_name for s in stages if s.status == StageStatus.SKIPPED
@@ -691,7 +731,7 @@ class GenerationPipeline:
                     f"Anti-YOLO validation failed: {gate_anti_yolo.message}"
                 )
                 self.logger.warning(
-                    f"Issues: {gate_anti_yolo.metadata.get('issues', [])}"
+                    f"Issues: {(gate_anti_yolo.metadata or {}).get('issues', [])}"
                 )
 
             # Quality Gate: Process Validation (SV-002) - After Stage 3, before Stage 4
@@ -699,7 +739,7 @@ class GenerationPipeline:
                 EnumQualityGate.PROCESS_VALIDATION,
                 {
                     "current_stage": "stage_4",
-                    "completed_stages": [s.name for s in stages],
+                    "completed_stages": [s.stage_name for s in stages],
                     "expected_stages": (
                         [
                             "Stage 1: Prompt Parsing",
@@ -901,7 +941,7 @@ class GenerationPipeline:
                     "validation_passed": validation_passed,
                     "node_type": node_type,
                     "validation_gates": (
-                        [g.to_dict() for g in stage5.validation_gates]
+                        [g.model_dump() for g in stage5.validation_gates]
                         if hasattr(stage5, "validation_gates")
                         else []
                     ),
@@ -928,7 +968,7 @@ class GenerationPipeline:
                     f"ONEX Standards validation failed: {gate_onex_standards.message}"
                 )
                 self.logger.warning(
-                    f"Issues: {gate_onex_standards.metadata.get('issues', [])}"
+                    f"Issues: {(gate_onex_standards.metadata or {}).get('issues', [])}"
                 )
 
             # Quality Gate: Error Handling (QC-004) - After post-validation
@@ -1016,12 +1056,13 @@ class GenerationPipeline:
 
             # POLY-I: UAKS Integration (KV-001) - Capture knowledge for UAKS
             # Collect all patterns extracted during the pipeline
-            all_patterns = []
-            for result in self.quality_gate_registry.get_results(
+            all_patterns: List[Any] = []
+            for gate_result in self.quality_gate_registry.get_results(
                 EnumQualityGate.PATTERN_RECOGNITION
             ):
-                if result.passed and result.metadata.get("patterns_extracted"):
-                    all_patterns.extend(result.metadata["patterns_extracted"])
+                gate_metadata = gate_result.metadata or {}
+                if gate_result.passed and gate_metadata.get("patterns_extracted"):
+                    all_patterns.extend(gate_metadata["patterns_extracted"])
 
             gate_kv001 = await self._check_quality_gate(
                 EnumQualityGate.UAKS_INTEGRATION,
@@ -1037,7 +1078,7 @@ class GenerationPipeline:
                             {
                                 "stage": "1.5",
                                 "intelligence_context": (
-                                    intelligence_context.to_dict()
+                                    intelligence_context.model_dump()
                                     if intelligence_context
                                     else {}
                                 ),
@@ -1072,6 +1113,8 @@ class GenerationPipeline:
 
         except OnexError as e:
             error_summary = str(e)
+            error_traceback = traceback.format_exc()
+            error_type_name = type(e).__name__  # Capture actual exception class name
             self.logger.error(
                 f"Pipeline failed for correlation_id={correlation_id}: {error_summary}"
             )
@@ -1081,6 +1124,8 @@ class GenerationPipeline:
 
         except Exception as e:
             error_summary = f"Unexpected error: {str(e)}"
+            error_traceback = traceback.format_exc()
+            error_type_name = type(e).__name__  # Capture actual exception class name
             self.logger.error(
                 f"Pipeline failed with unexpected error: {error_summary}",
                 exc_info=True,
@@ -1088,6 +1133,63 @@ class GenerationPipeline:
 
             # Rollback written files
             await self._rollback(stages[-1].stage_name if stages else "unknown")
+
+        # Early return on error - include rich metadata for debugging
+        # Even on failure, callers may need partial results, timing data, and error context
+        if status != "success":
+            total_duration_ms = int((time() - start_time) * 1000)
+            self.logger.info(
+                f"Pipeline failed, skipping post-error quality gates. "
+                f"Duration: {total_duration_ms}ms"
+            )
+
+            # Determine the last successful stage for error context
+            last_successful_stage = None
+            failed_stage = None
+            for stage in stages:
+                if stage.status == StageStatus.COMPLETED:
+                    last_successful_stage = stage.stage_name
+                elif stage.status == StageStatus.FAILED:
+                    failed_stage = stage.stage_name
+                    break
+
+            # Build comprehensive error metadata
+            error_metadata: Dict[str, Any] = {
+                "prompt": prompt,
+                "output_directory": output_directory,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                # Performance metrics collected up to failure point
+                "performance_metrics": self.metrics_collector.get_summary(),
+                # Quality gates that were checked before failure
+                "quality_gates": self.quality_gate_registry.get_summary(),
+                # Error context for debugging
+                "error_context": {
+                    "error_type": error_type_name,  # Actual exception class name
+                    "error_traceback": error_traceback,
+                    "last_successful_stage": last_successful_stage,
+                    "failed_stage": failed_stage,
+                    "stages_completed": sum(
+                        1 for s in stages if s.status == StageStatus.COMPLETED
+                    ),
+                    "total_stages_attempted": len(stages),
+                },
+            }
+
+            return PipelineResult(
+                status=status,
+                correlation_id=correlation_id,
+                node_type=node_type,
+                service_name=service_name,
+                domain=domain,
+                stages=stages,
+                output_path=output_path,
+                generated_files=generated_files,
+                validation_passed=validation_passed,
+                compilation_passed=compilation_passed,
+                error_summary=error_summary,
+                total_duration_ms=total_duration_ms,
+                metadata=error_metadata,
+            )
 
         # Calculate total duration
         total_duration_ms = int((time() - start_time) * 1000)
@@ -1109,7 +1211,7 @@ class GenerationPipeline:
                 f"Performance validation failed: {gate_performance.message}"
             )
             self.logger.warning(
-                f"Breaches: {gate_performance.metadata.get('total_breaches', 0)}"
+                f"Breaches: {(gate_performance.metadata or {}).get('total_breaches', 0)}"
             )
 
         # Quality Gate: Resource Utilization (PF-002) - Continuous monitoring
@@ -1301,7 +1403,7 @@ class GenerationPipeline:
                 "performance_metrics": self.metrics_collector.get_summary(),
                 "quality_gates": self.quality_gate_registry.get_summary(),
                 # Week 2 Poly-J: Add comprehensive quality report
-                "quality_report": quality_report.to_dict(),
+                "quality_report": quality_report.model_dump(),
             },
         )
 
@@ -1797,8 +1899,9 @@ class GenerationPipeline:
 
         try:
             # Generate node using template engine with intelligence
+            # Note: SimplePRDAnalysisResult is structurally compatible with PRDAnalysisResult
             generation_result = await self.template_engine.generate_node(
-                analysis_result=analysis_result,
+                analysis_result=analysis_result,  # type: ignore[arg-type]
                 node_type=node_type,
                 microservice_name=service_name,
                 domain=domain,
@@ -1993,9 +2096,9 @@ except ImportError:
             # Insert imports after the last import statement
             # Handle multi-line imports with backslash continuations
             import_pattern = r"((?:import |from )(?:[^\n]|\\\n)+\n)+"
-            match = list(re.finditer(import_pattern, node_code))
-            if match:
-                last_import_end = match[-1].end()
+            import_matches = list(re.finditer(import_pattern, node_code))
+            if import_matches:
+                last_import_end = import_matches[-1].end()
                 # Find the next blank line or class definition
                 next_section = node_code[last_import_end : last_import_end + 200]
                 blank_line = next_section.find("\n\n")
@@ -2214,7 +2317,7 @@ except ImportError:
         self,
         generated_files: Dict[str, Any],
         validation_gates: List[ValidationGate],
-        quorum_result: Optional["QuorumResult"],
+        quorum_result: Optional["_QuorumResultType"],
         intelligence: IntelligenceContext,
         correlation_id: UUID,
         node_type: str,
@@ -2354,7 +2457,7 @@ except ImportError:
     def _build_refinement_context(
         self,
         validation_gates: List[ValidationGate],
-        quorum_result: Optional["QuorumResult"],
+        quorum_result: Optional["_QuorumResultType"],
         intelligence: IntelligenceContext,
     ) -> List[str]:
         """
@@ -2408,7 +2511,7 @@ except ImportError:
     def _check_refinement_needed(
         self,
         validation_gates: List[ValidationGate],
-        quorum_result: Optional["QuorumResult"],
+        quorum_result: Optional["_QuorumResultType"],
     ) -> bool:
         """
         Check if code refinement is needed based on validation results.
@@ -2424,10 +2527,12 @@ except ImportError:
         has_warnings = any(gate.status == "warning" for gate in validation_gates)
 
         # Check for quorum deficiencies
-        has_quorum_deficiencies = quorum_result and len(quorum_result.deficiencies) > 0
+        has_quorum_deficiencies = bool(
+            quorum_result and len(quorum_result.deficiencies) > 0
+        )
 
         # Check for low quorum confidence
-        low_quorum_confidence = quorum_result and quorum_result.confidence < 0.8
+        low_quorum_confidence = bool(quorum_result and quorum_result.confidence < 0.8)
 
         return has_warnings or has_quorum_deficiencies or low_quorum_confidence
 

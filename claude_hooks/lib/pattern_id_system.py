@@ -547,8 +547,8 @@ class PatternDeduplicator:
             List of PatternMetadata in lineage order (oldest to newest)
         """
         with self._lock:
-            lineage = []
-            current_id = pattern_id
+            lineage: List[PatternMetadata] = []
+            current_id: Optional[str] = pattern_id
 
             # Trace back to root
             while current_id:

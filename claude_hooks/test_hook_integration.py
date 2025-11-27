@@ -13,21 +13,18 @@ import json
 import sys
 import time
 from pathlib import Path
+from typing import Any, Dict
+
+from .lib.hook_event_logger import HookEventLogger
+from .lib.post_tool_metrics import collect_post_tool_metrics
 
 
-# Add lib to path
-sys.path.insert(0, str(Path(__file__).parent / "lib"))
-
-from hook_event_logger import HookEventLogger
-from post_tool_metrics import collect_post_tool_metrics
-
-
-def simulate_write_operation():
+def simulate_write_operation() -> bool:
     """Simulate a Write tool execution."""
     print("\n=== Simulating Write Operation ===\n")
 
     # Simulate tool info JSON (as received by PostToolUse hook)
-    tool_info = {
+    tool_info: Dict[str, Any] = {
         "tool_name": "Write",
         "tool_input": {
             "file_path": "/test/calculator.py",
@@ -52,10 +49,13 @@ def divide(a, b):
         "tool_response": {"success": True, "message": "File written successfully"},
     }
 
+    tool_input: Dict[str, Any] = tool_info["tool_input"]
+    tool_name: str = tool_info["tool_name"]
+
     print("📝 Tool Info:")
-    print(f"  Tool: {tool_info['tool_name']}")
-    print(f"  File: {tool_info['tool_input']['file_path']}")
-    print(f"  Size: {len(tool_info['tool_input']['content'])} bytes")
+    print(f"  Tool: {tool_name}")
+    print(f"  File: {tool_input['file_path']}")
+    print(f"  Size: {len(tool_input['content'])} bytes")
     print()
 
     # 1. Collect enhanced metrics
@@ -82,11 +82,11 @@ def divide(a, b):
             source="PostToolUse",
             action="tool_completion",
             resource="tool",
-            resource_id=tool_info["tool_name"],
+            resource_id=tool_name,
             payload={
-                "tool_name": tool_info["tool_name"],
+                "tool_name": tool_name,
                 "tool_output": tool_info["tool_response"],
-                "file_path": tool_info["tool_input"]["file_path"],
+                "file_path": tool_input["file_path"],
                 "enhanced_metadata": enhanced_metadata,
                 "auto_fix_applied": False,
                 "auto_fix_details": None,
@@ -148,11 +148,11 @@ def divide(a, b):
         return False
 
 
-def simulate_failed_operation():
+def simulate_failed_operation() -> bool:
     """Simulate a failed tool execution."""
     print("\n=== Simulating Failed Operation ===\n")
 
-    tool_info = {
+    tool_info: Dict[str, Any] = {
         "tool_name": "Edit",
         "tool_input": {
             "file_path": "/test/nonexistent.py",
@@ -161,10 +161,12 @@ def simulate_failed_operation():
         },
         "tool_response": {"error": "File not found: /test/nonexistent.py"},
     }
+    tool_input: Dict[str, Any] = tool_info["tool_input"]
+    tool_name: str = tool_info["tool_name"]
 
     print("📝 Tool Info:")
-    print(f"  Tool: {tool_info['tool_name']}")
-    print(f"  File: {tool_info['tool_input']['file_path']}")
+    print(f"  Tool: {tool_name}")
+    print(f"  File: {tool_input['file_path']}")
     print()
 
     # Collect metrics

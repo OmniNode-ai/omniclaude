@@ -13,11 +13,7 @@ import os
 import sys
 from unittest.mock import patch
 
-
-# Add current directory to path
-sys.path.insert(0, os.path.dirname(__file__))
-
-from session_intelligence import get_environment_metadata
+from .session_intelligence import get_environment_metadata
 
 
 def test_username_fallback():

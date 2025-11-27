@@ -78,7 +78,8 @@ class FileUtils:
         """Read JSON data from file."""
         try:
             content = self.read_file(file_path)
-            return json.loads(content)
+            result: Dict[str, Any] = json.loads(content)
+            return result
         except json.JSONDecodeError as e:
             raise ValueError(f"Invalid JSON in file {file_path}: {e}")
 
@@ -218,7 +219,9 @@ class FileUtils:
             "dirname": os.path.dirname(full_path),
         }
 
-    def clean_directory(self, directory_path: str, keep_pattern: str = None) -> int:
+    def clean_directory(
+        self, directory_path: str, keep_pattern: Optional[str] = None
+    ) -> int:
         """Clean directory, optionally keeping files matching pattern."""
         full_path = self._resolve_path(directory_path)
 
@@ -416,7 +419,7 @@ class BackupManager:
                 try:
                     metadata = self.file_utils.read_json(metadata_path)
                 except (json.JSONDecodeError, FileNotFoundError):
-                    pass
+                    pass  # nosec B110 - metadata is optional, defaults to empty dict
 
             backup_info = self.file_utils.get_file_info(backup_path)
             backup_info.update(metadata)

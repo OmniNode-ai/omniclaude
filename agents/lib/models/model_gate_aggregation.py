@@ -20,7 +20,7 @@ ONEX v2.0 Compliance:
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -181,10 +181,10 @@ class ModelGateAggregation(BaseModel):
     average_execution_time_ms: float = Field(
         ..., ge=0.0, description="Average execution time per gate"
     )
-    slowest_gate: Optional[dict[str, Any]] = Field(
+    slowest_gate: dict[str, Any] | None = Field(
         default=None, description="Details of slowest gate execution"
     )
-    fastest_gate: Optional[dict[str, Any]] = Field(
+    fastest_gate: dict[str, Any] | None = Field(
         default=None, description="Details of fastest gate execution"
     )
 

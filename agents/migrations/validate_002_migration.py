@@ -22,7 +22,7 @@ Usage:
 import os
 import sys
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -31,7 +31,7 @@ from psycopg2.extras import RealDictCursor
 class MigrationValidator:
     """Validate migration 002 data quality"""
 
-    def __init__(self, db_password: str = None):
+    def __init__(self, db_password: Optional[str] = None):
         # Priority: explicit password > POSTGRES_PASSWORD env var (no hardcoded default)
         password = (
             db_password

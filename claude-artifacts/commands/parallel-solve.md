@@ -76,9 +76,25 @@ Create a plan to execute tasks in parallel:
 
 ## Phase 4: Execute Plan
 
-**🚨 CRITICAL REQUIREMENT: YOU MUST USE THE TASK TOOL 🚨**
+**🚨 CRITICAL REQUIREMENT: ALWAYS DISPATCH POLYMORPHIC AGENTS (POLLYS) 🚨**
 
-**DO NOT execute tasks yourself** - you MUST dispatch EVERY task to a polymorphic agent using the Task tool.
+**DO NOT execute tasks yourself** - you MUST dispatch EVERY task to a **polymorphic-agent** using the Task tool.
+
+### 🟣 MANDATORY: subagent_type="polymorphic-agent"
+
+**EVERY Task tool call MUST use:**
+```
+subagent_type="polymorphic-agent"
+```
+
+**NEVER use these subagent_types:**
+- ❌ `general-purpose` - NO, use polymorphic-agent
+- ❌ `Explore` - NO, use polymorphic-agent
+- ❌ `Plan` - NO, use polymorphic-agent
+- ❌ Any other type - NO, ALWAYS use polymorphic-agent
+
+**WHY**: Polymorphic agents (pollys) have full ONEX capabilities, intelligence integration,
+quality gates, and proper observability. Generic agents do not.
 
 ### ❌ WRONG (Running commands directly):
 ```
@@ -86,6 +102,8 @@ DO NOT DO THIS IN COORDINATOR:
 - Edit: file.py to change code
 - Write: file.py with new content
 - Bash: running implementation commands directly
+- Task with subagent_type="general-purpose" ← WRONG!
+- Task with subagent_type="Explore" ← WRONG!
 
 DO NOT DO THIS IN SPAWNED AGENTS:
 - Bash: git add file.py && git commit
@@ -98,7 +116,7 @@ Git operations are ONLY for the main coordinator when EXPLICITLY requested by th
 not for spawned polymorphic agents.
 ```
 
-### ✅ CORRECT (Dispatching to polymorphic agent):
+### ✅ CORRECT (Dispatching to polymorphic-agent):
 
 **For EACH task, you MUST call Task tool like this:**
 
@@ -260,14 +278,16 @@ After all fixes are complete, **ASK the user** if they want to:
 - Run Bash/Edit/Write commands directly to execute tasks
 - Execute tasks yourself instead of using Task tool
 - Skip dispatching to polymorphic agents
+- **Use any subagent_type other than "polymorphic-agent"** ← CRITICAL
+- Use `general-purpose`, `Explore`, `Plan`, or any other agent type
 - Reject tasks because they're "enhancements" or "features" instead of bugs
 - **Run git commands in spawned agents** (git add, git commit, git push, git stash, etc.)
 - **Automatically commit changes** without explicit user approval
 - **Assume user wants changes committed** - always ask first
 
 **DO**:
-- Use Task tool for EVERY task in your plan (bugs, features, enhancements, optimizations, etc.)
-- Dispatch multiple independent tasks in parallel
+- **ALWAYS use subagent_type="polymorphic-agent"** for EVERY Task dispatch (bugs, features, enhancements, optimizations, etc.) ← MANDATORY
+- Dispatch multiple independent pollys in parallel
 - Provide detailed context in each Task prompt
 - Include Intelligence Context from hooks
 - Track refactor attempts per task (use internal state tracking)

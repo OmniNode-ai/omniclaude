@@ -6,24 +6,31 @@ Uses direct HTTP POST requests to the FastMCP stateless HTTP endpoint.
 
 import asyncio
 import json
-from typing import Any, Dict, Optional
+from typing import Any, Any as TypingAny, Callable, Dict, Optional
 
 import httpx
 
 
+log_llm_call: Callable[..., TypingAny] | None = None
 try:
-    from agents.lib.llm_logging import log_llm_call  # type: ignore
-except Exception:
-    log_llm_call = None  # type: ignore
+    from agents.lib.llm_logging import log_llm_call as _log_llm_call
 
-try:
-    from agents.lib.circuit_breaker import (  # type: ignore
-        CircuitBreakerConfig,
-        call_with_breaker,
-    )
+    log_llm_call = _log_llm_call
 except Exception:
-    call_with_breaker = None  # type: ignore
-    CircuitBreakerConfig = None  # type: ignore
+    log_llm_call = None
+
+call_with_breaker: Callable[..., TypingAny] | None = None
+CircuitBreakerConfig: type | None = None
+try:
+    from agents.lib.circuit_breaker import (
+        CircuitBreakerConfig as _CircuitBreakerConfig,
+        call_with_breaker as _call_with_breaker,
+    )
+
+    call_with_breaker = _call_with_breaker
+    CircuitBreakerConfig = _CircuitBreakerConfig
+except Exception:
+    pass
 
 
 class ArchonMCPClient:
@@ -38,13 +45,13 @@ class ArchonMCPClient:
         self.base_url = base_url
         self.mcp_url = f"{base_url}/mcp"
         self.request_id = 0
-        self.client = None
+        self.client: Optional[httpx.AsyncClient] = None
         self.default_timeout = default_timeout
         self.enable_circuit_breaker = enable_circuit_breaker
 
         # Circuit breaker configuration for MCP calls
-        self.circuit_breaker_config = None
-        if enable_circuit_breaker and CircuitBreakerConfig:
+        self.circuit_breaker_config: TypingAny = None
+        if enable_circuit_breaker and CircuitBreakerConfig is not None:
             self.circuit_breaker_config = CircuitBreakerConfig(
                 failure_threshold=3,  # Open after 3 failures
                 timeout_seconds=30.0,  # Wait 30s before trying again
@@ -83,14 +90,18 @@ class ArchonMCPClient:
             RuntimeError: If MCP service is unavailable or returns error
         """
         # Use circuit breaker if enabled
-        if self.enable_circuit_breaker and call_with_breaker:
+        if self.enable_circuit_breaker and call_with_breaker is not None:
             success, result = await call_with_breaker(
                 "mcp_client", self._call_tool_internal, tool_name, timeout, **kwargs
             )
             if success:
-                return result
+                if isinstance(result, dict):
+                    return result
+                return {"result": result}
             else:
-                raise result
+                if isinstance(result, Exception):
+                    raise result
+                raise RuntimeError(f"Circuit breaker call failed: {result}")
         else:
             return await self._call_tool_internal(tool_name, timeout, **kwargs)
 
@@ -113,9 +124,14 @@ class ArchonMCPClient:
         }
 
         try:
+            if self.client is None:
+                raise RuntimeError("HTTP client not initialized")
+
+            client = self.client  # Local reference for type narrowing
+
             # Wrap HTTP call with asyncio timeout for additional protection
-            async def _make_request():
-                response = await self.client.post(
+            async def _make_request() -> httpx.Response:
+                response = await client.post(
                     self.mcp_url,
                     json=request,
                     headers={
@@ -140,7 +156,7 @@ class ArchonMCPClient:
                     try:
                         events.append(json.loads(event_data))
                     except json.JSONDecodeError:
-                        pass
+                        pass  # nosec B110 - skip malformed SSE events, handled below
 
             # Get the last event (should be the result)
             if not events:
@@ -165,7 +181,8 @@ class ArchonMCPClient:
                     if isinstance(first_item, dict) and "text" in first_item:
                         # Try to parse as JSON
                         try:
-                            return json.loads(first_item["text"])
+                            parsed: Dict[str, Any] = json.loads(first_item["text"])
+                            return parsed
                         except json.JSONDecodeError:
                             # Return as plain text
                             return {"result": first_item["text"]}
@@ -185,9 +202,11 @@ class ArchonMCPClient:
                         ),
                     )
             except Exception:
-                pass
+                pass  # nosec B110 - best-effort logging, main result returned below
 
-            return mcp_result
+            if isinstance(mcp_result, dict):
+                return mcp_result
+            return {"result": mcp_result}
 
         except asyncio.TimeoutError:
             raise RuntimeError(

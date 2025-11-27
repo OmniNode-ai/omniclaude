@@ -287,13 +287,13 @@ class FrameworkMethodDetector:
             return base.id
         elif isinstance(base, ast.Attribute):
             # Handle module.Class format
-            parts = []
-            node = base
-            while isinstance(node, ast.Attribute):
-                parts.append(node.attr)
-                node = node.value
-            if isinstance(node, ast.Name):
-                parts.append(node.id)
+            parts: List[str] = []
+            current: ast.expr = base
+            while isinstance(current, ast.Attribute):
+                parts.append(current.attr)
+                current = current.value
+            if isinstance(current, ast.Name):
+                parts.append(current.id)
             return ".".join(reversed(parts))
         return None
 
@@ -303,13 +303,13 @@ class FrameworkMethodDetector:
             return decorator.id
         elif isinstance(decorator, ast.Attribute):
             # Handle @app.get format
-            parts = []
-            node = decorator
-            while isinstance(node, ast.Attribute):
-                parts.append(node.attr)
-                node = node.value
-            if isinstance(node, ast.Name):
-                parts.append(node.id)
+            parts: List[str] = []
+            current: ast.expr = decorator
+            while isinstance(current, ast.Attribute):
+                parts.append(current.attr)
+                current = current.value
+            if isinstance(current, ast.Name):
+                parts.append(current.id)
             return ".".join(reversed(parts))
         elif isinstance(decorator, ast.Call):
             # Handle @decorator() format

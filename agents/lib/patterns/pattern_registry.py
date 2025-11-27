@@ -7,7 +7,7 @@ Provides pattern lookup, caching, and priority ordering.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from .aggregation_pattern import AggregationPattern
 from .crud_pattern import CRUDPattern
@@ -108,7 +108,7 @@ class PatternRegistry:
                 f"using {pattern_match.pattern_type} pattern"
             )
 
-            return code
+            return cast(str | None, code)
 
         except Exception as e:
             self.logger.error(
@@ -131,7 +131,7 @@ class PatternRegistry:
         if not pattern:
             return []
 
-        return pattern.get_required_imports()
+        return cast(List[str], pattern.get_required_imports())
 
     def get_required_mixins_for_pattern(self, pattern_type: PatternType) -> List[str]:
         """
@@ -148,7 +148,7 @@ class PatternRegistry:
         if not pattern:
             return []
 
-        return pattern.get_required_mixins()
+        return cast(List[str], pattern.get_required_mixins())
 
     def matches_capability(
         self, pattern_type: PatternType, capability: Dict[str, Any]
@@ -168,7 +168,7 @@ class PatternRegistry:
         if not pattern:
             return 0.0
 
-        return pattern.matches(capability)
+        return cast(float, pattern.matches(capability))
 
     def get_pattern_priorities(self) -> Dict[PatternType, int]:
         """

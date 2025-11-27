@@ -13,7 +13,7 @@ ONEX v2.0 Compliance:
 - Performance targets: PF <50ms per gate
 """
 
-from typing import Any
+from typing import Any, Literal
 
 import psutil
 
@@ -141,6 +141,7 @@ class PerformanceThresholdsValidator(BaseQualityGate):
                 )
 
         # Determine status
+        status: Literal["passed", "failed", "skipped"]
         if issues:
             status = "failed"
             message = f"Performance threshold violations: {len(issues)} issues, {summary.total_breaches} total breaches"
@@ -273,6 +274,7 @@ class ResourceUtilizationValidator(BaseQualityGate):
             )
 
         # Determine status
+        status: Literal["passed", "failed", "skipped"]
         if issues:
             status = "failed"
             message = f"Resource utilization violations: {len(issues)} issues found"

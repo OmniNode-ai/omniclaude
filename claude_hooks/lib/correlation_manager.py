@@ -116,7 +116,8 @@ class CorrelationManager:
             with open(self.correlation_file, "w") as f:
                 json.dump(state, f)
 
-            return state
+            result: Dict[str, Any] = state
+            return result
 
         except Exception:
             return None

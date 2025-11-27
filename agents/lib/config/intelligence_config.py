@@ -45,10 +45,10 @@ from pydantic import BaseModel, Field, field_validator
 
 # Lazy import of settings to avoid circular dependency
 # Settings is loaded on first access, not at module import time
-_settings_cache = None
+_settings_cache: Any = None
 
 
-def _get_settings():
+def _get_settings() -> Any:
     """Lazy import settings from global config package (cached)."""
     global _settings_cache
     if _settings_cache is not None:
@@ -57,7 +57,6 @@ def _get_settings():
     # Use importlib to load settings from absolute file path
     # This bypasses sys.path resolution and avoids conflicts with local config package
     import importlib.util
-    import sys
     from pathlib import Path as _Path
 
     _project_root = _Path(__file__).parent.parent.parent.parent
@@ -67,7 +66,11 @@ def _get_settings():
     spec = importlib.util.spec_from_file_location(
         "_global_config_settings", _settings_file
     )
+    if spec is None:
+        raise RuntimeError(f"Could not load spec from {_settings_file}")
     settings_module = importlib.util.module_from_spec(spec)
+    if spec.loader is None:
+        raise RuntimeError(f"Spec loader is None for {_settings_file}")
     spec.loader.exec_module(settings_module)
 
     # Get settings singleton

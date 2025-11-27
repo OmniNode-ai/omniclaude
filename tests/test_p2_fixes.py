@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from omnibase_core.errors.error_codes import EnumCoreErrorCode
 from omnibase_core.errors.model_onex_error import ModelOnexError
+from omnibase_core.models.container.model_onex_container import ModelONEXContainer
 
 from omniclaude.debug_loop.enum_provider import EnumProvider
 
@@ -24,15 +25,21 @@ from omniclaude.debug_loop.node_model_price_catalog_effect import (
 from omniclaude.debug_loop.node_stf_hash_compute import NodeSTFHashCompute
 
 
+@pytest.fixture
+def container():
+    """Create a test container for ONEX nodes."""
+    return ModelONEXContainer()
+
+
 # ============================================================================
 # TASK-8: STF Hash Compute - AST-based normalization tests
 # ============================================================================
 
 
 @pytest.mark.asyncio
-async def test_ast_based_comment_removal():
+async def test_ast_based_comment_removal(container):
     """Test that comments are removed using AST (not regex)."""
-    node = NodeSTFHashCompute()
+    node = NodeSTFHashCompute(container=container)
 
     code = """
 def hello():
@@ -60,9 +67,9 @@ def hello():
 
 
 @pytest.mark.asyncio
-async def test_ast_based_docstring_removal():
+async def test_ast_based_docstring_removal(container):
     """Test that ONLY actual docstrings are removed (not all triple-quoted strings)."""
-    node = NodeSTFHashCompute()
+    node = NodeSTFHashCompute(container=container)
 
     code = '''
 def hello():
@@ -92,9 +99,9 @@ def hello():
 
 
 @pytest.mark.asyncio
-async def test_ast_handles_edge_cases():
+async def test_ast_handles_edge_cases(container):
     """Test that AST handles edge cases that regex would break on."""
-    node = NodeSTFHashCompute()
+    node = NodeSTFHashCompute(container=container)
 
     # Edge case: # in strings, nested quotes, etc.
     code = """
@@ -126,9 +133,9 @@ def test():
 
 
 @pytest.mark.asyncio
-async def test_hash_consistency():
+async def test_hash_consistency(container):
     """Test that identical code produces identical hashes."""
-    node = NodeSTFHashCompute()
+    node = NodeSTFHashCompute(container=container)
 
     code1 = """
 def hello():
@@ -157,10 +164,10 @@ def hello():
 
 
 @pytest.mark.asyncio
-async def test_update_pricing_validates_provider():
+async def test_update_pricing_validates_provider(container):
     """Test that update_pricing validates provider using EnumProvider."""
     mock_db = AsyncMock()
-    node = NodeModelPriceCatalogEffect(db_protocol=mock_db)
+    node = NodeModelPriceCatalogEffect(db_protocol=mock_db, container=container)
 
     contract = {
         "operation": "update_pricing",
@@ -180,10 +187,10 @@ async def test_update_pricing_validates_provider():
 
 
 @pytest.mark.asyncio
-async def test_get_pricing_validates_provider():
+async def test_get_pricing_validates_provider(container):
     """Test that get_pricing validates provider using EnumProvider."""
     mock_db = AsyncMock()
-    node = NodeModelPriceCatalogEffect(db_protocol=mock_db)
+    node = NodeModelPriceCatalogEffect(db_protocol=mock_db, container=container)
 
     contract = {
         "operation": "get_pricing",
@@ -199,10 +206,10 @@ async def test_get_pricing_validates_provider():
 
 
 @pytest.mark.asyncio
-async def test_list_models_validates_provider():
+async def test_list_models_validates_provider(container):
     """Test that list_models validates provider filter using EnumProvider."""
     mock_db = AsyncMock()
-    node = NodeModelPriceCatalogEffect(db_protocol=mock_db)
+    node = NodeModelPriceCatalogEffect(db_protocol=mock_db, container=container)
 
     contract = {
         "operation": "list_models",
@@ -219,7 +226,7 @@ async def test_list_models_validates_provider():
 
 
 @pytest.mark.asyncio
-async def test_valid_provider_accepted():
+async def test_valid_provider_accepted(container):
     """Test that valid providers are accepted."""
     mock_db = AsyncMock()
     mock_db.fetch_one.return_value = {
@@ -241,7 +248,7 @@ async def test_valid_provider_accepted():
         "updated_at": "2024-01-01T00:00:00Z",
     }
 
-    node = NodeModelPriceCatalogEffect(db_protocol=mock_db)
+    node = NodeModelPriceCatalogEffect(db_protocol=mock_db, container=container)
 
     contract = {
         "operation": "get_pricing",
@@ -262,7 +269,8 @@ async def test_all_enum_providers_valid():
     valid_providers = EnumProvider.get_valid_providers()
 
     # Verify common providers are in the enum
-    expected_providers = ["anthropic", "openai", "gemini"]
+    # Note: EnumProvider uses "google" not "gemini" for Google models
+    expected_providers = ["anthropic", "openai", "google"]
     for provider in expected_providers:
         assert (
             provider in valid_providers
@@ -276,15 +284,15 @@ async def test_all_enum_providers_valid():
 
 
 @pytest.mark.asyncio
-async def test_integration_both_nodes_work():
+async def test_integration_both_nodes_work(container):
     """Integration test: verify both nodes can be imported and instantiated."""
     # TASK-8: STF Hash Compute
-    hash_node = NodeSTFHashCompute()
+    hash_node = NodeSTFHashCompute(container=container)
     assert hash_node is not None
 
     # TASK-9: Model Price Catalog
     mock_db = AsyncMock()
-    catalog_node = NodeModelPriceCatalogEffect(db_protocol=mock_db)
+    catalog_node = NodeModelPriceCatalogEffect(db_protocol=mock_db, container=container)
     assert catalog_node is not None
 
     # Verify AST is being used (not regex)

@@ -5,23 +5,45 @@ import asyncio
 import sys
 import time
 from pathlib import Path
-from typing import Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional, Type
 
 import yaml
 
 
-# Add lib directory to path AFTER stdlib imports
+# Define script directory
 SCRIPT_DIR = Path(__file__).parent
-sys.path.insert(0, str(SCRIPT_DIR / "lib"))
 
-# Import pattern tracker (graceful fallback if unavailable)
+# Add parent directory to sys.path for direct script execution
+# This enables absolute imports when run as a standalone script
+parent_dir = SCRIPT_DIR.parent
+if str(parent_dir) not in sys.path:
+    sys.path.insert(0, str(parent_dir))
+
+# Import pattern tracker (supports both module and script execution)
+# Use TYPE_CHECKING to allow type hints without runtime dependency
+if TYPE_CHECKING:
+    from .lib.pattern_tracker_sync import PatternTrackerSync as PatternTrackerSyncType
+
+PatternTrackerSyncClass: Optional[Type[Any]] = None
+PATTERN_TRACKING_ENABLED = False
+
 try:
-    from pattern_tracker_sync import PatternTrackerSync
+    # Try relative import first (when used as a module)
+    from .lib.pattern_tracker_sync import PatternTrackerSync
 
+    PatternTrackerSyncClass = PatternTrackerSync
     PATTERN_TRACKING_ENABLED = True
 except ImportError:
-    PATTERN_TRACKING_ENABLED = False
-    PatternTrackerSync = None
+    try:
+        # Fall back to absolute import (when run as a script)
+        from claude_hooks.lib.pattern_tracker_sync import PatternTrackerSync
+
+        PatternTrackerSyncClass = PatternTrackerSync
+        PATTERN_TRACKING_ENABLED = True
+    except ImportError:
+        # Pattern tracking unavailable
+        PATTERN_TRACKING_ENABLED = False
+        PatternTrackerSyncClass = None
 
 
 def load_config():
@@ -31,7 +53,7 @@ def load_config():
         return yaml.safe_load(f)
 
 
-def track_pattern_for_file(file_path: str, config: dict) -> bool:
+def track_pattern_for_file(file_path_str: str, config: dict) -> bool:
     """
     Track pattern for a file independently of auto-fix.
 
@@ -39,13 +61,13 @@ def track_pattern_for_file(file_path: str, config: dict) -> bool:
     happens even when auto-fix is disabled.
 
     Args:
-        file_path: Path to file to track
+        file_path_str: Path to file to track
         config: Configuration dict
 
     Returns:
         True if pattern tracking succeeded, False otherwise
     """
-    file_path = Path(file_path)
+    file_path = Path(file_path_str)
 
     # Check if pattern tracking is enabled
     pattern_config = config.get("pattern_tracking", {})
@@ -54,7 +76,7 @@ def track_pattern_for_file(file_path: str, config: dict) -> bool:
         return False
 
     # Check if pattern tracker is available
-    if not PATTERN_TRACKING_ENABLED:
+    if not PATTERN_TRACKING_ENABLED or PatternTrackerSyncClass is None:
         print(
             "[PostToolUse] Pattern tracking: UNAVAILABLE (module not imported)",
             file=sys.stderr,
@@ -77,7 +99,7 @@ def track_pattern_for_file(file_path: str, config: dict) -> bool:
 
     # Initialize pattern tracker
     try:
-        pattern_tracker = PatternTrackerSync()
+        pattern_tracker = PatternTrackerSyncClass()
         print(
             f"[PostToolUse] Pattern tracker: ENABLED (session: {pattern_tracker.session_id})",
             file=sys.stderr,
@@ -161,8 +183,18 @@ def apply_correction(content: str, correction: Dict) -> str:
         Modified content with correction applied, or original on error
     """
     try:
-        from correction.ast_corrector import apply_single_correction
-        from correction.framework_detector import FrameworkMethodDetector
+        # Try relative imports first (when used as a module)
+        try:
+            from .lib.correction.ast_corrector import apply_single_correction
+            from .lib.correction.framework_detector import FrameworkMethodDetector
+        except ImportError:
+            # Fall back to absolute imports (when run as a script)
+            from claude_hooks.lib.correction.ast_corrector import (
+                apply_single_correction,
+            )
+            from claude_hooks.lib.correction.framework_detector import (
+                FrameworkMethodDetector,
+            )
 
         # Create framework detector
         detector = FrameworkMethodDetector()
@@ -179,19 +211,19 @@ def apply_correction(content: str, correction: Dict) -> str:
         return content
 
 
-async def apply_fixes_to_file_async(file_path: str, config: dict) -> bool:
+async def apply_fixes_to_file_async(file_path_str: str, config: dict) -> bool:
     """
     Apply naming convention fixes to a file (async version).
 
     Args:
-        file_path: Path to file to fix
+        file_path_str: Path to file to fix
         config: Configuration dict
 
     Returns:
         True if fixes were applied, False otherwise
     """
     start_time = time.time()
-    file_path = Path(file_path)
+    file_path = Path(file_path_str)
 
     print(f"[PostToolUse] ===== START processing {file_path} =====", file=sys.stderr)
 
@@ -206,10 +238,10 @@ async def apply_fixes_to_file_async(file_path: str, config: dict) -> bool:
         return False
 
     # Initialize pattern tracker if enabled
-    pattern_tracker: Optional[PatternTrackerSync] = None
-    if PATTERN_TRACKING_ENABLED:
+    pattern_tracker: Optional[Any] = None
+    if PATTERN_TRACKING_ENABLED and PatternTrackerSyncClass is not None:
         try:
-            pattern_tracker = PatternTrackerSync()
+            pattern_tracker = PatternTrackerSyncClass()
             print(
                 f"[PostToolUse] Pattern tracker: ENABLED (session: {pattern_tracker.session_id})",
                 file=sys.stderr,
@@ -326,7 +358,12 @@ async def apply_fixes_to_file_async(file_path: str, config: dict) -> bool:
 
     # Phase 2: Generate corrections
     print("[PostToolUse] Generating corrections...", file=sys.stderr)
-    from correction.generator import CorrectionGenerator
+
+    # Import generator (supports both module and script execution)
+    try:
+        from .lib.correction.generator import CorrectionGenerator
+    except ImportError:
+        from claude_hooks.lib.correction.generator import CorrectionGenerator
 
     generator = CorrectionGenerator()
 
@@ -353,14 +390,23 @@ async def apply_fixes_to_file_async(file_path: str, config: dict) -> bool:
 
     if quorum_enabled:
         print(f"[PostToolUse] Running AI Quorum for {len(corrections)} correction(s)")
-        from consensus.quorum import AIQuorum
+
+        # Import quorum (supports both module and script execution)
+        try:
+            from .lib.consensus.quorum import AIQuorum
+        except ImportError:
+            from claude_hooks.lib.consensus.quorum import AIQuorum
 
         quorum = AIQuorum()  # AIQuorum loads config internally
 
         scored_corrections = []
         for correction in corrections:
+            # quorum.score_correction expects (correction_description: str, original: str, path: str)
+            correction_desc = (
+                f"{correction.get('old_name', '')} -> {correction.get('new_name', '')}"
+            )
             score = await quorum.score_correction(
-                correction, original_content, str(file_path)
+                correction_desc, original_content, str(file_path)
             )
             if score.should_apply:
                 scored_corrections.append((correction, score))

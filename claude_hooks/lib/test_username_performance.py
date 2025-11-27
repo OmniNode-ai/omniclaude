@@ -9,11 +9,7 @@ import os
 import sys
 import time
 
-
-# Add current directory to path
-sys.path.insert(0, os.path.dirname(__file__))
-
-from session_intelligence import get_environment_metadata, get_git_metadata
+from .session_intelligence import get_environment_metadata, get_git_metadata
 
 
 def benchmark_metadata_capture(iterations=100):

@@ -2,10 +2,23 @@
 
 import asyncio
 
-from metrics_collector import get_metrics_collector
+from .metrics_collector import get_metrics_collector
 
 
-async def main():
+async def main() -> None:
+    """Quick validation test of RouterMetricsCollector functionality.
+
+    Tests basic operations: recording routing decisions, recording threshold metrics,
+    and retrieving statistics. Intended for manual validation during development.
+
+    Returns:
+        None
+
+    Example:
+        >>> await main()
+        Testing RouterMetricsCollector...
+        ✓ Metrics collector working!
+    """
     print("Testing RouterMetricsCollector...")
     collector = get_metrics_collector()
 
@@ -30,7 +43,7 @@ async def main():
     print("\n✓ Metrics collector working!")
     print(f"  Routing decisions: {routing_stats['total_decisions']}")
     print(f"  Cache hit rate: {cache_stats['hit_rate_percent']:.1f}%")
-    print(f"  Thresholds defined: {len(collector._thresholds)}")
+    print(f"  Thresholds defined: {collector.threshold_count}")
 
 
 if __name__ == "__main__":

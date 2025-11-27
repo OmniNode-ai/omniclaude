@@ -9,6 +9,7 @@ PatternMatcher and PatternRegistry functionality.
 from typing import Any, Dict, List, Optional
 
 from agents.lib.patterns import PatternMatcher, PatternRegistry
+from agents.lib.patterns.pattern_matcher import PatternType
 
 
 class PatternLibrary:
@@ -63,7 +64,7 @@ class PatternLibrary:
         # Aggregate confidence by pattern type
         if all_matches:
             # Group matches by pattern type
-            pattern_groups = {}
+            pattern_groups: Dict[str, Any] = {}
             for match in all_matches:
                 # Use title case for pattern names (CRUD stays CRUD, transformation -> Transformation)
                 raw_name = (
@@ -171,7 +172,7 @@ class PatternLibrary:
             return {"patterns": []}
 
         # Group by pattern type and aggregate confidence (same as detect_pattern)
-        pattern_groups = {}
+        pattern_groups: Dict[str, Any] = {}
         for match in all_matches:
             # Use title case for pattern names
             raw_name = (
@@ -311,7 +312,14 @@ class PatternLibrary:
         Returns:
             Dict with pattern metadata or None
         """
-        pattern = self.registry.get_pattern(pattern_name.lower())
+        # Convert string pattern name to PatternType enum
+        try:
+            pattern_type = PatternType(pattern_name.lower())
+        except ValueError:
+            # If not a valid PatternType, return None
+            return None
+
+        pattern = self.registry.get_pattern(pattern_type)
 
         if pattern:
             return {

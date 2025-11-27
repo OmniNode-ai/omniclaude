@@ -195,8 +195,8 @@ class ReferenceResolver:
         if path is None:
             path = []
 
-        if not isinstance(schema, dict):
-            return schema
+        # Note: The recursive calls below (lines 220-228) are guarded by isinstance(value, dict)
+        # checks, so this method always receives a dict. No defensive check needed.
 
         # Check for $ref
         if "$ref" in schema:
@@ -214,12 +214,12 @@ class ReferenceResolver:
             return {"type": "object", "__resolved_ref": resolved_type}
 
         # Recursively resolve all dict values
-        result = {}
+        result: Dict[str, Any] = {}
         for key, value in schema.items():
             if isinstance(value, dict):
                 result[key] = self.resolve_references(value, path)
             elif isinstance(value, list):
-                result[key] = [
+                resolved_list: List[Any] = [
                     (
                         self.resolve_references(item, path)
                         if isinstance(item, dict)
@@ -227,6 +227,7 @@ class ReferenceResolver:
                     )
                     for item in value
                 ]
+                result[key] = resolved_list
             else:
                 result[key] = value
 

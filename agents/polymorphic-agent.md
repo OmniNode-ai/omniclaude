@@ -1,9 +1,8 @@
 ---
 name: polymorphic-agent
 description: Workflow orchestration with intelligent routing, parallel execution, and ONEX development
+model: inherit
 color: purple
-category: workflow_coordinator
-aliases: [polly, poly, Polly, agent-workflow-coordinator, workflow-coordinator]
 ---
 
 ## Routing (Auto-Handled by Hook)

@@ -12,7 +12,8 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 import aiofiles
-from pattern_tracker import PatternTracker, get_tracker
+
+from .pattern_tracker import PatternTracker, get_tracker
 
 
 class PerformanceDashboard:

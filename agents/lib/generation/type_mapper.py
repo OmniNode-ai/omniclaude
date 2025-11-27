@@ -256,7 +256,8 @@ class TypeMapper:
         """
         if self.reference_resolver:
             # Use injected resolver if available
-            return self.reference_resolver.resolve_ref(ref)
+            result: str = self.reference_resolver.resolve_ref(ref)
+            return result
 
         # Simple fallback resolution for local references
         if ref.startswith("#/definitions/"):

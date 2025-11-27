@@ -11,14 +11,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from agent_model import AgentConfig, AgentResult, AgentTask
-from agent_registry import register_agent
 from mcp_client import ArchonMCPClient
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
 from trace_logger import TraceEventType, TraceLevel, get_trace_logger
 
 from agents.lib.agent_execution_mixin import AgentExecutionMixin
+
+from .agent_model import AgentConfig, AgentResult, AgentTask
+from .agent_registry import register_agent
 
 
 # Load environment variables from .env file
@@ -28,7 +29,7 @@ try:
     env_path = Path(__file__).parent / ".env"
     load_dotenv(dotenv_path=env_path)
 except ImportError:
-    pass  # python-dotenv already installed via poetry
+    pass  # python-dotenv not available, skipping .env loading
 
 
 # ============================================================================
@@ -481,9 +482,11 @@ class DebugIntelligenceAgent(AgentExecutionMixin):
                 trace_id=self._current_trace_id,
             )
 
+            # TODO: trace_logger expects literal strings "completed"/"failed", not enums.
+            # Consider updating trace_logger API to accept EnumOperationStatus.
             await self.trace_logger.end_agent_trace(
                 trace_id=self._current_trace_id,
-                status="completed",
+                status="completed",  # trace_logger-specific value, not EnumOperationStatus
                 result=agent_result.model_dump(),
             )
 
@@ -502,7 +505,9 @@ class DebugIntelligenceAgent(AgentExecutionMixin):
             error_msg = f"Debug analysis failed: {str(e)}"
 
             await self.trace_logger.end_agent_trace(
-                trace_id=self._current_trace_id, status="failed", error=error_msg
+                trace_id=self._current_trace_id,
+                status="failed",  # trace_logger-specific value, not EnumOperationStatus
+                error=error_msg,
             )
 
             await self.trace_logger.log_event(

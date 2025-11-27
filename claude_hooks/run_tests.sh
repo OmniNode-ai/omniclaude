@@ -53,7 +53,7 @@ run_unit_tests() {
     print_info "Target: <100ms per test, 100% code coverage"
 
     cd "$SCRIPT_DIR"
-    pytest -m unit \
+    poetry run pytest -m unit \
         --tb=short \
         --durations=10 \
         tests/
@@ -66,7 +66,7 @@ run_integration_tests() {
     print_info "Target: <500ms per test, 95% integration coverage"
 
     cd "$SCRIPT_DIR"
-    pytest -m integration \
+    poetry run pytest -m integration \
         --tb=short \
         --durations=10 \
         tests/
@@ -79,7 +79,7 @@ run_e2e_tests() {
     print_info "Target: <5s per test, 85% workflow coverage"
 
     cd "$SCRIPT_DIR"
-    pytest -m e2e \
+    poetry run pytest -m e2e \
         --tb=short \
         --durations=10 \
         tests/
@@ -92,7 +92,7 @@ run_performance_tests() {
     print_info "Benchmarking hook performance and scalability"
 
     cd "$SCRIPT_DIR"
-    pytest -m performance \
+    poetry run pytest -m performance \
         --tb=short \
         --durations=0 \
         tests/
@@ -105,7 +105,7 @@ run_all_tests() {
     print_info "This may take 5-10 minutes..."
 
     cd "$SCRIPT_DIR"
-    pytest \
+    poetry run pytest \
         --tb=short \
         --durations=20 \
         tests/
@@ -118,7 +118,7 @@ run_fast_tests() {
     print_info "Quick validation, skipping slow tests"
 
     cd "$SCRIPT_DIR"
-    pytest -m "not slow and not e2e and not performance" \
+    poetry run pytest -m "not slow and not e2e and not performance" \
         --tb=line \
         tests/
 
@@ -130,7 +130,7 @@ run_with_coverage() {
     print_info "Generating coverage report..."
 
     cd "$SCRIPT_DIR"
-    pytest \
+    poetry run pytest \
         --cov=lib \
         --cov-report=html \
         --cov-report=term \
@@ -147,13 +147,13 @@ run_parallel() {
     print_header "Running Tests in Parallel"
     print_info "Using pytest-xdist for parallel execution"
 
-    if ! python3 -c "import xdist" 2>/dev/null; then
+    if ! poetry run python -c "import xdist" 2>/dev/null; then
         print_warning "pytest-xdist not installed, installing..."
-        pip3 install pytest-xdist
+        poetry add --group dev pytest-xdist
     fi
 
     cd "$SCRIPT_DIR"
-    pytest -n auto \
+    poetry run pytest -n auto \
         --tb=short \
         tests/
 
@@ -166,7 +166,7 @@ run_specific_test() {
     print_header "Running Specific Test: $test_file"
 
     cd "$SCRIPT_DIR"
-    pytest "$test_file" -v --tb=short
+    poetry run pytest "$test_file" -v --tb=short
 
     print_success "Test completed"
 }
@@ -175,13 +175,13 @@ run_watch_mode() {
     print_header "Running Tests in Watch Mode"
     print_info "Tests will re-run on file changes (Ctrl+C to stop)"
 
-    if ! python3 -c "import pytest_watch" 2>/dev/null; then
+    if ! poetry run python -c "import pytest_watch" 2>/dev/null; then
         print_warning "pytest-watch not installed, installing..."
-        pip3 install pytest-watch
+        poetry add --group dev pytest-watch
     fi
 
     cd "$SCRIPT_DIR"
-    pytest-watch tests/
+    poetry run pytest-watch tests/
 }
 
 # ============================================================================
@@ -198,13 +198,21 @@ check_dependencies() {
     fi
     print_success "Python 3 found: $(python3 --version)"
 
-    # Check pytest
-    if ! python3 -c "import pytest" 2>/dev/null; then
-        print_error "pytest not installed"
-        print_info "Install with: pip3 install pytest pytest-cov pytest-xdist"
+    # Check Poetry
+    if ! command -v poetry &> /dev/null; then
+        print_error "Poetry not found"
+        print_info "Install with: curl -sSL https://install.python-poetry.org | python3 -"
         exit 1
     fi
-    print_success "pytest found: $(python3 -c 'import pytest; print(pytest.__version__)')"
+    print_success "Poetry found: $(poetry --version)"
+
+    # Check pytest
+    if ! poetry run python -c "import pytest" 2>/dev/null; then
+        print_error "pytest not installed in Poetry environment"
+        print_info "Install with: poetry install"
+        exit 1
+    fi
+    print_success "pytest found: $(poetry run python -c 'import pytest; print(pytest.__version__)')"
 
     # Check test files exist
     if [ ! -d "$TESTS_DIR" ]; then
@@ -221,19 +229,20 @@ check_dependencies() {
 install_dependencies() {
     print_header "Installing Test Dependencies"
 
-    pip3 install -r "${SCRIPT_DIR}/requirements.txt" || true
+    # Use Poetry to install all dependencies from pyproject.toml
+    poetry install
 
-    print_info "Installing additional test tools..."
-    pip3 install \
+    print_info "Ensuring test tools are in dev dependencies..."
+    poetry add --group dev \
         pytest \
         pytest-cov \
         pytest-xdist \
         pytest-timeout \
         pytest-benchmark \
         pytest-watch \
-        pyyaml
+        pyyaml 2>/dev/null || true
 
-    print_success "Dependencies installed"
+    print_success "Dependencies installed via Poetry"
 }
 
 # ============================================================================
@@ -250,7 +259,7 @@ show_test_statistics() {
 
     echo ""
     echo "Test Markers:"
-    pytest --markers | grep "^@pytest.mark" | head -10
+    poetry run pytest --markers | grep "^@pytest.mark" | head -10
 
     echo ""
     echo "Test Count by Type:"
@@ -266,7 +275,7 @@ generate_test_report() {
     cd "$SCRIPT_DIR"
 
     # Run tests with JSON report
-    pytest \
+    poetry run pytest \
         --json-report \
         --json-report-file=test-report.json \
         tests/ 2>/dev/null || true
@@ -287,7 +296,7 @@ run_ci_tests() {
     cd "$SCRIPT_DIR"
 
     # Run with coverage and JUnit XML for CI systems
-    pytest \
+    poetry run pytest \
         --cov=lib \
         --cov-report=xml \
         --cov-report=term \

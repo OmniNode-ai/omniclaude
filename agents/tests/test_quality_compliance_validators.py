@@ -320,9 +320,11 @@ class NodeTestCompute:
 
         assert result.status == "failed"
         # Message may vary: "Code file not found or code is empty" or "No code provided"
-        assert "code" in result.message.lower() and (  # noqa: PT018
-            "empty" in result.message.lower() or "not found" in result.message.lower()
-        )
+        message_lower = result.message.lower()
+        assert "code" in message_lower, "Error message should mention 'code'"
+        assert (
+            "empty" in message_lower or "not found" in message_lower
+        ), "Error message should mention 'empty' or 'not found'"
 
     @pytest.mark.asyncio
     async def test_syntax_error(self, validator):

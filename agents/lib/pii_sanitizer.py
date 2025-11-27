@@ -61,7 +61,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, cast
 
 
 logger = logging.getLogger(__name__)
@@ -121,7 +121,7 @@ TOKEN_PATTERN = re.compile(
 # SENSITIVE FIELD NAMES (case-insensitive)
 # =========================================================================
 
-SENSITIVE_FIELD_NAMES: Set[str] = {
+SENSITIVE_FIELD_NAMES: set[str] = {
     # Authentication & Authorization
     "password",
     "passwd",
@@ -504,7 +504,7 @@ def sanitize_token(value: str) -> str:
 # =========================================================================
 
 
-def sanitize_string(value: str) -> str:
+def sanitize_string(value: object) -> str:
     """
     Apply all sanitization patterns to a string.
 
@@ -521,13 +521,14 @@ def sanitize_string(value: str) -> str:
     - Session tokens
 
     Args:
-        value: String to sanitize
+        value: Value to sanitize (non-strings are converted to string)
 
     Returns:
         Sanitized string with PII masked
     """
+    # Defensive runtime check - convert non-str values to string for safety
     if not isinstance(value, str):
-        return value
+        return str(value)
 
     # Apply patterns in order of specificity (most specific first)
 
@@ -577,16 +578,17 @@ def sanitize_string(value: str) -> str:
     return value
 
 
-def is_sensitive_field(field_name: str) -> bool:
+def is_sensitive_field(field_name: object) -> bool:
     """
     Check if field name indicates sensitive data.
 
     Args:
-        field_name: Field name to check
+        field_name: Field name to check (non-strings return False)
 
     Returns:
         True if field name suggests sensitive data
     """
+    # Defensive runtime check - non-str values cannot be sensitive field names
     if not isinstance(field_name, str):
         return False
 
@@ -739,7 +741,7 @@ def sanitize_for_slack(
 # =========================================================================
 
 
-def sanitize_correlation_id_for_slack(correlation_id: Optional[str]) -> str:
+def sanitize_correlation_id_for_slack(correlation_id: str | None) -> str:
     """
     Sanitize correlation ID for Slack (convenience function).
 
@@ -755,9 +757,7 @@ def sanitize_correlation_id_for_slack(correlation_id: Optional[str]) -> str:
     return sanitize_correlation_id(correlation_id)
 
 
-def sanitize_error_context_for_slack(
-    context: Optional[Dict[str, Any]]
-) -> Dict[str, Any]:
+def sanitize_error_context_for_slack(context: dict[str, Any] | None) -> dict[str, Any]:
     """
     Sanitize error context dictionary for Slack (convenience function).
 
@@ -770,7 +770,7 @@ def sanitize_error_context_for_slack(
     if not context:
         return {}
 
-    return sanitize_for_slack(context, sanitize_all_strings=False)
+    return cast(dict[str, Any], sanitize_for_slack(context, sanitize_all_strings=False))
 
 
 # =========================================================================

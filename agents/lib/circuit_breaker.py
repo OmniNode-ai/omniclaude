@@ -59,8 +59,8 @@ class CircuitBreaker:
         self.state = CircuitState.CLOSED
         self.failure_count = 0
         self.success_count = 0
-        self.last_failure_time = None
-        self.last_success_time = None
+        self.last_failure_time: Optional[float] = None
+        self.last_success_time: Optional[float] = None
 
         # Statistics
         self.total_calls = 0

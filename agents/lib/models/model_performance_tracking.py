@@ -13,7 +13,7 @@ Architecture:
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
@@ -36,7 +36,7 @@ class ModelPerformanceMetric:
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     """When measurement was recorded"""
 
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     """Additional context (e.g., input size, complexity)"""
 
     @property
@@ -63,7 +63,7 @@ class ModelPerformanceMetric:
         """Calculate variance from target (negative = under budget)."""
         return self.duration_ms - self.target_ms
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return {
             "stage_name": self.stage_name,
@@ -128,8 +128,8 @@ class MetricsCollector:
 
     def __init__(self):
         """Initialize metrics collector."""
-        self.metrics: List[ModelPerformanceMetric] = []
-        self.thresholds: Dict[str, ModelPerformanceThreshold] = {}
+        self.metrics: list[ModelPerformanceMetric] = []
+        self.thresholds: dict[str, ModelPerformanceThreshold] = {}
 
     def set_threshold(
         self,
@@ -158,8 +158,8 @@ class MetricsCollector:
         self,
         stage_name: str,
         duration_ms: int,
-        target_ms: Optional[int] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        target_ms: int | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> ModelPerformanceMetric:
         """
         Record timing for a pipeline stage.
@@ -190,7 +190,7 @@ class MetricsCollector:
         self.metrics.append(metric)
         return metric
 
-    def get_summary(self) -> Dict[str, Any]:
+    def get_summary(self) -> dict[str, Any]:
         """
         Generate comprehensive metrics summary.
 
@@ -229,7 +229,7 @@ class MetricsCollector:
             "metrics": [m.to_dict() for m in self.metrics],
         }
 
-    def get_stage_metrics(self, stage_name: str) -> List[ModelPerformanceMetric]:
+    def get_stage_metrics(self, stage_name: str) -> list[ModelPerformanceMetric]:
         """Get all metrics for a specific stage."""
         return [m for m in self.metrics if m.stage_name == stage_name]
 

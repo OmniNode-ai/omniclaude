@@ -52,7 +52,7 @@ Dependencies: Issue #1, #6, #8 (resolved)
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Set, Union
+from typing import Any, Dict, List, Optional, Set, Union
 
 
 # Sensitive key patterns (case-insensitive matching)
@@ -124,10 +124,10 @@ REDACTED = "[REDACTED]"
 
 
 def sanitize_dict(
-    data: Dict[str, Any],
+    data: Any,
     max_depth: int = 5,
     current_depth: int = 0,
-    additional_fields: List[str] = None,
+    additional_fields: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
     Recursively sanitize dictionary by replacing sensitive values.
@@ -172,24 +172,24 @@ def sanitize_dict(
         >>> sanitized["my_custom_secret"]
         '[REDACTED]'
     """
-    # Depth limit reached - truncate to prevent infinite recursion
-    if current_depth >= max_depth:
-        return {"_truncated": "max depth reached"}
-
     # Handle None input gracefully
     if data is None:
         return {}
 
-    # Ensure input is a dict
+    # Handle non-dict input
     if not isinstance(data, dict):
         return {"_error": f"expected dict, got {type(data).__name__}"}
+
+    # Depth limit reached - truncate to prevent infinite recursion
+    if current_depth >= max_depth:
+        return {"_truncated": "max depth reached"}
 
     # Combine default sensitive fields with additional custom fields
     sensitive_fields = SENSITIVE_KEYS.copy()
     if additional_fields:
         sensitive_fields.update(field.lower() for field in additional_fields)
 
-    sanitized = {}
+    sanitized: Dict[str, Any] = {}
     for key, value in data.items():
         # Check if key is sensitive (case-insensitive substring match)
         key_lower = str(key).lower()
@@ -248,12 +248,12 @@ def sanitize_value(value: Any) -> Any:
     return value
 
 
-def sanitize_string(text: str, max_length: int = 200) -> str:
+def sanitize_string(text: Any, max_length: int = 200) -> str:
     """
     Sanitize string by removing sensitive patterns and truncating.
 
     Args:
-        text: String to sanitize
+        text: String to sanitize (can be None)
         max_length: Maximum length before truncation (0 = no truncation)
 
     Returns:
@@ -272,9 +272,9 @@ def sanitize_string(text: str, max_length: int = 200) -> str:
     if text is None:
         return ""
 
-    # Ensure input is a string
+    # Convert non-string to string
     if not isinstance(text, str):
-        return str(text)
+        text = str(text)
 
     # Truncate FIRST to avoid pattern matching on very long strings
     sanitized = text
@@ -285,11 +285,11 @@ def sanitize_string(text: str, max_length: int = 200) -> str:
     for pattern in SENSITIVE_PATTERNS:
         sanitized = pattern.sub(REDACTED, sanitized)
 
-    return sanitized
+    return str(sanitized)
 
 
 def sanitize_error_context(
-    context: Dict[str, Any], additional_fields: List[str] = None
+    context: Dict[str, Any], additional_fields: Optional[List[str]] = None
 ) -> Dict[str, Any]:
     """
     Sanitize error context for ActionLogger.
@@ -323,7 +323,7 @@ def sanitize_error_context(
     return sanitize_dict(context, additional_fields=additional_fields)
 
 
-def sanitize_stack_trace(stack_trace: str) -> str:
+def sanitize_stack_trace(stack_trace: Any) -> str:
     """
     Sanitize stack trace by removing absolute paths.
 
@@ -331,7 +331,7 @@ def sanitize_stack_trace(stack_trace: str) -> str:
     directory structure.
 
     Args:
-        stack_trace: Stack trace string
+        stack_trace: Stack trace string (can be None)
 
     Returns:
         Sanitized stack trace with relative paths
@@ -353,9 +353,9 @@ def sanitize_stack_trace(stack_trace: str) -> str:
     if stack_trace is None:
         return ""
 
-    # Ensure input is a string
+    # Convert non-string to string
     if not isinstance(stack_trace, str):
-        return str(stack_trace)
+        stack_trace = str(stack_trace)
 
     # Replace absolute paths with relative paths
     # Pattern: /some/absolute/path/to/file.py → file.py
@@ -373,7 +373,7 @@ def sanitize_for_logging(
     data: Union[Dict[str, Any], str, Any],
     max_string_length: int = 200,
     max_dict_depth: int = 5,
-    additional_fields: List[str] = None,
+    additional_fields: Optional[List[str]] = None,
 ) -> Union[Dict[str, Any], str, Any]:
     """
     Universal sanitization function for any logging data.

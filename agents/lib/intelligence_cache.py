@@ -53,10 +53,13 @@ from typing import Any, Dict, Optional
 
 
 # Import Pydantic Settings for type-safe configuration
+settings: Optional[Any] = None
 try:
-    from config import settings
+    from config import settings as _settings
+
+    settings = _settings
 except ImportError:
-    settings = None
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -99,9 +102,10 @@ class IntelligenceCache:
             self.redis_url = redis_url or os.getenv("VALKEY_URL", default_url)
         self._client: Optional[Any] = None
 
-        # Default TTLs by operation type (in seconds)
+        # Default TTLs by operation type (in seconds) - declare once
+        self._default_ttls: Dict[str, int]
         if settings is not None:
-            self._default_ttls: Dict[str, int] = {
+            self._default_ttls = {
                 "pattern_discovery": settings.cache_ttl_patterns,
                 "infrastructure_query": settings.cache_ttl_infrastructure,
                 "schema_query": settings.cache_ttl_schemas,
@@ -110,7 +114,7 @@ class IntelligenceCache:
                 "filesystem_query": settings.cache_ttl_patterns,
             }
         else:
-            self._default_ttls: Dict[str, int] = {
+            self._default_ttls = {
                 "pattern_discovery": int(
                     os.getenv("CACHE_TTL_PATTERNS", "300")
                 ),  # 5 min
@@ -195,7 +199,8 @@ class IntelligenceCache:
             cached_json = await self._client.get(cache_key)
             if cached_json:
                 logger.debug(f"Cache HIT: {operation_type} (key: {cache_key})")
-                return json.loads(cached_json)
+                result: Dict[str, Any] = json.loads(cached_json)
+                return result
             else:
                 logger.debug(f"Cache MISS: {operation_type} (key: {cache_key})")
                 return None

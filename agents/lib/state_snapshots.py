@@ -112,7 +112,8 @@ class StateSnapshotCapture:
                 # TODO: Implement object storage retrieval
                 return None
             else:
-                return row["snapshot"]
+                snapshot: Dict[str, Any] = row["snapshot"]
+                return snapshot
 
     async def get_success_snapshots(self, run_id: str) -> List[Dict[str, Any]]:
         """Get all success state snapshots for a run."""

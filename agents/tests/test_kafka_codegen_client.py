@@ -59,7 +59,8 @@ async def test_publish_message_shape_and_topic(monkeypatch):
     assert data["id"]
     assert data["service"] == "omniclaude"
     assert data["correlation_id"] == str(evt.correlation_id)
-    assert "payload" in data and "prd_content" in data["payload"]  # noqa: PT018
+    assert "payload" in data, "Missing 'payload' in data"
+    assert "prd_content" in data["payload"], "Missing 'prd_content' in payload"
 
 
 @pytest.mark.asyncio

@@ -10,7 +10,7 @@ import sys
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 
@@ -27,13 +27,13 @@ class PatternTrackerSync:
 
         # Performance optimizations
         self._session = requests.Session()
-        self._pattern_id_cache = {}
+        self._pattern_id_cache: Dict[str, Tuple[float, str]] = {}
         self._cache_ttl = 300  # 5 minutes
-        self._metrics = {
-            "total_requests": 0,
-            "cache_hits": 0,
-            "cache_misses": 0,
-            "total_time_ms": 0,
+        self._metrics: Dict[str, float] = {
+            "total_requests": 0.0,
+            "cache_hits": 0.0,
+            "cache_misses": 0.0,
+            "total_time_ms": 0.0,
         }
 
         # Configure session with connection pooling
@@ -242,11 +242,11 @@ class PatternTrackerSync:
         cache_hits = self._metrics["cache_hits"]
         cache_misses = self._metrics["cache_misses"]
 
-        avg_response_time = 0
+        avg_response_time: float = 0.0
         if total_requests > 0:
             avg_response_time = self._metrics["total_time_ms"] / total_requests
 
-        cache_hit_rate = 0
+        cache_hit_rate: float = 0.0
         total_cache_ops = cache_hits + cache_misses
         if total_cache_ops > 0:
             cache_hit_rate = (cache_hits / total_cache_ops) * 100
@@ -279,7 +279,7 @@ class PatternTrackerSync:
         self._pattern_id_cache.clear()
         print("🧹 [PatternTrackerSync] Cache cleared", file=sys.stderr)
 
-    def calculate_quality_score(self, violations: list) -> float:
+    def calculate_quality_score(self, violations: List[Any]) -> float:
         """Calculate quality score based on violations.
 
         Args:

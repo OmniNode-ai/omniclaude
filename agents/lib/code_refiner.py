@@ -863,7 +863,8 @@ You are an expert Python developer specializing in ONEX architecture patterns.
 
         if matches:
             # Return the first (or largest) code block
-            return matches[0].strip()
+            first_match: str = matches[0]
+            return first_match.strip()
 
         # Fallback: return stripped response
         return response_text.strip()

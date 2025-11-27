@@ -10,7 +10,16 @@ import logging
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, TypedDict
+
+
+class ValidationResultDict(TypedDict):
+    """Type definition for validation result dictionary."""
+
+    valid: bool
+    issues: List[str]
+    warnings: List[str]
+
 
 import yaml
 
@@ -43,12 +52,12 @@ DEFAULT_METRICS_PORT = 9090
 class ContractGenerator:
     """Generate YAML contracts from PRD analysis"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.config = get_config()
         self.logger = logging.getLogger(__name__)
 
         # Mixin configuration templates
-        self.mixin_configs = {
+        self.mixin_configs: Dict[str, Dict[str, Any]] = {
             "MixinEventBus": {
                 "topics": [],
                 "event_patterns": ["publish", "subscribe"],
@@ -318,7 +327,7 @@ class ContractGenerator:
             "external_systems": analysis_result.external_systems,
         }
 
-    async def validate_contract(self, contract: Dict[str, Any]) -> Dict[str, Any]:
+    async def validate_contract(self, contract: Dict[str, Any]) -> ValidationResultDict:
         """
         Validate contract against ONEX schemas.
 
@@ -328,7 +337,11 @@ class ContractGenerator:
         Returns:
             Validation result with status and issues
         """
-        validation_result = {"valid": True, "issues": [], "warnings": []}
+        validation_result: ValidationResultDict = {
+            "valid": True,
+            "issues": [],
+            "warnings": [],
+        }
 
         # Check required fields
         required_fields = [
@@ -555,7 +568,7 @@ class ContractGenerator:
         Returns:
             List of incompatible mixin pairs
         """
-        incompatible_pairs = [
+        incompatible_pairs: List[Tuple[str, str]] = [
             # Define known incompatible mixin pairs
             # For now, return empty list (no known incompatibilities)
         ]

@@ -30,6 +30,41 @@ examples:
 
 Real-time monitoring and diagnostics for the OmniClaude agent execution system. These skills provide comprehensive health monitoring, error analysis, and performance insights.
 
+## 🚨 CRITICAL: ALWAYS DISPATCH TO POLYMORPHIC AGENT
+
+**DO NOT run skill scripts directly.** When this skill is invoked, you MUST dispatch to a polymorphic-agent.
+
+### ❌ WRONG - Running scripts directly:
+```
+Bash(~/.claude/skills/agent-observability/check-health)
+Bash(~/.claude/skills/agent-observability/diagnose-errors --time-range 24h)
+```
+
+### ✅ CORRECT - Dispatch to polymorphic-agent:
+```
+Task(
+  subagent_type="polymorphic-agent",
+  description="Agent system health check",
+  prompt="Check the health of the agent observability system.
+    Use the agent-observability skill tools:
+    1. Run: ~/.claude/skills/agent-observability/check-health
+    2. If issues detected, run: ~/.claude/skills/agent-observability/diagnose-errors --time-range 24h
+
+    Available tools:
+    - check-health - Quick 5-second health check
+    - diagnose-errors - Deep error pattern analysis
+    - generate-report - Comprehensive observability analysis
+    - check-agent - Agent-specific performance profiling
+
+    Return:
+    - Overall system health status
+    - Any critical alerts
+    - Recommended actions"
+)
+```
+
+**WHY**: Polymorphic agents have full ONEX capabilities, intelligence integration, quality gates, and proper observability. Running scripts directly bypasses all of this.
+
 ## Available Skills
 
 ### 1. check-health

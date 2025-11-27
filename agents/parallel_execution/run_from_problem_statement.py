@@ -28,7 +28,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict
 
-from parallel_execution.validated_task_architect import ValidatedTaskArchitect
+from .validated_task_architect import ValidatedTaskArchitect
 
 
 async def process_problem_statement(

@@ -9,12 +9,8 @@ import sys
 import time
 from pathlib import Path
 
-
-# Add hooks lib to path
-sys.path.insert(0, str(Path.home() / ".claude" / "hooks" / "lib"))
-
-from correlation_manager import CorrelationManager
-from metadata_extractor import MetadataExtractor
+from .lib.correlation_manager import CorrelationManager
+from .lib.metadata_extractor import MetadataExtractor
 
 
 def test_performance():
@@ -32,9 +28,9 @@ def test_performance():
     ]
 
     extractor = MetadataExtractor()
-    total_time = 0
-    max_time = 0
-    min_time = float("inf")
+    total_time: float = 0.0
+    max_time: float = 0.0
+    min_time: float = float("inf")
 
     for i, prompt in enumerate(test_prompts, 1):
         start = time.perf_counter()

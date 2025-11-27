@@ -35,24 +35,86 @@ Integration:
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, TypeAlias
 from uuid import uuid4
 
 
 # Configure logging first
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
-# Import ONEX nodes
+# Import ONEX nodes with fallback to placeholders
+NODES_AVAILABLE: bool = False
+
+
+# Type alias for node classes (TypeAlias kept for Python <3.12 compatibility)
+NodeClassType: TypeAlias = type  # noqa: UP040
+
+
+# Define placeholder classes first
+class _PlaceholderNodeDebugSTFStorageEffect:
+    """Placeholder for when omnibase_core is unavailable.
+
+    This placeholder allows STFHelper to be instantiated in degraded mode
+    without raising ImportError. All operations will return empty/failed results.
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialize placeholder - does not raise, allows degraded mode."""
+        pass
+
+    async def execute_effect(self, contract: dict[str, Any]) -> dict[str, Any]:
+        """Return failure result for all operations in degraded mode."""
+        return {
+            "success": False,
+            "error": "STF storage unavailable - omnibase_core not installed",
+            "search_results": [],
+            "stf_data": None,
+        }
+
+
+class _PlaceholderNodeSTFHashCompute:
+    """Placeholder for when omnibase_core is unavailable.
+
+    This placeholder allows STFHelper to be instantiated in degraded mode
+    without raising ImportError. Hash computation returns a deterministic fallback.
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """Initialize placeholder - does not raise, allows degraded mode."""
+        pass
+
+    async def execute_compute(self, contract: dict[str, Any]) -> dict[str, Any]:
+        """Return fallback hash result for degraded mode."""
+        import hashlib
+
+        stf_code = contract.get("stf_code", "")
+        # Simple fallback hash without normalization
+        fallback_hash = hashlib.sha256(stf_code.encode()).hexdigest()
+        return {
+            "stf_hash": fallback_hash,
+            "normalization_applied": ["none (degraded mode)"],
+        }
+
+
+# Initialize with placeholders as defaults
+NodeDebugSTFStorageEffect: type[Any] = _PlaceholderNodeDebugSTFStorageEffect
+NodeSTFHashCompute: type[Any] = _PlaceholderNodeSTFHashCompute
+
 try:
     from omniclaude.debug_loop.mock_database_protocol import MockDatabaseProtocol
     from omniclaude.debug_loop.node_debug_stf_storage_effect import (
-        NodeDebugSTFStorageEffect,
+        NodeDebugSTFStorageEffect as _ActualNodeDebugSTFStorageEffect,
     )
-    from omniclaude.debug_loop.node_stf_hash_compute import NodeSTFHashCompute
+    from omniclaude.debug_loop.node_stf_hash_compute import (
+        NodeSTFHashCompute as _ActualNodeSTFHashCompute,
+    )
 
+    # Use actual implementations
+    NodeDebugSTFStorageEffect = _ActualNodeDebugSTFStorageEffect
+    NodeSTFHashCompute = _ActualNodeSTFHashCompute
     NODES_AVAILABLE = True
 except ImportError as e:
-    # omnibase_core not installed - provide mock implementations for testing
+    # omnibase_core not installed - use placeholder implementations
     logger.warning(
         f"ONEX nodes not available: {e}\n"
         "STFHelper requires omnibase_core for full functionality.\n"
@@ -65,28 +127,9 @@ except ImportError as e:
     NODES_AVAILABLE = False
 
     # Import mock protocol only
-    from omniclaude.debug_loop.mock_database_protocol import MockDatabaseProtocol
-
-    # Create placeholder classes
-    class NodeDebugSTFStorageEffect:
-        """Placeholder - requires omnibase_core installation."""
-
-        def __init__(self, *args, **kwargs):
-            raise ImportError(
-                "NodeDebugSTFStorageEffect requires omnibase_core.\n"
-                "Install with: pip install omnibase_core\n"
-                "This node provides STF storage and retrieval functionality."
-            )
-
-    class NodeSTFHashCompute:
-        """Placeholder - requires omnibase_core installation."""
-
-        def __init__(self, *args, **kwargs):
-            raise ImportError(
-                "NodeSTFHashCompute requires omnibase_core.\n"
-                "Install with: pip install omnibase_core\n"
-                "This node provides code normalization and deduplication."
-            )
+    from omniclaude.debug_loop.mock_database_protocol import (
+        MockDatabaseProtocol,  # noqa: F401
+    )
 
 
 class STFHelper:
@@ -98,32 +141,86 @@ class STFHelper:
     - Retrieve full STF details
     - Store new STFs with automatic deduplication
     - Update STF usage metrics
+
+    Graceful Degradation:
+        By default (allow_degraded=True), STFHelper can be instantiated even when
+        omnibase_core is not installed. In this "degraded mode":
+        - All query operations return empty results
+        - All store operations return None (failure)
+        - All update operations return False
+        - The `is_degraded` property returns True
+
+        This allows dependent code to continue operating without crashes,
+        while logging warnings about reduced functionality.
+
+        To require full functionality, pass allow_degraded=False to __init__,
+        which will raise ImportError if omnibase_core is unavailable.
     """
 
-    def __init__(self, db_protocol=None):
+    # Class-level flag indicating if nodes are available
+    nodes_available: bool = NODES_AVAILABLE
+
+    def __init__(
+        self, db_protocol: Any | None = None, allow_degraded: bool = True
+    ) -> None:
         """
         Initialize STF helper.
 
         Args:
             db_protocol: Database protocol (IDatabaseProtocol).
                         If None, uses MockDatabaseProtocol for testing.
+            allow_degraded: If True, allow instantiation in degraded mode when
+                          omnibase_core is not available. If False, raise ImportError.
+                          Default is True for graceful degradation.
+
+        Raises:
+            ImportError: If omnibase_core is not installed AND allow_degraded is False.
         """
+        # Check if ONEX nodes are available
+        if not NODES_AVAILABLE:
+            if not allow_degraded:
+                raise ImportError(
+                    "STFHelper requires omnibase_core to be installed.\n"
+                    "Install with: pip install omnibase_core"
+                )
+            # Enable degraded mode with placeholder implementations
+            self._degraded_mode: bool = True
+            logger.warning(
+                "STFHelper initialized in DEGRADED MODE - "
+                "omnibase_core not available, using placeholder implementations. "
+                "All STF operations will return empty/failed results."
+            )
+        else:
+            self._degraded_mode = False
+
         # Use provided protocol or create mock for testing
-        self.db = db_protocol or MockDatabaseProtocol()
+        self.db: Any = db_protocol or MockDatabaseProtocol()
 
-        # Initialize ONEX nodes
-        self.storage_node = NodeDebugSTFStorageEffect(db_protocol=self.db)
-        self.hash_node = NodeSTFHashCompute()
+        # Initialize ONEX nodes (will use placeholders if in degraded mode)
+        self.storage_node: Any = NodeDebugSTFStorageEffect(db_protocol=self.db)
+        self.hash_node: Any = NodeSTFHashCompute()
 
-        logger.info("STFHelper initialized with database protocol")
+        if self._degraded_mode:
+            logger.info("STFHelper initialized in degraded mode (placeholder nodes)")
+        else:
+            logger.info("STFHelper initialized with database protocol")
+
+    @property
+    def is_degraded(self) -> bool:
+        """Check if STFHelper is running in degraded mode.
+
+        Returns:
+            True if omnibase_core is unavailable and placeholder nodes are in use.
+        """
+        return self._degraded_mode
 
     async def query_stfs(
         self,
         problem_signature: str,
-        problem_category: Optional[str] = None,
+        problem_category: str | None = None,
         min_quality: float = 0.7,
         limit: int = 10,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Query STFs matching problem criteria.
 
@@ -147,6 +244,8 @@ class STFHelper:
                 - usage_count: Number of times STF has been used
                 - success_rate: Ratio of successful uses (0.0-1.0)
 
+            Returns empty list if in degraded mode (omnibase_core unavailable).
+
         Example:
             stfs = await helper.query_stfs(
                 problem_signature="No module named",
@@ -157,6 +256,13 @@ class STFHelper:
             for stf in stfs:
                 print(f"Found STF: {stf['stf_name']} (quality: {stf['quality_score']})")
         """
+        if self._degraded_mode:
+            logger.debug(
+                f"query_stfs called in degraded mode - returning empty list "
+                f"(signature='{problem_signature}', category='{problem_category}')"
+            )
+            return []
+
         try:
             # Build search criteria
             search_criteria = {
@@ -182,7 +288,7 @@ class STFHelper:
                 logger.warning(f"STF search failed: {result}")
                 return []
 
-            search_results = result.get("search_results", [])
+            search_results: list[dict[str, Any]] = result.get("search_results", [])
             logger.info(
                 f"Query found {len(search_results)} STFs for signature='{problem_signature}' "
                 f"category='{problem_category}' min_quality={min_quality}"
@@ -194,7 +300,7 @@ class STFHelper:
             logger.error(f"Error querying STFs: {e}", exc_info=True)
             return []
 
-    async def retrieve_stf(self, stf_id: str) -> Optional[Dict[str, Any]]:
+    async def retrieve_stf(self, stf_id: str) -> dict[str, Any] | None:
         """
         Retrieve full STF by ID.
 
@@ -219,13 +325,19 @@ class STFHelper:
                 - created_at: Creation timestamp
                 - last_used_at: Last usage timestamp
 
-            Returns None if STF not found.
+            Returns None if STF not found or in degraded mode.
 
         Example:
             stf = await helper.retrieve_stf(stf_id)
             if stf:
                 print(f"STF Code:\n{stf['stf_code']}")
         """
+        if self._degraded_mode:
+            logger.debug(
+                f"retrieve_stf called in degraded mode - returning None (id={stf_id})"
+            )
+            return None
+
         try:
             # Execute retrieve via storage node
             contract = {
@@ -239,7 +351,7 @@ class STFHelper:
                 logger.warning(f"STF retrieve failed for id={stf_id}: {result}")
                 return None
 
-            stf_data = result.get("stf_data")
+            stf_data: dict[str, Any] | None = result.get("stf_data")
             logger.info(f"Retrieved STF: {stf_id}")
 
             return stf_data
@@ -257,9 +369,9 @@ class STFHelper:
         problem_signature: str,
         quality_score: float,
         correlation_id: str,
-        source_execution_id: Optional[str] = None,
-        contributor_agent_name: Optional[str] = None,
-    ) -> Optional[str]:
+        source_execution_id: str | None = None,
+        contributor_agent_name: str | None = None,
+    ) -> str | None:
         """
         Store new STF and return stf_id.
 
@@ -279,7 +391,7 @@ class STFHelper:
             contributor_agent_name: Optional name of agent that created STF
 
         Returns:
-            STF ID (str) on success, None on failure
+            STF ID (str) on success, None on failure or in degraded mode
 
         Example:
             stf_id = await helper.store_stf(
@@ -295,6 +407,12 @@ class STFHelper:
             if stf_id:
                 print(f"Stored STF with ID: {stf_id}")
         """
+        if self._degraded_mode:
+            logger.debug(
+                f"store_stf called in degraded mode - returning None (name='{stf_name}')"
+            )
+            return None
+
         try:
             # Step 1: Compute hash using NodeSTFHashCompute
             hash_contract = {
@@ -340,7 +458,7 @@ class STFHelper:
                 logger.error(f"STF storage failed: {store_result}")
                 return None
 
-            stf_id = store_result["stf_id"]
+            stf_id: str | None = store_result["stf_id"]
             is_duplicate = store_result.get("duplicate", False)
 
             if is_duplicate:
@@ -371,7 +489,7 @@ class STFHelper:
             success: True if STF was successfully applied, False otherwise
 
         Returns:
-            True if update succeeded, False otherwise
+            True if update succeeded, False otherwise (including degraded mode)
 
         Example:
             # After applying STF
@@ -380,6 +498,12 @@ class STFHelper:
             else:
                 await helper.update_stf_usage(stf_id, success=False)
         """
+        if self._degraded_mode:
+            logger.debug(
+                f"update_stf_usage called in degraded mode - returning False (id={stf_id})"
+            )
+            return False
+
         try:
             # Update usage count via storage node
             contract = {
@@ -407,7 +531,7 @@ class STFHelper:
 
     async def get_top_stfs(
         self, problem_category: str, limit: int = 5, min_quality: float = 0.8
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Get top-ranked STFs for a problem category.
 
@@ -421,6 +545,7 @@ class STFHelper:
 
         Returns:
             List of top-ranked STFs (same structure as query_stfs)
+            Returns empty list if in degraded mode.
 
         Example:
             top_stfs = await helper.get_top_stfs(
@@ -433,6 +558,13 @@ class STFHelper:
                       f"(quality: {stf['quality_score']}, "
                       f"usage: {stf['usage_count']})")
         """
+        if self._degraded_mode:
+            logger.debug(
+                f"get_top_stfs called in degraded mode - returning empty list "
+                f"(category='{problem_category}')"
+            )
+            return []
+
         try:
             # Query without problem_signature to get all STFs in category
             search_criteria = {
@@ -453,7 +585,7 @@ class STFHelper:
                 logger.warning(f"Top STFs query failed: {result}")
                 return []
 
-            search_results = result.get("search_results", [])
+            search_results: list[dict[str, Any]] = result.get("search_results", [])
             logger.info(
                 f"Retrieved {len(search_results)} top STFs for category '{problem_category}'"
             )

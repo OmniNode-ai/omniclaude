@@ -16,8 +16,8 @@ Setup:
 import asyncio
 from pathlib import Path
 
-from agent_dispatcher import ParallelCoordinator
-from agent_model import AgentTask
+from .agent_dispatcher import ParallelCoordinator
+from .agent_model import AgentTask
 
 
 # Calculator contract
@@ -66,6 +66,7 @@ async def create_calculator():
         tasks = [
             AgentTask(
                 task_id="generate_calculator",
+                agent_name="agent-code-generator",
                 description="Generate ONEX Compute node for calculator from contract",
                 input_data={
                     "contract": CALCULATOR_CONTRACT,

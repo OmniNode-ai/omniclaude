@@ -7,6 +7,44 @@ description: Generate ONEX nodes via automated code generation with ContractInfe
 
 Fully automated ONEX node generation using the omninode_bridge codegen system. Generates complete, production-ready nodes with contracts, infrastructure code, business logic, and tests.
 
+## 🚨 CRITICAL: ALWAYS DISPATCH TO POLYMORPHIC AGENT
+
+**DO NOT run generation scripts directly.** When this skill is invoked, you MUST dispatch to a polymorphic-agent.
+
+### ❌ WRONG - Running scripts directly:
+```
+Bash(~/.claude/skills/generate-node/generate "Create PostgreSQL CRUD Effect")
+Bash(~/.claude/skills/generate-node/regenerate src/nodes/my_node)
+```
+
+### ✅ CORRECT - Dispatch to polymorphic-agent:
+```
+Task(
+  subagent_type="polymorphic-agent",
+  description="Generate PostgreSQL CRUD Effect node",
+  prompt="Generate an ONEX node with the following requirements:
+    Description: Create a PostgreSQL CRUD Effect node for user management
+    Node Type: Effect
+
+    Use the generate-node skill:
+    ~/.claude/skills/generate-node/generate 'Create PostgreSQL CRUD Effect node for user management with async operations'
+
+    Options available:
+    - --output-dir ./generated_nodes (default)
+    - --node-type effect|compute|reducer|orchestrator
+    - --enable-intelligence (default)
+    - --enable-quorum (multi-model validation)
+
+    After generation:
+    1. Verify the generated contract YAML
+    2. Check the business logic implementation
+    3. Run the generated tests
+    4. Report any issues found"
+)
+```
+
+**WHY**: Polymorphic agents have full ONEX capabilities, intelligence integration, quality gates, and proper observability. Running scripts directly bypasses all of this.
+
 ## What It Does
 
 The codegen system provides **100% automated node generation** through an event-driven workflow:

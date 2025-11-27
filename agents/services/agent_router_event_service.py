@@ -29,6 +29,8 @@ Created: 2025-10-30
 Reference: agent_router_service.py (HTTP version)
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
@@ -39,7 +41,7 @@ import time
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 
 # Configure logging FIRST (before any logging calls)
@@ -53,6 +55,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from config import settings
 
 
+# Type-only imports for optional dependencies (avoid runtime errors)
+if TYPE_CHECKING:
+    import asyncpg
+    from aiohttp import web
+    from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
+
+
 # Kafka imports
 try:
     from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
@@ -60,6 +69,8 @@ try:
     KAFKA_AVAILABLE = True
 except ImportError:
     KAFKA_AVAILABLE = False
+    AIOKafkaConsumer = None  # type: ignore[misc,assignment]
+    AIOKafkaProducer = None  # type: ignore[misc,assignment]
     logging.error("aiokafka not available. Install with: pip install aiokafka")
 
 # PostgreSQL imports
@@ -69,6 +80,7 @@ try:
     ASYNCPG_AVAILABLE = True
 except ImportError:
     ASYNCPG_AVAILABLE = False
+    asyncpg = None  # type: ignore[assignment]
     logging.error("asyncpg not available. Install with: pip install asyncpg")
 
 # HTTP server for health checks
@@ -78,19 +90,17 @@ try:
     AIOHTTP_AVAILABLE = True
 except ImportError:
     AIOHTTP_AVAILABLE = False
+    web = None  # type: ignore[assignment]
     logging.error("aiohttp not available. Install with: pip install aiohttp")
-
-# Add lib directory to Python path for AgentRouter imports
-lib_path = Path(__file__).parent.parent / "lib"
-sys.path.insert(0, str(lib_path))
 
 # Import required modules (must succeed for service to function)
 try:
-    from agent_execution_logger import log_agent_execution
-    from agent_router import AgentRouter
-    from confidence_scoring_publisher import publish_confidence_scored
-    from data_sanitizer import sanitize_dict, sanitize_string
     from omnibase_core.enums.enum_operation_status import EnumOperationStatus
+
+    from ..lib.agent_execution_logger import log_agent_execution
+    from ..lib.agent_router import AgentRouter
+    from ..lib.confidence_scoring_publisher import publish_confidence_scored
+    from ..lib.data_sanitizer import sanitize_dict, sanitize_string
 except ImportError as e:
     logging.error(f"Failed to import required modules: {e}")
     logging.error(f"Python path: {sys.path}")
@@ -98,7 +108,7 @@ except ImportError as e:
 
 # Import ActionLogger separately (optional - graceful degradation if unavailable)
 try:
-    from action_logger import ActionLogger
+    from ..lib.action_logger import ActionLogger
 
     ACTION_LOGGER_AVAILABLE = True
 except ImportError:
@@ -109,7 +119,7 @@ except ImportError:
 
 # Import Slack notifier for error notifications
 try:
-    from slack_notifier import get_slack_notifier
+    from ..lib.slack_notifier import get_slack_notifier
 
     SLACK_NOTIFIER_AVAILABLE = True
 except ImportError:
@@ -146,7 +156,7 @@ class PostgresLogger:
         self.pool_min_size = pool_min_size
         self.pool_max_size = pool_max_size
 
-        self._pool: Optional[asyncpg.Pool] = None
+        self._pool: asyncpg.Pool | None = None
         self._initialized = False
 
         # Metrics
@@ -280,11 +290,11 @@ class PostgresLogger:
         confidence_score: float,
         routing_strategy: str,
         routing_time_ms: float,
-        correlation_id: Optional[str] = None,
-        alternatives: Optional[List[Dict[str, Any]]] = None,
-        reasoning: Optional[str] = None,
+        correlation_id: str | None = None,
+        alternatives: list[dict[str, Any]] | None = None,
+        reasoning: str | None = None,
         max_retries: int = 3,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Log routing decision to database with retry logic.
 
@@ -370,7 +380,7 @@ class PostgresLogger:
 
         return None
 
-    def get_stats(self) -> Dict[str, int]:
+    def get_stats(self) -> dict[str, int]:
         """Get logging statistics."""
         return {
             "total_logs": self._log_count,
@@ -394,12 +404,12 @@ class PostgresLogger:
         context_confidence: float,
         capability_confidence: float,
         historical_confidence: float,
-        correlation_id: Optional[str] = None,
-        user_request_hash: Optional[str] = None,
-        context_hash: Optional[str] = None,
-        alternative_agents: Optional[List[Dict[str, Any]]] = None,
+        correlation_id: str | None = None,
+        user_request_hash: str | None = None,
+        context_hash: str | None = None,
+        alternative_agents: list[dict[str, Any]] | None = None,
         max_retries: int = 3,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Log router performance metrics to database with retry logic.
 
@@ -530,7 +540,7 @@ class AgentRouterEventService:
         self,
         bootstrap_servers: str,
         consumer_group_id: str = "agent-router-service",
-        registry_path: Optional[str] = None,
+        registry_path: str | None = None,
         db_host: str = "192.168.86.200",
         db_port: int = 5436,
         db_name: str = "omninode_bridge",
@@ -572,22 +582,20 @@ class AgentRouterEventService:
                 )
         self.registry_path = registry_path
 
-        # Database config
-        self.db_config = {
-            "host": db_host,
-            "port": db_port,
-            "database": db_name,
-            "user": db_user,
-            "password": db_password,
-        }
+        # Database config - stored separately for type safety
+        self.db_host = db_host
+        self.db_port = db_port
+        self.db_name = db_name
+        self.db_user = db_user
+        self.db_password = db_password
 
         # Components
-        self._router: Optional[AgentRouter] = None
-        self._producer: Optional[AIOKafkaProducer] = None
-        self._consumer: Optional[AIOKafkaConsumer] = None
-        self._postgres_logger: Optional[PostgresLogger] = None
-        self._health_app: Optional[web.Application] = None
-        self._health_runner: Optional[web.AppRunner] = None
+        self._router: AgentRouter | None = None
+        self._producer: AIOKafkaProducer | None = None
+        self._consumer: AIOKafkaConsumer | None = None
+        self._postgres_logger: PostgresLogger | None = None
+        self._health_app: web.Application | None = None
+        self._health_runner: web.AppRunner | None = None
         self._shutdown_event = asyncio.Event()
         self._started = False
 
@@ -624,7 +632,13 @@ class AgentRouterEventService:
         self.logger.info(f"Loaded {agent_count} agents successfully")
 
         # Initialize PostgreSQL logger
-        self._postgres_logger = PostgresLogger(**self.db_config)
+        self._postgres_logger = PostgresLogger(
+            host=self.db_host,
+            port=self.db_port,
+            database=self.db_name,
+            user=self.db_user,
+            password=self.db_password,
+        )
         await self._postgres_logger.initialize()
 
         # Initialize Kafka producer
@@ -838,8 +852,8 @@ class AgentRouterEventService:
         self,
         correlation_id: str,
         user_request: str,
-        context: Dict[str, Any],
-        options: Dict[str, Any],
+        context: dict[str, Any],
+        options: dict[str, Any],
     ) -> None:
         """
         Handle a single routing request.
@@ -1305,8 +1319,8 @@ class AgentRouterEventService:
 
     def _create_fallback_recommendation(self):
         """Create fallback recommendation when routing fails."""
-        from agent_router import AgentRecommendation
-        from confidence_scorer import ConfidenceScore
+        # Import from package-level exports (not submodules) for maintainability
+        from ..lib import AgentRecommendation, ConfidenceScore
 
         return AgentRecommendation(
             agent_name="polymorphic-agent",
@@ -1334,22 +1348,17 @@ async def main():
     registry_path = os.getenv("REGISTRY_PATH")  # Optional override
     health_check_port = settings.health_check_port
 
-    # PostgreSQL configuration
-    db_config = {
-        "db_host": settings.postgres_host,
-        "db_port": settings.postgres_port,
-        "db_name": settings.postgres_database,
-        "db_user": settings.postgres_user,
-        "db_password": settings.get_effective_postgres_password(),
-    }
-
-    # Create service
+    # Create service with PostgreSQL configuration
     service = AgentRouterEventService(
         bootstrap_servers=bootstrap_servers,
         consumer_group_id=consumer_group_id,
         registry_path=registry_path,
         health_check_port=health_check_port,
-        **db_config,
+        db_host=settings.postgres_host,
+        db_port=settings.postgres_port,
+        db_name=settings.postgres_database,
+        db_user=settings.postgres_user,
+        db_password=settings.get_effective_postgres_password(),
     )
 
     # Setup signal handlers for graceful shutdown

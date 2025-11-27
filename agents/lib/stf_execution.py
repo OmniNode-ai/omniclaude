@@ -10,10 +10,10 @@ import hashlib
 import json
 import uuid
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from .db import get_pg_pool
-from .lineage import LineageWriter
+from .lineage import LineageEdge, LineageWriter
 
 
 class STFRegistry:
@@ -144,8 +144,8 @@ class STFRegistry:
 
         async with pool.acquire() as conn:
             # Build query based on filters
-            where_conditions = ["blocked = false"]
-            params = []
+            where_conditions: List[str] = ["blocked = false"]
+            params: List[Union[str, bool]] = []
             param_count = 0
 
             if error_type:
@@ -320,7 +320,7 @@ class STFRegistry:
             if hasattr(module, symbol):
                 func = getattr(module, symbol)
                 if callable(func):
-                    return func
+                    return func  # type: ignore[no-any-return]
 
             return None
 
@@ -364,11 +364,11 @@ class STFRegistry:
             )
 
             # Emit lineage edge
-            await self._lineage_writer.emit(
-                source_type="stf",
-                source_id=stf_id,
-                target_type="execution",
-                target_id=execution_id,
+            edge = LineageEdge(
+                src_type="stf",
+                src_id=stf_id,
+                dst_type="execution",
+                dst_id=execution_id,
                 edge_type="EXECUTED",
                 attributes={
                     "run_id": run_id,
@@ -377,6 +377,7 @@ class STFRegistry:
                     "timestamp": datetime.now().isoformat(),
                 },
             )
+            await self._lineage_writer.emit(edge)
 
             return True, result, execution_id
 

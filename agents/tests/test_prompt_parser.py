@@ -15,6 +15,7 @@ from uuid import UUID
 
 import pytest
 from omnibase_core.errors import EnumCoreErrorCode, OnexError
+from pydantic import ValidationError
 
 from agents.lib.models.prompt_parse_result import PromptParseResult
 from agents.lib.prompt_parser import PromptParser
@@ -456,7 +457,7 @@ class TestResultValidation:
         """Test invalid node type raises error."""
         from uuid import uuid4
 
-        with pytest.raises(Exception):  # noqa: B017, PT011  # Pydantic ValidationError
+        with pytest.raises(ValidationError):
             PromptParseResult(
                 node_name="Test",
                 node_type="INVALID",  # Not a valid node type
@@ -471,7 +472,7 @@ class TestResultValidation:
         """Test confidence out of range raises error."""
         from uuid import uuid4
 
-        with pytest.raises(Exception):  # noqa: B017, PT011  # Pydantic ValidationError
+        with pytest.raises(ValidationError):
             PromptParseResult(
                 node_name="Test",
                 node_type="EFFECT",
@@ -486,7 +487,7 @@ class TestResultValidation:
         """Test description too short raises error."""
         from uuid import uuid4
 
-        with pytest.raises(Exception):  # noqa: B017, PT011  # Pydantic ValidationError
+        with pytest.raises(ValidationError):
             PromptParseResult(
                 node_name="Test",
                 node_type="EFFECT",

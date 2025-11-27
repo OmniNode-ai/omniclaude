@@ -13,7 +13,7 @@ Demonstrates real-world usage patterns for:
 
 import threading
 
-from pattern_id_system import (
+from .pattern_id_system import (
     PatternDeduplicator,
     PatternVersion,
     detect_pattern_derivation,
@@ -122,7 +122,12 @@ def example2_version_evolution():
         print(f"✓ {label}: {modified_meta.pattern_id}")
         print(f"  Version: {original_meta.version} → {modified_meta.version}")
         print(f"  Similarity: {modified_meta.similarity_score:.2%}")
-        print(f"  Type: {modified_meta.modification_type.value}")
+        mod_type = (
+            modified_meta.modification_type.value
+            if modified_meta.modification_type
+            else "unknown"
+        )
+        print(f"  Type: {mod_type}")
 
         current_code = next_code
 

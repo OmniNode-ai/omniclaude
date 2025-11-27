@@ -13,7 +13,7 @@ import os
 import re
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
 
 class ONEXNodeType(Enum):
@@ -87,9 +87,9 @@ class ONEXTemplateInjector:
             return self.PATTERNS_DOC.read_text(encoding="utf-8")
         return ""
 
-    def _extract_node_templates(self) -> Dict[ONEXNodeType, str]:
+    def _extract_node_templates(self) -> Dict[Union[ONEXNodeType, str], str]:
         """Extract quick reference templates for each node type."""
-        templates = {}
+        templates: Dict[Union[ONEXNodeType, str], str] = {}
 
         # Extract Effect template
         effect_match = re.search(

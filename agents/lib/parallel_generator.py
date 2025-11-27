@@ -12,7 +12,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 from uuid import UUID
 
 from omnibase_core.errors import EnumCoreErrorCode, OnexError
@@ -92,7 +92,7 @@ class ParallelGenerator:
         # Template engine (shared, thread-safe)
         # Disable caching for parallel mode to avoid event loop issues in worker threads
         self._template_engine_lock = threading.Lock()
-        self._template_engine = None
+        self._template_engine: Optional[OmniNodeTemplateEngine] = None
         self._cache_enabled = False  # Disable cache for thread-safe operation
 
         # Persistence for metrics
@@ -113,6 +113,11 @@ class ParallelGenerator:
                 if self._template_engine is None:
                     # Disable cache to avoid asyncio event loop issues in worker threads
                     self._template_engine = OmniNodeTemplateEngine(enable_cache=False)
+        # At this point _template_engine is guaranteed to be initialized
+        if self._template_engine is None:
+            raise RuntimeError(
+                "Template engine failed to initialize in double-checked lock"
+            )
         return self._template_engine
 
     async def generate_nodes_parallel(
@@ -282,9 +287,10 @@ class ParallelGenerator:
 
             try:
                 # Generate node using shared template engine
+                # Cast analysis_result to match template engine's expected type
                 node_result = loop.run_until_complete(
                     self.template_engine.generate_node(
-                        analysis_result=job.analysis_result,
+                        analysis_result=cast(Any, job.analysis_result),
                         node_type=job.node_type,
                         microservice_name=job.microservice_name,
                         domain=job.domain,

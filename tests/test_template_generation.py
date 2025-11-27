@@ -35,7 +35,7 @@ from uuid import uuid4
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from agents.lib.omninode_template_engine import OmniNodeTemplateEngine
-from agents.lib.simple_prd_analyzer import (
+from agents.lib.prd_analyzer import (
     DecompositionResult,
     ParsedPRD,
     PRDAnalysisResult,
@@ -64,7 +64,7 @@ class TestResult:
 class TemplateGenerationTester:
     """Test harness for template generation"""
 
-    def __init__(self, output_dir: Path = None, cleanup: bool = True):
+    def __init__(self, output_dir: Path | None = None, cleanup: bool = True):
         """
         Initialize tester
 
@@ -463,7 +463,7 @@ class TemplateGenerationTester:
                 errors=[str(e)],
             )
 
-    async def run_all_tests(self, node_types: List[str] = None) -> Dict:
+    async def run_all_tests(self, node_types: List[str] | None = None) -> Dict:
         """
         Run all tests
 

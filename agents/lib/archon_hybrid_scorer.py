@@ -53,7 +53,7 @@ class ArchonHybridScorer:
 
     def __init__(
         self,
-        archon_url: str = None,
+        archon_url: Optional[str] = None,
         timeout: float = 5.0,
         max_retries: int = 2,
         enable_fallback: bool = True,
@@ -357,7 +357,9 @@ class ArchonHybridScorer:
         )
 
         # Filter out errors and sort by score
-        valid_patterns = [p for p in scored_patterns if not isinstance(p, Exception)]
+        valid_patterns: List[Dict[str, Any]] = [
+            p for p in scored_patterns if isinstance(p, dict)
+        ]
         valid_patterns.sort(key=lambda p: p.get("hybrid_score", 0.0), reverse=True)
 
         return valid_patterns
@@ -377,7 +379,7 @@ class ArchonHybridScorer:
                 response.raise_for_status()
 
                 data = response.json()
-                is_healthy = data.get("status") == "healthy"
+                is_healthy: bool = data.get("status") == "healthy"
 
                 if is_healthy:
                     self._api_available = True

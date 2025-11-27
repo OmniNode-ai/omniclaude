@@ -18,7 +18,7 @@ Performance Targets:
 
 import statistics
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -201,12 +201,14 @@ class MetricsCollector:
             True if within threshold, False if breached
         """
         # Get threshold values based on measurement type
+        threshold_value: float
+        alert_threshold_value: float
         if threshold.threshold_ms > 0:
-            threshold_value = threshold.threshold_ms
-            alert_threshold_value = threshold.alert_threshold_ms
+            threshold_value = float(threshold.threshold_ms)
+            alert_threshold_value = float(threshold.alert_threshold_ms)
         elif threshold.threshold_mb > 0:
-            threshold_value = threshold.threshold_mb
-            alert_threshold_value = threshold.alert_threshold_mb
+            threshold_value = float(threshold.threshold_mb)
+            alert_threshold_value = float(threshold.alert_threshold_mb)
         elif threshold.threshold_ratio > 0:
             threshold_value = threshold.threshold_ratio
             alert_threshold_value = threshold.alert_threshold_ratio
@@ -301,7 +303,7 @@ class MetricsCollector:
             )
 
         # Calculate duration statistics
-        durations = [t.duration_ms for t in self.stage_timings]
+        durations = [float(t.duration_ms) for t in self.stage_timings]
         avg_duration = statistics.mean(durations)
         p50_duration = self._percentile(durations, 0.50)
         p95_duration = self._percentile(durations, 0.95)
@@ -354,7 +356,7 @@ class MetricsCollector:
             window_end=window_end,
         )
 
-    def _percentile(self, data: List[float], percentile: float) -> float:
+    def _percentile(self, data: Sequence[float], percentile: float) -> float:
         """
         Calculate percentile of data.
 
@@ -388,7 +390,7 @@ class MetricsCollector:
 
         stage_metrics = {}
         for stage_name, timings in stage_data.items():
-            durations = [t.duration_ms for t in timings]
+            durations = [float(t.duration_ms) for t in timings]
             ratios = [t.duration_ms / t.target_ms for t in timings if t.target_ms > 0]
 
             stage_metrics[stage_name] = {

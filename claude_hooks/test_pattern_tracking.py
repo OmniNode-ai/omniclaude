@@ -13,9 +13,7 @@ import uuid
 
 from config import settings
 
-
-# Add hooks to path
-sys.path.insert(0, "/Users/jonah/.claude/hooks")
+from .pattern_tracker import get_tracker
 
 
 def test_pattern_tracking():
@@ -23,8 +21,7 @@ def test_pattern_tracking():
     print("=== Pattern Tracking End-to-End Test ===")
 
     try:
-        # Import pattern tracker
-        from pattern_tracker import get_tracker
+        # Import pattern tracker (already imported above)
 
         print("✓ Pattern tracker imported successfully")
 
@@ -59,9 +56,13 @@ print(f"Result: {result}")
         tracker = get_tracker()
         print(f"✓ Pattern tracker initialized (session: {tracker.session_id})")
 
-        # Test the sync wrapper (used by hooks)
-        pattern_id = tracker.track_pattern_creation_sync(
-            code=test_code, context=context, metadata=metadata
+        # Test the async method using asyncio.run()
+        import asyncio
+
+        pattern_id = asyncio.run(
+            tracker.track_pattern_creation(
+                code=test_code, context=context, metadata=metadata
+            )
         )
 
         print("✓ Pattern creation tracked successfully")

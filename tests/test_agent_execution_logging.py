@@ -120,7 +120,7 @@ async def test_agent_execution_logging():
         # Connect to database using environment variables
         conn = psycopg2.connect(
             host=POSTGRES_HOST,
-            port=int(POSTGRES_PORT),
+            port=int(POSTGRES_PORT or "5436"),
             database=POSTGRES_DATABASE,
             user=POSTGRES_USER,
             password=POSTGRES_PASSWORD,

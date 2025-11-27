@@ -74,8 +74,10 @@ def test_cache_entry():
 
     # Wait for expiration
     time.sleep(1.1)
-    assert entry.is_expired
-    print(f"✅ Entry expired: age={entry.age_seconds:.3f}s")
+    # Note: mypy can't track that time.sleep causes is_expired to change
+    expired = entry.is_expired
+    assert expired
+    print(f"✅ Entry expired: age={entry.age_seconds:.3f}s")  # type: ignore[unreachable]
 
     print("✅ CacheEntry tests passed")
 

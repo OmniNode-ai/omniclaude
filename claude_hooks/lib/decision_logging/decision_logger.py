@@ -166,7 +166,7 @@ class DecisionLogger:
             }
 
         total = 0
-        actions = {}
+        actions: Dict[str, int] = {}
         consensus_scores = []
         user_responses = {"accepted": 0, "rejected": 0, "modified": 0}
         total_responses = 0

@@ -9,13 +9,14 @@ import time
 from collections import defaultdict
 from typing import Any, Dict, List
 
-from agent_analyzer import ArchitecturalAnalyzerAgent
-from agent_coder import CoderAgent
-from agent_debug_intelligence import DebugIntelligenceAgent
-from agent_model import AgentResult, AgentTask
-from agent_researcher import ResearchIntelligenceAgent
-from agent_validator import AgentValidator
 from trace_logger import TraceEventType, TraceLevel, get_trace_logger
+
+from .agent_analyzer import ArchitecturalAnalyzerAgent
+from .agent_coder import CoderAgent
+from .agent_debug_intelligence import DebugIntelligenceAgent
+from .agent_model import AgentResult, AgentTask
+from .agent_researcher import ResearchIntelligenceAgent
+from .agent_validator import AgentValidator
 
 
 class ParallelCoordinator:

@@ -20,7 +20,7 @@ ONEX v2.0 Compliance:
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, Field
 
@@ -217,7 +217,10 @@ class EnumQualityGate(str, Enum):
             self.LIFECYCLE_COMPLIANCE: "blocking",
             self.FRAMEWORK_INTEGRATION: "blocking",
         }
-        return types.get(self, "checkpoint")
+        return cast(
+            Literal["blocking", "monitoring", "checkpoint", "quality_check"],
+            types.get(self, "checkpoint"),
+        )
 
     @property
     def execution_point(self) -> str:
@@ -437,12 +440,16 @@ class QualityGateRegistry:
             # Check if gate should be skipped
             should_skip, skip_reason = validator.should_skip(context, self.results)
             if should_skip:
-                result = validator.create_skipped_result(skip_reason)
+                result: ModelQualityGateResult = validator.create_skipped_result(
+                    skip_reason
+                )
                 self.results.append(result)
                 return result
 
             # Execute validator with timing
-            result = await validator.execute_with_timing(context)
+            result = cast(
+                ModelQualityGateResult, await validator.execute_with_timing(context)
+            )
             self.results.append(result)
             return result
 

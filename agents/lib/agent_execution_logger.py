@@ -25,22 +25,21 @@ import time
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 from uuid import UUID, uuid4
 
 from omnibase_core.enums.enum_operation_status import EnumOperationStatus
 
 
-try:
-    # Try relative imports first (for package usage)
+# Import pattern: use relative imports when run as package, absolute when standalone
+if __package__:
     from .db import get_pg_pool
     from .kafka_rpk_client import RpkKafkaClient
     from .structured_logger import StructuredLogger
-except ImportError:
-    # Fall back to absolute imports (for standalone usage)
-    from db import get_pg_pool
-    from kafka_rpk_client import RpkKafkaClient
-    from structured_logger import StructuredLogger
+else:
+    from db import get_pg_pool  # type: ignore[import-not-found]
+    from kafka_rpk_client import RpkKafkaClient  # type: ignore[import-not-found]
+    from structured_logger import StructuredLogger  # type: ignore[import-not-found]
 
 # Lazy initialization for fallback log directory (platform-appropriate)
 _FALLBACK_LOG_DIR = None
@@ -100,23 +99,23 @@ class AgentExecutionLogger:
         await logger.progress(stage="analyzing_results", percent=75)
 
         # Complete with success
-        await logger.complete(status="success", quality_score=0.92)
+        await logger.complete(status=EnumOperationStatus.SUCCESS, quality_score=0.92)
 
         # Or complete with error
-        await logger.complete(status="error", error_message=str(error))
+        await logger.complete(status=EnumOperationStatus.FAILED, error_message=str(error))
     """
 
     def __init__(
         self,
         agent_name: str,
-        user_prompt: Optional[str] = None,
-        correlation_id: Optional[UUID | str] = None,
-        session_id: Optional[UUID | str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        project_path: Optional[str] = None,
-        project_name: Optional[str] = None,
-        claude_session_id: Optional[str] = None,
-        terminal_id: Optional[str] = None,
+        user_prompt: str | None = None,
+        correlation_id: UUID | str | None = None,
+        session_id: UUID | str | None = None,
+        metadata: dict[str, Any] | None = None,
+        project_path: str | None = None,
+        project_name: str | None = None,
+        claude_session_id: str | None = None,
+        terminal_id: str | None = None,
     ):
         """
         Initialize agent execution logger.
@@ -142,8 +141,8 @@ class AgentExecutionLogger:
         self.claude_session_id = claude_session_id
         self.terminal_id = terminal_id
 
-        self.execution_id: Optional[str] = None
-        self.started_at: Optional[datetime] = None
+        self.execution_id: str | None = None
+        self.started_at: datetime | None = None
 
         # Structured logger for stderr output
         self.logger = StructuredLogger(
@@ -266,7 +265,7 @@ class AgentExecutionLogger:
         self._db_retry_count = 0
         self._last_retry_time = 0.0
 
-    def _publish_kafka_event(self, event_data: Dict[str, Any]):
+    def _publish_kafka_event(self, event_data: dict[str, Any]):
         """
         Publish event to Kafka topic 'agent-execution-logs'.
 
@@ -409,8 +408,8 @@ class AgentExecutionLogger:
     async def progress(
         self,
         stage: str,
-        percent: Optional[int] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        percent: int | None = None,
+        metadata: dict[str, Any] | None = None,
     ):
         """
         Log execution progress.
@@ -502,10 +501,10 @@ class AgentExecutionLogger:
     async def complete(
         self,
         status: EnumOperationStatus = EnumOperationStatus.SUCCESS,
-        quality_score: Optional[float] = None,
-        error_message: Optional[str] = None,
-        error_type: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        quality_score: float | None = None,
+        error_message: str | None = None,
+        error_type: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ):
         """
         Log execution completion.
@@ -625,7 +624,7 @@ class AgentExecutionLogger:
             }
         )
 
-    def _write_fallback_log(self, event_type: str, data: Dict[str, Any]):
+    def _write_fallback_log(self, event_type: str, data: dict[str, Any]):
         """
         Write log to fallback file when database is unavailable.
 
@@ -676,13 +675,13 @@ class AgentExecutionLogger:
 
 async def log_agent_execution(
     agent_name: str,
-    user_prompt: Optional[str] = None,
-    correlation_id: Optional[UUID | str] = None,
-    session_id: Optional[UUID | str] = None,
-    project_path: Optional[str] = None,
-    project_name: Optional[str] = None,
-    claude_session_id: Optional[str] = None,
-    terminal_id: Optional[str] = None,
+    user_prompt: str | None = None,
+    correlation_id: UUID | str | None = None,
+    session_id: UUID | str | None = None,
+    project_path: str | None = None,
+    project_name: str | None = None,
+    claude_session_id: str | None = None,
+    terminal_id: str | None = None,
 ) -> AgentExecutionLogger:
     """
     Factory function to create and start agent execution logger.
@@ -709,7 +708,7 @@ async def log_agent_execution(
         )
 
         await logger.progress(stage="gathering", percent=50)
-        await logger.complete(status="success", quality_score=0.92)
+        await logger.complete(status=EnumOperationStatus.SUCCESS, quality_score=0.92)
     """
     logger = AgentExecutionLogger(
         agent_name=agent_name,

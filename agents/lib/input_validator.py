@@ -40,7 +40,7 @@ class ValidationResult:
 
     is_valid: bool
     sanitized_input: Any
-    issues: List[Dict[str, Any]]
+    issues: List[str]
     warnings: List[str]
     errors: List[str]
     metadata: Dict[str, Any]
@@ -402,10 +402,9 @@ class InputValidator:
             return self._sanitize_string(user_input, input_type)
         elif isinstance(user_input, dict):
             return self._sanitize_dict(user_input, input_type)
-        elif isinstance(user_input, list):
-            return self._sanitize_list(user_input, input_type)
         else:
-            return user_input
+            # user_input is a list
+            return self._sanitize_list(user_input, input_type)
 
     def _sanitize_string(self, input_str: str, input_type: InputType) -> str:
         """Sanitize string input."""
@@ -449,12 +448,13 @@ class InputValidator:
 
     def _sanitize_dict(self, input_dict: Dict, input_type: InputType) -> Dict:
         """Sanitize dictionary input."""
-        sanitized = {}
+        sanitized: Dict[Any, Any] = {}
         for key, value in input_dict.items():
             # Sanitize key
             sanitized_key = self._sanitize_string(str(key), input_type)
 
-            # Sanitize value
+            # Sanitize value based on type
+            sanitized_value: Any
             if isinstance(value, str):
                 sanitized_value = self._sanitize_string(value, input_type)
             elif isinstance(value, dict):
@@ -468,9 +468,9 @@ class InputValidator:
 
         return sanitized
 
-    def _sanitize_list(self, input_list: List, input_type: InputType) -> List:
+    def _sanitize_list(self, input_list: List, input_type: InputType) -> List[Any]:
         """Sanitize list input."""
-        sanitized = []
+        sanitized: List[Any] = []
         for item in input_list:
             if isinstance(item, str):
                 sanitized.append(self._sanitize_string(item, input_type))
@@ -494,7 +494,9 @@ class InputValidator:
             Sanitized prompt
         """
         result = await self.validate_and_sanitize(prompt, InputType.USER_PROMPT)
-        return result.sanitized_input
+        if not isinstance(result, ValidationResult):
+            raise TypeError(f"Expected ValidationResult, got {type(result).__name__}")
+        return str(result.sanitized_input)
 
     async def validate_json_input(self, json_str: str) -> Tuple[bool, Any]:
         """
@@ -509,6 +511,10 @@ class InputValidator:
         try:
             parsed = json.loads(json_str)
             result = await self.validate_and_sanitize(parsed, InputType.JSON_DATA)
+            if not isinstance(result, ValidationResult):
+                raise TypeError(
+                    f"Expected ValidationResult, got {type(result).__name__}"
+                )
             return result.is_valid, result.sanitized_input
         except json.JSONDecodeError:
             return False, None
@@ -524,7 +530,9 @@ class InputValidator:
             Tuple of (is_valid, sanitized_path)
         """
         result = await self.validate_and_sanitize(file_path, InputType.FILE_PATH)
-        return result.is_valid, result.sanitized_input
+        if not isinstance(result, ValidationResult):
+            raise TypeError(f"Expected ValidationResult, got {type(result).__name__}")
+        return result.is_valid, str(result.sanitized_input)
 
     async def validate_url(self, url: str) -> Tuple[bool, str]:
         """
@@ -537,7 +545,9 @@ class InputValidator:
             Tuple of (is_valid, sanitized_url)
         """
         result = await self.validate_and_sanitize(url, InputType.URL)
-        return result.is_valid, result.sanitized_input
+        if not isinstance(result, ValidationResult):
+            raise TypeError(f"Expected ValidationResult, got {type(result).__name__}")
+        return result.is_valid, str(result.sanitized_input)
 
     def _get_timestamp(self) -> str:
         """Get current timestamp."""
@@ -566,9 +576,12 @@ async def validate_and_sanitize(
     user_input: Union[str, Dict, List], input_type: InputType, strict_mode: bool = True
 ) -> ValidationResult:
     """Validate and sanitize user input."""
-    return await input_validator.validate_and_sanitize(
+    result = await input_validator.validate_and_sanitize(
         user_input, input_type, strict_mode
     )
+    if not isinstance(result, ValidationResult):
+        raise TypeError(f"Expected ValidationResult, got {type(result).__name__}")
+    return result
 
 
 async def sanitize_prompt(prompt: str) -> str:

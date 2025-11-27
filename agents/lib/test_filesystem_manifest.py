@@ -17,7 +17,7 @@ lib_path = Path(__file__).parent
 if str(lib_path) not in sys.path:
     sys.path.insert(0, str(lib_path))
 
-from manifest_injector import ManifestInjector  # noqa: E402
+from .manifest_injector import ManifestInjector  # noqa: E402
 
 
 async def test_filesystem_query():

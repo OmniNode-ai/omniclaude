@@ -547,7 +547,9 @@ class IntelligenceGatherer:
             },
         }
 
-        return targets.get(node_type, {"max_execution_time_ms": 1000})
+        default_target: Dict[str, Any] = {"max_execution_time_ms": 1000}
+        result = targets.get(node_type, default_target)
+        return result if isinstance(result, dict) else default_target
 
     def _get_error_scenarios(self, node_type: str, domain: str) -> List[str]:
         """Get common error scenarios to handle"""

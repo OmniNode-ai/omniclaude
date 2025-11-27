@@ -16,17 +16,14 @@ try:
     import sys
     from pathlib import Path
 
-    # Add parent directory to path for imports
-    sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-
-    from hooks.lib.tracing.models import (
+    from .models import (
         HookMetadata,
         TraceContext,
         create_new_hook_execution,
         create_new_trace,
         parse_trace_from_row,
     )
-    from hooks.lib.tracing.postgres_client import PostgresTracingClient
+    from .postgres_client import PostgresTracingClient
 
     IMPORTS_AVAILABLE = True
 except ImportError as e:
@@ -71,7 +68,7 @@ async def test_basic_model_creation():
     trace.mark_completed(success=True)
     assert trace.status == "completed"
     assert trace.success is True
-    assert trace.completed_at is not None
+    assert trace.completed_at is not None  # type: ignore[unreachable]
     print(f"✓ Marked trace as completed, duration: {trace.duration_ms}ms")
 
     hook.mark_completed(success=True)

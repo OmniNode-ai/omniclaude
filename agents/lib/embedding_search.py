@@ -50,7 +50,7 @@ class EmbeddingSearch:
         # Simple text-based similarity for MVP
         # In production, replace with actual embedding model
         words = error_text.lower().split()
-        word_counts = {}
+        word_counts: Dict[str, int] = {}
         for word in words:
             word_counts[word] = word_counts.get(word, 0) + 1
 
@@ -86,7 +86,7 @@ class EmbeddingSearch:
         if norm1 == 0 or norm2 == 0:
             return 0.0
 
-        return dot_product / (norm1 * norm2)
+        return float(dot_product / (norm1 * norm2))
 
     async def find_similar_errors(
         self,
@@ -115,8 +115,8 @@ class EmbeddingSearch:
         query_embedding = await self._get_error_embedding(error_text)
 
         # Build query for error events
-        where_conditions = []
-        params = []
+        where_conditions: List[str] = []
+        params: List[Any] = []
         param_count = 0
 
         if error_type:

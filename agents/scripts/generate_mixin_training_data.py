@@ -29,10 +29,9 @@ import argparse
 import asyncio
 import logging
 import random
-from typing import List, Tuple
 
-from lib.mixin_features import MixinFeatureExtractor
-from lib.persistence import CodegenPersistence
+from agents.lib.mixin_features import MixinFeatureExtractor
+from agents.lib.persistence import CodegenPersistence
 
 
 logging.basicConfig(level=logging.INFO)
@@ -139,7 +138,7 @@ NODE_TYPE_PATTERNS = {
 
 def generate_training_samples(
     num_samples: int = 200,
-) -> List[Tuple[str, str, str, bool, str]]:
+) -> list[tuple[str, str, str, int, int, str]]:
     """
     Generate training samples with known compatibility outcomes.
 
@@ -147,7 +146,13 @@ def generate_training_samples(
         num_samples: Number of samples to generate
 
     Returns:
-        List of (mixin_a, mixin_b, node_type, success, reason) tuples
+        List of 6-tuples containing:
+            - mixin_a (str): First mixin name
+            - mixin_b (str): Second mixin name
+            - node_type (str): Node type (EFFECT, COMPUTE, REDUCER, ORCHESTRATOR)
+            - success_count (int): Number of successful test runs
+            - failure_count (int): Number of failed test runs
+            - reason (str): Explanation of the compatibility result
     """
     samples = []
 
@@ -252,7 +257,7 @@ def generate_training_samples(
     return samples
 
 
-async def populate_database(samples: List[Tuple[str, str, str, int, int, str]]):
+async def populate_database(samples: list[tuple[str, str, str, int, int, str]]):
     """
     Populate database with training samples.
 

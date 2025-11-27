@@ -19,10 +19,17 @@ Architecture:
 import os
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING, Optional
 from uuid import uuid4
 
 
-def load_manifest(correlation_id: str = None, agent_name: str = None):
+if TYPE_CHECKING:
+    from typing import Any
+
+
+def load_manifest(
+    correlation_id: Optional[str] = None, agent_name: Optional[str] = None
+) -> str:
     """
     Load and return dynamic system manifest.
 
@@ -64,7 +71,9 @@ def load_manifest(correlation_id: str = None, agent_name: str = None):
 
         # Call inject_manifest with correlation_id and agent_name (new v2.0 API)
         # This will query event bus for dynamic data or fall back to minimal manifest
-        manifest = inject_manifest(correlation_id=correlation_id, agent_name=agent_name)
+        manifest: str = inject_manifest(
+            correlation_id=correlation_id, agent_name=agent_name
+        )
         return manifest
 
     except ImportError as e:

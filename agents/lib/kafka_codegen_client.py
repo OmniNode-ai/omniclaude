@@ -17,9 +17,10 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import AsyncIterator, Dict, List, Optional
+from typing import Any, AsyncIterator
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
+from omnibase_core.errors import OnexError
 
 from .codegen_events import BaseEvent
 from .version_config import get_config
@@ -27,26 +28,26 @@ from .version_config import get_config
 
 # Optional confluent fallback
 try:
-    from .kafka_confluent_client import ConfluentKafkaClient  # type: ignore
+    from .kafka_confluent_client import ConfluentKafkaClient
 except Exception:  # pragma: no cover
-    ConfluentKafkaClient = None  # type: ignore
+    ConfluentKafkaClient = None  # type: ignore[misc,assignment]
 
 # Optional event optimizer
 try:
-    from .event_optimizer import EventOptimizer, OptimizerConfig  # type: ignore
+    from .event_optimizer import EventOptimizer, OptimizerConfig
 except Exception:  # pragma: no cover
-    EventOptimizer = None  # type: ignore
-    OptimizerConfig = None  # type: ignore
+    EventOptimizer = None  # type: ignore[misc,assignment]
+    OptimizerConfig = None  # type: ignore[misc,assignment]
 
 
 class KafkaCodegenClient:
     def __init__(
         self,
-        bootstrap_servers: Optional[str] = None,
-        group_id: Optional[str] = None,
-        host_rewrite: Optional[Dict[str, str]] = None,
+        bootstrap_servers: str | None = None,
+        group_id: str | None = None,
+        host_rewrite: dict[str, str] | None = None,
         enable_optimizer: bool = True,
-        optimizer_config: Optional[OptimizerConfig] = None,
+        optimizer_config: OptimizerConfig | None = None,
     ) -> None:
         cfg = get_config()
         self.bootstrap_servers = bootstrap_servers or cfg.kafka_bootstrap_servers
@@ -54,11 +55,11 @@ class KafkaCodegenClient:
         # Host rewrite for development environments (disabled by default - use remote broker)
         # Only enable if explicitly provided via host_rewrite parameter
         self.host_rewrite = host_rewrite or {}
-        self._producer: Optional[AIOKafkaProducer] = None
-        self._consumer: Optional[AIOKafkaConsumer] = None
+        self._producer: AIOKafkaProducer | None = None
+        self._consumer: AIOKafkaConsumer | None = None
 
         # Framework: Event optimizer integration
-        self._optimizer: Optional[EventOptimizer] = None
+        self._optimizer: EventOptimizer | None = None
         self._enable_optimizer = enable_optimizer and EventOptimizer is not None
         self._optimizer_config = optimizer_config
 
@@ -142,7 +143,8 @@ class KafkaCodegenClient:
         # Fallback to direct publishing
         try:
             await self.start_producer()
-            assert self._producer is not None
+            if self._producer is None:
+                raise OnexError("Failed to start Kafka producer - producer is None")
             topic = event.to_kafka_topic()
             payload = json.dumps(
                 {
@@ -177,7 +179,7 @@ class KafkaCodegenClient:
                 },
             )
 
-    async def publish_batch(self, events: List[BaseEvent]) -> None:
+    async def publish_batch(self, events: list[BaseEvent]) -> None:
         """
         Publish batch of events efficiently.
 
@@ -205,15 +207,48 @@ class KafkaCodegenClient:
         for event in events:
             await self.publish(event)
 
-    async def consume(self, topic: str) -> AsyncIterator[dict]:
+    async def consume(self, topic: str) -> AsyncIterator[dict[Any, Any]]:
+        """Consume messages from a Kafka topic as an async iterator.
+
+        Establishes a consumer connection and yields messages as they arrive.
+        Automatically handles connection management and provides fallback to
+        confluent-kafka client if aiokafka fails.
+
+        Args:
+            topic: The Kafka topic name to consume messages from.
+
+        Yields:
+            dict[Any, Any]: Parsed JSON payload from each consumed message.
+                Malformed messages are skipped with a debug log.
+
+        Raises:
+            OnexError: If consumer initialization fails and no fallback available.
+            Exception: Re-raises connection errors if ConfluentKafkaClient
+                fallback is not available.
+
+        Example:
+            async for message in client.consume("my-topic"):
+                correlation_id = message.get("correlation_id")
+                payload = message.get("payload")
+                process_message(payload)
+
+        Note:
+            - Uses auto-commit for offset management
+            - Starts from latest offset by default
+            - Falls back to ConfluentKafkaClient if aiokafka fails
+        """
         try:
             await self.start_consumer(topic)
-            assert self._consumer is not None
-            async for msg in self._consumer:
+            if self._consumer is None:
+                raise OnexError("Failed to start Kafka consumer - consumer is None")
+            consumer = self._consumer  # Local reference for type narrowing
+            async for msg in consumer:
                 try:
-                    yield json.loads(msg.value.decode("utf-8"))
-                except Exception as e:  # noqa: S112
-                    # Skip malformed messages
+                    result: dict[Any, Any] = json.loads(msg.value.decode("utf-8"))
+                    yield result
+                except (
+                    Exception
+                ) as e:  # noqa: S112 - intentional: skip malformed messages, continue consuming
                     self.logger.debug(f"Skipping malformed message: {e}")
                     continue
         except Exception as e:
@@ -232,17 +267,57 @@ class KafkaCodegenClient:
 
     async def consume_until(
         self, topic: str, predicate, timeout_seconds: float = 30.0
-    ) -> Optional[dict]:
-        """Consume messages until predicate(payload) is True or timeout expires."""
+    ) -> dict[Any, Any] | None:
+        """Consume messages until a predicate condition is met or timeout expires.
+
+        Useful for request-response patterns where you need to wait for a
+        specific message (e.g., matching a correlation_id) within a time limit.
+
+        Args:
+            topic: The Kafka topic name to consume messages from.
+            predicate: A callable that takes a message payload (dict) and returns
+                True if this is the desired message, False to continue consuming.
+            timeout_seconds: Maximum time in seconds to wait for a matching
+                message. Defaults to 30.0.
+
+        Returns:
+            dict[Any, Any] | None: The first message payload where predicate
+                returns True, or None if timeout expires without finding a match.
+
+        Raises:
+            OnexError: If consumer initialization fails and no fallback available.
+            Exception: Re-raises connection errors if ConfluentKafkaClient
+                fallback is not available.
+
+        Example:
+            # Wait for response with matching correlation ID
+            response = await client.consume_until(
+                topic="responses.v1",
+                predicate=lambda msg: msg.get("correlation_id") == my_correlation_id,
+                timeout_seconds=10.0
+            )
+            if response:
+                process_response(response)
+            else:
+                handle_timeout()
+
+        Note:
+            - Malformed messages are skipped and do not affect the timeout
+            - Falls back to ConfluentKafkaClient polling if aiokafka fails
+        """
         try:
             await self.start_consumer(topic)
-            assert self._consumer is not None
+            if self._consumer is None:
+                raise OnexError("Failed to start Kafka consumer - consumer is None")
+            consumer = self._consumer  # Local reference for type narrowing
 
-            async def _wait():
-                async for msg in self._consumer:
+            async def _wait() -> dict[Any, Any] | None:
+                async for msg in consumer:
                     try:
-                        payload = json.loads(msg.value.decode("utf-8"))
-                    except Exception as e:  # noqa: S112
+                        payload: dict[Any, Any] = json.loads(msg.value.decode("utf-8"))
+                    except (
+                        Exception
+                    ) as e:  # noqa: S112 - intentional: skip malformed messages, continue consuming
                         self.logger.debug(f"Skipping malformed message: {e}")
                         continue
                     if predicate(payload):
@@ -264,5 +339,6 @@ class KafkaCodegenClient:
             while asyncio.get_event_loop().time() < end:
                 payload = client.consume_one(topic, timeout_sec=1.0)
                 if payload and predicate(payload):
-                    return payload
+                    result: dict[Any, Any] = payload
+                    return result
             return None

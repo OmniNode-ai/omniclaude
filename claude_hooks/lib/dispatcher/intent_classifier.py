@@ -9,10 +9,31 @@ Classifies tool use intent and extracts ONEX-relevant patterns to enable:
 - Mistake prevention
 """
 
+from __future__ import annotations
+
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Optional, TypedDict
+
+
+class IntentPatternDict(TypedDict):
+    """Type definition for intent pattern configuration."""
+
+    triggers: list[str]
+    agents: list[str]
+    validators: list[str]
+    onex_rules: list[str]
+    weight: float
+
+
+class IntentMetadataDict(TypedDict):
+    """Type definition for intent metadata."""
+
+    tool_name: str
+    file_path: str
+    language: Optional[str]
+    all_scores: dict[str, float]
 
 
 @dataclass
@@ -32,11 +53,15 @@ class IntentContext:
 
     primary_intent: str
     confidence: float
-    suggested_agents: List[str] = field(default_factory=list)
-    validators: List[str] = field(default_factory=list)
-    onex_rules: List[str] = field(default_factory=list)
-    secondary_intents: List[str] = field(default_factory=list)
-    metadata: Dict = field(default_factory=dict)
+    suggested_agents: list[str] = field(default_factory=list)
+    validators: list[str] = field(default_factory=list)
+    onex_rules: list[str] = field(default_factory=list)
+    secondary_intents: list[str] = field(default_factory=list)
+    metadata: IntentMetadataDict = field(
+        default_factory=lambda: IntentMetadataDict(
+            tool_name="", file_path="", language=None, all_scores={}
+        )
+    )
 
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
@@ -63,7 +88,7 @@ class IntentClassifier:
     """
 
     # Intent pattern definitions (class constant - keep UPPERCASE)
-    INTENT_PATTERNS = {
+    INTENT_PATTERNS: dict[str, IntentPatternDict] = {
         "file_modification": {
             "triggers": ["Edit", "Write", "replace_", "modify", "update"],
             "agents": ["agent-code-quality-analyzer", "agent-onex-compliance"],
@@ -210,7 +235,7 @@ class IntentClassifier:
             normalized_scores = {"file_modification": 0.5}  # Default fallback
 
         # Get primary intent
-        primary_intent = max(normalized_scores, key=normalized_scores.get)
+        primary_intent = max(normalized_scores, key=lambda k: normalized_scores[k])
         confidence = normalized_scores[primary_intent]
 
         # Get secondary intents (score >= 0.5)
@@ -230,15 +255,15 @@ class IntentClassifier:
             validators=pattern["validators"],
             onex_rules=pattern["onex_rules"],
             secondary_intents=secondary_intents,
-            metadata={
-                "tool_name": tool_name,
-                "file_path": file_path,
-                "language": self._detect_language(file_path),
-                "all_scores": normalized_scores,
-            },
+            metadata=IntentMetadataDict(
+                tool_name=tool_name,
+                file_path=file_path,
+                language=self._detect_language(file_path),
+                all_scores=normalized_scores,
+            ),
         )
 
-    def _score_tool_name(self, tool_name: str, pattern: dict) -> float:
+    def _score_tool_name(self, tool_name: str, pattern: IntentPatternDict) -> float:
         """
         Score tool name against intent pattern triggers.
 
@@ -349,9 +374,9 @@ class IntentClassifier:
         """Extract content from tool arguments."""
         # Handle different tool argument structures
         if "content" in arguments:
-            return arguments["content"]
+            return str(arguments["content"])
         elif "new_string" in arguments:
-            return arguments["new_string"]
+            return str(arguments["new_string"])
         elif "edits" in arguments:
             # MultiEdit case
             return "\n".join(
@@ -368,7 +393,7 @@ class IntentClassifier:
         return self.LANGUAGE_MAP.get(ext)
 
     @classmethod
-    def get_available_intents(cls) -> List[str]:
+    def get_available_intents(cls) -> list[str]:
         """Get list of all available intent categories."""
         return list(cls.INTENT_PATTERNS.keys())
 

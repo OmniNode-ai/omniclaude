@@ -33,6 +33,22 @@ from .persistence import CodegenPersistence
 logger = logging.getLogger(__name__)
 
 
+def _get_event_type(event: BaseEvent) -> str:
+    """
+    Get event type from event.
+
+    BaseEvent now defines `event: str` as an instance attribute (default "unknown"),
+    so direct attribute access is type-safe.
+
+    Args:
+        event: Event to extract type from
+
+    Returns:
+        Event type string from the event
+    """
+    return event.event
+
+
 class CircuitState(Enum):
     """Circuit breaker states"""
 
@@ -248,8 +264,9 @@ class EventOptimizer:
 
             # Track success metrics
             if self.persistence:
+                event_type = _get_event_type(event)
                 await self.persistence.insert_event_processing_metric(
-                    event_type=event.event,
+                    event_type=event_type,
                     event_source="event_optimizer",
                     processing_duration_ms=int(duration_ms),
                     success=True,
@@ -260,8 +277,9 @@ class EventOptimizer:
 
             # Track failure metrics
             if self.persistence:
+                event_type = _get_event_type(event)
                 await self.persistence.insert_event_processing_metric(
-                    event_type=event.event,
+                    event_type=event_type,
                     event_source="event_optimizer",
                     processing_duration_ms=int(duration_ms),
                     success=False,

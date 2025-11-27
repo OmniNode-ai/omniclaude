@@ -7,7 +7,7 @@ A simplified PRD analyzer that doesn't depend on legacy omniagent code.
 
 import logging
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
@@ -47,8 +47,18 @@ class SimpleDecompositionResult:
 class SimplePRDAnalyzer:
     """Simple PRD analyzer for Phase 0"""
 
-    def __init__(self):
+    def __init__(self, enable_ml_recommendations: bool = False) -> None:
+        """
+        Initialize simple PRD analyzer.
+
+        Args:
+            enable_ml_recommendations: Whether to enable ML recommendations.
+                This parameter exists for API compatibility with PRDAnalyzer
+                but is not used in the simple implementation.
+        """
         self.logger = logging.getLogger(__name__)
+        # Store for API compatibility (not used in simple implementation)
+        self.enable_ml = enable_ml_recommendations
 
     async def analyze_prd(
         self, prd_content: str, workspace_context: Optional[Dict[str, Any]] = None
@@ -533,11 +543,9 @@ class SimplePRDAnalysisResult:
     external_systems: List[str]
     quality_baseline: float
     confidence_score: float
-    analysis_timestamp: datetime = None
-
-    def __post_init__(self):
-        if self.analysis_timestamp is None:
-            self.analysis_timestamp = datetime.now(timezone.utc).replace(tzinfo=None)
+    analysis_timestamp: datetime = field(
+        default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+    )
 
 
 # Aliases for compatibility

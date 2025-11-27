@@ -6,7 +6,7 @@ Captures failed, missed, or low-confidence agent detections for system improveme
 import hashlib
 import os
 import sys
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from uuid import UUID
 
 import psycopg2
@@ -21,7 +21,7 @@ from config import settings
 class DetectionFailureTracker:
     """Track detection failures for system improvement"""
 
-    def __init__(self, db_password: str = None):
+    def __init__(self, db_password: Optional[str] = None) -> None:
         password = db_password or settings.get_effective_postgres_password()
         host = os.getenv("POSTGRES_HOST", "localhost")
         port = os.getenv("POSTGRES_PORT", "5436")
@@ -31,11 +31,12 @@ class DetectionFailureTracker:
             f"host={host} port={port} dbname={db} " f"user={user} password={password}"
         )
 
-    def get_connection(self):
+    def get_connection(self) -> "psycopg2.extensions.connection":
         """Get database connection"""
         return psycopg2.connect(self.conn_string)
 
-    def _hash_prompt(self, prompt: str) -> str:
+    @staticmethod
+    def _hash_prompt(prompt: str) -> str:
         """Generate SHA-256 hash of prompt for deduplication"""
         return hashlib.sha256(prompt.encode("utf-8")).hexdigest()
 
@@ -141,7 +142,10 @@ class DetectionFailureTracker:
         with self.get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(query, params)
-                failure_id = cur.fetchone()[0]
+                result = cur.fetchone()
+                if result is None:
+                    raise RuntimeError("Failed to insert detection failure record")
+                failure_id: int = result[0]
                 conn.commit()
                 return failure_id
 
@@ -201,8 +205,8 @@ class DetectionFailureTracker:
         Returns:
             List of failure records
         """
-        conditions = []
-        params = []
+        conditions: List[str] = []
+        params: List[Union[str, int]] = []
 
         if status:
             conditions.append("detection_status = %s")
@@ -237,6 +241,8 @@ class DetectionFailureTracker:
         with self.get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(query, params)
+                if cur.description is None:
+                    return []
                 columns = [desc[0] for desc in cur.description]
                 return [dict(zip(columns, row)) for row in cur.fetchall()]
 
@@ -247,6 +253,8 @@ class DetectionFailureTracker:
         with self.get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(query, (hours,))
+                if cur.description is None:
+                    return {}
                 columns = [desc[0] for desc in cur.description]
                 row = cur.fetchone()
                 return dict(zip(columns, row)) if row else {}
@@ -291,6 +299,8 @@ class DetectionFailureTracker:
         with self.get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(query)
+                if cur.description is None:
+                    return []
                 columns = [desc[0] for desc in cur.description]
                 return [dict(zip(columns, row)) for row in cur.fetchall()]
 

@@ -396,7 +396,7 @@ class PerformanceMonitor:
 
     def get_performance_summary(self) -> Dict[str, Any]:
         """Get overall performance summary."""
-        summary = {
+        summary: Dict[str, Any] = {
             "total_phases": len(self.metrics),
             "total_executions": sum(m.total_executions for m in self.metrics.values()),
             "overall_success_rate": 0.0,

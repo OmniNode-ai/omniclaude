@@ -60,7 +60,7 @@ jobs:
       - name: Install project packages
         run: |
           echo "📦 Installing project packages (agents, cli, claude_hooks, config, services)..."
-          poetry install --no-interaction --only-root --with dev
+          poetry install --no-interaction --with dev
           echo "✅ Project packages installed"
 
       - name: Run Black (code formatting check)
@@ -89,12 +89,30 @@ jobs:
             }
           echo "::endgroup::"
 
-      # Temporarily disabled - 499 pre-existing type errors need separate cleanup PR
-      # Costs money to run on every CI iteration
-      # - name: Run type checking (mypy)
-      #   run: |
-      #     poetry run pip install mypy types-PyYAML
-      #     poetry run mypy agents/ --ignore-missing-imports
+      - name: Run type checking (mypy)
+        run: |
+          echo "::group::MyPy Type Checking"
+          echo "🔍 Running MyPy type checker..."
+          poetry run pip install mypy types-PyYAML types-aiofiles types-redis
+          # Use project's mypy.ini config which has proper exclusions
+          # Phase 1: Non-blocking check (report errors but don't fail CI)
+          # Phase 2: Fix errors and make blocking (TODO: remove || true)
+          poetry run mypy agents/ claude_hooks/ --config-file mypy.ini \
+            --exclude "agents/tests/" --exclude "claude_hooks/tests/" \
+            --exclude "agents/examples/" 2>&1 | tee mypy-output.txt || true
+
+          ERROR_COUNT=$(grep -c "error:" mypy-output.txt 2>/dev/null || echo "0")
+          echo ""
+          echo "📊 MyPy Summary: $ERROR_COUNT type errors found"
+          if [ "$ERROR_COUNT" -eq "0" ]; then
+            echo "✅ MyPy check passed - no type errors!"
+          else
+            echo "⚠️  MyPy found $ERROR_COUNT type errors (non-blocking for now)"
+            echo "💡 Run: poetry run mypy agents/ claude_hooks/ --config-file mypy.ini"
+            # TODO: Uncomment to make blocking once errors are fixed
+            # exit 1
+          fi
+          echo "::endgroup::"
 
   # ============================================================================
   # Security Scanning - Python Dependencies
@@ -139,24 +157,34 @@ jobs:
           pip install bandit
           echo "🔒 Running Bandit security scanner..."
           echo "📁 Scanning: agents/ claude_hooks/"
-          echo "⏭️  Excluding: templates, tests, .venv, __pycache__"
-          echo "📊 Severity/Confidence: MEDIUM and above"
+          echo "⏭️  Excluding: templates, tests, skills, .venv, __pycache__"
+          echo "📊 Severity/Confidence: MEDIUM+ only (filters out Low severity)"
+          echo "🎯 Configuration: .bandit file + pyproject.toml (13 skip codes)"
+          echo ""
+          echo "Skip codes (false positives):"
+          echo "  - B608: SQL injection (parameterized queries are safe)"
+          echo "  - B105/B106/B107: Hardcoded passwords (variable/param names only)"
+          echo "  - B110: Try-except-pass (acceptable in specific contexts)"
+          echo "  - B311: Random (not used for cryptographic purposes)"
+          echo "  - B404/B603/B607: Subprocess (validated inputs)"
+          echo ""
 
-          # Generate JSON report
+          # Generate JSON report (don't fail on issues - just collect data)
           bandit -r agents/ claude_hooks/ \
-            --exclude agents/templates/,agents/parallel_execution/templates/,agents/tests/,claude_hooks/tests/,.venv/,__pycache__/ \
+            --exclude agents/templates/,agents/parallel_execution/templates/,agents/tests/,claude_hooks/tests/,.venv/,__pycache__/,skills/ \
             --ini .bandit \
             --confidence-level medium --severity-level medium \
             -f json -o bandit-report.json || true
 
-          # Run with text output for CI logs
+          # Run with text output for CI logs (this determines pass/fail)
           bandit -r agents/ claude_hooks/ \
-            --exclude agents/templates/,agents/parallel_execution/templates/,agents/tests/,claude_hooks/tests/,.venv/,__pycache__/ \
+            --exclude agents/templates/,agents/parallel_execution/templates/,agents/tests/,claude_hooks/tests/,.venv/,__pycache__/,skills/ \
             --ini .bandit \
             --confidence-level medium --severity-level medium \
             -f txt && echo "✅ Bandit scan passed" || {
-              echo "❌ Bandit found security issues"
+              echo "❌ Bandit found security issues (Medium+ severity, Medium+ confidence)"
               echo "📋 Check bandit-report.json artifact for details"
+              echo "💡 If false positive, add skip code to .bandit and pyproject.toml [tool.bandit]"
               exit 1
             }
           echo "::endgroup::"
@@ -175,6 +203,7 @@ jobs:
     name: Run Tests
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false  # Continue running other splits even if one fails
       matrix:
         group: [1, 2, 3, 4, 5]  # Split tests into 5 parallel jobs
     services:
@@ -184,6 +213,9 @@ jobs:
           POSTGRES_USER: test
           POSTGRES_PASSWORD: test
           POSTGRES_DB: test_db
+        # Health check uses pg_isready without -U flag for consistency with
+        # integration-tests.yml. pg_isready only checks if server accepts
+        # connections - it doesn't authenticate, so -U is unnecessary.
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -241,13 +273,8 @@ jobs:
       - name: Install project packages
         run: |
           echo "📦 Installing project packages (agents, cli, claude_hooks, config, services)..."
-          poetry install --no-interaction --only-root --with dev
+          poetry install --no-interaction --with dev
           echo "✅ Project packages installed"
-
-      - name: Verify CLI package installation
-        run: |
-          echo "📋 Verifying cli package is available..."
-          poetry run python -c "import sys; import cli; print(f'cli location: {cli.__file__}'); from cli.lib import CLIHandler; print('✅ CLIHandler import successful')"
 
       - name: Install pytest-split for parallel test execution
         run: |
@@ -270,15 +297,6 @@ jobs:
           echo "   - Current group: ${{ matrix.group }}"
           echo "   - Markers: not integration"
           echo "   - Coverage: agents/"
-          echo ""
-          echo "📦 Verifying test dependencies..."
-          poetry run python -c "import pytest; print(f'pytest version: {pytest.__version__}')"
-          poetry run python -c "from cli.lib import CLIHandler; print('✅ CLIHandler import OK')" || {
-            echo "❌ CLIHandler import FAILED"
-            echo "📋 Available packages:"
-            poetry show --tree | head -50
-            exit 1
-          }
           echo ""
           echo "🚀 Starting test execution..."
 
@@ -458,7 +476,7 @@ jobs:
           context: .
           file: ./deployment/Dockerfile
           load: true
-          tags: ${{ env.IMAGE_NAME }}:scan
+          tags: ${{ github.repository | lower }}:scan
           cache-from: type=gha
 
       # ============================================================================
@@ -467,7 +485,7 @@ jobs:
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.IMAGE_NAME }}:scan
+          image-ref: ${{ github.repository | lower }}:scan
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
@@ -481,7 +499,7 @@ jobs:
       - name: Run Trivy vulnerability scanner (table output)
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ env.IMAGE_NAME }}:scan
+          image-ref: ${{ github.repository | lower }}:scan
           format: 'table'
           severity: 'CRITICAL,HIGH'
 

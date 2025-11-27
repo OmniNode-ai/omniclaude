@@ -17,7 +17,7 @@ Date: 2025-09-30
 import ast
 import logging
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from .framework_detector import FrameworkMethodDetector
 
@@ -30,8 +30,12 @@ try:
     from libcst import metadata
 
     LIBCST_AVAILABLE = True
+    LIBCST_AVAIL = True
 except ImportError:
     LIBCST_AVAILABLE = False
+    LIBCST_AVAIL = False
+    cst = None  # type: ignore[assignment,unused-ignore]
+    metadata = None  # type: ignore[assignment,unused-ignore]
     logger.warning(
         "libcst not available - falling back to regex-based corrections. "
         "Install libcst for AST-aware corrections: pip install libcst"
@@ -51,7 +55,7 @@ class CorrectionResult:
     performance_ms: Optional[float] = None
 
 
-class ContextAwareRenameTransformer(cst.CSTTransformer if LIBCST_AVAILABLE else object):
+class ContextAwareRenameTransformer(cst.CSTTransformer if LIBCST_AVAIL else object):  # type: ignore[misc]
     """
     libcst transformer for surgical, position-aware identifier renaming.
 
@@ -62,12 +66,12 @@ class ContextAwareRenameTransformer(cst.CSTTransformer if LIBCST_AVAILABLE else 
     - Docstrings
     """
 
-    if LIBCST_AVAILABLE:
-        METADATA_DEPENDENCIES = (metadata.PositionProvider,)
+    if LIBCST_AVAIL:
+        METADATA_DEPENDENCIES = (metadata.PositionProvider,)  # type: ignore[union-attr,unused-ignore]
 
     def __init__(
         self,
-        corrections: Dict[Tuple[int, int, str], str],
+        corrections: Dict[Tuple[Any, Any, Any], Any],
         framework_detector: FrameworkMethodDetector,
         original_tree: ast.Module,
     ):
@@ -80,14 +84,14 @@ class ContextAwareRenameTransformer(cst.CSTTransformer if LIBCST_AVAILABLE else 
             original_tree: Original AST tree for framework detection
         """
         super().__init__()
-        self.corrections = corrections
+        self.corrections: Dict[Tuple[Any, Any, Any], Any] = corrections
         self.framework_detector = framework_detector
         self.original_tree = original_tree
         self.corrections_applied = 0
         self.corrections_skipped = 0
         self.framework_methods_preserved = 0
-        self.current_function = None
-        self.current_class = None
+        self.current_function: Any = None
+        self.current_class: Any = None
 
     def visit_ClassDef(self, node) -> bool:  # noqa: N802
         """Track current class for framework context."""
@@ -199,17 +203,19 @@ class ContextAwareRenameTransformer(cst.CSTTransformer if LIBCST_AVAILABLE else 
         # Try exact match first
         key = (line, column, old_name)
         if key in self.corrections:
-            return self.corrections[key]
+            result = self.corrections[key]
+            return str(result) if result is not None else None
 
         # Try fuzzy matching (off-by-one column due to different parsers)
         for col_offset in range(-2, 3):
             key = (line, column + col_offset, old_name)
             if key in self.corrections:
-                return self.corrections[key]
+                result = self.corrections[key]
+                return str(result) if result is not None else None
 
         return None
 
-    def _is_in_framework_context(self, node, pos) -> bool:
+    def _is_in_framework_context(self, node: Any, pos: Any) -> bool:
         """
         Check if the current node is in a framework method context.
 
@@ -217,7 +223,7 @@ class ContextAwareRenameTransformer(cst.CSTTransformer if LIBCST_AVAILABLE else 
         save(), get(), etc. that are part of framework contracts.
         """
         # If we're in a function, check if it's a framework method
-        if self.current_function:
+        if self.current_function is not None:
             # Convert libcst FunctionDef to ast FunctionDef for framework detection
             func_name = self.current_function.name.value
 
@@ -411,9 +417,13 @@ def _fallback_regex_correction(
         old_name = correction.get("old_name")
         new_name = correction.get("new_name")
 
+        # Skip if either name is missing
+        if old_name is None or new_name is None:
+            continue
+
         # Use word boundaries to avoid partial matches
-        pattern = r"\b" + re.escape(old_name) + r"\b"
-        modified = re.sub(pattern, new_name, corrected)
+        pattern = r"\b" + re.escape(str(old_name)) + r"\b"
+        modified = re.sub(pattern, str(new_name), corrected)
 
         if modified != corrected:
             corrections_applied += 1

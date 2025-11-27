@@ -16,7 +16,11 @@ import json
 import time
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import TYPE_CHECKING, Any, Union
+
+
+if TYPE_CHECKING:
+    from agents.lib.input_validator import ValidationResult
 
 from agents.lib.agent_analytics import AgentAnalytics, track_agent_performance
 from agents.lib.circuit_breaker import (
@@ -27,10 +31,14 @@ from agents.lib.circuit_breaker import (
 from agents.lib.context_optimizer import ContextOptimizer
 from agents.lib.input_validator import InputValidator
 from agents.lib.performance_monitor import PerformanceMonitor
-from agents.lib.performance_optimization import PerformanceOptimizer
+from agents.lib.performance_optimization import BatchOperation, PerformanceOptimizer
 from agents.lib.retry_manager import RetryConfig, RetryManager, execute_with_retry
 from agents.parallel_execution.context_manager import ContextManager
-from agents.parallel_execution.quorum_validator import QuorumValidator
+from agents.parallel_execution.quorum_validator import (
+    QuorumResult,
+    QuorumValidator,
+    ValidationDecision,
+)
 
 
 class PerformanceBenchmark:
@@ -50,7 +58,7 @@ class PerformanceBenchmark:
         self.context_optimizer = ContextOptimizer()
         self.agent_analytics = AgentAnalytics()
 
-    async def benchmark_parallel_rag_queries(self) -> Dict[str, Any]:
+    async def benchmark_parallel_rag_queries(self) -> dict[str, Any]:
         """Benchmark parallel vs sequential RAG queries."""
         print("Benchmarking parallel RAG queries...")
 
@@ -89,7 +97,7 @@ class PerformanceBenchmark:
             "context_items_sequential": len(sequential_context),
         }
 
-    async def _simulate_sequential_rag(self, rag_queries: List[str]) -> Dict[str, Any]:
+    async def _simulate_sequential_rag(self, rag_queries: list[str]) -> dict[str, Any]:
         """Simulate sequential RAG query execution."""
         context_items = {}
 
@@ -104,7 +112,7 @@ class PerformanceBenchmark:
 
         return context_items
 
-    async def benchmark_parallel_model_calls(self) -> Dict[str, Any]:
+    async def benchmark_parallel_model_calls(self) -> dict[str, Any]:
         """Benchmark parallel vs sequential model calls."""
         print("Benchmarking parallel model calls...")
 
@@ -144,15 +152,10 @@ class PerformanceBenchmark:
             "sequential_decision": sequential_result.decision.value,
         }
 
-    async def _simulate_sequential_models(self):
+    async def _simulate_sequential_models(self) -> QuorumResult:
         """Simulate sequential model calls."""
         # Simulate calling models one by one
         await asyncio.sleep(0.2)  # Simulate model call delay
-
-        from agents.parallel_execution.quorum_validator import (
-            QuorumResult,
-            ValidationDecision,
-        )
 
         return QuorumResult(
             decision=ValidationDecision.PASS,
@@ -162,7 +165,7 @@ class PerformanceBenchmark:
             model_responses=[],
         )
 
-    async def benchmark_batch_database_operations(self) -> Dict[str, Any]:
+    async def benchmark_batch_database_operations(self) -> dict[str, Any]:
         """Benchmark batch vs individual database operations."""
         print("Benchmarking batch database operations...")
 
@@ -178,9 +181,12 @@ class PerformanceBenchmark:
 
         # Test batch operation
         start_time = time.time()
-        await self.performance_optimizer.batch_write_with_pooling(
-            data=test_data, operation_type="INSERT", table_name="benchmark_test"
+        batch_op = BatchOperation(
+            operation_type="insert",
+            table_name="benchmark_test",
+            data=test_data,
         )
+        await self.performance_optimizer.batch_write_with_pooling([batch_op])
         batch_duration = time.time() - start_time
 
         # Test individual operations (simulated)
@@ -202,8 +208,8 @@ class PerformanceBenchmark:
         }
 
     async def _simulate_individual_operations(
-        self, test_data: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        self, test_data: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """Simulate individual database operations."""
         results = []
 
@@ -214,7 +220,7 @@ class PerformanceBenchmark:
 
         return {"results": results, "count": len(results)}
 
-    async def benchmark_circuit_breaker_effectiveness(self) -> Dict[str, Any]:
+    async def benchmark_circuit_breaker_effectiveness(self) -> dict[str, Any]:
         """Benchmark circuit breaker effectiveness."""
         print("Benchmarking circuit breaker effectiveness...")
 
@@ -250,9 +256,9 @@ class PerformanceBenchmark:
                 try:
                     await failing_service()
                 except Exception:
-                    pass
+                    pass  # nosec B110 - intentional: benchmark measures failure handling overhead
         except Exception:
-            pass
+            pass  # nosec B110 - intentional: benchmark wrapper catches all for timing
 
         no_circuit_breaker_duration = time.time() - start_time
 
@@ -269,7 +275,7 @@ class PerformanceBenchmark:
             "circuit_breaker_efficiency": failure_count / circuit_breaker_duration,
         }
 
-    async def benchmark_retry_manager_efficiency(self) -> Dict[str, Any]:
+    async def benchmark_retry_manager_efficiency(self) -> dict[str, Any]:
         """Benchmark retry manager efficiency."""
         print("Benchmarking retry manager efficiency...")
 
@@ -313,7 +319,7 @@ class PerformanceBenchmark:
             "retry_efficiency": attempt_count / retry_duration,
         }
 
-    async def benchmark_context_optimization(self) -> Dict[str, Any]:
+    async def benchmark_context_optimization(self) -> dict[str, Any]:
         """Benchmark context optimization impact."""
         print("Benchmarking context optimization...")
 
@@ -354,7 +360,7 @@ class PerformanceBenchmark:
             "unoptimized_context_items": len(unoptimized_context),
         }
 
-    async def benchmark_agent_analytics_performance(self) -> Dict[str, Any]:
+    async def benchmark_agent_analytics_performance(self) -> dict[str, Any]:
         """Benchmark agent analytics performance."""
         print("Benchmarking agent analytics performance...")
 
@@ -397,7 +403,7 @@ class PerformanceBenchmark:
             "analytics_efficiency": 2 / analytics_duration,  # 2 queries
         }
 
-    async def benchmark_input_validation_performance(self) -> Dict[str, Any]:
+    async def benchmark_input_validation_performance(self) -> dict[str, Any]:
         """Benchmark input validation performance."""
         print("Benchmarking input validation performance...")
 
@@ -421,18 +427,40 @@ class PerformanceBenchmark:
         # Test validation performance
         start_time = time.time()
 
-        validation_results = []
+        # validate_and_sanitize returns Union[ValidationResult, dict[str, Any]]
+        # When called with user_prompt/tasks_data params, it returns dict with 'is_valid' key
+        # When called with user_input/input_type params, it returns ValidationResult
+        validation_results: list[dict[str, Any]] = []
         for test_input in test_inputs:
-            result = await self.input_validator.validate_and_sanitize(
-                user_prompt=test_input["user_prompt"],
-                tasks_data=test_input["tasks_data"],
+            user_prompt_str = str(test_input["user_prompt"])
+            tasks_data_dict = test_input["tasks_data"]
+            # Using user_prompt/tasks_data pattern - returns dict[str, Any]
+            result: Union[dict[str, Any], "ValidationResult"] = (
+                await self.input_validator.validate_and_sanitize(
+                    user_prompt=user_prompt_str,
+                    tasks_data=(
+                        tasks_data_dict if isinstance(tasks_data_dict, dict) else None
+                    ),
+                )
             )
-            validation_results.append(result)
+            # When using user_prompt/tasks_data, returns dict with 'is_valid' key
+            if isinstance(result, dict):
+                validation_results.append(result)
+            else:
+                # Handle ValidationResult case (returned when using user_input/input_type)
+                validation_results.append(
+                    {
+                        "is_valid": result.is_valid,
+                        "errors": result.errors,
+                    }
+                )
 
         validation_duration = time.time() - start_time
 
         # Calculate statistics
-        valid_count = sum(1 for result in validation_results if result["is_valid"])
+        valid_count = sum(
+            1 for result in validation_results if result.get("is_valid", False)
+        )
         invalid_count = len(validation_results) - valid_count
 
         return {
@@ -444,7 +472,7 @@ class PerformanceBenchmark:
             "success_rate": valid_count / len(test_inputs),
         }
 
-    async def run_comprehensive_benchmark(self) -> Dict[str, Any]:
+    async def run_comprehensive_benchmark(self) -> dict[str, Any]:
         """Run comprehensive benchmark of all optimizations."""
         print("Running comprehensive performance benchmark...")
         print("=" * 60)
@@ -491,7 +519,7 @@ class PerformanceBenchmark:
 
         return summary
 
-    def print_benchmark_results(self, results: Dict[str, Any]):
+    def print_benchmark_results(self, results: dict[str, Any]) -> None:
         """Print benchmark results in a formatted way."""
         print("\n" + "=" * 60)
         print("PERFORMANCE BENCHMARK RESULTS")
@@ -535,7 +563,7 @@ class PerformanceBenchmark:
         print("=" * 60)
 
 
-async def main():
+async def main() -> None:
     """Main benchmark execution."""
     benchmark = PerformanceBenchmark()
 

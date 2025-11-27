@@ -2,31 +2,31 @@
 Minimal Quorum Validation System
 
 Validates agent outputs using consensus from multiple AI models.
-Uses Gemini (direct API) and local Ollama models for voting.
+Uses Gemini (direct API) and Z.ai models for voting.
 """
 
 import asyncio
 import json
-import os
+import sys
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Union
 
 import httpx
 
 
-# Load environment variables from .env file
+# Use project's type-safe configuration system
 try:
-    from dotenv import load_dotenv
-
-    # Load .env from the same directory as this script
-    env_path = Path(__file__).parent / ".env"
-    load_dotenv(dotenv_path=env_path)
+    from config import settings
 except ImportError:
+    print("ERROR: Could not import config module")
+    print("Make sure you're running from the project root with PYTHONPATH set:")
+    print("  cd /path/to/omniclaude")
     print(
-        "Warning: python-dotenv not installed, relying on system environment variables"
+        "  PYTHONPATH=/path/to/omniclaude python -m agents.parallel_execution.quorum_validator"
     )
+    sys.exit(1)
 
 
 class ValidationDecision(Enum):
@@ -52,13 +52,20 @@ class QuorumValidator:
     """Quorum validation for AI model consensus"""
 
     def __init__(self):
-        self.gemini_api_key = os.getenv("GEMINI_API_KEY")
+        # Use type-safe configuration from project's config system
+        self.gemini_api_key = settings.gemini_api_key
         if not self.gemini_api_key:
-            raise ValueError("GEMINI_API_KEY environment variable not set")
+            raise ValueError(
+                "GEMINI_API_KEY is not set. Please set it in .env file. "
+                "See .env.example and SECURITY_KEY_ROTATION.md for setup instructions."
+            )
 
-        self.zai_api_key = os.getenv("ZAI_API_KEY")
+        self.zai_api_key = settings.zai_api_key
         if not self.zai_api_key:
-            raise ValueError("ZAI_API_KEY environment variable not set")
+            raise ValueError(
+                "ZAI_API_KEY is not set. Please set it in .env file. "
+                "See .env.example and SECURITY_KEY_ROTATION.md for setup instructions."
+            )
 
         # Cloud-only models (128K minimum context)
         self.models = {
@@ -225,23 +232,24 @@ CRITICAL: Do NOT repeat the task breakdown or user request in your response. Onl
     ) -> Dict[str, Any]:
         """Query Z.ai API using Anthropic Messages API format"""
 
-        headers = {
-            "x-api-key": self.zai_api_key,
+        headers: Dict[str, str] = {
+            "x-api-key": self.zai_api_key or "",
             "anthropic-version": "2023-06-01",
             "content-type": "application/json",
         }
 
+        model_name_str = str(config["model"])
+        endpoint_str = str(config["endpoint"])
+
         payload = {
-            "model": config["model"],
+            "model": model_name_str,
             "max_tokens": 2048,
             "temperature": 0.1,
             "messages": [{"role": "user", "content": prompt}],
         }
 
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                config["endpoint"], headers=headers, json=payload
-            )
+            response = await client.post(endpoint_str, headers=headers, json=payload)
             response.raise_for_status()
 
             data = response.json()
@@ -274,7 +282,7 @@ CRITICAL: Do NOT repeat the task breakdown or user request in your response. Onl
 
             if start >= 0 and end > start:
                 json_str = text[start:end]
-                parsed = json.loads(json_str)
+                parsed: Dict[str, Any] = json.loads(json_str)
                 parsed["model"] = model_name
                 return parsed
             else:
@@ -300,7 +308,9 @@ CRITICAL: Do NOT repeat the task breakdown or user request in your response. Onl
                 "recommendation": "RETRY",
             }
 
-    def _calculate_consensus(self, results: List[Dict[str, Any]]) -> QuorumResult:
+    def _calculate_consensus(
+        self, results: List[Union[Dict[str, Any], BaseException]]
+    ) -> QuorumResult:
         """Calculate weighted consensus"""
 
         # Filter valid results
@@ -337,25 +347,29 @@ CRITICAL: Do NOT repeat the task breakdown or user request in your response. Onl
             )
 
         # Calculate weighted votes
-        total_weight = 0
-        pass_weight = 0
-        retry_weight = 0
-        fail_weight = 0
-        all_deficiencies = []
-        all_scores = []
+        total_weight: float = 0.0
+        pass_weight: float = 0.0
+        retry_weight: float = 0.0
+        fail_weight: float = 0.0
+        all_deficiencies: List[str] = []
+        all_scores: List[Any] = []
 
         for result in valid_results:
-            model_name = result["model"]
-            weight = self.models[model_name]["weight"]
-            total_weight += weight
+            model_name_key = str(result["model"])
+            raw_weight = self.models[model_name_key]["weight"]
+            weight_value: float = (
+                float(raw_weight) if isinstance(raw_weight, (int, float)) else 1.0
+            )
+            model_weight: float = weight_value if weight_value > 0 else 1.0
+            total_weight += model_weight
 
             recommendation = result.get("recommendation", "FAIL")
             if recommendation == "PASS":
-                pass_weight += weight
+                pass_weight += model_weight
             elif recommendation == "RETRY":
-                retry_weight += weight
+                retry_weight += model_weight
             else:
-                fail_weight += weight
+                fail_weight += model_weight
 
             all_deficiencies.extend(result.get("missing_requirements", []))
             all_scores.append(result.get("alignment_score", 0))
@@ -419,10 +433,9 @@ async def main():
     print(f"Deficiencies: {result.deficiencies}")
     print("\nScores:")
     for key, value in result.scores.items():
-        if isinstance(value, float):
-            print(f"  {key}: {value:.1f}")
-        else:
-            print(f"  {key}: {value}")
+        print(
+            f"  {key}: {value:.1f}" if isinstance(value, float) else f"  {key}: {value}"
+        )
 
     print("\nModel Responses:")
     for response in result.model_responses:

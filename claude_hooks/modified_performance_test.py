@@ -13,13 +13,9 @@ from pathlib import Path
 from typing import Any, Dict
 
 
-# Add lib to path
-SCRIPT_DIR = Path(__file__).parent
-sys.path.insert(0, str(SCRIPT_DIR / "lib"))
-
 # Import sync tracker for testing
 try:
-    from pattern_tracker_sync import PatternTrackerSync
+    from .lib.pattern_tracker_sync import PatternTrackerSync
 
     SYNC_AVAILABLE = True
 except ImportError:

@@ -236,7 +236,7 @@ class PatternTracker:
         code: str,
         context: Dict[str, Any],
         parent_pattern_ids: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+    ) -> Optional[Dict[str, Any]]:
         """
         Track pattern creation event.
 
@@ -294,7 +294,7 @@ class PatternTracker:
 
         # Track via resilient API client with comprehensive error handling
         try:
-            result = await self.api_client.track_pattern_resilient(
+            result: Dict[str, Any] = await self.api_client.track_pattern_resilient(
                 event_type="pattern_created",
                 pattern_id=pattern_id,
                 pattern_name=pattern_name,
@@ -322,7 +322,7 @@ class PatternTracker:
                 file=sys.stderr,
             )
             return None
-        except httpx.TimeoutError as e:
+        except httpx.TimeoutException as e:
             print(
                 f"❌ [PatternTracker.track_pattern_creation] Phase 4 API timeout: {e}",
                 file=sys.stderr,
@@ -349,7 +349,7 @@ class PatternTracker:
         new_code: str,
         context: Dict[str, Any],
         reason: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> Optional[Dict[str, Any]]:
         """
         Track pattern modification event.
 
@@ -394,7 +394,7 @@ class PatternTracker:
 
         # Track via resilient API client with comprehensive error handling
         try:
-            result = await self.api_client.track_pattern_resilient(
+            result: Dict[str, Any] = await self.api_client.track_pattern_resilient(
                 event_type="pattern_modified",
                 pattern_id=new_pattern_id,
                 pattern_name=self._extract_pattern_name(new_code, context),
@@ -422,7 +422,7 @@ class PatternTracker:
                 file=sys.stderr,
             )
             return None
-        except httpx.TimeoutError as e:
+        except httpx.TimeoutException as e:
             print(
                 f"❌ [PatternTracker.track_pattern_modification] Phase 4 API timeout: {e}",
                 file=sys.stderr,
@@ -445,7 +445,7 @@ class PatternTracker:
     @graceful_tracking(fallback_return={})
     async def track_pattern_application(
         self, pattern_id: str, context: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    ) -> Optional[Dict[str, Any]]:
         """
         Track pattern application event.
 
@@ -482,7 +482,7 @@ class PatternTracker:
 
         # Track via resilient API client with comprehensive error handling
         try:
-            result = await self.api_client.track_pattern_resilient(
+            result: Dict[str, Any] = await self.api_client.track_pattern_resilient(
                 event_type="pattern_applied",
                 pattern_id=pattern_id,
                 pattern_data=pattern_data,
@@ -503,7 +503,7 @@ class PatternTracker:
                 file=sys.stderr,
             )
             return None
-        except httpx.TimeoutError as e:
+        except httpx.TimeoutException as e:
             print(
                 f"❌ [PatternTracker.track_pattern_application] Phase 4 API timeout: {e}",
                 file=sys.stderr,
@@ -530,7 +530,7 @@ class PatternTracker:
         merged_code: str,
         context: Dict[str, Any],
         reason: Optional[str] = None,
-    ) -> Dict[str, Any]:
+    ) -> Optional[Dict[str, Any]]:
         """
         Track pattern merge event.
 
@@ -573,7 +573,7 @@ class PatternTracker:
 
         # Track via resilient API client with comprehensive error handling
         try:
-            result = await self.api_client.track_pattern_resilient(
+            result: Dict[str, Any] = await self.api_client.track_pattern_resilient(
                 event_type="pattern_merged",
                 pattern_id=merged_pattern_id,
                 pattern_name=self._extract_pattern_name(merged_code, context),
@@ -601,7 +601,7 @@ class PatternTracker:
                 file=sys.stderr,
             )
             return None
-        except httpx.TimeoutError as e:
+        except httpx.TimeoutException as e:
             print(
                 f"❌ [PatternTracker.track_pattern_merge] Phase 4 API timeout: {e}",
                 file=sys.stderr,
@@ -655,7 +655,7 @@ class PatternTracker:
                 },
                 "resilience": {"error": "connection_failed"},
             }
-        except httpx.TimeoutError as e:
+        except httpx.TimeoutException as e:
             print(
                 f"❌ [PatternTracker.get_tracker_stats] Phase 4 API timeout: {e}",
                 file=sys.stderr,
@@ -712,7 +712,7 @@ class PatternTracker:
                 file=sys.stderr,
             )
             return {"success": False, "error": "connection_failed"}
-        except httpx.TimeoutError as e:
+        except httpx.TimeoutException as e:
             print(
                 f"❌ [PatternTracker.sync_offline_events] Phase 4 API timeout: {e}",
                 file=sys.stderr,
@@ -759,7 +759,7 @@ class PatternTracker:
                 file=sys.stderr,
             )
             return {"success": False, "error": "connection_failed"}
-        except httpx.TimeoutError as e:
+        except httpx.TimeoutException as e:
             print(
                 f"❌ [PatternTracker.cleanup_cache] Phase 4 API timeout: {e}",
                 file=sys.stderr,
@@ -781,7 +781,7 @@ class PatternTracker:
 
 async def track_write_tool_pattern(
     file_path: str, content: str, language: str = "unknown"
-) -> Dict[str, Any]:
+) -> Optional[Dict[str, Any]]:
     """
     Convenience function for tracking Write tool patterns.
 
@@ -795,7 +795,7 @@ async def track_write_tool_pattern(
     """
     tracker = await PatternTracker.get_instance()
 
-    return await tracker.track_pattern_creation(
+    result: Optional[Dict[str, Any]] = await tracker.track_pattern_creation(
         code=content,
         context={
             "file_path": file_path,
@@ -804,6 +804,7 @@ async def track_write_tool_pattern(
             "pattern_type": "code",
         },
     )
+    return result
 
 
 async def track_edit_tool_pattern(
@@ -812,7 +813,7 @@ async def track_edit_tool_pattern(
     new_content: str,
     language: str = "unknown",
     reason: Optional[str] = None,
-) -> Dict[str, Any]:
+) -> Optional[Dict[str, Any]]:
     """
     Convenience function for tracking Edit tool patterns.
 
@@ -828,7 +829,7 @@ async def track_edit_tool_pattern(
     """
     tracker = await PatternTracker.get_instance()
 
-    return await tracker.track_pattern_modification(
+    result: Optional[Dict[str, Any]] = await tracker.track_pattern_modification(
         pattern_id=pattern_id,
         new_code=new_content,
         context={
@@ -839,6 +840,7 @@ async def track_edit_tool_pattern(
         },
         reason=reason,
     )
+    return result
 
 
 # ============================================================================

@@ -593,32 +593,29 @@ class AlertManager:
         # Add active alerts
         recent_alerts.extend(self.active_alerts.values())
 
-        stats = {
-            "total_alerts": len(recent_alerts),
-            "active_alerts": len(self.active_alerts),
-            "by_severity": {"critical": 0, "warning": 0, "info": 0},
-            "by_component": defaultdict(int),
-            "by_status": {
-                "active": 0,
-                "acknowledged": 0,
-                "resolved": 0,
-                "suppressed": 0,
-            },
-            "avg_resolution_time_minutes": 0.0,
-            "escalated_count": 0,
+        # Use typed sub-dictionaries to avoid mypy inference issues
+        by_severity: Dict[str, int] = {"critical": 0, "warning": 0, "info": 0}
+        by_component: Dict[str, int] = defaultdict(int)
+        by_status: Dict[str, int] = {
+            "active": 0,
+            "acknowledged": 0,
+            "resolved": 0,
+            "suppressed": 0,
         }
+        escalated_count = 0
+        avg_resolution_time_minutes = 0.0
 
-        resolution_times = []
+        resolution_times: List[float] = []
 
         for alert in recent_alerts:
             # Count by severity
-            stats["by_severity"][alert.alert.severity.value] += 1
+            by_severity[alert.alert.severity.value] += 1
 
             # Count by component
-            stats["by_component"][alert.alert.component] += 1
+            by_component[alert.alert.component] += 1
 
             # Count by status
-            stats["by_status"][alert.status.value] += 1
+            by_status[alert.status.value] += 1
 
             # Track resolution times
             if alert.resolved_at:
@@ -629,13 +626,21 @@ class AlertManager:
 
             # Count escalations
             if alert.escalation_count > 0:
-                stats["escalated_count"] += 1
+                escalated_count += 1
 
         # Calculate average resolution time
         if resolution_times:
-            stats["avg_resolution_time_minutes"] = sum(resolution_times) / len(
-                resolution_times
-            )
+            avg_resolution_time_minutes = sum(resolution_times) / len(resolution_times)
+
+        stats: Dict[str, Any] = {
+            "total_alerts": len(recent_alerts),
+            "active_alerts": len(self.active_alerts),
+            "by_severity": by_severity,
+            "by_component": dict(by_component),
+            "by_status": by_status,
+            "avg_resolution_time_minutes": avg_resolution_time_minutes,
+            "escalated_count": escalated_count,
+        }
 
         return stats
 

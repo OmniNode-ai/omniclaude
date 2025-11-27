@@ -6,6 +6,7 @@ Tests CRUD, Transformation, and Aggregation pattern implementations.
 """
 
 import unittest
+from typing import Any
 
 from agents.lib.patterns.aggregation_pattern import AggregationPattern
 from agents.lib.patterns.crud_pattern import CRUDPattern
@@ -86,7 +87,7 @@ class TestTransformationPattern(unittest.TestCase):
             "name": "convert_data",
             "description": "Convert data format",
         }
-        context = {}
+        context: dict[str, Any] = {}
 
         code = self.pattern.generate(capability, context)
 
@@ -101,7 +102,7 @@ class TestTransformationPattern(unittest.TestCase):
 
     def test_data_mapping_generation(self):
         """Test data mapping method generation"""
-        context = {}
+        context: dict[str, Any] = {}
 
         code = self.pattern._generate_data_mapping("map_fields", "Map fields", context)
 
@@ -118,7 +119,7 @@ class TestTransformationPattern(unittest.TestCase):
 
     def test_validation_transform_generation(self):
         """Test validation transformation generation"""
-        context = {}
+        context: dict[str, Any] = {}
 
         code = self.pattern._generate_validation_transform(
             "validate_data", "Validate data", context
@@ -131,7 +132,7 @@ class TestTransformationPattern(unittest.TestCase):
 
     def test_streaming_transform_generation(self):
         """Test streaming transformation generation"""
-        context = {}
+        context: dict[str, Any] = {}
 
         code = self.pattern._generate_streaming_transform(
             "transform_stream", "Transform stream", context
@@ -162,7 +163,7 @@ class TestAggregationPattern(unittest.TestCase):
 
     def test_reduce_method_generation(self):
         """Test reduce aggregation generation"""
-        context = {}
+        context: dict[str, Any] = {}
 
         code = self.pattern._generate_reduce_method("sum_values", "Sum values", context)
 
@@ -175,7 +176,7 @@ class TestAggregationPattern(unittest.TestCase):
 
     def test_windowed_aggregation_generation(self):
         """Test windowed aggregation generation"""
-        context = {}
+        context: dict[str, Any] = {}
 
         code = self.pattern._generate_windowed_aggregation(
             "aggregate_by_window", "Aggregate by window", context
@@ -194,7 +195,7 @@ class TestAggregationPattern(unittest.TestCase):
 
     def test_stateful_aggregation_generation(self):
         """Test stateful aggregation generation"""
-        context = {}
+        context: dict[str, Any] = {}
 
         code = self.pattern._generate_stateful_aggregation(
             "incremental_aggregate", "Incremental aggregate", context
@@ -229,7 +230,7 @@ class TestPatternIntegration(unittest.TestCase):
 
     def test_all_patterns_generate_valid_code(self):
         """Test all patterns generate valid Python code"""
-        patterns = [
+        patterns: list[tuple[Any, dict[str, str]]] = [
             (CRUDPattern(), {"name": "create_item", "description": "Create item"}),
             (
                 TransformationPattern(),

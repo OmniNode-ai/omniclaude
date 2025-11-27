@@ -165,7 +165,8 @@ Return ONLY valid JSON in this exact format:
                         start = content.find("{")
                         end = content.rfind("}") + 1
                         json_str = content[start:end]
-                        return json.loads(json_str)
+                        parsed_result: Dict[str, Any] = json.loads(json_str)
+                        return parsed_result
                     except json.JSONDecodeError:
                         continue
 
@@ -212,11 +213,13 @@ Return ONLY valid JSON in this exact format:
 
             # Only add ONEX-specific fields if explicitly requested
             if is_onex:
-                input_data["contract"] = {
-                    "name": "UserRequest",
-                    "description": user_prompt,
-                    "type": "application",
-                }
+                input_data["contract"] = str(
+                    {
+                        "name": "UserRequest",
+                        "description": user_prompt,
+                        "type": "application",
+                    }
+                )
                 input_data["node_type"] = "Compute"
 
             # Build context requirements dynamically

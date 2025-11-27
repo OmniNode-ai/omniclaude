@@ -23,9 +23,9 @@ Setup:
 import asyncio
 from typing import Any, Dict
 
-from agent_dispatcher import ParallelCoordinator
-from agent_loader import AgentLoader, AgentLoadStatus
-from agent_model import AgentTask
+from .agent_dispatcher import ParallelCoordinator
+from .agent_loader import AgentLoader, AgentLoadStatus
+from .agent_model import AgentTask
 
 
 class AgentLoaderValidator:

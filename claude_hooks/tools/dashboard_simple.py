@@ -8,16 +8,12 @@ import json
 import sys
 from datetime import datetime
 from decimal import Decimal
-from pathlib import Path
-
-
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
 
 # Use simple http.server for minimal dependencies
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
 
-from system_dashboard_md import SystemDashboard
+from ..system_dashboard_md import SystemDashboard
 
 
 class DecimalEncoder(json.JSONEncoder):

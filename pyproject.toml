@@ -42,10 +42,7 @@ jinja2 = "^3.1.0"
 rich = "^13.7.0"
 dependency-injector = "^4.48.1"
 prometheus-client = "^0.21.0"
-
-[tool.poetry.group.patterns.dependencies]
-# Optional dependencies for pattern storage with Qdrant
-qdrant-client = "^1.7.0"
+qdrant-client = "^1.16.0"
 
 [tool.poetry.group.kafka.dependencies]
 confluent-kafka = "^2.6.0"
@@ -71,6 +68,15 @@ isort = "^7.0.0"
 pre-commit = "^4.3.0"
 tabulate = "^0.9.0"
 pytest-xdist = "^3.8.0"
+types-psycopg2 = "^2.9.21.20251012"
+types-redis = "^4.6.0.20241004"
+types-aiofiles = "^25.1.0.20251011"
+types-pyyaml = "^6.0.12.20250915"
+types-requests = "^2.32.4.20250913"
+types-urllib3 = "^1.26.25.14"
+types-protobuf = "^6.32.1.20251105"
+types-psutil = "^7.1.1.20251122"
+types-docker = "^7.1.0.20251009"
 
 [build-system]
 requires = ["poetry-core"]
@@ -99,11 +105,16 @@ warn_unused_configs = true
 disallow_untyped_defs = false
 explicit_package_bases = true
 namespace_packages = true
+plugins = ["pydantic.mypy"]
 exclude = [
     "^agents/templates/",  # Template files with placeholder syntax
     "^agents/parallel_execution/templates/",  # More template files
     "^skills/",  # Third-party skills - not our code to lint
 ]
+
+[tool.pydantic]
+# Pydantic settings for mypy plugin
+mypy_init_subclass_as_base = true
 
 [tool.ruff]
 line-length = 88
@@ -181,6 +192,10 @@ markers = [
     "slow: marks tests as slow (>2 seconds)",
     "performance: marks tests that measure performance metrics",
 ]
+filterwarnings = [
+    "ignore:Task was destroyed but it is pending:RuntimeWarning",
+    "ignore::pytest.PytestUnraisableExceptionWarning",
+]
 
 # Sane defaults optimized for 3499 tests on M2 Ultra (10 cores)
 # Uses pytest-xdist for parallel execution with smart load balancing
@@ -211,6 +226,7 @@ addopts = [
 ]
 [tool.bandit]
 # Bandit security scanner configuration - matches CI workflow
+# Severity and confidence levels are controlled via CI command-line args
 exclude_dirs = [
     "agents/templates",
     "agents/parallel_execution/templates",
@@ -223,6 +239,24 @@ exclude_dirs = [
     "dist",
 ]
 skips = [
-    # Skip test files - they often have intentional security issues for testing
-    "B101",  # assert_used - common in tests
+    # Skip codes that produce false positives - matches .bandit (primary config)
+    # IMPORTANT: Keep in sync with .bandit file
+    #
+    # LOW-SIGNAL CHECKS (safe to skip globally):
+    "B101",  # assert_used - tests excluded via exclude_dirs
+    "B104",  # hardcoded_bind_all_interfaces - development only
+    "B105",  # hardcoded_password_string - false positives; real secrets via env
+    "B106",  # hardcoded_password_funcarg - false positives on parameter names
+    "B107",  # hardcoded_password_default - false positives on default values
+    "B108",  # hardcoded_tmp_directory - controlled tmp usage
+    "B201",  # flask_debug_true - controlled via environment variables
+    "B311",  # random - non-crypto use only; secrets module for security
+    "B404",  # subprocess_import - required for system calls, inputs validated
+    "B603",  # subprocess_without_shell_equals_true - we validate all inputs
+    "B607",  # start_process_with_partial_path - development environment
+    #
+    # HIGH-SIGNAL CHECKS - NOW ENABLED (not in this list):
+    # B110 - try_except_pass: Silent catches can hide security issues
+    # B608 - sql_statements_without_placeholders: SQL injection is critical
+    # Use inline `# nosec B110/B608 - <reason>` for justified exceptions
 ]

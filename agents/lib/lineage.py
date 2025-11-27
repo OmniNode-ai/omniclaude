@@ -2,7 +2,7 @@ import asyncio
 import json
 import os
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from .db import get_pg_pool
 
@@ -40,7 +40,7 @@ class PostgresLineageStore:
 class MemgraphLineageStore:
     def __init__(self) -> None:
         self._enabled = False
-        self._driver = None
+        self._driver: Optional[Any] = None
 
         # Support both MEMGRAPH_* and NEO4J_* style envs
         uri = os.getenv("MEMGRAPH_URI") or os.getenv(
@@ -54,20 +54,26 @@ class MemgraphLineageStore:
         if not uri:
             return
         try:
-            from neo4j import GraphDatabase  # type: ignore
+            from neo4j import GraphDatabase
 
-            auth = (user, password) if user or password else None
+            # Only create auth tuple if both user and password are present
+            auth: Optional[tuple[str, str]] = None
+            if user and password:
+                auth = (user, password)
             self._driver = GraphDatabase.driver(uri, auth=auth)
             self._enabled = True
+        except ImportError:
+            # neo4j driver not installed; ignore for MVP
+            self._enabled = False
         except Exception:
-            # neo4j driver not installed or cannot connect; ignore for MVP
+            # Cannot connect; ignore for MVP
             self._enabled = False
 
     async def write_edge(self, edge: LineageEdge) -> None:
         if not self._enabled or self._driver is None:
             return
 
-        def _write(tx):
+        def _write(tx: Any) -> None:
             tx.run(
                 f"""
                 MERGE (s:Entity {{type:$src_type, id:$src_id}})
@@ -82,10 +88,20 @@ class MemgraphLineageStore:
                 attrs=edge.attributes or {},
             )
 
+        def _execute_in_session() -> None:
+            # _driver is guaranteed non-None here due to guard at start of write_edge
+            driver = self._driver
+            if driver is None:
+                raise RuntimeError(
+                    "Neo4j driver unexpectedly None in _execute_in_session"
+                )
+            with driver.session() as session:
+                session.execute_write(_write)
+
         try:
-            # best-effort; do not await driver internals, run in thread
+            # best-effort; run in thread to avoid blocking
             loop = asyncio.get_running_loop()
-            await loop.run_in_executor(None, self._driver.execute_write, _write)
+            await loop.run_in_executor(None, _execute_in_session)
         except Exception:
             # best-effort mirror; swallow errors in MVP
             return

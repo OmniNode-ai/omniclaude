@@ -180,7 +180,8 @@ class ArchonIntelligence:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(url, json=payload)
                 response.raise_for_status()
-                return response.json()
+                result: Dict[str, Any] = response.json()
+                return result
         except httpx.TimeoutException:
             print(f"RAG query timeout: {query[:50]}...", file=sys.stderr)
             return {"error": "timeout", "query": query}

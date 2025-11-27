@@ -34,7 +34,7 @@ import pickle  # noqa: S403 - pickle usage documented in module docstring
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Tuple
 
 import numpy as np
 from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
@@ -98,7 +98,7 @@ class ModelMetrics:
     precision: float
     recall: float
     f1_score: float
-    cross_val_scores: List[float]
+    cross_val_scores: list[float]
     training_samples: int
     test_samples: int
     trained_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -125,10 +125,10 @@ class MixinLearner:
 
     def __init__(
         self,
-        model_path: Optional[Path] = None,
+        model_path: Path | None = None,
         auto_train: bool = False,
         min_confidence_threshold: float = 0.7,
-        persistence: Optional[CodegenPersistence] = None,
+        persistence: CodegenPersistence | None = None,
     ):
         """
         Initialize mixin learner.
@@ -148,9 +148,9 @@ class MixinLearner:
         self.model_path.parent.mkdir(parents=True, exist_ok=True)
 
         # ML models
-        self.model: Optional[RandomForestClassifier] = None
-        self.gb_model: Optional[GradientBoostingClassifier] = None
-        self.metrics: Optional[ModelMetrics] = None
+        self.model: RandomForestClassifier | None = None
+        self.gb_model: GradientBoostingClassifier | None = None
+        self.metrics: ModelMetrics | None = None
 
         # Feature extractor
         self.feature_extractor = MixinFeatureExtractor()
@@ -159,10 +159,10 @@ class MixinLearner:
         self.persistence = persistence or CodegenPersistence()
 
         # Feature cache for performance
-        self._feature_cache: Dict[Tuple[str, str, str], np.ndarray] = {}
+        self._feature_cache: dict[tuple[str, str, str], np.ndarray] = {}
 
         # Prediction cache for even faster repeated predictions
-        self._prediction_cache: Dict[Tuple[str, str, str], Tuple[int, np.ndarray]] = {}
+        self._prediction_cache: dict[tuple[str, str, str], tuple[int, np.ndarray]] = {}
 
         # Load existing model if available
         if self.model_path.exists():
@@ -288,15 +288,15 @@ class MixinLearner:
         gb_pred = gb_model.predict(X_test)
 
         # Ensemble prediction: use RF for primary, GB to break ties or boost confidence
-        y_pred = []
+        y_pred_list: list[int] = []
         for i in range(len(X_test)):
             if rf_pred[i] == gb_pred[i]:
-                y_pred.append(rf_pred[i])
+                y_pred_list.append(int(rf_pred[i]))
             else:
                 # When models disagree, use RF probability
                 rf_proba = rf_model.predict_proba(X_test[i : i + 1])[0]
-                y_pred.append(1 if rf_proba[1] > 0.6 else 0)
-        y_pred = np.array(y_pred)
+                y_pred_list.append(1 if rf_proba[1] > 0.6 else 0)
+        y_pred = np.array(y_pred_list)
 
         rf_model.predict_proba(X_test)
 
@@ -344,7 +344,7 @@ class MixinLearner:
 
         return self.metrics
 
-    async def _fetch_training_data(self) -> List[Dict[str, Any]]:
+    async def _fetch_training_data(self) -> list[dict[str, Any]]:
         """
         Fetch training data from mixin_compatibility_matrix.
 
@@ -352,6 +352,8 @@ class MixinLearner:
             List of compatibility records with features
         """
         pool = await self.persistence._ensure_pool()
+        if pool is None:
+            return []
         async with pool.acquire() as conn:
             rows = await conn.fetch(
                 """
@@ -373,8 +375,8 @@ class MixinLearner:
             return [dict(row) for row in rows]
 
     def _prepare_training_data(
-        self, training_data: List[Dict[str, Any]]
-    ) -> Tuple[np.ndarray, np.ndarray, Dict[Tuple[str, str, str], Dict[str, Any]]]:
+        self, training_data: list[dict[str, Any]]
+    ) -> tuple[np.ndarray, np.ndarray, dict[tuple[str, str, str], dict[str, Any]]]:
         """
         Prepare feature matrix and labels from raw training data.
 
@@ -430,7 +432,7 @@ class MixinLearner:
 
     async def _fetch_historical_data(
         self, mixin_a: str, mixin_b: str, node_type: str
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Fetch historical data for mixin pair from database.
 
@@ -444,6 +446,8 @@ class MixinLearner:
         """
         try:
             pool = await self.persistence._ensure_pool()
+            if pool is None:
+                return None
             async with pool.acquire() as conn:
                 # Try both orderings
                 row = await conn.fetchrow(
@@ -487,7 +491,7 @@ class MixinLearner:
         mixin_a: str,
         mixin_b: str,
         node_type: str,
-        historical_data: Optional[Dict[str, Any]] = None,
+        historical_data: dict[str, Any] | None = None,
     ) -> MixinPrediction:
         """
         Predict compatibility for mixin pair.
@@ -508,7 +512,12 @@ class MixinLearner:
             raise ValueError("Model not trained. Call train_model() first.")
 
         # Create canonical cache key (alphabetically sorted)
-        cache_key = tuple(sorted([mixin_a, mixin_b]) + [node_type])
+        sorted_mixins = sorted([mixin_a, mixin_b])
+        cache_key: tuple[str, str, str] = (
+            sorted_mixins[0],
+            sorted_mixins[1],
+            node_type,
+        )
 
         # Check prediction cache first (fastest path)
         if cache_key in self._prediction_cache:
@@ -750,10 +759,10 @@ class MixinLearner:
     def recommend_mixins(
         self,
         node_type: str,
-        required_capabilities: List[str],
-        existing_mixins: Optional[List[str]] = None,
+        required_capabilities: list[str],
+        existing_mixins: list[str] | None = None,
         max_recommendations: int = 5,
-    ) -> List[Tuple[str, float, str]]:
+    ) -> list[tuple[str, float, str]]:
         """
         Recommend mixins for a node type based on required capabilities.
 
@@ -819,8 +828,8 @@ class MixinLearner:
         return recommendations[:max_recommendations]
 
     def _fallback_recommendations(
-        self, node_type: str, required_capabilities: List[str]
-    ) -> List[Tuple[str, float, str]]:
+        self, node_type: str, required_capabilities: list[str]
+    ) -> list[tuple[str, float, str]]:
         """Fallback rule-based recommendations when model not available"""
         recommendations = []
 
@@ -889,7 +898,7 @@ class MixinLearner:
             self.logger.info(f"Retraining model with {len(training_data)} samples...")
             await self.train_model()
 
-    def get_metrics(self) -> Optional[ModelMetrics]:
+    def get_metrics(self) -> ModelMetrics | None:
         """Get current model metrics"""
         return self.metrics
 

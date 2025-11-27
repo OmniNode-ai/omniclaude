@@ -15,7 +15,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 import yaml
 
@@ -53,16 +53,16 @@ class AIAgentSelector:
         self.agents = self._load_agent_metadata()
 
         # Selection stats
-        self.stats = {
+        self.stats: Dict[str, Any] = {
             "total_selections": 0,
             "ai_selections": 0,
             "fallback_selections": 0,
             "model_used": {},
         }
 
-    def _load_agent_metadata(self) -> List[Dict]:
+    def _load_agent_metadata(self) -> List[Dict[str, Any]]:
         """Load metadata from all agent YAML files."""
-        agents = []
+        agents: List[Dict[str, Any]] = []
 
         if not self.config_dir.exists():
             return agents
@@ -301,7 +301,8 @@ Be concise. Match user intent to agent domain and triggers."""
 
             if response.status_code == 200:
                 result = response.json()
-                return result["choices"][0]["message"]["content"]
+                content: Optional[str] = result["choices"][0]["message"]["content"]
+                return content
 
         except Exception as e:
             print(f"Local model call failed: {e}", file=sys.stderr)

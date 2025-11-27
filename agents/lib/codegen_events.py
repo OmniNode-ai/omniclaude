@@ -20,12 +20,26 @@ def _now_iso() -> str:
 
 @dataclass
 class BaseEvent:
+    """Base event class for all codegen events.
+
+    Attributes:
+        id: Unique event identifier
+        service: Service name (default: omniclaude)
+        timestamp: ISO-format timestamp
+        correlation_id: Correlation ID for tracing
+        metadata: Event metadata dictionary
+        payload: Event payload dictionary
+        event: Event type string (overridden in subclasses)
+    """
+
     id: UUID = field(default_factory=uuid4)
     service: str = "omniclaude"
     timestamp: str = field(default_factory=_now_iso)
     correlation_id: UUID = field(default_factory=uuid4)
     metadata: Dict[str, Any] = field(default_factory=dict)
     payload: Dict[str, Any] = field(default_factory=dict)
+    # Event type - defined at class level in subclasses, defaults to unknown
+    event: str = "unknown"
 
     def to_kafka_topic(self) -> str:
         raise NotImplementedError

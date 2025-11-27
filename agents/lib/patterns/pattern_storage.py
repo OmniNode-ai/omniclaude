@@ -233,16 +233,16 @@ class PatternStorage:
             must_conditions.append(
                 FieldCondition(
                     key="confidence_score",
-                    range={
+                    range={  # type: ignore[arg-type]
                         "gte": min_confidence,
                     },
                 )
             )
 
-            query_filter = Filter(must=must_conditions) if must_conditions else None
+            query_filter = Filter(must=must_conditions) if must_conditions else None  # type: ignore[arg-type]
 
             # Search
-            results = self.client.search(
+            results = self.client.search(  # type: ignore[attr-defined]
                 collection_name=self.collection_name,
                 query_vector=query_embedding,
                 query_filter=query_filter,
@@ -254,7 +254,9 @@ class PatternStorage:
             matches: list[ModelPatternMatch] = []
             for result in results:
                 payload = result.payload
-                pattern = ModelCodePattern(
+                if payload is None:
+                    continue
+                pattern = ModelCodePattern(  # type: ignore[call-arg]
                     pattern_id=payload["pattern_id"],
                     pattern_type=payload["pattern_type"],
                     pattern_name=payload["pattern_name"],
@@ -330,7 +332,9 @@ class PatternStorage:
                 return None
 
             payload = results[0][0].payload
-            return ModelCodePattern(
+            if payload is None:
+                return None
+            return ModelCodePattern(  # type: ignore[call-arg]
                 pattern_id=payload["pattern_id"],
                 pattern_type=payload["pattern_type"],
                 pattern_name=payload["pattern_name"],
@@ -512,7 +516,7 @@ class PatternStorage:
                 "qdrant_url": self.qdrant_url,
                 "collection_name": self.collection_name,
                 "total_patterns": collection_info.points_count,
-                "vector_size": collection_info.config.params.vectors.size,
+                "vector_size": collection_info.config.params.vectors.size,  # type: ignore[union-attr]
             }
         except Exception as e:
             logger.error(f"Failed to get storage stats: {e}")

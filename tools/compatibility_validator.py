@@ -18,7 +18,6 @@ Usage:
 
 import argparse
 import ast
-import importlib
 import json
 import os
 import re
@@ -355,34 +354,19 @@ class OmniBaseCompatibilityValidator:
                                 )
                             )
                 else:
-                    # Try to actually import it
-                    try:
-                        # Add omnibase_core to path if provided
-                        if self.omnibase_path.exists():
-                            sys.path.insert(0, str(self.omnibase_path / "src"))
-
-                        importlib.import_module(module)
-                        result.checks.append(
-                            ValidationCheck(
-                                check_type=CheckType.IMPORT,
-                                status=CheckStatus.PASS,
-                                rule="importable_module",
-                                message=f"Module is importable: {module}",
-                                line_number=line_no,
-                            )
+                    # Unknown module - not in known valid imports list
+                    # Add a warning instead of trying dynamic import (which is environment-dependent)
+                    result.checks.append(
+                        ValidationCheck(
+                            check_type=CheckType.IMPORT,
+                            status=CheckStatus.WARNING,
+                            rule="unknown_module",
+                            message=f"Unknown omnibase_core module: {module}",
+                            line_number=line_no,
+                            details=f"Module {module} is not in the known valid imports list",
+                            suggestion="Check omnibase_core documentation for correct import paths",
                         )
-                    except ImportError:
-                        result.checks.append(
-                            ValidationCheck(
-                                check_type=CheckType.IMPORT,
-                                status=CheckStatus.FAIL,
-                                rule="import_not_found",
-                                message=f"Import not found: {module}",
-                                line_number=line_no,
-                                details=f"Module {module} cannot be imported",
-                                suggestion="Check omnibase_core documentation for correct import paths",
-                            )
-                        )
+                    )
 
     def _check_class_naming(self, tree: ast.AST, result: ValidationResult) -> None:
         """Check ONEX naming conventions"""

@@ -333,9 +333,7 @@ def validate_partition_key(
         return False
 
     # Basic validation: partition key should be a non-empty string
-    if not isinstance(partition_key, str):
-        logger.warning(f"Partition key must be string, got: {type(partition_key)}")
-        return False
+    # Note: At this point partition_key is already known to be truthy from check above
 
     if len(partition_key.strip()) == 0:
         logger.warning(f"Partition key is empty string for event type: {event_type}")

@@ -42,9 +42,10 @@ import atexit
 import json
 import logging
 import os
+from asyncio import Lock
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 from uuid import UUID, uuid4
 from weakref import WeakKeyDictionary
 
@@ -147,7 +148,7 @@ async def get_producer_lock() -> asyncio.Lock:
     if loop not in _producer_locks:
         _producer_locks[loop] = asyncio.Lock()
 
-    return _producer_locks[loop]
+    return cast(Lock, _producer_locks[loop])
 
 
 async def _get_kafka_producer():
@@ -160,13 +161,13 @@ async def _get_kafka_producer():
     global _kafka_producer
 
     if _kafka_producer is not None:
-        return _kafka_producer
+        return _kafka_producer  # type: ignore[unreachable]
 
     # Get the lock (created lazily under running event loop)
     async with await get_producer_lock():
         # Double-check after acquiring lock
         if _kafka_producer is not None:
-            return _kafka_producer
+            return _kafka_producer  # type: ignore[unreachable]
 
         try:
             from aiokafka import AIOKafkaProducer

@@ -399,7 +399,7 @@ class TraceContext(BaseModel):
             session_id=trace.session_id,
         )
 
-    def to_dict(self) -> Dict[str, str]:
+    def to_dict(self) -> Dict[str, Optional[str]]:
         """Convert to dictionary with string values for headers/metadata"""
         return {
             "correlation_id": str(self.correlation_id),

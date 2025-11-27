@@ -123,8 +123,8 @@ class HookEventProcessor:
         self._running = False
         self._shutdown_requested = False
 
-        # Metrics
-        self.metrics = {
+        # Metrics - typed dict with explicit int values (start_time is set to float in run())
+        self.metrics: Dict[str, Any] = {
             "events_processed": 0,
             "events_succeeded": 0,
             "events_failed": 0,

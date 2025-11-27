@@ -78,7 +78,7 @@ def verify_in_database(execution_id):
 
         conn = psycopg2.connect(
             host=POSTGRES_HOST,
-            port=int(POSTGRES_PORT),
+            port=int(POSTGRES_PORT or "5436"),
             database=POSTGRES_DATABASE,
             user=POSTGRES_USER,
             password=POSTGRES_PASSWORD,

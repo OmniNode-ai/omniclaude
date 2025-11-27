@@ -21,11 +21,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-
-# Add lib to path
-sys.path.insert(0, str(Path(__file__).parent))
-
-from pattern_tracker_sync import PatternTrackerSync
+from .pattern_tracker_sync import PatternTrackerSync
 
 
 def generate_intent_id(prompt: str, agent: str) -> str:

@@ -10,7 +10,7 @@ Target: <500ms query time with graceful degradation
 import hashlib
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import httpx
 
@@ -166,7 +166,7 @@ class RAGIntelligenceClient:
         # Check cache
         cached = self._get_cached(cache_key)
         if cached is not None:
-            return cached
+            return cast(List[NamingConvention], cached)
 
         # TODO: Phase 2 - Enable RAG queries
         # if self.enable_rag:
@@ -208,7 +208,7 @@ class RAGIntelligenceClient:
         # Check cache
         cached = self._get_cached(cache_key)
         if cached is not None:
-            return cached
+            return cast(List[CodeExample], cached)
 
         # TODO: Phase 2 - Enable RAG queries
         # if self.enable_rag:

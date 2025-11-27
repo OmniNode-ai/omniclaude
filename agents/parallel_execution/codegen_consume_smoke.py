@@ -34,7 +34,7 @@ async def main() -> None:
 
     def matches(payload: dict) -> bool:
         if args.correlation_id:
-            return payload.get("correlation_id") == args.correlation_id
+            return bool(payload.get("correlation_id") == args.correlation_id)
         return True
 
     if args.rpk:

@@ -84,8 +84,8 @@ async def run_migrations() -> None:
             row = None
             if ident_col in col_meta:
                 # Note: ident_col is from database introspection (fixed set: filename/name/id/version)
-                row = await conn.fetchrow(  # nosec B608
-                    f"SELECT 1 FROM schema_migrations WHERE {ident_col}=$1",
+                row = await conn.fetchrow(
+                    f"SELECT 1 FROM schema_migrations WHERE {ident_col}=$1",  # nosec B608
                     migration_id,
                 )
             if row:
@@ -97,7 +97,7 @@ async def run_migrations() -> None:
                 continue
             # Build dynamic insert covering required non-null, no-default columns
             insert_cols = []
-            insert_vals = []
+            insert_vals: list[str | int] = []
             if ident_col in col_meta:
                 insert_cols.append(ident_col)
                 insert_vals.append(migration_id)
@@ -109,6 +109,7 @@ async def run_migrations() -> None:
                     continue
                 # Provide sensible filler values based on type
                 dtype = (meta["type"] or "").lower()
+                filler: str | int
                 if "int" in dtype or dtype in ("integer", "smallint", "bigint"):
                     filler = 1
                 elif "timestamp" in dtype or "date" in dtype:
@@ -123,9 +124,10 @@ async def run_migrations() -> None:
                 placeholders = ",".join(f"${i+1}" for i in range(len(insert_vals)))
                 cols_sql = ",".join(insert_cols)
                 try:
-                    # Note: Column names from database introspection (information_schema.columns)
-                    await conn.execute(  # nosec B608
-                        f"INSERT INTO schema_migrations ({cols_sql}) VALUES ({placeholders})",
+                    # Column names from database introspection (information_schema.columns),
+                    # not user input - safe for dynamic SQL construction
+                    await conn.execute(
+                        f"INSERT INTO schema_migrations ({cols_sql}) VALUES ({placeholders})",  # nosec B608
                         *insert_vals,
                     )
                 except Exception:

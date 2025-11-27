@@ -19,6 +19,41 @@ dependencies:
 
 Production-ready CI/CD debugging system that fetches GitHub Actions workflow runs, analyzes failures, and provides actionable debugging information with severity classification.
 
+## 🚨 CRITICAL: ALWAYS DISPATCH TO POLYMORPHIC AGENT
+
+**DO NOT run bash scripts directly.** When this skill is invoked, you MUST dispatch to a polymorphic-agent.
+
+### ❌ WRONG - Running bash directly:
+```
+Bash(~/.claude/skills/ci-failures/ci-quick-review 33)
+Bash(~/.claude/skills/ci-failures/fetch-ci-data 33)
+```
+
+### ✅ CORRECT - Dispatch to polymorphic-agent:
+```
+Task(
+  subagent_type="polymorphic-agent",
+  description="CI failure analysis for PR #33",
+  prompt="Analyze CI failures for PR #33. Use the ci-failures skill tools:
+    1. Run: ~/.claude/skills/ci-failures/ci-quick-review 33
+    2. For deep investigation, use: ~/.claude/skills/ci-failures/get-ci-job-details <job_id>
+    3. Analyze the failures and categorize by severity
+
+    Available tools in ~/.claude/skills/ci-failures/:
+    - ci-quick-review <PR#> - Quick summary of all failures (Tier 1)
+    - get-ci-job-details <job_id> - Deep dive into specific job (Tier 2)
+    - fetch-ci-data <PR#> - Raw CI data in JSON format
+
+    Return a summary with:
+    - Severity breakdown (CRITICAL/MAJOR/MINOR)
+    - Root cause analysis
+    - Suggested fixes for each failure
+    - Whether the PR is blocked from merge"
+)
+```
+
+**WHY**: Polymorphic agents have full ONEX capabilities, intelligence integration, quality gates, and proper observability. Running bash directly bypasses all of this.
+
 ## Skills Available
 
 1. **ci-quick-review** - One-command CI failure summary with actionable suggestions (RECOMMENDED - Tier 1)

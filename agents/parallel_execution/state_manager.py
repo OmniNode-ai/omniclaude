@@ -429,7 +429,7 @@ class NodeStateDiffCompute:
         Returns:
             Dictionary with added, removed, modified keys
         """
-        diff = {"added": {}, "removed": {}, "modified": {}}
+        diff: Dict[str, Dict[str, Any]] = {"added": {}, "removed": {}, "modified": {}}
 
         # Find added and modified keys
         for key, after_value in after_state.items():

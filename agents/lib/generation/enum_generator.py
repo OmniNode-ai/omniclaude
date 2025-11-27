@@ -167,7 +167,7 @@ class EnumGenerator:
             ast.Name(id="Enum", ctx=ast.Load()),
         ]
 
-        body = []
+        body: list[ast.stmt] = []
 
         # Add docstring
         docstring = f"{class_name} enumeration from contract definitions."
@@ -200,10 +200,11 @@ class EnumGenerator:
 
         class_def = ast.ClassDef(
             name=class_name,
-            bases=bases,
+            bases=list(bases),  # Cast to list[expr] for type checker
             keywords=[],
             decorator_list=[],
             body=body,
+            type_params=[],  # Required for Python 3.12+
         )
 
         # Fix missing locations for proper AST
@@ -260,14 +261,16 @@ class EnumGenerator:
             Generated enum class name (e.g., "EnumStatus", "EnumProcessingMode")
         """
         if self.type_mapper:
-            return self.type_mapper.generate_enum_name_from_values(enum_values)
+            result: str = self.type_mapper.generate_enum_name_from_values(enum_values)
+            return result
 
         # Fallback name generation
         if not enum_values:
             return "EnumGeneric"
 
-        first_value = enum_values[0]
+        first_value: Any = enum_values[0]
         if not isinstance(first_value, str):
+            # Handle non-string first values
             return "EnumGeneric"
 
         logger.debug(
@@ -296,16 +299,17 @@ class EnumGenerator:
             )
             return generated_name
 
-    def generate_enum_name_from_schema(self, schema: Dict[str, Any]) -> str:
+    def generate_enum_name_from_schema(self, schema: Any) -> str:
         """
         Generate enum class name from schema context.
 
         Args:
-            schema: Schema definition dict
+            schema: Schema definition (expected dict but validated at runtime)
 
         Returns:
             Generated enum class name
         """
+        # Early return for non-dict schemas
         if not isinstance(schema, dict):
             return "EnumGeneric"
 

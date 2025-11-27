@@ -425,8 +425,6 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime
 import logging
 
-from code_extractor import IConsulClientAdapter, ConsulServiceConfig, ConsulHealthCheck
-
 
 class ConsulClientAdapter(IConsulClientAdapter):
     """Concrete implementation of IConsulClientAdapter using Consul HTTP API."""

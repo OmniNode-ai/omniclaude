@@ -8,7 +8,7 @@ and stage progress across the 6-stage generation pipeline.
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -45,7 +45,7 @@ class ValidationGate(BaseModel):
     gate_type: GateType = Field(
         default=GateType.BLOCKING, description="Gate type (blocking/warning)"
     )
-    message: Optional[str] = Field(
+    message: str | None = Field(
         default=None, description="Status message or error details"
     )
     duration_ms: int = Field(..., description="Gate execution time in milliseconds")
@@ -69,22 +69,18 @@ class PipelineStage(BaseModel):
     status: StageStatus = Field(
         default=StageStatus.PENDING, description="Stage execution status"
     )
-    start_time: Optional[datetime] = Field(
+    start_time: datetime | None = Field(
         default=None, description="Stage start timestamp"
     )
-    end_time: Optional[datetime] = Field(
-        default=None, description="Stage end timestamp"
-    )
-    duration_ms: Optional[int] = Field(
+    end_time: datetime | None = Field(default=None, description="Stage end timestamp")
+    duration_ms: int | None = Field(
         default=None, description="Stage execution time in milliseconds"
     )
-    validation_gates: List[ValidationGate] = Field(
+    validation_gates: list[ValidationGate] = Field(
         default_factory=list, description="Validation gates executed in this stage"
     )
-    error: Optional[str] = Field(
-        default=None, description="Error message if stage failed"
-    )
-    metadata: Dict[str, Any] = Field(
+    error: str | None = Field(default=None, description="Error message if stage failed")
+    metadata: dict[str, Any] = Field(
         default_factory=dict, description="Stage-specific metadata"
     )
 
@@ -145,32 +141,30 @@ class PipelineResult(BaseModel):
     total_duration_ms: int = Field(
         ..., description="Total pipeline execution time in milliseconds"
     )
-    stages: List[PipelineStage] = Field(
+    stages: list[PipelineStage] = Field(
         default_factory=list, description="All pipeline stages"
     )
-    output_path: Optional[str] = Field(
+    output_path: str | None = Field(
         default=None, description="Output directory path (if successful)"
     )
-    generated_files: List[str] = Field(
+    generated_files: list[str] = Field(
         default_factory=list, description="List of generated file paths"
     )
-    node_type: Optional[str] = Field(
+    node_type: str | None = Field(
         default=None, description="Generated node type (EFFECT, COMPUTE, etc.)"
     )
-    service_name: Optional[str] = Field(
-        default=None, description="Generated service name"
-    )
-    domain: Optional[str] = Field(default=None, description="Generated node domain")
+    service_name: str | None = Field(default=None, description="Generated service name")
+    domain: str | None = Field(default=None, description="Generated node domain")
     validation_passed: bool = Field(
         default=False, description="Whether all validation gates passed"
     )
     compilation_passed: bool = Field(
         default=False, description="Whether compilation testing passed"
     )
-    metadata: Dict[str, Any] = Field(
+    metadata: dict[str, Any] = Field(
         default_factory=dict, description="Pipeline execution metadata"
     )
-    error_summary: Optional[str] = Field(
+    error_summary: str | None = Field(
         default=None, description="High-level error summary if pipeline failed"
     )
 
@@ -188,14 +182,14 @@ class PipelineResult(BaseModel):
         """Get total duration in seconds."""
         return self.total_duration_ms / 1000.0
 
-    def get_stage(self, stage_name: str) -> Optional[PipelineStage]:
+    def get_stage(self, stage_name: str) -> PipelineStage | None:
         """Get stage by name."""
         for stage in self.stages:
             if stage.stage_name == stage_name:
                 return stage
         return None
 
-    def get_failed_gates(self) -> List[ValidationGate]:
+    def get_failed_gates(self) -> list[ValidationGate]:
         """Get all failed validation gates."""
         failed = []
         for stage in self.stages:
@@ -204,7 +198,7 @@ class PipelineResult(BaseModel):
                     failed.append(gate)
         return failed
 
-    def get_warning_gates(self) -> List[ValidationGate]:
+    def get_warning_gates(self) -> list[ValidationGate]:
         """Get all warning validation gates."""
         warnings = []
         for stage in self.stages:

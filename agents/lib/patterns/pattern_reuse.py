@@ -19,7 +19,7 @@ ONEX v2.0 Compliance:
 """
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from jinja2 import StrictUndefined, Template
 
@@ -334,7 +334,9 @@ class PatternReuse:
         if self.embedding_generator:
             # Use provided embedding generator
             context_text = " ".join(f"{k}: {v}" for k, v in context.items())
-            return await self.embedding_generator.generate(context_text)
+            return cast(
+                list[float], await self.embedding_generator.generate(context_text)
+            )
 
         # Fallback: Simple hash-based embedding (384 dimensions)
         import hashlib

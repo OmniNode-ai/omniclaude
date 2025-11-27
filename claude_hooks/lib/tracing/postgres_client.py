@@ -127,8 +127,9 @@ class PostgresTracingClient:
             return self._initialized
 
         async with self._pool_lock:
+            # Already initialized check
             if self._initialized:
-                return True
+                return True  # type: ignore[unreachable]
 
             attempt = 0
             last_error = None
@@ -209,6 +210,9 @@ class PostgresTracingClient:
             return
 
         try:
+            if self.pool is None:
+                yield None
+                return
             async with self.pool.acquire() as conn:
                 yield conn
         except Exception as e:
@@ -418,7 +422,7 @@ class PostgresTracingClient:
                     json.dumps(context) if context else None,
                     tags,
                 )
-                trace_id = row["id"]
+                trace_id: UUID = row["id"]
                 logger.debug(
                     f"Created execution trace: {trace_id} (correlation: {correlation_id})"
                 )
@@ -582,7 +586,7 @@ class PostgresTracingClient:
                     error_stack,
                     json.dumps(metadata) if metadata else None,
                 )
-                hook_id = row["id"]
+                hook_id: UUID = row["id"]
                 logger.debug(f"Recorded hook execution: {hook_id} ({hook_name})")
                 return hook_id
         except Exception as e:
@@ -1059,8 +1063,8 @@ class PostgresTracingClient:
         if not self._initialized and not await self.initialize():
             raise RuntimeError("Client not initialized")
 
-        set_clauses = []
-        values = [corr_id]
+        set_clauses: List[str] = []
+        values: List[Any] = [corr_id]
 
         for idx, (key, value) in enumerate(updates.items(), start=2):
             set_clauses.append(f"{key} = ${idx}")

@@ -36,13 +36,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict
 
-from lib.alert_manager import get_alert_statistics
-from lib.health_checker import (
+from agents.lib.alert_manager import get_alert_statistics
+from agents.lib.health_checker import (
     HealthCheckStatus,
     check_system_health,
     get_overall_health_status,
 )
-from lib.monitoring import (
+from agents.lib.monitoring import (
     AlertSeverity,
     collect_all_metrics,
     export_prometheus_metrics,

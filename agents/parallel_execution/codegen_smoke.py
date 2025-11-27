@@ -119,12 +119,12 @@ async def main() -> None:
         print("[confluent] Published CodegenAnalysisRequest", evt.correlation_id)
         return
     else:
-        client = KafkaCodegenClient(bootstrap_servers=args.bootstrap)
+        kafka_client = KafkaCodegenClient(bootstrap_servers=args.bootstrap)
         try:
-            await client.publish(evt)
+            await kafka_client.publish(evt)
             print("Published CodegenAnalysisRequest", evt.correlation_id)
         finally:
-            await client.stop_producer()
+            await kafka_client.stop_producer()
 
 
 if __name__ == "__main__":

@@ -9,7 +9,7 @@
 ```bash
 # Install dependencies
 cd ~/.claude/hooks
-pip3 install pytest pytest-cov pytest-xdist pyyaml
+poetry install
 
 # Run all tests
 ./run_tests.sh all
@@ -367,13 +367,13 @@ jobs:
       - name: Install dependencies
         run: |
           cd ~/.claude/hooks  # Adjust path
-          pip install -r requirements.txt
-          pip install pytest pytest-cov
+          pip install poetry
+          poetry install
 
       - name: Run tests
         run: |
           cd ~/.claude/hooks
-          ./run_tests.sh ci
+          poetry run pytest --cov=lib --cov-report=xml -m "not slow"
 
       - name: Upload coverage
         uses: codecov/codecov-action@v3

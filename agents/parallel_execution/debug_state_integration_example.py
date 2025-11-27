@@ -86,7 +86,7 @@ class DebugStateManager:
             SELECT capture_state_snapshot($1, $2, $3, $4::JSONB, $5, $6, $7)
         """
 
-        snapshot_id = await self.db.execute_query(
+        result = await self.db.execute_query(
             query,
             snapshot_type,
             correlation_id,
@@ -97,6 +97,7 @@ class DebugStateManager:
             execution_step,
             fetch="val",
         )
+        snapshot_id: UUID = result if isinstance(result, UUID) else UUID(str(result))
 
         logger.debug(
             f"Captured {snapshot_type} snapshot {snapshot_id} "
@@ -200,7 +201,7 @@ class DebugStateManager:
 
         import traceback
 
-        error_id = await self.db.execute_query(
+        result = await self.db.execute_query(
             query,
             correlation_id,
             session_id,
@@ -216,6 +217,7 @@ class DebugStateManager:
             is_recoverable,
             fetch="val",
         )
+        error_id: UUID = result if isinstance(result, UUID) else UUID(str(result))
 
         logger.error(
             f"Captured error {error_id} for {agent_name}: {str(error)} "
@@ -306,7 +308,7 @@ class DebugStateManager:
             RETURNING id
         """
 
-        success_id = await self.db.execute_query(
+        result = await self.db.execute_query(
             query,
             correlation_id,
             session_id,
@@ -320,6 +322,7 @@ class DebugStateManager:
             json.dumps(success_factors or {}),
             fetch="val",
         )
+        success_id: UUID = result if isinstance(result, UUID) else UUID(str(result))
 
         logger.info(
             f"Captured success {success_id} for {agent_name}: {operation_name} "
@@ -372,7 +375,7 @@ class DebugStateManager:
             RETURNING id
         """
 
-        step_id = await self.db.execute_query(
+        result = await self.db.execute_query(
             query,
             correlation_id,
             session_id,
@@ -385,6 +388,7 @@ class DebugStateManager:
             json.dumps(input_data or {}),
             fetch="val",
         )
+        step_id: UUID = result if isinstance(result, UUID) else UUID(str(result))
 
         logger.debug(
             f"Started workflow step {step_id} (step {step_number}): "
@@ -472,7 +476,7 @@ class DebugStateManager:
             RETURNING id
         """
 
-        corr_id = await self.db.execute_query(
+        result = await self.db.execute_query(
             query,
             error_event_id,
             success_event_id,
@@ -482,6 +486,7 @@ class DebugStateManager:
             confidence_score,
             fetch="val",
         )
+        corr_id: UUID = result if isinstance(result, UUID) else UUID(str(result))
 
         logger.info(
             f"Correlated error {error_event_id} to success {success_event_id} "

@@ -16,7 +16,45 @@ Categories: 7 (intelligence, parallel_execution, coordination, context_managemen
 """
 
 from enum import Enum
-from typing import Dict, List
+from typing import TypedDict
+
+from typing_extensions import NotRequired
+
+
+class ThresholdMetadata(TypedDict):
+    """TypedDict for threshold metadata with type-safe field definitions.
+
+    Required fields (always present):
+        name: Human-readable threshold name
+        description: Detailed threshold description
+        category: Threshold category (e.g., 'intelligence', 'parallel_execution')
+        criticality: Criticality level ('high', 'medium', 'low')
+        measurement_type: Type of measurement (e.g., 'response_time', 'overhead')
+
+    Optional fields (one set per measurement unit):
+        threshold_ms/mb/ratio: Target threshold value
+        tolerance_ms/mb/ratio: Acceptable tolerance range
+        alert_threshold_ms/mb/ratio: Early warning threshold
+    """
+
+    # Required fields (always present in all threshold metadata)
+    name: str
+    description: str
+    category: str
+    criticality: str
+    measurement_type: str
+    # Time-based thresholds (optional - only for time-based measurements)
+    threshold_ms: NotRequired[int]
+    tolerance_ms: NotRequired[int]
+    alert_threshold_ms: NotRequired[int]
+    # Memory-based thresholds (optional - only for memory-based measurements)
+    threshold_mb: NotRequired[int]
+    tolerance_mb: NotRequired[int]
+    alert_threshold_mb: NotRequired[int]
+    # Ratio-based thresholds (optional - only for ratio-based measurements)
+    threshold_ratio: NotRequired[float]
+    tolerance_ratio: NotRequired[float]
+    alert_threshold_ratio: NotRequired[float]
 
 
 class EnumPerformanceThreshold(str, Enum):
@@ -90,93 +128,116 @@ class EnumPerformanceThreshold(str, Enum):
     @property
     def category(self) -> str:
         """Get threshold category."""
-        return self._get_metadata()["category"]
+        result: str = self._get_metadata()["category"]
+        return result
 
     @property
     def threshold_ms(self) -> int:
         """Get threshold value in milliseconds (0 for ratio-based thresholds)."""
         metadata = self._get_metadata()
-        return metadata.get("threshold_ms", 0)
+        result: int = metadata.get("threshold_ms", 0)
+        return result
 
     @property
     def threshold_mb(self) -> int:
         """Get threshold value in megabytes (0 for non-memory thresholds)."""
         metadata = self._get_metadata()
-        return metadata.get("threshold_mb", 0)
+        result: int = metadata.get("threshold_mb", 0)
+        return result
 
     @property
     def threshold_ratio(self) -> float:
         """Get threshold ratio (0.0 for non-ratio thresholds)."""
         metadata = self._get_metadata()
-        return metadata.get("threshold_ratio", 0.0)
+        result: float = metadata.get("threshold_ratio", 0.0)
+        return result
 
     @property
     def tolerance_ms(self) -> int:
         """Get tolerance in milliseconds (0 for ratio-based thresholds)."""
         metadata = self._get_metadata()
-        return metadata.get("tolerance_ms", 0)
+        result: int = metadata.get("tolerance_ms", 0)
+        return result
 
     @property
     def tolerance_mb(self) -> int:
         """Get tolerance in megabytes (0 for non-memory thresholds)."""
         metadata = self._get_metadata()
-        return metadata.get("tolerance_mb", 0)
+        result: int = metadata.get("tolerance_mb", 0)
+        return result
 
     @property
     def tolerance_ratio(self) -> float:
         """Get tolerance ratio (0.0 for non-ratio thresholds)."""
         metadata = self._get_metadata()
-        return metadata.get("tolerance_ratio", 0.0)
+        result: float = metadata.get("tolerance_ratio", 0.0)
+        return result
 
     @property
     def alert_threshold_ms(self) -> int:
         """Get alert threshold in milliseconds (0 for ratio-based thresholds)."""
         metadata = self._get_metadata()
-        return metadata.get("alert_threshold_ms", 0)
+        result: int = metadata.get("alert_threshold_ms", 0)
+        return result
 
     @property
     def alert_threshold_mb(self) -> int:
         """Get alert threshold in megabytes (0 for non-memory thresholds)."""
         metadata = self._get_metadata()
-        return metadata.get("alert_threshold_mb", 0)
+        result: int = metadata.get("alert_threshold_mb", 0)
+        return result
 
     @property
     def alert_threshold_ratio(self) -> float:
         """Get alert threshold ratio (0.0 for non-ratio thresholds)."""
         metadata = self._get_metadata()
-        return metadata.get("alert_threshold_ratio", 0.0)
+        result: float = metadata.get("alert_threshold_ratio", 0.0)
+        return result
 
     @property
     def criticality(self) -> str:
         """Get criticality level (high/medium/low)."""
-        return self._get_metadata()["criticality"]
+        result: str = self._get_metadata()["criticality"]
+        return result
 
     @property
     def measurement_type(self) -> str:
         """Get measurement type (response_time, overhead, etc.)."""
-        return self._get_metadata()["measurement_type"]
+        result: str = self._get_metadata()["measurement_type"]
+        return result
 
     @property
     def name(self) -> str:
         """Get human-readable threshold name."""
-        return self._get_metadata()["name"]
+        result: str = self._get_metadata()["name"]
+        return result
 
     @property
     def description(self) -> str:
         """Get threshold description."""
-        return self._get_metadata()["description"]
+        result: str = self._get_metadata()["description"]
+        return result
 
-    def _get_metadata(self) -> Dict[str, any]:
-        """Get metadata for this threshold from specification."""
-        return _THRESHOLD_METADATA.get(self, {})
+    def _get_metadata(self) -> ThresholdMetadata:
+        """Get metadata for this threshold from specification.
+
+        Returns:
+            ThresholdMetadata: The metadata for this threshold.
+
+        Raises:
+            KeyError: If threshold metadata is not defined (programming error).
+        """
+        # Use direct access - missing metadata is a programming error
+        # that should fail fast rather than return invalid data
+        return _THRESHOLD_METADATA[self]
 
     @staticmethod
-    def all_thresholds() -> List["EnumPerformanceThreshold"]:
+    def all_thresholds() -> list["EnumPerformanceThreshold"]:
         """Get all performance thresholds."""
         return list(EnumPerformanceThreshold)
 
     @staticmethod
-    def by_category(category: str) -> List["EnumPerformanceThreshold"]:
+    def by_category(category: str) -> list["EnumPerformanceThreshold"]:
         """Get thresholds by category."""
         return [
             threshold
@@ -185,7 +246,7 @@ class EnumPerformanceThreshold(str, Enum):
         ]
 
     @staticmethod
-    def by_criticality(criticality: str) -> List["EnumPerformanceThreshold"]:
+    def by_criticality(criticality: str) -> list["EnumPerformanceThreshold"]:
         """Get thresholds by criticality level."""
         return [
             threshold
@@ -195,7 +256,7 @@ class EnumPerformanceThreshold(str, Enum):
 
 
 # Threshold metadata from performance-thresholds.yaml specification
-_THRESHOLD_METADATA: Dict[EnumPerformanceThreshold, Dict[str, any]] = {
+_THRESHOLD_METADATA: dict[EnumPerformanceThreshold, ThresholdMetadata] = {
     # Intelligence Thresholds (INT-001 to INT-006)
     EnumPerformanceThreshold.RAG_QUERY_RESPONSE_TIME: {
         "name": "RAG Query Response Time",

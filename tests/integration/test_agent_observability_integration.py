@@ -100,7 +100,13 @@ def db_connection():
         pytest.skip("POSTGRES_PASSWORD not set - load .env file")
 
     try:
-        conn = psycopg2.connect(**db_config)
+        conn = psycopg2.connect(
+            host=str(db_config["host"]),
+            port=db_config["port"],
+            dbname=str(db_config["database"]),
+            user=str(db_config["user"]),
+            password=str(db_config.get("password") or ""),
+        )
         logger.info(
             f"✓ Database connection established: {db_config['host']}:{db_config['port']}"
         )

@@ -53,16 +53,10 @@ async def log_llm_call(
     # Fetch active price
     price_row = await _get_active_price_row(model, provider)
     # Values may come back as Decimal; convert to float for computation
-    eff_in = (
-        float(price_row.get("input_per_1k"))
-        if price_row and price_row.get("input_per_1k") is not None
-        else None
-    )
-    eff_out = (
-        float(price_row.get("output_per_1k"))
-        if price_row and price_row.get("output_per_1k") is not None
-        else None
-    )
+    input_per_1k = price_row.get("input_per_1k") if price_row else None
+    output_per_1k = price_row.get("output_per_1k") if price_row else None
+    eff_in = float(input_per_1k) if input_per_1k is not None else None
+    eff_out = float(output_per_1k) if output_per_1k is not None else None
     price_id = price_row.get("id") if price_row else None
 
     # Compute cost

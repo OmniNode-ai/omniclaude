@@ -726,6 +726,12 @@ class HealthChecker:
                         error=str(check),
                     )
                 else:
+                    # Type guard: check cannot be BaseException at this point
+                    # because the isinstance branch above handles that case
+                    if isinstance(check, BaseException):
+                        raise RuntimeError(
+                            f"Unexpected BaseException for component {component}: {check}"
+                        )
                     results[component] = check
                     self.last_checks[component] = check
 

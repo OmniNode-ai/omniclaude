@@ -13,9 +13,11 @@ Features:
 - Contract structure validation
 """
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import yaml
 
@@ -48,14 +50,14 @@ class ValidationResult(BaseModel):
     """
 
     valid: bool = Field(..., description="Whether contract is valid")
-    contract: Optional[ModelContractBase] = Field(
+    contract: ModelContractBase | None = Field(
         default=None, description="Validated contract object (if valid)"
     )
-    errors: List[Dict[str, Any]] = Field(
+    errors: list[dict[str, Any]] = Field(
         default_factory=list, description="Validation errors"
     )
-    warnings: List[str] = Field(default_factory=list, description="Validation warnings")
-    node_type: Optional[str] = Field(
+    warnings: list[str] = Field(default_factory=list, description="Validation warnings")
+    node_type: str | None = Field(
         default=None, description="Validated node type (EFFECT, COMPUTE, etc.)"
     )
     model_references_valid: bool = Field(
@@ -108,7 +110,7 @@ class ContractValidator:
         "ORCHESTRATOR": ModelContractOrchestrator,
     }
 
-    def __init__(self, model_search_paths: Optional[List[Path]] = None):
+    def __init__(self, model_search_paths: list[Path] | None = None):
         """
         Initialize contract validator.
 
@@ -163,6 +165,24 @@ class ContractValidator:
 
             # Validate using Pydantic
             try:
+                # NOTE: Known upstream bug in omnibase_core ModelContractCompute
+                #
+                # Issue: ModelContractCompute.__init__ doesn't pass the 'algorithm' field
+                # to the parent constructor, causing validation failures for COMPUTE contracts.
+                # Additionally, model_post_init() expects all nested dicts (algorithm,
+                # performance, dependencies) to be converted to proper Pydantic models
+                # before instantiation.
+                #
+                # Workaround Applied: The _convert_yaml_types() method pre-converts nested
+                # dictionaries to their proper Pydantic model types (ModelAlgorithmConfig,
+                # ModelDependency, etc.) before passing to the contract constructor.
+                #
+                # Bug Location: omnibase_core.models.contracts.ModelContractCompute.__init__
+                # Reference: omninode_bridge adapter pattern in src/omninode_bridge/nodes/conftest.py
+                # Upstream Issue: https://github.com/OmniNode/omnibase_core/issues/TBD
+                #   (TODO: File issue and update this reference)
+                # Removal Condition: Remove this workaround when omnibase_core >= X.Y.Z
+                #   includes the fix for ModelContractCompute field forwarding.
                 contract = contract_model(**contract_dict)
                 result.contract = contract
                 result.valid = True
@@ -183,7 +203,8 @@ class ContractValidator:
                 )
 
             except ValidationError as e:
-                result.errors = e.errors()
+                # Convert ErrorDetails to dicts for storage
+                result.errors = [dict(err) for err in e.errors()]
                 result.schema_compliance = False
                 self.logger.error(
                     f"Contract validation failed for {node_type}: {e.error_count()} errors"
@@ -252,7 +273,7 @@ class ContractValidator:
         """
         return self.CONTRACT_MODELS[node_type]
 
-    def _validate_model_references(self, contract: ModelContractBase) -> List[str]:
+    def _validate_model_references(self, contract: ModelContractBase) -> list[str]:
         """
         Verify all model references exist.
 
@@ -327,7 +348,7 @@ class ContractValidator:
 
         return f"model_{name}.py"
 
-    def _convert_yaml_types(self, contract_dict: Dict[str, Any]) -> Dict[str, Any]:
+    def _convert_yaml_types(self, contract_dict: dict[str, Any]) -> dict[str, Any]:
         """
         Convert YAML string types to proper Python objects for Pydantic validation.
 
@@ -335,6 +356,8 @@ class ContractValidator:
         into the typed objects expected by omnibase_core contract models:
         - String node_type → EnumNodeType enum
         - String version → ModelSemVer object
+        - Dict dependencies → List[ModelDependency]
+        - Dict algorithm → ModelAlgorithmConfig (for COMPUTE nodes)
 
         Args:
             contract_dict: Raw contract dictionary from YAML parsing
@@ -345,6 +368,10 @@ class ContractValidator:
         # Import here to avoid circular dependencies and handle missing omnibase_core gracefully
         try:
             from omnibase_core.enums import EnumNodeType
+            from omnibase_core.models.contracts.model_algorithm_config import (
+                ModelAlgorithmConfig,
+            )
+            from omnibase_core.models.contracts.model_dependency import ModelDependency
             from omnibase_core.primitives.model_semver import ModelSemVer
         except ImportError:
             # If omnibase_core is not available, log warning and return unchanged
@@ -393,11 +420,50 @@ class ContractValidator:
                     "Pydantic validation will report this error."
                 )
 
+        # Convert dict dependencies to List[ModelDependency]
+        dependencies_raw = converted.get("dependencies")
+        if dependencies_raw is not None:
+            try:
+                # Validate that dependencies is iterable (list or tuple)
+                if isinstance(dependencies_raw, (list, tuple)):
+                    converted_deps: list[Any] = []
+                    for dep in dependencies_raw:
+                        if isinstance(dep, dict):
+                            converted_deps.append(ModelDependency(**dep))
+                        else:
+                            converted_deps.append(dep)  # Already converted
+                    converted["dependencies"] = converted_deps
+                    self.logger.debug(
+                        f"Converted {len(converted_deps)} dependencies to ModelDependency objects"
+                    )
+                else:
+                    self.logger.warning(
+                        f"Dependencies must be a list or tuple, got {type(dependencies_raw).__name__}. "
+                        "Pydantic validation will report this error."
+                    )
+            except Exception as e:
+                self.logger.warning(
+                    f"Failed to convert dependencies: {e}. "
+                    "Pydantic validation will report this error."
+                )
+
+        # Convert dict algorithm to ModelAlgorithmConfig (for COMPUTE nodes)
+        if "algorithm" in converted and isinstance(converted["algorithm"], dict):
+            try:
+                # Pydantic will handle nested ModelAlgorithmFactorConfig conversion
+                converted["algorithm"] = ModelAlgorithmConfig(**converted["algorithm"])
+                self.logger.debug("Converted algorithm to ModelAlgorithmConfig object")
+            except Exception as e:
+                self.logger.warning(
+                    f"Failed to convert algorithm: {e}. "
+                    "Pydantic validation will report this error."
+                )
+
         return converted
 
     def validate_batch(
-        self, contracts: List[Dict[str, Any]]
-    ) -> Dict[str, ValidationResult]:
+        self, contracts: list[dict[str, Any]]
+    ) -> dict[str, ValidationResult]:
         """
         Validate multiple contracts.
 
@@ -407,7 +473,7 @@ class ContractValidator:
         Returns:
             Dict mapping contract names to validation results
         """
-        results = {}
+        results: dict[str, ValidationResult] = {}
 
         for contract_data in contracts:
             contract_yaml = contract_data["yaml"]
@@ -420,8 +486,8 @@ class ContractValidator:
         return results
 
     def get_validation_summary(
-        self, results: Dict[str, ValidationResult]
-    ) -> Dict[str, Any]:
+        self, results: dict[str, ValidationResult]
+    ) -> dict[str, Any]:
         """
         Generate validation summary for batch results.
 

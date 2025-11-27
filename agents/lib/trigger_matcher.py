@@ -40,7 +40,7 @@ class TriggerMatcher:
         Returns:
             Dictionary mapping lowercase triggers to list of agent names
         """
-        index = {}
+        index: Dict[str, List[str]] = {}
         for agent_name, agent_data in self.registry["agents"].items():
             triggers = agent_data.get("activation_triggers", [])
             for trigger in triggers:

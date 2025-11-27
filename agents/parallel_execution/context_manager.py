@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from mcp_client import ArchonMCPClient
+from .mcp_client import ArchonMCPClient
 
 
 # Import context optimizer for intelligent context selection
@@ -126,9 +126,9 @@ class ContextManager:
             # Process results
             for i, result in enumerate(rag_results):
                 query = rag_queries[i]
-                if isinstance(result, Exception):
+                if isinstance(result, BaseException):
                     print(f"Warning: RAG query failed for '{query}': {result}")
-                else:
+                elif isinstance(result, dict):
                     # Store RAG result as context item
                     key = f"rag:{query[:50]}"  # Truncate for key
                     context_items[key] = ContextItem(
@@ -144,7 +144,7 @@ class ContextManager:
                     )
 
         # 2-4. Parallel execution of default RAG, file scanning, and pattern recognition
-        parallel_tasks = []
+        parallel_tasks: List[Any] = []
 
         # Default domain pattern query
         parallel_tasks.append(
@@ -155,7 +155,7 @@ class ContextManager:
         if workspace_path:
             parallel_tasks.append(self._scan_workspace(workspace_path))
         else:
-            parallel_tasks.append(asyncio.create_task(asyncio.sleep(0)))  # Dummy task
+            parallel_tasks.append(self._create_empty_result())
 
         # Pattern recognition
         parallel_tasks.append(self._execute_pattern_recognition())
@@ -169,7 +169,7 @@ class ContextManager:
         pattern_result = parallel_results[2] if workspace_path else parallel_results[1]
 
         # Handle default RAG result
-        if not isinstance(default_rag_result, Exception):
+        if not isinstance(default_rag_result, BaseException):
             key = "rag:domain-patterns"
             context_items[key] = ContextItem(
                 context_type="rag",
@@ -182,7 +182,7 @@ class ContextManager:
             print(f"Warning: Default RAG query failed: {default_rag_result}")
 
         # Handle file scan result
-        if file_scan_result and not isinstance(file_scan_result, Exception):
+        if file_scan_result and not isinstance(file_scan_result, BaseException):
             key = f"structure:{workspace_path}"
             context_items[key] = ContextItem(
                 context_type="structure",
@@ -191,11 +191,11 @@ class ContextManager:
                 tokens_estimate=file_scan_result["tokens_estimate"],
                 metadata=file_scan_result["metadata"],
             )
-        elif isinstance(file_scan_result, Exception):
+        elif isinstance(file_scan_result, BaseException):
             print(f"Warning: File system scan failed: {file_scan_result}")
 
         # Handle pattern result
-        if not isinstance(pattern_result, Exception):
+        if not isinstance(pattern_result, BaseException):
             key = "pattern:onex-architecture"
             context_items[key] = ContextItem(
                 context_type="pattern",
@@ -412,7 +412,7 @@ class ContextManager:
             item.tokens_estimate for item in self.global_context.values()
         )
 
-        by_type = {}
+        by_type: Dict[str, int] = {}
         for item in self.global_context.values():
             by_type[item.context_type] = by_type.get(item.context_type, 0) + 1
 
@@ -438,9 +438,10 @@ class ContextManager:
             RAG result dictionary
         """
         try:
-            return await self.mcp_client.perform_rag_query(
+            result: Dict[str, Any] = await self.mcp_client.perform_rag_query(
                 query=query, match_count=match_count, context=context
             )
+            return result
         except Exception as e:
             # Re-raise the exception to be handled by the caller
             raise e
@@ -568,6 +569,10 @@ class ContextManager:
             }
         except Exception as e:
             raise e
+
+    async def _create_empty_result(self) -> Dict[str, Any]:
+        """Create an empty result placeholder for parallel tasks."""
+        return {"content": None, "metadata": {}, "tokens_estimate": 0}
 
     async def cleanup(self):
         """Cleanup resources."""

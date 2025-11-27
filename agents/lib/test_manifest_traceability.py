@@ -37,7 +37,8 @@ async def test_manifest_traceability():
     Test end-to-end manifest injection traceability.
     """
     import psycopg2
-    from manifest_injector import ManifestInjector
+
+    from .manifest_injector import ManifestInjector
 
     # Verify database password is set
     if not os.environ.get("POSTGRES_PASSWORD"):

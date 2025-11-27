@@ -114,7 +114,7 @@ class AgentAnalytics:
             async with pool.acquire() as conn:
                 # Build query conditions
                 where_conditions = ["created_at >= $1"]
-                params = [since_date]
+                params: List[Any] = [since_date]
                 param_count = 1
 
                 if agent_id:
@@ -387,7 +387,7 @@ class AgentAnalytics:
             async with pool.acquire() as conn:
                 # Build query conditions
                 where_conditions = ["created_at >= $1"]
-                params = [since_date]
+                params: List[Any] = [since_date]
                 param_count = 1
 
                 if agent_id:

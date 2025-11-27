@@ -54,7 +54,7 @@ import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path, Path as PathLib
-from typing import Any, Dict, List, Optional
+from typing import Any, cast
 from uuid import uuid4
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
@@ -108,10 +108,10 @@ class IntelligenceEventClient:
 
     def __init__(
         self,
-        bootstrap_servers: Optional[str] = None,
+        bootstrap_servers: str | None = None,
         enable_intelligence: bool = True,
         request_timeout_ms: int = 5000,
-        consumer_group_id: Optional[str] = None,
+        consumer_group_id: str | None = None,
     ):
         """
         Initialize intelligence event client.
@@ -148,13 +148,13 @@ class IntelligenceEventClient:
             consumer_group_id or f"omniclaude-intelligence-{uuid4().hex[:8]}"
         )
 
-        self._producer: Optional[AIOKafkaProducer] = None
-        self._consumer: Optional[AIOKafkaConsumer] = None
-        self._consumer_task: Optional[asyncio.Task] = (
+        self._producer: AIOKafkaProducer | None = None
+        self._consumer: AIOKafkaConsumer | None = None
+        self._consumer_task: asyncio.Task | None = (
             None  # Track background consumer task
         )
         self._started = False
-        self._pending_requests: Dict[str, asyncio.Future] = {}
+        self._pending_requests: dict[str, asyncio.Future] = {}
         self._consumer_ready = asyncio.Event()  # Signal when consumer is polling
 
         self.logger = logging.getLogger(__name__)
@@ -361,8 +361,8 @@ class IntelligenceEventClient:
         self,
         source_path: str,
         language: str,
-        timeout_ms: Optional[int] = None,
-    ) -> List[Dict[str, Any]]:
+        timeout_ms: int | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Request pattern discovery via events.
 
@@ -425,16 +425,16 @@ class IntelligenceEventClient:
         )
 
         # Extract patterns list from result dict
-        return result.get("patterns", [])
+        return cast(list[dict[str, Any]], result.get("patterns", []))
 
     async def request_code_analysis(
         self,
-        content: Optional[str],
+        content: str | None,
         source_path: str,
         language: str,
-        options: Optional[Dict[str, Any]] = None,
-        timeout_ms: Optional[int] = None,
-    ) -> Dict[str, Any]:
+        options: dict[str, Any] | None = None,
+        timeout_ms: int | None = None,
+    ) -> dict[str, Any]:
         """
         Request comprehensive code analysis via events.
 
@@ -523,11 +523,11 @@ class IntelligenceEventClient:
     def _create_request_payload(
         self,
         correlation_id: str,
-        content: Optional[str],
+        content: str | None,
         source_path: str,
         language: str,
-        options: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        options: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Build request payload compatible with EVENT_BUS_INTEGRATION_GUIDE standards.
 
@@ -589,9 +589,9 @@ class IntelligenceEventClient:
     async def _publish_and_wait(
         self,
         correlation_id: str,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
         timeout_ms: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Publish request and wait for response with timeout.
 
@@ -657,7 +657,7 @@ class IntelligenceEventClient:
                 future, timeout=timeout_ms / 1000.0  # Convert to seconds
             )
 
-            return result
+            return cast(dict[str, Any], result)
 
         finally:
             # Clean up pending request
@@ -781,7 +781,7 @@ class IntelligenceEventClientContext:
 
     def __init__(
         self,
-        bootstrap_servers: Optional[str] = None,
+        bootstrap_servers: str | None = None,
         enable_intelligence: bool = True,
         request_timeout_ms: int = 5000,
     ):

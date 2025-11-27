@@ -74,8 +74,10 @@ class TestContextInheritanceValidator:
 
         result = await validator.validate(context)
 
+        assert result.metadata is not None
         assert result.status == "passed"
         assert "6/6 fields preserved" in result.message
+        assert result.metadata is not None
         assert result.metadata["preservation_ratio"] == 1.0
         assert result.metadata["correlation_id_preserved"] is True
         assert result.metadata["version_compatible"] is True
@@ -93,8 +95,10 @@ class TestContextInheritanceValidator:
 
         result = await validator.validate(context)
 
+        assert result.metadata is not None
         assert result.status == "failed"
         assert "No parent context" in result.message
+        assert result.metadata is not None
         assert result.metadata["reason"] == "no_parent_context"
 
     @pytest.mark.asyncio
@@ -110,8 +114,10 @@ class TestContextInheritanceValidator:
 
         result = await validator.validate(context)
 
+        assert result.metadata is not None
         assert result.status == "failed"
         assert "No context was passed" in result.message
+        assert result.metadata is not None
         assert result.metadata["reason"] == "no_delegated_context"
 
     @pytest.mark.asyncio
@@ -128,8 +134,10 @@ class TestContextInheritanceValidator:
 
         result = await validator.validate(context)
 
+        assert result.metadata is not None
         assert result.status == "failed"
         assert "Critical context fields lost" in result.message
+        assert result.metadata is not None
         assert "task_id" in result.metadata["missing_fields"]
         assert result.metadata["reason"] == "critical_fields_lost"
 
@@ -148,8 +156,10 @@ class TestContextInheritanceValidator:
 
         result = await validator.validate(context)
 
+        assert result.metadata is not None
         assert result.status == "failed"
         assert "Correlation ID not preserved" in result.message
+        assert result.metadata is not None
         assert result.metadata["reason"] == "correlation_id_mismatch"
 
     @pytest.mark.asyncio
@@ -166,8 +176,10 @@ class TestContextInheritanceValidator:
 
         result = await validator.validate(context)
 
+        assert result.metadata is not None
         # Should pass - user_request is not critical
         assert result.status == "passed"
+        assert result.metadata is not None
         assert result.metadata["preservation_ratio"] == pytest.approx(0.833, rel=0.01)
         assert result.metadata["preserved_fields_count"] == 5
         assert result.metadata["total_parent_fields"] == 6
@@ -185,8 +197,10 @@ class TestContextInheritanceValidator:
 
         result = await validator.validate(context)
 
+        assert result.metadata is not None
         # Should still pass but version_compatible will be False
         assert result.status == "passed"
+        assert result.metadata is not None
         assert result.metadata["version_compatible"] is False
 
     @pytest.mark.asyncio
@@ -200,7 +214,9 @@ class TestContextInheritanceValidator:
 
         result = await validator.validate(context)
 
+        assert result.metadata is not None
         assert result.status == "passed"
+        assert result.metadata is not None
         assert result.metadata["chain_valid"] is True
         assert result.metadata["inheritance_chain_length"] == 1
         assert result.metadata["parent_agent"] == "agent_workflow_coordinator"
@@ -274,9 +290,11 @@ class TestAgentCoordinationValidator:
 
         result = await validator.validate(context)
 
+        assert result.metadata is not None
         assert result.status == "passed"
         assert "3 agents" in result.message
         assert "4/4 comms successful" in result.message
+        assert result.metadata is not None
         assert result.metadata["agent_count"] == 3
         assert result.metadata["total_communications"] == 4
         assert result.metadata["comm_success_rate"] == 1.0
@@ -286,7 +304,7 @@ class TestAgentCoordinationValidator:
     @pytest.mark.asyncio
     async def test_no_protocol_specified(self, validator: AgentCoordinationValidator):
         """Test validation fails when no protocol specified."""
-        context = {
+        context: dict = {
             "agent_coordination": {
                 "communications": [],
                 "collaboration_metrics": {},
@@ -296,8 +314,10 @@ class TestAgentCoordinationValidator:
 
         result = await validator.validate(context)
 
+        assert result.metadata is not None
         assert result.status == "failed"
         assert "No coordination protocol" in result.message
+        assert result.metadata is not None
         assert result.metadata["reason"] == "no_protocol"
 
     @pytest.mark.asyncio
@@ -311,8 +331,10 @@ class TestAgentCoordinationValidator:
 
         result = await validator.validate(context)
 
+        assert result.metadata is not None
         # Should pass but with warning
         assert result.status == "passed"
+        assert result.metadata is not None
         assert result.metadata["protocol_warning"] is True
 
     @pytest.mark.asyncio
@@ -328,6 +350,7 @@ class TestAgentCoordinationValidator:
 
         result = await validator.validate(context)
 
+        assert result.metadata is not None
         assert result.status == "failed"
         assert "communication failures" in result.message
         assert result.metadata["failed_count"] == 2
@@ -352,6 +375,7 @@ class TestAgentCoordinationValidator:
 
         result = await validator.validate(context)
 
+        assert result.metadata is not None
         assert result.status == "failed"
         assert "deadlock detected" in result.message
         assert result.metadata["reason"] == "deadlock_detected"
@@ -367,6 +391,7 @@ class TestAgentCoordinationValidator:
 
         result = await validator.validate(context)
 
+        assert result.metadata is not None
         # Should pass - 3 conflicts is below default max of 5
         assert result.status == "passed"
         assert result.metadata["resource_conflicts"] == 3
@@ -384,6 +409,7 @@ class TestAgentCoordinationValidator:
 
         result = await validator.validate(context)
 
+        assert result.metadata is not None
         assert result.status == "failed"
         assert "Too many resource conflicts" in result.message
         assert result.metadata["conflict_count"] == 10
@@ -400,6 +426,7 @@ class TestAgentCoordinationValidator:
 
         result = await validator.validate(context)
 
+        assert result.metadata is not None
         # Should pass but with warning
         assert result.status == "passed"
         assert result.metadata["comm_warning"] is True
@@ -413,6 +440,7 @@ class TestAgentCoordinationValidator:
 
         result = await validator.validate(context)
 
+        assert result.metadata is not None
         assert result.status == "passed"
         assert result.metadata["comm_success_rate"] == 1.0
         assert result.metadata["successful_communications"] == 4
@@ -466,6 +494,7 @@ class TestDelegationValidationValidator:
 
         result = await validator.validate(context)
 
+        assert result.metadata is not None
         assert result.status == "passed"
         assert "agent_specialist" in result.message
         assert "1500ms" in result.message
@@ -488,6 +517,7 @@ class TestDelegationValidationValidator:
 
         result = await validator.validate(context)
 
+        assert result.metadata is not None
         assert result.status == "failed"
         assert "handoff was not successful" in result.message
         assert result.metadata["reason"] == "handoff_failed"
@@ -506,6 +536,7 @@ class TestDelegationValidationValidator:
 
         result = await validator.validate(context)
 
+        assert result.metadata is not None
         assert result.status == "failed"
         assert "did not complete" in result.message
         assert result.metadata["reason"] == "task_not_completed"
@@ -522,6 +553,7 @@ class TestDelegationValidationValidator:
 
         result = await validator.validate(context)
 
+        assert result.metadata is not None
         assert result.status == "failed"
         assert "not returned to caller" in result.message
         assert result.metadata["reason"] == "results_not_returned"
@@ -537,6 +569,7 @@ class TestDelegationValidationValidator:
 
         result = await validator.validate(context)
 
+        assert result.metadata is not None
         # Should pass but with warning
         assert result.status == "passed"
         assert result.metadata["chain_warning"] is True
@@ -553,6 +586,7 @@ class TestDelegationValidationValidator:
 
         result = await validator.validate(context)
 
+        assert result.metadata is not None
         # Should pass but with depth warning
         assert result.status == "passed"
         assert result.metadata["depth_warning"] is True
@@ -571,6 +605,7 @@ class TestDelegationValidationValidator:
 
         result = await validator.validate(context)
 
+        assert result.metadata is not None
         assert result.status == "failed"
         assert "error was not properly handled" in result.message
         assert result.metadata["reason"] == "unhandled_error"
@@ -587,6 +622,7 @@ class TestDelegationValidationValidator:
 
         result = await validator.validate(context)
 
+        assert result.metadata is not None
         # Should pass - error was handled
         assert result.status == "passed"
         assert result.metadata["has_error"] is True
@@ -608,6 +644,7 @@ class TestDelegationValidationValidator:
 
         result = await validator.validate(context)
 
+        assert result.metadata is not None
         assert result.status == "passed"
         assert result.metadata["parent_in_chain"] is True
 
@@ -620,6 +657,7 @@ class TestDelegationValidationValidator:
 
         result = await validator.validate(context)
 
+        assert result.metadata is not None
         assert result.status == "passed"
         assert result.metadata["delegation_time_ms"] == 1500
         assert result.metadata["delegated_agent"] == "agent_specialist"

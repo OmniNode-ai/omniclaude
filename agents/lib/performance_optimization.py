@@ -9,7 +9,7 @@ import asyncio
 import json
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Union
 
 from .db import get_pg_pool
 from .security_utils import validate_sql_identifier
@@ -36,8 +36,8 @@ class PerformanceOptimizer:
         self._batch_timeout = 5.0  # seconds
         self._last_batch_time = time.time()
         self._connection_pool_size = 10
-        self._write_queue = asyncio.Queue()
-        self._background_writer = None
+        self._write_queue: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
+        self._background_writer: Optional[asyncio.Task[None]] = None
         self._shutdown = False
 
     async def _get_pool(self):
@@ -507,7 +507,7 @@ class PerformanceOptimizer:
         start_time = time.time()
 
         # Group operations by type for better batching
-        grouped_ops = {}
+        grouped_ops: Dict[str, List[BatchOperation]] = {}
         for op in operations:
             key = f"{op.operation_type}_{op.table_name}"
             if key not in grouped_ops:
@@ -526,11 +526,11 @@ class PerformanceOptimizer:
         # Process results
         for i, result in enumerate(operation_results):
             key = list(grouped_ops.keys())[i]
-            if isinstance(result, Exception):
+            if isinstance(result, BaseException):
                 print(f"Warning: Batch operation failed for {key}: {result}")
                 results[key] = 0
             else:
-                results[key] = result
+                results[key] = int(result)
 
         elapsed_ms = (time.time() - start_time) * 1000
         print(f"[PerformanceOptimizer] Batch write completed in {elapsed_ms:.0f}ms")
@@ -733,7 +733,7 @@ class PerformanceOptimizer:
         try:
             async with pool.acquire() as conn:
                 # Group by table
-                by_table = {}
+                by_table: Dict[str, List[Dict[str, Any]]] = {}
                 for item in batch:
                     table = item["table"]
                     if table not in by_table:
@@ -763,7 +763,7 @@ class PerformanceOptimizer:
         if pool is None:
             return {}
 
-        metrics = {}
+        metrics: Dict[str, Any] = {}
 
         async with pool.acquire() as conn:
             # Get table row counts
@@ -774,7 +774,7 @@ class PerformanceOptimizer:
                 "success_events",
                 "lineage_edges",
             ]
-            row_counts = {}
+            row_counts: Dict[str, Any] = {}
 
             for table in tables:
                 try:
@@ -792,16 +792,20 @@ class PerformanceOptimizer:
             metrics["row_counts"] = row_counts
 
             # Get queue sizes
-            metrics["write_queue_size"] = self._write_queue.qsize()
-            metrics["batch_queue_size"] = len(self._batch_queue)
+            write_queue_size: int = self._write_queue.qsize()
+            batch_queue_size: int = len(self._batch_queue)
+            metrics["write_queue_size"] = write_queue_size
+            metrics["batch_queue_size"] = batch_queue_size
 
             # Get connection pool stats
+            pool_size: Union[int, str]
             if hasattr(pool, "_pool"):
-                metrics["pool_size"] = (
+                pool_size = (
                     len(pool._pool) if hasattr(pool._pool, "__len__") else "unknown"
                 )
             else:
-                metrics["pool_size"] = "unknown"
+                pool_size = "unknown"
+            metrics["pool_size"] = pool_size
 
         return metrics
 
