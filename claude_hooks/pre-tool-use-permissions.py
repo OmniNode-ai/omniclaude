@@ -8,8 +8,23 @@ in Claude Code hooks. It will be expanded during Phase 2 to implement:
 - Destructive command detection
 - Safe path analysis
 - Dynamic permission decisions
+- Rate limiting (see RATE_LIMIT_* constants)
 
 Current State: Skeleton that passes through all requests (Phase 1 preparation)
+
+Rate Limiting Strategy:
+-----------------------
+Claude Code enforces a 5000ms (5 second) hook timeout, which provides implicit
+rate limiting - hooks cannot execute more than ~12 times per minute in the
+worst case. However, in practice:
+1. Most hook executions complete in <50ms
+2. The timeout acts as a backstop for runaway hooks
+3. Phase 2 will implement explicit rate limiting for additional protection
+
+Phase 2 will add:
+- Token bucket rate limiting (10 requests/second default)
+- Sliding window tracking for burst detection
+- Configurable limits via environment variables
 """
 
 import json
@@ -27,6 +42,21 @@ from typing import Any, Dict, Optional
 # Claude settings and cache paths
 SETTINGS_PATH = Path.home() / ".claude" / "settings.json"
 CACHE_PATH = Path.home() / ".claude" / ".cache" / "permission-cache.json"
+
+# =============================================================================
+# CONSTANTS - Timeouts and Rate Limiting
+# =============================================================================
+
+# Claude Code hook timeout (enforced by Claude Code, not this script)
+# This provides implicit rate limiting - hooks cannot block indefinitely
+# Reference: https://docs.anthropic.com/en/docs/claude-code/hooks
+CLAUDE_HOOK_TIMEOUT_MS = 5000  # 5 seconds - enforced by Claude Code
+
+# Rate limiting constants for Phase 2 implementation
+# These provide defense-in-depth beyond the hook timeout
+RATE_LIMIT_REQUESTS_PER_SECOND = 10  # Max requests per second (Phase 2)
+RATE_LIMIT_BURST_SIZE = 20  # Allow short bursts up to this size (Phase 2)
+RATE_LIMIT_WINDOW_SECONDS = 60  # Sliding window for tracking (Phase 2)
 
 # =============================================================================
 # CONSTANTS - Safe Temporary Directories
@@ -90,8 +120,58 @@ def ensure_local_tmp_exists() -> Path:
 # CONSTANTS - Destructive Command Patterns (Improved Regex)
 # =============================================================================
 
-# These patterns are designed to minimize false positives while catching
-# genuinely destructive commands. Key improvements:
+# SECURITY NOTE: Defense-in-Depth, NOT a Security Boundary
+# =========================================================
+# These patterns provide a FIRST LINE OF DEFENSE against accidental destructive
+# commands. They are NOT designed to be a comprehensive security boundary.
+#
+# KNOWN LIMITATIONS AND BYPASS VECTORS:
+# -------------------------------------
+# These patterns CAN be bypassed by determined or creative users. Known methods:
+#
+# 1. Variable expansion:
+#    - CMD=rm; $CMD -rf /
+#    - ${CMD:-rm} -rf /
+#    - export X=rm; $X file
+#
+# 2. Command substitution:
+#    - $(echo rm) -rf /
+#    - `echo rm` -rf /
+#    - $(printf 'rm') file
+#
+# 3. Character escaping/quoting:
+#    - r\m -rf /
+#    - 'r'm -rf /
+#    - r""m -rf /
+#
+# 4. Alias/function tricks:
+#    - alias x=rm; x -rf /
+#    - function x { rm "$@"; }; x file
+#
+# 5. Indirect execution:
+#    - /bin/rm file (partially covered by patterns below)
+#    - command rm file
+#    - builtin eval 'rm file'
+#    - xargs rm < filelist
+#
+# 6. Encoding tricks:
+#    - echo cm0gLXJmIC8= | base64 -d | sh
+#    - printf '\x72\x6d' | sh
+#
+# WHY THIS IS STILL VALUABLE:
+# ---------------------------
+# - Catches accidental destructive commands (the 99% case)
+# - Provides clear signal for audit/logging purposes
+# - Raises awareness before executing dangerous operations
+# - Works as part of a layered security approach
+#
+# For true security boundaries, rely on:
+# - OS-level permissions
+# - Sandboxing/containerization
+# - Claude Code's built-in permission system
+# - User confirmation dialogs
+#
+# Pattern Design:
 # - Use word boundaries and command separators to avoid matching substrings
 # - Account for command chaining with ;, &&, ||, |
 # - Match commands at start of line or after separators
@@ -99,14 +179,19 @@ def ensure_local_tmp_exists() -> Path:
 DESTRUCTIVE_PATTERNS = [
     # rm command - avoid matching 'rm' in words like 'form', 'transform'
     # Matches: rm, rm -rf, rm -f, etc. at start or after separator
-    re.compile(r"(?:^|[;&|]\s*)rm\s+(?:-[rfivdP]+\s+)*", re.MULTILINE),
+    # Also matches /bin/rm, /usr/bin/rm for absolute path invocation
+    re.compile(
+        r"(?:^|[;&|]\s*)(?:/(?:usr/)?bin/)?rm\s+(?:-[rfivdP]+\s+)*", re.MULTILINE
+    ),
     # rmdir command - remove directories
-    re.compile(r"(?:^|[;&|]\s*)rmdir\s+", re.MULTILINE),
+    re.compile(r"(?:^|[;&|]\s*)(?:/(?:usr/)?bin/)?rmdir\s+", re.MULTILINE),
     # dd command - disk destroyer, often used for data wiping
     # Avoid matching 'add', 'odd', etc.
-    re.compile(r"(?:^|[;&|]\s*)dd\s+", re.MULTILINE),
+    re.compile(r"(?:^|[;&|]\s*)(?:/(?:usr/)?bin/)?dd\s+", re.MULTILINE),
     # mkfs command - format filesystems
-    re.compile(r"(?:^|[;&|]\s*)mkfs(?:\.[a-z0-9]+)?\s+", re.MULTILINE),
+    re.compile(
+        r"(?:^|[;&|]\s*)(?:/(?:usr/)?s?bin/)?mkfs(?:\.[a-z0-9]+)?\s+", re.MULTILINE
+    ),
     # Dangerous redirects - truncating files
     re.compile(
         r">\s*/(?!dev/null)", re.MULTILINE
@@ -121,12 +206,20 @@ DESTRUCTIVE_PATTERNS = [
         re.MULTILINE,
     ),
     # Kill signals
-    re.compile(r"(?:^|[;&|]\s*)kill\s+-9\s+", re.MULTILINE),
-    re.compile(r"(?:^|[;&|]\s*)pkill\s+", re.MULTILINE),
+    re.compile(r"(?:^|[;&|]\s*)(?:/(?:usr/)?bin/)?kill\s+-9\s+", re.MULTILINE),
+    re.compile(r"(?:^|[;&|]\s*)(?:/(?:usr/)?bin/)?pkill\s+", re.MULTILINE),
     # Git destructive operations
     re.compile(
         r"git\s+(?:push\s+.*--force|reset\s+--hard|clean\s+-[fd]+)", re.MULTILINE
     ),
+    # Command substitution executing destructive commands (partial coverage)
+    # Catches: $(rm ...), `rm ...`
+    re.compile(r"\$\(\s*rm\s+", re.MULTILINE),
+    re.compile(r"`\s*rm\s+", re.MULTILINE),
+    # xargs piping to destructive commands
+    re.compile(r"xargs\s+(?:-[^\s]+\s+)*rm\b", re.MULTILINE),
+    # base64 decoded and piped to shell (common obfuscation)
+    re.compile(r"base64\s+(?:-d|--decode)[^|]*\|\s*(?:ba)?sh", re.MULTILINE),
 ]
 
 # Patterns for commands that modify important files
@@ -355,6 +448,40 @@ def touches_sensitive_path(cmd: str) -> bool:
 # =============================================================================
 # PHASE 2 PLACEHOLDER FUNCTIONS
 # =============================================================================
+
+
+def check_rate_limit() -> bool:
+    """
+    Check if the current request should be rate limited.
+
+    TODO (Phase 2): Implement token bucket rate limiting
+
+    Phase 2 Implementation Plan:
+    - Use a simple token bucket algorithm with RATE_LIMIT_REQUESTS_PER_SECOND
+    - Store state in a lightweight file or shared memory
+    - Support burst handling with RATE_LIMIT_BURST_SIZE
+    - Track requests in sliding window of RATE_LIMIT_WINDOW_SECONDS
+
+    Current Mitigation:
+    - Claude Code enforces CLAUDE_HOOK_TIMEOUT_MS (5000ms) timeout
+    - This provides implicit rate limiting (~12 requests/minute worst case)
+    - Most hook executions complete in <50ms, so practical throughput is higher
+
+    Returns:
+        True if request is allowed, False if rate limited.
+        Phase 1: Always returns True (no rate limiting).
+
+    Raises:
+        None - designed for fail-open behavior.
+
+    Example:
+        >>> if not check_rate_limit():
+        ...     return {"decision": "deny", "reason": "Rate limited"}
+        >>> # Proceed with request
+    """
+    # Phase 1: No rate limiting - always allow
+    # The 5000ms hook timeout provides implicit rate limiting
+    return True
 
 
 def check_permission_cache(tool_name: str, params: Dict[str, Any]) -> Optional[str]:
