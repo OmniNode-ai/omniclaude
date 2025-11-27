@@ -102,72 +102,99 @@ The following directories are excluded from scanning:
 
 ### Skip Codes (False Positives)
 
-The following Bandit test IDs are skipped because they produce false positives in our codebase:
+The following Bandit test IDs are skipped because they produce false positives in our codebase.
+**NOTE**: High-signal security checks (B608, B110) are now ENABLED - see "Enabled High-Signal Checks" below.
 
-#### B101 - Assert Used
+#### LOW-SIGNAL SKIPS (Globally Disabled)
+
+##### B101 - Assert Used
 **Why skipped**: Common in tests (already excluded via `exclude_dirs`)
 
-#### B104 - Hardcoded Bind All Interfaces
+##### B104 - Hardcoded Bind All Interfaces
 **Why skipped**: Development-only configuration (0.0.0.0 binding is intentional)
 
-#### B105 - Hardcoded Password String
+##### B105 - Hardcoded Password String
 **Why skipped**: False positives on variable names containing "password"
 ```python
 # This triggers B105 but is not a hardcoded password:
 password_field = "password"
 ```
 
-#### B106 - Hardcoded Password Function Argument
+##### B106 - Hardcoded Password Function Argument
 **Why skipped**: False positives on parameter names
 ```python
 def authenticate(username, password):  # B106 triggers here
     ...
 ```
 
-#### B107 - Hardcoded Password Default
+##### B107 - Hardcoded Password Default
 **Why skipped**: False positives on default parameter values
 ```python
 def connect(host, password=""):  # B107 triggers on empty string
     ...
 ```
 
-#### B108 - Hardcoded Temp Directory
+##### B108 - Hardcoded Temp Directory
 **Why skipped**: Controlled usage of `/tmp` in development
 
-#### B110 - Try Except Pass
-**Why skipped**: Acceptable in specific contexts (error suppression is intentional)
-
-#### B201 - Flask Debug True
+##### B201 - Flask Debug True
 **Why skipped**: Debug mode controlled via environment variables (not hardcoded)
 
-#### B311 - Random
+##### B311 - Random
 **Why skipped**: `random` module used for non-cryptographic purposes (we use `secrets` for security)
 
-#### B404 - Subprocess Import
+##### B404 - Subprocess Import
 **Why skipped**: Required for system calls, inputs are validated
 
-#### B603 - Subprocess Without Shell Equals True
+##### B603 - Subprocess Without Shell Equals True
 **Why skipped**: All subprocess calls validate inputs before execution
 
-#### B607 - Start Process With Partial Path
+##### B607 - Start Process With Partial Path
 **Why skipped**: Development environment with known PATH configuration
 
-#### B608 - SQL Statements Without Placeholders
-**Why skipped**: **Most important** - False positives on parameterized queries
+#### HIGH-SIGNAL CHECKS - NOW ENABLED
 
-**Example false positive**:
+These checks were previously skipped but are now **ENABLED** because they catch real security issues.
+Use inline `# nosec B<ID> - <reason>` for justified exceptions only.
+
+##### B110 - Try Except Pass (NOW ENABLED)
+**Why enabled**: Silent exception handling can hide bugs and security issues like:
+- Failed authentication
+- Connection errors
+- Data corruption
+- Permission failures
+
+**Acceptable exceptions** (use inline nosec):
+- Optional imports with graceful fallback
+- Best-effort cleanup code
+- Feature detection
+
+**Usage**: Add `# nosec B110 - <reason>` for justified silent catches.
+
+##### B608 - SQL Statements Without Placeholders (NOW ENABLED)
+**Why enabled**: SQL injection is a critical vulnerability (OWASP Top 10).
+All SQL should use parameterized queries (`$1`, `%s`, `?`) not f-strings.
+
+**Acceptable exceptions** (use inline nosec):
+- Static table names from database introspection
+- Identifier quoting with prior validation (`validate_sql_identifier()`)
+- Template code generators where entity names are developer-controlled
+
+**Usage**: Add `# nosec B608 - <reason>` for validated dynamic identifiers.
+
+**Example with proper nosec usage**:
 ```python
-# This is SAFE (uses parameterized query) but B608 flags it:
-query = "SELECT * FROM users WHERE id = $1"  # PostgreSQL parameterized
-await conn.fetchrow(query, user_id)
+# Table name validated via validate_sql_identifier() above
+query = f"SELECT * FROM {table}"  # nosec B608 - table name validated
+await conn.execute(query)
 ```
 
-Our codebase uses:
-- SQLAlchemy with parameterized queries
+Our codebase uses proper parameterization:
 - asyncpg with `$1, $2, ...` placeholders
 - psycopg2 with `%s` placeholders
+- SQLAlchemy with parameterized queries
 
-All SQL queries are properly parameterized, making B608 a false positive in our context.
+All dynamic identifiers are validated with `validate_sql_identifier()` before use.
 
 ## CI/CD Integration
 
@@ -287,7 +314,8 @@ The configuration filters out **false positives** while maintaining detection of
 
 ## Maintenance
 
-**Last Updated**: 2025-11-24
-**Configuration Version**: 2.0
-**Skip Codes**: 13 (B101, B104, B105, B106, B107, B108, B110, B201, B311, B404, B603, B607, B608)
-**Scan Result**: PASSING ✅ (0 Medium+, 0 High)
+**Last Updated**: 2025-11-26
+**Configuration Version**: 3.0
+**Skip Codes**: 11 (B101, B104, B105, B106, B107, B108, B201, B311, B404, B603, B607)
+**Enabled High-Signal Checks**: 2 (B110, B608) - Use inline nosec for justified exceptions
+**Scan Result**: PASSING (0 Medium+, 0 High)

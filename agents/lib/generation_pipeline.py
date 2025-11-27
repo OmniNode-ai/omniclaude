@@ -39,7 +39,7 @@ from dotenv import load_dotenv
 
 load_dotenv()  # Load .env file automatically
 
-# All imports below MUST come after load_dotenv() - omnibase_core requires env vars  # noqa: E402
+# All imports below MUST come after load_dotenv() - omnibase_core requires env vars
 from omnibase_core.errors import EnumCoreErrorCode, OnexError  # noqa: E402
 
 from ..parallel_execution.interactive_validator import (  # noqa: E402
@@ -102,7 +102,7 @@ from .validators.quality_compliance_validators import (  # noqa: E402
     TypeSafetyValidator,
 )
 
-# Import quality gate validators  # noqa: E402
+# Import quality gate validators
 from .validators.sequential_validators import (  # noqa: E402
     InputValidationValidator,
     IntegrationTestingValidator,

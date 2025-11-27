@@ -504,7 +504,7 @@ def sanitize_token(value: str) -> str:
 # =========================================================================
 
 
-def sanitize_string(value: str) -> str:
+def sanitize_string(value: object) -> str:
     """
     Apply all sanitization patterns to a string.
 
@@ -521,15 +521,14 @@ def sanitize_string(value: str) -> str:
     - Session tokens
 
     Args:
-        value: String to sanitize
+        value: Value to sanitize (non-strings are converted to string)
 
     Returns:
         Sanitized string with PII masked
     """
-    # Defensive runtime check - handle unexpected non-str values gracefully
-    # This cast is intentional: non-str values passed at runtime are returned unchanged
+    # Defensive runtime check - convert non-str values to string for safety
     if not isinstance(value, str):
-        return cast(str, value)
+        return str(value)
 
     # Apply patterns in order of specificity (most specific first)
 
@@ -579,17 +578,17 @@ def sanitize_string(value: str) -> str:
     return value
 
 
-def is_sensitive_field(field_name: str) -> bool:
+def is_sensitive_field(field_name: object) -> bool:
     """
     Check if field name indicates sensitive data.
 
     Args:
-        field_name: Field name to check
+        field_name: Field name to check (non-strings return False)
 
     Returns:
         True if field name suggests sensitive data
     """
-    # Defensive runtime check - handle unexpected non-str values gracefully
+    # Defensive runtime check - non-str values cannot be sensitive field names
     if not isinstance(field_name, str):
         return False
 

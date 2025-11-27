@@ -261,6 +261,7 @@ class STFHelper:
                 f"query_stfs called in degraded mode - returning empty list "
                 f"(signature='{problem_signature}', category='{problem_category}')"
             )
+            return []
 
         try:
             # Build search criteria
@@ -335,6 +336,7 @@ class STFHelper:
             logger.debug(
                 f"retrieve_stf called in degraded mode - returning None (id={stf_id})"
             )
+            return None
 
         try:
             # Execute retrieve via storage node
@@ -409,6 +411,7 @@ class STFHelper:
             logger.debug(
                 f"store_stf called in degraded mode - returning None (name='{stf_name}')"
             )
+            return None
 
         try:
             # Step 1: Compute hash using NodeSTFHashCompute
@@ -499,6 +502,7 @@ class STFHelper:
             logger.debug(
                 f"update_stf_usage called in degraded mode - returning False (id={stf_id})"
             )
+            return False
 
         try:
             # Update usage count via storage node
@@ -559,6 +563,7 @@ class STFHelper:
                 f"get_top_stfs called in degraded mode - returning empty list "
                 f"(category='{problem_category}')"
             )
+            return []
 
         try:
             # Query without problem_signature to get all STFs in category

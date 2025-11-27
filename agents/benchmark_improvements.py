@@ -30,7 +30,11 @@ from agents.lib.performance_monitor import PerformanceMonitor
 from agents.lib.performance_optimization import BatchOperation, PerformanceOptimizer
 from agents.lib.retry_manager import RetryConfig, RetryManager, execute_with_retry
 from agents.parallel_execution.context_manager import ContextManager
-from agents.parallel_execution.quorum_validator import QuorumValidator
+from agents.parallel_execution.quorum_validator import (
+    QuorumResult,
+    QuorumValidator,
+    ValidationDecision,
+)
 
 
 class PerformanceBenchmark:
@@ -144,15 +148,10 @@ class PerformanceBenchmark:
             "sequential_decision": sequential_result.decision.value,
         }
 
-    async def _simulate_sequential_models(self):
+    async def _simulate_sequential_models(self) -> QuorumResult:
         """Simulate sequential model calls."""
         # Simulate calling models one by one
         await asyncio.sleep(0.2)  # Simulate model call delay
-
-        from agents.parallel_execution.quorum_validator import (
-            QuorumResult,
-            ValidationDecision,
-        )
 
         return QuorumResult(
             decision=ValidationDecision.PASS,
@@ -253,9 +252,9 @@ class PerformanceBenchmark:
                 try:
                     await failing_service()
                 except Exception:
-                    pass
+                    pass  # nosec B110 - intentional: benchmark measures failure handling overhead
         except Exception:
-            pass
+            pass  # nosec B110 - intentional: benchmark wrapper catches all for timing
 
         no_circuit_breaker_duration = time.time() - start_time
 
@@ -554,7 +553,7 @@ class PerformanceBenchmark:
         print("=" * 60)
 
 
-async def main():
+async def main() -> None:
     """Main benchmark execution."""
     benchmark = PerformanceBenchmark()
 

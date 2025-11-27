@@ -8,7 +8,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 # All directories containing Python packages (discovered via find -name "__init__.py")
-# Excludes: venv, .venv, htmlcov, __pycache__, and hidden directories
+# Excludes: hidden directories (.*), __pycache__, venv, .venv, htmlcov, node_modules
+# Note: Since PACKAGE_DIRS is hardcoded, only hidden dirs and __pycache__ matter in practice
 PACKAGE_DIRS=(
   "agents"
   "app"
@@ -64,7 +65,8 @@ done < <(find "${find_args[@]}" -type f -name "__init__.py" -not -path "*/.*" -n
 expected_total=$((count_added + count_existing))
 
 # Count actual py.typed files (strip whitespace from wc output)
-actual_total=$(find "${find_args[@]}" -name "py.typed" -not -path "*/.*" 2>/dev/null | wc -l | tr -d ' ')
+# Use same exclusion patterns as the main find to ensure consistent counting
+actual_total=$(find "${find_args[@]}" -name "py.typed" -not -path "*/.*" -not -path "*/__pycache__/*" 2>/dev/null | wc -l | tr -d ' ')
 
 echo ""
 echo "Summary:"

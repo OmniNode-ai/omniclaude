@@ -99,10 +99,10 @@ class AgentExecutionLogger:
         await logger.progress(stage="analyzing_results", percent=75)
 
         # Complete with success
-        await logger.complete(status="success", quality_score=0.92)
+        await logger.complete(status=EnumOperationStatus.SUCCESS, quality_score=0.92)
 
         # Or complete with error
-        await logger.complete(status="error", error_message=str(error))
+        await logger.complete(status=EnumOperationStatus.FAILED, error_message=str(error))
     """
 
     def __init__(
@@ -708,7 +708,7 @@ async def log_agent_execution(
         )
 
         await logger.progress(stage="gathering", percent=50)
-        await logger.complete(status="success", quality_score=0.92)
+        await logger.complete(status=EnumOperationStatus.SUCCESS, quality_score=0.92)
     """
     logger = AgentExecutionLogger(
         agent_name=agent_name,

@@ -43,7 +43,7 @@ import logging
 import os
 import sys
 from pathlib import Path as PathLib
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, cast
 from uuid import uuid4
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
@@ -145,9 +145,9 @@ class RoutingEventClient:
 
     def __init__(
         self,
-        bootstrap_servers: Optional[str] = None,
+        bootstrap_servers: str | None = None,
         request_timeout_ms: int = 5000,
-        consumer_group_id: Optional[str] = None,
+        consumer_group_id: str | None = None,
     ):
         """
         Initialize routing event client.
@@ -188,10 +188,10 @@ class RoutingEventClient:
             consumer_group_id or f"omniclaude-routing-{uuid4().hex[:8]}"
         )
 
-        self._producer: Optional[AIOKafkaProducer] = None
-        self._consumer: Optional[AIOKafkaConsumer] = None
+        self._producer: AIOKafkaProducer | None = None
+        self._consumer: AIOKafkaConsumer | None = None
         self._started = False
-        self._pending_requests: Dict[str, asyncio.Future] = {}
+        self._pending_requests: dict[str, asyncio.Future] = {}
         self._consumer_ready = asyncio.Event()  # Signal when consumer is polling
 
         self.logger = logging.getLogger(__name__)
@@ -423,12 +423,12 @@ class RoutingEventClient:
     async def request_routing(
         self,
         user_request: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
         max_recommendations: int = 5,
         min_confidence: float = 0.6,
         routing_strategy: str = "enhanced_fuzzy_matching",
-        timeout_ms: Optional[int] = None,
-    ) -> List[Dict[str, Any]]:
+        timeout_ms: int | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Request agent routing via events.
 
@@ -511,7 +511,7 @@ class RoutingEventClient:
                 f"Routing completed (correlation_id: {correlation_id}, recommendations: {len(result.get('recommendations', []))})"
             )
 
-            return cast(List[Dict[str, Any]], result.get("recommendations", []))
+            return cast(list[dict[str, Any]], result.get("recommendations", []))
 
         except asyncio.TimeoutError as e:
             self.logger.warning(
@@ -571,9 +571,9 @@ class RoutingEventClient:
     async def _publish_and_wait(
         self,
         correlation_id: str,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
         timeout_ms: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Publish request and wait for response with timeout.
 
@@ -610,7 +610,7 @@ class RoutingEventClient:
                 future, timeout=timeout_ms / 1000.0  # Convert to seconds
             )
 
-            return cast(Dict[str, Any], result)
+            return cast(dict[str, Any], result)
 
         finally:
             # Clean up pending request
@@ -752,7 +752,7 @@ class RoutingEventClientContext:
 
     def __init__(
         self,
-        bootstrap_servers: Optional[str] = None,
+        bootstrap_servers: str | None = None,
         request_timeout_ms: int = 5000,
     ):
         self.client = RoutingEventClient(
@@ -772,12 +772,12 @@ class RoutingEventClientContext:
 # Backward compatibility wrapper for existing code
 async def route_via_events(
     user_request: str,
-    context: Optional[Dict[str, Any]] = None,
+    context: dict[str, Any] | None = None,
     max_recommendations: int = 5,
     min_confidence: float = 0.6,
     timeout_ms: int = 5000,
     fallback_to_local: bool = True,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Convenience function for one-off routing requests via events.
 

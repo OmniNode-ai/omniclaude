@@ -6,7 +6,7 @@ Captures intelligence gathered from RAG, code examples, and domain patterns
 for enhanced node generation.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -20,73 +20,73 @@ class IntelligenceContext(BaseModel):
     """
 
     # Node Type Patterns
-    node_type_patterns: List[str] = Field(
+    node_type_patterns: list[str] = Field(
         default_factory=list,
         description="Best practices specific to the node type (EFFECT, COMPUTE, REDUCER, ORCHESTRATOR)",
     )
 
     # Common Operations
-    common_operations: List[str] = Field(
+    common_operations: list[str] = Field(
         default_factory=list,
         description="Common operations found in similar nodes (e.g., 'create', 'update', 'delete')",
     )
 
     # Required Mixins
-    required_mixins: List[str] = Field(
+    required_mixins: list[str] = Field(
         default_factory=list,
         description="Recommended mixins based on requirements (e.g., 'MixinRetry', 'MixinEventBus')",
     )
 
     # Performance Targets
-    performance_targets: Dict[str, Any] = Field(
+    performance_targets: dict[str, Any] = Field(
         default_factory=dict,
         description="Performance targets from similar implementations (e.g., {'query_time_ms': 10})",
     )
 
     # Error Scenarios
-    error_scenarios: List[str] = Field(
+    error_scenarios: list[str] = Field(
         default_factory=list,
         description="Common error scenarios to handle (e.g., 'Connection timeout', 'Constraint violation')",
     )
 
     # Domain Best Practices
-    domain_best_practices: List[str] = Field(
+    domain_best_practices: list[str] = Field(
         default_factory=list,
         description="Domain-specific patterns and best practices (e.g., 'Use prepared statements for SQL')",
     )
 
     # Code Examples
-    code_examples: List[Dict[str, str]] = Field(
+    code_examples: list[dict[str, str]] = Field(
         default_factory=list,
         description="Relevant code examples from similar implementations",
     )
 
     # Anti-patterns to Avoid
-    anti_patterns: List[str] = Field(
+    anti_patterns: list[str] = Field(
         default_factory=list,
         description="Anti-patterns to avoid based on historical issues",
     )
 
     # Dependencies
-    recommended_dependencies: List[Dict[str, str]] = Field(
+    recommended_dependencies: list[dict[str, str]] = Field(
         default_factory=list,
         description="Recommended external dependencies (e.g., [{'name': 'PostgreSQL', 'type': 'database'}])",
     )
 
     # Testing Recommendations
-    testing_recommendations: List[str] = Field(
+    testing_recommendations: list[str] = Field(
         default_factory=list,
         description="Testing strategies based on node type and domain",
     )
 
     # Security Considerations
-    security_considerations: List[str] = Field(
+    security_considerations: list[str] = Field(
         default_factory=list,
         description="Security best practices relevant to this node",
     )
 
     # RAG Query Metadata
-    rag_sources: List[str] = Field(
+    rag_sources: list[str] = Field(
         default_factory=list, description="Sources of intelligence (for traceability)"
     )
 
@@ -112,19 +112,19 @@ class NodeTypeIntelligence(BaseModel):
         ..., description="Node type (EFFECT, COMPUTE, REDUCER, ORCHESTRATOR)"
     )
 
-    default_patterns: List[str] = Field(
+    default_patterns: list[str] = Field(
         default_factory=list, description="Default best practices for this node type"
     )
 
-    typical_operations: List[str] = Field(
+    typical_operations: list[str] = Field(
         default_factory=list, description="Typical operations for this node type"
     )
 
-    common_mixins: List[str] = Field(
+    common_mixins: list[str] = Field(
         default_factory=list, description="Commonly used mixins for this node type"
     )
 
-    performance_baseline: Dict[str, Any] = Field(
+    performance_baseline: dict[str, Any] = Field(
         default_factory=dict,
         description="Baseline performance metrics for this node type",
     )
@@ -133,7 +133,7 @@ class NodeTypeIntelligence(BaseModel):
 
 
 # Default intelligence for each node type
-DEFAULT_NODE_TYPE_INTELLIGENCE: Dict[str, NodeTypeIntelligence] = {
+DEFAULT_NODE_TYPE_INTELLIGENCE: dict[str, NodeTypeIntelligence] = {
     "EFFECT": NodeTypeIntelligence(
         node_type="EFFECT",
         default_patterns=[
@@ -207,7 +207,7 @@ DEFAULT_NODE_TYPE_INTELLIGENCE: Dict[str, NodeTypeIntelligence] = {
 }
 
 
-def get_default_intelligence(node_type: str) -> Optional[IntelligenceContext]:
+def get_default_intelligence(node_type: str) -> IntelligenceContext | None:
     """
     Get default intelligence for a node type.
 

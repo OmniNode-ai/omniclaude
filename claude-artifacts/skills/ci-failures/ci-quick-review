@@ -357,7 +357,8 @@ while IFS= read -r workflow; do
                 else
                     # Show first few lines of error log
                     echo -e "       ${MAGENTA}Error snippet:${NC}"
-                    echo "$error_logs" | head -3 | sed 's/^/         /' | sed "s/\(error\|fatal\|failed\|Error\|Fatal\|Failed\)/${RED}\1${MAGENTA}/gi"
+                    # Use -E for extended regex (portable BSD/GNU) and character classes for case-insensitivity
+                    echo "$error_logs" | head -3 | sed 's/^/         /' | sed -E "s/([Ee][Rr][Rr][Oo][Rr]|[Ff][Aa][Tt][Aa][Ll]|[Ff][Aa][Ii][Ll][Ee][Dd])/${RED}\1${MAGENTA}/g"
                 fi
             fi
         fi

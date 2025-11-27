@@ -18,8 +18,10 @@ Categories: 7 (intelligence, parallel_execution, coordination, context_managemen
 from enum import Enum
 from typing import TypedDict
 
+from typing_extensions import NotRequired
 
-class ThresholdMetadata(TypedDict, total=False):
+
+class ThresholdMetadata(TypedDict):
     """TypedDict for threshold metadata with type-safe field definitions.
 
     Required fields (always present):
@@ -35,24 +37,24 @@ class ThresholdMetadata(TypedDict, total=False):
         alert_threshold_ms/mb/ratio: Early warning threshold
     """
 
-    # Required fields
+    # Required fields (always present in all threshold metadata)
     name: str
     description: str
     category: str
     criticality: str
     measurement_type: str
-    # Time-based thresholds (optional)
-    threshold_ms: int
-    tolerance_ms: int
-    alert_threshold_ms: int
-    # Memory-based thresholds (optional)
-    threshold_mb: int
-    tolerance_mb: int
-    alert_threshold_mb: int
-    # Ratio-based thresholds (optional)
-    threshold_ratio: float
-    tolerance_ratio: float
-    alert_threshold_ratio: float
+    # Time-based thresholds (optional - only for time-based measurements)
+    threshold_ms: NotRequired[int]
+    tolerance_ms: NotRequired[int]
+    alert_threshold_ms: NotRequired[int]
+    # Memory-based thresholds (optional - only for memory-based measurements)
+    threshold_mb: NotRequired[int]
+    tolerance_mb: NotRequired[int]
+    alert_threshold_mb: NotRequired[int]
+    # Ratio-based thresholds (optional - only for ratio-based measurements)
+    threshold_ratio: NotRequired[float]
+    tolerance_ratio: NotRequired[float]
+    alert_threshold_ratio: NotRequired[float]
 
 
 class EnumPerformanceThreshold(str, Enum):
@@ -217,8 +219,17 @@ class EnumPerformanceThreshold(str, Enum):
         return result
 
     def _get_metadata(self) -> ThresholdMetadata:
-        """Get metadata for this threshold from specification."""
-        return _THRESHOLD_METADATA.get(self, {})
+        """Get metadata for this threshold from specification.
+
+        Returns:
+            ThresholdMetadata: The metadata for this threshold.
+
+        Raises:
+            KeyError: If threshold metadata is not defined (programming error).
+        """
+        # Use direct access - missing metadata is a programming error
+        # that should fail fast rather than return invalid data
+        return _THRESHOLD_METADATA[self]
 
     @staticmethod
     def all_thresholds() -> list["EnumPerformanceThreshold"]:

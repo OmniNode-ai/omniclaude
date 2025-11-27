@@ -67,7 +67,7 @@ def test_basic_performance():
         try:
             requests.get(f"{base_url}/health", timeout=2)
         except Exception:
-            pass
+            pass  # nosec B110 - intentional: benchmark runs regardless of service availability
     no_pool_time = time.time() - start_time
 
     # With connection pooling
@@ -77,7 +77,7 @@ def test_basic_performance():
         try:
             session.get(f"{base_url}/health", timeout=2)
         except Exception:
-            pass
+            pass  # nosec B110 - intentional: benchmark runs regardless of service availability
     with_pool_time = time.time() - start_time
 
     print(f"   No pooling: {no_pool_time:.3f}s for 5 requests")
@@ -145,7 +145,7 @@ def test_basic_performance():
                 if response.status_code == 200:
                     return pattern_id, response_time
             except Exception:
-                pass
+                pass  # nosec B110 - intentional: performance test gracefully handles unavailable service
 
             return pattern_id, 0
 

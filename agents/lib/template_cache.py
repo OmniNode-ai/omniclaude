@@ -716,7 +716,8 @@ if __name__ == "__main__":
             loader_func=lambda p: p.read_text(encoding="utf-8"),
         )
         print(f"   Hit: {hit}, Content length: {len(content)}")
-        assert not hit, "First access should be cache miss"
+        if hit:
+            raise RuntimeError("First access should be cache miss")
 
         # Test 2: Cache hit
         print("\n2. Cache Hit:")
@@ -727,7 +728,8 @@ if __name__ == "__main__":
             loader_func=lambda p: p.read_text(encoding="utf-8"),
         )
         print(f"   Hit: {hit}, Content length: {len(content)}")
-        assert hit, "Second access should be cache hit"
+        if not hit:
+            raise RuntimeError("Second access should be cache hit")
 
         # Test 3: Content-based invalidation
         print("\n3. Content-Based Invalidation:")
@@ -741,7 +743,8 @@ if __name__ == "__main__":
             loader_func=lambda p: p.read_text(encoding="utf-8"),
         )
         print(f"   Hit after modification: {hit}")
-        assert not hit, "Modified template should invalidate cache"
+        if hit:
+            raise RuntimeError("Modified template should invalidate cache")
 
         # Test 4: TTL expiration
         print("\n4. TTL Expiration:")
@@ -760,7 +763,8 @@ if __name__ == "__main__":
             loader_func=lambda p: p.read_text(encoding="utf-8"),
         )
         print(f"   Hit after TTL expiration: {hit}")
-        assert not hit, "Expired template should not be cache hit"
+        if hit:
+            raise RuntimeError("Expired template should not be cache hit")
 
         # Test 5: Statistics
         print("\n5. Cache Statistics:")
@@ -794,7 +798,9 @@ if __name__ == "__main__":
         stats = small_cache.get_stats()
         print(f"   Templates in cache: {stats['cached_templates']}")
         print(f"   Evictions: {stats['evictions']}")
-        assert stats["cached_templates"] == 2, "Should have evicted oldest template"
-        assert stats["evictions"] == 1, "Should have 1 eviction"
+        if stats["cached_templates"] != 2:
+            raise RuntimeError("Should have evicted oldest template")
+        if stats["evictions"] != 1:
+            raise RuntimeError("Should have 1 eviction")
 
         print("\n✅ All tests passed!")

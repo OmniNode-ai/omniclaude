@@ -23,7 +23,7 @@ from agents.lib.models.model_performance_tracking import (
     ModelPerformanceMetric,
     ModelPerformanceThreshold,
 )
-from agents.lib.models.model_quality_gate import (  # noqa: E402
+from agents.lib.models.model_quality_gate import (
     EnumQualityGate,
     ModelQualityGateResult,
     QualityGateRegistry,

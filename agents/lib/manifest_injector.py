@@ -5410,7 +5410,8 @@ async def inject_manifest_async(
             # Will use minimal manifest
 
         formatted = injector.format_for_prompt(sections)
-        return cast(str, formatted)
+
+    return formatted
 
 
 # Convenience function for quick access (sync wrapper for backward compatibility)

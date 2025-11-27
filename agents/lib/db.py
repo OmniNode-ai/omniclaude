@@ -1,5 +1,5 @@
 import os
-from typing import Any, Optional
+from typing import Any
 
 import asyncpg
 
@@ -21,10 +21,10 @@ except ImportError:
     SETTINGS_AVAILABLE = False
 
 
-_pool: Optional[asyncpg.Pool] = None
+_pool: asyncpg.Pool | None = None
 
 
-def _build_dsn_from_env() -> Optional[str]:
+def _build_dsn_from_env() -> str | None:
     """Build PostgreSQL DSN from environment variables or Pydantic Settings."""
     # Prefer Pydantic Settings if available (type-safe, validated)
     if SETTINGS_AVAILABLE:
@@ -50,7 +50,7 @@ def _build_dsn_from_env() -> Optional[str]:
     return f"postgresql://{user}{pw}@{host}:{port}/{db}"
 
 
-async def get_pg_pool() -> Optional[asyncpg.Pool]:
+async def get_pg_pool() -> asyncpg.Pool | None:
     """Create or return a shared asyncpg pool based on PG_DSN or POSTGRES_* envs.
 
     If connection info is not set, returns None and callers should noop.
