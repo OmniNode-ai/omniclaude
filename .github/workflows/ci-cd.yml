@@ -470,13 +470,17 @@ jobs:
             VCS_REF=${{ github.sha }}
             VERSION=${{ steps.meta.outputs.version }}
 
+      - name: Set lowercase image name
+        id: image-name
+        run: echo "name=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
       - name: Export image for scanning
         uses: docker/build-push-action@v5
         with:
           context: .
           file: ./deployment/Dockerfile
           load: true
-          tags: ${{ github.repository | lower }}:scan
+          tags: ${{ steps.image-name.outputs.name }}:scan
           cache-from: type=gha
 
       # ============================================================================
@@ -485,7 +489,7 @@ jobs:
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ github.repository | lower }}:scan
+          image-ref: ${{ steps.image-name.outputs.name }}:scan
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
@@ -499,7 +503,7 @@ jobs:
       - name: Run Trivy vulnerability scanner (table output)
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: ${{ github.repository | lower }}:scan
+          image-ref: ${{ steps.image-name.outputs.name }}:scan
           format: 'table'
           severity: 'CRITICAL,HIGH'
 
