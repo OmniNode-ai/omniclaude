@@ -25,7 +25,7 @@ Design Philosophy:
 
 import json
 import os
-import subprocess
+import subprocess  # nosec B404 - subprocess needed for health check commands
 import sys
 import time
 from typing import Any, Dict
@@ -54,11 +54,13 @@ def check_running_services() -> Dict[str, Any]:
 
     # Check intelligence service (Phase 4)
     try:
-        result = subprocess.run(
-            ["curl", "-s", f"{INTELLIGENCE_SERVICE_URL}/health"],
-            capture_output=True,
-            text=True,
-            timeout=5,
+        result = (
+            subprocess.run(  # nosec B607 B603 - controlled curl call with hardcoded URL
+                ["curl", "-s", f"{INTELLIGENCE_SERVICE_URL}/health"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
         )
         if result.returncode == 0:
             try:
@@ -95,11 +97,13 @@ def check_running_services() -> Dict[str, Any]:
 
     # Check main server (Port 8181)
     try:
-        result = subprocess.run(
-            ["curl", "-s", f"{MAIN_SERVER_URL}/health"],
-            capture_output=True,
-            text=True,
-            timeout=5,
+        result = (
+            subprocess.run(  # nosec B607 B603 - controlled curl call with hardcoded URL
+                ["curl", "-s", f"{MAIN_SERVER_URL}/health"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
         )
         if result.returncode == 0:
             services["main_server"] = {
@@ -118,11 +122,13 @@ def check_running_services() -> Dict[str, Any]:
 
     # Check MCP server (Port 8051)
     try:
-        result = subprocess.run(
-            ["curl", "-s", f"{MCP_SERVER_URL}/health"],
-            capture_output=True,
-            text=True,
-            timeout=5,
+        result = (
+            subprocess.run(  # nosec B607 B603 - controlled curl call with hardcoded URL
+                ["curl", "-s", f"{MCP_SERVER_URL}/health"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
         )
         if result.returncode == 0:
             services["mcp_server"] = {
@@ -142,7 +148,7 @@ def check_running_services() -> Dict[str, Any]:
     # Check database connectivity (Docker)
     try:
         # Try to check if PostgreSQL container is running
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B607 B603 - controlled docker call with hardcoded args
             ["docker", "ps", "--filter", "name=postgres", "--format", "{{json .}}"],
             capture_output=True,
             text=True,
@@ -181,7 +187,7 @@ def check_running_services() -> Dict[str, Any]:
 
     # Check Memgraph (if available)
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B607 B603 - controlled docker call with hardcoded args
             ["docker", "ps", "--filter", "name=memgraph", "--format", "{{json .}}"],
             capture_output=True,
             text=True,
@@ -220,7 +226,7 @@ def check_running_services() -> Dict[str, Any]:
 
     # Check Qdrant (if available)
     try:
-        result = subprocess.run(
+        result = subprocess.run(  # nosec B607 B603 - controlled docker call with hardcoded args
             ["docker", "ps", "--filter", "name=qdrant", "--format", "{{json .}}"],
             capture_output=True,
             text=True,

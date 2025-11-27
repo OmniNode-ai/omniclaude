@@ -212,6 +212,20 @@ The permission hook is located at `claude_hooks/pre_tool_use_permissions.py`.
 
 The permission hook includes comprehensive security infrastructure:
 
+**Rate Limiting** (defense-in-depth):
+
+Two-layer rate limiting protects against abuse:
+
+1. **Implicit Rate Limiting** (always active):
+   - Claude Code enforces 5000ms hook timeout
+   - Limits hooks to ~12 requests/minute worst case
+   - Most hooks complete in <50ms
+
+2. **Explicit Rate Limiting** (opt-in):
+   - Token bucket algorithm: 10 req/sec sustained, 20 burst
+   - Enable with `PERMISSION_HOOK_RATE_LIMIT=true`
+   - Fail-open design for reliability
+
 **Safe Temporary Directories** (`SAFE_TEMP_DIRS`):
 - `./tmp` - Local repository temp (PREFERRED)
 - `tmp` - Relative tmp without ./
@@ -219,22 +233,43 @@ The permission hook includes comprehensive security infrastructure:
 - `.claude/tmp` - Claude cache temp
 - `/dev/null` - Discard output (always safe)
 
-**Destructive Command Detection** (`DESTRUCTIVE_PATTERNS` - 13 patterns):
-- `rm`, `rmdir` with proper word boundary matching (avoids false positives like 'form', 'transform')
-- `dd` disk operations (avoids false positives like 'add', 'odd')
-- `mkfs` filesystem formatting
+**Destructive Command Detection** (`DESTRUCTIVE_PATTERNS` - 22 patterns):
+
+Improved regex patterns with:
+- Word boundaries (`\b`) to prevent false positives ('rm' won't match 'transform')
+- Case-insensitive matching for command names
+- Coverage of absolute paths (`/bin/`, `/usr/bin/`, `/usr/local/bin/`)
+- Command separator awareness (`;`, `&&`, `||`, `|`)
+
+Commands detected:
+- `rm`, `rmdir` - file/directory deletion
+- `dd` - disk operations (avoids 'add', 'odd' false positives)
+- `mkfs` - filesystem formatting
+- `shred` - secure file deletion
+- `fdisk`, `gdisk`, `parted` - partition manipulation
 - Dangerous redirects to root paths (except `/dev/null`)
 - Remote code execution (`curl`/`wget` piped to shell)
-- `eval` dynamic code execution
+- `eval` - dynamic code execution
 - Recursive `chmod`/`chown` on system paths
-- Kill signals (`kill -9`, `pkill`)
+- Kill signals (`kill -9`, `pkill`, `killall`)
 - Git destructive operations (`push --force`, `reset --hard`, `clean -fd`)
+- Obfuscation: `base64 -d | sh`, `printf \x | sh`
 
-**Sensitive Path Patterns** (`SENSITIVE_PATH_PATTERNS` - 8 patterns):
-- `/etc/passwd`, `/etc/shadow`, `/etc/sudoers`, `/etc/hosts`
-- `/root/`, `~/.ssh/`, `~/.gnupg/`, `~/.aws/`
-- `/usr/bin`, `/usr/lib`, `/usr/local`
-- `/var/log`, `/var/lib`
+**SECURITY NOTE**: These patterns provide DEFENSE-IN-DEPTH, not a security boundary.
+Known bypass vectors (variable expansion, command substitution, escaping) are documented
+in the source code. For true security, rely on OS permissions, sandboxing, and Claude Code's
+built-in permission system.
+
+**Sensitive Path Patterns** (`SENSITIVE_PATH_PATTERNS` - 22 patterns):
+- System config: `/etc/passwd`, `/etc/shadow`, `/etc/sudoers`, `/etc/hosts`, `/etc/fstab`
+- SSH config: `/etc/ssh/`, `/etc/pam.d/`
+- Root: `/root/`
+- User credentials: `~/.ssh/`, `~/.gnupg/`, `~/.aws/`, `~/.kube/`, `~/.docker/`
+- Auth tokens: `~/.npmrc`, `~/.pypirc`, `~/.netrc`, `~/.gitconfig`
+- System binaries: `/bin/`, `/sbin/`, `/usr/bin/`, `/usr/lib/`, `/usr/local/`
+- System data: `/var/log/`, `/var/lib/`, `/var/run/`
+- Virtual filesystems: `/proc/`, `/sys/`, `/boot/`
+- macOS: `/System/`, `/Library/Keychains/`
 
 **Helper Functions**:
 - `ensure_local_tmp_exists()` - Creates local ./tmp with .gitignore
@@ -242,6 +277,7 @@ The permission hook includes comprehensive security infrastructure:
 - `is_destructive_command(cmd)` - Matches commands against destructive patterns
 - `touches_sensitive_path(cmd)` - Detects sensitive path references
 - `normalize_bash_command(cmd)` - Normalizes commands for consistent matching
+- `check_rate_limit()` - Token bucket rate limiting (opt-in)
 - `load_json()` / `save_json()` - Atomic JSON file operations
 
 **Phase 2 Placeholders** (to be implemented in OMN-95):
