@@ -330,9 +330,14 @@ Edit `~/.claude/settings.json`:
 
 ### Step 4: Verify Phase 2 Setup
 
+> **Note**: The blocking behaviors described below are expected only after OMN-95 (Phase 2)
+> implements the actual permission logic. During Phase 1, the permission hook passes through
+> all requests (`{}` response) while logging events for analysis. The infrastructure and
+> security pattern detection code exists but returns allow-all decisions.
+
 1. **Restart Claude Code** to load the new configuration
 
-2. **Test permission blocking**:
+2. **Test permission blocking** (Phase 2 only - after OMN-95):
    - Ask Claude to run a dangerous command (should be blocked)
    - Ask Claude to edit a sensitive file (should be blocked)
 
@@ -343,10 +348,14 @@ Edit `~/.claude/settings.json`:
 4. **Check the logs**:
 
 ```bash
-# Permission decisions
-tail -20 ~/.claude/hooks/logs/permissions.log
+# Phase 1 events (available now - timestamped JSON files)
+ls -lt ~/.claude/logs/pre_tool_use_*.json | head -5
+cat "$(ls -t ~/.claude/logs/pre_tool_use_*.json | head -1)" | jq .
 
-# Quality enforcer logs
+# Phase 2 permission decisions (available after OMN-95)
+# tail -20 ~/.claude/hooks/logs/permissions.log
+
+# Quality enforcer logs (if quality hook is configured)
 tail -20 ~/.claude/hooks/logs/quality_enforcer.log
 ```
 
@@ -413,39 +422,57 @@ tail -20 ~/.claude/hooks/logs/quality_enforcer.log
 
 ### Log File Locations
 
-| File | Purpose |
-|------|---------|
-| `~/.claude/logs/pre_tool_use_*.json` | Phase 1 event logs (timestamped JSON files) |
-| `~/.claude/hooks/logs/permissions.log` | Permission decisions (Phase 2) |
-| `~/.claude/hooks/logs/quality_enforcer.log` | Quality check results |
-| `~/.claude/hooks/hook-enhanced.log` | UserPromptSubmit hook log |
+| File | Purpose | Phase |
+|------|---------|-------|
+| `~/.claude/logs/pre_tool_use_*.json` | Event logs (timestamped JSON files) | Phase 1 (current) |
+| `~/.claude/hooks/logs/permissions.log` | Permission decisions | Phase 2 (OMN-95) |
+| `~/.claude/hooks/logs/quality_enforcer.log` | Quality check results | Phase 2 |
+| `~/.claude/hooks/hook-enhanced.log` | UserPromptSubmit hook log | All phases |
+
+> **Note**: Phase 1 logs events to `~/.claude/logs/pre_tool_use_*.json`. The `~/.claude/hooks/logs/`
+> directory is used by Phase 2 hooks (OMN-95) for permission and quality enforcement logs.
 
 ### Useful Log Commands
 
 ```bash
-# Real-time monitoring
-tail -f ~/.claude/hooks/logs/permissions.log
+# Phase 1: View recent events (timestamped JSON files)
+ls -lt ~/.claude/logs/pre_tool_use_*.json | head -10
+cat "$(ls -t ~/.claude/logs/pre_tool_use_*.json | head -1)" | jq .
 
-# Count blocked operations
-grep "BLOCKED" ~/.claude/hooks/logs/permissions.log | wc -l
+# Phase 1: Count events by tool type
+cat ~/.claude/logs/pre_tool_use_*.json | jq -r '.tool_name' | sort | uniq -c | sort -rn
 
-# View recent quality issues
-grep -E "(ERROR|WARNING|BLOCKED)" ~/.claude/hooks/logs/quality_enforcer.log | tail -20
-
-# Export Phase 1 events for analysis
+# Phase 1: Export events for analysis
 cp ~/.claude/logs/pre_tool_use_*.json ~/Desktop/tool-events-$(date +%Y%m%d)/
+
+# Phase 2 (after OMN-95): Real-time permission monitoring
+# tail -f ~/.claude/hooks/logs/permissions.log
+# grep "BLOCKED" ~/.claude/hooks/logs/permissions.log | wc -l
+
+# Quality enforcer logs (if quality hook is configured)
+grep -E "(ERROR|WARNING|BLOCKED)" ~/.claude/hooks/logs/quality_enforcer.log | tail -20
 ```
 
 ### Kafka Event Viewing (if enabled)
 
 If Kafka logging is enabled, view events in the topic:
 
+> **Note**: See `~/.claude/CLAUDE.md` for current Kafka broker configuration.
+> The bootstrap servers vary by context (Docker vs host scripts).
+
 ```bash
+# See ~/.claude/CLAUDE.md for KAFKA_BOOTSTRAP_SERVERS configuration
+# For host scripts, typically use: 192.168.86.200:29092
+# For Docker services, typically use: omninode-bridge-redpanda:9092
+
+# List available topics
+kcat -b "${KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}" -L
+
 # View recent hook events
-kcat -C -b 192.168.86.200:29092 -t omninode.logging.application.v1 -o -10 -e | jq .
+kcat -C -b "${KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}" -t omninode.logging.application.v1 -o -10 -e | jq .
 
 # Filter by hook name
-kcat -C -b 192.168.86.200:29092 -t omninode.logging.application.v1 -o beginning -e | \
+kcat -C -b "${KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}" -t omninode.logging.application.v1 -o beginning -e | \
   jq 'select(.payload.logger | contains("pretooluse"))'
 ```
 
@@ -512,7 +539,8 @@ chmod +x ~/.claude/hooks/pre-tool-use-permissions.py
 chmod +x ~/.claude/hooks/pre-tool-use-quality.sh
 
 # Fix log directory permissions
-chmod 755 ~/.claude/hooks/logs
+chmod 755 ~/.claude/logs           # Phase 1 event logs
+chmod 755 ~/.claude/hooks/logs     # Phase 2 permission/quality logs
 ```
 
 ### Python Script Errors
@@ -654,6 +682,9 @@ ls -lt ~/.claude/logs/pre_tool_use_*.json | head -5
 
 ### Phase 2 Setup (Full Enforcement)
 
+> **Note**: Full enforcement requires OMN-95 implementation. Current scaffold passes through
+> all requests while logging to `~/.claude/logs/pre_tool_use_*.json`.
+
 ```bash
 # 1. Copy the permission hook scaffold from this repository
 cp claude_hooks/pre-tool-use-permissions.py ~/.claude/hooks/
@@ -666,9 +697,12 @@ ls -la ~/.claude/hooks/pre-tool-use-quality.sh
 
 # 4. Restart Claude Code
 
-# 5. Verify
-tail -f ~/.claude/hooks/logs/permissions.log
-tail -f ~/.claude/hooks/logs/quality_enforcer.log
+# 5. Verify Phase 1 events are logged
+ls -lt ~/.claude/logs/pre_tool_use_*.json | head -5
+
+# 6. After OMN-95: Verify Phase 2 permission/quality logs
+# tail -f ~/.claude/hooks/logs/permissions.log
+# tail -f ~/.claude/hooks/logs/quality_enforcer.log
 ```
 
 ---

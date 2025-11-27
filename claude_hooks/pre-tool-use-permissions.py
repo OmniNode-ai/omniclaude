@@ -66,7 +66,15 @@ def ensure_local_tmp_exists() -> Path:
     repository-local tmp directory instead of system /tmp.
 
     Returns:
-        Path to the local tmp directory
+        Path to the local tmp directory.
+
+    Raises:
+        None explicitly - directory creation uses exist_ok=True.
+
+    Example:
+        >>> tmp_dir = ensure_local_tmp_exists()
+        >>> tmp_dir.exists()
+        True
     """
     local_tmp = Path.cwd() / "tmp"
     if not local_tmp.exists():
@@ -142,16 +150,25 @@ def load_json(path: Path) -> Optional[Dict[str, Any]]:
     Load JSON file safely, returning None if file doesn't exist or is invalid.
 
     Args:
-        path: Path to the JSON file
+        path: Path to the JSON file.
 
     Returns:
-        Parsed JSON as dict, or None on failure
+        Parsed JSON as dict, or None on failure.
+
+    Raises:
+        None explicitly - all exceptions are caught and logged to stderr.
+
+    Example:
+        >>> data = load_json(Path("config.json"))
+        >>> if data:
+        ...     print(data.get("key"))
     """
     try:
         if not path.exists():
             return None
         with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+            result: Dict[str, Any] = json.load(f)
+            return result
     except (json.JSONDecodeError, OSError, PermissionError) as e:
         # Log error but don't crash - graceful degradation
         print(f"Warning: Failed to load {path}: {e}", file=sys.stderr)
@@ -165,11 +182,18 @@ def save_json(path: Path, data: Dict[str, Any]) -> bool:
     This prevents corruption if the process is interrupted during write.
 
     Args:
-        path: Destination path for the JSON file
-        data: Dictionary to serialize as JSON
+        path: Destination path for the JSON file.
+        data: Dictionary to serialize as JSON.
 
     Returns:
-        True on success, False on failure
+        True on success, False on failure.
+
+    Raises:
+        None explicitly - all exceptions are caught and logged to stderr.
+
+    Example:
+        >>> success = save_json(Path("config.json"), {"key": "value"})
+        >>> print("Saved" if success else "Failed")
     """
     tmp_path = path.with_suffix(".tmp")
     try:
@@ -207,10 +231,17 @@ def normalize_bash_command(cmd: str) -> str:
     - Preserve intentional newlines in heredocs (TODO: Phase 2)
 
     Args:
-        cmd: Raw bash command string
+        cmd: Raw bash command string.
 
     Returns:
-        Normalized command string
+        Normalized command string.
+
+    Raises:
+        None - handles empty/None input gracefully.
+
+    Example:
+        >>> normalize_bash_command("  rm   -rf   ./tmp  ")
+        'rm -rf ./tmp'
     """
     if not cmd:
         return ""
@@ -231,10 +262,19 @@ def is_safe_temp_path(path: str) -> bool:
     Check if a path is in a safe temporary directory.
 
     Args:
-        path: File path to check
+        path: File path to check.
 
     Returns:
-        True if path is in a safe temp location
+        True if path is in a safe temp location.
+
+    Raises:
+        None - handles empty/None input gracefully.
+
+    Example:
+        >>> is_safe_temp_path("./tmp/test.txt")
+        True
+        >>> is_safe_temp_path("/etc/passwd")
+        False
     """
     if not path:
         return False
@@ -257,10 +297,19 @@ def is_destructive_command(cmd: str) -> bool:
     Check if a command matches any destructive patterns.
 
     Args:
-        cmd: Bash command to analyze
+        cmd: Bash command to analyze.
 
     Returns:
-        True if command appears destructive
+        True if command appears destructive.
+
+    Raises:
+        None - handles empty/None input gracefully.
+
+    Example:
+        >>> is_destructive_command("rm -rf /")
+        True
+        >>> is_destructive_command("ls -la")
+        False
     """
     if not cmd:
         return False
@@ -279,10 +328,19 @@ def touches_sensitive_path(cmd: str) -> bool:
     Check if a command references sensitive system paths.
 
     Args:
-        cmd: Bash command to analyze
+        cmd: Bash command to analyze.
 
     Returns:
-        True if command references sensitive paths
+        True if command references sensitive paths.
+
+    Raises:
+        None - handles empty/None input gracefully.
+
+    Example:
+        >>> touches_sensitive_path("cat /etc/passwd")
+        True
+        >>> touches_sensitive_path("cat README.md")
+        False
     """
     if not cmd:
         return False
@@ -306,11 +364,19 @@ def check_permission_cache(tool_name: str, params: Dict[str, Any]) -> Optional[s
     TODO (Phase 2): Implement permission caching
 
     Args:
-        tool_name: Name of the tool being invoked
-        params: Tool parameters
+        tool_name: Name of the tool being invoked.
+        params: Tool parameters.
 
     Returns:
-        "allow" or "deny" if cached, None if no cache entry
+        "allow" or "deny" if cached, None if no cache entry.
+
+    Raises:
+        None - currently a stub returning None.
+
+    Example:
+        >>> result = check_permission_cache("Bash", {"command": "ls"})
+        >>> result is None  # Phase 1: always returns None
+        True
     """
     # Phase 1: No caching, always return None to proceed with fresh decision
     return None
@@ -325,12 +391,20 @@ def make_permission_decision(
     TODO (Phase 2): Implement intelligent permission logic
 
     Args:
-        tool_name: Name of the tool being invoked
-        params: Tool parameters
-        hook_input: Full hook input data
+        tool_name: Name of the tool being invoked.
+        params: Tool parameters.
+        hook_input: Full hook input data.
 
     Returns:
-        Hook response dict (empty for pass-through, or with decision)
+        Hook response dict (empty for pass-through, or with decision).
+
+    Raises:
+        None - currently a stub returning empty dict.
+
+    Example:
+        >>> decision = make_permission_decision("Bash", {"command": "ls"}, {})
+        >>> decision  # Phase 1: always pass-through
+        {}
     """
     # Phase 1: Pass through all requests (skeleton behavior)
     return {}
@@ -352,7 +426,15 @@ def main() -> int:
     - Outputs empty JSON (pass-through)
 
     Returns:
-        Exit code (0 for success)
+        Exit code (0 for success).
+
+    Raises:
+        None explicitly - all exceptions are caught internally for fail-safe behavior.
+
+    Example:
+        Called by Claude Code hooks system:
+        $ echo '{"tool_name": "Bash"}' | python pre-tool-use-permissions.py
+        {}
     """
     try:
         # Read input from stdin
