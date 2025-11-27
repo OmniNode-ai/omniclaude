@@ -74,7 +74,7 @@ echo '# Ignore all temp files
 !.gitignore' > ./tmp/.gitignore
 ```
 
-The `ensure_local_tmp_exists()` function in the permission hook (`pre-tool-use-permissions.py`) does this automatically when called by hooks and skills.
+The `ensure_local_tmp_exists()` function in the permission hook (`pre_tool_use_permissions.py`) does this automatically when called by hooks and skills.
 
 ### System /tmp is NOT Allowed
 
@@ -199,12 +199,12 @@ Phase 2 implements intelligent permission decisions and code quality validation.
 
 ### Components
 
-1. **pre-tool-use-permissions.py** - Smart permission hook (allow/block/modify)
+1. **pre_tool_use_permissions.py** - Smart permission hook (allow/block/modify)
 2. **pre-tool-use-quality.sh** - Code quality enforcement (Write/Edit/MultiEdit)
 
 ### Step 1: Permission Hook Setup
 
-The permission hook is located at `claude_hooks/pre-tool-use-permissions.py`.
+The permission hook is located at `claude_hooks/pre_tool_use_permissions.py`.
 
 **Current State**: Phase 1 scaffold that passes through all requests while providing the infrastructure for Phase 2 intelligent permission logic.
 
@@ -253,11 +253,11 @@ The permission hook includes comprehensive security infrastructure:
 Copy the hook to your Claude hooks directory:
 
 ```bash
-cp claude_hooks/pre-tool-use-permissions.py ~/.claude/hooks/
-chmod +x ~/.claude/hooks/pre-tool-use-permissions.py
+cp claude_hooks/pre_tool_use_permissions.py ~/.claude/hooks/
+chmod +x ~/.claude/hooks/pre_tool_use_permissions.py
 ```
 
-> **Note**: See `claude_hooks/pre-tool-use-permissions.py` for the complete implementation with full documentation and pattern definitions.
+> **Note**: See `claude_hooks/pre_tool_use_permissions.py` for the complete implementation with full documentation and pattern definitions.
 
 ### Step 2: Verify Quality Hook Exists
 
@@ -292,7 +292,7 @@ Edit `~/.claude/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/pre-tool-use-permissions.py",
+            "command": "~/.claude/hooks/pre_tool_use_permissions.py",
             "timeout": 5000
           }
         ]
@@ -535,7 +535,7 @@ kcat -C -b "${KAFKA_BOOTSTRAP_SERVERS:-localhost:9092}" -t omninode.logging.appl
 ```bash
 # Fix script permissions
 chmod +x ~/.claude/hooks/pre-tool-use-log.sh
-chmod +x ~/.claude/hooks/pre-tool-use-permissions.py
+chmod +x ~/.claude/hooks/pre_tool_use_permissions.py
 chmod +x ~/.claude/hooks/pre-tool-use-quality.sh
 
 # Fix log directory permissions
@@ -560,7 +560,7 @@ chmod 755 ~/.claude/hooks/logs     # Phase 2 permission/quality logs
 3. **Test script directly**:
    ```bash
    echo '{"tool_name":"Write","tool_input":{"file_path":"test.py"}}' | \
-     python3 ~/.claude/hooks/pre-tool-use-permissions.py
+     python3 ~/.claude/hooks/pre_tool_use_permissions.py
    ```
 
 ### Timeout Errors
@@ -576,7 +576,7 @@ chmod 755 ~/.claude/hooks/logs     # Phase 2 permission/quality logs
 
 2. **Profile your script**:
    ```bash
-   time echo '{"tool_name":"Write","tool_input":{}}' | ~/.claude/hooks/pre-tool-use-permissions.py
+   time echo '{"tool_name":"Write","tool_input":{}}' | ~/.claude/hooks/pre_tool_use_permissions.py
    ```
 
 3. **Make async operations non-blocking**:
@@ -687,8 +687,8 @@ ls -lt ~/.claude/logs/pre_tool_use_*.json | head -5
 
 ```bash
 # 1. Copy the permission hook scaffold from this repository
-cp claude_hooks/pre-tool-use-permissions.py ~/.claude/hooks/
-chmod +x ~/.claude/hooks/pre-tool-use-permissions.py
+cp claude_hooks/pre_tool_use_permissions.py ~/.claude/hooks/
+chmod +x ~/.claude/hooks/pre_tool_use_permissions.py
 
 # 2. Verify quality hook exists
 ls -la ~/.claude/hooks/pre-tool-use-quality.sh
