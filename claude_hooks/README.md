@@ -97,37 +97,26 @@ Phase 1 is a **logging-only** implementation that captures all tool usage events
 Create `~/.claude/hooks/pre-tool-use-log.sh`:
 
 ```bash
-#!/bin/bash
+#!/usr/bin/env bash
 # PreToolUse Logger - Phase 1 Event Discovery
 # Logs all tool usage events for analysis without modifying behavior
+# Each event is written to a timestamped JSON file
 
 set -euo pipefail
 
-# Configuration
-HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-LOG_FILE="$HOOK_DIR/logs/pre-tool-use-events.log"
-JSON_LOG_FILE="$HOOK_DIR/logs/pre-tool-use-events.jsonl"
+# Configuration - logs go to ~/.claude/logs/
+LOG_DIR="${HOME}/.claude/logs"
+mkdir -p "${LOG_DIR}"
 
-# Ensure log directory exists
-mkdir -p "$(dirname "$LOG_FILE")"
+# Create timestamped log file for this event
+TS="$(date -Iseconds | tr ':' '_')"
+LOG_FILE="${LOG_DIR}/pre_tool_use_${TS}.json"
 
-# Read tool information from stdin
-TOOL_INFO=$(cat)
-
-# Extract key fields
-TOOL_NAME=$(echo "$TOOL_INFO" | jq -r '.tool_name // "unknown"')
-TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-
-# Log human-readable entry
-echo "[$TIMESTAMP] Tool: $TOOL_NAME" >> "$LOG_FILE"
-
-# Log full JSON event for analysis (JSONL format)
-echo "$TOOL_INFO" | jq -c --arg ts "$TIMESTAMP" '. + {logged_at: $ts}' >> "$JSON_LOG_FILE"
-
-# Pass through original tool info unchanged (no modification)
-echo "$TOOL_INFO"
-exit 0
+# Copy stdin to both file and stdout so Claude still sees it
+tee "${LOG_FILE}"
 ```
+
+**Note**: The actual implementation in `claude_hooks/pre-tool-use-log.sh` uses this simpler approach with timestamped individual JSON files at `~/.claude/logs/pre_tool_use_*.json`.
 
 Make it executable:
 
@@ -171,14 +160,17 @@ Edit `~/.claude/settings.json`:
 3. **Check the logs**:
 
 ```bash
-# View recent events (human-readable)
-tail -20 ~/.claude/hooks/logs/pre-tool-use-events.log
+# List recent log files (timestamped JSON files)
+ls -lt ~/.claude/logs/pre_tool_use_*.json | head -10
 
-# View recent events (JSON)
-tail -5 ~/.claude/hooks/logs/pre-tool-use-events.jsonl | jq .
+# View most recent event
+cat "$(ls -t ~/.claude/logs/pre_tool_use_*.json | head -1)" | jq .
+
+# View recent events (last 5 files)
+for f in $(ls -t ~/.claude/logs/pre_tool_use_*.json | head -5); do cat "$f"; done | jq -s .
 
 # Count events by tool type
-cat ~/.claude/hooks/logs/pre-tool-use-events.jsonl | jq -r '.tool_name' | sort | uniq -c | sort -rn
+cat ~/.claude/logs/pre_tool_use_*.json | jq -r '.tool_name' | sort | uniq -c | sort -rn
 ```
 
 ### Phase 1 Log Analysis
@@ -187,16 +179,16 @@ Analyze captured events to inform Phase 2 permission rules:
 
 ```bash
 # Most common tools
-jq -r '.tool_name' ~/.claude/hooks/logs/pre-tool-use-events.jsonl | sort | uniq -c | sort -rn | head -10
+cat ~/.claude/logs/pre_tool_use_*.json | jq -r '.tool_name' | sort | uniq -c | sort -rn | head -10
 
 # File write patterns
-jq -r 'select(.tool_name == "Write") | .tool_input.file_path' ~/.claude/hooks/logs/pre-tool-use-events.jsonl | sort | uniq -c
+cat ~/.claude/logs/pre_tool_use_*.json | jq -r 'select(.tool_name == "Write") | .tool_input.file_path' | sort | uniq -c
 
 # Edit operations by file type
-jq -r 'select(.tool_name == "Edit") | .tool_input.file_path' ~/.claude/hooks/logs/pre-tool-use-events.jsonl | grep -oE '\.[^.]+$' | sort | uniq -c
+cat ~/.claude/logs/pre_tool_use_*.json | jq -r 'select(.tool_name == "Edit") | .tool_input.file_path' | grep -oE '\.[^.]+$' | sort | uniq -c
 
 # Bash commands executed
-jq -r 'select(.tool_name == "Bash") | .tool_input.command' ~/.claude/hooks/logs/pre-tool-use-events.jsonl | head -20
+cat ~/.claude/logs/pre_tool_use_*.json | jq -r 'select(.tool_name == "Bash") | .tool_input.command' | head -20
 ```
 
 ---
@@ -210,137 +202,62 @@ Phase 2 implements intelligent permission decisions and code quality validation.
 1. **pre-tool-use-permissions.py** - Smart permission hook (allow/block/modify)
 2. **pre-tool-use-quality.sh** - Code quality enforcement (Write/Edit/MultiEdit)
 
-### Step 1: Create Permission Hook
+### Step 1: Permission Hook Setup
 
-Create `~/.claude/hooks/pre-tool-use-permissions.py`:
+The permission hook is located at `claude_hooks/pre-tool-use-permissions.py`.
 
-```python
-#!/usr/bin/env python3
-"""
-PreToolUse Permission Hook - Phase 2
-Implements smart permission decisions based on tool type and context.
-"""
+**Current State**: Phase 1 scaffold that passes through all requests while providing the infrastructure for Phase 2 intelligent permission logic.
 
-import json
-import sys
-import os
-from pathlib import Path
-from datetime import datetime
+#### Key Features
 
-# Configuration
-HOOK_DIR = Path(__file__).parent
-LOG_FILE = HOOK_DIR / "logs" / "permissions.log"
+The permission hook includes comprehensive security infrastructure:
 
-# Ensure log directory exists
-LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+**Safe Temporary Directories** (`SAFE_TEMP_DIRS`):
+- `./tmp` - Local repository temp (PREFERRED)
+- `tmp` - Relative tmp without ./
+- `.claude-tmp` - Claude-specific local temp
+- `.claude/tmp` - Claude cache temp
+- `/dev/null` - Discard output (always safe)
 
-def log(message: str) -> None:
-    """Log message with timestamp."""
-    timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-    with open(LOG_FILE, "a") as f:
-        f.write(f"[{timestamp}] {message}\n")
+**Destructive Command Detection** (`DESTRUCTIVE_PATTERNS` - 13 patterns):
+- `rm`, `rmdir` with proper word boundary matching (avoids false positives like 'form', 'transform')
+- `dd` disk operations (avoids false positives like 'add', 'odd')
+- `mkfs` filesystem formatting
+- Dangerous redirects to root paths (except `/dev/null`)
+- Remote code execution (`curl`/`wget` piped to shell)
+- `eval` dynamic code execution
+- Recursive `chmod`/`chown` on system paths
+- Kill signals (`kill -9`, `pkill`)
+- Git destructive operations (`push --force`, `reset --hard`, `clean -fd`)
 
-def check_permission(tool_name: str, tool_input: dict) -> dict:
-    """
-    Check if tool should be allowed, blocked, or modified.
+**Sensitive Path Patterns** (`SENSITIVE_PATH_PATTERNS` - 8 patterns):
+- `/etc/passwd`, `/etc/shadow`, `/etc/sudoers`, `/etc/hosts`
+- `/root/`, `~/.ssh/`, `~/.gnupg/`, `~/.aws/`
+- `/usr/bin`, `/usr/lib`, `/usr/local`
+- `/var/log`, `/var/lib`
 
-    Returns:
-        dict with keys:
-        - decision: "allow" | "block" | "modify"
-        - reason: str (for blocking)
-        - modified_input: dict (for modification)
-    """
-    # Example rules - customize for your needs
+**Helper Functions**:
+- `ensure_local_tmp_exists()` - Creates local ./tmp with .gitignore
+- `is_safe_temp_path(path)` - Validates paths against safe temp locations
+- `is_destructive_command(cmd)` - Matches commands against destructive patterns
+- `touches_sensitive_path(cmd)` - Detects sensitive path references
+- `normalize_bash_command(cmd)` - Normalizes commands for consistent matching
+- `load_json()` / `save_json()` - Atomic JSON file operations
 
-    # Block dangerous bash commands
-    if tool_name == "Bash":
-        command = tool_input.get("command", "")
-        dangerous_patterns = [
-            "rm -rf /",
-            "sudo rm -rf",
-            "> /dev/sd",
-            "mkfs.",
-            "dd if=/dev/zero",
-        ]
-        for pattern in dangerous_patterns:
-            if pattern in command:
-                return {
-                    "decision": "block",
-                    "reason": f"Dangerous command pattern detected: {pattern}"
-                }
+**Phase 2 Placeholders** (to be implemented in OMN-95):
+- `check_permission_cache()` - Permission decision caching
+- `make_permission_decision()` - Intelligent allow/block/modify logic
 
-    # Block writes to sensitive locations
-    if tool_name in ("Write", "Edit", "MultiEdit"):
-        file_path = tool_input.get("file_path", "")
-        sensitive_paths = [
-            "/etc/",
-            "/usr/",
-            "/var/",
-            "~/.ssh/",
-            "~/.aws/",
-            ".env",
-        ]
-        for sensitive in sensitive_paths:
-            if sensitive in file_path:
-                return {
-                    "decision": "block",
-                    "reason": f"Write to sensitive location blocked: {sensitive}"
-                }
+#### Installation
 
-    # Allow everything else
-    return {"decision": "allow"}
-
-def main():
-    # Read tool info from stdin
-    tool_info = json.loads(sys.stdin.read())
-    tool_name = tool_info.get("tool_name", "unknown")
-    tool_input = tool_info.get("tool_input", {})
-
-    log(f"Permission check for: {tool_name}")
-
-    # Check permission
-    result = check_permission(tool_name, tool_input)
-
-    if result["decision"] == "block":
-        log(f"BLOCKED: {tool_name} - {result['reason']}")
-        # Output block message and exit with code 2
-        output = {
-            "decision": "block",
-            "reason": result["reason"]
-        }
-        print(json.dumps(output))
-        sys.exit(2)  # Exit code 2 blocks the tool
-
-    elif result["decision"] == "modify":
-        log(f"MODIFIED: {tool_name}")
-        # Output modified tool info
-        tool_info["tool_input"] = result.get("modified_input", tool_input)
-        print(json.dumps(tool_info))
-        sys.exit(0)
-
-    else:
-        log(f"ALLOWED: {tool_name}")
-        # Pass through unchanged
-        print(json.dumps(tool_info))
-        sys.exit(0)
-
-if __name__ == "__main__":
-    try:
-        main()
-    except Exception as e:
-        # On error, log and pass through (fail open)
-        with open(LOG_FILE, "a") as f:
-            f.write(f"[ERROR] {e}\n")
-        # Read stdin if not already consumed
-        print(json.dumps({"error": str(e)}))
-        sys.exit(0)
-```
-
-Make it executable:
+Copy the hook to your Claude hooks directory:
 
 ```bash
+cp claude_hooks/pre-tool-use-permissions.py ~/.claude/hooks/
 chmod +x ~/.claude/hooks/pre-tool-use-permissions.py
 ```
+
+> **Note**: See `claude_hooks/pre-tool-use-permissions.py` for the complete implementation with full documentation and pattern definitions.
 
 ### Step 2: Verify Quality Hook Exists
 

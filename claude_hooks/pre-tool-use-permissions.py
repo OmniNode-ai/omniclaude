@@ -17,7 +17,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 
 # =============================================================================
@@ -137,7 +137,7 @@ SENSITIVE_PATH_PATTERNS = [
 # =============================================================================
 
 
-def load_json(path: Path) -> Optional[dict[str, Any]]:
+def load_json(path: Path) -> Optional[Dict[str, Any]]:
     """
     Load JSON file safely, returning None if file doesn't exist or is invalid.
 
@@ -158,7 +158,7 @@ def load_json(path: Path) -> Optional[dict[str, Any]]:
         return None
 
 
-def save_json(path: Path, data: dict[str, Any]) -> bool:
+def save_json(path: Path, data: Dict[str, Any]) -> bool:
     """
     Save JSON data atomically using a temporary file.
 
@@ -299,7 +299,7 @@ def touches_sensitive_path(cmd: str) -> bool:
 # =============================================================================
 
 
-def check_permission_cache(tool_name: str, params: dict[str, Any]) -> Optional[str]:
+def check_permission_cache(tool_name: str, params: Dict[str, Any]) -> Optional[str]:
     """
     Check if we have a cached permission decision.
 
@@ -317,8 +317,8 @@ def check_permission_cache(tool_name: str, params: dict[str, Any]) -> Optional[s
 
 
 def make_permission_decision(
-    tool_name: str, params: dict[str, Any], hook_input: dict[str, Any]
-) -> dict[str, Any]:
+    tool_name: str, params: Dict[str, Any], hook_input: Dict[str, Any]
+) -> Dict[str, Any]:
     """
     Make a permission decision for a tool invocation.
 
