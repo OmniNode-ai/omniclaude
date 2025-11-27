@@ -16,7 +16,11 @@ import json
 import time
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any, Union
+
+
+if TYPE_CHECKING:
+    from agents.lib.input_validator import ValidationResult
 
 from agents.lib.agent_analytics import AgentAnalytics, track_agent_performance
 from agents.lib.circuit_breaker import (
@@ -423,25 +427,31 @@ class PerformanceBenchmark:
         # Test validation performance
         start_time = time.time()
 
+        # validate_and_sanitize returns Union[ValidationResult, dict[str, Any]]
+        # When called with user_prompt/tasks_data params, it returns dict with 'is_valid' key
+        # When called with user_input/input_type params, it returns ValidationResult
         validation_results: list[dict[str, Any]] = []
         for test_input in test_inputs:
             user_prompt_str = str(test_input["user_prompt"])
             tasks_data_dict = test_input["tasks_data"]
-            result = await self.input_validator.validate_and_sanitize(
-                user_prompt=user_prompt_str,
-                tasks_data=(
-                    tasks_data_dict if isinstance(tasks_data_dict, dict) else None
-                ),
+            # Using user_prompt/tasks_data pattern - returns dict[str, Any]
+            result: Union[dict[str, Any], "ValidationResult"] = (
+                await self.input_validator.validate_and_sanitize(
+                    user_prompt=user_prompt_str,
+                    tasks_data=(
+                        tasks_data_dict if isinstance(tasks_data_dict, dict) else None
+                    ),
+                )
             )
-            # validate_and_sanitize returns dict[str, Any] when called with user_prompt/tasks_data
+            # When using user_prompt/tasks_data, returns dict with 'is_valid' key
             if isinstance(result, dict):
                 validation_results.append(result)
             else:
-                # Handle ValidationResult case - use getattr for type-safe attribute access
+                # Handle ValidationResult case (returned when using user_input/input_type)
                 validation_results.append(
                     {
-                        "is_valid": getattr(result, "is_valid", False),
-                        "errors": getattr(result, "errors", []),
+                        "is_valid": result.is_valid,
+                        "errors": result.errors,
                     }
                 )
 

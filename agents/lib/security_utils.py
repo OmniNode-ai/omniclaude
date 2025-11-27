@@ -10,7 +10,6 @@ Purpose: Centralized security validation for all OmniClaude components
 """
 
 import re
-from typing import Optional
 
 
 def validate_sql_identifier(
@@ -68,9 +67,7 @@ def validate_sql_identifier(
         )
 
 
-def validate_file_path(
-    file_path: str, allowed_extensions: Optional[list] = None
-) -> None:
+def validate_file_path(file_path: str, allowed_extensions: list | None = None) -> None:
     """
     Validate file path to prevent path traversal attacks.
 

@@ -29,7 +29,7 @@ from datetime import datetime, timezone
 from importlib import import_module
 from pathlib import Path
 from time import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 from uuid import UUID, uuid4
 
 # Load environment variables from .env file BEFORE importing omnibase_core modules
@@ -112,16 +112,23 @@ from .validators.sequential_validators import (  # noqa: E402
 from .warning_fixer import apply_automatic_fixes  # noqa: E402
 
 
-# Import quorum validation (optional dependency)
-# Use try/except for runtime import, TYPE_CHECKING for type hints
+# Import types under TYPE_CHECKING for proper type hints without runtime dependency
+if TYPE_CHECKING:
+    from ..parallel_execution.quorum_validator import (
+        QuorumResult as _QuorumResultType,
+        QuorumValidator as _QuorumValidatorType,
+    )
+    from .dashboard.quality_dashboard import QualityDashboard as _QualityDashboardType
+
+# Runtime import for quorum validation (optional dependency)
 QUORUM_AVAILABLE = False
-QuorumResult: Any = None
-QuorumValidator: Any = None
-ValidationDecision: Any = None
+QuorumResult: type | None = None
+QuorumValidator: type | None = None
+ValidationDecision: type | None = None
 
 try:
     from ..parallel_execution.quorum_validator import (
-        QuorumResult,
+        QuorumResult,  # noqa: F401 - needed for availability pattern
         QuorumValidator,
         ValidationDecision,
     )
@@ -160,12 +167,12 @@ class GenerationPipeline:
 
     def __init__(
         self,
-        template_engine: Optional[OmniNodeTemplateEngine] = None,
+        template_engine: OmniNodeTemplateEngine | None = None,
         enable_compilation_testing: bool = True,
         enable_intelligence_gathering: bool = True,
         interactive_mode: bool = False,
-        session_file: Optional[Path] = None,
-        quorum_config: Optional[QuorumConfig] = None,
+        session_file: Path | None = None,
+        quorum_config: QuorumConfig | None = None,
     ):
         """
         Initialize generation pipeline.
@@ -196,17 +203,17 @@ class GenerationPipeline:
         )
 
         # Lazy-initialize intelligence gatherer (only if needed)
-        self._intelligence_gatherer: Optional[IntelligenceGatherer] = None
+        self._intelligence_gatherer: IntelligenceGatherer | None = None
 
         # Lazy-initialize quorum validator (only if needed and available)
-        self._quorum_validator: Optional[Any] = None
+        self._quorum_validator: "_QuorumValidatorType | None" = None
 
         # Lazy-initialize code refiner (only if needed)
-        self._code_refiner: Optional[CodeRefiner] = None
+        self._code_refiner: CodeRefiner | None = None
 
         # Track written files for rollback
-        self.written_files: List[Path] = []
-        self.temp_files: List[Path] = []
+        self.written_files: list[Path] = []
+        self.temp_files: list[Path] = []
 
         # Performance tracking and quality gates (Week 1 Day 5)
         self.metrics_collector = MetricsCollector()
@@ -214,7 +221,7 @@ class GenerationPipeline:
 
         # Quality gate aggregation and dashboard (Week 2 Poly-J)
         self.gate_aggregator = GateResultAggregator(self.quality_gate_registry)
-        self._quality_dashboard: Optional[Any] = None  # Lazy-loaded
+        self._quality_dashboard: "_QualityDashboardType | None" = None  # Lazy-loaded
 
         # Pattern extraction and storage (Week 2 Poly-E, Poly-I)
         from .patterns.pattern_extractor import PatternExtractor
@@ -239,7 +246,7 @@ class GenerationPipeline:
         )
 
     @property
-    def quality_dashboard(self) -> Any:
+    def quality_dashboard(self) -> "_QualityDashboardType":
         """Lazy-load quality dashboard to avoid Rich import overhead (~50-150ms)."""
         if self._quality_dashboard is None:
             from .dashboard.quality_dashboard import QualityDashboard
@@ -2310,7 +2317,7 @@ except ImportError:
         self,
         generated_files: Dict[str, Any],
         validation_gates: List[ValidationGate],
-        quorum_result: Optional[Any],
+        quorum_result: Optional["_QuorumResultType"],
         intelligence: IntelligenceContext,
         correlation_id: UUID,
         node_type: str,
@@ -2450,7 +2457,7 @@ except ImportError:
     def _build_refinement_context(
         self,
         validation_gates: List[ValidationGate],
-        quorum_result: Optional[Any],
+        quorum_result: Optional["_QuorumResultType"],
         intelligence: IntelligenceContext,
     ) -> List[str]:
         """
@@ -2504,7 +2511,7 @@ except ImportError:
     def _check_refinement_needed(
         self,
         validation_gates: List[ValidationGate],
-        quorum_result: Optional[Any],
+        quorum_result: Optional["_QuorumResultType"],
     ) -> bool:
         """
         Check if code refinement is needed based on validation results.

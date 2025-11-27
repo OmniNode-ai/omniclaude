@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any
 
 from .db import get_pg_pool
 
@@ -13,10 +13,10 @@ async def record_workflow_step(
     completed_at: str,
     duration_ms: float,
     success: bool,
-    error: Optional[str] = None,
-    correlation_id: Optional[str] = None,
-    applied_tf_id: Optional[str] = None,
-    extra: Optional[Dict[str, Any]] = None,
+    error: str | None = None,
+    correlation_id: str | None = None,
+    applied_tf_id: str | None = None,
+    extra: dict[str, Any] | None = None,
 ) -> None:
     """Persist a workflow_steps row if Postgres is configured.
 

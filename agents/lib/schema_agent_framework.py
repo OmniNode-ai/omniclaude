@@ -17,7 +17,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -84,15 +84,13 @@ class MixinCompatibilityMatrix(BaseModel):
     mixin_b: str = Field(..., max_length=100)
     node_type: NodeType
 
-    compatibility_score: Optional[Decimal] = Field(
-        None, ge=0.0, le=1.0, decimal_places=4
-    )
+    compatibility_score: Decimal | None = Field(None, ge=0.0, le=1.0, decimal_places=4)
     success_count: int = Field(default=0, ge=0)
     failure_count: int = Field(default=0, ge=0)
 
-    last_tested_at: Optional[datetime] = None
-    conflict_reason: Optional[str] = None
-    resolution_pattern: Optional[str] = None
+    last_tested_at: datetime | None = None
+    conflict_reason: str | None = None
+    resolution_pattern: str | None = None
 
     created_at: datetime
     updated_at: datetime
@@ -122,8 +120,8 @@ class MixinCompatibilityCreate(BaseModel):
     mixin_b: str = Field(..., max_length=100)
     node_type: NodeType
     success: bool
-    conflict_reason: Optional[str] = None
-    resolution_pattern: Optional[str] = None
+    conflict_reason: str | None = None
+    resolution_pattern: str | None = None
 
 
 # =============================================================================
@@ -142,18 +140,16 @@ class PatternFeedbackLog(BaseModel):
     session_id: UUID
     pattern_name: str = Field(..., max_length=100)
 
-    detected_confidence: Optional[Decimal] = Field(
-        None, ge=0.0, le=1.0, decimal_places=4
-    )
+    detected_confidence: Decimal | None = Field(None, ge=0.0, le=1.0, decimal_places=4)
     actual_pattern: str = Field(..., max_length=100)
     feedback_type: FeedbackType
 
     user_provided: bool = False
 
-    contract_json: Optional[Dict[str, Any]] = None
-    capabilities_matched: List[str] = Field(default_factory=list)
-    false_positives: List[str] = Field(default_factory=list)
-    false_negatives: List[str] = Field(default_factory=list)
+    contract_json: dict[str, Any] | None = None
+    capabilities_matched: list[str] = Field(default_factory=list)
+    false_positives: list[str] = Field(default_factory=list)
+    false_negatives: list[str] = Field(default_factory=list)
 
     learning_weight: Decimal = Field(
         default=Decimal("1.0"), ge=0.0, le=1.0, decimal_places=4
@@ -172,14 +168,14 @@ class PatternFeedbackCreate(BaseModel):
 
     session_id: UUID
     pattern_name: str = Field(..., max_length=100)
-    detected_confidence: Optional[Decimal] = Field(None, ge=0.0, le=1.0)
+    detected_confidence: Decimal | None = Field(None, ge=0.0, le=1.0)
     actual_pattern: str = Field(..., max_length=100)
     feedback_type: FeedbackType
     user_provided: bool = False
-    contract_json: Optional[Dict[str, Any]] = None
-    capabilities_matched: Optional[List[str]] = None
-    false_positives: Optional[List[str]] = None
-    false_negatives: Optional[List[str]] = None
+    contract_json: dict[str, Any] | None = None
+    capabilities_matched: list[str] | None = None
+    false_positives: list[str] | None = None
+    false_negatives: list[str] | None = None
 
 
 # =============================================================================
@@ -200,14 +196,14 @@ class GenerationPerformanceMetrics(BaseModel):
     phase: GenerationPhase
 
     duration_ms: int = Field(..., ge=0)
-    memory_usage_mb: Optional[int] = Field(None, ge=0)
-    cpu_percent: Optional[Decimal] = Field(None, ge=0, decimal_places=2)
+    memory_usage_mb: int | None = Field(None, ge=0)
+    cpu_percent: Decimal | None = Field(None, ge=0, decimal_places=2)
 
     cache_hit: bool = False
     parallel_execution: bool = False
     worker_count: int = Field(default=1, ge=1)
 
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: dict[str, Any] | None = None
 
     created_at: datetime
 
@@ -224,12 +220,12 @@ class GenerationPerformanceCreate(BaseModel):
     node_type: str = Field(..., max_length=50)
     phase: GenerationPhase
     duration_ms: int = Field(..., ge=0)
-    memory_usage_mb: Optional[int] = Field(None, ge=0)
-    cpu_percent: Optional[float] = Field(None, ge=0)
+    memory_usage_mb: int | None = Field(None, ge=0)
+    cpu_percent: float | None = Field(None, ge=0)
     cache_hit: bool = False
     parallel_execution: bool = False
     worker_count: int = Field(default=1, ge=1)
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: dict[str, Any] | None = None
 
 
 # =============================================================================
@@ -251,10 +247,10 @@ class TemplateCacheMetadata(BaseModel):
 
     file_path: str
     file_hash: str = Field(..., max_length=64)
-    size_bytes: Optional[int] = Field(None, ge=0)
+    size_bytes: int | None = Field(None, ge=0)
 
-    load_time_ms: Optional[int] = Field(None, ge=0)
-    last_accessed_at: Optional[datetime] = None
+    load_time_ms: int | None = Field(None, ge=0)
+    last_accessed_at: datetime | None = None
     access_count: int = Field(default=0, ge=0)
     cache_hits: int = Field(default=0, ge=0)
     cache_misses: int = Field(default=0, ge=0)
@@ -285,15 +281,15 @@ class TemplateCacheCreate(BaseModel):
     cache_key: str = Field(..., max_length=500)
     file_path: str
     file_hash: str = Field(..., max_length=64)
-    size_bytes: Optional[int] = Field(None, ge=0)
-    load_time_ms: Optional[int] = Field(None, ge=0)
+    size_bytes: int | None = Field(None, ge=0)
+    load_time_ms: int | None = Field(None, ge=0)
 
 
 class TemplateCacheUpdate(BaseModel):
     """Schema for updating template cache metadata"""
 
     cache_hit: bool
-    load_time_ms: Optional[int] = None
+    load_time_ms: int | None = None
 
 
 # =============================================================================
@@ -313,11 +309,11 @@ class EventProcessingMetrics(BaseModel):
     event_source: str = Field(..., max_length=100)
 
     processing_duration_ms: int = Field(..., ge=0)
-    queue_wait_time_ms: Optional[int] = Field(None, ge=0)
+    queue_wait_time_ms: int | None = Field(None, ge=0)
 
     success: bool
-    error_type: Optional[str] = Field(None, max_length=100)
-    error_message: Optional[str] = None
+    error_type: str | None = Field(None, max_length=100)
+    error_message: str | None = None
     retry_count: int = Field(default=0, ge=0)
 
     batch_size: int = Field(default=1, ge=1)
@@ -333,10 +329,10 @@ class EventProcessingCreate(BaseModel):
     event_type: str = Field(..., max_length=100)
     event_source: str = Field(..., max_length=100)
     processing_duration_ms: int = Field(..., ge=0)
-    queue_wait_time_ms: Optional[int] = Field(None, ge=0)
+    queue_wait_time_ms: int | None = Field(None, ge=0)
     success: bool
-    error_type: Optional[str] = Field(None, max_length=100)
-    error_message: Optional[str] = None
+    error_type: str | None = Field(None, max_length=100)
+    error_message: str | None = None
     retry_count: int = Field(default=0, ge=0)
     batch_size: int = Field(default=1, ge=1)
 
@@ -351,10 +347,10 @@ class MixinCompatibilitySummary(BaseModel):
 
     node_type: NodeType
     total_combinations: int
-    avg_compatibility: Optional[Decimal]
+    avg_compatibility: Decimal | None
     total_successes: int
     total_failures: int
-    success_rate: Optional[Decimal]
+    success_rate: Decimal | None
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -368,9 +364,9 @@ class PatternFeedbackAnalysis(BaseModel):
     pattern_name: str
     feedback_type: FeedbackType
     feedback_count: int
-    avg_confidence: Optional[Decimal]
+    avg_confidence: Decimal | None
     user_provided_count: int
-    avg_learning_weight: Optional[Decimal]
+    avg_learning_weight: Decimal | None
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -383,12 +379,12 @@ class PerformanceMetricsSummary(BaseModel):
 
     phase: GenerationPhase
     execution_count: int
-    avg_duration_ms: Optional[Decimal]
-    p95_duration_ms: Optional[Decimal]
-    p99_duration_ms: Optional[Decimal]
+    avg_duration_ms: Decimal | None
+    p95_duration_ms: Decimal | None
+    p99_duration_ms: Decimal | None
     cache_hits: int
     parallel_executions: int
-    avg_workers: Optional[Decimal]
+    avg_workers: Decimal | None
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -401,11 +397,11 @@ class TemplateCacheEfficiency(BaseModel):
 
     template_type: TemplateType
     template_count: int
-    avg_cache_hits: Optional[Decimal]
-    avg_cache_misses: Optional[Decimal]
-    hit_rate: Optional[Decimal]
-    avg_load_time_ms: Optional[Decimal]
-    total_size_mb: Optional[Decimal]
+    avg_cache_hits: Decimal | None
+    avg_cache_misses: Decimal | None
+    hit_rate: Decimal | None
+    avg_load_time_ms: Decimal | None
+    total_size_mb: Decimal | None
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -421,10 +417,10 @@ class EventProcessingHealth(BaseModel):
     total_events: int
     success_count: int
     failure_count: int
-    success_rate: Optional[Decimal]
-    avg_duration_ms: Optional[Decimal]
-    avg_wait_ms: Optional[Decimal]
-    avg_retries: Optional[Decimal]
+    success_rate: Decimal | None
+    avg_duration_ms: Decimal | None
+    avg_wait_ms: Decimal | None
+    avg_retries: Decimal | None
 
     model_config = ConfigDict(
         from_attributes=True,

@@ -101,12 +101,13 @@ from .pattern_quality_scorer import PatternQualityScorer
 from .task_classifier import TaskClassifier, TaskContext, TaskIntent
 
 
+# Import ActionLogger type under TYPE_CHECKING for proper type hints
+if TYPE_CHECKING:
+    from .action_logger import ActionLogger as _ActionLoggerType
+
 # Import ActionLogger for tracking intelligence gathering performance
 ACTION_LOGGER_AVAILABLE: bool = False
 ActionLogger: type | None = None
-
-# Type alias for ActionLogger (can be None if not available)
-ActionLoggerType = Any  # Will be replaced with actual ActionLogger type if imported
 
 
 def _load_action_logger() -> bool:
@@ -812,7 +813,7 @@ class ManifestInjector:
         self.min_quality_threshold = settings.min_pattern_quality
 
         # ActionLogger cache (performance optimization - avoid recreating on every manifest generation)
-        self._action_logger_cache: dict[str, Any | None] = {}
+        self._action_logger_cache: dict[str, _ActionLoggerType | None] = {}
 
     async def __aenter__(self) -> ManifestInjector:
         """
@@ -1033,7 +1034,7 @@ class ManifestInjector:
             )
             return self._get_minimal_manifest()
 
-    def _get_action_logger(self, correlation_id: str) -> Any | None:
+    def _get_action_logger(self, correlation_id: str) -> _ActionLoggerType | None:
         """
         Get or create ActionLogger instance with caching.
 

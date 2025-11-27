@@ -191,12 +191,14 @@ class TestSingletonPattern:
         print(f"Speedup: {first_call_time / subsequent_avg_time:.1f}x faster")
 
         # Verify singleton is created and reused
-        # Note: mypy can't track that publish_application_log sets _global_publisher
+        # Note: mypy can't track that publish_application_log sets _global_publisher,
+        # so it incorrectly thinks _global_publisher is always None and code after the
+        # assert is unreachable. The ignore below is required for this mypy limitation.
         publisher = logging_event_publisher._global_publisher
         assert publisher is not None
         # Subsequent calls should not be significantly slower than first
         # (both should be fast since enable_events=False)
-        assert subsequent_avg_time < 0.01  # type: ignore[unreachable]
+        assert subsequent_avg_time < 0.01  # type: ignore[unreachable] # mypy limitation
 
     @pytest.mark.asyncio
     async def test_all_convenience_functions_share_singleton(self):

@@ -13,7 +13,6 @@ import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 from uuid import UUID
 
 import yaml
@@ -47,8 +46,8 @@ class AgentIdentity:
     description: str
     capabilities: list
     triggers: list
-    intelligence_integration: Optional[str] = None
-    success_criteria: Optional[list] = None
+    intelligence_integration: str | None = None
+    success_criteria: list | None = None
 
     def format_assumption_prompt(self) -> str:
         """Format identity for assumption by coordinator."""
@@ -117,7 +116,7 @@ Execute the user's request AS {self.name}, not as a coordinator.
 class AgentTransformer:
     """Loads and transforms agent identities from YAML configs."""
 
-    def __init__(self, config_dir: Optional[Path] = None):
+    def __init__(self, config_dir: Path | None = None):
         """
         Initialize transformer.
 
@@ -225,11 +224,11 @@ class AgentTransformer:
         self,
         agent_name: str,
         source_agent: str = "polymorphic-agent",
-        transformation_reason: Optional[str] = None,
-        correlation_id: Optional[str | UUID] = None,
-        user_request: Optional[str] = None,
-        routing_confidence: Optional[float] = None,
-        routing_strategy: Optional[str] = None,
+        transformation_reason: str | None = None,
+        correlation_id: str | UUID | None = None,
+        user_request: str | None = None,
+        routing_confidence: float | None = None,
+        routing_strategy: str | None = None,
     ) -> str:
         """
         Load agent, log transformation event to Kafka, and return formatted prompt.
@@ -315,11 +314,11 @@ class AgentTransformer:
         self,
         agent_name: str,
         source_agent: str = "polymorphic-agent",
-        transformation_reason: Optional[str] = None,
-        correlation_id: Optional[str | UUID] = None,
-        user_request: Optional[str] = None,
-        routing_confidence: Optional[float] = None,
-        routing_strategy: Optional[str] = None,
+        transformation_reason: str | None = None,
+        correlation_id: str | UUID | None = None,
+        user_request: str | None = None,
+        routing_confidence: float | None = None,
+        routing_strategy: str | None = None,
     ) -> str:
         """
         Synchronous wrapper for transform_with_logging.

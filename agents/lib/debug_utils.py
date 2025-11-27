@@ -35,7 +35,7 @@ import json
 import logging
 import subprocess
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 logger = logging.getLogger(__name__)
@@ -49,7 +49,7 @@ class DockerCommandError(Exception):
 
 def get_docker_service_status(
     service_name: str, include_health: bool = True
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Get the status of a Docker service/container.
 
@@ -173,11 +173,11 @@ def get_docker_service_status(
 
 def get_docker_logs(
     service_name: str,
-    tail: Optional[int] = 100,
-    since: Optional[str] = None,
+    tail: int | None = 100,
+    since: str | None = None,
     follow: bool = False,
     timestamps: bool = True,
-    search_pattern: Optional[str] = None,
+    search_pattern: str | None = None,
 ) -> str:
     """
     Get logs from a Docker service/container.
@@ -280,10 +280,10 @@ def get_docker_logs(
 
 
 def list_docker_services(
-    filter_prefix: Optional[str] = None,
+    filter_prefix: str | None = None,
     include_stopped: bool = False,
     format_output: str = "dict",
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     List Docker services/containers.
 
@@ -440,7 +440,7 @@ def restart_docker_service(
 
 def check_docker_network(
     network_name: str = "omninode-bridge-network",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Check Docker network status and connected containers.
 
@@ -500,7 +500,7 @@ def check_docker_network(
 
 
 # Convenience function for common OmniClaude services
-def check_omniclaude_services() -> Dict[str, Dict[str, Any]]:
+def check_omniclaude_services() -> dict[str, dict[str, Any]]:
     """
     Check status of all OmniClaude infrastructure services.
 

@@ -19,7 +19,7 @@ Target Performance:
 
 import hashlib
 import time
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 class ResultCache:
@@ -37,10 +37,10 @@ class ResultCache:
         Args:
             default_ttl_seconds: Default time-to-live in seconds (default: 1 hour)
         """
-        self.cache: Dict[str, Dict[str, Any]] = {}
+        self.cache: dict[str, dict[str, Any]] = {}
         self.default_ttl = default_ttl_seconds
 
-    def _generate_key(self, query: str, context: Optional[Dict] = None) -> str:
+    def _generate_key(self, query: str, context: dict | None = None) -> str:
         """
         Generate cache key from query and context.
 
@@ -61,7 +61,7 @@ class ResultCache:
 
         return hashlib.sha256(key_data.encode()).hexdigest()
 
-    def get(self, query: str, context: Optional[Dict] = None) -> Optional[Any]:
+    def get(self, query: str, context: dict | None = None) -> Any | None:
         """
         Get cached result if valid.
 
@@ -97,8 +97,8 @@ class ResultCache:
         self,
         query: str,
         value: Any,
-        context: Optional[Dict] = None,
-        ttl_seconds: Optional[int] = None,
+        context: dict | None = None,
+        ttl_seconds: int | None = None,
     ):
         """
         Cache result with TTL.
@@ -121,7 +121,7 @@ class ResultCache:
             "hits": 0,  # Number of times accessed after creation
         }
 
-    def invalidate(self, query: str, context: Optional[Dict] = None):
+    def invalidate(self, query: str, context: dict | None = None):
         """
         Invalidate specific cache entry.
 
@@ -158,7 +158,7 @@ class ResultCache:
 
         return len(expired_keys)
 
-    def stats(self) -> Dict[str, Any]:
+    def stats(self) -> dict[str, Any]:
         """
         Get cache statistics.
 
@@ -190,7 +190,7 @@ class ResultCache:
             "cache_size_bytes": len(str(self.cache)),  # Approximate size
         }
 
-    def get_detailed_stats(self) -> Dict[str, Any]:
+    def get_detailed_stats(self) -> dict[str, Any]:
         """
         Get detailed cache statistics.
 

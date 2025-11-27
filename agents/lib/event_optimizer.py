@@ -35,24 +35,18 @@ logger = logging.getLogger(__name__)
 
 def _get_event_type(event: BaseEvent) -> str:
     """
-    Get event type from event with type-safe fallback.
+    Get event type from event.
 
-    Uses getattr with None default followed by isinstance check for proper
-    type narrowing. This approach is type-checker friendly because:
-    1. getattr returns Any when default is provided, avoiding attribute errors
-    2. isinstance provides proper type narrowing to str
-    3. No direct attribute access on BaseEvent which lacks 'event' attribute
+    BaseEvent now defines `event: str` as an instance attribute (default "unknown"),
+    so direct attribute access is type-safe.
 
     Args:
         event: Event to extract type from
 
     Returns:
-        Event type string, or "unknown" if attribute is missing or not a string
+        Event type string from the event
     """
-    event_attr = getattr(event, "event", None)
-    if isinstance(event_attr, str):
-        return event_attr
-    return "unknown"
+    return event.event
 
 
 class CircuitState(Enum):

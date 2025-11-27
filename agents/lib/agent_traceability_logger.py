@@ -43,7 +43,7 @@ import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 from uuid import UUID, uuid4
 
 from .db import get_pg_pool
@@ -76,13 +76,13 @@ class AgentTraceabilityLogger:
     def __init__(
         self,
         agent_name: str,
-        correlation_id: Optional[UUID | str] = None,
-        session_id: Optional[UUID | str] = None,
-        execution_id: Optional[UUID | str] = None,
-        project_path: Optional[str] = None,
-        project_name: Optional[str] = None,
-        claude_session_id: Optional[str] = None,
-        terminal_id: Optional[str] = None,
+        correlation_id: UUID | str | None = None,
+        session_id: UUID | str | None = None,
+        execution_id: UUID | str | None = None,
+        project_path: str | None = None,
+        project_name: str | None = None,
+        claude_session_id: str | None = None,
+        terminal_id: str | None = None,
     ):
         """
         Initialize traceability logger.
@@ -107,8 +107,8 @@ class AgentTraceabilityLogger:
         self.terminal_id = terminal_id
 
         # Track IDs for cross-references
-        self.prompt_id: Optional[str] = None
-        self.manifest_injection_id: Optional[str] = None
+        self.prompt_id: str | None = None
+        self.manifest_injection_id: str | None = None
 
         # Structured logger
         self.logger = StructuredLogger(
@@ -124,13 +124,13 @@ class AgentTraceabilityLogger:
     async def log_prompt(
         self,
         user_prompt: str,
-        agent_instructions: Optional[str] = None,
-        manifest_injection_id: Optional[UUID | str] = None,
-        manifest_sections: Optional[List[str]] = None,
-        system_context: Optional[Dict[str, Any]] = None,
-        conversation_history: Optional[List[Dict[str, Any]]] = None,
-        attached_files: Optional[List[str]] = None,
-    ) -> Optional[str]:
+        agent_instructions: str | None = None,
+        manifest_injection_id: UUID | str | None = None,
+        manifest_sections: list[str] | None = None,
+        system_context: dict[str, Any] | None = None,
+        conversation_history: list[dict[str, Any]] | None = None,
+        attached_files: list[str] | None = None,
+    ) -> str | None:
         """
         Log user prompt and agent instructions.
 
@@ -232,17 +232,17 @@ class AgentTraceabilityLogger:
         self,
         operation_type: str,
         file_path: str,
-        content_before: Optional[str] = None,
-        content_after: Optional[str] = None,
-        tool_name: Optional[str] = None,
-        line_range: Optional[Dict[str, int]] = None,
-        operation_params: Optional[Dict[str, Any]] = None,
-        intelligence_file_id: Optional[UUID | str] = None,
-        matched_pattern_ids: Optional[List[UUID | str]] = None,
+        content_before: str | None = None,
+        content_after: str | None = None,
+        tool_name: str | None = None,
+        line_range: dict[str, int] | None = None,
+        operation_params: dict[str, Any] | None = None,
+        intelligence_file_id: UUID | str | None = None,
+        matched_pattern_ids: list[UUID | str] | None = None,
         success: bool = True,
-        error_message: Optional[str] = None,
-        duration_ms: Optional[int] = None,
-    ) -> Optional[str]:
+        error_message: str | None = None,
+        duration_ms: int | None = None,
+    ) -> str | None:
         """
         Log file operation with content hashes.
 
@@ -390,23 +390,23 @@ class AgentTraceabilityLogger:
         self,
         intelligence_type: str,
         intelligence_source: str,
-        intelligence_id: Optional[UUID | str] = None,
-        intelligence_name: Optional[str] = None,
-        collection_name: Optional[str] = None,
+        intelligence_id: UUID | str | None = None,
+        intelligence_name: str | None = None,
+        collection_name: str | None = None,
         usage_context: str = "reference",
         usage_count: int = 1,
-        confidence_score: Optional[float] = None,
-        intelligence_snapshot: Optional[Dict[str, Any]] = None,
-        intelligence_summary: Optional[str] = None,
-        query_used: Optional[str] = None,
-        query_time_ms: Optional[int] = None,
-        query_results_rank: Optional[int] = None,
+        confidence_score: float | None = None,
+        intelligence_snapshot: dict[str, Any] | None = None,
+        intelligence_summary: str | None = None,
+        query_used: str | None = None,
+        query_time_ms: int | None = None,
+        query_results_rank: int | None = None,
         was_applied: bool = False,
-        application_details: Optional[Dict[str, Any]] = None,
-        file_operations_using_this: Optional[List[UUID | str]] = None,
-        contributed_to_success: Optional[bool] = None,
-        quality_impact: Optional[float] = None,
-    ) -> Optional[str]:
+        application_details: dict[str, Any] | None = None,
+        file_operations_using_this: list[UUID | str] | None = None,
+        contributed_to_success: bool | None = None,
+        quality_impact: float | None = None,
+    ) -> str | None:
         """
         Log intelligence usage (patterns, schemas, debug intelligence).
 
@@ -528,7 +528,7 @@ class AgentTraceabilityLogger:
             )
             return None
 
-    async def get_complete_trace(self) -> Optional[Dict[str, Any]]:
+    async def get_complete_trace(self) -> dict[str, Any] | None:
         """
         Get complete execution trace for this correlation ID.
 
@@ -548,7 +548,7 @@ class AgentTraceabilityLogger:
                 )
 
             # Group by trace type
-            trace_data: Dict[str, List[Any]] = {
+            trace_data: dict[str, list[Any]] = {
                 "prompt": [],
                 "file_operation": [],
                 "intelligence_usage": [],
@@ -574,13 +574,13 @@ class AgentTraceabilityLogger:
 
 async def create_traceability_logger(
     agent_name: str,
-    correlation_id: Optional[UUID | str] = None,
-    session_id: Optional[UUID | str] = None,
-    execution_id: Optional[UUID | str] = None,
-    project_path: Optional[str] = None,
-    project_name: Optional[str] = None,
-    claude_session_id: Optional[str] = None,
-    terminal_id: Optional[str] = None,
+    correlation_id: UUID | str | None = None,
+    session_id: UUID | str | None = None,
+    execution_id: UUID | str | None = None,
+    project_path: str | None = None,
+    project_name: str | None = None,
+    claude_session_id: str | None = None,
+    terminal_id: str | None = None,
 ) -> AgentTraceabilityLogger:
     """
     Factory function to create traceability logger.

@@ -195,9 +195,8 @@ class ReferenceResolver:
         if path is None:
             path = []
 
-        if not isinstance(schema, dict):
-            # Schema is a primitive value, wrap it in a dict for type consistency
-            return {"__value": schema}  # type: ignore[unreachable]
+        # Note: The recursive calls below (lines 220-228) are guarded by isinstance(value, dict)
+        # checks, so this method always receives a dict. No defensive check needed.
 
         # Check for $ref
         if "$ref" in schema:
