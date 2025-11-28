@@ -103,8 +103,7 @@ These hooks are designed to be symlinked to ~/.claude/hooks/:
 
 Or manually:
 
-    ln -sf /path/to/repo/claude/hooks ~/.claude/onex/hooks
-    ln -sf ~/.claude/onex/hooks ~/.claude/hooks
+    ln -sf /path/to/repo/claude/hooks ~/.claude/hooks
 
 Configuration
 =============
@@ -120,15 +119,18 @@ Dependencies
 Shell hooks require:
 - jq (JSON processing)
 - python3 (subprocess calls)
-- ~/.claude/onex/lib/ (Python utilities)
+- claude/hooks/lib/ (Python utilities - auto-discovered via SCRIPT_DIR)
 
 Python hooks require:
 - yaml (configuration loading)
 - psycopg2 (database connections)
 - kafka-python (event bus integration)
 
-The lib/ directory at ~/.claude/onex/lib/ contains shared utilities
+The lib/ directory at claude/hooks/lib/ contains hook-specific utilities
 including correlation management, event logging, and pattern tracking.
+
+The lib/ directory at claude/lib/ contains shared utilities for the
+entire claude package (core/, utils/, etc.).
 """
 
 # Hook file names for programmatic access

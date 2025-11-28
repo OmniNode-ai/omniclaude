@@ -94,8 +94,12 @@ class IntelligenceCache:
             return
 
         # Default uses Docker hostname (archon-valkey:6379); override with VALKEY_URL in .env for localhost development
-        # Password 'archon_cache_2025' is Docker default; change via VALKEY_URL for production deployments
-        default_url = "redis://:archon_cache_2025@archon-valkey:6379/0"
+        # Password must be set via VALKEY_PASSWORD environment variable (no hardcoded defaults)
+        valkey_password = os.getenv("VALKEY_PASSWORD", "")
+        if valkey_password:
+            default_url = f"redis://:{valkey_password}@archon-valkey:6379/0"
+        else:
+            default_url = "redis://archon-valkey:6379/0"
         if settings is not None:
             self.redis_url = redis_url or settings.valkey_url or default_url
         else:
@@ -133,8 +137,15 @@ class IntelligenceCache:
                 ),  # 5 min
             }
 
+        # Redact credentials from URL before logging
+        safe_url = self.redis_url
+        if "@" in safe_url:
+            # URL format: redis://[:password]@host:port/db - redact password portion
+            prefix_end = safe_url.find("://") + 3
+            at_pos = safe_url.find("@")
+            safe_url = safe_url[:prefix_end] + "***REDACTED***" + safe_url[at_pos:]
         logger.info(
-            f"Intelligence cache initialized: enabled={self.enabled}, url={self.redis_url}"
+            f"Intelligence cache initialized: enabled={self.enabled}, url={safe_url}"
         )
 
     async def connect(self):

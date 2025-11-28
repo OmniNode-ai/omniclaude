@@ -50,50 +50,10 @@ from kafka_types import (
 
 # Import type-safe configuration (Phase 2 - Pydantic Settings migration)
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+# Import shared timeout utility to avoid duplication
+from common_utils import get_timeout_seconds
+
 from config import settings
-
-
-def get_timeout_seconds(override_seconds: Optional[int] = None) -> float:
-    """
-    Get timeout value in seconds from type-safe configuration.
-
-    Returns timeout from Pydantic Settings (default: 5 seconds).
-    Configurable via REQUEST_TIMEOUT_MS environment variable.
-
-    Args:
-        override_seconds: Optional custom timeout in seconds. If provided,
-                         this value takes precedence over configuration.
-                         Useful for long-running operations that need
-                         extended timeouts.
-
-    Returns:
-        Timeout in seconds (float)
-
-    Note:
-        Timeout strategy: All helper subprocess/network calls use the same
-        timeout to prevent infinite hangs. Default is 5 seconds, configurable
-        via .env file (REQUEST_TIMEOUT_MS=5000). Valid range: 100-60000ms.
-
-        Use override_seconds for specific operations that require longer
-        timeouts (e.g., generate-status-report --timeout 30).
-
-        Priority order:
-        1. override_seconds parameter (highest priority)
-        2. OPERATION_TIMEOUT_OVERRIDE environment variable (for CLI scripts)
-        3. REQUEST_TIMEOUT_MS from Pydantic Settings (default)
-    """
-    if override_seconds is not None:
-        return float(override_seconds)
-
-    # Check for operation-specific timeout override (for CLI scripts)
-    env_override = os.getenv("OPERATION_TIMEOUT_OVERRIDE")
-    if env_override is not None:
-        try:
-            return float(env_override)
-        except (ValueError, TypeError):
-            pass  # Fall through to default
-
-    return settings.request_timeout_ms / 1000.0
 
 
 def get_kafka_bootstrap_servers() -> str:
@@ -201,6 +161,7 @@ def check_kafka_connection() -> KafkaConnectionResult:
             "broker": bootstrap_servers,
             "reachable": False,
             "error": f"Connection timeout after {get_timeout_seconds()}s",
+            "return_code": 1,
         }
     except FileNotFoundError:
         install_instructions = (
@@ -216,6 +177,7 @@ def check_kafka_connection() -> KafkaConnectionResult:
             "broker": bootstrap_servers,
             "reachable": False,
             "error": install_instructions,
+            "return_code": 1,
         }
     except (subprocess.SubprocessError, OSError) as e:
         # SubprocessError: subprocess-related failures
@@ -226,6 +188,7 @@ def check_kafka_connection() -> KafkaConnectionResult:
             "broker": bootstrap_servers,
             "reachable": False,
             "error": f"Subprocess error: {str(e)}",
+            "return_code": 1,
         }
 
 
@@ -289,6 +252,7 @@ def list_topics() -> KafkaTopicsResult:
             "topics": [],
             "count": 0,
             "error": f"kcat timed out after {get_timeout_seconds()}s (Kafka unreachable?)",
+            "return_code": 1,
         }
     except FileNotFoundError:
         install_instructions = (
@@ -303,6 +267,7 @@ def list_topics() -> KafkaTopicsResult:
             "topics": [],
             "count": 0,
             "error": install_instructions,
+            "return_code": 1,
         }
     except (subprocess.SubprocessError, OSError) as e:
         # SubprocessError: subprocess-related failures
@@ -312,6 +277,7 @@ def list_topics() -> KafkaTopicsResult:
             "topics": [],
             "count": 0,
             "error": f"Subprocess error: {str(e)}",
+            "return_code": 1,
         }
 
 
@@ -381,12 +347,14 @@ def get_topic_stats(topic_name: str) -> KafkaTopicStatsResult:
             "success": False,
             "topic": topic_name,
             "error": f"kcat timed out after {get_timeout_seconds()}s (Kafka unreachable?)",
+            "return_code": 1,
         }
     except FileNotFoundError:
         return {
             "success": False,
             "topic": topic_name,
             "error": "kcat not installed. Install: macOS: 'brew install kcat' | Ubuntu/Debian: 'sudo apt-get install kafkacat'",
+            "return_code": 1,
         }
     except (subprocess.SubprocessError, OSError) as e:
         # SubprocessError: subprocess-related failures
@@ -395,6 +363,7 @@ def get_topic_stats(topic_name: str) -> KafkaTopicStatsResult:
             "success": False,
             "topic": topic_name,
             "error": f"Subprocess error: {str(e)}",
+            "return_code": 1,
         }
 
 
@@ -460,6 +429,7 @@ def get_consumer_groups() -> KafkaConsumerGroupsResult:
             "groups": [],
             "count": 0,
             "error": f"kcat timed out after {get_timeout_seconds()}s (Kafka unreachable?)",
+            "return_code": 1,
         }
     except FileNotFoundError:
         return {
@@ -467,6 +437,7 @@ def get_consumer_groups() -> KafkaConsumerGroupsResult:
             "groups": [],
             "count": 0,
             "error": "kcat not installed. Install: macOS: 'brew install kcat' | Ubuntu/Debian: 'sudo apt-get install kafkacat'",
+            "return_code": 1,
         }
     except (subprocess.SubprocessError, OSError) as e:
         # SubprocessError: subprocess-related failures
@@ -476,6 +447,7 @@ def get_consumer_groups() -> KafkaConsumerGroupsResult:
             "groups": [],
             "count": 0,
             "error": f"Subprocess error: {str(e)}",
+            "return_code": 1,
         }
 
 
@@ -605,7 +577,7 @@ def get_recent_message_count(
             "messages_sampled": 0,
             "sample_duration_s": timeout_seconds,
             "error": f"kcat timed out after {timeout_seconds}s (broker may be unreachable)",
-            "return_code": None,
+            "return_code": 1,
         }
     except FileNotFoundError:
         return {
@@ -614,7 +586,7 @@ def get_recent_message_count(
             "messages_sampled": 0,
             "sample_duration_s": timeout_seconds,
             "error": "kcat command not found. Install: macOS: 'brew install kcat' | Ubuntu/Debian: 'sudo apt-get install kafkacat'",
-            "return_code": None,
+            "return_code": 1,
         }
     except (subprocess.SubprocessError, OSError) as e:
         # SubprocessError: subprocess-related failures
@@ -625,7 +597,7 @@ def get_recent_message_count(
             "messages_sampled": 0,
             "sample_duration_s": timeout_seconds,
             "error": f"Subprocess error: {str(e)}",
-            "return_code": None,
+            "return_code": 1,
         }
 
 

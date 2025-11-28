@@ -14,12 +14,57 @@ echo ""
 # Create onex namespace directory
 mkdir -p "$ONEX_DIR"
 
-# Function to create symlink with backup
+# Security: Validate path is within allowed directories
+validate_source_path() {
+    local source="$1"
+    local resolved_source
+
+    # Resolve to absolute path (handles .. and symlinks)
+    resolved_source="$(cd "$(dirname "$source")" 2>/dev/null && pwd)/$(basename "$source")" || {
+        return 1
+    }
+
+    # Allow paths within REPO_ROOT or HOME
+    if [[ "$resolved_source" == "$REPO_ROOT"* ]] || [[ "$resolved_source" == "$HOME"* ]]; then
+        return 0
+    fi
+
+    return 1
+}
+
+# Function to create symlink with backup and security validation
 create_symlink() {
     local source="$1"
     local target="$2"
     local name="$3"
+    local required="${4:-true}"  # Optional: whether source is required (default: true)
 
+    # Security Check 1: Validate source path exists
+    if [[ ! -e "$source" ]]; then
+        if [[ "$required" == "true" ]]; then
+            echo "  ERROR: Source path does not exist: $source"
+            echo "  Cannot create symlink for: $name"
+            exit 1
+        else
+            echo "  WARNING: Skipping $name symlink, source does not exist: $source"
+            return 0
+        fi
+    fi
+
+    # Security Check 2: Validate source path is within allowed directories
+    if ! validate_source_path "$source"; then
+        echo "  ERROR: Source path is outside allowed directories: $source"
+        echo "  Allowed: $REPO_ROOT or $HOME"
+        exit 1
+    fi
+
+    # Security Check 3: Validate paths don't contain dangerous characters
+    if [[ "$source" =~ [[:cntrl:]] ]] || [[ "$target" =~ [[:cntrl:]] ]]; then
+        echo "  ERROR: Path contains control characters: $name"
+        exit 1
+    fi
+
+    # Handle existing target
     if [[ -L "$target" ]]; then
         rm "$target"
     elif [[ -e "$target" ]]; then
@@ -48,18 +93,20 @@ create_symlink "$ONEX_DIR/agents" "$CLAUDE_DIR/agent-definitions" "agent-definit
 
 echo ""
 echo "Symlinking shared resources..."
-create_symlink "$REPO_ROOT/.env" "$CLAUDE_DIR/.env" ".env"
+# .env is optional - warn but don't fail if missing
+create_symlink "$REPO_ROOT/.env" "$CLAUDE_DIR/.env" ".env" "false"
 create_symlink "$REPO_ROOT/config" "$ONEX_DIR/config" "config"
 
 # Symlink the poetry venv for Python imports
 VENV_PATH=$(cd "$REPO_ROOT" && poetry env info --path 2>/dev/null || echo "")
 if [[ -n "$VENV_PATH" && -d "$VENV_PATH" ]]; then
-    create_symlink "$VENV_PATH" "$ONEX_DIR/.venv" ".venv"
+    # Use create_symlink with required=false since venv is optional
+    create_symlink "$VENV_PATH" "$ONEX_DIR/.venv" ".venv" "false"
     echo ""
-    echo "✓ Poetry venv linked: $VENV_PATH"
+    echo "Poetry venv linked: $VENV_PATH"
 else
     echo ""
-    echo "⚠ Poetry venv not found. Run 'poetry install' first."
+    echo "Poetry venv not found. Run 'poetry install' first."
 fi
 
 echo ""

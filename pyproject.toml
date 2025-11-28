@@ -166,6 +166,8 @@ ignore = [
     "C401",      # Unnecessary generator (technical debt)
     "C416",      # Unnecessary list comprehension (technical debt)
     "PT001",     # Pytest fixture parentheses (technical debt)
+    "PT004",     # Pytest fixture doesn't return - underscore convention (style)
+    "PT006",     # Pytest parametrize names as tuple (style)
     "PT017",     # Pytest raises in except (technical debt)
     "PT023",     # Pytest mark parentheses (technical debt)
 ]

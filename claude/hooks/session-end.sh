@@ -13,8 +13,13 @@
 set -euo pipefail
 
 # Configuration
-LOG_FILE="$HOME/.claude/hooks/hook-enhanced.log"
-HOOKS_LIB="$HOME/.claude/onex/lib"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOG_FILE="${SCRIPT_DIR}/logs/hook-session-end.log"
+HOOKS_LIB="${SCRIPT_DIR}/lib"
+
+# Ensure log directory exists
+mkdir -p "$(dirname "$LOG_FILE")"
+
 export PYTHONPATH="${HOOKS_LIB}:${PYTHONPATH:-}"
 
 # Read stdin (Claude Code sends JSON with session info)

@@ -18,6 +18,8 @@ Target Performance:
 """
 
 import hashlib
+import json
+import sys
 import time
 from typing import Any
 
@@ -56,8 +58,16 @@ class ResultCache:
         """
         key_data = query
         if context:
-            # Sort context items for consistent hashing
-            key_data += str(sorted(context.items()))
+            # Convert context to JSON for consistent serialization of all value types
+            # This handles non-string values (int, bool, list, nested dict) correctly
+            # Cache sorted items to avoid re-computing in fallback path
+            sorted_items = sorted(context.items())
+            try:
+                sorted_context = dict(sorted_items)
+                key_data += json.dumps(sorted_context, sort_keys=True, default=str)
+            except (TypeError, ValueError):
+                # Fallback for non-serializable values
+                key_data += str(sorted_items)
 
         return hashlib.sha256(key_data.encode()).hexdigest()
 
@@ -182,12 +192,24 @@ class ResultCache:
         oldest_created = min(entry["created_at"] for entry in self.cache.values())
         oldest_age = current_time - oldest_created
 
+        # Calculate approximate cache size in bytes
+        # Uses sys.getsizeof for dict overhead + JSON serialization for entry values
+        cache_size = sys.getsizeof(self.cache)
+        for key, entry in self.cache.items():
+            cache_size += sys.getsizeof(key)
+            cache_size += sys.getsizeof(entry)
+            # Estimate value size using JSON serialization
+            try:
+                cache_size += len(json.dumps(entry.get("value", ""), default=str))
+            except (TypeError, ValueError):
+                cache_size += sys.getsizeof(entry.get("value", ""))
+
         return {
             "entries": total_entries,
             "total_hits": total_hits,
             "avg_hits_per_entry": total_hits / total_entries if total_entries else 0,
             "oldest_entry_age_seconds": oldest_age,
-            "cache_size_bytes": len(str(self.cache)),  # Approximate size
+            "cache_size_bytes": cache_size,
         }
 
     def get_detailed_stats(self) -> dict[str, Any]:

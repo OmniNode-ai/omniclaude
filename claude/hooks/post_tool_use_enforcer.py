@@ -22,7 +22,9 @@ if str(parent_dir) not in sys.path:
 # Import pattern tracker (supports both module and script execution)
 # Use TYPE_CHECKING to allow type hints without runtime dependency
 if TYPE_CHECKING:
-    from .lib.pattern_tracker_sync import PatternTrackerSync as PatternTrackerSyncType
+    from claude.lib.utils.pattern_tracker_sync import (
+        PatternTrackerSync as PatternTrackerSyncType,
+    )
 
 PatternTrackerSyncClass: Optional[Type[Any]] = None
 PATTERN_TRACKING_ENABLED = False
@@ -283,7 +285,7 @@ async def apply_fixes_to_file_async(file_path_str: str, config: dict) -> bool:
 
     # Phase 1: Validate
     print("[PostToolUse] Starting validation...", file=sys.stderr)
-    from validators.naming_validator import NamingValidator
+    from claude.lib.utils.naming_validator import NamingValidator
 
     validator = NamingValidator()
     violations = validator.validate_content(original_content, str(file_path))

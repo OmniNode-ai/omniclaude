@@ -559,6 +559,19 @@ class AgentRouter:
             with open(path) as f:
                 self.registry = yaml.safe_load(f)
 
+            # Convert relative definition_path to absolute paths
+            registry_dir = Path(path).parent
+            for agent_name, agent_data in self.registry.get("agents", {}).items():
+                if "definition_path" in agent_data:
+                    def_path = agent_data["definition_path"]
+                    # Convert relative path to absolute
+                    if not Path(def_path).is_absolute():
+                        # Strip "agent-definitions/" prefix if present
+                        # (already in registry_dir)
+                        if def_path.startswith("agent-definitions/"):
+                            def_path = def_path.replace("agent-definitions/", "", 1)
+                        agent_data["definition_path"] = str(registry_dir / def_path)
+
             # Rebuild components
             self.trigger_matcher = TriggerMatcher(self.registry)
             self.capability_index = CapabilityIndex(path)

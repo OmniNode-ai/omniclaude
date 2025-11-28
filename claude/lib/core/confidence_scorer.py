@@ -166,16 +166,22 @@ class ConfidenceScorer:
             # No capabilities defined - neutral score
             return 0.5
 
-        # Extract keywords from request
-        request_lower = request.lower()
+        # Extract words from request for token-based matching
+        # This prevents false positives like "debug" matching "debugging"
+        request_words = set(request.lower().split())
 
-        # Check if any capability mentioned
-        matches = sum(1 for cap in capabilities if cap.lower() in request_lower)
+        # Check if any capability matches as a complete token
+        matches = 0
+        for cap in capabilities:
+            cap_lower = cap.lower()
+            # Check if capability appears as a complete word in the request
+            if cap_lower in request_words:
+                matches += 1
 
         # Return proportional score
         return min(matches / len(capabilities), 1.0)
 
-    def _calculate_historical_score(self, agent_name: str, request: str) -> float:
+    def _calculate_historical_score(self, agent_name: str, _request: str) -> float:
         """
         Score based on historical success.
 
@@ -184,7 +190,8 @@ class ConfidenceScorer:
 
         Args:
             agent_name: Name of the agent
-            request: User's input text
+            _request: User's input text (unused in Phase 1, reserved for future
+                request-specific historical analysis)
 
         Returns:
             Historical success score (0.0-1.0)

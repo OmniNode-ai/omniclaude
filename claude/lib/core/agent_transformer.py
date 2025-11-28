@@ -124,8 +124,9 @@ class AgentTransformer:
             config_dir: Directory containing agent-*.yaml files
         """
         if config_dir is None:
-            # Use relative path from this file's location
-            config_dir = Path(__file__).parent.parent / "configs"
+            # Default to consolidated agent definitions location (claude/agents/)
+            # Path relative to this module: claude/lib/core/ -> claude/agents/
+            config_dir = Path(__file__).parent.parent.parent / "agents"
 
         self.config_dir = Path(config_dir)
 

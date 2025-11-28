@@ -26,7 +26,8 @@ logger = logging.getLogger(__name__)
 
 
 # Add config for type-safe settings (Pydantic Settings framework)
-sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..")))
+# Path: _shared -> skills -> claude -> project_root (3 levels up)
+sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
 from config import settings
 
 

@@ -29,9 +29,39 @@ class TriggerMatcher:
 
         Args:
             agent_registry: Loaded YAML registry with agent definitions
+
+        Raises:
+            ValueError: If registry structure is invalid (missing 'agents' key
+                or agents is not a dictionary)
         """
+        self._validate_registry(agent_registry)
         self.registry = agent_registry
         self.trigger_index = self._build_trigger_index()
+
+    def _validate_registry(self, registry: Dict) -> None:
+        """
+        Validate registry structure before use.
+
+        Args:
+            registry: Registry dictionary to validate
+
+        Raises:
+            ValueError: If registry structure is invalid
+        """
+        if not isinstance(registry, dict):
+            raise ValueError(
+                f"Registry must be a dictionary, got {type(registry).__name__}"
+            )
+        if "agents" not in registry:
+            raise ValueError(
+                "Registry must contain 'agents' key. "
+                "Expected structure: {'agents': {'agent-name': {...}, ...}}"
+            )
+        if not isinstance(registry["agents"], dict):
+            raise ValueError(
+                f"Registry 'agents' must be a dictionary, "
+                f"got {type(registry['agents']).__name__}"
+            )
 
     def _build_trigger_index(self) -> Dict[str, List[str]]:
         """

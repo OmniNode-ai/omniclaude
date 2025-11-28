@@ -488,9 +488,8 @@ class RoutingEventClient:
                     max_recommendations=max_recommendations,
                     min_confidence=min_confidence,
                     routing_strategy=routing_strategy,
-                    timeout_ms=timeout,
                 ),
-                timeout_ms=timeout,
+                timeout_ms=timeout,  # Single source of truth for timeout
             )
 
             # Convert to dict for Kafka

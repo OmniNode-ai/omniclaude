@@ -17,6 +17,7 @@ Usage:
     result = _shared.execute_query("SELECT * FROM users")
 
 Modules:
+    - common_utils: Shared utilities (timeout configuration) used by all helpers
     - db_helper: PostgreSQL connection and query utilities
     - kafka_helper: Kafka connectivity, topic listing, message sampling
     - docker_helper: Container status, health checks, resource monitoring

@@ -49,16 +49,14 @@ import asyncio
 import json
 import logging
 import os
-
-# Import centralized Kafka configuration
-import sys
 from datetime import UTC, datetime
-from pathlib import Path, Path as PathLib
+from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from aiokafka.errors import KafkaError
+from omnibase_core.errors import EnumCoreErrorCode, ModelOnexError
 
 from config import settings
 
@@ -129,18 +127,22 @@ class IntelligenceEventClient:
             bootstrap_servers or settings.get_effective_kafka_bootstrap_servers()
         )
         if not self.bootstrap_servers:
-            raise ValueError(
-                "bootstrap_servers must be provided or set via environment variables.\n"
-                "Checked variables (in order):\n"
-                "  1. KAFKA_BOOTSTRAP_SERVERS (general config)\n"
-                "  2. KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS (intelligence-specific)\n"
-                "  3. KAFKA_BROKERS (legacy compatibility)\n"
-                "Example: KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:9092\n"
-                "Current values: KAFKA_BOOTSTRAP_SERVERS={}, KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS={}, KAFKA_BROKERS={}".format(
-                    getattr(settings, "kafka_bootstrap_servers", "not set"),
-                    os.getenv("KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS", "not set"),
-                    os.getenv("KAFKA_BROKERS", "not set"),
-                )
+            raise ModelOnexError(
+                message=(
+                    "bootstrap_servers must be provided or set via environment variables.\n"
+                    "Checked variables (in order):\n"
+                    "  1. KAFKA_BOOTSTRAP_SERVERS (general config)\n"
+                    "  2. KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS (intelligence-specific)\n"
+                    "  3. KAFKA_BROKERS (legacy compatibility)\n"
+                    "Example: KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:9092\n"
+                    "Current values: KAFKA_BOOTSTRAP_SERVERS={}, KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS={}, KAFKA_BROKERS={}".format(
+                        getattr(settings, "kafka_bootstrap_servers", "not set"),
+                        os.getenv("KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS", "not set"),
+                        os.getenv("KAFKA_BROKERS", "not set"),
+                    )
+                ),
+                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
+                operation="__init__",
             )
         self.enable_intelligence = enable_intelligence
         self.request_timeout_ms = request_timeout_ms
@@ -315,7 +317,11 @@ class IntelligenceEventClient:
             for correlation_id, future in self._pending_requests.items():
                 if not future.done():
                     future.set_exception(
-                        RuntimeError("Client stopped while request pending")
+                        ModelOnexError(
+                            message="Client stopped while request pending",
+                            error_code=EnumCoreErrorCode.OPERATION_FAILED,
+                            operation="stop",
+                        )
                     )
             self._pending_requests.clear()
 
@@ -380,7 +386,7 @@ class IntelligenceEventClient:
         Raises:
             TimeoutError: If response not received within timeout
             KafkaError: If Kafka communication fails
-            RuntimeError: If client not started
+            ModelOnexError: If client not started
 
         Example:
             patterns = await client.request_pattern_discovery(
@@ -393,7 +399,11 @@ class IntelligenceEventClient:
                 print(f"Found: {pattern['file_path']} (confidence: {pattern['confidence']})")
         """
         if not self._started:
-            raise RuntimeError("Client not started. Call start() first.")
+            raise ModelOnexError(
+                message="Client not started. Call start() first.",
+                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
+                operation="request_pattern_discovery",
+            )
 
         timeout = timeout_ms or self.request_timeout_ms
 
@@ -459,7 +469,7 @@ class IntelligenceEventClient:
         Raises:
             TimeoutError: If response not received within timeout
             KafkaError: If Kafka communication fails
-            RuntimeError: If client not started
+            ModelOnexError: If client not started
 
         Example:
             result = await client.request_code_analysis(
@@ -474,7 +484,11 @@ class IntelligenceEventClient:
             )
         """
         if not self._started:
-            raise RuntimeError("Client not started. Call start() first.")
+            raise ModelOnexError(
+                message="Client not started. Call start() first.",
+                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
+                operation="request_code_analysis",
+            )
 
         timeout = timeout_ms or self.request_timeout_ms
 
@@ -555,7 +569,7 @@ class IntelligenceEventClient:
         envelope = {
             # Full dotted event type (not simplified)
             "event_type": "omninode.intelligence.code-analysis.requested.v1",
-            # UUID v7 for event_id (time-ordered)
+            # Unique event identifier
             "event_id": str(uuid4()),
             # RFC3339 timestamp
             "timestamp": datetime.now(UTC).isoformat(),
@@ -620,7 +634,11 @@ class IntelligenceEventClient:
         try:
             # Publish request with partition key and headers
             if self._producer is None:
-                raise RuntimeError("Producer not initialized. Call start() first.")
+                raise ModelOnexError(
+                    message="Producer not initialized. Call start() first.",
+                    error_code=EnumCoreErrorCode.VALIDATION_ERROR,
+                    operation="_publish_and_wait",
+                )
 
             # Partition key: Use correlation_id for request→result ordering
             # Reference: EVENT_BUS_INTEGRATION_GUIDE section "Partition Key Policy"
@@ -680,7 +698,11 @@ class IntelligenceEventClient:
 
         try:
             if self._consumer is None:
-                raise RuntimeError("Consumer not initialized. Call start() first.")
+                raise ModelOnexError(
+                    message="Consumer not initialized. Call start() first.",
+                    error_code=EnumCoreErrorCode.VALIDATION_ERROR,
+                    operation="_consume_responses",
+                )
 
             # Signal that consumer is ready to poll (fixes race condition)
             self._consumer_ready.set()

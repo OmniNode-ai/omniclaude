@@ -250,11 +250,13 @@ class IntelligenceGatherer:
             timeout_ms: Response timeout in milliseconds
 
         Returns:
-            True if patterns were successfully gathered, False otherwise
+            True if patterns were successfully gathered, False otherwise.
+            Returns False on timeout or communication errors (graceful degradation).
 
-        Raises:
-            TimeoutError: If no response within timeout
-            KafkaError: If Kafka communication fails
+        Note:
+            This method catches TimeoutError and other exceptions internally,
+            returning False to allow fallback to built-in patterns. Exceptions
+            are logged but not propagated.
         """
         if not self.event_client:
             self.logger.debug(

@@ -6,9 +6,14 @@ set -euo pipefail
 # -----------------------------
 # Config
 # -----------------------------
-LOG_FILE="$HOME/.claude/hooks/hook-enhanced.log"
-HOOKS_LIB="$HOME/.claude/onex/lib"
-HOOK_DIR="$HOME/.claude/hooks"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOG_FILE="${SCRIPT_DIR}/logs/hook-enhanced.log"
+HOOKS_LIB="${SCRIPT_DIR}/lib"
+HOOK_DIR="${SCRIPT_DIR}"
+
+# Ensure log directory exists
+mkdir -p "$(dirname "$LOG_FILE")"
+
 export PYTHONPATH="${HOOKS_LIB}:${PYTHONPATH:-}"
 
 # Use hooks venv Python (has kafka-python, aiokafka, etc.)
@@ -237,7 +242,7 @@ if [[ "$AGENT_NAME" == "NO_AGENT_DETECTED" ]] || [[ -z "$AGENT_NAME" ]]; then
 import sys
 import os
 import base64
-sys.path.insert(0, os.path.expanduser("~/.claude/hooks/lib"))
+sys.path.insert(0, os.environ.get("HOOKS_LIB", os.path.expanduser("~/.claude/hooks/lib")))
 try:
     from hook_event_adapter import get_hook_event_adapter
 
@@ -345,7 +350,7 @@ if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
 import sys
 import os
 import base64
-sys.path.insert(0, os.path.expanduser("~/.claude/hooks/lib"))
+sys.path.insert(0, os.environ.get("HOOKS_LIB", os.path.expanduser("~/.claude/hooks/lib")))
 try:
     from hook_event_logger import get_logger
 
@@ -462,11 +467,8 @@ fi
 log "Loading system manifest for agent context..."
 
 # Use manifest_loader.py to avoid heredoc quoting issues
-MANIFEST_LOADER="$HOME/.claude/onex/lib/utils/manifest_loader.py"
-if [[ ! -f "$MANIFEST_LOADER" ]]; then
-  # Fallback to HOOKS_LIB parent (claude/lib)
-  MANIFEST_LOADER="${HOOKS_LIB}/utils/manifest_loader.py"
-fi
+# The manifest_loader is in claude/lib/utils/ (sibling to hooks dir)
+MANIFEST_LOADER="${SCRIPT_DIR}/../lib/utils/manifest_loader.py"
 
 SYSTEM_MANIFEST="$(PROJECT_PATH="$PROJECT_PATH" CORRELATION_ID="$CORRELATION_ID" AGENT_NAME="${AGENT_NAME:-unknown}" python3 "$MANIFEST_LOADER" --correlation-id "$CORRELATION_ID" --agent-name "${AGENT_NAME:-unknown}" 2>>"$LOG_FILE" || echo "System Manifest: Not available")"
 
