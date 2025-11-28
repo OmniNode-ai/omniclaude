@@ -14,6 +14,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON_SCRIPT="${SCRIPT_DIR}/post_tool_use_enforcer.py"
 LOG_FILE="${SCRIPT_DIR}/logs/post-tool-use.log"
 
+# Use hooks venv Python (has kafka-python, aiokafka, etc.)
+# The bin/python3 wrapper will fall back to system Python with a warning if venv missing
+export PATH="$SCRIPT_DIR/bin:$PATH"
+
 # Kafka/Redpanda configuration (moved to 192.168.86.200)
 export KAFKA_BROKERS="${KAFKA_BROKERS:-192.168.86.200:29102}"
 
