@@ -795,7 +795,7 @@ jobs:
   # ============================================================================
   # Docker Compose Stack Validation
   # ============================================================================
-  docker compose-validation:
+  docker-compose-validation:
     name: Docker Compose Stack Validation
     runs-on: ubuntu-latest
     steps:

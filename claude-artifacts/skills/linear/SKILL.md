@@ -42,12 +42,13 @@ Task(
 
 ## Skills Available
 
-This skill package provides 4 sub-skills:
+This skill package provides 5 sub-skills:
 
 1. **create-ticket** - Create new Linear tickets with requirements and DoD
 2. **update-ticket** - Update existing tickets with status, requirements, or DoD
 3. **list-tickets** - List and filter tickets by team, assignee, status
 4. **get-ticket** - Get complete ticket details including requirements and DoD
+5. **pr_integration.py** - Create tickets from PR review data (Pydantic-backed)
 
 ## When to Use
 
@@ -115,6 +116,99 @@ When creating tickets from planning documents like EVENT_ALIGNMENT_PLAN.md:
 4. Set priority based on phase importance
 5. Link to parent epic/milestone
 
+## PR Review Integration
+
+The `pr_integration.py` module provides type-safe integration with the Pydantic-backed PR review system. This ensures Claude bot comments are **NEVER missed** when creating Linear tickets from PR reviews.
+
+### Why This Matters
+
+Claude Code bot posts reviews to the **issue_comments** endpoint, which is often missed by simple PR review tools. The PR integration uses a 4-endpoint fetcher that guarantees complete coverage:
+
+1. `/pulls/{pr}/reviews` - Formal reviews
+2. `/pulls/{pr}/comments` - Inline code comments
+3. `gh pr view --json comments` - PR conversation
+4. `/issues/{pr}/comments` - **Where Claude bot posts!**
+
+### Quick Start
+
+```bash
+# Get all critical/major issues for Linear tickets
+~/.claude/skills/linear/pr_integration.py 123
+
+# Only Claude bot comments (prioritized)
+~/.claude/skills/linear/pr_integration.py 123 --claude-only
+
+# Critical issues + Claude comments
+~/.claude/skills/linear/pr_integration.py 123 --critical-only
+
+# Check merge status
+~/.claude/skills/linear/pr_integration.py 123 --status-only
+
+# Human-readable summary
+~/.claude/skills/linear/pr_integration.py 123 --format summary
+```
+
+### Python API
+
+```python
+from pr_integration import get_pr_issues_for_linear, get_merge_status_for_linear
+
+# Get issues ready for Linear API
+issues = get_pr_issues_for_linear(
+    pr_number=123,
+    repo="owner/repo",        # Optional, auto-detected
+    include_claude=True,      # Always include Claude (default)
+    include_critical=True,    # Include critical issues
+    include_major=True,       # Include major issues
+    include_minor=False,      # Exclude minor by default
+)
+
+# Each issue is ready for mcp__linear-server__create_issue:
+for issue in issues:
+    # Use directly with Linear MCP
+    mcp__linear-server__create_issue(
+        title=issue["title"],
+        description=issue["description"],
+        priority=issue["priority"],
+        labels=issue["labels"],
+        team="Engineering",
+    )
+
+# Check merge readiness
+status = get_merge_status_for_linear(123)
+if status["can_merge"]:
+    print("Ready to merge!")
+else:
+    print(f"Blocked by {status['blocker_count']} issues")
+```
+
+### Output Format
+
+Each issue dict contains:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `title` | str | Formatted title with PR reference |
+| `description` | str | Full markdown description |
+| `priority` | int | Linear priority (1=Urgent, 2=High, 3=Normal, 4=Low) |
+| `labels` | list[str] | Severity and type labels |
+| `source_comment_id` | str | GitHub comment ID |
+| `source_pr` | int | PR number |
+| `source_author` | str | Comment author |
+| `is_claude_comment` | bool | True if from Claude bot |
+| `severity` | str | critical/major/minor/nitpick |
+| `file_path` | str|None | File path if inline comment |
+| `file_line` | int|None | Line number if inline comment |
+
+### Priority Mapping
+
+| PR Severity | Linear Priority | Description |
+|-------------|-----------------|-------------|
+| CRITICAL | 1 (Urgent) | Security, crashes, data loss |
+| MAJOR | 2 (High) | Bugs, performance, missing tests |
+| MINOR | 3 (Normal) | Code quality, documentation |
+| NITPICK | 4 (Low) | Style, formatting, naming |
+
 ## MCP Integration
 
 This skill uses the Linear MCP server for all API operations. Linear MCP is retained because:
@@ -141,6 +235,7 @@ Ensure Linear MCP is connected:
 - `~/.claude/skills/linear/update-ticket`
 - `~/.claude/skills/linear/list-tickets`
 - `~/.claude/skills/linear/get-ticket`
+- `~/.claude/skills/linear/pr_integration.py` (Pydantic-backed PR integration)
 
 ## See Also
 

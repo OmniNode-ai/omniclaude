@@ -8,7 +8,12 @@ set -euo pipefail
 # -----------------------------
 LOG_FILE="$HOME/.claude/hooks/hook-enhanced.log"
 HOOKS_LIB="$HOME/.claude/hooks/lib"
+HOOK_DIR="$HOME/.claude/hooks"
 export PYTHONPATH="${HOOKS_LIB}:${PYTHONPATH:-}"
+
+# Use hooks venv Python (has kafka-python, aiokafka, etc.)
+# The bin/python3 wrapper will fall back to system Python with a warning if venv missing
+export PATH="$HOOK_DIR/bin:$PATH"
 
 # Detect project root dynamically
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

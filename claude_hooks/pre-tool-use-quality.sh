@@ -18,6 +18,10 @@ HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PYTHON_SCRIPT="$HOOK_DIR/quality_enforcer.py"
 LOG_FILE="$HOOK_DIR/logs/quality_enforcer.log"
 
+# Use hooks venv Python (has kafka-python, aiokafka, etc.)
+# The bin/python3 wrapper will fall back to system Python with a warning if venv missing
+export PATH="$HOOK_DIR/bin:$PATH"
+
 # Kafka/Redpanda configuration (moved to 192.168.86.200)
 export KAFKA_BROKERS="${KAFKA_BROKERS:-192.168.86.200:29102}"
 

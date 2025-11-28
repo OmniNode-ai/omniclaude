@@ -1,0 +1,54 @@
+#!/bin/bash
+# Python3 wrapper for Claude hooks
+#
+# This wrapper ensures hooks use the omniclaude poetry venv which has all
+# required dependencies installed. NO separate requirements.txt - uses poetry.
+#
+# Priority:
+# 1. Use symlinked .venv (pointing to poetry venv)
+# 2. Use poetry venv directly from omniclaude repo
+# 3. Fall back to system Python with warning (limited functionality)
+#
+# To setup: ~/.claude/hooks/setup-venv.sh (creates symlink to poetry venv)
+
+HOOK_DIR="${HOME}/.claude/hooks"
+OMNICLAUDE_DIR="/Volumes/PRO-G40/Code/omniclaude"
+
+# Option 1: Symlinked venv (preferred - fastest)
+VENV_PYTHON="${HOOK_DIR}/.venv/bin/python3"
+if [[ -x "$VENV_PYTHON" ]]; then
+    exec "$VENV_PYTHON" "$@"
+fi
+
+# Option 2: Poetry venv from omniclaude (get path dynamically, cache it)
+POETRY_VENV_CACHE="${HOOK_DIR}/.cache/poetry_venv_path"
+if [[ -f "$POETRY_VENV_CACHE" ]]; then
+    POETRY_VENV=$(cat "$POETRY_VENV_CACHE")
+    if [[ -x "${POETRY_VENV}/bin/python3" ]]; then
+        exec "${POETRY_VENV}/bin/python3" "$@"
+    fi
+fi
+
+# Option 3: Resolve poetry venv (slower, but works)
+if [[ -d "$OMNICLAUDE_DIR" ]] && command -v poetry &>/dev/null; then
+    POETRY_VENV=$(cd "$OMNICLAUDE_DIR" && poetry env info --path 2>/dev/null)
+    if [[ -n "$POETRY_VENV" && -x "${POETRY_VENV}/bin/python3" ]]; then
+        # Cache for next time
+        mkdir -p "${HOOK_DIR}/.cache"
+        echo "$POETRY_VENV" > "$POETRY_VENV_CACHE"
+        exec "${POETRY_VENV}/bin/python3" "$@"
+    fi
+fi
+
+# Fallback: System Python (limited functionality)
+echo "WARNING: Poetry venv not found. Some hook features may not work." >&2
+echo "         Run: cd $OMNICLAUDE_DIR && poetry install" >&2
+
+for py in python3.12 python3.11 python3.10 python3; do
+    if command -v "$py" &>/dev/null; then
+        exec "$py" "$@"
+    fi
+done
+
+echo "ERROR: No Python 3 found" >&2
+exit 1

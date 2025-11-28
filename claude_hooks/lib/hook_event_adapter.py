@@ -41,11 +41,25 @@ from typing import Any, Dict, Optional
 
 
 # Use kafka-python for synchronous publishing (simpler for hooks)
+# Graceful degradation: if kafka-python is not installed, we skip Kafka operations
+# but don't crash the hook. This is defense-in-depth - the hooks venv should have
+# the package, but we handle the case where it doesn't gracefully.
+KAFKA_AVAILABLE = False
+KafkaProducer = None  # type: ignore
+
 try:
-    from kafka import KafkaProducer
+    from kafka import KafkaProducer as _KafkaProducer
+
+    KafkaProducer = _KafkaProducer
+    KAFKA_AVAILABLE = True
 except ImportError:
-    raise ImportError(
-        "kafka-python not installed. Install with: pip install kafka-python"
+    # Log warning but don't crash - hooks will continue without Kafka
+    import sys
+
+    print(
+        "WARNING: kafka-python not installed. Kafka event publishing disabled. "
+        "Run: ~/.claude/hooks/setup-venv.sh",
+        file=sys.stderr,
     )
 
 logger = logging.getLogger(__name__)
@@ -91,23 +105,31 @@ class HookEventAdapter:
         self.bootstrap_servers = bootstrap_servers or os.environ.get(
             "KAFKA_BOOTSTRAP_SERVERS", "omninode-bridge-redpanda:9092"
         )
-        self.enable_events = enable_events
+        # Disable events if Kafka is not available
+        self.enable_events = enable_events and KAFKA_AVAILABLE
 
-        self._producer: Optional[KafkaProducer] = None
+        self._producer: Optional[Any] = None  # KafkaProducer or None
         self._initialized = False
+        self._kafka_available = KAFKA_AVAILABLE
 
         self.logger = logging.getLogger(__name__)
 
-    def _get_producer(self) -> KafkaProducer:
+    def _get_producer(self) -> Any:
         """
         Get or create Kafka producer (lazy initialization).
 
         Returns:
-            Kafka producer instance
+            Kafka producer instance, or None if Kafka is not available
 
         Raises:
+            RuntimeError: If Kafka is not available
             KafkaProducerError: If producer creation fails
         """
+        if not self._kafka_available or KafkaProducer is None:
+            raise RuntimeError(
+                "Kafka is not available. Run: ~/.claude/hooks/setup-venv.sh"
+            )
+
         if self._producer is None:
             try:
                 # Configurable timeouts from environment variables
@@ -163,6 +185,10 @@ class HookEventAdapter:
         """
         if not self.enable_events:
             self.logger.debug("Event publishing disabled via feature flag")
+            return False
+
+        if not self._kafka_available:
+            self.logger.debug("Kafka not available, skipping event publish")
             return False
 
         try:

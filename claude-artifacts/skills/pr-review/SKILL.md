@@ -466,6 +466,81 @@ Use direct API/MCP for:
 - ✅ Real-time read-only operations
 - ✅ Simple request-response patterns without state
 
+## Pydantic-Backed System (v2)
+
+The PR review skill now has a type-safe Python backend using Pydantic models.
+
+### Files
+- `models.py` - Pydantic v2 models for all PR data structures
+- `fetcher.py` - Type-safe GitHub API fetcher
+- `analyzer.py` - Comment analyzer with Claude bot detection
+- `pr_review.py` - Unified entry point
+
+### Usage (New)
+```bash
+# Quick summary
+./pr_review.py 38
+
+# Full analysis
+./pr_review.py 38 --full
+
+# Only Claude bot comments (NEVER MISSED!)
+./pr_review.py 38 --claude-only
+
+# Merge blockers only
+./pr_review.py 38 --blockers
+
+# JSON output
+./pr_review.py 38 --json
+
+# Markdown report
+./pr_review.py 38 --markdown --save
+```
+
+### Key Features
+- **Type Safety**: All data validated through Pydantic models
+- **Claude Bot Detection**: 7 patterns checked, NEVER misses Claude comments
+- **Structured Sections**: Parses "Must Fix", "Should Fix" sections
+- **Caching**: 5-minute TTL cache at `/tmp/pr-review-cache-v2/`
+- **Multiple Output Formats**: Summary, JSON, Markdown
+- **Exit Codes**: 0 = ready to merge, 1 = has blockers
+
+### Backward Compatibility
+
+Use the wrapper script for backward compatibility with existing workflows:
+
+```bash
+# Same as pr_review.py but via bash wrapper
+~/.claude/skills/pr-review/pr-review-v2 38 --full
+```
+
+### Python API
+
+```python
+from models import PRData, PRAnalysis, CommentSeverity, BotType
+from fetcher import PRFetcher
+from analyzer import PRAnalyzer, generate_markdown_report
+
+# Fetch PR data
+fetcher = PRFetcher("owner/repo", 38)
+pr_data = fetcher.fetch()
+
+# Analyze
+analyzer = PRAnalyzer(pr_data)
+analysis = analyzer.analyze()
+
+# Check merge readiness
+if analysis.merge_blockers:
+    print(f"Blocked by {len(analysis.merge_blockers)} issues")
+
+# Get Claude bot comments (NEVER missed)
+for comment in analysis.claude_issues:
+    print(f"[{comment.severity.value}] {comment.body[:100]}")
+
+# Generate markdown report
+report = generate_markdown_report(analysis)
+```
+
 ## See Also
 
 - GitHub API Docs: https://docs.github.com/en/rest/pulls

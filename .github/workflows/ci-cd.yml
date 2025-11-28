@@ -496,7 +496,7 @@ jobs:
 
       - name: Upload Trivy results to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
+        if: github.event_name != 'pull_request'
         with:
           sarif_file: 'trivy-results.sarif'
 
