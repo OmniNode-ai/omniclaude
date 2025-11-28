@@ -12,7 +12,7 @@ Purpose: Prevent tech debt from inconsistent return patterns
 from typing import Any, Dict, List, Optional, TypedDict
 
 
-class KafkaConnectionResult(TypedDict, total=False):
+class KafkaConnectionResult(TypedDict):
     """
     Result from Kafka connection check operations.
 
@@ -23,6 +23,10 @@ class KafkaConnectionResult(TypedDict, total=False):
         reachable: Whether broker is reachable
         error: Error message if operation failed (None on success)
         return_code: Process return code if applicable (None for non-process errors)
+
+    Note:
+        All fields are always present. Optional types indicate the value may be None,
+        not that the key may be missing.
     """
 
     success: bool
@@ -33,7 +37,7 @@ class KafkaConnectionResult(TypedDict, total=False):
     return_code: Optional[int]
 
 
-class KafkaTopicsResult(TypedDict, total=False):
+class KafkaTopicsResult(TypedDict):
     """
     Result from topic listing operations.
 
@@ -43,6 +47,10 @@ class KafkaTopicsResult(TypedDict, total=False):
         count: Number of topics found
         error: Error message if operation failed (None on success)
         return_code: Process return code if applicable (None for non-process errors)
+
+    Note:
+        All fields are always present. Optional types indicate the value may be None,
+        not that the key may be missing.
     """
 
     success: bool
@@ -52,7 +60,7 @@ class KafkaTopicsResult(TypedDict, total=False):
     return_code: Optional[int]
 
 
-class KafkaTopicStatsResult(TypedDict, total=False):
+class KafkaTopicStatsResult(TypedDict):
     """
     Result from topic statistics operations.
 
@@ -62,6 +70,10 @@ class KafkaTopicStatsResult(TypedDict, total=False):
         partitions: Number of partitions
         error: Error message if operation failed (None on success)
         return_code: Process return code if applicable (None for non-process errors)
+
+    Note:
+        All fields are always present. Optional types indicate the value may be None,
+        not that the key may be missing.
     """
 
     success: bool
@@ -71,7 +83,7 @@ class KafkaTopicStatsResult(TypedDict, total=False):
     return_code: Optional[int]
 
 
-class KafkaConsumerGroupsResult(TypedDict, total=False):
+class KafkaConsumerGroupsResult(TypedDict):
     """
     Result from consumer group listing operations.
 
@@ -82,6 +94,10 @@ class KafkaConsumerGroupsResult(TypedDict, total=False):
         error: Error message if operation failed (None on success)
         implemented: Whether the operation is implemented (False for placeholder)
         return_code: Process return code if applicable (None for non-process errors)
+
+    Note:
+        All fields are always present. Optional types indicate the value may be None,
+        not that the key may be missing.
     """
 
     success: bool
@@ -92,7 +108,7 @@ class KafkaConsumerGroupsResult(TypedDict, total=False):
     return_code: Optional[int]
 
 
-class KafkaMessageCountResult(TypedDict, total=False):
+class KafkaMessageCountResult(TypedDict):
     """
     Result from message count sampling operations.
 
@@ -105,6 +121,9 @@ class KafkaMessageCountResult(TypedDict, total=False):
         return_code: Process return code if applicable (None for non-process errors)
 
     Note:
+        All fields are always present. Optional types indicate the value may be None,
+        not that the key may be missing.
+
         Distinguishes between:
         - "0 messages found" (success=True, messages_sampled=0)
         - "operation failed" (success=False, error contains details)
@@ -118,7 +137,7 @@ class KafkaMessageCountResult(TypedDict, total=False):
     return_code: Optional[int]
 
 
-class KafkaPublishResult(TypedDict, total=False):
+class KafkaPublishResult(TypedDict):
     """
     Result from message publishing operations.
 
@@ -127,6 +146,10 @@ class KafkaPublishResult(TypedDict, total=False):
         topic: Topic name
         data: Publish metadata on success (partition, offset, timestamp)
         error: Error message if publish failed (None on success)
+
+    Note:
+        All fields are always present. Optional types indicate the value may be None,
+        not that the key may be missing.
     """
 
     success: bool
@@ -135,7 +158,7 @@ class KafkaPublishResult(TypedDict, total=False):
     error: Optional[str]
 
 
-class KafkaConsumeResult(TypedDict, total=False):
+class KafkaConsumeResult(TypedDict):
     """
     Result from message consumption operations.
 
@@ -145,6 +168,10 @@ class KafkaConsumeResult(TypedDict, total=False):
         data: Message payload on success (None if no message or error)
         error: Error message if consume failed (None on success)
         timeout: Whether operation timed out waiting for message
+
+    Note:
+        All fields are always present. Optional types indicate the value may be None,
+        not that the key may be missing.
     """
 
     success: bool

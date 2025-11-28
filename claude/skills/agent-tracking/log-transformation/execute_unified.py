@@ -22,11 +22,11 @@ import sys
 from pathlib import Path
 
 
-# Add claude_hooks/lib to path (5 parents from claude/skills/agent-tracking/log-transformation/)
+# Add agents/lib to path (5 parents from claude/skills/agent-tracking/log-transformation/)
 sys.path.insert(
-    0, str(Path(__file__).parent.parent.parent.parent.parent / "claude_hooks" / "lib")
+    0, str(Path(__file__).parent.parent.parent.parent.parent / "agents" / "lib")
 )
-from hook_event_adapter import get_hook_event_adapter
+from transformation_event_publisher import publish_transformation_event_sync
 
 
 # Add _shared to path
@@ -61,15 +61,22 @@ def main():
     output_data = parse_json_param(args.output_data) if args.output_data else {}
     metadata = parse_json_param(args.metadata) if args.metadata else {}
 
-    # Get adapter and publish
-    adapter = get_hook_event_adapter()
-    success = adapter.publish_transformation(
-        agent_name=args.agent,
-        transformation_type=args.transformation_type,
+    # Build context snapshot from input/output/metadata
+    context_snapshot = {}
+    if input_data:
+        context_snapshot["input_data"] = input_data
+    if output_data:
+        context_snapshot["output_data"] = output_data
+    if metadata:
+        context_snapshot["metadata"] = metadata
+
+    # Publish transformation event using transformation_event_publisher
+    success = publish_transformation_event_sync(
+        source_agent=args.agent,
+        target_agent=args.agent,  # Same agent for unified logging
+        transformation_reason=args.transformation_type,
         correlation_id=correlation_id,
-        input_data=input_data,
-        output_data=output_data,
-        metadata=metadata,
+        context_snapshot=context_snapshot if context_snapshot else None,
     )
 
     if success:

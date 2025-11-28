@@ -40,9 +40,6 @@ triggers:
 
 integration_pattern: "Pre + During + Post (response quality)"
 
-claude_skills_references:
-  - "@git-advanced-workflows - Advanced Git Workflows"
-
 documentation: |
   # Intelligence Integration for Addressing PR Comments
 

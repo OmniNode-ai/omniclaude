@@ -247,6 +247,7 @@ def test_connection() -> bool:
     Test database connection.
     Returns True if connection successful, False otherwise.
     """
+    conn = None
     try:
         conn = get_connection()
         if not conn:
@@ -256,7 +257,6 @@ def test_connection() -> bool:
             cur.execute("SELECT 1")
             result = cur.fetchone()
 
-        release_connection(conn)
         return result is not None
 
     except psycopg2.Error as e:
@@ -267,6 +267,9 @@ def test_connection() -> bool:
         # OSError/IOError: network issues, system-level errors
         logger.error(f"Connection test failed (system error): {e}")
         return False
+    finally:
+        if conn:
+            release_connection(conn)
 
 
 def format_timestamp(dt: Optional[datetime] = None) -> str:

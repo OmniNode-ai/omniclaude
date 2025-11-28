@@ -8,6 +8,7 @@ when Qdrant reports them as "green" or "yellow".
 
 import json
 import sys
+import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any, Dict

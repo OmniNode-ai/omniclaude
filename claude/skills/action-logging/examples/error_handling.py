@@ -9,7 +9,7 @@ import asyncio
 import traceback
 from uuid import uuid4
 
-from claude.lib.core import ActionLogger
+from agents.lib.action_logger import ActionLogger
 
 
 async def error_and_success_examples():

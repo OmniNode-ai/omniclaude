@@ -28,22 +28,14 @@ PatternTrackerSyncClass: Optional[Type[Any]] = None
 PATTERN_TRACKING_ENABLED = False
 
 try:
-    # Try new claude.lib.utils path first
     from claude.lib.utils.pattern_tracker_sync import PatternTrackerSync
 
     PatternTrackerSyncClass = PatternTrackerSync
     PATTERN_TRACKING_ENABLED = True
 except ImportError:
-    try:
-        # Fall back to relative import (when used as a module)
-        from .lib.pattern_tracker_sync import PatternTrackerSync
-
-        PatternTrackerSyncClass = PatternTrackerSync
-        PATTERN_TRACKING_ENABLED = True
-    except ImportError:
-        # Pattern tracking unavailable
-        PATTERN_TRACKING_ENABLED = False
-        PatternTrackerSyncClass = None
+    # Pattern tracking unavailable - module not found
+    PATTERN_TRACKING_ENABLED = False
+    PatternTrackerSyncClass = None
 
 
 def load_config():
@@ -183,22 +175,10 @@ def apply_correction(content: str, correction: Dict) -> str:
         Modified content with correction applied, or original on error
     """
     try:
-        # Try relative imports first (when used as a module)
-        try:
-            from claude.lib.utils.correction.ast_corrector import (
-                apply_single_correction,
-            )
-            from claude.lib.utils.correction.framework_detector import (
-                FrameworkMethodDetector,
-            )
-        except ImportError:
-            # Fall back to relative imports (when used as a module)
-            from .lib.correction.ast_corrector import (
-                apply_single_correction,
-            )
-            from .lib.correction.framework_detector import (
-                FrameworkMethodDetector,
-            )
+        from claude.lib.utils.correction.ast_corrector import apply_single_correction
+        from claude.lib.utils.correction.framework_detector import (
+            FrameworkMethodDetector,
+        )
 
         # Create framework detector
         detector = FrameworkMethodDetector()
@@ -363,11 +343,7 @@ async def apply_fixes_to_file_async(file_path_str: str, config: dict) -> bool:
     # Phase 2: Generate corrections
     print("[PostToolUse] Generating corrections...", file=sys.stderr)
 
-    # Import generator (supports both module and script execution)
-    try:
-        from claude.lib.utils.correction.generator import CorrectionGenerator
-    except ImportError:
-        from .lib.correction.generator import CorrectionGenerator
+    from claude.lib.utils.correction.generator import CorrectionGenerator
 
     generator = CorrectionGenerator()
 
@@ -395,11 +371,7 @@ async def apply_fixes_to_file_async(file_path_str: str, config: dict) -> bool:
     if quorum_enabled:
         print(f"[PostToolUse] Running AI Quorum for {len(corrections)} correction(s)")
 
-        # Import quorum (supports both module and script execution)
-        try:
-            from claude.lib.utils.consensus.quorum import AIQuorum
-        except ImportError:
-            from .lib.consensus.quorum import AIQuorum
+        from claude.lib.utils.consensus.quorum import AIQuorum
 
         quorum = AIQuorum()  # AIQuorum loads config internally
 
