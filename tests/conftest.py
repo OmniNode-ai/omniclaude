@@ -196,6 +196,7 @@ dependencies:
 performance:
   expected_duration_ms: 50
   timeout_ms: 2000
+  single_operation_max_ms: 100
 """
 
 

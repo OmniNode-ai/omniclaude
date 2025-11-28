@@ -5,6 +5,7 @@ description = "Parallel agent execution framework with MCP integration"
 authors = ["OmniClaude Team"]
 readme = "README.md"
 packages = [
+    {include = "claude"},                                # Source of truth for hooks/skills/commands
     {include = "parallel_execution", from = "agents"},
     {include = "agents"},
     {include = "cli"},
@@ -175,7 +176,7 @@ ignore = [
 combine-as-imports = true
 force-sort-within-sections = false
 lines-after-imports = 2
-known-first-party = ["agents", "parallel_execution", "config", "claude_hooks"]
+known-first-party = ["claude", "agents", "parallel_execution", "config", "claude_hooks"]
 
 [tool.ruff.lint.per-file-ignores]
 "agents/tests/test_parallel_generation.py" = ["B017", "PT011"]  # Intentionally broad exception for error handling tests

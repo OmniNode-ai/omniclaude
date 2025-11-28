@@ -28,8 +28,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
-# Add claude_hooks to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent / "claude_hooks"))
+# Add claude/hooks to path for imports (updated for consolidation)
+sys.path.insert(0, str(Path(__file__).parent.parent / "claude" / "hooks"))
 
 from pre_tool_use_permissions import (
     CACHE_PATH,

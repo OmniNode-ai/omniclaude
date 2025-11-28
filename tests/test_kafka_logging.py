@@ -22,18 +22,18 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 
-# Add skills path
+# Add skills path (updated for claude/ consolidation)
 sys.path.insert(
     0,
     str(
         Path(__file__).parent.parent
-        / "claude-artifacts"
+        / "claude"
         / "skills"
         / "agent-tracking"
         / "log-agent-action"
     ),
 )
-sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "_shared"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "claude" / "skills" / "_shared"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "shared_lib"))
 
 
