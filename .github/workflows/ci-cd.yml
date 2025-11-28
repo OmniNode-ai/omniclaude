@@ -59,7 +59,7 @@ jobs:
 
       - name: Install project packages
         run: |
-          echo "📦 Installing project packages (agents, cli, claude_hooks, config, services)..."
+          echo "📦 Installing project packages (agents, cli, claude, config, services)..."
           poetry install --no-interaction --with dev
           echo "✅ Project packages installed"
 
@@ -67,12 +67,12 @@ jobs:
         run: |
           echo "::group::Black Formatting Check"
           echo "🎨 Running Black formatter check..."
-          echo "📁 Scanning directories: agents/ claude_hooks/ cli/ scripts/ tests/"
+          echo "📁 Scanning directories: agents/ claude/ cli/ scripts/ tests/"
           poetry run black --check --diff \
             --extend-exclude="/(\.venv|\.git|__pycache__|\.pytest_cache|\.mypy_cache|dist|build|agents\/templates|agents\/parallel_execution\/templates)/" \
-            agents/ claude_hooks/ cli/ scripts/ tests/ && echo "✅ Black check passed" || {
+            agents/ claude/ cli/ scripts/ tests/ && echo "✅ Black check passed" || {
               echo "❌ Black check failed - files need formatting"
-              echo "💡 Run: poetry run black agents/ claude_hooks/ cli/ scripts/ tests/"
+              echo "💡 Run: poetry run black agents/ claude/ cli/ scripts/ tests/"
               exit 1
             }
           echo "::endgroup::"
@@ -81,10 +81,10 @@ jobs:
         run: |
           echo "::group::Ruff Linting"
           echo "🔍 Running Ruff linter..."
-          echo "📁 Scanning directories: agents/ claude_hooks/ cli/ scripts/ tests/"
-          poetry run ruff check agents/ claude_hooks/ cli/ scripts/ tests/ && echo "✅ Ruff check passed" || {
+          echo "📁 Scanning directories: agents/ claude/ cli/ scripts/ tests/"
+          poetry run ruff check agents/ claude/ cli/ scripts/ tests/ && echo "✅ Ruff check passed" || {
               echo "❌ Ruff check failed - linting errors found"
-              echo "💡 Run: poetry run ruff check --fix agents/ claude_hooks/ cli/ scripts/ tests/"
+              echo "💡 Run: poetry run ruff check --fix agents/ claude/ cli/ scripts/ tests/"
               exit 1
             }
           echo "::endgroup::"
@@ -97,8 +97,8 @@ jobs:
           # Use project's mypy.ini config which has proper exclusions
           # Phase 1: Non-blocking check (report errors but don't fail CI)
           # Phase 2: Fix errors and make blocking (TODO: remove || true)
-          poetry run mypy agents/ claude_hooks/ --config-file mypy.ini \
-            --exclude "agents/tests/" --exclude "claude_hooks/tests/" \
+          poetry run mypy agents/ claude/ --config-file mypy.ini \
+            --exclude "agents/tests/" --exclude "claude/tests/" \
             --exclude "agents/examples/" 2>&1 | tee mypy-output.txt || true
 
           ERROR_COUNT=$(grep -c "error:" mypy-output.txt 2>/dev/null || echo "0")
@@ -108,7 +108,7 @@ jobs:
             echo "✅ MyPy check passed - no type errors!"
           else
             echo "⚠️  MyPy found $ERROR_COUNT type errors (non-blocking for now)"
-            echo "💡 Run: poetry run mypy agents/ claude_hooks/ --config-file mypy.ini"
+            echo "💡 Run: poetry run mypy agents/ claude/ --config-file mypy.ini"
             # TODO: Uncomment to make blocking once errors are fixed
             # exit 1
           fi
@@ -156,7 +156,7 @@ jobs:
           echo "::group::Bandit Security Scan"
           pip install bandit
           echo "🔒 Running Bandit security scanner..."
-          echo "📁 Scanning: agents/ claude_hooks/"
+          echo "📁 Scanning: agents/ claude/"
           echo "⏭️  Excluding: templates, tests, skills, .venv, __pycache__"
           echo "📊 Severity/Confidence: MEDIUM+ only (filters out Low severity)"
           echo "🎯 Configuration: .bandit file + pyproject.toml (13 skip codes)"
@@ -170,15 +170,15 @@ jobs:
           echo ""
 
           # Generate JSON report (don't fail on issues - just collect data)
-          bandit -r agents/ claude_hooks/ \
-            --exclude agents/templates/,agents/parallel_execution/templates/,agents/tests/,claude_hooks/tests/,.venv/,__pycache__/,skills/ \
+          bandit -r agents/ claude/ \
+            --exclude agents/templates/,agents/parallel_execution/templates/,agents/tests/,claude/tests/,.venv/,__pycache__/,skills/ \
             --ini .bandit \
             --confidence-level medium --severity-level medium \
             -f json -o bandit-report.json || true
 
           # Run with text output for CI logs (this determines pass/fail)
-          bandit -r agents/ claude_hooks/ \
-            --exclude agents/templates/,agents/parallel_execution/templates/,agents/tests/,claude_hooks/tests/,.venv/,__pycache__/,skills/ \
+          bandit -r agents/ claude/ \
+            --exclude agents/templates/,agents/parallel_execution/templates/,agents/tests/,claude/tests/,.venv/,__pycache__/,skills/ \
             --ini .bandit \
             --confidence-level medium --severity-level medium \
             -f txt && echo "✅ Bandit scan passed" || {
@@ -272,7 +272,7 @@ jobs:
 
       - name: Install project packages
         run: |
-          echo "📦 Installing project packages (agents, cli, claude_hooks, config, services)..."
+          echo "📦 Installing project packages (agents, cli, claude, config, services)..."
           poetry install --no-interaction --with dev
           echo "✅ Project packages installed"
 
