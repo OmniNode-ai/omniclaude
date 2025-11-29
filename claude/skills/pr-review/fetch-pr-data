@@ -27,6 +27,62 @@ CACHE_DIR="${TMPDIR:-/tmp}/pr-review-cache"
 CACHE_TTL=300  # 5 minutes
 MAX_COMMENTS_DEFAULT=1000  # Default limit before summarization
 
+# Fetch resolved review threads via GraphQL
+# Returns JSON: [{path, line, isResolved, commentIds: [...]}]
+fetch_resolved_threads() {
+    local repo_name="$1"
+    local pr_number="$2"
+
+    # Split owner/repo
+    local owner="${repo_name%%/*}"
+    local repo="${repo_name#*/}"
+
+    # GraphQL query to fetch review threads with resolution status
+    gh api graphql -f query='
+        query($owner: String!, $repo: String!, $pr: Int!) {
+            repository(owner: $owner, name: $repo) {
+                pullRequest(number: $pr) {
+                    reviewThreads(first: 100) {
+                        nodes {
+                            isResolved
+                            isOutdated
+                            path
+                            line
+                            originalLine
+                            resolvedBy {
+                                login
+                            }
+                            comments(first: 50) {
+                                nodes {
+                                    id
+                                    databaseId
+                                    body
+                                    createdAt
+                                    author {
+                                        login
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ' -f owner="$owner" -f repo="$repo" -F pr="$pr_number" 2>/dev/null | jq '[
+        .data.repository.pullRequest.reviewThreads.nodes[] |
+        {
+            path: .path,
+            line: (.line // .originalLine),
+            is_resolved: .isResolved,
+            is_outdated: .isOutdated,
+            resolved_by: (.resolvedBy.login // null),
+            comment_ids: [.comments.nodes[].databaseId],
+            first_comment_body: (.comments.nodes[0].body // ""),
+            first_comment_author: (.comments.nodes[0].author.login // "")
+        }
+    ]' 2>/dev/null || echo '[]'
+}
+
 # Function to print colored status (to stderr to keep stdout clean for JSON)
 print_status() {
     echo -e "${BLUE}[PR-FETCH]${NC} $1" >&2
@@ -210,13 +266,24 @@ fetch_pr_data() {
     local inline_file="$tmp_dir/inline.json"
     local pr_comments_file="$tmp_dir/pr_comments.json"
     local issue_comments_file="$tmp_dir/issue_comments.json"
+    local resolved_threads_file="$tmp_dir/resolved_threads.json"
 
     # Fetch in parallel for speed
-    print_status "Fetching from 4 endpoints in parallel..."
+    print_status "Fetching from 5 endpoints in parallel..."
 
     if [[ -n "$limit" ]]; then
         print_warning "Limiting to $limit recent comments per endpoint + all bot comments"
     fi
+
+    # 0. Resolved review threads (GraphQL) - always fetch for resolution tracking
+    (
+        if [[ "$summary_only" != "true" ]]; then
+            fetch_resolved_threads "$repo_name" "$pr_number" > "$resolved_threads_file"
+        else
+            echo '[]' > "$resolved_threads_file"
+        fi
+        print_success "Resolved Threads API (GraphQL)"
+    ) &
 
     # 1. Formal PR reviews
     (
@@ -356,6 +423,7 @@ fetch_pr_data() {
         --slurpfile inline "$inline_file" \
         --slurpfile pr_comments "$pr_comments_file" \
         --slurpfile issue_comments "$issue_comments_file" \
+        --slurpfile resolved_threads "$resolved_threads_file" \
         '{
             pr_number: ($pr_num | tonumber),
             repository: $repo,
@@ -366,11 +434,14 @@ fetch_pr_data() {
             inline_comments: $inline[0],
             pr_comments: $pr_comments[0],
             issue_comments: $issue_comments[0],
+            resolved_threads: $resolved_threads[0],
             summary: {
                 total_reviews: (if $reviews[0] | type == "array" then ($reviews[0] | length) elif $reviews[0].count? then $reviews[0].count else 0 end),
                 total_inline_comments: (if $inline[0] | type == "array" then ($inline[0] | length) elif $inline[0].count? then $inline[0].count else 0 end),
                 total_pr_comments: (if $pr_comments[0] | type == "array" then ($pr_comments[0] | length) elif $pr_comments[0].count? then $pr_comments[0].count else 0 end),
                 total_issue_comments: (if $issue_comments[0] | type == "array" then ($issue_comments[0] | length) elif $issue_comments[0].count? then $issue_comments[0].count else 0 end),
+                total_resolved_threads: (if $resolved_threads[0] | type == "array" then [$resolved_threads[0][] | select(.is_resolved == true)] | length else 0 end),
+                total_unresolved_threads: (if $resolved_threads[0] | type == "array" then [$resolved_threads[0][] | select(.is_resolved == false)] | length else 0 end),
                 total_all_comments: (
                     (if $reviews[0] | type == "array" then ($reviews[0] | length) elif $reviews[0].count? then $reviews[0].count else 0 end) +
                     (if $inline[0] | type == "array" then ($inline[0] | length) elif $inline[0].count? then $inline[0].count else 0 end) +

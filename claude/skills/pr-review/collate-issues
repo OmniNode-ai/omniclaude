@@ -32,6 +32,8 @@ SHOW_STATS=false
 INCLUDE_NITPICKS=false
 PARALLEL_SOLVE_FORMAT=false
 UNFINISHED_ONLY=false
+HIDE_RESOLVED=false
+SHOW_RESOLVED_ONLY=false
 
 # Usage
 usage() {
@@ -46,7 +48,10 @@ Arguments:
 Options:
   --include-nitpicks       Include nitpick issues in output (default: excluded)
   --parallel-solve-format  Output in format ready for /parallel-solve command
-  --unfinished-only        Only show issues NOT marked as addressed (filters ✅)
+  --unfinished-only        Only show issues NOT marked as addressed (filters checkmarks)
+  --hide-resolved          Hide issues that have been resolved on GitHub
+                           (uses GitHub's native thread resolution status)
+  --show-resolved-only     Only show resolved issues (inverse of --hide-resolved)
   --stats                  Show statistics summary
   --help                   Show this help message
 
@@ -58,10 +63,16 @@ Output:
     ⚪ NITPICK  - Optional improvements (only with --include-nitpicks)
     ❓ UNMATCHED - Comments not matching any pattern (review manually)
 
+  Resolution indicators (when showing resolved issues):
+    [RESOLVED] - Issue thread marked as resolved on GitHub
+    [OUTDATED] - Code has changed since the comment was made
+
 Examples:
   collate-issues 33                      # Critical, Major, Minor only
   collate-issues 33 --include-nitpicks   # Include nitpicks too
   collate-issues 33 --unfinished-only    # Only unaddressed issues
+  collate-issues 33 --hide-resolved      # Hide resolved GitHub threads
+  collate-issues 33 --show-resolved-only # Show only resolved issues
   collate-issues 33 --stats              # With statistics summary
 
 Exit codes:
@@ -150,7 +161,7 @@ collate_pr_issues() {
     # Use jq to do ALL parsing and categorization
     # This is much more efficient and handles multiline bodies correctly
     local categorized
-    categorized=$(echo "$pr_data" | jq -r --arg modified_files "$modified_files" --arg unfinished_only "$UNFINISHED_ONLY" '
+    categorized=$(echo "$pr_data" | jq -r --arg modified_files "$modified_files" --arg unfinished_only "$UNFINISHED_ONLY" --arg hide_resolved "$HIDE_RESOLVED" --arg show_resolved_only "$SHOW_RESOLVED_ONLY" '
         # Function to extract severity and summary from CodeRabbit comments
         def parse_coderabbit:
             if (. | test("^_⚠️ Potential issue_|^_🛠️ Refactor suggestion_")) then
@@ -405,27 +416,30 @@ collate_pr_issues() {
         def extract_summary:
             split("\n") | map(gsub("^[[:space:]]*|[[:space:]]*$"; "")) | map(select(length > 0)) | first // "";
 
+        # Capture resolved_threads for resolution detection
+        (.resolved_threads // []) as $resolved_threads |
+
         # Process all comments - split into regular and Claude bot reviews
         (
             [
-                # Reviews
+                # Reviews (no ID tracking - reviews use different resolution mechanism)
                 (.reviews[]? |
-                    {location: "", body: (.body // ""), is_claude: false}),
+                    {location: "", body: (.body // ""), is_claude: false, comment_id: null}),
 
-                # Inline comments
+                # Inline comments (include ID for resolution matching)
                 (.inline_comments[]? |
-                    {location: "[\(.path):\(.line)]", body: (.body // ""), is_claude: false}),
+                    {location: "[\(.path):\(.line)]", body: (.body // ""), is_claude: false, comment_id: .id}),
 
                 # PR comments
                 # Claude detection: match "claude" as whole word, or common bot patterns
                 # Avoids false positives like "claudesmith" or "myclauderepo"
                 (.pr_comments[]? |
-                    {location: "", body: (.body // ""), is_claude: (.author | test("^claude$|^claude[-_]|[-_]claude$|claude.?bot|claude.?code"; "i"))}),
+                    {location: "", body: (.body // ""), is_claude: (.author | test("^claude$|^claude[-_]|[-_]claude$|claude.?bot|claude.?code"; "i")), comment_id: .id}),
 
                 # Issue comments
                 # Claude detection: match "claude" as whole word, or common bot patterns
                 (.issue_comments[]? |
-                    {location: "", body: (.body // ""), is_claude: (.author | test("^claude$|^claude[-_]|[-_]claude$|claude.?bot|claude.?code"; "i"))})
+                    {location: "", body: (.body // ""), is_claude: (.author | test("^claude$|^claude[-_]|[-_]claude$|claude.?bot|claude.?code"; "i")), comment_id: .id})
             ]
         ) as $all_comments |
 
@@ -455,7 +469,8 @@ collate_pr_issues() {
                 {
                     severity: $cr.severity,
                     location: .location,
-                    summary: $cr.summary
+                    summary: $cr.summary,
+                    comment_id: .comment_id
                 }
             else
                 # Manual categorization based on keywords
@@ -465,16 +480,16 @@ collate_pr_issues() {
                 select($summary | test("^<!--.*-->$") | not) |
 
                 if (.body | test("(missing|vulnerable|unprotected|exposed|insecure).*(security|SQL|injection|XSS|CSRF)|deprecated.*(flag|option|command)|(test|tests).*(fail|failing|failure)|pytest-xdist.*(conflict|incompatible)|breaking.?change|crashes|critical.?bug"; "i")) then
-                    {severity: "critical", location: .location, summary: $summary}
+                    {severity: "critical", location: .location, summary: $summary, comment_id: .comment_id}
                 elif (.body | test("(inconsistent|missing|should|need).*(API|contract|pattern|architecture)|(missing|no|lacks).*(error.?handling|validation|exit.?code)|standardize.*(exit.?code|error)|race.?condition|deadlock|performance.?issue"; "i")) then
-                    {severity: "major", location: .location, summary: $summary}
+                    {severity: "major", location: .location, summary: $summary, comment_id: .comment_id}
                 elif (.body | test("missing.*(documentation|docstring|YAML|frontmatter|test|type.?hint)|(should|need).*(document|test|edge.?case)|consider.*(add|document|test)"; "i")) then
-                    {severity: "minor", location: .location, summary: $summary}
+                    {severity: "minor", location: .location, summary: $summary, comment_id: .comment_id}
                 elif (.body | test("nitpick|nit:|style|consider.?renaming|optional|minor.?improvement"; "i")) then
-                    {severity: "nit", location: .location, summary: $summary}
+                    {severity: "nit", location: .location, summary: $summary, comment_id: .comment_id}
                 else
                     # CHANGED: Keep as unmatched for visibility instead of dropping
-                    {severity: "unmatched", location: .location, summary: $summary}
+                    {severity: "unmatched", location: .location, summary: $summary, comment_id: .comment_id}
                 end
             end
         ]) as $regular_items |
@@ -507,11 +522,39 @@ collate_pr_issues() {
             .
         end) |
 
+        # Build resolved comment ID set from resolved_threads GraphQL data
+        # resolved_threads contains: {is_resolved, is_outdated, comment_ids: [...]}
+        ([$resolved_threads[]? | select(.is_resolved == true or .is_outdated == true) | .comment_ids[]?] | map(tostring) | unique) as $resolved_ids |
+
+        # Add resolution status to each item and format output
+        map(
+            # Check if this item has a comment_id that is in the resolved set
+            (.comment_id // null | tostring) as $cid |
+            (if $cid != "null" and ($resolved_ids | index($cid)) then
+                . + {is_resolved: true}
+            else
+                . + {is_resolved: false}
+            end)
+        ) |
+
+        # Filter by resolution status (--hide-resolved / --show-resolved-only)
+        (if $hide_resolved == "true" then
+            map(select(.is_resolved == false))
+        elif $show_resolved_only == "true" then
+            map(select(.is_resolved == true))
+        else
+            .
+        end) |
+
         # Group by severity
         group_by(.severity) |
         map({
             key: .[0].severity,
-            value: map(if .location != "" then (.location + " " + .summary) else .summary end)
+            value: map(
+                # Add resolution indicator prefix if resolved
+                (if .is_resolved then "[RESOLVED] " else "" end) as $prefix |
+                if .location != "" then ($prefix + .location + " " + .summary) else ($prefix + .summary) end
+            )
         }) |
         from_entries
     ')
@@ -675,6 +718,14 @@ main() {
                 UNFINISHED_ONLY=true
                 shift
                 ;;
+            --hide-resolved)
+                HIDE_RESOLVED=true
+                shift
+                ;;
+            --show-resolved-only)
+                SHOW_RESOLVED_ONLY=true
+                shift
+                ;;
             --stats)
                 SHOW_STATS=true
                 shift
@@ -693,6 +744,12 @@ main() {
                 ;;
         esac
     done
+
+    # Validate conflicting options
+    if [[ "$HIDE_RESOLVED" == "true" ]] && [[ "$SHOW_RESOLVED_ONLY" == "true" ]]; then
+        echo "ERROR: Cannot use both --hide-resolved and --show-resolved-only" >&2
+        exit 1
+    fi
 
     if [[ -z "$pr_number" ]]; then
         usage
