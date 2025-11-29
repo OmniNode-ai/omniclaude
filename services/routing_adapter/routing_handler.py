@@ -85,7 +85,7 @@ class RoutingHandler:
         # Initialize AgentRouter with registry path from config
         try:
             registry_path = self._config.get(
-                "agent_registry_path", "/agent-definitions/agent-registry.yaml"
+                "agent_registry_path", "/agents/onex/agent-registry.yaml"
             )
             cache_ttl = self._config.get("cache_ttl_seconds", 3600)
 
@@ -216,7 +216,7 @@ class RoutingHandler:
                 confidence = 0.0
                 reason = "No specialized agents matched the request"
                 definition_path = (
-                    self._config.get("agent_definitions_path", "/agent-definitions")
+                    self._config.get("agent_definitions_path", "/agents/onex")
                     + "/polymorphic-agent.yaml"
                 )
                 alternatives = []

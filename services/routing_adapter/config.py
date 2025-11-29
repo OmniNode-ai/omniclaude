@@ -25,8 +25,8 @@ Environment Variables:
     HEALTH_CHECK_INTERVAL - Health check interval seconds (default: 30)
 
     # Agent Router Configuration
-    AGENT_REGISTRY_PATH - Path to agent registry YAML (default: ~/.claude/agent-definitions/agent-registry.yaml)
-    AGENT_DEFINITIONS_PATH - Path to agent definitions (default: ~/.claude/agent-definitions/)
+    AGENT_REGISTRY_PATH - Path to agent registry YAML (default: ~/.claude/agents/onex/agent-registry.yaml)
+    AGENT_DEFINITIONS_PATH - Path to agent definitions (default: ~/.claude/agents/onex/)
 
     # Performance Configuration
     ROUTING_TIMEOUT_MS - Routing operation timeout (default: 5000)

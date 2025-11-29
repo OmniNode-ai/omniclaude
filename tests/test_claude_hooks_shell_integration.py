@@ -30,8 +30,8 @@ import pytest
 
 @pytest.fixture
 def hooks_dir() -> Path:
-    """Return the claude_hooks directory path."""
-    return Path(__file__).parent.parent / "claude_hooks"
+    """Return the claude/hooks directory path (updated for consolidation)."""
+    return Path(__file__).parent.parent / "claude" / "hooks"
 
 
 @pytest.fixture

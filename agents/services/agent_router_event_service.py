@@ -575,10 +575,7 @@ class AgentRouterEventService:
             registry_path = os.getenv("REGISTRY_PATH")
             if registry_path is None:
                 registry_path = str(
-                    Path.home()
-                    / ".claude"
-                    / "agent-definitions"
-                    / "agent-registry.yaml"
+                    Path.home() / ".claude" / "agents" / "onex" / "agent-registry.yaml"
                 )
         self.registry_path = registry_path
 
@@ -1335,7 +1332,7 @@ class AgentRouterEventService:
             ),
             reason="Routing failed - using fallback agent",
             definition_path=str(
-                Path.home() / ".claude" / "agent-definitions" / "polymorphic-agent.yaml"
+                Path.home() / ".claude" / "agents" / "onex" / "polymorphic-agent.yaml"
             ),
         )
 

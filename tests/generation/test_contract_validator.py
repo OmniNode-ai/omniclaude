@@ -21,7 +21,7 @@ import pytest
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from agents.lib.generation.contract_validator import (
+from claude.lib.generation.contract_validator import (
     ContractValidator,
     ValidationResult,
 )
@@ -108,23 +108,19 @@ error_model: ModelError
 # -------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    reason=(
-        "UPSTREAM BUG: omnibase_core.models.contracts.ModelContractCompute.__init__ "
-        "doesn't pass 'algorithm' field to parent constructor. "
-        "Additionally, model_post_init() expects nested dicts to be pre-converted to Pydantic models. "
-        "Upstream Issue: https://github.com/OmniNode/omnibase_core/issues/TBD "
-        "(TODO: File issue and update reference). "
-        "Workaround Reference: omninode_bridge adapter pattern in src/omninode_bridge/nodes/conftest.py. "
-        "Removal Condition: Remove xfail when omnibase_core >= X.Y.Z includes fix for "
-        "ModelContractCompute field forwarding, then update this test to verify the fix."
-    ),
-    strict=False,  # Allow unexpected passes (if upstream fixes the bug)
-)
 def test_validate_compute_contract_success(
     contract_validator: ContractValidator, sample_compute_contract_yaml: str
 ):
-    """Test successful COMPUTE contract validation."""
+    """Test successful COMPUTE contract validation.
+
+    Note: This test previously had @pytest.mark.xfail due to an upstream bug in
+    omnibase_core v0.1.0 where ModelContractCompute.__init__ doesn't pass the
+    'algorithm' field to super().__init__(). A workaround using model_construct()
+    was implemented in ContractValidator._construct_compute_contract_workaround().
+
+    Upstream Issue: https://github.com/OmniNode/omnibase_core/issues/TBD
+    Workaround Location: agents/lib/generation/contract_validator.py
+    """
     result = contract_validator.validate_contract(
         sample_compute_contract_yaml, "COMPUTE"
     )

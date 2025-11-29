@@ -36,7 +36,7 @@ else:
     print("Running in CI environment - using GitHub Actions environment variables")
 
 # Import project modules
-from agents.lib.generation.contract_validator import ContractValidator, ValidationResult
+from claude.lib.generation.contract_validator import ContractValidator, ValidationResult
 
 
 # -------------------------------------------------------------------------
@@ -196,6 +196,7 @@ dependencies:
 performance:
   expected_duration_ms: 50
   timeout_ms: 2000
+  single_operation_max_ms: 100
 """
 
 
@@ -632,20 +633,20 @@ def _cleanup_all_kafka_producers_sync():
     """
     # List of all Kafka producer modules and their global variable names
     producer_modules = [
-        ("agents.lib.action_event_publisher", "_kafka_producer", "close_producer"),
+        ("claude.lib.action_event_publisher", "_kafka_producer", "close_producer"),
         (
-            "agents.lib.transformation_event_publisher",
+            "claude.lib.transformation_event_publisher",
             "_kafka_producer",
             "close_producer",
         ),
         (
-            "agents.lib.confidence_scoring_publisher",
+            "claude.lib.confidence_scoring_publisher",
             "_kafka_producer",
             "close_producer",
         ),
-        ("agents.lib.quality_gate_publisher", "_kafka_producer", "close_producer"),
+        ("claude.lib.quality_gate_publisher", "_kafka_producer", "close_producer"),
         (
-            "agents.lib.provider_selection_publisher",
+            "claude.lib.provider_selection_publisher",
             "_kafka_producer",
             "close_producer",
         ),
@@ -712,7 +713,7 @@ def _cleanup_all_kafka_producers_sync():
 
     # Cleanup logging_event_publisher._global_publisher
     try:
-        from agents.lib import logging_event_publisher
+        from claude.lib import logging_event_publisher
 
         publisher = logging_event_publisher._global_publisher
         if publisher is not None:

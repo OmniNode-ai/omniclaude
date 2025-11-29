@@ -688,12 +688,12 @@ class Settings(BaseSettings):
     # The validators provide sensible defaults, so None is never the final value.
     agent_registry_path: str = Field(
         default="",
-        description="Path to agent registry YAML (defaults to ~/.claude/agent-definitions/agent-registry.yaml)",
+        description="Path to agent registry YAML (defaults to ~/.claude/agents/onex/agent-registry.yaml)",
     )
 
     agent_definitions_path: str = Field(
         default="",
-        description="Path to agent definitions directory (defaults to ~/.claude/agent-definitions/)",
+        description="Path to agent definitions directory (defaults to ~/.claude/agents/onex/)",
     )
 
     # Kafka Consumer Configuration
@@ -852,7 +852,7 @@ class Settings(BaseSettings):
         Priority:
         1. AGENT_REGISTRY_PATH environment variable (explicit override)
         2. REGISTRY_PATH environment variable (Docker compatibility)
-        3. Default: ~/.claude/agent-definitions/agent-registry.yaml
+        3. Default: ~/.claude/agents/onex/agent-registry.yaml
 
         Returns:
             str: Resolved path to agent registry (never None or empty)
@@ -871,7 +871,7 @@ class Settings(BaseSettings):
         # Fall back to home directory default
         home_dir = Path.home()
         default_path = str(
-            home_dir / ".claude" / "agent-definitions" / "agent-registry.yaml"
+            home_dir / ".claude" / "agents" / "onex" / "agent-registry.yaml"
         )
 
         if not default_path:
@@ -898,7 +898,7 @@ class Settings(BaseSettings):
             return v
 
         home_dir = Path.home()
-        default_path = str(home_dir / ".claude" / "agent-definitions")
+        default_path = str(home_dir / ".claude" / "agents" / "onex")
 
         if not default_path:
             raise ValueError(
@@ -1167,7 +1167,7 @@ class Settings(BaseSettings):
             )
 
         # Validate agent registry exists
-        # Note: agent_registry_path is always set (via validator defaults to ~/.claude/agent-definitions/agent-registry.yaml)
+        # Note: agent_registry_path is always set (via validator defaults to ~/.claude/agents/onex/agent-registry.yaml)
         # This validates the resolved path exists on disk
         if self.agent_registry_path:
             registry_path = Path(self.agent_registry_path)
@@ -1179,7 +1179,7 @@ class Settings(BaseSettings):
                 )
 
         # Validate agent definitions directory exists
-        # Note: agent_definitions_path is always set (via validator defaults to ~/.claude/agent-definitions/)
+        # Note: agent_definitions_path is always set (via validator defaults to ~/.claude/agents/onex/)
         # This validates the resolved path exists on disk
         if self.agent_definitions_path:
             definitions_path = Path(self.agent_definitions_path)

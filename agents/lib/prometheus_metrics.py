@@ -100,7 +100,7 @@ def set_system_info(
         {
             "version": version,
             "environment": environment,
-            "agent_registry_path": agent_registry_path or "~/.claude/agent-definitions",
+            "agent_registry_path": agent_registry_path or "~/.claude/agents/onex",
         }
     )
 

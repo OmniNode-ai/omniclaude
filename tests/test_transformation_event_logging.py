@@ -30,7 +30,7 @@ from uuid import uuid4
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from agents.lib.transformation_event_publisher import (
+from claude.lib.transformation_event_publisher import (
     close_producer,
     publish_transformation_complete,
     publish_transformation_failed,

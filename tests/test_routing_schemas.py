@@ -64,7 +64,7 @@ try:
                     explanation="High confidence match on 'optimize' triggers",
                 ),
                 reason="Strong trigger match with 'optimize' keyword",
-                definition_path="/Users/jonah/.claude/agent-definitions/agent-performance.yaml",
+                definition_path="/Users/jonah/.claude/agents/onex/agent-performance.yaml",
             )
         ],
         routing_metadata=ModelRoutingMetadata(

@@ -67,7 +67,7 @@ echo -e "${GREEN}✓ Environment validation passed${NC}"
 echo ""
 
 # Check if agent registry exists
-REGISTRY_PATH="${HOME}/.claude/agent-definitions/agent-registry.yaml"
+REGISTRY_PATH="${HOME}/.claude/agents/onex/agent-registry.yaml"
 if [ ! -f "$REGISTRY_PATH" ]; then
     echo -e "${RED}ERROR: Agent registry not found: $REGISTRY_PATH${NC}"
     exit 1

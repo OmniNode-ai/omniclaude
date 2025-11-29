@@ -112,7 +112,7 @@ fuzzy:
   score_cutoff: 60  # 0-100
 
   # Agent registry
-  registry_path: "~/.claude/agent-definitions"
+  registry_path: "~/.claude/agents/onex"
   registry_cache_ttl_seconds: 300  # 5 minutes
   registry_watch_enabled: true  # Watch for file changes
 
@@ -333,7 +333,7 @@ cost_management:
 # Agent Registry
 agent_registry:
   # Registry location
-  path: "~/.claude/agent-definitions"
+  path: "~/.claude/agents/onex"
   format: "yaml"  # yaml, json
 
   # Registry loading

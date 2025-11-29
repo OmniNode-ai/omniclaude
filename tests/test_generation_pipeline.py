@@ -19,8 +19,8 @@ import pytest
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from agents.lib.generation_pipeline import GenerationPipeline
-from agents.lib.models.pipeline_models import (
+from claude.lib.generation_pipeline import GenerationPipeline
+from claude.lib.models.pipeline_models import (
     GateType,
     PipelineResult,
     PipelineStage,

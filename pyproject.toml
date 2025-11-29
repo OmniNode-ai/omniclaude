@@ -5,10 +5,10 @@ description = "Parallel agent execution framework with MCP integration"
 authors = ["OmniClaude Team"]
 readme = "README.md"
 packages = [
+    {include = "claude"},                                # Source of truth for hooks/skills/commands
     {include = "parallel_execution", from = "agents"},
     {include = "agents"},
     {include = "cli"},
-    {include = "claude_hooks"},
     {include = "config"},
     {include = "services"},
 ]
@@ -166,6 +166,8 @@ ignore = [
     "C401",      # Unnecessary generator (technical debt)
     "C416",      # Unnecessary list comprehension (technical debt)
     "PT001",     # Pytest fixture parentheses (technical debt)
+    "PT004",     # Pytest fixture doesn't return - underscore convention (style)
+    "PT006",     # Pytest parametrize names as tuple (style)
     "PT017",     # Pytest raises in except (technical debt)
     "PT023",     # Pytest mark parentheses (technical debt)
 ]
@@ -175,7 +177,7 @@ ignore = [
 combine-as-imports = true
 force-sort-within-sections = false
 lines-after-imports = 2
-known-first-party = ["agents", "parallel_execution", "config", "claude_hooks"]
+known-first-party = ["claude", "agents", "parallel_execution", "config"]
 
 [tool.ruff.lint.per-file-ignores]
 "agents/tests/test_parallel_generation.py" = ["B017", "PT011"]  # Intentionally broad exception for error handling tests
@@ -231,7 +233,7 @@ exclude_dirs = [
     "agents/templates",
     "agents/parallel_execution/templates",
     "agents/tests",
-    "claude_hooks/tests",
+    "claude/tests",  # Consolidated from claude_hooks/tests
     "skills",  # Third-party skills - not our code to scan
     ".venv",
     "__pycache__",

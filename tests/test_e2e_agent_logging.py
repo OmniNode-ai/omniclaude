@@ -35,18 +35,18 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import settings
 
 
-# Add paths
+# Add paths (updated for claude/ consolidation)
 sys.path.insert(
     0,
     str(
         Path(__file__).parent.parent
-        / "claude-artifacts"
+        / "claude"
         / "skills"
         / "agent-tracking"
         / "log-agent-action"
     ),
 )
-sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "_shared"))
+sys.path.insert(0, str(Path(__file__).parent.parent / "claude" / "skills" / "_shared"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "agents" / "lib"))
 
 from kafka_agent_action_consumer import KafkaAgentActionConsumer
@@ -170,7 +170,7 @@ class TestEndToEndAgentLogging:
                 "python",
                 str(
                     Path(__file__).parent.parent
-                    / "claude-artifacts"
+                    / "claude"
                     / "skills"
                     / "agent-tracking"
                     / "log-agent-action"
@@ -260,7 +260,7 @@ class TestEndToEndAgentLogging:
                 "python",
                 str(
                     Path(__file__).parent.parent
-                    / "claude-artifacts"
+                    / "claude"
                     / "skills"
                     / "agent-tracking"
                     / "log-agent-action"
@@ -341,7 +341,7 @@ class TestEndToEndAgentLogging:
                 "python",
                 str(
                     Path(__file__).parent.parent
-                    / "claude-artifacts"
+                    / "claude"
                     / "skills"
                     / "agent-tracking"
                     / "log-agent-action"
@@ -429,7 +429,7 @@ class TestEndToEndAgentLogging:
             "python",
             str(
                 Path(__file__).parent.parent
-                / "claude-artifacts"
+                / "claude"
                 / "skills"
                 / "agent-tracking"
                 / "log-agent-action"
@@ -519,7 +519,7 @@ class TestEndToEndAgentLogging:
             "python",
             str(
                 Path(__file__).parent.parent
-                / "claude-artifacts"
+                / "claude"
                 / "skills"
                 / "agent-tracking"
                 / "log-agent-action"

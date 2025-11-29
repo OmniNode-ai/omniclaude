@@ -25,7 +25,7 @@ Examples:
                     historical_score=0.95
                 ),
                 reason="Strong trigger match with 'optimize' keyword",
-                definition_path="/Users/jonah/.claude/agent-definitions/agent-performance.yaml"
+                definition_path="/Users/jonah/.claude/agents/onex/agent-performance.yaml"
             )
         ],
         routing_metadata=ModelRoutingMetadata(
@@ -164,7 +164,7 @@ class ModelAgentRecommendation(BaseModel):
                     "explanation": "High confidence match on 'optimize' and 'database' triggers",
                 },
                 "reason": "Strong trigger match with 'optimize' keyword and database context",
-                "definition_path": "/Users/jonah/.claude/agent-definitions/agent-performance.yaml",
+                "definition_path": "/Users/jonah/.claude/agents/onex/agent-performance.yaml",
                 "alternatives": ["agent-database-architect", "agent-test-generator"],
             }
         }
@@ -315,7 +315,7 @@ class ModelRoutingResponse(BaseModel):
                             "explanation": "High confidence match on 'optimize' and 'database' triggers",
                         },
                         "reason": "Strong trigger match with 'optimize' keyword and database context",
-                        "definition_path": "/Users/jonah/.claude/agent-definitions/agent-performance.yaml",
+                        "definition_path": "/Users/jonah/.claude/agents/onex/agent-performance.yaml",
                         "alternatives": [
                             "agent-database-architect",
                             "agent-test-generator",
