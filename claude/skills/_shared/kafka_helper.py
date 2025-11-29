@@ -38,26 +38,38 @@ import subprocess
 import sys
 from typing import Any, Dict, List, Optional
 
-# Import standardized Kafka result types
-from kafka_types import (
-    KafkaConnectionResult,
-    KafkaConsumerGroupsResult,
-    KafkaMessageCountResult,
-    KafkaTopicsResult,
-    KafkaTopicStatsResult,
-)
 
+# Import standardized Kafka result types (same package)
+try:
+    from .kafka_types import (
+        KafkaConnectionResult,
+        KafkaConsumerGroupsResult,
+        KafkaMessageCountResult,
+        KafkaTopicsResult,
+        KafkaTopicStatsResult,
+    )
+except ImportError:
+    from kafka_types import (
+        KafkaConnectionResult,
+        KafkaConsumerGroupsResult,
+        KafkaMessageCountResult,
+        KafkaTopicsResult,
+        KafkaTopicStatsResult,
+    )
 
-# Import type-safe configuration (Phase 2 - Pydantic Settings migration)
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
-# Import shared timeout utility to avoid duplication
-from common_utils import get_timeout_seconds
+# Add project root for config module (type-safe Pydantic Settings) and ONEX errors
+# Path: claude/skills/_shared/ -> claude/skills/ -> claude/ -> project root
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+
+# Import shared timeout utility using relative import (same package)
+# Fallback to absolute import for direct script execution
+try:
+    from .common_utils import get_timeout_seconds
+except ImportError:
+    from common_utils import get_timeout_seconds
 
 from config import settings
 
-
-# Add project root for ONEX error imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 # ONEX-compliant error handling
 # Try to import from agents.lib.errors, fallback to local definitions

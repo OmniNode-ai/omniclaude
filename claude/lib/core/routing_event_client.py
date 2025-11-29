@@ -225,10 +225,15 @@ class RoutingEventClient:
             )
 
         if not self.bootstrap_servers:
-            raise ValueError(
-                "bootstrap_servers must be provided or set via KAFKA_BOOTSTRAP_SERVERS in .env file.\n"
-                "Example: KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:9092\n"
-                f"Current value from settings: {self.bootstrap_servers!r}"
+            raise OnexError(
+                code=EnumCoreErrorCode.VALIDATION_ERROR,
+                message="bootstrap_servers must be provided or set via KAFKA_BOOTSTRAP_SERVERS in .env file",
+                details={
+                    "component": "RoutingEventClient",
+                    "operation": "initialization",
+                    "current_value": self.bootstrap_servers,
+                    "suggestion": "Set KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:9092 in .env file",
+                },
             )
         self.request_timeout_ms = request_timeout_ms
         self.consumer_group_id = (
@@ -258,6 +263,30 @@ class RoutingEventClient:
         if self._started:
             self.logger.debug("Routing event client already started")
             return
+
+        # Validate required services before attempting connection
+        # This follows coding guidelines for service validation at startup
+        if SETTINGS_AVAILABLE:
+            validation_errors = settings.validate_required_services()
+            # Filter to only Kafka-related errors for this client
+            kafka_errors = [e for e in validation_errors if "kafka" in e.lower()]
+            if kafka_errors:
+                self.logger.warning(f"Service validation warnings: {kafka_errors}")
+                # Log but don't fail - allow connection attempt to provide
+                # more specific error messages
+
+        # Validate bootstrap servers format
+        if not self.bootstrap_servers or not isinstance(self.bootstrap_servers, str):
+            raise OnexError(
+                code=EnumCoreErrorCode.VALIDATION_ERROR,
+                message="Invalid Kafka bootstrap servers configuration",
+                details={
+                    "component": "RoutingEventClient",
+                    "operation": "service_validation",
+                    "bootstrap_servers": self.bootstrap_servers,
+                    "suggestion": "Set valid KAFKA_BOOTSTRAP_SERVERS in .env (e.g., 192.168.86.200:9092)",
+                },
+            )
 
         try:
             self.logger.info(
@@ -589,7 +618,29 @@ class RoutingEventClient:
         # Create request envelope using factory
         correlation_id = str(uuid4())
 
+        # Structured logging context for correlation ID tracking
+        log_extra = {
+            "correlation_id": correlation_id,
+            "component": "RoutingEventClient",
+            "operation": "request_routing",
+        }
+
         try:
+            # Log routing request start with correlation ID
+            self.logger.info(
+                "Routing request started",
+                extra={
+                    **log_extra,
+                    "user_request_preview": (
+                        user_request[:100] if user_request else None
+                    ),
+                    "max_recommendations": max_recommendations,
+                    "min_confidence": min_confidence,
+                    "routing_strategy": routing_strategy,
+                    "timeout_ms": timeout,
+                },
+            )
+
             envelope = ModelRoutingEventEnvelope.create_request(
                 user_request=user_request,
                 correlation_id=correlation_id,
@@ -608,7 +659,11 @@ class RoutingEventClient:
 
             # Publish request and wait for response
             self.logger.debug(
-                f"Publishing routing request (correlation_id: {correlation_id}, request: {user_request[:100]}...)"
+                "Publishing routing request to Kafka",
+                extra={
+                    **log_extra,
+                    "topic": self.TOPIC_REQUEST,
+                },
             )
 
             result = await self._publish_and_wait(
@@ -617,15 +672,30 @@ class RoutingEventClient:
                 timeout_ms=timeout,
             )
 
-            self.logger.debug(
-                f"Routing completed (correlation_id: {correlation_id}, recommendations: {len(result.get('recommendations', []))})"
+            recommendation_count = len(result.get("recommendations", []))
+
+            # Log successful completion with correlation ID
+            self.logger.info(
+                "Routing request completed successfully",
+                extra={
+                    **log_extra,
+                    "recommendation_count": recommendation_count,
+                    "status": "success",
+                },
             )
 
             return cast(list[dict[str, Any]], result.get("recommendations", []))
 
         except asyncio.TimeoutError as e:
+            # Log timeout with structured correlation ID tracking
             self.logger.warning(
-                f"Routing request timeout (correlation_id: {correlation_id}, timeout: {timeout}ms)"
+                "Routing request timeout",
+                extra={
+                    **log_extra,
+                    "timeout_ms": timeout,
+                    "status": "timeout",
+                    "error_type": "TIMEOUT",
+                },
             )
 
             # Send Slack notification for timeout (indicates potential Kafka/router service issues)
@@ -665,8 +735,15 @@ class RoutingEventClient:
             )
 
         except Exception as e:
+            # Log error with structured correlation ID tracking
             self.logger.error(
-                f"Routing request failed (correlation_id: {correlation_id}): {e}"
+                "Routing request failed",
+                extra={
+                    **log_extra,
+                    "status": "error",
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                },
             )
 
             # Send Slack notification for routing failure

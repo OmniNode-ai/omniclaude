@@ -15,8 +15,6 @@ Created: 2025-11-12
 """
 
 import json
-
-# Add path for config module (type-safe Pydantic Settings)
 import os
 import socket
 import sys
@@ -27,11 +25,16 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
-# Add project root for ONEX error imports
+# Add project root for config module (type-safe Pydantic Settings) and ONEX errors
+# Path: claude/skills/_shared/ -> claude/skills/ -> claude/ -> project root
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-# Import shared timeout utility to avoid duplication
-from common_utils import get_timeout_seconds
+
+# Import shared timeout utility using relative import (same package)
+# Fallback to absolute import for direct script execution
+try:
+    from .common_utils import get_timeout_seconds
+except ImportError:
+    from common_utils import get_timeout_seconds
 
 from config import settings
 

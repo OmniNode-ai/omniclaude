@@ -24,9 +24,16 @@ import sys
 from typing import Any, Dict, List, Optional
 
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
-# Import shared timeout utility to avoid duplication
-from common_utils import get_timeout_seconds
+# Add project root for config module (type-safe Pydantic Settings)
+# Path: claude/skills/_shared/ -> claude/skills/ -> claude/ -> project root
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+
+# Import shared timeout utility using relative import (same package)
+# Fallback to absolute import for direct script execution
+try:
+    from .common_utils import get_timeout_seconds
+except ImportError:
+    from common_utils import get_timeout_seconds
 
 from config import settings
 
