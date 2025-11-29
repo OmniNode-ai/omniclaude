@@ -110,10 +110,12 @@ def log_session_end(
             action="session_completed",
             resource="session",
             resource_id=session_id,
+            # Double-defense: spread metadata FIRST, then set core fields AFTER
+            # This ensures core fields always win even if filtering misses something
             payload={
+                **safe_metadata,
                 "session_id": session_id,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                **safe_metadata,
             },
             metadata={
                 "hook_type": "SessionEnd",

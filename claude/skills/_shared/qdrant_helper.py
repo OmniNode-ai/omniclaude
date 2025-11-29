@@ -218,7 +218,9 @@ def get_qdrant_url() -> str:
         Validated Qdrant URL (e.g., "http://localhost:6333" or "https://qdrant.internal:6333")
 
     Raises:
-        ValueError: If URL fails SSRF validation checks
+        OnexError: If URL fails SSRF validation checks
+            - CONFIGURATION_ERROR: HTTPS required but HTTP provided in production
+            - VALIDATION_ERROR: Host not in whitelist, invalid port, or dangerous port
 
     Note:
         Configuration is loaded from .env file and validated on import.

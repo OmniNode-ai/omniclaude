@@ -1,18 +1,128 @@
 #!/bin/bash
 set -euo pipefail
 
+# =============================================================================
+# deploy-claude.sh - OmniClaude Claude Artifacts Deployment
+#
+# Security Features:
+#   - Source path existence validation before symlink creation
+#   - Path traversal protection (validates paths within allowed directories)
+#   - Symlink target validation (prevents symlink traversal attacks)
+#   - Control character rejection in paths
+#   - Automatic backup of existing non-symlink targets
+#
+# Usage:
+#   ./deploy-claude.sh [OPTIONS]
+#
+# Options:
+#   --force       Skip existence checks for optional sources (security checks remain)
+#   --dry-run     Show what would be done without making changes
+#   --help        Show this help message
+# =============================================================================
+
+# Parse command line arguments
+FORCE_MODE=false
+DRY_RUN=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --force)
+            FORCE_MODE=true
+            shift
+            ;;
+        --dry-run)
+            DRY_RUN=true
+            shift
+            ;;
+        --help|-h)
+            echo "Usage: $0 [OPTIONS]"
+            echo ""
+            echo "Options:"
+            echo "  --force     Skip existence checks for optional sources"
+            echo "  --dry-run   Show what would be done without making changes"
+            echo "  --help      Show this help message"
+            echo ""
+            echo "Security: This script validates all source paths exist and are within"
+            echo "allowed directories before creating symlinks."
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+done
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CLAUDE_DIR="$HOME/.claude"
 ONEX_DIR="$CLAUDE_DIR/onex"
 
 echo "=== OmniClaude Claude Artifacts Deployment ==="
+if [[ "$DRY_RUN" == "true" ]]; then
+    echo "[DRY RUN MODE - No changes will be made]"
+fi
+if [[ "$FORCE_MODE" == "true" ]]; then
+    echo "[FORCE MODE - Optional source checks relaxed]"
+fi
 echo "Repo: $REPO_ROOT"
 echo "Target: $ONEX_DIR"
 echo ""
 
+# Pre-flight validation: Check all required source paths exist before deployment
+# This prevents partial deployment failures
+preflight_validation() {
+    local missing_paths=()
+    local required_sources=(
+        "$REPO_ROOT/claude/hooks"
+        "$REPO_ROOT/claude/skills"
+        "$REPO_ROOT/claude/commands"
+        "$REPO_ROOT/claude/agents"
+        "$REPO_ROOT/claude/lib"
+        "$REPO_ROOT/claude/plugins"
+        "$REPO_ROOT/config"
+    )
+
+    echo "Running pre-flight validation..."
+
+    for source in "${required_sources[@]}"; do
+        if [[ ! -e "$source" ]]; then
+            missing_paths+=("$source")
+        fi
+    done
+
+    if [[ ${#missing_paths[@]} -gt 0 ]]; then
+        echo ""
+        echo "ERROR: Pre-flight validation failed!"
+        echo "The following required source paths do not exist:"
+        echo ""
+        for path in "${missing_paths[@]}"; do
+            echo "  - $path"
+        done
+        echo ""
+        echo "Please ensure these directories exist before running deployment."
+        echo "You may need to run: mkdir -p $REPO_ROOT/claude/{hooks,skills,commands,agents,lib,plugins}"
+        exit 1
+    fi
+
+    echo "  All required source paths verified"
+    echo ""
+}
+
+# Run pre-flight validation (skip in force mode)
+if [[ "$FORCE_MODE" != "true" ]]; then
+    preflight_validation
+fi
+
 # Create onex namespace directory
-mkdir -p "$ONEX_DIR"
+if [[ "$DRY_RUN" == "true" ]]; then
+    if [[ ! -d "$ONEX_DIR" ]]; then
+        echo "[DRY] Would create directory: $ONEX_DIR"
+    fi
+else
+    mkdir -p "$ONEX_DIR"
+fi
 
 # Security: Validate path is within allowed directories
 validate_source_path() {
@@ -56,13 +166,27 @@ create_symlink() {
     local name="$3"
     local required="${4:-true}"  # Optional: whether source is required (default: true)
 
+    # Convert relative source paths to absolute (security: prevent path confusion)
+    if [[ "$source" != /* ]]; then
+        source="$(cd "$(dirname "$source")" 2>/dev/null && pwd)/$(basename "$source")" || {
+            echo "  ERROR: Cannot resolve relative path: $source"
+            exit 1
+        }
+    fi
+
     # Security Check 1: Validate source path exists
     if [[ ! -e "$source" ]]; then
         if [[ "$required" == "true" ]]; then
             echo "  ERROR: Source path does not exist: $source"
             echo "  Cannot create symlink for: $name"
+            echo "  Hint: Ensure the source directory/file exists before deployment"
             exit 1
         else
+            # In force mode, skip warnings for optional sources
+            if [[ "$FORCE_MODE" == "true" ]]; then
+                echo "  SKIP: $name (source not found, --force enabled)"
+                return 0
+            fi
             echo "  WARNING: Skipping $name symlink, source does not exist: $source"
             return 0
         fi
@@ -72,25 +196,59 @@ create_symlink() {
     if ! validate_source_path "$source"; then
         echo "  ERROR: Source path is outside allowed directories: $source"
         echo "  Allowed: $REPO_ROOT or $HOME"
+        echo "  Security: This check cannot be bypassed with --force"
         exit 1
     fi
 
     # Security Check 3: Validate paths don't contain dangerous characters
     if [[ "$source" =~ [[:cntrl:]] ]] || [[ "$target" =~ [[:cntrl:]] ]]; then
         echo "  ERROR: Path contains control characters: $name"
+        echo "  Security: This check cannot be bypassed with --force"
         exit 1
+    fi
+
+    # Security Check 4: Validate target directory exists
+    local target_dir
+    target_dir="$(dirname "$target")"
+    if [[ ! -d "$target_dir" ]]; then
+        echo "  ERROR: Target directory does not exist: $target_dir"
+        echo "  Cannot create symlink for: $name"
+        exit 1
+    fi
+
+    # Dry-run mode: show what would be done without making changes
+    if [[ "$DRY_RUN" == "true" ]]; then
+        if [[ -L "$target" ]]; then
+            echo "  [DRY] Would replace symlink: $name → $source"
+        elif [[ -e "$target" ]]; then
+            echo "  [DRY] Would backup and replace: $name → $source"
+        else
+            echo "  [DRY] Would create: $name → $source"
+        fi
+        return 0
     fi
 
     # Handle existing target
     if [[ -L "$target" ]]; then
+        # Check if symlink already points to correct source
+        local current_target
+        current_target="$(readlink "$target")"
+        if [[ "$current_target" == "$source" ]]; then
+            echo "  = $name (already correct)"
+            return 0
+        fi
         rm "$target"
     elif [[ -e "$target" ]]; then
         echo "  Backing up existing $name to ${target}.bak"
+        # Remove old backup if exists to prevent accumulation
+        if [[ -e "${target}.bak" ]]; then
+            rm -rf "${target}.bak"
+        fi
         mv "$target" "${target}.bak"
     fi
 
     ln -s "$source" "$target"
-    echo "  ✓ $name → $source"
+    echo "  + $name -> $source"
 }
 
 echo "Creating symlinks in $ONEX_DIR/..."
@@ -127,13 +285,19 @@ else
 fi
 
 echo ""
-echo "=== Deployment Complete ==="
-echo ""
-echo "Structure:"
-echo "  ~/.claude/"
-echo "    ├── hooks/      → $REPO_ROOT/claude/hooks/"
-echo "    ├── skills/     → $REPO_ROOT/claude/skills/"
-echo "    ├── commands/   → $REPO_ROOT/claude/commands/"
-echo "    └── agent-definitions/ → $REPO_ROOT/claude/agents/"
-echo ""
-echo "All Python code can now import from 'claude.lib'"
+if [[ "$DRY_RUN" == "true" ]]; then
+    echo "=== Dry Run Complete ==="
+    echo ""
+    echo "No changes were made. Run without --dry-run to apply changes."
+else
+    echo "=== Deployment Complete ==="
+    echo ""
+    echo "Structure:"
+    echo "  ~/.claude/"
+    echo "    |-- hooks/      -> $REPO_ROOT/claude/hooks/"
+    echo "    |-- skills/     -> $REPO_ROOT/claude/skills/"
+    echo "    |-- commands/   -> $REPO_ROOT/claude/commands/"
+    echo "    \`-- agent-definitions/ -> $REPO_ROOT/claude/agents/"
+    echo ""
+    echo "All Python code can now import from 'claude.lib'"
+fi

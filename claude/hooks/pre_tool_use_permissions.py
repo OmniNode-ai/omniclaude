@@ -59,7 +59,7 @@ For true security boundaries, rely on:
 
 Testing:
 --------
-Run tests with: python -m pytest claude_hooks/tests/test_pre_tool_use_permissions.py -v
+Run tests with: python -m pytest tests/hooks/test_pre_tool_use_permissions.py -v
 """
 
 import json

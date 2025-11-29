@@ -23,8 +23,8 @@ Connection = psycopg2.extensions.connection
 
 # Add project root to path for config import
 project_root = (
-    Path(__file__).resolve().parents[2]
-)  # lib → claude_hooks → omniclaude root
+    Path(__file__).resolve().parents[3]
+)  # lib → hooks → claude → omniclaude root
 sys.path.insert(0, str(project_root))
 
 from config import settings

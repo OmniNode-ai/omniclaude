@@ -13,11 +13,12 @@ import yaml
 # Define script directory
 _SCRIPT_DIR = Path(__file__).parent
 
-# Add parent directory to sys.path for direct script execution
+# Add project root to sys.path for direct script execution
 # This enables absolute imports like 'from claude.lib.utils...' when run as standalone script
-_parent_dir = _SCRIPT_DIR.parent
-if str(_parent_dir) not in sys.path:
-    sys.path.insert(0, str(_parent_dir))
+# Note: We need 2 parents (hooks/ -> claude/ -> project_root) for claude.* imports to work
+_project_root = _SCRIPT_DIR.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
 
 # Import pattern tracker with graceful fallback
 # Use TYPE_CHECKING to allow type hints without runtime dependency

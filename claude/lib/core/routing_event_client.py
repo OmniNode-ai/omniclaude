@@ -52,7 +52,8 @@ from aiokafka.errors import KafkaError
 
 # CRITICAL: Add project root FIRST to avoid config module conflicts
 # There's a config module in agents/lib/config/ that conflicts with main config/
-_project_root = PathLib(__file__).parent.parent.parent
+# Note: 4 parents needed (core/ -> lib/ -> claude/ -> project_root)
+_project_root = PathLib(__file__).parent.parent.parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 

@@ -8,7 +8,7 @@ This directory contains user-level configuration files for Claude Code that shou
 ~/.claude/
 ├── agent-definitions/  → symlink to omniclaude/agents/definitions/
 ├── agents/            → symlink to omniclaude/agents/
-├── hooks/             → symlink to omniclaude/claude_hooks/
+├── hooks/             → symlink to omniclaude/claude/hooks/
 ├── skills/            → symlink to omniclaude/skills/
 ├── commands/          → symlink to omniclaude/.claude/commands/
 ├── .env               → symlink to omniclaude/.env
@@ -33,7 +33,7 @@ mkdir -p ~/.claude
 # Create symlinks
 ln -sf "$(pwd)/agents/definitions" ~/.claude/agent-definitions
 ln -sf "$(pwd)/agents" ~/.claude/agents
-ln -sf "$(pwd)/claude_hooks" ~/.claude/hooks
+ln -sf "$(pwd)/claude/hooks" ~/.claude/hooks
 ln -sf "$(pwd)/skills" ~/.claude/skills
 ln -sf "$(pwd)/.claude/commands" ~/.claude/commands
 ln -sf "$(pwd)/.env" ~/.claude/.env
@@ -54,7 +54,7 @@ ln -sf "$(pwd)/CLAUDE.md" ~/.claude/CLAUDE.md
 - `/pr-dev-review` - Development PR review workflow
 - `/pr-release-ready` - Release-ready PR review workflow
 
-### Hooks (`claude_hooks/`)
+### Hooks (`claude/hooks/`)
 - User prompt submit hooks with agent routing
 - Manifest injection for intelligence context
 - Correlation ID tracking and observability

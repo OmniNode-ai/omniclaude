@@ -56,19 +56,55 @@ from common_utils import get_timeout_seconds
 from config import settings
 
 
+# Add project root for ONEX error imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+
+# ONEX-compliant error handling
+# Try to import from agents.lib.errors, fallback to local definitions
+try:
+    from agents.lib.errors import EnumCoreErrorCode, OnexError
+except ImportError:
+    # Fallback: Define locally if import fails (for standalone usage)
+    from enum import Enum as FallbackEnum
+
+    class EnumCoreErrorCode(str, FallbackEnum):  # type: ignore[no-redef]
+        """Core error codes for ONEX operations."""
+
+        CONFIGURATION_ERROR = "CONFIGURATION_ERROR"
+
+    class OnexError(Exception):  # type: ignore[no-redef]
+        """Base exception class for ONEX operations."""
+
+        def __init__(
+            self,
+            code: EnumCoreErrorCode,
+            message: str,
+            details: dict | None = None,
+        ):
+            self.code = code
+            self.error_code = code
+            self.message = message
+            self.details = details or {}
+            super().__init__(message)
+
+        def __str__(self):
+            return f"{self.code}: {self.message}"
+
+
 def get_kafka_bootstrap_servers() -> str:
     """
     Get Kafka bootstrap servers from type-safe configuration.
 
     Uses Pydantic Settings framework for validated configuration.
-    Raises ValueError if KAFKA_BOOTSTRAP_SERVERS is not properly configured.
+    Raises OnexError if KAFKA_BOOTSTRAP_SERVERS is not properly configured.
 
     Returns:
         Bootstrap server address (e.g., "192.168.86.200:29092" for host scripts
         or "omninode-bridge-redpanda:9092" for Docker services)
 
     Raises:
-        ValueError: If KAFKA_BOOTSTRAP_SERVERS is not set in environment
+        OnexError: If KAFKA_BOOTSTRAP_SERVERS is not set in environment
+            (code: CONFIGURATION_ERROR)
 
     Note:
         Configuration context matters:
@@ -79,12 +115,20 @@ def get_kafka_bootstrap_servers() -> str:
     bootstrap = settings.get_effective_kafka_bootstrap_servers()
 
     if not bootstrap:
-        raise ValueError(
-            "KAFKA_BOOTSTRAP_SERVERS not configured. "
-            "Set KAFKA_BOOTSTRAP_SERVERS in .env file. "
-            "Use 'omninode-bridge-redpanda:9092' for Docker services "
-            "or '192.168.86.200:29092' for host scripts. "
-            "See CLAUDE.md for deployment context details."
+        raise OnexError(
+            code=EnumCoreErrorCode.CONFIGURATION_ERROR,
+            message=(
+                "KAFKA_BOOTSTRAP_SERVERS not configured. "
+                "Set KAFKA_BOOTSTRAP_SERVERS in .env file. "
+                "Use 'omninode-bridge-redpanda:9092' for Docker services "
+                "or '192.168.86.200:29092' for host scripts. "
+                "See CLAUDE.md for deployment context details."
+            ),
+            details={
+                "setting": "KAFKA_BOOTSTRAP_SERVERS",
+                "docker_value": "omninode-bridge-redpanda:9092",
+                "host_value": "192.168.86.200:29092",
+            },
         )
 
     return bootstrap
