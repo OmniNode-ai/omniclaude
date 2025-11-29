@@ -72,35 +72,38 @@ from config import settings
 
 
 # ONEX-compliant error handling
-# Try to import from agents.lib.errors, fallback to local definitions
+# Try to import from claude.lib.core (preferred), fallback to agents.lib.errors, then local definitions
 try:
-    from agents.lib.errors import EnumCoreErrorCode, OnexError
+    from claude.lib.core import EnumCoreErrorCode, OnexError
 except ImportError:
-    # Fallback: Define locally if import fails (for standalone usage)
-    from enum import Enum as FallbackEnum
+    try:
+        from agents.lib.errors import EnumCoreErrorCode, OnexError
+    except ImportError:
+        # Fallback: Define locally if import fails (for standalone usage)
+        from enum import Enum as FallbackEnum
 
-    class EnumCoreErrorCode(str, FallbackEnum):  # type: ignore[no-redef]
-        """Core error codes for ONEX operations."""
+        class EnumCoreErrorCode(str, FallbackEnum):  # type: ignore[no-redef]
+            """Core error codes for ONEX operations."""
 
-        CONFIGURATION_ERROR = "CONFIGURATION_ERROR"
+            CONFIGURATION_ERROR = "CONFIGURATION_ERROR"
 
-    class OnexError(Exception):  # type: ignore[no-redef]
-        """Base exception class for ONEX operations."""
+        class OnexError(Exception):  # type: ignore[no-redef]
+            """Base exception class for ONEX operations."""
 
-        def __init__(
-            self,
-            code: EnumCoreErrorCode,
-            message: str,
-            details: dict | None = None,
-        ):
-            self.code = code
-            self.error_code = code
-            self.message = message
-            self.details = details or {}
-            super().__init__(message)
+            def __init__(
+                self,
+                code: EnumCoreErrorCode,
+                message: str,
+                details: dict | None = None,
+            ):
+                self.code = code
+                self.error_code = code
+                self.message = message
+                self.details = details or {}
+                super().__init__(message)
 
-        def __str__(self):
-            return f"{self.code}: {self.message}"
+            def __str__(self):
+                return f"{self.code}: {self.message}"
 
 
 def get_kafka_bootstrap_servers() -> str:

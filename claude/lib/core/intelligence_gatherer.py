@@ -18,9 +18,17 @@ The intelligence gathered includes:
 import logging
 from typing import Any, Dict, List, Optional
 
-# External imports (from original agents/lib location)
-from agents.lib.config.intelligence_config import IntelligenceConfig
-from agents.lib.models.intelligence_context import IntelligenceContext
+
+# External imports (try claude.lib first, fallback to agents.lib)
+try:
+    from claude.lib.config.intelligence_config import IntelligenceConfig
+except ImportError:
+    from agents.lib.config.intelligence_config import IntelligenceConfig
+
+try:
+    from claude.lib.models.intelligence_context import IntelligenceContext
+except ImportError:
+    from agents.lib.models.intelligence_context import IntelligenceContext
 
 # Internal imports (within this package)
 from .intelligence_event_client import IntelligenceEventClient

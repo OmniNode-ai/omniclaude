@@ -14,6 +14,15 @@ set -euo pipefail
 #   - Deduplication of similar issues
 #   - Token-efficient output (< 2000 tokens)
 #   - Ready for agent consumption (no parsing needed)
+#   - Captures unmatched comments for manual review (never silently drops)
+#
+# Supported Formats:
+#   - CodeRabbit emoji indicators (## CRITICAL, ## Moderate, ## Suggestion)
+#   - Claude text headers (### CRITICAL:, ### MAJOR:, ### MINOR:)
+#   - Priority suffixes (**Title** (HIGH PRIORITY), (MEDIUM PRIORITY))
+#   - Unchecked items (- [ ] Description)
+#   - Risk indicators (High Risk:, Medium Risk:, Low Risk:)
+#   - Action items (Must Fix, Should Fix, Final Recommendations)
 # ============================================================================
 
 # Configuration
@@ -47,6 +56,7 @@ Output:
     🟠 MAJOR    - Must address before merge
     🟡 MINOR    - Must address before merge
     ⚪ NITPICK  - Optional improvements (only with --include-nitpicks)
+    ❓ UNMATCHED - Comments not matching any pattern (review manually)
 
 Examples:
   collate-issues 33                      # Critical, Major, Minor only
@@ -314,6 +324,59 @@ collate_pr_issues() {
                         map({severity: "major", location: "", summary: .})
                     else [] end),
 
+                    # NEW: Claude text-based severity markers (### CRITICAL:, ### MAJOR:, ### MINOR:)
+                    # Format: ### CRITICAL: Title or ### MAJOR: Description
+                    (if ($body | test("### CRITICAL:"; "i")) then
+                        [scan("### CRITICAL[:\\s]+([^\n]+)"; "i")] |
+                        map({severity: "critical", location: "", summary: .[0]})
+                    else [] end),
+
+                    (if ($body | test("### MAJOR:"; "i")) then
+                        [scan("### MAJOR[:\\s]+([^\n]+)"; "i")] |
+                        map({severity: "major", location: "", summary: .[0]})
+                    else [] end),
+
+                    (if ($body | test("### MINOR:"; "i")) then
+                        [scan("### MINOR[:\\s]+([^\n]+)"; "i")] |
+                        map({severity: "minor", location: "", summary: .[0]})
+                    else [] end),
+
+                    # NEW: Items with (HIGH/MEDIUM/LOW PRIORITY) suffix
+                    # Format: **Title** (HIGH PRIORITY) or ### 1. **Title** (MEDIUM PRIORITY)
+                    (if ($body | test("\\([^)]*PRIORITY\\)"; "i")) then
+                        [scan("\\*\\*([^*]+)\\*\\*\\s*\\(([^)]*PRIORITY)\\)"; "i")] |
+                        map({
+                            severity: (if (.[1] | test("HIGH|URGENT"; "i")) then "critical"
+                                      elif (.[1] | test("MEDIUM"; "i")) then "major"
+                                      elif (.[1] | test("LOW"; "i")) then "minor"
+                                      else "major" end),
+                            location: "",
+                            summary: .[0]
+                        })
+                    else [] end),
+
+                    # NEW: Unchecked test plan items
+                    # Format: - [ ] Description (unchecked checkbox)
+                    (if ($body | test("- \\[ \\]")) then
+                        [scan("- \\[ \\]\\s*([^\n]+)")] |
+                        map(.[0]) | map(select(. != null)) |
+                        # Strip trailing status indicators and clean up
+                        map(gsub("\\s*⚠️.*$|\\s*❌.*$|\\s*✅.*$|\\s*NOT CHECKED.*$"; "")) |
+                        map(gsub("\\s*\\(see issue[^)]*\\)"; "")) |
+                        map(gsub("\\s+$"; "")) |
+                        unique |
+                        map({severity: "major", location: "", summary: ("UNCHECKED: " + .)})
+                    else [] end),
+
+                    # NEW: Failed/blocked items with ❌ emoji prefix
+                    # Format: - ❌ Description or ❌ **Title**
+                    (if ($body | test("❌")) then
+                        [scan("[-*]\\s*❌\\s*([^\n]+)|❌\\s*\\*\\*([^*]+)\\*\\*")] |
+                        map(.[0] // .[1]) | map(select(. != null and (. | length) > 3)) |
+                        unique |
+                        map({severity: "major", location: "", summary: ("FAILED: " + .)})
+                    else [] end),
+
                     # Claude: ## Concerns, ### Concerns, or **Concerns** section - extract Risk items
                     # Format: "High Risk: description" or "Medium Risk: description" or "Low Risk: description"
                     # Mapping: High Risk -> major, Medium Risk -> minor, Low Risk -> nit
@@ -410,7 +473,8 @@ collate_pr_issues() {
                 elif (.body | test("nitpick|nit:|style|consider.?renaming|optional|minor.?improvement"; "i")) then
                     {severity: "nit", location: .location, summary: $summary}
                 else
-                    empty
+                    # CHANGED: Keep as unmatched for visibility instead of dropping
+                    {severity: "unmatched", location: .location, summary: $summary}
                 end
             end
         ]) as $regular_items |
@@ -457,7 +521,8 @@ collate_pr_issues() {
     local major_count=$(echo "$categorized" | jq -r '.major // [] | length')
     local minor_count=$(echo "$categorized" | jq -r '.minor // [] | length')
     local nit_count=$(echo "$categorized" | jq -r '.nit // [] | length')
-    local total_count=$((critical_count + major_count + minor_count + nit_count))
+    local unmatched_count=$(echo "$categorized" | jq -r '.unmatched // [] | length')
+    local total_count=$((critical_count + major_count + minor_count + nit_count + unmatched_count))
 
     # Output results
     if [[ "$PARALLEL_SOLVE_FORMAT" == "true" ]]; then
@@ -494,6 +559,13 @@ collate_pr_issues() {
         if [[ "$INCLUDE_NITPICKS" == "true" ]] && [[ $nit_count -gt 0 ]]; then
             echo "⚪ NITPICK:"
             echo "$categorized" | jq -r '.nit // [] | to_entries | map("- \(.value)") | .[]'
+            echo ""
+        fi
+
+        # Unmatched items (format may have changed - review manually)
+        if [[ $unmatched_count -gt 0 ]]; then
+            echo "❓ UNMATCHED (review manually - format may have changed):"
+            echo "$categorized" | jq -r '.unmatched // [] | to_entries | map("- \(.value)") | .[]'
             echo ""
         fi
     else
@@ -533,17 +605,36 @@ collate_pr_issues() {
             echo ""
         fi
 
+        # Unmatched items (format may have changed - review manually)
+        if [[ $unmatched_count -gt 0 ]]; then
+            echo "❓ UNMATCHED ($unmatched_count) - Review manually, format may have changed:"
+            echo "$categorized" | jq -r '.unmatched // [] | to_entries | map("\(.key + 1). \(.value)") | .[]'
+            echo ""
+        fi
+
         # Summary
         local filter_note=""
         if [[ "$UNFINISHED_ONLY" == "true" ]]; then
             filter_note=" (filtered to unaddressed only)"
         fi
 
+        # Build unmatched suffix if any
+        local unmatched_note=""
+        if [[ $unmatched_count -gt 0 ]]; then
+            unmatched_note=", ${unmatched_count} unmatched"
+        fi
+
         if [[ "$INCLUDE_NITPICKS" == "true" ]]; then
-            echo "Summary: ${critical_count} critical, ${major_count} major, ${minor_count} minor, ${nit_count} nitpick = ${total_count} issues total${filter_note}"
+            echo "Summary: ${critical_count} critical, ${major_count} major, ${minor_count} minor, ${nit_count} nitpick${unmatched_note} = ${total_count} issues total${filter_note}"
         else
             local actionable_count=$((critical_count + major_count + minor_count))
-            echo "Summary: ${critical_count} critical, ${major_count} major, ${minor_count} minor = ${actionable_count} actionable issues (nitpicks excluded)${filter_note}"
+            echo "Summary: ${critical_count} critical, ${major_count} major, ${minor_count} minor${unmatched_note} = ${actionable_count} actionable issues (nitpicks excluded)${filter_note}"
+        fi
+
+        # Add note when unmatched items exist
+        if [[ $unmatched_count -gt 0 ]]; then
+            echo ""
+            echo "NOTE: Found ${unmatched_count} unmatched comments. Check if PR review format has changed."
         fi
     fi
 

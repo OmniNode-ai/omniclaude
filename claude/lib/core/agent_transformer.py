@@ -23,17 +23,25 @@ logger = logging.getLogger(__name__)
 
 # Import transformation event publisher
 try:
-    from agents.lib.transformation_event_publisher import (
+    from claude.lib.transformation_event_publisher import (
         TransformationEventType,
         publish_transformation_event,
     )
 
     KAFKA_AVAILABLE = True
 except ImportError:
-    logger.warning(
-        "transformation_event_publisher not available, transformation events will not be logged"
-    )
-    KAFKA_AVAILABLE = False
+    try:
+        from agents.lib.transformation_event_publisher import (
+            TransformationEventType,
+            publish_transformation_event,
+        )
+
+        KAFKA_AVAILABLE = True
+    except ImportError:
+        logger.warning(
+            "transformation_event_publisher not available, transformation events will not be logged"
+        )
+        KAFKA_AVAILABLE = False
 
 
 @dataclass

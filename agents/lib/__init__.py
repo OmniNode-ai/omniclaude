@@ -11,6 +11,7 @@ Components:
 - capability_index: In-memory agent capability indexing
 - result_cache: Result caching with TTL
 - agent_router: Main routing orchestration
+- errors: ONEX-compliant error handling
 
 DEPRECATION NOTICE
 ==================
@@ -28,6 +29,10 @@ Please update imports to use claude.lib.core directly:
 
 __version__ = "1.0.0"
 __author__ = "Archon Agent Coordination System"
+
+# Re-export errors from local module (canonical location)
+from .errors import CoreErrorCode, EnumCoreErrorCode, ModelOnexError, OnexError
+
 
 # Re-export from claude.lib.core for backwards compatibility
 # These provide the canonical implementations
@@ -105,6 +110,11 @@ except ImportError:
 
 
 __all__ = [
+    # Error Handling (always available from .errors)
+    "CoreErrorCode",
+    "EnumCoreErrorCode",
+    "ModelOnexError",
+    "OnexError",
     # Core routing (always available)
     "AgentRecommendation",
     "AgentRouter",

@@ -76,38 +76,48 @@ logger = logging.getLogger(__name__)
 
 # ONEX-compliant error handling with fallback
 try:
-    from agents.lib.errors import EnumCoreErrorCode, OnexError
+    from claude.lib.errors import EnumCoreErrorCode, OnexError
 except ImportError:
-    from enum import Enum
+    try:
+        from agents.lib.errors import EnumCoreErrorCode, OnexError
+    except ImportError:
+        from enum import Enum
 
-    class EnumCoreErrorCode(str, Enum):
-        """Fallback error codes for ONEX compliance."""
+        class EnumCoreErrorCode(str, Enum):
+            """Fallback error codes for ONEX compliance."""
 
-        VALIDATION_ERROR = "VALIDATION_ERROR"
-        CONFIGURATION_ERROR = "CONFIGURATION_ERROR"
-        OPERATION_FAILED = "OPERATION_FAILED"
+            VALIDATION_ERROR = "VALIDATION_ERROR"
+            CONFIGURATION_ERROR = "CONFIGURATION_ERROR"
+            OPERATION_FAILED = "OPERATION_FAILED"
 
-    class OnexError(Exception):
-        """Fallback OnexError for ONEX compliance."""
+        class OnexError(Exception):
+            """Fallback OnexError for ONEX compliance."""
 
-        def __init__(
-            self, code: EnumCoreErrorCode, message: str, details: dict | None = None
-        ):
-            self.code = code
-            self.error_code = code
-            self.message = message
-            self.details = details or {}
-            super().__init__(message)
+            def __init__(
+                self, code: EnumCoreErrorCode, message: str, details: dict | None = None
+            ):
+                self.code = code
+                self.error_code = code
+                self.message = message
+                self.details = details or {}
+                super().__init__(message)
 
 
 # Import agent execution logger for observability
 try:
-    from agents.lib.agent_execution_logger import log_agent_execution
+    from claude.lib.agent_execution_logger import log_agent_execution
 
     AGENT_LOGGER_AVAILABLE = True
 except ImportError:
-    AGENT_LOGGER_AVAILABLE = False
-    logging.debug("Agent execution logger not available - execution logging disabled")
+    try:
+        from agents.lib.agent_execution_logger import log_agent_execution
+
+        AGENT_LOGGER_AVAILABLE = True
+    except ImportError:
+        AGENT_LOGGER_AVAILABLE = False
+        logging.debug(
+            "Agent execution logger not available - execution logging disabled"
+        )
 
 try:
     from config import settings
@@ -121,12 +131,17 @@ except ImportError:
 
 # Import Slack notifier for error notifications
 try:
-    from agents.lib.slack_notifier import get_slack_notifier
+    from claude.lib.slack_notifier import get_slack_notifier
 
     SLACK_NOTIFIER_AVAILABLE = True
 except ImportError:
-    SLACK_NOTIFIER_AVAILABLE = False
-    logging.warning("SlackNotifier not available - error notifications disabled")
+    try:
+        from agents.lib.slack_notifier import get_slack_notifier
+
+        SLACK_NOTIFIER_AVAILABLE = True
+    except ImportError:
+        SLACK_NOTIFIER_AVAILABLE = False
+        logging.warning("SlackNotifier not available - error notifications disabled")
 
 
 class RoutingEventClient:

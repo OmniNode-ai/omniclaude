@@ -33,5 +33,5 @@ __all__ = [
     "agent_exists",
 ]
 
-# Number of available agent definitions
-AGENT_COUNT = 52  # Excluding agent-registry.yaml meta-file
+# Number of available agent definitions (computed dynamically)
+AGENT_COUNT = get_agent_count()

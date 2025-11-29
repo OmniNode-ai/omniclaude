@@ -40,43 +40,46 @@ from config import settings
 
 
 # ONEX-compliant error handling
-# Try to import from agents.lib.errors, fallback to local definitions
+# Try to import from claude.lib.core (preferred), fallback to agents.lib.errors, then local definitions
 try:
-    from agents.lib.errors import EnumCoreErrorCode, OnexError
+    from claude.lib.core import EnumCoreErrorCode, OnexError
 except ImportError:
-    # Fallback: Define locally if import fails (for standalone usage)
-    class EnumCoreErrorCode(str, Enum):
-        """Core error codes for ONEX operations."""
+    try:
+        from agents.lib.errors import EnumCoreErrorCode, OnexError
+    except ImportError:
+        # Fallback: Define locally if import fails (for standalone usage)
+        class EnumCoreErrorCode(str, Enum):
+            """Core error codes for ONEX operations."""
 
-        VALIDATION_ERROR = "VALIDATION_ERROR"
-        CONFIGURATION_ERROR = "CONFIGURATION_ERROR"
-        OPERATION_FAILED = "OPERATION_FAILED"
+            VALIDATION_ERROR = "VALIDATION_ERROR"
+            CONFIGURATION_ERROR = "CONFIGURATION_ERROR"
+            OPERATION_FAILED = "OPERATION_FAILED"
 
-    class OnexError(Exception):
-        """
-        Base exception class for ONEX operations.
+        class OnexError(Exception):
+            """
+            Base exception class for ONEX operations.
 
-        Provides structured error handling with error codes, messages,
-        and contextual details for debugging and monitoring.
-        """
+            Provides structured error handling with error codes, messages,
+            and contextual details for debugging and monitoring.
+            """
 
-        def __init__(
-            self,
-            code: EnumCoreErrorCode,
-            message: str,
-            details: Optional[Dict[Any, Any]] = None,
-        ):
-            self.code = code
-            self.error_code = code
-            self.message = message
-            self.details = details or {}
-            super().__init__(message)
+            def __init__(
+                self,
+                code: EnumCoreErrorCode,
+                message: str,
+                details: Optional[Dict[Any, Any]] = None,
+            ):
+                self.code = code
+                self.error_code = code
+                self.message = message
+                self.details = details or {}
+                super().__init__(message)
 
-        def __str__(self):
-            return f"{self.code}: {self.message}"
+            def __str__(self):
+                return f"{self.code}: {self.message}"
 
-        def __repr__(self):
-            return f"OnexError(code={self.code}, message={self.message}, details={self.details})"
+            def __repr__(self):
+                return f"OnexError(code={self.code}, message={self.message}, details={self.details})"
 
 
 def validate_qdrant_url(url: str) -> str:

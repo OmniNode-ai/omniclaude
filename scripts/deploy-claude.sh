@@ -273,7 +273,16 @@ create_symlink "$REPO_ROOT/.env" "$CLAUDE_DIR/.env" ".env" "false"
 create_symlink "$REPO_ROOT/config" "$ONEX_DIR/config" "config"
 
 # Symlink the poetry venv for Python imports
-VENV_PATH=$(cd "$REPO_ROOT" && poetry env info --path 2>/dev/null || echo "")
+# Check if poetry is installed before attempting to get venv path
+if ! command -v poetry >/dev/null 2>&1; then
+    echo ""
+    echo "WARNING: poetry is not installed. Python virtual environment symlink skipped."
+    echo "  Install poetry: curl -sSL https://install.python-poetry.org | python3 -"
+    echo "  Then run: poetry install"
+    VENV_PATH=""
+else
+    VENV_PATH=$(cd "$REPO_ROOT" && poetry env info --path 2>/dev/null || echo "")
+fi
 if [[ -n "$VENV_PATH" && -d "$VENV_PATH" ]]; then
     # Use create_symlink with required=false since venv is optional
     create_symlink "$VENV_PATH" "$ONEX_DIR/.venv" ".venv" "false"

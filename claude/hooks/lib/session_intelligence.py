@@ -99,10 +99,17 @@ def log_session_end(
         logger_instance = HookEventLogger()
 
         # Filter metadata to prevent overwriting reserved fields
+        # Warn if metadata contains reserved fields (helps debug accidental overwrites)
+        raw_metadata = metadata or {}
+        conflicting_keys = set(raw_metadata.keys()) & _RESERVED_PAYLOAD_FIELDS
+        if conflicting_keys:
+            logger.warning(
+                f"Metadata contains reserved payload fields that will be ignored: "
+                f"{conflicting_keys}. These fields are protected: {_RESERVED_PAYLOAD_FIELDS}"
+            )
+
         safe_metadata = {
-            k: v
-            for k, v in (metadata or {}).items()
-            if k not in _RESERVED_PAYLOAD_FIELDS
+            k: v for k, v in raw_metadata.items() if k not in _RESERVED_PAYLOAD_FIELDS
         }
 
         event_id = logger_instance.log_event(

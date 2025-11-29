@@ -392,7 +392,8 @@ action_logging_integration:
   initialization:
     description: "Initialize ActionLogger at agent startup with correlation ID"
     code_example: |
-      from agents.lib.action_logger import ActionLogger
+      # Import from claude.lib.core (preferred) or agents.lib (backward compat)
+      from claude.lib.core import ActionLogger
 
       # Initialize logger with agent context
       action_logger = ActionLogger(
@@ -461,7 +462,7 @@ action_logging_integration:
 
   integration_checklist:
     required_steps:
-      - "Import ActionLogger from agents.lib.action_logger"
+      - "Import ActionLogger from claude.lib.core (or agents.lib for backward compat)"
       - "Initialize logger in agent_lifecycle_initialization() with correlation_id"
       - "Wrap all tool calls with async with logger.tool_call() context manager"
       - "Log all coordination decisions with log_decision()"
@@ -493,8 +494,9 @@ action_logging_integration:
 
   related_documentation:
     - "docs/observability/AGENT_ACTION_LOGGING.md - Comprehensive implementation guide"
-    - "agents/lib/action_logger.py - ActionLogger API reference"
-    - "agents/lib/action_event_publisher.py - Low-level publishing API"
+    - "claude/lib/core/action_logger.py - ActionLogger API reference (canonical)"
+    - "claude/lib/core/action_event_publisher.py - Low-level publishing API (canonical)"
+    - "agents/lib/action_logger.py - ActionLogger (backward compat)"
     - "consumers/agent_actions_consumer.py - Consumer implementation"
     - "migrations/005_create_agent_actions_table.sql - Database schema"
 

@@ -52,7 +52,7 @@ except ImportError:
 
 # Import Prometheus metrics
 try:
-    from agents.lib.prometheus_metrics import (
+    from claude.lib.prometheus_metrics import (
         event_publish_bytes,
         event_publish_counter,
         event_publish_duration,
@@ -62,8 +62,19 @@ try:
 
     PROMETHEUS_AVAILABLE = True
 except ImportError:
-    PROMETHEUS_AVAILABLE = False
-    logging.debug("Prometheus metrics not available - metrics disabled")
+    try:
+        from agents.lib.prometheus_metrics import (
+            event_publish_bytes,
+            event_publish_counter,
+            event_publish_duration,
+            event_publish_errors_counter,
+            record_event_publish,
+        )
+
+        PROMETHEUS_AVAILABLE = True
+    except ImportError:
+        PROMETHEUS_AVAILABLE = False
+        logging.debug("Prometheus metrics not available - metrics disabled")
 
 logger = logging.getLogger(__name__)
 

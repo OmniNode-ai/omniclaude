@@ -6,6 +6,7 @@ This package contains core components for the OmniClaude agent system:
 - Action logging: Structured logging for agent actions
 - Intelligence gathering: RAG integration for pattern discovery
 - Correlation tracking: Request tracing across services
+- Error handling: ONEX-compliant error classes
 
 Core Modules:
     manifest_injector: Dynamic system manifest generation
@@ -22,6 +23,43 @@ Core Modules:
     capability_index: Agent capability indexing
     result_cache: In-memory result caching
 """
+
+# Import errors from agents.lib.errors (canonical location)
+# Re-export for unified access via claude.lib.core
+try:
+    from agents.lib.errors import (
+        CoreErrorCode,
+        EnumCoreErrorCode,
+        ModelOnexError,
+        OnexError,
+    )
+
+    _errors_available = True
+except ImportError:
+    # Fallback: Define minimal error classes if agents.lib.errors not available
+    from enum import Enum
+
+    class EnumCoreErrorCode(str, Enum):
+        """Core error codes for ONEX operations."""
+
+        VALIDATION_ERROR = "VALIDATION_ERROR"
+        CONFIGURATION_ERROR = "CONFIGURATION_ERROR"
+        OPERATION_FAILED = "OPERATION_FAILED"
+
+    CoreErrorCode = EnumCoreErrorCode
+
+    class OnexError(Exception):
+        """Base exception class for ONEX operations."""
+
+        def __init__(self, code, message, details=None):
+            self.code = code
+            self.error_code = code
+            self.message = message
+            self.details = details or {}
+            super().__init__(message)
+
+    ModelOnexError = OnexError
+    _errors_available = False
 
 # Manifest Injection
 from .action_event_publisher import (
@@ -62,6 +100,12 @@ from .trigger_matcher import TriggerMatcher
 
 
 __all__ = [
+    # Error Handling
+    "CoreErrorCode",
+    "EnumCoreErrorCode",
+    "ModelOnexError",
+    "OnexError",
+    "_errors_available",
     # Manifest Injection
     "ManifestInjector",
     "inject_manifest",

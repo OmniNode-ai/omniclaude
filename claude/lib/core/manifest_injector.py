@@ -89,16 +89,22 @@ except ImportError:
 # Import IntelligenceEventClient for event bus communication
 # Import IntelligenceCache for Valkey-backed caching
 # Import IntelligenceUsageTracker for intelligence effectiveness tracking
-# (External - still in agents/lib)
-from agents.lib.intelligence_usage_tracker import IntelligenceUsageTracker
+try:
+    from claude.lib.intelligence_usage_tracker import IntelligenceUsageTracker
+except ImportError:
+    from agents.lib.intelligence_usage_tracker import IntelligenceUsageTracker
 
 # Import PatternQualityScorer for quality filtering
-# (External - still in agents/lib)
-from agents.lib.pattern_quality_scorer import PatternQualityScorer
+try:
+    from claude.lib.pattern_quality_scorer import PatternQualityScorer
+except ImportError:
+    from agents.lib.pattern_quality_scorer import PatternQualityScorer
 
 # Import TaskClassifier for task-aware section selection
-# (External - still in agents/lib)
-from agents.lib.task_classifier import TaskClassifier, TaskContext, TaskIntent
+try:
+    from claude.lib.task_classifier import TaskClassifier, TaskContext, TaskIntent
+except ImportError:
+    from agents.lib.task_classifier import TaskClassifier, TaskContext, TaskIntent
 
 from .intelligence_cache import IntelligenceCache
 from .intelligence_event_client import IntelligenceEventClient
@@ -134,19 +140,23 @@ _load_action_logger()
 def _load_sanitizers() -> tuple[Callable[[Any], Any], Callable[[Any], Any]]:
     """Try to load sanitizer functions from various locations."""
     try:
-        # External - still in agents/lib
-        from agents.lib.data_sanitizer import sanitize_dict, sanitize_string
+        from claude.lib.data_sanitizer import sanitize_dict, sanitize_string
 
         return sanitize_dict, sanitize_string
     except ImportError:
-        # Fallback: no-op sanitization functions
-        def fallback_dict(d: Any, **kwargs: Any) -> Any:
-            return d
+        try:
+            from agents.lib.data_sanitizer import sanitize_dict, sanitize_string
 
-        def fallback_string(s: Any, **kwargs: Any) -> Any:
-            return s
+            return sanitize_dict, sanitize_string
+        except ImportError:
+            # Fallback: no-op sanitization functions
+            def fallback_dict(d: Any, **kwargs: Any) -> Any:
+                return d
 
-        return fallback_dict, fallback_string
+            def fallback_string(s: Any, **kwargs: Any) -> Any:
+                return s
+
+            return fallback_dict, fallback_string
 
 
 sanitize_dict, sanitize_string = _load_sanitizers()

@@ -65,16 +65,21 @@ from .action_event_publisher import (
 
 # Import Slack notifier for error notifications
 try:
-    from agents.lib.slack_notifier import get_slack_notifier
+    from claude.lib.slack_notifier import get_slack_notifier
 
     SLACK_NOTIFIER_AVAILABLE = True
 except ImportError:
-    SLACK_NOTIFIER_AVAILABLE = False
-    logging.warning("SlackNotifier not available - error notifications disabled")
+    try:
+        from agents.lib.slack_notifier import get_slack_notifier
+
+        SLACK_NOTIFIER_AVAILABLE = True
+    except ImportError:
+        SLACK_NOTIFIER_AVAILABLE = False
+        logging.warning("SlackNotifier not available - error notifications disabled")
 
 # Import Prometheus metrics
 try:
-    from agents.lib.prometheus_metrics import (
+    from claude.lib.prometheus_metrics import (
         action_log_counter,
         action_log_duration,
         action_log_errors_counter,
@@ -83,8 +88,18 @@ try:
 
     PROMETHEUS_AVAILABLE = True
 except ImportError:
-    PROMETHEUS_AVAILABLE = False
-    logging.debug("Prometheus metrics not available - metrics disabled")
+    try:
+        from agents.lib.prometheus_metrics import (
+            action_log_counter,
+            action_log_duration,
+            action_log_errors_counter,
+            record_action_log,
+        )
+
+        PROMETHEUS_AVAILABLE = True
+    except ImportError:
+        PROMETHEUS_AVAILABLE = False
+        logging.debug("Prometheus metrics not available - metrics disabled")
 
 logger = logging.getLogger(__name__)
 

@@ -20,7 +20,7 @@ from pathlib import Path
 parent_path = Path(__file__).parent.parent
 sys.path.insert(0, str(parent_path))
 
-from agents.lib.manifest_injector import (  # noqa: E402
+from claude.lib.manifest_injector import (  # noqa: E402
     CacheEntry,
     CacheMetrics,
     ManifestCache,
