@@ -688,6 +688,7 @@ class RoutingEventClient:
             )
 
             recommendation_count = len(result.get("recommendations", []))
+            recommendations = result.get("recommendations", [])
 
             # Log successful completion with correlation ID
             self.logger.info(
@@ -699,7 +700,46 @@ class RoutingEventClient:
                 },
             )
 
-            return cast(list[dict[str, Any]], result.get("recommendations", []))
+            # Optionally log to agent execution logger for full observability
+            # This provides database persistence of routing decisions
+            if AGENT_LOGGER_AVAILABLE and recommendations:
+                try:
+                    top_agent = recommendations[0].get("agent_name", "unknown")
+                    top_confidence = (
+                        recommendations[0].get("confidence", {}).get("total", 0.0)
+                    )
+                    execution_logger = await log_agent_execution(
+                        agent_name=f"routing-decision:{top_agent}",
+                        user_prompt=user_request[:500] if user_request else None,
+                        correlation_id=correlation_id,
+                    )
+                    await execution_logger.complete(
+                        status="completed",
+                        quality_score=top_confidence,
+                        metadata={
+                            "routing_method": "event_driven",
+                            "recommendation_count": recommendation_count,
+                            "top_agent": top_agent,
+                            "top_confidence": top_confidence,
+                            "all_recommendations": [
+                                {
+                                    "agent": r.get("agent_name"),
+                                    "confidence": r.get("confidence", {}).get(
+                                        "total", 0.0
+                                    ),
+                                }
+                                for r in recommendations[:5]
+                            ],
+                        },
+                    )
+                except Exception as log_error:
+                    # Non-blocking - don't fail routing if logging fails
+                    self.logger.debug(
+                        f"Agent execution logging failed (non-critical): {log_error}",
+                        extra=log_extra,
+                    )
+
+            return cast(list[dict[str, Any]], recommendations)
 
         except asyncio.TimeoutError as e:
             # Log timeout with structured correlation ID tracking
@@ -779,7 +819,23 @@ class RoutingEventClient:
                         f"Failed to send Slack notification: {notify_error}"
                     )
 
-            raise
+            # Wrap non-OnexError exceptions for ONEX compliance
+            if isinstance(e, OnexError):
+                raise
+            raise OnexError(
+                code=EnumCoreErrorCode.OPERATION_FAILED,
+                message=f"Routing request failed: {e}",
+                details={
+                    "component": "RoutingEventClient",
+                    "operation": "request_routing",
+                    "correlation_id": correlation_id,
+                    "user_request_preview": (
+                        user_request[:100] if user_request else None
+                    ),
+                    "original_error_type": type(e).__name__,
+                    "original_error": str(e),
+                },
+            ) from e
 
     async def _publish_and_wait(
         self,
@@ -1066,6 +1122,11 @@ async def route_via_events(
 
     Returns:
         List of agent recommendations
+
+    Raises:
+        OnexError: If both event-based routing and local fallback fail,
+            or if fallback_to_local is False and event routing fails.
+            Error details include correlation_id for tracing.
 
     Example:
         recommendations = await route_via_events(

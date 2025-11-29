@@ -37,6 +37,33 @@ from typing import Any, Dict, List, Optional, cast
 import yaml
 
 
+# ONEX-compliant error handling with fallback
+try:
+    from agents.lib.errors import EnumCoreErrorCode, OnexError
+except ImportError:
+    from enum import Enum
+
+    class EnumCoreErrorCode(str, Enum):
+        """Fallback error codes for ONEX compliance."""
+
+        VALIDATION_ERROR = "VALIDATION_ERROR"
+        CONFIGURATION_ERROR = "CONFIGURATION_ERROR"
+        INITIALIZATION_ERROR = "INITIALIZATION_ERROR"
+        OPERATION_FAILED = "OPERATION_FAILED"
+
+    class OnexError(Exception):
+        """Fallback OnexError for ONEX compliance."""
+
+        def __init__(
+            self, code: EnumCoreErrorCode, message: str, details: dict | None = None
+        ):
+            self.code = code
+            self.error_code = code
+            self.message = message
+            self.details = details or {}
+            super().__init__(message)
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -209,7 +236,17 @@ class AgentRouter:
                     "error_type": type(e).__name__,
                 },
             )
-            raise
+            raise OnexError(
+                code=EnumCoreErrorCode.INITIALIZATION_ERROR,
+                message=f"Router initialization failed: {e}",
+                details={
+                    "component": "AgentRouter",
+                    "operation": "initialization",
+                    "registry_path": registry_path,
+                    "original_error_type": type(e).__name__,
+                    "original_error": str(e),
+                },
+            ) from e
 
     def route(
         self,
@@ -449,6 +486,11 @@ class AgentRouter:
 
         Returns:
             List of agent recommendations sorted by confidence (highest first)
+
+        Raises:
+            OnexError: If routing fails and fallback_to_local is False.
+                The error will include details about the failure type
+                (timeout, connection error, etc.) and correlation ID.
 
         Example:
             router = AgentRouter()
@@ -778,7 +820,17 @@ class AgentRouter:
                     "error_type": type(e).__name__,
                 },
             )
-            raise
+            raise OnexError(
+                code=EnumCoreErrorCode.CONFIGURATION_ERROR,
+                message=f"Registry reload failed: {e}",
+                details={
+                    "component": "AgentRouter",
+                    "operation": "reload_registry",
+                    "registry_path": path,
+                    "original_error_type": type(e).__name__,
+                    "original_error": str(e),
+                },
+            ) from e
 
 
 # Example usage and testing

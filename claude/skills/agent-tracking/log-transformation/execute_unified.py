@@ -23,26 +23,47 @@ from pathlib import Path
 
 
 # Add agents/lib to path for transformation_event_publisher
-# Path: execute_unified.py -> log-transformation -> agent-tracking -> skills -> claude -> (project root) -> agents/lib
+# Path resolution: execute_unified.py (in log-transformation/)
+#   -> .parent (log-transformation/)
+#   -> .parent.parent (agent-tracking/)
+#   -> .parent.parent.parent (skills/)
+#   -> .parent.parent.parent.parent (claude/)
+#   -> .parent.parent.parent.parent.parent (project root)
+#   -> agents/lib/
 sys.path.insert(
     0, str(Path(__file__).parent.parent.parent.parent.parent / "agents" / "lib")
 )
 from transformation_event_publisher import publish_transformation_event_sync
 
 
-# Add _shared to path
+# Add claude/skills/_shared to path for shared utilities
+# Path resolution: .parent.parent.parent (claude/skills/) + _shared/
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 from db_helper import get_correlation_id, parse_json_param
 
 
-def main():
-    """Execute unified transformation logging.
+def main() -> int:
+    """Execute unified transformation logging via the event adapter.
 
-    This function orchestrates the transformation logging process
-    by coordinating with the agent tracking system.
+    This function serves as the CLI entry point for the log-transformation skill.
+    It parses command-line arguments, constructs a transformation event payload,
+    and publishes it via the transformation_event_publisher to the Kafka event bus.
+
+    The transformation event includes:
+    - Agent name and transformation type (required)
+    - Correlation ID for distributed tracing (auto-generated if not provided)
+    - Optional input/output data and metadata as JSON objects
+
+    Command-line arguments are parsed via argparse:
+    - --agent: Agent name performing the transformation (required)
+    - --transformation-type: Type of transformation being logged (required)
+    - --correlation-id: Optional tracking ID (auto-generated UUID if omitted)
+    - --input-data: Optional JSON object with input data
+    - --output-data: Optional JSON object with output data
+    - --metadata: Optional JSON object with additional metadata
 
     Returns:
-        int: Exit code (0 for success, non-zero for failure).
+        int: Exit code (0 for success, 1 for failure).
     """
     parser = argparse.ArgumentParser(
         description="Log agent transformation via unified event adapter",

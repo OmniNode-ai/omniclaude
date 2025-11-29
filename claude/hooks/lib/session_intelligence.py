@@ -28,19 +28,43 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 
 # ONEX error handling - import for structured error logging
+# Use Any type for optional imports to satisfy mypy while allowing runtime flexibility
+from typing import Any as _AnyType
+
+
+_OnexError: _AnyType = None
+_EnumCoreErrorCode: _AnyType = None
+
 try:
     from claude.lib.core import EnumCoreErrorCode, OnexError
+
+    _OnexError = OnexError
+    _EnumCoreErrorCode = EnumCoreErrorCode
 except ImportError:
     try:
         from agents.lib.errors import EnumCoreErrorCode, OnexError
+
+        _OnexError = OnexError
+        _EnumCoreErrorCode = EnumCoreErrorCode
     except ImportError:
         # Minimal fallback if neither import works
-        OnexError = None
-        EnumCoreErrorCode = None
+        pass
 
 
 # Reserved payload fields that metadata cannot overwrite
-_RESERVED_PAYLOAD_FIELDS = frozenset({"session_id", "timestamp", "project_path", "cwd"})
+# These fields are protected to ensure event integrity and traceability
+_RESERVED_PAYLOAD_FIELDS = frozenset(
+    {
+        "session_id",  # Core session identifier
+        "timestamp",  # Event timing (set by system)
+        "project_path",  # Session context
+        "cwd",  # Session context
+        "event_type",  # Event classification (reserved for internal use)
+        "correlation_id",  # Event correlation chain
+        "source",  # Event source identifier
+        "action",  # Event action type
+    }
+)
 
 
 # Configure logging
@@ -73,7 +97,7 @@ def log_session_start(
         from hook_event_logger import HookEventLogger
 
         logger_instance = HookEventLogger()
-        event_id = logger_instance.log_event(
+        event_id: str | None = logger_instance.log_event(
             source="SessionStart",
             action="session_initialized",
             resource="session",
@@ -96,23 +120,38 @@ def log_session_start(
         return None
     except (OSError, IOError) as e:
         # I/O errors during logging - use OnexError for structured logging
-        error_code = EnumCoreErrorCode.IO_ERROR if EnumCoreErrorCode else "IO_ERROR"
+        error_code = _EnumCoreErrorCode.IO_ERROR if _EnumCoreErrorCode else "IO_ERROR"
         logger.error(
             f"[{error_code}] Failed to log session start (I/O error): {e}",
             extra={"error_code": str(error_code), "session_id": session_id},
         )
         return None
     except Exception as e:
-        # Unexpected error - use OnexError for structured logging
-        error_code = (
-            EnumCoreErrorCode.OPERATION_FAILED
-            if EnumCoreErrorCode
-            else "OPERATION_FAILED"
-        )
-        logger.error(
-            f"[{error_code}] Failed to log session start: {type(e).__name__}: {e}",
-            extra={"error_code": str(error_code), "session_id": session_id},
-        )
+        # Unexpected error - wrap in OnexError for structured error handling
+        if _OnexError is not None and _EnumCoreErrorCode is not None:
+            onex_error = _OnexError(
+                code=_EnumCoreErrorCode.OPERATION_FAILED,
+                message=f"Failed to log session start: {e}",
+                details={
+                    "session_id": session_id,
+                    "exception_type": type(e).__name__,
+                    "original_error": str(e),
+                },
+            )
+            logger.error(
+                str(onex_error),
+                extra={
+                    "error_code": str(onex_error.code),
+                    "session_id": session_id,
+                    "details": onex_error.details,
+                },
+            )
+        else:
+            # Fallback if OnexError not available
+            logger.error(
+                f"[OPERATION_FAILED] Failed to log session start: {type(e).__name__}: {e}",
+                extra={"error_code": "OPERATION_FAILED", "session_id": session_id},
+            )
         return None
 
 
@@ -150,7 +189,7 @@ def log_session_end(
             k: v for k, v in raw_metadata.items() if k not in _RESERVED_PAYLOAD_FIELDS
         }
 
-        event_id = logger_instance.log_event(
+        event_id: str | None = logger_instance.log_event(
             source="SessionEnd",
             action="session_completed",
             resource="session",
@@ -174,23 +213,38 @@ def log_session_end(
         return None
     except (OSError, IOError) as e:
         # I/O errors during logging - use OnexError for structured logging
-        error_code = EnumCoreErrorCode.IO_ERROR if EnumCoreErrorCode else "IO_ERROR"
+        error_code = _EnumCoreErrorCode.IO_ERROR if _EnumCoreErrorCode else "IO_ERROR"
         logger.error(
             f"[{error_code}] Failed to log session end (I/O error): {e}",
             extra={"error_code": str(error_code), "session_id": session_id},
         )
         return None
     except Exception as e:
-        # Unexpected error - use OnexError for structured logging
-        error_code = (
-            EnumCoreErrorCode.OPERATION_FAILED
-            if EnumCoreErrorCode
-            else "OPERATION_FAILED"
-        )
-        logger.error(
-            f"[{error_code}] Failed to log session end: {type(e).__name__}: {e}",
-            extra={"error_code": str(error_code), "session_id": session_id},
-        )
+        # Unexpected error - wrap in OnexError for structured error handling
+        if _OnexError is not None and _EnumCoreErrorCode is not None:
+            onex_error = _OnexError(
+                code=_EnumCoreErrorCode.OPERATION_FAILED,
+                message=f"Failed to log session end: {e}",
+                details={
+                    "session_id": session_id,
+                    "exception_type": type(e).__name__,
+                    "original_error": str(e),
+                },
+            )
+            logger.error(
+                str(onex_error),
+                extra={
+                    "error_code": str(onex_error.code),
+                    "session_id": session_id,
+                    "details": onex_error.details,
+                },
+            )
+        else:
+            # Fallback if OnexError not available
+            logger.error(
+                f"[OPERATION_FAILED] Failed to log session end: {type(e).__name__}: {e}",
+                extra={"error_code": "OPERATION_FAILED", "session_id": session_id},
+            )
         return None
 
 

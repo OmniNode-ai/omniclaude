@@ -175,42 +175,56 @@ def load_agent(agent_name: str) -> AgentLoadResult:
             agent_name=agent_name,
         )
     else:
+        # Build descriptive error message with searched paths for debugging
+        path_list = ", ".join(str(p) for p in search_paths)
         return AgentLoadFailure(
             success=False,
-            error=f"Agent definition not found: {agent_name}",
+            error=f"Agent definition not found: '{agent_name}'. Searched: [{path_list}]",
             agent_name=agent_name,
             searched_paths=[str(p) for p in search_paths],
         )
 
 
-def main():
-    """CLI entry point - reads JSON from stdin."""
+def main() -> None:
+    """
+    CLI entry point - reads JSON from stdin.
+
+    Reads a JSON object with 'agent_name' key from stdin and outputs
+    the agent load result as JSON to stdout.
+
+    Input format:
+        {"agent_name": "agent-api"}
+
+    Output format (success):
+        {"success": true, "context_injection": "...", "agent_name": "agent-api"}
+
+    Output format (failure):
+        {"success": false, "error": "...", "agent_name": "...", "searched_paths": [...]}
+    """
     try:
         # Read input JSON from stdin
         input_data = json.loads(sys.stdin.read())
-        agent_name = input_data.get("agent_name", "")
+        agent_name: str = input_data.get("agent_name", "")
 
         result = load_agent(agent_name)
         print(json.dumps(result))
 
     except json.JSONDecodeError as e:
-        print(
-            json.dumps(
-                {
-                    "success": False,
-                    "error": f"Invalid JSON input: {e}",
-                }
-            )
-        )
+        json_error: AgentLoadFailure = {
+            "success": False,
+            "error": f"Invalid JSON input: {e}",
+            "agent_name": "",
+            "searched_paths": [],
+        }
+        print(json.dumps(json_error))
     except Exception as e:
-        print(
-            json.dumps(
-                {
-                    "success": False,
-                    "error": f"Unexpected error: {e}",
-                }
-            )
-        )
+        unexpected_error: AgentLoadFailure = {
+            "success": False,
+            "error": f"Unexpected error: {e}",
+            "agent_name": "",
+            "searched_paths": [],
+        }
+        print(json.dumps(unexpected_error))
 
 
 if __name__ == "__main__":
