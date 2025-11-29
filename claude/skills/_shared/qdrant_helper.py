@@ -289,9 +289,8 @@ def check_qdrant_connection() -> Dict[str, Any]:
     Returns:
         Dictionary with connection status
     """
-    qdrant_url = get_qdrant_url()
-
     try:
+        qdrant_url = get_qdrant_url()
         req = urllib.request.Request(f"{qdrant_url}/", method="GET")  # noqa: S310
         with urllib.request.urlopen(  # noqa: S310  # nosec B310 - URL validated by validate_qdrant_url() (http/https scheme only, host whitelist, safe port range)
             req, timeout=get_timeout_seconds()
@@ -334,9 +333,10 @@ def check_qdrant_connection() -> Dict[str, Any]:
         }
     except OnexError as e:
         # OnexError: URL validation or SSRF protection errors
+        # Note: qdrant_url may not be defined if get_qdrant_url() raised the error
         return {
             "status": "error",
-            "url": qdrant_url,
+            "url": e.details.get("url", "unknown") if e.details else "unknown",
             "reachable": False,
             "error": f"Configuration error: {e.message}",
         }
@@ -349,9 +349,8 @@ def list_collections() -> Dict[str, Any]:
     Returns:
         Dictionary with collection list
     """
-    qdrant_url = get_qdrant_url()
-
     try:
+        qdrant_url = get_qdrant_url()
         req = urllib.request.Request(  # noqa: S310
             f"{qdrant_url}/collections", method="GET"
         )
@@ -427,9 +426,8 @@ def get_collection_stats(collection_name: str) -> Dict[str, Any]:
     Returns:
         Dictionary with collection statistics
     """
-    qdrant_url = get_qdrant_url()
-
     try:
+        qdrant_url = get_qdrant_url()
         # URL-encode collection name to prevent URL injection attacks
         encoded_collection = urllib.parse.quote(collection_name, safe="")
         req = urllib.request.Request(  # noqa: S310

@@ -47,7 +47,7 @@ from typing import Any, cast
 from uuid import uuid4
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
-from aiokafka.errors import KafkaError
+from aiokafka.errors import KafkaError as AIOKafkaError
 
 
 # CRITICAL: Add project root FIRST to avoid config module conflicts
@@ -73,6 +73,41 @@ except ImportError as e:
     logging.error(f"Failed to import routing schemas: {e}")
 
 logger = logging.getLogger(__name__)
+
+# ONEX-compliant error handling with fallback
+try:
+    from agents.lib.errors import EnumCoreErrorCode, OnexError
+except ImportError:
+    from enum import Enum
+
+    class EnumCoreErrorCode(str, Enum):
+        """Fallback error codes for ONEX compliance."""
+
+        VALIDATION_ERROR = "VALIDATION_ERROR"
+        CONFIGURATION_ERROR = "CONFIGURATION_ERROR"
+        OPERATION_FAILED = "OPERATION_FAILED"
+
+    class OnexError(Exception):
+        """Fallback OnexError for ONEX compliance."""
+
+        def __init__(
+            self, code: EnumCoreErrorCode, message: str, details: dict | None = None
+        ):
+            self.code = code
+            self.error_code = code
+            self.message = message
+            self.details = details or {}
+            super().__init__(message)
+
+
+# Import agent execution logger for observability
+try:
+    from agents.lib.agent_execution_logger import log_agent_execution
+
+    AGENT_LOGGER_AVAILABLE = True
+except ImportError:
+    AGENT_LOGGER_AVAILABLE = False
+    logging.debug("Agent execution logger not available - execution logging disabled")
 
 try:
     from config import settings
@@ -161,9 +196,14 @@ class RoutingEventClient:
             consumer_group_id: Optional consumer group ID (default: auto-generated)
         """
         if not SCHEMAS_AVAILABLE:
-            raise RuntimeError(
-                "Routing schemas not available. Cannot initialize RoutingEventClient.\n"
-                "Ensure services/routing_adapter/schemas/ exists."
+            raise OnexError(
+                code=EnumCoreErrorCode.CONFIGURATION_ERROR,
+                message="Routing schemas not available. Cannot initialize RoutingEventClient.",
+                details={
+                    "component": "RoutingEventClient",
+                    "required_path": "services/routing_adapter/schemas/",
+                    "suggestion": "Ensure services/routing_adapter/schemas/ exists",
+                },
             )
 
         # Bootstrap servers - use type-safe configuration if not provided
@@ -173,9 +213,15 @@ class RoutingEventClient:
             self.bootstrap_servers = settings.get_effective_kafka_bootstrap_servers()
         else:
             # This should not happen - settings should always be available
-            raise RuntimeError(
-                "config.settings not available. Cannot initialize RoutingEventClient.\n"
-                "Ensure config/settings.py is accessible and KAFKA_BOOTSTRAP_SERVERS is set in .env"
+            raise OnexError(
+                code=EnumCoreErrorCode.CONFIGURATION_ERROR,
+                message="config.settings not available. Cannot initialize RoutingEventClient.",
+                details={
+                    "component": "RoutingEventClient",
+                    "required_module": "config/settings.py",
+                    "required_env_var": "KAFKA_BOOTSTRAP_SERVERS",
+                    "suggestion": "Ensure config/settings.py is accessible and KAFKA_BOOTSTRAP_SERVERS is set in .env",
+                },
             )
 
         if not self.bootstrap_servers:
@@ -206,7 +252,8 @@ class RoutingEventClient:
         Should be called once before making requests.
 
         Raises:
-            KafkaError: If Kafka connection fails
+            OnexError: With OPERATION_FAILED if Kafka connection fails or
+                       partition assignment times out
         """
         if self._started:
             self.logger.debug("Routing event client already started")
@@ -261,17 +308,28 @@ class RoutingEventClient:
                     )
 
                 if elapsed > max_wait_seconds:
-                    error_msg = (
-                        f"Consumer failed to get partition assignment after {max_wait_seconds}s.\n"
-                        f"Troubleshooting:\n"
-                        f"  1. Check Kafka broker is accessible: {self.bootstrap_servers}\n"
-                        f"  2. Verify topics exist: {self.TOPIC_COMPLETED}, {self.TOPIC_FAILED}\n"
-                        f"  3. Check consumer group permissions: {self.consumer_group_id}\n"
-                        f"  4. Review Kafka broker logs for connection issues\n"
-                        f"  5. Verify network connectivity to Kafka cluster"
-                    )
+                    error_msg = f"Consumer failed to get partition assignment after {max_wait_seconds}s"
                     self.logger.error(error_msg)
-                    raise TimeoutError(error_msg)
+                    raise OnexError(
+                        code=EnumCoreErrorCode.OPERATION_FAILED,
+                        message=error_msg,
+                        details={
+                            "error_type": "TIMEOUT",
+                            "component": "RoutingEventClient",
+                            "operation": "partition_assignment",
+                            "timeout_seconds": max_wait_seconds,
+                            "bootstrap_servers": self.bootstrap_servers,
+                            "topics": [self.TOPIC_COMPLETED, self.TOPIC_FAILED],
+                            "consumer_group": self.consumer_group_id,
+                            "troubleshooting": [
+                                f"Check Kafka broker is accessible: {self.bootstrap_servers}",
+                                f"Verify topics exist: {self.TOPIC_COMPLETED}, {self.TOPIC_FAILED}",
+                                f"Check consumer group permissions: {self.consumer_group_id}",
+                                "Review Kafka broker logs for connection issues",
+                                "Verify network connectivity to Kafka cluster",
+                            ],
+                        },
+                    )
 
             partition_count = len(self._consumer.assignment())
             self.logger.info(
@@ -291,12 +349,19 @@ class RoutingEventClient:
                 )
                 self.logger.info("Consumer task confirmed polling - ready for requests")
             except asyncio.TimeoutError:
-                error_msg = (
-                    f"Consumer task failed to start polling within {consumer_ready_timeout}s.\n"
-                    f"This indicates the consumer loop did not start properly."
-                )
+                error_msg = f"Consumer task failed to start polling within {consumer_ready_timeout}s"
                 self.logger.error(error_msg)
-                raise TimeoutError(error_msg)
+                raise OnexError(
+                    code=EnumCoreErrorCode.OPERATION_FAILED,
+                    message=error_msg,
+                    details={
+                        "error_type": "TIMEOUT",
+                        "component": "RoutingEventClient",
+                        "operation": "consumer_polling_start",
+                        "timeout_seconds": consumer_ready_timeout,
+                        "suggestion": "The consumer loop did not start properly",
+                    },
+                )
 
             self._started = True
             self.logger.info("Routing event client started successfully")
@@ -323,7 +388,17 @@ class RoutingEventClient:
                     )
 
             await self.stop()
-            raise KafkaError(f"Failed to start Kafka client: {e}") from e
+            raise OnexError(
+                code=EnumCoreErrorCode.OPERATION_FAILED,
+                message=f"Failed to start Kafka client: {e}",
+                details={
+                    "component": "RoutingEventClient",
+                    "operation": "kafka_client_start",
+                    "bootstrap_servers": self.bootstrap_servers,
+                    "consumer_group": self.consumer_group_id,
+                    "original_error": str(e),
+                },
+            ) from e
 
     async def stop(self) -> None:
         """
@@ -389,7 +464,15 @@ class RoutingEventClient:
             for correlation_id, future in self._pending_requests.items():
                 if not future.done():
                     future.set_exception(
-                        RuntimeError("Client stopped while request pending")
+                        OnexError(
+                            code=EnumCoreErrorCode.OPERATION_FAILED,
+                            message="Client stopped while request pending",
+                            details={
+                                "component": "RoutingEventClient",
+                                "operation": "request_cancellation",
+                                "correlation_id": correlation_id,
+                            },
+                        )
                     )
             self._pending_requests.clear()
             self.logger.debug("Pending requests cancelled")
@@ -469,9 +552,10 @@ class RoutingEventClient:
             - alternatives: Optional list of alternative agents
 
         Raises:
-            TimeoutError: If response not received within timeout
-            KafkaError: If Kafka communication fails
-            RuntimeError: If client not started
+            OnexError: With OPERATION_FAILED code if:
+                - Response not received within timeout (details["error_type"] == "TIMEOUT")
+                - Kafka communication fails
+                - Client not started (call start() first)
 
         Example:
             recommendations = await client.request_routing(
@@ -490,7 +574,15 @@ class RoutingEventClient:
                 print(f"Reason: {best['reason']}")
         """
         if not self._started:
-            raise RuntimeError("Client not started. Call start() first.")
+            raise OnexError(
+                code=EnumCoreErrorCode.OPERATION_FAILED,
+                message="Client not started. Call start() first.",
+                details={
+                    "component": "RoutingEventClient",
+                    "operation": "request_routing",
+                    "suggestion": "Call await client.start() before making requests",
+                },
+            )
 
         timeout = timeout_ms or self.request_timeout_ms
 
@@ -557,8 +649,19 @@ class RoutingEventClient:
                         f"Failed to send Slack notification: {notify_error}"
                     )
 
-            raise TimeoutError(
-                f"Routing request timeout after {timeout}ms (correlation_id: {correlation_id})"
+            raise OnexError(
+                code=EnumCoreErrorCode.OPERATION_FAILED,
+                message=f"Routing request timeout after {timeout}ms",
+                details={
+                    "error_type": "TIMEOUT",
+                    "component": "RoutingEventClient",
+                    "operation": "routing_request",
+                    "correlation_id": correlation_id,
+                    "timeout_ms": timeout,
+                    "user_request_preview": (
+                        user_request[:100] if user_request else None
+                    ),
+                },
             )
 
         except Exception as e:
@@ -610,8 +713,8 @@ class RoutingEventClient:
             Response payload
 
         Raises:
-            asyncio.TimeoutError: If timeout occurs
-            KafkaError: If Kafka operation fails
+            asyncio.TimeoutError: If timeout occurs (caught by caller)
+            OnexError: With OPERATION_FAILED if producer not initialized
         """
         # Create future for this request
         future: asyncio.Future = asyncio.Future()
@@ -620,7 +723,16 @@ class RoutingEventClient:
         try:
             # Publish request
             if self._producer is None:
-                raise RuntimeError("Producer not initialized. Call start() first.")
+                raise OnexError(
+                    code=EnumCoreErrorCode.OPERATION_FAILED,
+                    message="Producer not initialized. Call start() first.",
+                    details={
+                        "component": "RoutingEventClient",
+                        "operation": "publish_request",
+                        "correlation_id": correlation_id,
+                        "suggestion": "Call await client.start() before making requests",
+                    },
+                )
             await self._producer.send_and_wait(self.TOPIC_REQUEST, payload)
 
             # Wait for response with timeout
@@ -651,7 +763,15 @@ class RoutingEventClient:
 
         try:
             if self._consumer is None:
-                raise RuntimeError("Consumer not initialized. Call start() first.")
+                raise OnexError(
+                    code=EnumCoreErrorCode.OPERATION_FAILED,
+                    message="Consumer not initialized. Call start() first.",
+                    details={
+                        "component": "RoutingEventClient",
+                        "operation": "consume_responses",
+                        "suggestion": "Call await client.start() before consuming",
+                    },
+                )
 
             # Signal that consumer is ready to poll (fixes race condition)
             self._consumer_ready.set()
@@ -729,7 +849,17 @@ class RoutingEventClient:
 
                         if not future.done():
                             future.set_exception(
-                                KafkaError(f"{error_code}: {error_message}")
+                                OnexError(
+                                    code=EnumCoreErrorCode.OPERATION_FAILED,
+                                    message=f"{error_code}: {error_message}",
+                                    details={
+                                        "component": "RoutingEventClient",
+                                        "operation": "routing_response",
+                                        "correlation_id": correlation_id,
+                                        "error_code": error_code,
+                                        "error_message": error_message,
+                                    },
+                                )
                             )
                             self.logger.warning(
                                 f"Failed request (correlation_id: {correlation_id}, error: {error_code})"
@@ -787,6 +917,38 @@ class RoutingEventClientContext:
         return False
 
 
+def _format_recommendations(recommendations: list) -> list[dict[str, Any]]:
+    """
+    Convert AgentRecommendation objects to dict format.
+
+    This helper function extracts recommendation data into a consistent
+    dictionary format, avoiding code duplication.
+
+    Args:
+        recommendations: List of AgentRecommendation objects from router.route()
+
+    Returns:
+        List of recommendation dictionaries with agent details and confidence scores
+    """
+    return [
+        {
+            "agent_name": rec.agent_name,
+            "agent_title": rec.agent_title,
+            "confidence": {
+                "total": rec.confidence.total,
+                "trigger_score": rec.confidence.trigger_score,
+                "context_score": rec.confidence.context_score,
+                "capability_score": rec.confidence.capability_score,
+                "historical_score": rec.confidence.historical_score,
+                "explanation": rec.confidence.explanation,
+            },
+            "reason": rec.reason,
+            "definition_path": rec.definition_path,
+        }
+        for rec in recommendations
+    ]
+
+
 # Backward compatibility wrapper for existing code
 async def route_via_events(
     user_request: str,
@@ -842,24 +1004,7 @@ async def route_via_events(
             context=context or {},
             max_recommendations=max_recommendations,
         )
-        # Convert to dict format
-        return [
-            {
-                "agent_name": rec.agent_name,
-                "agent_title": rec.agent_title,
-                "confidence": {
-                    "total": rec.confidence.total,
-                    "trigger_score": rec.confidence.trigger_score,
-                    "context_score": rec.confidence.context_score,
-                    "capability_score": rec.confidence.capability_score,
-                    "historical_score": rec.confidence.historical_score,
-                    "explanation": rec.confidence.explanation,
-                },
-                "reason": rec.reason,
-                "definition_path": rec.definition_path,
-            }
-            for rec in recommendations
-        ]
+        return _format_recommendations(recommendations)
 
     # Try event-based routing first
     try:
@@ -872,7 +1017,7 @@ async def route_via_events(
                 timeout_ms=timeout_ms,
             )
 
-    except (TimeoutError, KafkaError, RuntimeError) as e:
+    except (OnexError, AIOKafkaError) as e:
         logger.warning(f"Event-based routing failed: {e}")
 
         if fallback_to_local:
@@ -887,28 +1032,20 @@ async def route_via_events(
                     context=context or {},
                     max_recommendations=max_recommendations,
                 )
-                # Convert to dict format
-                return [
-                    {
-                        "agent_name": rec.agent_name,
-                        "agent_title": rec.agent_title,
-                        "confidence": {
-                            "total": rec.confidence.total,
-                            "trigger_score": rec.confidence.trigger_score,
-                            "context_score": rec.confidence.context_score,
-                            "capability_score": rec.confidence.capability_score,
-                            "historical_score": rec.confidence.historical_score,
-                            "explanation": rec.confidence.explanation,
-                        },
-                        "reason": rec.reason,
-                        "definition_path": rec.definition_path,
-                    }
-                    for rec in recommendations
-                ]
+                return _format_recommendations(recommendations)
             except Exception as fallback_error:
                 logger.error(f"Local routing fallback also failed: {fallback_error}")
-                raise RuntimeError(
-                    f"Both event-based and local routing failed: {e}, {fallback_error}"
+                raise OnexError(
+                    code=EnumCoreErrorCode.OPERATION_FAILED,
+                    message="Both event-based and local routing failed",
+                    details={
+                        "component": "route_via_events",
+                        "event_routing_error": str(e),
+                        "local_routing_error": str(fallback_error),
+                        "user_request_preview": (
+                            user_request[:100] if user_request else None
+                        ),
+                    },
                 ) from e
         else:
             # No fallback, re-raise original error
