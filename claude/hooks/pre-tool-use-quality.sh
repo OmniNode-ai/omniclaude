@@ -15,6 +15,7 @@ set -euo pipefail
 
 # Configuration
 HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CLAUDE_ROOT="$(cd "$HOOK_DIR/.." && pwd)"
 PYTHON_SCRIPT="$HOOK_DIR/quality_enforcer.py"
 LOG_FILE="$HOOK_DIR/logs/quality_enforcer.log"
 
@@ -215,7 +216,8 @@ if corr_context:
                 ' 2>/dev/null || echo '{"tool_input": {}, "stage": "start"}')
 
                 # Publish to Kafka via log-agent-action skill (using execute_kafka.py for async)
-                python3 "$HOME/.claude/skills/agent-tracking/log-agent-action/execute_kafka.py" \
+                # Use CLAUDE_ROOT for portable paths (skills are in claude/skills/)
+                python3 "${CLAUDE_ROOT}/skills/agent-tracking/log-agent-action/execute_kafka.py" \
                     --agent "$TOOL_AGENT_NAME" \
                     --action-type "tool_call" \
                     --action-name "${TOOL_NAME}_start" \

@@ -15,10 +15,37 @@ Enables fast queries like:
 - "Which agents have both testing AND deployment capabilities?"
 """
 
+import logging
 from pathlib import Path
 from typing import Dict, List, Set, Tuple
 
 import yaml
+
+
+# Import ONEX error handling
+try:
+    from agents.lib.errors import EnumCoreErrorCode, OnexError
+except ImportError:
+    from enum import Enum
+
+    class EnumCoreErrorCode(str, Enum):
+        """Fallback error codes for ONEX compliance."""
+
+        VALIDATION_ERROR = "VALIDATION_ERROR"
+        CONFIGURATION_ERROR = "CONFIGURATION_ERROR"
+        OPERATION_FAILED = "OPERATION_FAILED"
+
+    class OnexError(Exception):
+        """Fallback OnexError for ONEX compliance."""
+
+        def __init__(self, code, message, details=None):
+            self.code = code
+            self.message = message
+            self.details = details or {}
+            super().__init__(message)
+
+
+logger = logging.getLogger(__name__)
 
 
 class CapabilityIndex:
@@ -27,6 +54,18 @@ class CapabilityIndex:
 
     Builds inverted indexes on initialization for O(1) capability
     and domain lookups.
+
+    Attributes:
+        registry_path: Path to the agent registry YAML file.
+        capability_to_agents: Mapping from capability name to set of agent names.
+        agent_to_capabilities: Mapping from agent name to list of capabilities.
+        domain_to_agents: Mapping from domain name to set of agent names.
+        agent_to_domain: Mapping from agent name to domain context.
+
+    Example:
+        >>> index = CapabilityIndex("/path/to/agent-registry.yaml")
+        >>> debug_agents = index.find_by_capability("debugging")
+        >>> api_agents = index.find_by_domain("api")
     """
 
     def __init__(self, registry_path: str):
@@ -35,6 +74,15 @@ class CapabilityIndex:
 
         Args:
             registry_path: Path to agent-registry.yaml file
+
+        Raises:
+            OnexError: If the registry file cannot be read or parsed.
+            FileNotFoundError: If the registry file does not exist.
+            yaml.YAMLError: If the registry contains invalid YAML.
+
+        Example:
+            >>> index = CapabilityIndex("~/.claude/agents/onex/agent-registry.yaml")
+            >>> print(index.stats())
         """
         self.registry_path = registry_path
         self.capability_to_agents: Dict[str, Set[str]] = {}
@@ -44,36 +92,120 @@ class CapabilityIndex:
 
         self._build_index()
 
-    def _build_index(self):
+    def _build_index(self) -> None:
         """
         Build inverted indexes from registry.
 
-        Creates:
+        Creates the following index structures:
         - capability_to_agents: capability -> set of agent names
         - agent_to_capabilities: agent name -> list of capabilities
         - domain_to_agents: domain -> set of agent names
         - agent_to_domain: agent name -> domain
+
+        Returns:
+            None
+
+        Raises:
+            OnexError: If registry file cannot be read, parsed, or has invalid structure.
+            FileNotFoundError: If the registry file does not exist.
+            yaml.YAMLError: If the registry contains invalid YAML.
+
+        Example:
+            This method is called automatically during __init__.
+            It can be called manually to rebuild indexes:
+            >>> index._build_index()
         """
-        with open(self.registry_path) as f:
-            registry = yaml.safe_load(f)
+        try:
+            with open(self.registry_path) as f:
+                registry = yaml.safe_load(f)
 
-        for agent_name, agent_data in registry["agents"].items():
-            # Index capabilities
-            capabilities = agent_data.get("capabilities", [])
-            self.agent_to_capabilities[agent_name] = capabilities
+            if registry is None:
+                raise OnexError(
+                    code=EnumCoreErrorCode.VALIDATION_ERROR,
+                    message="Registry file is empty or contains no valid YAML",
+                    details={"registry_path": self.registry_path},
+                )
 
-            for capability in capabilities:
-                if capability not in self.capability_to_agents:
-                    self.capability_to_agents[capability] = set()
-                self.capability_to_agents[capability].add(agent_name)
+            if "agents" not in registry:
+                raise OnexError(
+                    code=EnumCoreErrorCode.VALIDATION_ERROR,
+                    message="Registry file missing required 'agents' key",
+                    details={
+                        "registry_path": self.registry_path,
+                        "available_keys": list(registry.keys()) if registry else [],
+                    },
+                )
 
-            # Index domain
-            domain = agent_data.get("domain_context", "general")
-            self.agent_to_domain[agent_name] = domain
+            agent_count = 0
+            capability_count = 0
 
-            if domain not in self.domain_to_agents:
-                self.domain_to_agents[domain] = set()
-            self.domain_to_agents[domain].add(agent_name)
+            for agent_name, agent_data in registry["agents"].items():
+                if agent_data is None:
+                    logger.warning(
+                        f"Agent '{agent_name}' has no data, skipping",
+                        extra={"agent_name": agent_name},
+                    )
+                    continue
+
+                agent_count += 1
+
+                # Index capabilities
+                capabilities = agent_data.get("capabilities", [])
+                self.agent_to_capabilities[agent_name] = capabilities
+
+                for capability in capabilities:
+                    capability_count += 1
+                    if capability not in self.capability_to_agents:
+                        self.capability_to_agents[capability] = set()
+                    self.capability_to_agents[capability].add(agent_name)
+
+                # Index domain
+                domain = agent_data.get("domain_context", "general")
+                self.agent_to_domain[agent_name] = domain
+
+                if domain not in self.domain_to_agents:
+                    self.domain_to_agents[domain] = set()
+                self.domain_to_agents[domain].add(agent_name)
+
+            logger.debug(
+                f"Built capability index: {agent_count} agents, "
+                f"{len(self.capability_to_agents)} unique capabilities, "
+                f"{len(self.domain_to_agents)} domains",
+                extra={
+                    "agent_count": agent_count,
+                    "capability_count": len(self.capability_to_agents),
+                    "domain_count": len(self.domain_to_agents),
+                },
+            )
+
+        except FileNotFoundError:
+            logger.error(f"Registry file not found: {self.registry_path}")
+            raise OnexError(
+                code=EnumCoreErrorCode.CONFIGURATION_ERROR,
+                message=f"Registry file not found: {self.registry_path}",
+                details={"registry_path": self.registry_path},
+            )
+        except yaml.YAMLError as e:
+            logger.error(f"Invalid YAML in registry: {e}")
+            raise OnexError(
+                code=EnumCoreErrorCode.VALIDATION_ERROR,
+                message=f"Invalid YAML in registry file: {e}",
+                details={"registry_path": self.registry_path, "yaml_error": str(e)},
+            )
+        except OnexError:
+            # Re-raise OnexError as-is
+            raise
+        except Exception as e:
+            logger.error(f"Failed to build capability index: {e}", exc_info=True)
+            raise OnexError(
+                code=EnumCoreErrorCode.OPERATION_FAILED,
+                message=f"Failed to build capability index: {e}",
+                details={
+                    "registry_path": self.registry_path,
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                },
+            )
 
     def find_by_capability(self, capability: str) -> List[str]:
         """
@@ -211,9 +343,7 @@ class CapabilityIndex:
 
 # Standalone test
 if __name__ == "__main__":
-    registry_path = (
-        Path.home() / ".claude" / "agent-definitions" / "agent-registry.yaml"
-    )
+    registry_path = Path.home() / ".claude" / "agents" / "onex" / "agent-registry.yaml"
 
     if registry_path.exists():
         index = CapabilityIndex(str(registry_path))

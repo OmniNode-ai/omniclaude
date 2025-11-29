@@ -23,7 +23,8 @@ import sys
 from pathlib import Path
 
 
-# Add hooks/lib to path
+# Add claude/hooks/lib to path (4 parents from claude/skills/agent-tracking/log-performance-metrics/)
+# Path: execute_unified.py -> log-performance-metrics -> agent-tracking -> skills -> claude -> hooks/lib
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "hooks" / "lib"))
 from hook_event_adapter import get_hook_event_adapter
 

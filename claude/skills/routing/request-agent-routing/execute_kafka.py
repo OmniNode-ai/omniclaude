@@ -46,6 +46,12 @@ sys.path.insert(0, str(OMNICLAUDE_PATH))
 from config import settings
 
 
+try:
+    from claude.lib.core import EnumCoreErrorCode, OnexError
+except ImportError:
+    from agents.lib.errors import EnumCoreErrorCode, OnexError
+
+
 # Add _shared to path for utilities
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 from db_helper import get_correlation_id
@@ -201,7 +207,10 @@ class RoutingEventClient:
             TimeoutError: If no response within timeout
         """
         if not self._started:
-            raise RuntimeError("Client not started. Call start() first.")
+            raise OnexError(
+                "Client not started. Call start() first.",
+                error_code=EnumCoreErrorCode.INVALID_STATE,
+            )
 
         timeout = timeout_ms or self.request_timeout_ms
         correlation_id = correlation_id or str(uuid4())
@@ -255,7 +264,10 @@ class RoutingEventClient:
         try:
             # Publish request
             if self._producer is None:
-                raise RuntimeError("Producer not initialized")
+                raise OnexError(
+                    "Producer not initialized",
+                    error_code=EnumCoreErrorCode.INVALID_STATE,
+                )
             await self._producer.send_and_wait(self.TOPIC_REQUEST, payload)
 
             # Wait for response with timeout
@@ -269,7 +281,10 @@ class RoutingEventClient:
         """Background task to consume response events."""
         try:
             if self._consumer is None:
-                raise RuntimeError("Consumer not initialized")
+                raise OnexError(
+                    "Consumer not initialized",
+                    error_code=EnumCoreErrorCode.INVALID_STATE,
+                )
 
             # Signal that consumer is ready
             self._consumer_ready.set()

@@ -199,9 +199,9 @@ class ModelRoutingError(BaseModel):
             "example": {
                 "correlation_id": "a2f33abd-34c2-4d63-bfe7-2cb14ded13fd",
                 "error_code": "REGISTRY_LOAD_FAILED",
-                "error_message": "Failed to load agent registry: /Users/jonah/.claude/agent-definitions/agent-registry.yaml not found",
+                "error_message": "Failed to load agent registry: /Users/jonah/.claude/agents/onex/agent-registry.yaml not found",
                 "error_details": {
-                    "file_path": "/Users/jonah/.claude/agent-definitions/agent-registry.yaml",
+                    "file_path": "/Users/jonah/.claude/agents/onex/agent-registry.yaml",
                     "errno": 2,
                     "exception_type": "FileNotFoundError",
                     "stack_trace": "Traceback (most recent call last)...",

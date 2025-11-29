@@ -516,7 +516,7 @@ def test_validation():
         os.environ.pop("AGENT_REGISTRY_PATH", None)
         settings = Settings()
         expected_default = str(
-            Path.home() / ".claude" / "agent-definitions" / "agent-registry.yaml"
+            Path.home() / ".claude" / "agents" / "onex" / "agent-registry.yaml"
         )
         if settings.agent_registry_path == expected_default:
             print(f"  ✅ Default path resolved correctly")
@@ -563,7 +563,7 @@ def test_validation():
         # Default path (no environment variable set)
         os.environ.pop("AGENT_DEFINITIONS_PATH", None)
         settings = Settings()
-        expected_default = str(Path.home() / ".claude" / "agent-definitions")
+        expected_default = str(Path.home() / ".claude" / "agents" / "onex")
         if settings.agent_definitions_path == expected_default:
             print(f"  ✅ Default path resolved correctly")
             print(f"     Path: {settings.agent_definitions_path}")
@@ -586,7 +586,7 @@ def test_validation():
             )
 
         # Custom relative path
-        relative_path = "config/agent-definitions"
+        relative_path = "config/agents"
         os.environ["AGENT_DEFINITIONS_PATH"] = relative_path
         settings = Settings()
         if settings.agent_definitions_path == relative_path:

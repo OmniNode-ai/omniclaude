@@ -47,7 +47,7 @@ def _get_default_registry_path() -> str:
     Priority:
     1. AGENT_REGISTRY_PATH environment variable
     2. REGISTRY_PATH environment variable (Docker compatibility)
-    3. Default: ~/.claude/agent-definitions/agent-registry.yaml
+    3. Default: ~/.claude/agents/onex/agent-registry.yaml
 
     Returns:
         Path to agent registry file
@@ -62,7 +62,7 @@ def _get_default_registry_path() -> str:
 
     # Default to home directory
     home_dir = Path.home()
-    return str(home_dir / ".claude" / "agent-definitions" / "agent-registry.yaml")
+    return str(home_dir / ".claude" / "agents" / "onex" / "agent-registry.yaml")
 
 
 # Use relative imports for package-based usage
@@ -133,6 +133,16 @@ class AgentRouter:
         Args:
             registry_path: Path to agent registry YAML file (uses default if None)
             cache_ttl: Cache time-to-live in seconds (default: 1 hour)
+
+        Raises:
+            FileNotFoundError: If the registry file does not exist.
+            yaml.YAMLError: If the registry file contains invalid YAML.
+            OnexError: If initialization fails due to configuration issues.
+
+        Example:
+            >>> router = AgentRouter()
+            >>> router = AgentRouter(registry_path="/custom/path/registry.yaml")
+            >>> router = AgentRouter(cache_ttl=7200)  # 2-hour cache
         """
         # Use default registry path if not provided
         if registry_path is None:
@@ -150,10 +160,9 @@ class AgentRouter:
                     def_path = agent_data["definition_path"]
                     # Convert relative path to absolute
                     if not Path(def_path).is_absolute():
-                        # Strip "agent-definitions/" prefix if present
-                        # (already in registry_dir)
-                        if def_path.startswith("agent-definitions/"):
-                            def_path = def_path.replace("agent-definitions/", "", 1)
+                        # Strip agents/onex/ prefix if present (already in registry_dir)
+                        if def_path.startswith("agents/onex/"):
+                            def_path = def_path.replace("agents/onex/", "", 1)
                         agent_data["definition_path"] = str(registry_dir / def_path)
 
             logger.info(
@@ -219,7 +228,22 @@ class AgentRouter:
             max_recommendations: Maximum number of recommendations to return
 
         Returns:
-            List of agent recommendations sorted by confidence (highest first)
+            List of agent recommendations sorted by confidence (highest first).
+            Returns empty list on routing failure (graceful degradation).
+
+        Raises:
+            None: Exceptions are caught and logged; returns empty list on error.
+
+        Example:
+            >>> router = AgentRouter()
+            >>> recommendations = router.route(
+            ...     user_request="debug this performance issue",
+            ...     context={"domain": "performance"},
+            ...     max_recommendations=3,
+            ... )
+            >>> if recommendations:
+            ...     best = recommendations[0]
+            ...     print(f"Agent: {best.agent_name}, Confidence: {best.confidence.total:.2%}")
         """
         try:
             # Start overall timing
@@ -523,13 +547,27 @@ class AgentRouter:
         - "use agent-X" - Specific agent request
         - "@agent-X" - Specific agent request
         - "agent-X" at start of text - Specific agent request
-        - "use an agent", "spawn an agent", etc. - Generic request → polymorphic-agent
+        - "use an agent", "spawn an agent", etc. - Generic request -> polymorphic-agent
 
         Args:
             text: User's input text
 
         Returns:
-            Agent name if found and valid, None otherwise
+            Agent name if found and valid, None otherwise.
+
+        Raises:
+            None: Exceptions are caught and logged; returns None on error.
+
+        Example:
+            >>> router = AgentRouter()
+            >>> router._extract_explicit_agent("use agent-researcher to find docs")
+            'agent-researcher'
+            >>> router._extract_explicit_agent("@agent-debug analyze error")
+            'agent-debug'
+            >>> router._extract_explicit_agent("use an agent to help")
+            'polymorphic-agent'
+            >>> router._extract_explicit_agent("just a normal query")
+            None
         """
         try:
             text_lower = text.lower()
@@ -669,10 +707,25 @@ class AgentRouter:
         """
         Reload agent registry.
 
-        Useful when agent definitions change.
+        Useful when agent definitions change. Rebuilds trigger matcher,
+        capability index, and clears the result cache.
 
         Args:
             registry_path: Path to registry file (uses default if None)
+
+        Returns:
+            None
+
+        Raises:
+            FileNotFoundError: If the registry file does not exist.
+            yaml.YAMLError: If the registry file contains invalid YAML.
+            OnexError: If reload fails due to configuration issues.
+
+        Example:
+            >>> router = AgentRouter()
+            >>> # After modifying agent definitions...
+            >>> router.reload_registry()  # Reload from default path
+            >>> router.reload_registry("/custom/path/registry.yaml")  # Custom path
         """
         path = registry_path or _get_default_registry_path()
 
@@ -689,10 +742,9 @@ class AgentRouter:
                     def_path = agent_data["definition_path"]
                     # Convert relative path to absolute
                     if not Path(def_path).is_absolute():
-                        # Strip "agent-definitions/" prefix if present
-                        # (already in registry_dir)
-                        if def_path.startswith("agent-definitions/"):
-                            def_path = def_path.replace("agent-definitions/", "", 1)
+                        # Strip agents/onex/ prefix if present (already in registry_dir)
+                        if def_path.startswith("agents/onex/"):
+                            def_path = def_path.replace("agents/onex/", "", 1)
                         agent_data["definition_path"] = str(registry_dir / def_path)
 
             # Rebuild components
@@ -733,9 +785,7 @@ class AgentRouter:
 if __name__ == "__main__":  # pragma: no cover
     from pathlib import Path
 
-    registry_path = (
-        Path.home() / ".claude" / "agent-definitions" / "agent-registry.yaml"
-    )
+    registry_path = Path.home() / ".claude" / "agents" / "onex" / "agent-registry.yaml"
 
     if not registry_path.exists():
         print(f"Registry not found at: {registry_path}")

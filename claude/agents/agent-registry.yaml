@@ -63,7 +63,7 @@ agents:
     category: "architecture"
     color: "blue"
     task_agent_type: "api_architect"
-    definition_path: "agent-definitions/api-architect.yaml"
+    definition_path: "agents/onex/api-architect.yaml"
     priority: "high"
     capabilities: ["api_design", "openapi_specs", "fastapi_optimization", "microservices", "http_services"]
     activation_triggers: ["api design", "openapi", "rest api", "fastapi", "microservices", "endpoint"]
@@ -77,7 +77,7 @@ agents:
     category: "development"
     color: "red"
     task_agent_type: "debug_intelligence"
-    definition_path: "agent-definitions/debug-intelligence.yaml"
+    definition_path: "agents/onex/debug-intelligence.yaml"
     priority: "high"
     capabilities: ["debugging", "root_cause_analysis", "error_investigation", "performance_correlation", "system_behavior"]
     activation_triggers: ["debug", "error", "troubleshoot", "investigate", "root cause", "bug"]
@@ -91,7 +91,7 @@ agents:
     category: "development"
     color: "cyan"
     task_agent_type: "frontend_developer"
-    definition_path: "agent-definitions/frontend-developer.yaml"
+    definition_path: "agents/onex/frontend-developer.yaml"
     priority: "high"
     capabilities: ["react_development", "typescript_mastery", "ui_component_building", "responsive_design", "api_integration_frontend", "state_management", "accessibility_implementation", "visual_validation"]
     activation_triggers: ["frontend", "frontend development", "frontend task", "frontend integration", "react", "typescript", "ui", "ui component", "ui implementation", "build dashboard", "create component", "implement ui", "responsive design", "build interface", "develop component", "component development", "chat page", "chat ui", "page implementation", "interface implementation", "build page", "create page", "develop ui"]
@@ -105,7 +105,7 @@ agents:
     category: "development"
     color: "green"
     task_agent_type: "commit"
-    definition_path: "agent-definitions/commit.yaml"
+    definition_path: "agents/onex/commit.yaml"
     priority: "medium"
     capabilities: ["semantic_commits", "git_workflows", "commit_analysis", "change_categorization"]
     activation_triggers: ["commit", "git commit", "semantic commit", "commit message"]
@@ -119,7 +119,7 @@ agents:
     category: "quality"
     color: "green"
     task_agent_type: "testing"
-    definition_path: "agent-definitions/testing.yaml"
+    definition_path: "agents/onex/testing.yaml"
     priority: "high"
     capabilities: ["test_strategy", "quality_assurance", "test_automation", "coverage_analysis", "onex_testing"]
     activation_triggers: ["test", "testing", "validation", "validate", "verify", "quality assurance", "test strategy", "coverage", "validation test", "run tests", "execute tests"]
@@ -133,7 +133,7 @@ agents:
     category: "quality"
     color: "orange"
     task_agent_type: "performance"
-    definition_path: "agent-definitions/performance.yaml"
+    definition_path: "agents/onex/performance.yaml"
     priority: "high"
     capabilities: ["performance_optimization", "bottleneck_detection", "baseline_establishment", "trend_analysis"]
     activation_triggers: ["performance", "optimization", "bottleneck", "efficiency", "benchmark"]
@@ -147,7 +147,7 @@ agents:
     category: "quality"
     color: "orange"
     task_agent_type: "security_audit"
-    definition_path: "agent-definitions/security-audit.yaml"
+    definition_path: "agents/onex/security-audit.yaml"
     priority: "high"
     capabilities: ["vulnerability_assessment", "penetration_testing", "security_compliance", "threat_modeling", "risk_assessment"]
     activation_triggers: ["security", "audit", "vulnerability", "penetration test", "compliance", "threat model"]
@@ -161,7 +161,7 @@ agents:
     category: "infrastructure"
     color: "orange"
     task_agent_type: "devops_infrastructure"
-    definition_path: "agent-definitions/devops-infrastructure.yaml"
+    definition_path: "agents/onex/devops-infrastructure.yaml"
     priority: "high"
     capabilities: ["container_orchestration", "ci_cd_pipeline_optimization", "cloud_deployment", "infrastructure_automation", "kubernetes_management", "docker_containerization"]
     activation_triggers: ["devops", "infrastructure", "deployment", "ci/cd", "docker", "kubernetes"]
@@ -175,7 +175,7 @@ agents:
     category: "infrastructure"
     color: "green"
     task_agent_type: "production_monitor"
-    definition_path: "agent-definitions/production-monitor.yaml"
+    definition_path: "agents/onex/production-monitor.yaml"
     priority: "high"
     capabilities: ["real_time_monitoring", "system_observability", "alerting_automation", "performance_analytics", "incident_detection", "sla_slo_monitoring"]
     activation_triggers: ["production", "monitor", "observability", "alerting", "metrics", "uptime", "monitoring", "incident response", "24/7", "system health"]
@@ -189,7 +189,7 @@ agents:
     category: "infrastructure"
     color: "purple"
     task_agent_type: "observability"
-    definition_path: "agent-definitions/agent-observability.yaml"
+    definition_path: "agents/onex/agent-observability.yaml"
     priority: "high"
     capabilities: ["agent_health_monitoring", "error_diagnostics", "performance_analytics", "execution_tracking", "routing_intelligence", "correlation_analysis"]
     activation_triggers: ["observability", "agent health", "monitoring", "diagnostics", "metrics", "check status", "system health", "agent metrics", "error analysis", "performance", "what's the status"]
@@ -203,7 +203,7 @@ agents:
     category: "quality"
     color: "gray"
     task_agent_type: "code_quality"
-    definition_path: "agent-definitions/code-quality-analyzer.yaml"
+    definition_path: "agents/onex/code-quality-analyzer.yaml"
     priority: "high"
     capabilities: ["code_quality_assessment", "onex_compliance_verification", "anti_pattern_detection", "quality_improvement_recommendations", "documentation_quality_analysis"]
     activation_triggers: ["code quality", "quality analysis", "compliance", "anti-patterns", "code review", "quality assessment", "onex compliance", "code standards"]
@@ -217,7 +217,7 @@ agents:
     category: "quality"
     color: "green"
     task_agent_type: "pr_review"
-    definition_path: "agent-definitions/pr-review.yaml"
+    definition_path: "agents/onex/pr-review.yaml"
     priority: "high"
     capabilities: ["pr_analysis", "merge_readiness", "code_review", "security_assessment", "performance_validation", "onex_compliance"]
     activation_triggers: ["pr review", "pull request", "code review", "review code", "merge readiness", "review changes", "assess pr", "quality check", "standards review", "compliance check"]
@@ -231,7 +231,7 @@ agents:
     category: "documentation"
     color: "gray"
     task_agent_type: "research"
-    definition_path: "agent-definitions/research.yaml"
+    definition_path: "agents/onex/research.yaml"
     priority: "medium"
     capabilities: ["systematic_investigation", "problem_analysis", "knowledge_discovery", "root_cause_analysis", "evidence_based_research"]
     activation_triggers: ["research", "investigate", "analysis", "discovery", "explore"]
@@ -245,7 +245,7 @@ agents:
     category: "coordination"
     color: "yellow"
     task_agent_type: "ticket_manager"
-    definition_path: "agent-definitions/ticket-manager.yaml"
+    definition_path: "agents/onex/ticket-manager.yaml"
     priority: "high"
     capabilities: ["ticket_lifecycle_management", "ai_powered_intelligence", "dependency_analysis", "lifecycle_automation", "workflow_optimization", "smart_prioritization"]
     activation_triggers: ["ticket", "issue", "task management", "project management", "ticket lifecycle", "dependency analysis", "workflow automation", "smart prioritization"]
@@ -259,7 +259,7 @@ agents:
     category: "coordination"
     color: "gray"
     task_agent_type: "parameter_collector"
-    definition_path: "agent-definitions/parameter-collector.yaml"
+    definition_path: "agents/onex/parameter-collector.yaml"
     priority: "high"
     capabilities: ["parameter_collection", "intelligent_prompts", "file_browser", "smart_defaults", "parameter_validation", "workflow_initialization"]
     activation_triggers: ["collect parameters", "parameter collection", "workflow parameters", "smart defaults", "file browser", "parameter prompts", "workflow initialization", "parameter validation"]
@@ -273,7 +273,7 @@ agents:
     category: "coordination"
     color: "purple"
     task_agent_type: "polymorphic_agent"
-    definition_path: "agent-definitions/polymorphic-agent.yaml"
+    definition_path: "agents/onex/polymorphic-agent.yaml"
     priority: "high"
     capabilities: ["workflow_orchestration", "agent_coordination", "role_assumption", "multi_agent_routing", "parallel_execution", "dynamic_transformation", "polymorphic_transformation"]
     activation_triggers: ["polly", "poly", "spawn poly", "spawn polly", "polymorphic", "polymorphic agent", "workflow coordinator", "coordinate", "orchestrate workflow", "multi-agent", "workflow orchestration", "agent coordination", "dispatch for polly", "dispatch 4 pollys"]
@@ -288,7 +288,7 @@ agents:
     category: "development"
     color: "blue"
     task_agent_type: "python_fastapi_expert"
-    definition_path: "agent-definitions/python-fastapi-expert.yaml"
+    definition_path: "agents/onex/python-fastapi-expert.yaml"
     priority: "high"
     capabilities: ["python_development", "fastapi_optimization", "async_programming", "python_ecosystem", "backend_development"]
     activation_triggers: ["python", "fastapi", "async", "pydantic", "backend development", "python optimization", "async programming", "python ecosystem"]
@@ -302,7 +302,7 @@ agents:
     category: "development"
     color: "purple"
     task_agent_type: "ast_generator"
-    definition_path: "agent-definitions/ast-generator.yaml"
+    definition_path: "agents/onex/ast-generator.yaml"
     priority: "high"
     capabilities: ["ast_manipulation", "code_generation", "onex_tool_creation", "template_generation", "intelligent_pattern_learning", "quality_driven_generation", "anti_pattern_prevention"]
     activation_triggers: ["ast", "generate code structure", "code generation", "scaffold", "abstract syntax tree", "onex tool", "intelligent code generation", "quality-driven AST", "validated AST construction"]
@@ -316,7 +316,7 @@ agents:
     category: "infrastructure"
     color: "green"
     task_agent_type: "repository_setup"
-    definition_path: "agent-definitions/repository-setup.yaml"
+    definition_path: "agents/onex/repository-setup.yaml"
     priority: "high"
     capabilities: ["repository_initialization", "archon_project_setup", "development_environment_config", "ci_cd_pipeline_setup", "git_workflow_optimization"]
     activation_triggers: ["repository setup", "repo init", "project setup", "git init", "repository initialization", "development environment", "archon setup", "project configuration"]
@@ -330,7 +330,7 @@ agents:
     category: "documentation"
     color: "blue"
     task_agent_type: "documentation_architect"
-    definition_path: "agent-definitions/documentation-architect.yaml"
+    definition_path: "agents/onex/documentation-architect.yaml"
     priority: "high"
     capabilities: ["documentation_architecture", "api_documentation_generation", "developer_experience_optimization", "knowledge_management", "content_discovery_indexing", "documentation_quality_assessment"]
     activation_triggers: ["documentation", "docs", "api docs", "technical writing", "developer experience", "documentation architecture", "api documentation", "knowledge management", "content indexing", "documentation quality"]
@@ -344,7 +344,7 @@ agents:
     category: "coordination"
     color: "purple"
     task_agent_type: "pr_workflow"
-    definition_path: "agent-definitions/pr-workflow.yaml"
+    definition_path: "agents/onex/pr-workflow.yaml"
     priority: "high"
     capabilities: ["pr_workflow_orchestration", "prerequisites_validation", "quality_gates_execution", "pr_description_generation", "workflow_automation"]
     activation_triggers: ["create PR workflow", "systematic PR creation", "complete PR process", "PR with validation", "full PR workflow", "comprehensive PR creation"]
@@ -358,7 +358,7 @@ agents:
     category: "content_processing"
     color: "teal"
     task_agent_type: "content_summarizer"
-    definition_path: "agent-definitions/content-summarizer.yaml"
+    definition_path: "agents/onex/content-summarizer.yaml"
     priority: "medium"
     capabilities: ["content_summarization", "intelligent_extraction", "log_analysis", "text_reduction", "structure_preservation", "key_information_extraction"]
     activation_triggers: ["summarize", "summarize content", "reduce text", "condense", "extract key information", "summarize log", "summarize deployment", "reduce output", "make summary", "content summarization", "intelligent summary", "extract key lines"]

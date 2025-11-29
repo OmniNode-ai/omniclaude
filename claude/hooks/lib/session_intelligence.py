@@ -15,7 +15,28 @@ import json
 import logging
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, Optional
+
+
+# Ensure project root is in path for imports
+# This file is at: claude/hooks/lib/session_intelligence.py
+# Project root is 3 levels up: lib -> hooks -> claude -> project_root
+_PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+
+# ONEX error handling - import for structured error logging
+try:
+    from claude.lib.core import EnumCoreErrorCode, OnexError
+except ImportError:
+    try:
+        from agents.lib.errors import EnumCoreErrorCode, OnexError
+    except ImportError:
+        # Minimal fallback if neither import works
+        OnexError = None
+        EnumCoreErrorCode = None
 
 
 # Reserved payload fields that metadata cannot overwrite
@@ -73,8 +94,25 @@ def log_session_start(
     except ImportError as e:
         logger.warning(f"HookEventLogger not available: {e}")
         return None
+    except (OSError, IOError) as e:
+        # I/O errors during logging - use OnexError for structured logging
+        error_code = EnumCoreErrorCode.IO_ERROR if EnumCoreErrorCode else "IO_ERROR"
+        logger.error(
+            f"[{error_code}] Failed to log session start (I/O error): {e}",
+            extra={"error_code": str(error_code), "session_id": session_id},
+        )
+        return None
     except Exception as e:
-        logger.error(f"Failed to log session start: {e}")
+        # Unexpected error - use OnexError for structured logging
+        error_code = (
+            EnumCoreErrorCode.OPERATION_FAILED
+            if EnumCoreErrorCode
+            else "OPERATION_FAILED"
+        )
+        logger.error(
+            f"[{error_code}] Failed to log session start: {type(e).__name__}: {e}",
+            extra={"error_code": str(error_code), "session_id": session_id},
+        )
         return None
 
 
@@ -134,8 +172,25 @@ def log_session_end(
     except ImportError as e:
         logger.warning(f"HookEventLogger not available: {e}")
         return None
+    except (OSError, IOError) as e:
+        # I/O errors during logging - use OnexError for structured logging
+        error_code = EnumCoreErrorCode.IO_ERROR if EnumCoreErrorCode else "IO_ERROR"
+        logger.error(
+            f"[{error_code}] Failed to log session end (I/O error): {e}",
+            extra={"error_code": str(error_code), "session_id": session_id},
+        )
+        return None
     except Exception as e:
-        logger.error(f"Failed to log session end: {e}")
+        # Unexpected error - use OnexError for structured logging
+        error_code = (
+            EnumCoreErrorCode.OPERATION_FAILED
+            if EnumCoreErrorCode
+            else "OPERATION_FAILED"
+        )
+        logger.error(
+            f"[{error_code}] Failed to log session end: {type(e).__name__}: {e}",
+            extra={"error_code": str(error_code), "session_id": session_id},
+        )
         return None
 
 

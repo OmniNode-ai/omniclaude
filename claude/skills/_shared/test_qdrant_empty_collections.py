@@ -13,6 +13,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Dict
 from unittest.mock import MagicMock, patch
+from urllib.error import URLError
 
 
 # Add _shared to path

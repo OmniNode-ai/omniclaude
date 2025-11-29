@@ -306,7 +306,7 @@ The skill provides comprehensive error handling:
 
 **Claude Code Access**: `~/.claude/skills/generate-node/`
 **Executable**: `~/.claude/skills/generate-node/generate`
-**Repository**: `/Volumes/PRO-G40/Code/omninode_bridge`
+**Repository**: `omninode_bridge` (see sibling directory)
 
 ## Integration with Other Tools
 

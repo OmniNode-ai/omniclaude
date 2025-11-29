@@ -105,14 +105,14 @@ Test 5: Integration with determine_overall_status
 
 ## Files Modified
 
-- `/Users/jonah/.claude/skills/system-status/check-system-health/execute.py`
+- `~/.claude/skills/system-status/check-system-health/execute.py`
   - Updated `check_docker_services()` function (lines 49-98)
   - Added Docker availability check before returning success
   - Explicit count extraction for clarity
 
 ## Files Added
 
-- `/Users/jonah/.claude/skills/system-status/check-system-health/test_docker_failure.py`
+- `~/.claude/skills/system-status/check-system-health/test_docker_failure.py`
   - Comprehensive test suite with 5 test scenarios
   - Tests Docker failures, permission issues, and status integration
   - Can be run to verify fix: `python3 test_docker_failure.py`

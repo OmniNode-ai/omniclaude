@@ -121,8 +121,8 @@ See `skill.md` for:
 ## File Locations
 
 - **Skill**: `~/.claude/skills/action-logging/skill.md`
-- **Implementation**: `/Volumes/PRO-G40/Code/omniclaude/agents/lib/action_logger.py`
-- **Example**: `/Volumes/PRO-G40/Code/omniclaude/agents/lib/action_logging_example.py`
+- **Implementation**: `agents/lib/action_logger.py` (in repository root)
+- **Example**: `agents/lib/action_logging_example.py` (in repository root)
 
 ## Performance
 

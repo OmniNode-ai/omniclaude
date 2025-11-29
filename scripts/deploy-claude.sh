@@ -57,7 +57,8 @@ done
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CLAUDE_DIR="$HOME/.claude"
-ONEX_DIR="$CLAUDE_DIR/onex"
+# Namespace for this project's artifacts within each artifact type directory
+ONEX_NAMESPACE="onex"
 
 echo "=== OmniClaude Claude Artifacts Deployment ==="
 if [[ "$DRY_RUN" == "true" ]]; then
@@ -67,7 +68,7 @@ if [[ "$FORCE_MODE" == "true" ]]; then
     echo "[FORCE MODE - Optional source checks relaxed]"
 fi
 echo "Repo: $REPO_ROOT"
-echo "Target: $ONEX_DIR"
+echo "Target: $CLAUDE_DIR/<artifact-type>/$ONEX_NAMESPACE"
 echo ""
 
 # Pre-flight validation: Check all required source paths exist before deployment
@@ -75,7 +76,6 @@ echo ""
 preflight_validation() {
     local missing_paths=()
     local required_sources=(
-        "$REPO_ROOT/claude/hooks"
         "$REPO_ROOT/claude/skills"
         "$REPO_ROOT/claude/commands"
         "$REPO_ROOT/claude/agents"
@@ -115,13 +115,27 @@ if [[ "$FORCE_MODE" != "true" ]]; then
     preflight_validation
 fi
 
-# Create onex namespace directory
+# Create artifact type directories with onex namespace
+# Structure: ~/.claude/<artifact-type>/onex/ -> repo/claude/<artifact-type>/
+ARTIFACT_TYPES=("skills" "commands" "agents" "lib" "plugins")
+for type in "${ARTIFACT_TYPES[@]}"; do
+    type_dir="$CLAUDE_DIR/$type"
+    if [[ "$DRY_RUN" == "true" ]]; then
+        if [[ ! -d "$type_dir" ]]; then
+            echo "[DRY] Would create directory: $type_dir"
+        fi
+    else
+        mkdir -p "$type_dir"
+    fi
+done
+
+# Also create config directory
 if [[ "$DRY_RUN" == "true" ]]; then
-    if [[ ! -d "$ONEX_DIR" ]]; then
-        echo "[DRY] Would create directory: $ONEX_DIR"
+    if [[ ! -d "$CLAUDE_DIR/config" ]]; then
+        echo "[DRY] Would create directory: $CLAUDE_DIR/config"
     fi
 else
-    mkdir -p "$ONEX_DIR"
+    mkdir -p "$CLAUDE_DIR/config"
 fi
 
 # Security: Validate path is within allowed directories
@@ -207,16 +221,8 @@ create_symlink() {
         exit 1
     fi
 
-    # Security Check 4: Validate target directory exists
-    local target_dir
-    target_dir="$(dirname "$target")"
-    if [[ ! -d "$target_dir" ]]; then
-        echo "  ERROR: Target directory does not exist: $target_dir"
-        echo "  Cannot create symlink for: $name"
-        exit 1
-    fi
-
     # Dry-run mode: show what would be done without making changes
+    # Check this BEFORE target directory validation since dirs aren't created in dry-run
     if [[ "$DRY_RUN" == "true" ]]; then
         if [[ -L "$target" ]]; then
             echo "  [DRY] Would replace symlink: $name → $source"
@@ -226,6 +232,15 @@ create_symlink() {
             echo "  [DRY] Would create: $name → $source"
         fi
         return 0
+    fi
+
+    # Security Check 4: Validate target directory exists
+    local target_dir
+    target_dir="$(dirname "$target")"
+    if [[ ! -d "$target_dir" ]]; then
+        echo "  ERROR: Target directory does not exist: $target_dir"
+        echo "  Cannot create symlink for: $name"
+        exit 1
     fi
 
     # Handle existing target
@@ -251,26 +266,21 @@ create_symlink() {
     echo "  + $name -> $source"
 }
 
-echo "Creating symlinks in $ONEX_DIR/..."
-create_symlink "$REPO_ROOT/claude/hooks" "$ONEX_DIR/hooks" "hooks"
-create_symlink "$REPO_ROOT/claude/skills" "$ONEX_DIR/skills" "skills"
-create_symlink "$REPO_ROOT/claude/commands" "$ONEX_DIR/commands" "commands"
-create_symlink "$REPO_ROOT/claude/agents" "$ONEX_DIR/agents" "agents"
-create_symlink "$REPO_ROOT/claude/lib" "$ONEX_DIR/lib" "lib"
-create_symlink "$REPO_ROOT/claude/plugins" "$ONEX_DIR/plugins" "plugins"
-
-echo ""
-echo "Creating top-level Claude symlinks..."
-create_symlink "$ONEX_DIR/hooks" "$CLAUDE_DIR/hooks" "hooks"
-create_symlink "$ONEX_DIR/skills" "$CLAUDE_DIR/skills" "skills"
-create_symlink "$ONEX_DIR/commands" "$CLAUDE_DIR/commands" "commands"
-create_symlink "$ONEX_DIR/agents" "$CLAUDE_DIR/agent-definitions" "agent-definitions"
+# Create symlinks within each artifact type directory
+# Structure: ~/.claude/<type>/onex -> repo/claude/<type>
+# NOTE: Hooks are NOT symlinked - settings.json points directly to repo paths
+echo "Creating namespaced symlinks..."
+create_symlink "$REPO_ROOT/claude/skills" "$CLAUDE_DIR/skills/$ONEX_NAMESPACE" "skills/$ONEX_NAMESPACE"
+create_symlink "$REPO_ROOT/claude/commands" "$CLAUDE_DIR/commands/$ONEX_NAMESPACE" "commands/$ONEX_NAMESPACE"
+create_symlink "$REPO_ROOT/claude/agents" "$CLAUDE_DIR/agents/$ONEX_NAMESPACE" "agents/$ONEX_NAMESPACE"
+create_symlink "$REPO_ROOT/claude/lib" "$CLAUDE_DIR/lib/$ONEX_NAMESPACE" "lib/$ONEX_NAMESPACE"
+create_symlink "$REPO_ROOT/claude/plugins" "$CLAUDE_DIR/plugins/$ONEX_NAMESPACE" "plugins/$ONEX_NAMESPACE"
 
 echo ""
 echo "Symlinking shared resources..."
 # .env is optional - warn but don't fail if missing
 create_symlink "$REPO_ROOT/.env" "$CLAUDE_DIR/.env" ".env" "false"
-create_symlink "$REPO_ROOT/config" "$ONEX_DIR/config" "config"
+create_symlink "$REPO_ROOT/config" "$CLAUDE_DIR/config/$ONEX_NAMESPACE" "config/$ONEX_NAMESPACE"
 
 # Symlink the poetry venv for Python imports
 # Check if poetry is installed before attempting to get venv path
@@ -285,7 +295,8 @@ else
 fi
 if [[ -n "$VENV_PATH" && -d "$VENV_PATH" ]]; then
     # Use create_symlink with required=false since venv is optional
-    create_symlink "$VENV_PATH" "$ONEX_DIR/.venv" ".venv" "false"
+    # Place venv in lib/onex/.venv for Python import resolution
+    create_symlink "$VENV_PATH" "$CLAUDE_DIR/lib/$ONEX_NAMESPACE/.venv" "lib/$ONEX_NAMESPACE/.venv" "false"
     echo ""
     echo "Poetry venv linked: $VENV_PATH"
 else
@@ -303,10 +314,15 @@ else
     echo ""
     echo "Structure:"
     echo "  ~/.claude/"
-    echo "    |-- hooks/      -> $REPO_ROOT/claude/hooks/"
-    echo "    |-- skills/     -> $REPO_ROOT/claude/skills/"
-    echo "    |-- commands/   -> $REPO_ROOT/claude/commands/"
-    echo "    \`-- agent-definitions/ -> $REPO_ROOT/claude/agents/"
+    echo "    |-- skills/$ONEX_NAMESPACE/ -> $REPO_ROOT/claude/skills/"
+    echo "    |-- commands/$ONEX_NAMESPACE/ -> $REPO_ROOT/claude/commands/"
+    echo "    |-- agents/$ONEX_NAMESPACE/ -> $REPO_ROOT/claude/agents/"
+    echo "    |-- lib/$ONEX_NAMESPACE/ -> $REPO_ROOT/claude/lib/"
+    echo "    |-- plugins/$ONEX_NAMESPACE/ -> $REPO_ROOT/claude/plugins/"
+    echo "    \`-- config/$ONEX_NAMESPACE/ -> $REPO_ROOT/config/"
     echo ""
-    echo "All Python code can now import from 'claude.lib'"
+    echo "NOTE: Hooks are configured directly in settings.json (no symlink needed)"
+    echo ""
+    echo "Access pattern: ~/.claude/<type>/$ONEX_NAMESPACE/<component>"
+    echo "Example: ~/.claude/skills/$ONEX_NAMESPACE/pr-review/collate-issues"
 fi

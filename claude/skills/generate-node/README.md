@@ -53,5 +53,5 @@ Claude: [Uses ~/.claude/skills/generate-node/generate "Create PostgreSQL CRUD Ef
 ## See Also
 
 - Full skill documentation: `~/.claude/skills/generate-node/skill.md`
-- ContractInferencer docs: `/Volumes/PRO-G40/Code/omninode_bridge/docs/codegen/CONTRACT_INFERENCER.md`
-- ONEX v2.0 Specification: `/Volumes/PRO-G40/Code/omninode_bridge/docs/architecture/ONEX_V2_SPECIFICATION.md`
+- ContractInferencer docs: See `omninode_bridge/docs/codegen/CONTRACT_INFERENCER.md`
+- ONEX v2.0 Specification: See `omninode_bridge/docs/architecture/ONEX_V2_SPECIFICATION.md`

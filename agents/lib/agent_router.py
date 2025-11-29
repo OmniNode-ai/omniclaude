@@ -40,7 +40,7 @@ def _get_default_registry_path() -> str:
     Priority:
     1. AGENT_REGISTRY_PATH environment variable
     2. REGISTRY_PATH environment variable (Docker compatibility)
-    3. Default: ~/.claude/agent-definitions/agent-registry.yaml
+    3. Default: ~/.claude/agents/onex/agent-registry.yaml
 
     Returns:
         Path to agent registry file
@@ -55,7 +55,7 @@ def _get_default_registry_path() -> str:
 
     # Default to home directory
     home_dir = Path.home()
-    return str(home_dir / ".claude" / "agent-definitions" / "agent-registry.yaml")
+    return str(home_dir / ".claude" / "agents" / "onex" / "agent-registry.yaml")
 
 
 # Use absolute imports to avoid relative import issues
@@ -150,10 +150,9 @@ class AgentRouter:
                     def_path = agent_data["definition_path"]
                     # Convert relative path to absolute
                     if not Path(def_path).is_absolute():
-                        # Strip "agent-definitions/" prefix if present
-                        # (already in registry_dir)
-                        if def_path.startswith("agent-definitions/"):
-                            def_path = def_path.replace("agent-definitions/", "", 1)
+                        # Strip agents/onex/ prefix if present (already in registry_dir)
+                        if def_path.startswith("agents/onex/"):
+                            def_path = def_path.replace("agents/onex/", "", 1)
                         agent_data["definition_path"] = str(registry_dir / def_path)
 
             logger.info(
@@ -604,9 +603,7 @@ class AgentRouter:
 if __name__ == "__main__":  # pragma: no cover
     from pathlib import Path
 
-    registry_path = (
-        Path.home() / ".claude" / "agent-definitions" / "agent-registry.yaml"
-    )
+    registry_path = Path.home() / ".claude" / "agents" / "onex" / "agent-registry.yaml"
 
     if not registry_path.exists():
         print(f"Registry not found at: {registry_path}")

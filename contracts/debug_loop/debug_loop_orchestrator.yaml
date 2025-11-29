@@ -403,7 +403,7 @@ dependencies:
   # Service Resolution Configuration
   resolution:
     method: "capability_matching"
-    registry_path: "~/.claude/agent-definitions/"
+    registry_path: "~/.claude/agents/onex/"
     fallback_strategy: "graceful_degradation"
     cache_ttl_seconds: 300
 

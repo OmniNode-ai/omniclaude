@@ -133,16 +133,16 @@ Fixed three security test files to properly test parameterized queries, SQL inje
 ## Files Modified
 
 ### Test Files
-- `/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_ssrf_protection.py`
+- `~/.claude/skills/system-status/tests/test_ssrf_protection.py`
   - Updated to match whitelist-based validation
   - Added comprehensive documentation
   - Fixed test expectations
 
-- `/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_sql_security.py`
+- `~/.claude/skills/system-status/tests/test_sql_security.py`
   - Added documentation explaining expected failures
   - Clarified that failures indicate production code issues
 
-- `/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_sql_injection_prevention.py`
+- `~/.claude/skills/system-status/tests/test_sql_injection_prevention.py`
   - Added comprehensive documentation
   - Listed test coverage
 
@@ -162,7 +162,7 @@ The following production files need fixes:
 
 ```bash
 # Run all security tests
-cd /Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests
+cd ~/.claude/skills/system-status/tests
 python3 -m pytest test_sql_security.py test_sql_injection_prevention.py test_ssrf_protection.py -v
 
 # Expected results:

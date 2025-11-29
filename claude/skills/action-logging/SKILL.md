@@ -56,7 +56,7 @@ action_logger = ActionLogger(
     agent_name="agent-my-agent",
     correlation_id=correlation_id,  # From agent context
     project_name="omniclaude",
-    project_path="/Volumes/PRO-G40/Code/omniclaude",
+    project_path=os.getcwd(),  # Use current working directory
     working_directory=os.getcwd(),
     debug_mode=True
 )
@@ -439,8 +439,8 @@ Events are persisted to PostgreSQL table `agent_actions`:
   },
   "correlation_id": "abc-123",
   "project_name": "omniclaude",
-  "project_path": "/Volumes/PRO-G40/Code/omniclaude",
-  "working_directory": "/Volumes/PRO-G40/Code/omniclaude",
+  "project_path": "/path/to/project",
+  "working_directory": "/path/to/project",
   "debug_mode": true,
   "duration_ms": 20,
   "timestamp": "2025-11-06T10:00:00Z"
@@ -491,17 +491,17 @@ POSTGRES_PASSWORD=<set_in_env>
 
 **ActionLogger Implementation**:
 ```
-/Volumes/PRO-G40/Code/omniclaude/agents/lib/action_logger.py
+agents/lib/action_logger.py (in repository root)
 ```
 
 **Event Publisher** (underlying implementation):
 ```
-/Volumes/PRO-G40/Code/omniclaude/agents/lib/action_event_publisher.py
+agents/lib/action_event_publisher.py (in repository root)
 ```
 
 **Example Usage**:
 ```
-/Volumes/PRO-G40/Code/omniclaude/agents/lib/action_logging_example.py
+agents/lib/action_logging_example.py (in repository root)
 ```
 
 **Skill Location**:
@@ -663,8 +663,7 @@ await logger.log_success(
 ### Test ActionLogger Integration
 
 ```python
-# Run example script
-cd /Volumes/PRO-G40/Code/omniclaude
+# Run example script from repository root
 python3 agents/lib/action_logging_example.py
 ```
 
@@ -789,7 +788,7 @@ for attempt in range(max_retries):
 ## Skills Location
 
 **Claude Code Access**: `~/.claude/skills/action-logging/`
-**Repository Source**: `/Volumes/PRO-G40/Code/omniclaude/agents/lib/`
+**Repository Source**: `agents/lib/` (in repository root)
 
 ---
 

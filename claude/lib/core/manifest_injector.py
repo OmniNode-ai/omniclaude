@@ -106,6 +106,12 @@ try:
 except ImportError:
     from agents.lib.task_classifier import TaskClassifier, TaskContext, TaskIntent
 
+# Import ONEX error classes for compliant error handling
+try:
+    from claude.lib.core import EnumCoreErrorCode, OnexError
+except ImportError:
+    from agents.lib.errors import EnumCoreErrorCode, OnexError
+
 from .intelligence_cache import IntelligenceCache
 from .intelligence_event_client import IntelligenceEventClient
 
@@ -1447,13 +1453,15 @@ class ManifestInjector:
                         return cast(list[float], embedding)
                     else:
                         error_text = await response.text()
-                        raise RuntimeError(
-                            f"GTE-Qwen2 embedding failed with status {response.status}: {error_text}"
+                        raise OnexError(
+                            code=EnumCoreErrorCode.DEPENDENCY_ERROR,
+                            message=f"GTE-Qwen2 embedding failed with status {response.status}: {error_text}",
                         )
         except Exception as e:
             self.logger.error(f"GTE-Qwen2 embedding service error: {e}")
-            raise RuntimeError(
-                f"Embedding service unavailable at {embedding_url}"
+            raise OnexError(
+                code=EnumCoreErrorCode.DEPENDENCY_ERROR,
+                message=f"Embedding service unavailable at {embedding_url}",
             ) from e
 
     async def _query_patterns_direct_qdrant(
@@ -1508,9 +1516,10 @@ class ManifestInjector:
                 self.logger.error(
                     f"[{correlation_id}] GTE-Qwen2 embedding service unavailable: {e}"
                 )
-                raise RuntimeError(
-                    "Embedding service required for semantic search. "
-                    "Ensure GTE-Qwen2 service is running at http://192.168.86.201:8002"
+                raise OnexError(
+                    code=EnumCoreErrorCode.DEPENDENCY_ERROR,
+                    message="Embedding service required for semantic search. "
+                    "Ensure GTE-Qwen2 service is running at http://192.168.86.201:8002",
                 ) from e
 
         try:

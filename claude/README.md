@@ -54,7 +54,7 @@ This creates the following symlinks:
 ├── hooks/              → claude/hooks/
 ├── skills/             → claude/skills/
 ├── commands/           → claude/commands/
-├── agent-definitions/  → claude/agents/
+├── agents/onex/        → claude/agents/
 ├── .env                → .env
 └── onex/               # Namespace directory with all symlinks
     ├── hooks/
@@ -175,7 +175,7 @@ Common Python modules used across hooks and skills.
 
 1. Verify symlinks: `ls -la ~/.claude/skills/`
 2. Check Python path includes the skill directory
-3. Ensure Poetry venv is linked: `ls -la ~/.claude/onex/.venv`
+3. Ensure Poetry venv is linked: `ls -la ~/.claude/lib/onex/.venv`
 
 ### Agent not routing
 

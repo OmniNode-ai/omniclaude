@@ -39,7 +39,7 @@ def mock_claude_dir(mock_home_dir: Path) -> Path:
     claude_dir.mkdir()
 
     # Create subdirectories
-    (claude_dir / "agent-definitions").mkdir()
+    (claude_dir / "agents" / "onex").mkdir(parents=True)
     (claude_dir / ".cache").mkdir()
 
     return claude_dir

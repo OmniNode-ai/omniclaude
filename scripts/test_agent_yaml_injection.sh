@@ -5,7 +5,7 @@
 set -euo pipefail
 
 HOOKS_LIB="$HOME/.claude/hooks/lib"
-AGENT_DEFS="$HOME/.claude/agent-definitions"
+AGENT_DEFS="$HOME/.claude/agents/onex"
 
 echo "=========================================="
 echo "Testing Agent YAML Injection"

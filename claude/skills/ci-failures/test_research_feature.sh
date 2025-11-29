@@ -14,7 +14,7 @@ echo -e "${BLUE}Testing research feature enhancements...${NC}\n"
 
 # Test 1: Verify script syntax
 echo -e "${BLUE}Test 1: Verifying script syntax${NC}"
-if bash -n "${HOME}/.claude/skills/ci-failures/fetch-ci-data"; then
+if bash -n "${HOME}/.claude/skills/onex/ci-failures/fetch-ci-data"; then
     echo -e "${GREEN}✓ Script syntax valid${NC}\n"
 else
     echo -e "${RED}✗ Script has syntax errors${NC}\n"
@@ -30,7 +30,7 @@ functions_to_check=(
 )
 
 for func in "${functions_to_check[@]}"; do
-    if grep -q "^${func}()" "${HOME}/.claude/skills/ci-failures/fetch-ci-data"; then
+    if grep -q "^${func}()" "${HOME}/.claude/skills/onex/ci-failures/fetch-ci-data"; then
         echo -e "${GREEN}✓ Function '$func' exists${NC}"
     else
         echo -e "${RED}✗ Function '$func' not found${NC}"
@@ -51,7 +51,7 @@ patterns=(
 )
 
 for pattern in "${patterns[@]}"; do
-    if grep -q "$pattern" "${HOME}/.claude/skills/ci-failures/fetch-ci-data"; then
+    if grep -q "$pattern" "${HOME}/.claude/skills/onex/ci-failures/fetch-ci-data"; then
         echo -e "${GREEN}✓ Pattern '$pattern' implemented${NC}"
     else
         echo -e "${RED}✗ Pattern '$pattern' not found${NC}"
@@ -71,7 +71,7 @@ required_elements=(
 )
 
 for element in "${required_elements[@]}"; do
-    if grep -q "$element" "${HOME}/.claude/skills/ci-failures/fetch-ci-data"; then
+    if grep -q "$element" "${HOME}/.claude/skills/onex/ci-failures/fetch-ci-data"; then
         echo -e "${GREEN}✓ Research element '$element' implemented${NC}"
     else
         echo -e "${RED}✗ Research element '$element' not found${NC}"
@@ -82,7 +82,7 @@ echo ""
 
 # Test 5: Verify output includes researched count
 echo -e "${BLUE}Test 5: Verifying summary includes researched count${NC}"
-if grep -q "researched:" "${HOME}/.claude/skills/ci-failures/fetch-ci-data"; then
+if grep -q "researched:" "${HOME}/.claude/skills/onex/ci-failures/fetch-ci-data"; then
     echo -e "${GREEN}✓ Researched count added to summary${NC}"
 else
     echo -e "${RED}✗ Researched count not in summary${NC}"
@@ -103,7 +103,7 @@ technologies=(
 )
 
 for tech in "${technologies[@]}"; do
-    if grep -q "$tech" "${HOME}/.claude/skills/ci-failures/fetch-ci-data"; then
+    if grep -q "$tech" "${HOME}/.claude/skills/onex/ci-failures/fetch-ci-data"; then
         echo -e "${GREEN}✓ Technology '$tech' detection implemented${NC}"
     else
         echo -e "${RED}✗ Technology '$tech' detection not found${NC}"
@@ -114,14 +114,14 @@ echo ""
 
 # Test 7: Verify integration into process_workflow_runs
 echo -e "${BLUE}Test 7: Verifying integration into workflow processing${NC}"
-if grep -q "is_error_recognized.*job_name.*step_name" "${HOME}/.claude/skills/ci-failures/fetch-ci-data"; then
+if grep -q "is_error_recognized.*job_name.*step_name" "${HOME}/.claude/skills/onex/ci-failures/fetch-ci-data"; then
     echo -e "${GREEN}✓ Error recognition integrated into workflow processing${NC}"
 else
     echo -e "${RED}✗ Error recognition not integrated${NC}"
     exit 1
 fi
 
-if grep -q "research_error.*job_name.*step_name" "${HOME}/.claude/skills/ci-failures/fetch-ci-data"; then
+if grep -q "research_error.*job_name.*step_name" "${HOME}/.claude/skills/onex/ci-failures/fetch-ci-data"; then
     echo -e "${GREEN}✓ Research generation integrated into workflow processing${NC}"
 else
     echo -e "${RED}✗ Research generation not integrated${NC}"
@@ -139,7 +139,7 @@ doc_elements=(
 )
 
 for element in "${doc_elements[@]}"; do
-    if grep -qi "$element" "${HOME}/.claude/skills/ci-failures/fetch-ci-data"; then
+    if grep -qi "$element" "${HOME}/.claude/skills/onex/ci-failures/fetch-ci-data"; then
         echo -e "${GREEN}✓ Documentation mentions '$element'${NC}"
     else
         echo -e "${YELLOW}⚠ Documentation may be missing '$element'${NC}"
@@ -162,7 +162,7 @@ research_fields=(
 
 all_fields_found=true
 for field in "${research_fields[@]}"; do
-    if ! grep -q "$field" "${HOME}/.claude/skills/ci-failures/fetch-ci-data"; then
+    if ! grep -q "$field" "${HOME}/.claude/skills/onex/ci-failures/fetch-ci-data"; then
         echo -e "${RED}✗ Research field '$field' not found${NC}"
         all_fields_found=false
     fi
@@ -177,7 +177,7 @@ echo ""
 
 # Test 10: Verify conditional research attachment
 echo -e "${BLUE}Test 10: Verifying conditional research attachment${NC}"
-if grep -q 'if \[ -n "\$research" \]; then' "${HOME}/.claude/skills/ci-failures/fetch-ci-data"; then
+if grep -q 'if \[ -n "\$research" \]; then' "${HOME}/.claude/skills/onex/ci-failures/fetch-ci-data"; then
     echo -e "${GREEN}✓ Research conditionally attached to failures${NC}"
 else
     echo -e "${RED}✗ Research attachment logic not found${NC}"

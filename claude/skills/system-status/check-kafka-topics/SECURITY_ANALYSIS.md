@@ -132,7 +132,7 @@ This skill is correctly implemented for Kafka operations. The security test flag
 
 ```bash
 # Verify no SQL usage
-cd /Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-kafka-topics
+cd ~/.claude/skills/system-status/check-kafka-topics
 grep -iE "select|insert|update|delete|execute_query|psycopg2|sqlalchemy" execute.py
 
 # Verify operations are Kafka-only

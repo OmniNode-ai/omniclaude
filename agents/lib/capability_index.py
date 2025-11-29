@@ -211,9 +211,7 @@ class CapabilityIndex:
 
 # Standalone test
 if __name__ == "__main__":
-    registry_path = (
-        Path.home() / ".claude" / "agent-definitions" / "agent-registry.yaml"
-    )
+    registry_path = Path.home() / ".claude" / "agents" / "onex" / "agent-registry.yaml"
 
     if registry_path.exists():
         index = CapabilityIndex(str(registry_path))

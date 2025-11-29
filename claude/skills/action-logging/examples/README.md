@@ -14,8 +14,7 @@ Copy-paste ready examples for integrating action logging into agents.
 ## Running Examples
 
 ```bash
-# Basic usage
-cd /Volumes/PRO-G40/Code/omniclaude
+# Basic usage (run from repository root)
 python3 ~/.claude/skills/action-logging/examples/basic_usage.py
 
 # Tool call patterns
@@ -126,7 +125,7 @@ When copying these examples:
 
 - **Complete API**: `../skill.md`
 - **Quick Start**: `../README.md`
-- **Implementation**: `/Volumes/PRO-G40/Code/omniclaude/agents/lib/action_logger.py`
+- **Implementation**: `agents/lib/action_logger.py` (in repository root)
 
 ---
 

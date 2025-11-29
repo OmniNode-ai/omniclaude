@@ -7,6 +7,7 @@ set -euo pipefail
 # Config
 # -----------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 LOG_FILE="${SCRIPT_DIR}/logs/hook-enhanced.log"
 HOOKS_LIB="${SCRIPT_DIR}/lib"
 HOOK_DIR="${SCRIPT_DIR}"
@@ -14,15 +15,12 @@ HOOK_DIR="${SCRIPT_DIR}"
 # Ensure log directory exists
 mkdir -p "$(dirname "$LOG_FILE")"
 
-export PYTHONPATH="${HOOKS_LIB}:${PYTHONPATH:-}"
+# Include project root so claude.lib.core and agents.lib can be found
+export PYTHONPATH="${PROJECT_ROOT}:${HOOKS_LIB}:${PYTHONPATH:-}"
 
 # Use hooks venv Python (has kafka-python, aiokafka, etc.)
 # The bin/python3 wrapper will fall back to system Python with a warning if venv missing
 export PATH="$HOOK_DIR/bin:$PATH"
-
-# Detect project root dynamically
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Create tmp directory for this session
 mkdir -p "$PROJECT_ROOT/tmp"
@@ -44,7 +42,8 @@ export ARCHON_INTELLIGENCE_URL="${ARCHON_INTELLIGENCE_URL:-http://localhost:8053
 # Kafka/Redpanda configuration for event-based routing
 # IMPORTANT: KAFKA_BOOTSTRAP_SERVERS should be set in .env file
 # If not set, we use a development fallback with an explicit warning
-if [[ -z "$KAFKA_BOOTSTRAP_SERVERS" ]]; then
+# Note: Using ${VAR:-} syntax to handle unset variables with set -u
+if [[ -z "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
     # Development fallback (only used if .env not sourced)
     export KAFKA_BOOTSTRAP_SERVERS="192.168.86.200:29092"
     echo "WARNING: KAFKA_BOOTSTRAP_SERVERS not set in .env. Using development fallback: 192.168.86.200:29092" >&2
@@ -289,7 +288,8 @@ if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
   log "Logging routing decision for project $PROJECT_NAME..."
 
   # Check if the skill exists before attempting to log
-  SKILL_PATH="$HOME/.claude/skills/agent-tracking/log-routing-decision/execute_unified.py"
+  # Use PROJECT_ROOT for portable paths (skills are in claude/skills/)
+  SKILL_PATH="${PROJECT_ROOT}/skills/agent-tracking/log-routing-decision/execute_unified.py"
   if [[ -f "$SKILL_PATH" ]]; then
     # Convert latency to integer (remove decimal part)
     LATENCY_INT="${LATENCY_MS%.*}"
@@ -315,7 +315,8 @@ if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
   fi
 
   # Log agent action (agent dispatch)
-  ACTION_SKILL_PATH="$HOME/.claude/skills/agent-tracking/log-agent-action/execute_unified.py"
+  # Use PROJECT_ROOT for portable paths (skills are in claude/skills/)
+  ACTION_SKILL_PATH="${PROJECT_ROOT}/skills/agent-tracking/log-agent-action/execute_unified.py"
   if [[ -f "$ACTION_SKILL_PATH" ]]; then
     log "Logging agent dispatch action..."
 

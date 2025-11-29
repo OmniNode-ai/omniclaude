@@ -136,7 +136,7 @@ python3 ~/.claude/skills/routing/request-agent-routing/execute_direct.py \
         "explanation": "High confidence match on 'optimize' and 'database' triggers"
       },
       "reason": "Strong trigger match with 'optimize' keyword and database context",
-      "definition_path": "/Users/jonah/.claude/agent-definitions/agent-performance.yaml"
+      "definition_path": "~/.claude/agent-definitions/agent-performance.yaml"
     }
   ],
   "routing_metadata": {

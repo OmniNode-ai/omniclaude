@@ -45,6 +45,9 @@ except ImportError:
         VALIDATION_ERROR = "VALIDATION_ERROR"
         CONFIGURATION_ERROR = "CONFIGURATION_ERROR"
         OPERATION_FAILED = "OPERATION_FAILED"
+        EXTERNAL_SERVICE_ERROR = "EXTERNAL_SERVICE_ERROR"
+        FILE_NOT_FOUND = "FILE_NOT_FOUND"
+        IO_ERROR = "IO_ERROR"
 
     CoreErrorCode = EnumCoreErrorCode
 
@@ -61,7 +64,7 @@ except ImportError:
     ModelOnexError = OnexError
     _errors_available = False
 
-# Manifest Injection
+# Event Publishing (Kafka integration for agent actions)
 from .action_event_publisher import (
     close_producer,
     publish_action_event,

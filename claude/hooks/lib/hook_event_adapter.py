@@ -35,9 +35,26 @@ Usage:
 import json
 import logging
 import os
+import sys
 import uuid
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any, Dict, Optional
+
+
+# Ensure project root is in path for imports
+# This file is at: claude/hooks/lib/hook_event_adapter.py
+# Project root is 3 levels up: lib -> hooks -> claude -> project_root
+_PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+
+# ONEX error handling
+try:
+    from claude.lib.core import EnumCoreErrorCode, OnexError
+except ImportError:
+    from agents.lib.errors import EnumCoreErrorCode, OnexError
 
 
 # Use kafka-python for synchronous publishing (simpler for hooks)
@@ -122,12 +139,13 @@ class HookEventAdapter:
             Kafka producer instance, or None if Kafka is not available
 
         Raises:
-            RuntimeError: If Kafka is not available
+            OnexError: If Kafka is not available (EXTERNAL_SERVICE_ERROR)
             KafkaProducerError: If producer creation fails
         """
         if not self._kafka_available or KafkaProducer is None:
-            raise RuntimeError(
-                "Kafka is not available. Run: ~/.claude/hooks/setup-venv.sh"
+            raise OnexError(
+                code=EnumCoreErrorCode.EXTERNAL_SERVICE_ERROR,
+                message="Kafka is not available. Run: ~/.claude/hooks/setup-venv.sh",
             )
 
         if self._producer is None:

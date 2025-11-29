@@ -19,9 +19,7 @@ from trigger_matcher import TriggerMatcher
 
 def load_registry():
     """Load agent registry from standard location."""
-    registry_path = (
-        Path.home() / ".claude" / "agent-definitions" / "agent-registry.yaml"
-    )
+    registry_path = Path.home() / ".claude" / "agents" / "onex" / "agent-registry.yaml"
     with open(registry_path) as f:
         return yaml.safe_load(f)
 

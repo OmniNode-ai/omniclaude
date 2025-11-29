@@ -522,7 +522,9 @@ collate_pr_issues() {
     local minor_count=$(echo "$categorized" | jq -r '.minor // [] | length')
     local nit_count=$(echo "$categorized" | jq -r '.nit // [] | length')
     local unmatched_count=$(echo "$categorized" | jq -r '.unmatched // [] | length')
-    local total_count=$((critical_count + major_count + minor_count + nit_count + unmatched_count))
+    # Note: unmatched items are NOT included in total_count as they represent
+    # pattern-matching failures, not actionable issues
+    local total_count=$((critical_count + major_count + minor_count + nit_count))
 
     # Output results
     if [[ "$PARALLEL_SOLVE_FORMAT" == "true" ]]; then

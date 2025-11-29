@@ -548,27 +548,30 @@ def _cleanup_producer_sync():
                 pass
 
             # Event loop is closed. The producer was created on a closed loop.
-            # We can't use async cleanup, so directly close the underlying components.
-            # This prevents ResourceWarning about unclosed producers.
+            # We can't use async cleanup properly.
+            #
+            # NOTE: We avoid accessing private attributes (like _client, _sender, _closed)
+            # as these are internal implementation details of AIOKafkaProducer that may
+            # change between versions. Instead, we use the producer's public stop() method
+            # if a new event loop can be created, or simply clear our reference and let
+            # Python's garbage collector handle cleanup.
             try:
-                # Close all internal components to prevent resource warnings
-                if hasattr(_kafka_producer, "_client") and _kafka_producer._client:
-                    _kafka_producer._client.close()
-
-                # Close sender if it exists
-                if hasattr(_kafka_producer, "_sender"):
-                    _kafka_producer._sender = None
-
-                # Mark as closed
-                if hasattr(_kafka_producer, "_closed"):
-                    _kafka_producer._closed = True
-
-                # Mark producer as None to prevent further cleanup attempts
-                _kafka_producer = None
-                logger.debug("Kafka producer fully closed (synchronous cleanup)")
-            except Exception as inner_e:
-                logger.debug(f"Error during synchronous client close: {inner_e}")
-                # Last resort: just set to None
+                # Try creating a new event loop for cleanup (Python 3.10+ compatible)
+                new_loop = asyncio.new_event_loop()
+                try:
+                    new_loop.run_until_complete(close_producer())
+                finally:
+                    new_loop.close()
+                logger.debug("Kafka producer closed via new event loop")
+            except Exception as loop_error:
+                # If we can't create a new loop or cleanup fails,
+                # clear our reference and let garbage collection handle it.
+                # This may produce ResourceWarning on exit, but is safer than
+                # accessing private internals of AIOKafkaProducer.
+                logger.debug(
+                    f"Could not create event loop for cleanup: {loop_error}. "
+                    "Producer reference cleared; GC will handle cleanup."
+                )
                 _kafka_producer = None
 
         except Exception as e:

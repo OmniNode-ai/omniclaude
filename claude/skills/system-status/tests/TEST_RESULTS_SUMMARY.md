@@ -74,7 +74,7 @@ While the pass rate is low, this is primarily due to **test infrastructure issue
 **Example Error**:
 ```python
 ImportError: cannot import name 'validate_limit' from 'execute'
-(/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+(~/.claude/skills/system-status/check-agent-performance/execute.py)
 ```
 
 **Affected Functions**:

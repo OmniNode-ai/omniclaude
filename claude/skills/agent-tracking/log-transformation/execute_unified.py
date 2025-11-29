@@ -22,7 +22,8 @@ import sys
 from pathlib import Path
 
 
-# Add agents/lib to path (5 parents from claude/skills/agent-tracking/log-transformation/)
+# Add agents/lib to path for transformation_event_publisher
+# Path: execute_unified.py -> log-transformation -> agent-tracking -> skills -> claude -> (project root) -> agents/lib
 sys.path.insert(
     0, str(Path(__file__).parent.parent.parent.parent.parent / "agents" / "lib")
 )
@@ -35,6 +36,14 @@ from db_helper import get_correlation_id, parse_json_param
 
 
 def main():
+    """Execute unified transformation logging.
+
+    This function orchestrates the transformation logging process
+    by coordinating with the agent tracking system.
+
+    Returns:
+        int: Exit code (0 for success, non-zero for failure).
+    """
     parser = argparse.ArgumentParser(
         description="Log agent transformation via unified event adapter",
     )
