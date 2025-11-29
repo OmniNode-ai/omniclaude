@@ -11,38 +11,37 @@ import yaml
 
 
 # Define script directory
-SCRIPT_DIR = Path(__file__).parent
+_SCRIPT_DIR = Path(__file__).parent
 
 # Add parent directory to sys.path for direct script execution
-# This enables absolute imports when run as a standalone script
-parent_dir = SCRIPT_DIR.parent
-if str(parent_dir) not in sys.path:
-    sys.path.insert(0, str(parent_dir))
+# This enables absolute imports like 'from claude.lib.utils...' when run as standalone script
+_parent_dir = _SCRIPT_DIR.parent
+if str(_parent_dir) not in sys.path:
+    sys.path.insert(0, str(_parent_dir))
 
-# Import pattern tracker (supports both module and script execution)
+# Import pattern tracker with graceful fallback
 # Use TYPE_CHECKING to allow type hints without runtime dependency
 if TYPE_CHECKING:
     from claude.lib.utils.pattern_tracker_sync import (
         PatternTrackerSync as PatternTrackerSyncType,
     )
 
-PatternTrackerSyncClass: Optional[Type[Any]] = None
-PATTERN_TRACKING_ENABLED = False
+_PatternTrackerSyncClass: Optional[Type[Any]] = None
+_PATTERN_TRACKING_ENABLED = False
 
 try:
     from claude.lib.utils.pattern_tracker_sync import PatternTrackerSync
 
-    PatternTrackerSyncClass = PatternTrackerSync
-    PATTERN_TRACKING_ENABLED = True
+    _PatternTrackerSyncClass = PatternTrackerSync
+    _PATTERN_TRACKING_ENABLED = True
 except ImportError:
     # Pattern tracking unavailable - module not found
-    PATTERN_TRACKING_ENABLED = False
-    PatternTrackerSyncClass = None
+    pass
 
 
 def load_config():
     """Load configuration from config.yaml."""
-    config_path = SCRIPT_DIR / "config.yaml"
+    config_path = _SCRIPT_DIR / "config.yaml"
     with open(config_path, "r") as f:
         return yaml.safe_load(f)
 
@@ -70,7 +69,7 @@ def track_pattern_for_file(file_path_str: str, config: dict) -> bool:
         return False
 
     # Check if pattern tracker is available
-    if not PATTERN_TRACKING_ENABLED or PatternTrackerSyncClass is None:
+    if not _PATTERN_TRACKING_ENABLED or _PatternTrackerSyncClass is None:
         print(
             "[PostToolUse] Pattern tracking: UNAVAILABLE (module not imported)",
             file=sys.stderr,
@@ -93,7 +92,7 @@ def track_pattern_for_file(file_path_str: str, config: dict) -> bool:
 
     # Initialize pattern tracker
     try:
-        pattern_tracker = PatternTrackerSyncClass()
+        pattern_tracker = _PatternTrackerSyncClass()
         print(
             f"[PostToolUse] Pattern tracker: ENABLED (session: {pattern_tracker.session_id})",
             file=sys.stderr,
@@ -225,9 +224,9 @@ async def apply_fixes_to_file_async(file_path_str: str, config: dict) -> bool:
 
     # Initialize pattern tracker if enabled
     pattern_tracker: Optional[Any] = None
-    if PATTERN_TRACKING_ENABLED and PatternTrackerSyncClass is not None:
+    if _PATTERN_TRACKING_ENABLED and _PatternTrackerSyncClass is not None:
         try:
-            pattern_tracker = PatternTrackerSyncClass()
+            pattern_tracker = _PatternTrackerSyncClass()
             print(
                 f"[PostToolUse] Pattern tracker: ENABLED (session: {pattern_tracker.session_id})",
                 file=sys.stderr,
@@ -524,7 +523,7 @@ def main():
             file=sys.stderr,
         )
         print(
-            f"  - Pattern tracking available: {PATTERN_TRACKING_ENABLED}",
+            f"  - Pattern tracking available: {_PATTERN_TRACKING_ENABLED}",
             file=sys.stderr,
         )
         print(

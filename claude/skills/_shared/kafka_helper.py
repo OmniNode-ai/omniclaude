@@ -317,6 +317,7 @@ def get_topic_stats(topic_name: str) -> KafkaTopicStatsResult:
             return {
                 "success": False,
                 "topic": topic_name,
+                "partitions": 0,
                 "error": f"kcat failed: {result.stderr.strip()}",
                 "return_code": result.returncode,
             }
@@ -346,6 +347,7 @@ def get_topic_stats(topic_name: str) -> KafkaTopicStatsResult:
         return {
             "success": False,
             "topic": topic_name,
+            "partitions": 0,
             "error": f"kcat timed out after {get_timeout_seconds()}s (Kafka unreachable?)",
             "return_code": 1,
         }
@@ -353,6 +355,7 @@ def get_topic_stats(topic_name: str) -> KafkaTopicStatsResult:
         return {
             "success": False,
             "topic": topic_name,
+            "partitions": 0,
             "error": "kcat not installed. Install: macOS: 'brew install kcat' | Ubuntu/Debian: 'sudo apt-get install kafkacat'",
             "return_code": 1,
         }
@@ -362,6 +365,7 @@ def get_topic_stats(topic_name: str) -> KafkaTopicStatsResult:
         return {
             "success": False,
             "topic": topic_name,
+            "partitions": 0,
             "error": f"Subprocess error: {str(e)}",
             "return_code": 1,
         }
@@ -409,6 +413,7 @@ def get_consumer_groups() -> KafkaConsumerGroupsResult:
                 "groups": [],
                 "count": 0,
                 "error": f"kcat failed: {result.stderr.strip()}",
+                "implemented": False,
                 "return_code": result.returncode,
             }
 
@@ -421,7 +426,7 @@ def get_consumer_groups() -> KafkaConsumerGroupsResult:
             "count": 0,
             "error": "Consumer group listing not yet implemented (requires kafka-consumer-groups command or Kafka Admin API)",
             "implemented": False,
-            "return_code": 0,
+            "return_code": 1,
         }
     except subprocess.TimeoutExpired:
         return {
@@ -429,6 +434,7 @@ def get_consumer_groups() -> KafkaConsumerGroupsResult:
             "groups": [],
             "count": 0,
             "error": f"kcat timed out after {get_timeout_seconds()}s (Kafka unreachable?)",
+            "implemented": False,
             "return_code": 1,
         }
     except FileNotFoundError:
@@ -437,6 +443,7 @@ def get_consumer_groups() -> KafkaConsumerGroupsResult:
             "groups": [],
             "count": 0,
             "error": "kcat not installed. Install: macOS: 'brew install kcat' | Ubuntu/Debian: 'sudo apt-get install kafkacat'",
+            "implemented": False,
             "return_code": 1,
         }
     except (subprocess.SubprocessError, OSError) as e:
@@ -447,6 +454,7 @@ def get_consumer_groups() -> KafkaConsumerGroupsResult:
             "groups": [],
             "count": 0,
             "error": f"Subprocess error: {str(e)}",
+            "implemented": False,
             "return_code": 1,
         }
 

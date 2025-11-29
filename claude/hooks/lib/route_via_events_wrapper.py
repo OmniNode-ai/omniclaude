@@ -25,7 +25,25 @@ import json
 import logging
 import sys
 import time
-from typing import Any, Dict, Optional
+from pathlib import Path
+from typing import Any, Callable, Dict, Optional
+
+
+# Add script directory to path for sibling imports
+# This enables imports like 'from hook_event_adapter import ...' to work
+# regardless of the current working directory
+_SCRIPT_DIR = Path(__file__).parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+
+# Import hook_event_adapter with graceful fallback
+_get_hook_event_adapter: Optional[Callable[[], Any]] = None
+try:
+    from hook_event_adapter import get_hook_event_adapter
+
+    _get_hook_event_adapter = get_hook_event_adapter
+except ImportError:
+    _get_hook_event_adapter = None
 
 
 logger = logging.getLogger(__name__)
@@ -50,30 +68,31 @@ def route_via_events(
     start_time = time.time()
 
     try:
-        # Try to import the event client
-        from hook_event_adapter import get_hook_event_adapter
-
-        adapter = get_hook_event_adapter()
-
-        # Publish routing request and wait for response
-        # Note: This is a simplified implementation
-        # Full implementation would use Kafka request-response pattern
-
-        # For now, use the adapter's routing capability if available
-        if hasattr(adapter, "route_request"):
-            result = adapter.route_request(
-                prompt=prompt,
-                correlation_id=correlation_id,
-                timeout_ms=timeout_ms,
+        # Check if adapter is available (pre-imported at module level)
+        if _get_hook_event_adapter is None:
+            logger.warning(
+                "Event routing not available: hook_event_adapter import failed"
             )
-            if result:
-                latency_ms = int((time.time() - start_time) * 1000)
-                result["latency_ms"] = latency_ms
-                result["method"] = "event_based"
-                return result
+        else:
+            adapter = _get_hook_event_adapter()
 
-    except ImportError as e:
-        logger.warning(f"Event routing not available: {e}")
+            # Publish routing request and wait for response
+            # Note: This is a simplified implementation
+            # Full implementation would use Kafka request-response pattern
+
+            # For now, use the adapter's routing capability if available
+            if hasattr(adapter, "route_request"):
+                result = adapter.route_request(
+                    prompt=prompt,
+                    correlation_id=correlation_id,
+                    timeout_ms=timeout_ms,
+                )
+                if result:
+                    latency_ms = int((time.time() - start_time) * 1000)
+                    result["latency_ms"] = latency_ms
+                    result["method"] = "event_based"
+                    return result
+
     except Exception as e:
         logger.error(f"Event routing failed: {e}")
 

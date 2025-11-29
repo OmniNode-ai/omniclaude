@@ -122,15 +122,14 @@ def list_containers(name_filter: Optional[str] = None) -> Dict[str, Any]:
             "error": "Docker CLI not found. Ensure Docker is installed.",
             "return_code": 1,
         }
-    except (subprocess.SubprocessError, OSError, Exception) as e:
+    except (subprocess.SubprocessError, OSError) as e:
         # SubprocessError: subprocess-related failures
         # OSError: system-level errors (permissions, resource limits, etc.)
-        # Exception: catch-all for unexpected errors (JSON decode, etc.)
         return {
             "success": False,
             "containers": [],
             "count": 0,
-            "error": f"Subprocess error: {str(e)}",
+            "error": f"{type(e).__name__}: {str(e)}",
             "return_code": 1,
         }
 
@@ -163,7 +162,16 @@ def get_container_status(container_name: str) -> Dict[str, Any]:
                 "return_code": result.returncode,
             }
 
-        inspect_data = json.loads(result.stdout)[0]
+        parsed_data = json.loads(result.stdout)
+        if not parsed_data:
+            return {
+                "success": False,
+                "container": container_name,
+                "status": "not_found",
+                "error": "Docker inspect returned empty result",
+                "return_code": 1,
+            }
+        inspect_data = parsed_data[0]
         state = inspect_data.get("State", {})
         config = inspect_data.get("Config", {})
 
@@ -288,7 +296,7 @@ def get_container_stats(container_name: str) -> Dict[str, Any]:
                 "success": False,
                 "container": container_name,
                 "error": "Could not parse stats output",
-                "return_code": 0,
+                "return_code": 1,
             }
 
         cpu_percent = parts[0].replace("%", "").strip()

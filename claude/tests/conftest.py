@@ -206,7 +206,8 @@ def mock_postgres_connection() -> Generator[MagicMock, None, None]:
 
 
 # =============================================================================
-# Async Test Helpers
+# Async Test Configuration
 # =============================================================================
-# Note: pytest-asyncio handles event loops automatically.
-# No custom event_loop_policy fixture needed for standard async tests.
+# pytest-asyncio automatically manages event loop lifecycle.
+# Configure async mode in pyproject.toml: [tool.pytest.ini_options] asyncio_mode = "auto"
+# For custom event loop policies, use the pytest-asyncio event_loop fixture instead.

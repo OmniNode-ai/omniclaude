@@ -103,6 +103,7 @@ def main() -> int:
         result = {"timeframe": args.timeframe}
 
         # Get routing statistics
+        # ROUTING_TIMEOUT_THRESHOLD_MS is a safe integer constant (100) from constants.py
         routing_query = f"""
             SELECT
                 COUNT(*) as total_decisions,
@@ -111,7 +112,7 @@ def main() -> int:
                 COUNT(CASE WHEN routing_time_ms > {ROUTING_TIMEOUT_THRESHOLD_MS} THEN 1 END) as threshold_violations
             FROM agent_routing_decisions
             WHERE created_at > NOW() - %s::interval
-        """
+        """  # nosec B608
         routing_result = execute_query(routing_query, (interval,))
 
         if routing_result["success"] and routing_result["rows"]:

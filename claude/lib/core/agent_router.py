@@ -13,12 +13,19 @@ Flow:
 6. Cache results
 7. Return top N recommendations
 
+Async Event-Driven Routing:
+- route_async() method provides async event-driven routing via Kafka
+- Integrates with routing_event_client for distributed routing
+- Falls back to local synchronous routing on failure
+
 Performance Targets:
 - Total routing time: <100ms
 - Cache hit: <5ms
 - Cache miss: <100ms
+- Async event routing: <500ms (includes network overhead)
 """
 
+import asyncio
 import logging
 import os
 import re
@@ -391,6 +398,122 @@ class AgentRouter:
             )
             # Return empty list on failure (graceful degradation)
             return []
+
+    async def route_async(
+        self,
+        user_request: str,
+        context: Optional[Dict[str, Any]] = None,
+        max_recommendations: int = 5,
+        min_confidence: float = 0.6,
+        timeout_ms: int = 5000,
+        fallback_to_local: bool = True,
+    ) -> List[AgentRecommendation]:
+        """
+        Route user request to best agent(s) using async event-driven routing.
+
+        This method uses the Kafka event bus for distributed routing, enabling
+        integration with the routing_adapter service. Falls back to local
+        synchronous routing on timeout or failure if fallback_to_local=True.
+
+        Args:
+            user_request: User's input text
+            context: Optional execution context (domain, previous agent, etc.)
+            max_recommendations: Maximum number of recommendations to return
+            min_confidence: Minimum confidence threshold (0.0-1.0)
+            timeout_ms: Response timeout in milliseconds (default: 5000)
+            fallback_to_local: If True, use local routing on failure (default: True)
+
+        Returns:
+            List of agent recommendations sorted by confidence (highest first)
+
+        Example:
+            router = AgentRouter()
+            recommendations = await router.route_async(
+                user_request="optimize my database queries",
+                context={"domain": "database_optimization"},
+                max_recommendations=3,
+            )
+        """
+        try:
+            # Import here to avoid circular imports
+            from .routing_event_client import route_via_events
+
+            logger.debug(
+                f"Async routing request: {user_request[:100]}...",
+                extra={"context": context, "max_recommendations": max_recommendations},
+            )
+
+            # Use event-driven routing
+            recommendations_dicts = await route_via_events(
+                user_request=user_request,
+                context=context,
+                max_recommendations=max_recommendations,
+                min_confidence=min_confidence,
+                timeout_ms=timeout_ms,
+                fallback_to_local=False,  # Handle fallback ourselves for better typing
+            )
+
+            # Convert dict format to AgentRecommendation objects
+            recommendations = []
+            for rec_dict in recommendations_dicts:
+                confidence_data = rec_dict.get("confidence", {})
+                recommendation = AgentRecommendation(
+                    agent_name=rec_dict["agent_name"],
+                    agent_title=rec_dict["agent_title"],
+                    confidence=ConfidenceScore(
+                        total=confidence_data.get("total", 0.0),
+                        trigger_score=confidence_data.get("trigger_score", 0.0),
+                        context_score=confidence_data.get("context_score", 0.0),
+                        capability_score=confidence_data.get("capability_score", 0.0),
+                        historical_score=confidence_data.get("historical_score", 0.0),
+                        explanation=confidence_data.get("explanation", ""),
+                    ),
+                    reason=rec_dict.get("reason", ""),
+                    definition_path=rec_dict.get("definition_path", ""),
+                )
+                recommendations.append(recommendation)
+
+            logger.info(
+                f"Async routed request to {len(recommendations)} agents",
+                extra={
+                    "user_request": user_request[:100],
+                    "top_agent": (
+                        recommendations[0].agent_name if recommendations else "none"
+                    ),
+                    "confidence": (
+                        recommendations[0].confidence.total if recommendations else 0.0
+                    ),
+                    "routing_method": "event_driven",
+                },
+            )
+
+            return recommendations
+
+        except Exception as e:
+            logger.warning(
+                f"Async event-driven routing failed: {e}",
+                extra={
+                    "user_request": user_request[:100],
+                    "error_type": type(e).__name__,
+                },
+            )
+
+            if fallback_to_local:
+                # Fallback to synchronous local routing
+                logger.info("Falling back to local synchronous routing")
+                # Run sync route in executor to avoid blocking event loop
+                loop = asyncio.get_event_loop()
+                return await loop.run_in_executor(
+                    None,
+                    lambda: self.route(
+                        user_request=user_request,
+                        context=context,
+                        max_recommendations=max_recommendations,
+                    ),
+                )
+            else:
+                # Re-raise if no fallback
+                raise
 
     def _extract_explicit_agent(self, text: str) -> Optional[str]:
         """

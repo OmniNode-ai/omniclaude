@@ -193,6 +193,7 @@ class RoutingEventClient:
         self._started = False
         self._pending_requests: dict[str, asyncio.Future] = {}
         self._consumer_ready = asyncio.Event()  # Signal when consumer is polling
+        self._consumer_task: asyncio.Task | None = None  # Store task to prevent GC
 
         self.logger = logging.getLogger(__name__)
 
@@ -277,7 +278,8 @@ class RoutingEventClient:
             )
 
             # Start background consumer task AFTER partition assignment confirmed
-            asyncio.create_task(self._consume_responses())
+            # Store task reference to prevent garbage collection
+            self._consumer_task = asyncio.create_task(self._consume_responses())
 
             # CRITICAL: Wait for consumer task to actually start polling
             self.logger.info("Waiting for consumer task to start polling...")
@@ -342,6 +344,22 @@ class RoutingEventClient:
 
         # Track cleanup errors to report at the end
         cleanup_errors = []
+
+        # Cancel consumer task first (independent error handling)
+        if self._consumer_task is not None:
+            try:
+                if not self._consumer_task.done():
+                    self._consumer_task.cancel()
+                    try:
+                        await self._consumer_task
+                    except asyncio.CancelledError:
+                        pass  # Expected when cancelling
+                self.logger.debug("Consumer task cancelled successfully")
+            except Exception as e:
+                self.logger.error(f"Error cancelling consumer task: {e}")
+                cleanup_errors.append(f"consumer_task: {e}")
+            finally:
+                self._consumer_task = None
 
         # Stop producer (independent error handling)
         if self._producer is not None:

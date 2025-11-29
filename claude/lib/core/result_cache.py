@@ -60,14 +60,16 @@ class ResultCache:
         if context:
             # Convert context to JSON for consistent serialization of all value types
             # This handles non-string values (int, bool, list, nested dict) correctly
-            # Cache sorted items to avoid re-computing in fallback path
-            sorted_items = sorted(context.items())
+            # sorted() is inside try block because it can fail with non-comparable keys
+            # (e.g., mixing int and str keys raises TypeError)
             try:
+                sorted_items = sorted(context.items())
                 sorted_context = dict(sorted_items)
                 key_data += json.dumps(sorted_context, sort_keys=True, default=str)
             except (TypeError, ValueError):
-                # Fallback for non-serializable values
-                key_data += str(sorted_items)
+                # Fallback for non-serializable values or non-comparable keys
+                # Use repr() for consistent string representation without sorting
+                key_data += repr(context)
 
         return hashlib.sha256(key_data.encode()).hexdigest()
 

@@ -7,8 +7,27 @@ Called by stop.sh hook.
 """
 
 import logging
+import sys
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Type
+
+
+# Add script directory to path for sibling imports
+# This enables imports like 'from hook_event_logger import ...' to work
+# regardless of the current working directory
+_SCRIPT_DIR = Path(__file__).parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+
+# Import HookEventLogger with graceful fallback
+_HookEventLoggerClass: Optional[Type[Any]] = None
+try:
+    from hook_event_logger import HookEventLogger
+
+    _HookEventLoggerClass = HookEventLogger
+except ImportError:
+    _HookEventLoggerClass = None
 
 
 # Configure logging
@@ -39,10 +58,12 @@ def log_response_completion(
         Event ID if logged successfully, None otherwise
     """
     try:
-        # Import here to avoid circular imports and allow graceful degradation
-        from hook_event_logger import HookEventLogger
+        # Use pre-imported class for graceful degradation
+        if _HookEventLoggerClass is None:
+            logger.warning("HookEventLogger not available (import failed)")
+            return None
 
-        logger_instance = HookEventLogger()
+        logger_instance = _HookEventLoggerClass()
 
         # Build payload
         payload = {
@@ -77,9 +98,6 @@ def log_response_completion(
         )
         return event_id
 
-    except ImportError as e:
-        logger.warning(f"HookEventLogger not available: {e}")
-        return None
     except Exception as e:
         logger.error(f"Failed to log response completion: {e}")
         return None

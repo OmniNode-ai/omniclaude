@@ -45,9 +45,9 @@ def load_agent_yaml(agent_name: str) -> Optional[str]:
     search_paths = [
         AGENT_DEFINITIONS_DIR / f"{agent_name}.yaml",
         AGENT_DEFINITIONS_DIR / f"{agent_name}.yml",
-        # Also check for agent without "agent-" prefix
-        AGENT_DEFINITIONS_DIR / f"{agent_name.replace('agent-', '')}.yaml",
-        AGENT_DEFINITIONS_DIR / f"{agent_name.replace('agent-', '')}.yml",
+        # Also check for agent without "agent-" prefix (use removeprefix for safety)
+        AGENT_DEFINITIONS_DIR / f"{agent_name.removeprefix('agent-')}.yaml",
+        AGENT_DEFINITIONS_DIR / f"{agent_name.removeprefix('agent-')}.yml",
     ]
 
     for path in search_paths:

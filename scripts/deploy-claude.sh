@@ -18,18 +18,35 @@ mkdir -p "$ONEX_DIR"
 validate_source_path() {
     local source="$1"
     local resolved_source
+    local final_target
 
-    # Resolve to absolute path (handles .. and symlinks)
+    # Resolve to absolute path (handles ..)
     resolved_source="$(cd "$(dirname "$source")" 2>/dev/null && pwd)/$(basename "$source")" || {
         return 1
     }
 
-    # Allow paths within REPO_ROOT or HOME
-    if [[ "$resolved_source" == "$REPO_ROOT"* ]] || [[ "$resolved_source" == "$HOME"* ]]; then
-        return 0
+    # Check initial path is within allowed directories
+    if [[ "$resolved_source" != "$REPO_ROOT"* ]] && [[ "$resolved_source" != "$HOME"* ]]; then
+        return 1
     fi
 
-    return 1
+    # Security: If source is a symlink, verify final target is also within allowed paths
+    # This prevents symlink traversal attacks
+    if [[ -L "$resolved_source" ]]; then
+        # Use readlink to get the canonical path (follows all symlinks)
+        # macOS uses -f flag, which is also supported on GNU coreutils
+        final_target="$(readlink -f "$resolved_source" 2>/dev/null)" || {
+            # If readlink fails, reject the symlink for safety
+            return 1
+        }
+
+        # Verify the final target is within allowed directories
+        if [[ "$final_target" != "$REPO_ROOT"* ]] && [[ "$final_target" != "$HOME"* ]]; then
+            return 1
+        fi
+    fi
+
+    return 0
 }
 
 # Function to create symlink with backup and security validation

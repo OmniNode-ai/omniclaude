@@ -9,11 +9,28 @@ Usage:
 """
 
 import argparse
-import json
 import logging
 import sys
 from datetime import datetime, timezone
-from typing import Optional
+from pathlib import Path
+from typing import Any, Optional, Type
+
+
+# Add script directory to path for sibling imports
+# This enables imports like 'from hook_event_logger import ...' to work
+# regardless of the current working directory
+_SCRIPT_DIR = Path(__file__).parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
+
+# Import HookEventLogger with graceful fallback
+_HookEventLoggerClass: Optional[Type[Any]] = None
+try:
+    from hook_event_logger import HookEventLogger
+
+    _HookEventLoggerClass = HookEventLogger
+except ImportError:
+    _HookEventLoggerClass = None
 
 
 logger = logging.getLogger(__name__)
@@ -42,9 +59,12 @@ def track_intent(
         Event ID if logged successfully
     """
     try:
-        from hook_event_logger import HookEventLogger
+        # Use pre-imported class for graceful degradation
+        if _HookEventLoggerClass is None:
+            logger.warning("HookEventLogger not available (import failed)")
+            return None
 
-        event_logger = HookEventLogger()
+        event_logger = _HookEventLoggerClass()
 
         # Classify intent from prompt
         intent_type = _classify_intent(prompt)
@@ -70,9 +90,6 @@ def track_intent(
                 "domain": domain,
             },
         )
-    except ImportError:
-        logger.warning("HookEventLogger not available")
-        return None
     except Exception as e:
         logger.error(f"Failed to track intent: {e}")
         return None

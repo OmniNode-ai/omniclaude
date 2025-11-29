@@ -23,14 +23,57 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from enum import Enum
 from typing import Any, Dict, List, Optional
 
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+# Add project root for ONEX error imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 # Import shared timeout utility to avoid duplication
 from common_utils import get_timeout_seconds
 
 from config import settings
+
+
+# ONEX-compliant error handling
+# Try to import from agents.lib.errors, fallback to local definitions
+try:
+    from agents.lib.errors import EnumCoreErrorCode, OnexError
+except ImportError:
+    # Fallback: Define locally if import fails (for standalone usage)
+    class EnumCoreErrorCode(str, Enum):
+        """Core error codes for ONEX operations."""
+
+        VALIDATION_ERROR = "VALIDATION_ERROR"
+        CONFIGURATION_ERROR = "CONFIGURATION_ERROR"
+        OPERATION_FAILED = "OPERATION_FAILED"
+
+    class OnexError(Exception):
+        """
+        Base exception class for ONEX operations.
+
+        Provides structured error handling with error codes, messages,
+        and contextual details for debugging and monitoring.
+        """
+
+        def __init__(
+            self,
+            code: EnumCoreErrorCode,
+            message: str,
+            details: Optional[Dict[Any, Any]] = None,
+        ):
+            self.code = code
+            self.error_code = code
+            self.message = message
+            self.details = details or {}
+            super().__init__(message)
+
+        def __str__(self):
+            return f"{self.code}: {self.message}"
+
+        def __repr__(self):
+            return f"OnexError(code={self.code}, message={self.message}, details={self.details})"
 
 
 def validate_qdrant_url(url: str) -> str:
@@ -50,7 +93,9 @@ def validate_qdrant_url(url: str) -> str:
         The validated URL (unchanged if valid)
 
     Raises:
-        ValueError: If URL fails security validation
+        OnexError: If URL fails security validation
+            - CONFIGURATION_ERROR: HTTPS required but HTTP provided
+            - VALIDATION_ERROR: Host not in whitelist, invalid port, or dangerous port
 
     Example:
         >>> validate_qdrant_url("http://localhost:6333")  # OK in dev
@@ -58,7 +103,7 @@ def validate_qdrant_url(url: str) -> str:
         >>> validate_qdrant_url("https://qdrant.internal:6333")  # OK in prod
         'https://qdrant.internal:6333'
         >>> validate_qdrant_url("http://internal-admin:80")  # BLOCKED
-        ValueError: Qdrant host not in whitelist: internal-admin
+        OnexError: VALIDATION_ERROR: Qdrant host not in whitelist: internal-admin
 
     Note:
         This prevents environment variable compromise from enabling SSRF attacks
@@ -72,9 +117,13 @@ def validate_qdrant_url(url: str) -> str:
 
     # Require HTTPS in production
     if environment == "production" and parsed.scheme != "https":
-        raise ValueError(
-            f"HTTPS required for production Qdrant (got: {parsed.scheme}). "
-            f"Set QDRANT_URL to use https:// in production environment."
+        raise OnexError(
+            code=EnumCoreErrorCode.CONFIGURATION_ERROR,
+            message=(
+                f"HTTPS required for production Qdrant (got: {parsed.scheme}). "
+                f"Set QDRANT_URL to use https:// in production environment."
+            ),
+            details={"url": url, "scheme": parsed.scheme, "environment": environment},
         )
 
     # Whitelist allowed hosts (add your production Qdrant hosts here)
@@ -93,22 +142,38 @@ def validate_qdrant_url(url: str) -> str:
         allowed_hosts.extend(h.strip() for h in extra_hosts.split(",") if h.strip())
 
     if parsed.hostname not in allowed_hosts:
-        raise ValueError(
-            f"Qdrant host not in whitelist: {parsed.hostname}. "
-            f"Allowed hosts: {', '.join(allowed_hosts)}. "
-            f"Add to QDRANT_ALLOWED_HOSTS environment variable if needed."
+        raise OnexError(
+            code=EnumCoreErrorCode.VALIDATION_ERROR,
+            message=(
+                f"Qdrant host not in whitelist: {parsed.hostname}. "
+                f"Allowed hosts: {', '.join(allowed_hosts)}. "
+                f"Add to QDRANT_ALLOWED_HOSTS environment variable if needed."
+            ),
+            details={
+                "url": url,
+                "hostname": parsed.hostname,
+                "allowed_hosts": allowed_hosts,
+            },
         )
 
     # Validate port is in valid range (if specified)
     # Note: Port 0 is parsed as None by urllib, so we need explicit checks
     if parsed.port is not None:
         if not (1 <= parsed.port <= 65535):
-            raise ValueError(f"Invalid port number: {parsed.port}. Must be 1-65535.")
+            raise OnexError(
+                code=EnumCoreErrorCode.VALIDATION_ERROR,
+                message=f"Invalid port number: {parsed.port}. Must be 1-65535.",
+                details={"url": url, "port": parsed.port},
+            )
 
     # Handle special case: port 0 in URL string (parsed.port becomes None)
     # Check if URL explicitly contains ":0" which is invalid
     if ":0" in url or url.endswith(":0/") or ":0/" in url:
-        raise ValueError("Invalid port number: 0. Must be 1-65535.")
+        raise OnexError(
+            code=EnumCoreErrorCode.VALIDATION_ERROR,
+            message="Invalid port number: 0. Must be 1-65535.",
+            details={"url": url, "port": 0},
+        )
 
     # Block dangerous ports that could be used for SSRF attacks
     dangerous_ports = [
@@ -125,10 +190,18 @@ def validate_qdrant_url(url: str) -> str:
     ]
 
     if parsed.port and parsed.port in dangerous_ports:
-        raise ValueError(
-            f"Dangerous port blocked: {parsed.port}. "
-            f"This port is commonly used for sensitive services and should not "
-            f"be accessed via Qdrant client."
+        raise OnexError(
+            code=EnumCoreErrorCode.VALIDATION_ERROR,
+            message=(
+                f"Dangerous port blocked: {parsed.port}. "
+                f"This port is commonly used for sensitive services and should not "
+                f"be accessed via Qdrant client."
+            ),
+            details={
+                "url": url,
+                "port": parsed.port,
+                "dangerous_ports": dangerous_ports,
+            },
         )
 
     return url
@@ -218,7 +291,7 @@ def check_qdrant_connection() -> Dict[str, Any]:
 
     try:
         req = urllib.request.Request(f"{qdrant_url}/", method="GET")  # noqa: S310
-        with urllib.request.urlopen(  # noqa: S310
+        with urllib.request.urlopen(  # noqa: S310  # nosec B310 - URL validated by validate_qdrant_url() (http/https scheme only, host whitelist, safe port range)
             req, timeout=get_timeout_seconds()
         ) as response:
             if response.status == 200:
@@ -257,13 +330,13 @@ def check_qdrant_connection() -> Dict[str, Any]:
             "reachable": False,
             "error": f"Network error: {str(e)}",
         }
-    except ValueError as e:
-        # ValueError: URL validation or SSRF protection errors
+    except OnexError as e:
+        # OnexError: URL validation or SSRF protection errors
         return {
             "status": "error",
             "url": qdrant_url,
             "reachable": False,
-            "error": f"Configuration error: {str(e)}",
+            "error": f"Configuration error: {e.message}",
         }
 
 
@@ -280,7 +353,7 @@ def list_collections() -> Dict[str, Any]:
         req = urllib.request.Request(  # noqa: S310
             f"{qdrant_url}/collections", method="GET"
         )
-        with urllib.request.urlopen(  # noqa: S310
+        with urllib.request.urlopen(  # noqa: S310  # nosec B310 - URL validated by validate_qdrant_url() (http/https scheme only, host whitelist, safe port range)
             req, timeout=get_timeout_seconds()
         ) as response:
             if response.status != 200:
@@ -332,13 +405,13 @@ def list_collections() -> Dict[str, Any]:
             "count": 0,
             "error": f"Network error: {str(e)}",
         }
-    except ValueError as e:
-        # ValueError: URL validation or data parsing errors
+    except OnexError as e:
+        # OnexError: URL validation or SSRF protection errors
         return {
             "success": False,
             "collections": [],
             "count": 0,
-            "error": f"Configuration error: {str(e)}",
+            "error": f"Configuration error: {e.message}",
         }
 
 
@@ -360,7 +433,7 @@ def get_collection_stats(collection_name: str) -> Dict[str, Any]:
         req = urllib.request.Request(  # noqa: S310
             f"{qdrant_url}/collections/{encoded_collection}", method="GET"
         )
-        with urllib.request.urlopen(  # noqa: S310
+        with urllib.request.urlopen(  # noqa: S310  # nosec B310 - URL validated by validate_qdrant_url() (http/https scheme only, host whitelist, safe port range)
             req, timeout=get_timeout_seconds()
         ) as response:
             if response.status != 200:
@@ -408,12 +481,12 @@ def get_collection_stats(collection_name: str) -> Dict[str, Any]:
             "collection": collection_name,
             "error": f"Network error: {str(e)}",
         }
-    except ValueError as e:
-        # ValueError: URL validation or data parsing errors
+    except OnexError as e:
+        # OnexError: URL validation or SSRF protection errors
         return {
             "success": False,
             "collection": collection_name,
-            "error": f"Configuration error: {str(e)}",
+            "error": f"Configuration error: {e.message}",
         }
 
 
@@ -442,7 +515,15 @@ def get_all_collections_stats() -> Dict[str, Any]:
     collections_result = list_collections()
 
     if not collections_result["success"]:
-        return collections_result
+        # Return consistent shape matching success path
+        # (list_collections returns different keys: collections=list, count)
+        return {
+            "success": False,
+            "collections": {},
+            "collection_count": 0,
+            "total_vectors": 0,
+            "error": collections_result.get("error", "Failed to list collections"),
+        }
 
     collections_stats = {}
     total_vectors = 0

@@ -18,6 +18,10 @@ from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 
+# Reserved payload fields that metadata cannot overwrite
+_RESERVED_PAYLOAD_FIELDS = frozenset({"session_id", "timestamp", "project_path", "cwd"})
+
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -93,6 +97,14 @@ def log_session_end(
         from hook_event_logger import HookEventLogger
 
         logger_instance = HookEventLogger()
+
+        # Filter metadata to prevent overwriting reserved fields
+        safe_metadata = {
+            k: v
+            for k, v in (metadata or {}).items()
+            if k not in _RESERVED_PAYLOAD_FIELDS
+        }
+
         event_id = logger_instance.log_event(
             source="SessionEnd",
             action="session_completed",
@@ -101,7 +113,7 @@ def log_session_end(
             payload={
                 "session_id": session_id,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                **(metadata or {}),
+                **safe_metadata,
             },
             metadata={
                 "hook_type": "SessionEnd",
