@@ -292,6 +292,18 @@ def is_claude_bot(author: str) -> bool:
     """Check if author is Claude Code bot.
 
     Uses detect_bot_type from models for consistent bot detection.
+
+    Args:
+        author: GitHub username to check.
+
+    Returns:
+        True if the author is identified as Claude Code bot.
+
+    Example:
+        >>> is_claude_bot("claude[bot]")
+        True
+        >>> is_claude_bot("octocat")
+        False
     """
     return detect_bot_type(author) == BotType.CLAUDE_CODE
 
@@ -300,6 +312,18 @@ def is_coderabbit(author: str) -> bool:
     """Check if author is CodeRabbit bot.
 
     Uses detect_bot_type from models for consistent bot detection.
+
+    Args:
+        author: GitHub username to check.
+
+    Returns:
+        True if the author is identified as CodeRabbit bot.
+
+    Example:
+        >>> is_coderabbit("coderabbitai[bot]")
+        True
+        >>> is_coderabbit("github-actions[bot]")
+        False
     """
     return detect_bot_type(author) == BotType.CODERABBIT
 
@@ -415,7 +439,17 @@ def fetch_pr_data(pr_number: int) -> dict[str, Any]:
 
 
 def get_repo_name() -> str:
-    """Get repository name from git."""
+    """Get repository name from git.
+
+    Uses the GitHub CLI to retrieve the current repository's name with owner.
+
+    Returns:
+        Repository name in format "owner/repo", or empty string on failure.
+
+    Example:
+        >>> get_repo_name()  # In OmniNode-ai/omniclaude repo
+        'OmniNode-ai/omniclaude'
+    """
     try:
         result = subprocess.run(
             ["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"],
@@ -633,7 +667,27 @@ def format_issues_human(
     show_status: bool = True,
     include_nitpicks: bool = False,
 ) -> str:
-    """Format issues for human-readable output."""
+    """Format issues for human-readable output.
+
+    Generates a prioritized list of issues grouped by severity with optional
+    resolution status indicators.
+
+    Args:
+        issues: CollatedIssues instance containing categorized issues.
+        show_status: If True, include [RESOLVED]/[OUTDATED] indicators.
+        include_nitpicks: If True, include nitpick-level issues.
+
+    Returns:
+        Formatted string suitable for terminal display.
+
+    Example:
+        >>> output = format_issues_human(issues, show_status=True)
+        >>> print(output)
+        PR #40 Issues - Prioritized
+
+        :red_circle: CRITICAL (1):
+        1. [RESOLVED] Missing test coverage
+    """
     lines: list[str] = []
 
     lines.append(f"PR #{issues.pr_number} Issues - Prioritized")
@@ -717,7 +771,22 @@ def format_issues_human(
 
 
 def format_issues_json(issues: CollatedIssues) -> str:
-    """Format issues as JSON output."""
+    """Format issues as JSON output.
+
+    Serializes the CollatedIssues model to JSON with indentation.
+
+    Args:
+        issues: CollatedIssues instance to serialize.
+
+    Returns:
+        JSON string representation of the issues.
+
+    Example:
+        >>> json_output = format_issues_json(issues)
+        >>> data = json.loads(json_output)
+        >>> data["pr_number"]
+        40
+    """
     return issues.model_dump_json(indent=2)
 
 

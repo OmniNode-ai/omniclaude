@@ -144,13 +144,13 @@ auto_clear_stale_cache() {
     # Check if fetch script is newer than any cached files for this PR
     if [[ -d "$cache_dir" ]]; then
         local fetch_script_mtime
-        fetch_script_mtime=$(stat -f %m "$FETCH_SCRIPT" 2>/dev/null || stat -c %Y "$FETCH_SCRIPT" 2>/dev/null)
+        fetch_script_mtime=$(stat -f %m "$FETCH_SCRIPT" 2>/dev/null || stat -c %Y "$FETCH_SCRIPT" 2>/dev/null || echo "0")
 
         # Find and remove cache files older than the fetch script
         for cache_file in "$cache_dir"/pr_"${pr_number}"_*.json; do
             if [[ -f "$cache_file" ]]; then
                 local cache_mtime
-                cache_mtime=$(stat -f %m "$cache_file" 2>/dev/null || stat -c %Y "$cache_file" 2>/dev/null)
+                cache_mtime=$(stat -f %m "$cache_file" 2>/dev/null || stat -c %Y "$cache_file" 2>/dev/null || echo "0")
 
                 if [[ "$fetch_script_mtime" -gt "$cache_mtime" ]]; then
                     echo "Cache invalidated: fetch-pr-data script updated" >&2
