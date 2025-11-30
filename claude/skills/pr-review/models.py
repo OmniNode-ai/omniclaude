@@ -1230,7 +1230,7 @@ class PRIssue(BaseModel):
             line_number=42,
             severity=IssueSeverity.CRITICAL,
             description="Missing null check",
-            status=IssueStatus.OPEN,
+            status=IssueStatus.UNADDRESSED,
         )
 
         if issue.is_resolved:
@@ -1379,7 +1379,9 @@ class PRIssue(BaseModel):
             severity=severity or comment.severity,
             description=description,
             status=status,
-            comment_id=int(comment.id) if comment.id.isdigit() else None,
+            # Safe conversion: only convert purely numeric IDs (REST API)
+            # GraphQL node IDs like "IC_kwDOABC123" cannot be stored as int
+            comment_id=int(comment.id) if comment.id and comment.id.isdigit() else None,
             thread_id=comment.thread_id,
             resolved_at=comment.resolved_at,
             resolved_by=comment.resolved_by,

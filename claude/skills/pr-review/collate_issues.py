@@ -34,7 +34,7 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, TypedDict
 
 
 # Add script directory to path for relative imports
@@ -43,13 +43,36 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 from models import (
+    BotType,
     CollatedIssues,
     CommentSeverity,
     CommentStatus,
     PRComment,
     PRCommentSource,
     PRIssue,
+    detect_bot_type,
 )
+
+
+# =============================================================================
+# Constants
+# =============================================================================
+
+# Maximum characters for issue description truncation
+MAX_DESCRIPTION_LENGTH = 200
+
+
+# =============================================================================
+# Type Definitions
+# =============================================================================
+
+
+class ExtractedIssue(TypedDict):
+    """Type-safe structure for issues extracted from comment bodies."""
+
+    severity: CommentSeverity
+    location: str
+    summary: str
 
 
 # =============================================================================
@@ -121,9 +144,7 @@ def classify_severity(body: str) -> CommentSeverity:
     if not body:
         return CommentSeverity.UNCLASSIFIED
 
-    body_lower = body.lower()
-
-    # Check patterns in priority order
+    # Check patterns in priority order (using re.IGNORECASE for case-insensitive matching)
     for pattern in CRITICAL_PATTERNS:
         if re.search(pattern, body, re.IGNORECASE):
             return CommentSeverity.CRITICAL
@@ -148,7 +169,7 @@ def classify_severity(body: str) -> CommentSeverity:
 # =============================================================================
 
 
-def extract_issues_from_body(body: str, source: str = "") -> list[dict[str, Any]]:
+def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue]:
     """
     Extract individual issues from a structured comment body.
 
@@ -163,9 +184,23 @@ def extract_issues_from_body(body: str, source: str = "") -> list[dict[str, Any]
         source: Location string like "[path:line]".
 
     Returns:
-        List of dicts with {severity, location, summary}.
+        List of ExtractedIssue dicts with {severity, location, summary}.
+        Deduplicated by normalized summary text.
     """
-    issues: list[dict[str, Any]] = []
+    issues: list[ExtractedIssue] = []
+    # Track seen summaries to prevent duplicate issues from multiple patterns
+    seen_summaries: set[str] = set()
+
+    def add_issue(severity: CommentSeverity, summary: str) -> None:
+        """Add issue if not already seen (case-insensitive deduplication)."""
+        normalized = summary.lower().strip()
+        if normalized and normalized not in seen_summaries:
+            seen_summaries.add(normalized)
+            issues.append(
+                ExtractedIssue(
+                    severity=severity, location=source, summary=summary.strip()
+                )
+            )
 
     if not body:
         return issues
@@ -174,9 +209,7 @@ def extract_issues_from_body(body: str, source: str = "") -> list[dict[str, Any]
     numbered_bold = re.findall(r"### \d+\.\s*\*\*([^*]+)\*\*", body)
     for title in numbered_bold:
         severity = classify_severity(title)
-        issues.append(
-            {"severity": severity, "location": source, "summary": title.strip()}
-        )
+        add_issue(severity, title)
 
     # Pattern: - [ ] Unchecked item (test plan items)
     unchecked = re.findall(r"- \[ \]\s*([^\n]+)", body)
@@ -186,13 +219,7 @@ def extract_issues_from_body(body: str, source: str = "") -> list[dict[str, Any]
         item = re.sub(r"\s*\(see issue[^)]*\)", "", item)
         item = item.strip()
         if item:
-            issues.append(
-                {
-                    "severity": CommentSeverity.MAJOR,
-                    "location": source,
-                    "summary": f"UNCHECKED: {item}",
-                }
-            )
+            add_issue(CommentSeverity.MAJOR, f"UNCHECKED: {item}")
 
     # Pattern: **N. Title (Priority)**
     priority_items = re.findall(r"\*\*\d+\.\s*([^(]+)\s*\(([^)]+)\)\*\*", body)
@@ -205,9 +232,7 @@ def extract_issues_from_body(body: str, source: str = "") -> list[dict[str, Any]
             severity = CommentSeverity.MINOR
         else:
             severity = CommentSeverity.MAJOR
-        issues.append(
-            {"severity": severity, "location": source, "summary": title.strip()}
-        )
+        add_issue(severity, title)
 
     # Pattern: ### CRITICAL/MAJOR/MINOR: description
     for level, sev in [
@@ -217,9 +242,7 @@ def extract_issues_from_body(body: str, source: str = "") -> list[dict[str, Any]
     ]:
         matches = re.findall(rf"### {level}[:\s]+([^\n]+)", body, re.IGNORECASE)
         for desc in matches:
-            issues.append(
-                {"severity": sev, "location": source, "summary": desc.strip()}
-            )
+            add_issue(sev, desc)
 
     # Pattern: Risk items (High Risk: / Medium Risk: / Low Risk:)
     risk_patterns = [
@@ -230,28 +253,25 @@ def extract_issues_from_body(body: str, source: str = "") -> list[dict[str, Any]
     for pattern, sev in risk_patterns:
         matches = re.findall(pattern, body)
         for desc in matches:
-            issues.append(
-                {"severity": sev, "location": source, "summary": desc.strip()}
-            )
+            add_issue(sev, desc)
 
     return issues
 
 
 def is_claude_bot(author: str) -> bool:
-    """Check if author is Claude Code bot."""
-    if not author:
-        return False
-    author_lower = author.lower()
-    patterns = ["claude", "anthropic", "claude-code", "claude[bot]", "claude-bot"]
-    return any(p in author_lower for p in patterns)
+    """Check if author is Claude Code bot.
+
+    Uses detect_bot_type from models for consistent bot detection.
+    """
+    return detect_bot_type(author) == BotType.CLAUDE_CODE
 
 
 def is_coderabbit(author: str) -> bool:
-    """Check if author is CodeRabbit bot."""
-    if not author:
-        return False
-    author_lower = author.lower()
-    return "coderabbit" in author_lower
+    """Check if author is CodeRabbit bot.
+
+    Uses detect_bot_type from models for consistent bot detection.
+    """
+    return detect_bot_type(author) == BotType.CODERABBIT
 
 
 # =============================================================================
@@ -354,6 +374,9 @@ def fetch_pr_data(pr_number: int) -> dict[str, Any]:
         if result.returncode != 0:
             raise RuntimeError(f"fetch-pr-data failed: {result.stderr}")
 
+        if not result.stdout.strip():
+            raise RuntimeError("fetch-pr-data returned empty output")
+
         return json.loads(result.stdout)
     except subprocess.TimeoutExpired:
         raise RuntimeError("fetch-pr-data timed out")
@@ -372,7 +395,7 @@ def get_repo_name() -> str:
         )
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()
-    except Exception:
+    except (subprocess.SubprocessError, subprocess.TimeoutExpired, OSError, ValueError):
         pass
     return ""
 
@@ -498,7 +521,7 @@ def collate_pr_issues(
                         and not line_text.startswith("#")
                         and not line_text.startswith("<!--")
                     ):
-                        summary = line_text[:200]
+                        summary = line_text[:MAX_DESCRIPTION_LENGTH]
                         break
 
                 if not summary or len(summary) < 10:

@@ -27,8 +27,9 @@ CACHE_DIR="${TMPDIR:-/tmp}/pr-review-cache"
 CACHE_TTL=300  # 5 minutes
 MAX_COMMENTS_DEFAULT=1000  # Default limit before summarization
 
-# Fetch resolved review threads via GraphQL
+# Fetch resolved review threads via GraphQL with full pagination
 # Returns JSON: [{path, line, isResolved, commentIds: [...]}]
+# Handles PRs with >100 review threads via cursor-based pagination
 fetch_resolved_threads() {
     local repo_name="$1"
     local pr_number="$2"
@@ -37,29 +38,58 @@ fetch_resolved_threads() {
     local owner="${repo_name%%/*}"
     local repo="${repo_name#*/}"
 
-    # GraphQL query to fetch review threads with resolution status
-    gh api graphql -f query='
-        query($owner: String!, $repo: String!, $pr: Int!) {
-            repository(owner: $owner, name: $repo) {
-                pullRequest(number: $pr) {
-                    reviewThreads(first: 100) {
-                        nodes {
-                            isResolved
-                            isOutdated
-                            path
-                            line
-                            originalLine
-                            resolvedBy {
-                                login
+    local all_threads="[]"
+    local cursor=""
+    local has_next_page="true"
+    local page_count=0
+    local max_pages=50  # Safety limit: 50 pages * 100 = 5000 threads max
+
+    while [[ "$has_next_page" == "true" ]] && [[ $page_count -lt $max_pages ]]; do
+        page_count=$((page_count + 1))
+
+        # Build the cursor argument for pagination
+        local after_arg=""
+        if [[ -n "$cursor" ]]; then
+            after_arg=", after: \\\"$cursor\\\""
+        fi
+
+        # GraphQL query with pagination support
+        # Uses comments(first: 100) which is GitHub's max per page for nested pagination
+        #
+        # LIMITATION: Nested comments pagination
+        # - Review threads use cursor-based pagination (up to 5000 threads via max_pages)
+        # - Comments within each thread are limited to first 100 (no nested cursor pagination)
+        # - Threads with >100 comments will have truncated comment data
+        # - This is acceptable for most PRs; very large threads are rare
+        # - To implement nested pagination would require separate queries per thread
+        local query="
+            query(\$owner: String!, \$repo: String!, \$pr: Int!) {
+                repository(owner: \$owner, name: \$repo) {
+                    pullRequest(number: \$pr) {
+                        reviewThreads(first: 100${after_arg}) {
+                            pageInfo {
+                                hasNextPage
+                                endCursor
                             }
-                            comments(first: 50) {
-                                nodes {
-                                    id
-                                    databaseId
-                                    body
-                                    createdAt
-                                    author {
-                                        login
+                            nodes {
+                                isResolved
+                                isOutdated
+                                path
+                                line
+                                originalLine
+                                resolvedBy {
+                                    login
+                                }
+                                resolvedAt
+                                comments(first: 100) {
+                                    nodes {
+                                        id
+                                        databaseId
+                                        body
+                                        createdAt
+                                        author {
+                                            login
+                                        }
                                     }
                                 }
                             }
@@ -67,20 +97,52 @@ fetch_resolved_threads() {
                     }
                 }
             }
+        "
+
+        # Execute the GraphQL query
+        local result
+        result=$(gh api graphql -f query="$query" -f owner="$owner" -f repo="$repo" -F pr="$pr_number" 2>/dev/null) || {
+            # On error, return what we have so far
+            echo "$all_threads"
+            return
         }
-    ' -f owner="$owner" -f repo="$repo" -F pr="$pr_number" 2>/dev/null | jq '[
-        .data.repository.pullRequest.reviewThreads.nodes[] |
-        {
-            path: .path,
-            line: (.line // .originalLine),
-            is_resolved: .isResolved,
-            is_outdated: .isOutdated,
-            resolved_by: (.resolvedBy.login // null),
-            comment_ids: [.comments.nodes[].databaseId],
-            first_comment_body: (.comments.nodes[0].body // ""),
-            first_comment_author: (.comments.nodes[0].author.login // "")
-        }
-    ]' 2>/dev/null || echo '[]'
+
+        # Extract pagination info
+        has_next_page=$(echo "$result" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage // "false"')
+        cursor=$(echo "$result" | jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.endCursor // ""')
+
+        # Extract and transform threads from this page
+        local page_threads
+        page_threads=$(echo "$result" | jq '[
+            .data.repository.pullRequest.reviewThreads.nodes[] |
+            {
+                path: .path,
+                line: (.line // .originalLine),
+                is_resolved: .isResolved,
+                is_outdated: .isOutdated,
+                resolved_by: (.resolvedBy.login // null),
+                resolved_at: (.resolvedAt // null),
+                comment_ids: [.comments.nodes[].databaseId],
+                first_comment_body: (.comments.nodes[0].body // ""),
+                first_comment_author: (.comments.nodes[0].author.login // "")
+            }
+        ]' 2>/dev/null) || page_threads="[]"
+
+        # Merge with existing threads
+        all_threads=$(echo "$all_threads" "$page_threads" | jq -s 'add' 2>/dev/null) || all_threads="$page_threads"
+
+        # If no more pages or empty cursor, stop
+        if [[ "$has_next_page" != "true" ]] || [[ -z "$cursor" ]] || [[ "$cursor" == "null" ]]; then
+            break
+        fi
+    done
+
+    # Log if we hit the page limit (indicates very large PR)
+    if [[ $page_count -ge $max_pages ]]; then
+        print_warning "Review threads truncated at $max_pages pages (${max_pages}00 threads). PR may have more." >&2
+    fi
+
+    echo "$all_threads"
 }
 
 # Function to print colored status (to stderr to keep stdout clean for JSON)

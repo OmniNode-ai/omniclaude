@@ -10,7 +10,7 @@ For the fastest workflow, use the unified helper script:
 
 1. **Run the unified helper**:
    ```bash
-   ~/.claude/skills/pr-review/collate-issues-with-ci "${1:-}" 2>&1
+   ./claude/skills/pr-review/collate-issues-with-ci "${1:-}" 2>&1
    ```
 
 2. **Fire /parallel-solve** with the output (exclude ⚪ NITPICK sections)
@@ -32,7 +32,7 @@ For more control over each step, follow the detailed workflow below:
 Execute the collate-issues helper to get PR review issues in /parallel-solve-ready format:
 
 ```bash
-~/.claude/skills/pr-review/collate-issues "${1:-}" --parallel-solve-format 2>&1
+./claude/skills/pr-review/collate-issues "${1:-}" --parallel-solve-format 2>&1
 ```
 
 **Save this output** - we'll need it for Step 3.
@@ -44,7 +44,7 @@ Execute the collate-issues helper to get PR review issues in /parallel-solve-rea
 Execute the ci-quick-review helper to get CI failure data in JSON format:
 
 ```bash
-~/.claude/skills/ci-failures/ci-quick-review --json "${1:-}" 2>&1
+./claude/skills/ci-failures/ci-quick-review --json "${1:-}" 2>&1
 ```
 
 **What this returns**:
@@ -148,7 +148,7 @@ Use the unified helper script that combines both PR review issues and CI failure
 
 ```bash
 # Combines PR review + CI failures in one command
-~/.claude/skills/pr-review/collate-issues-with-ci "${1:-}" 2>&1
+./claude/skills/pr-review/collate-issues-with-ci "${1:-}" 2>&1
 ```
 
 This script:
@@ -163,13 +163,13 @@ This script:
 
 ```bash
 # Step 1: PR review issues
-~/.claude/skills/pr-review/collate-issues "${1:-}" --parallel-solve-format
+./claude/skills/pr-review/collate-issues "${1:-}" --parallel-solve-format
 
 # Step 2: CI failures (JSON)
-~/.claude/skills/ci-failures/ci-quick-review --json "${1:-}"
+./claude/skills/ci-failures/ci-quick-review --json "${1:-}"
 
 # Step 2 (alternative): CI failures (human-readable)
-~/.claude/skills/ci-failures/ci-quick-review "${1:-}"
+./claude/skills/ci-failures/ci-quick-review "${1:-}"
 ```
 
 **Exit Codes** (ci-quick-review):
