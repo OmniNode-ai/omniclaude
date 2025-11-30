@@ -34,8 +34,8 @@ from uuid import uuid4
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from claude.lib.omninode_template_engine import OmniNodeTemplateEngine
-from claude.lib.prd_analyzer import (
+from agents.lib.omninode_template_engine import OmniNodeTemplateEngine
+from agents.lib.prd_analyzer import (
     DecompositionResult,
     ParsedPRD,
     PRDAnalysisResult,

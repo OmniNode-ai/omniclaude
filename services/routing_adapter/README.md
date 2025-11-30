@@ -98,7 +98,7 @@ Follows ONEX v2.0 architecture patterns based on the successful database adapter
 - `POSTGRES_USER` - Database user (default: `postgres`)
 - `ROUTING_ADAPTER_PORT` - Service HTTP port (default: `8055`)
 - `ROUTING_ADAPTER_HOST` - Service bind address (default: `0.0.0.0`)
-- `AGENT_REGISTRY_PATH` - Path to agent registry YAML (default: `~/.claude/agents/onex/agent-registry.yaml`)
+- `AGENT_REGISTRY_PATH` - Path to agent registry YAML (default: `~/.claude/agents/omniclaude/agent-registry.yaml`)
 - `ROUTING_TIMEOUT_MS` - Routing operation timeout (default: `5000`)
 
 ### Configuration File
@@ -118,7 +118,7 @@ source .env
 - Python 3.12+
 - Kafka/Redpanda running at configured address
 - PostgreSQL with `omninode_bridge` database
-- Agent registry at `~/.claude/agents/onex/`
+- Agent registry at `~/.claude/agents/omniclaude/`
 
 ### Dependencies
 
@@ -268,7 +268,7 @@ echo $KAFKA_BOOTSTRAP_SERVERS
 
 **Verify agent registry exists**:
 ```bash
-ls ~/.claude/agents/onex/agent-registry.yaml
+ls ~/.claude/agents/omniclaude/agent-registry.yaml
 ```
 
 **Check agents/lib in path**:

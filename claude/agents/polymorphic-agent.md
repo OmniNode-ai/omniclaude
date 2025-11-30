@@ -242,23 +242,23 @@ mcp__linear-server__create_issue(
 
 ### PR Review System
 
-**Location**: `~/.claude/skills/pr-review/`
+**Location**: `~/.claude/skills/omniclaude/pr-review/`
 
 **Available Scripts**:
 
 1. **fetch-pr-data** - Fetch all feedback from 4 GitHub endpoints
-   - Script: `~/.claude/skills/pr-review/fetch-pr-data <PR>`
+   - Script: `~/.claude/skills/omniclaude/pr-review/fetch-pr-data <PR>`
    - Returns JSON with reviews, inline comments, PR comments, issue comments
    - **Critical**: Includes Claude Code bot reviews from issue comments endpoint
 
 2. **review-pr** - Comprehensive review with priority organization
-   - Script: `~/.claude/skills/pr-review/review-pr <PR> [--strict] [--json]`
+   - Script: `~/.claude/skills/omniclaude/pr-review/review-pr <PR> [--strict] [--json]`
    - Categorizes issues: Critical, Major, Minor, Nit
    - Generates markdown report with merge requirements
    - Strict mode available for CI/CD (`--strict`)
 
 3. **pr-review-production** (NEW) - Production-grade review wrapper
-   - Script: `~/.claude/skills/pr-review/pr-review-production <PR> [OPTIONS]`
+   - Script: `~/.claude/skills/omniclaude/pr-review/pr-review-production <PR> [OPTIONS]`
    - **Enforces strict production standards** (all Critical/Major/Minor MUST be resolved)
    - Optional Linear ticket creation for each issue
    - Production-ready output formatting
@@ -285,18 +285,18 @@ mcp__linear-server__create_issue(
 
 ```bash
 # Standard review
-~/.claude/skills/pr-review/review-pr 22
+~/.claude/skills/omniclaude/pr-review/review-pr 22
 
 # Production review (stricter)
-~/.claude/skills/pr-review/pr-review-production 22
+~/.claude/skills/omniclaude/pr-review/pr-review-production 22
 
 # Production review with Linear ticket creation
-~/.claude/skills/pr-review/pr-review-production 22 \
+~/.claude/skills/omniclaude/pr-review/pr-review-production 22 \
   --create-linear-tickets \
   --team 9bdff6a3-f4ef-4ff7-b29a-6c4cf44371e6
 
 # CI/CD integration (exits 2 if issues found)
-~/.claude/skills/pr-review/pr-review-production 22 --json
+~/.claude/skills/omniclaude/pr-review/pr-review-production 22 --json
 ```
 
 **Workflow - PR Review to Linear Tickets**:

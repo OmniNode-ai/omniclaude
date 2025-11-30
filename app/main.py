@@ -66,7 +66,7 @@ async def lifespan(app: FastAPI):
     version = app.version
     environment = settings.environment if settings else "production"
     agent_registry_path = (
-        settings.agent_registry_path if settings else "~/.claude/agents/onex"
+        settings.agent_registry_path if settings else "~/.claude/agents/omniclaude"
     )
 
     initialize_metrics(

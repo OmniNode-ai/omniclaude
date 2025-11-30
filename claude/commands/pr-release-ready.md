@@ -9,7 +9,7 @@
 Execute the collate-issues helper with `--include-nitpicks` to get /parallel-solve-ready output:
 
 ```bash
-./claude/skills/pr-review/collate-issues "${1:-}" --parallel-solve-format --include-nitpicks 2>&1
+~/.claude/skills/omniclaude/pr-review/collate-issues "${1:-}" --parallel-solve-format --include-nitpicks 2>&1
 ```
 
 ---

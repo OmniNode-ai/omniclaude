@@ -33,8 +33,8 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# Agent definitions directory (uses onex namespace)
-AGENT_DEFINITIONS_DIR = Path.home() / ".claude" / "agents" / "onex"
+# Agent definitions directory (uses omniclaude namespace)
+AGENT_DEFINITIONS_DIR = Path.home() / ".claude" / "agents" / "omniclaude"
 
 
 class AgentLoadSuccess(TypedDict):

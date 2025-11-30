@@ -688,12 +688,12 @@ class Settings(BaseSettings):
     # The validators provide sensible defaults, so None is never the final value.
     agent_registry_path: str = Field(
         default="",
-        description="Path to agent registry YAML (defaults to ~/.claude/agents/onex/agent-registry.yaml)",
+        description="Path to agent registry YAML (defaults to ~/.claude/agents/omniclaude/agent-registry.yaml)",
     )
 
     agent_definitions_path: str = Field(
         default="",
-        description="Path to agent definitions directory (defaults to ~/.claude/agents/onex/)",
+        description="Path to agent definitions directory (defaults to ~/.claude/agents/omniclaude/)",
     )
 
     # Kafka Consumer Configuration
@@ -852,7 +852,7 @@ class Settings(BaseSettings):
         Priority:
         1. AGENT_REGISTRY_PATH environment variable (explicit override)
         2. REGISTRY_PATH environment variable (Docker compatibility)
-        3. Default: ~/.claude/agents/onex/agent-registry.yaml
+        3. Default: ~/.claude/agents/omniclaude/agent-registry.yaml
 
         Returns:
             str: Resolved path to agent registry (never None or empty)
@@ -871,7 +871,7 @@ class Settings(BaseSettings):
         # Fall back to home directory default
         home_dir = Path.home()
         default_path = str(
-            home_dir / ".claude" / "agents" / "onex" / "agent-registry.yaml"
+            home_dir / ".claude" / "agents" / "omniclaude" / "agent-registry.yaml"
         )
 
         if not default_path:
@@ -898,7 +898,7 @@ class Settings(BaseSettings):
             return v
 
         home_dir = Path.home()
-        default_path = str(home_dir / ".claude" / "agents" / "onex")
+        default_path = str(home_dir / ".claude" / "agents" / "omniclaude")
 
         if not default_path:
             raise ValueError(

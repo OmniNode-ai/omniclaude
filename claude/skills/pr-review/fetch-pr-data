@@ -13,6 +13,12 @@ set -euo pipefail
 #   - Summary-only mode for extremely large datasets
 #   - Parallel fetching with error recovery
 #   - Statistics tracking
+#
+# Cache Location:
+#   - Stored in <git_repo_root>/tmp/pr-review-cache/
+#   - Cache key includes repo name: pr_<num>_<owner-repo>_<mode>.json
+#   - Cross-platform compatible (no /tmp dependency for Windows)
+#   - Add ./tmp/ to your .gitignore
 # ============================================================================
 
 # Colors for output
@@ -22,8 +28,28 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Configuration
-CACHE_DIR="${TMPDIR:-/tmp}/pr-review-cache"
+# Get project-local cache directory
+# Uses git repo root if available, falls back to current directory
+# This ensures cache is project-local and avoids cross-project pollution
+# Note: Cache key includes target repo name, so different repos don't collide
+# even when fetching PRs from other repos via URL
+get_project_cache_dir() {
+    local repo_root
+    if repo_root=$(git rev-parse --show-toplevel 2>/dev/null); then
+        echo "$repo_root/tmp/pr-review-cache"
+    else
+        # Fallback to current directory if not in git repo
+        # This also works on Windows (no /tmp dependency)
+        echo "./tmp/pr-review-cache"
+    fi
+}
+
+# Configuration - use project-local cache (NOT system temp)
+# Benefits:
+#   - Cross-platform compatible (no /tmp on Windows)
+#   - Project-isolated caches (easy cleanup per project)
+#   - Cache key includes repo name to prevent PR# collisions across repos
+CACHE_DIR="$(get_project_cache_dir)"
 CACHE_TTL=300  # 5 minutes
 MAX_COMMENTS_DEFAULT=1000  # Default limit before summarization
 
@@ -236,6 +262,19 @@ extract_pr_number() {
     fi
 }
 
+# Extract repository name from URL (returns empty string if not a URL)
+extract_repo_from_url() {
+    local input="$1"
+
+    # If it's a GitHub URL, extract owner/repo
+    # Handles: https://github.com/OmniNode-ai/omnibase_core/pull/105
+    if [[ "$input" =~ github\.com/([^/]+/[^/]+)/pull/ ]]; then
+        echo "${BASH_REMATCH[1]}"
+    else
+        echo ""  # Return empty, caller will use get_repo_name() fallback
+    fi
+}
+
 # Get repository name (owner/repo format)
 get_repo_name() {
     gh repo view --json nameWithOwner -q .nameWithOwner 2>/dev/null || {
@@ -293,9 +332,18 @@ fetch_pr_data() {
     local summary_only="${3:-false}"
     local use_cache="${4:-true}"
     local cache_only="${5:-false}"
+    local repo_hint="${6:-}"  # Optional repo from URL extraction
     local repo_name
 
-    # Setup cache with mode-specific key to prevent serving truncated data as full
+    # Get repo name FIRST - needed for cache key to prevent cross-repo pollution
+    # Use repo_hint if provided (from URL), otherwise detect from git remote
+    if [[ -n "$repo_hint" ]]; then
+        repo_name="$repo_hint"
+    else
+        repo_name=$(get_repo_name)
+    fi
+
+    # Setup cache with mode-specific key AND repo name to prevent cross-repo pollution
     mkdir -p "$CACHE_DIR"
     local fetch_mode="full"
     if [[ "$summary_only" == "true" ]]; then
@@ -303,7 +351,11 @@ fetch_pr_data() {
     elif [[ -n "$limit" ]]; then
         fetch_mode="limited_${limit}"
     fi
-    local cache_file="$CACHE_DIR/pr_${pr_number}_${fetch_mode}.json"
+
+    # Sanitize repo name for filesystem (replace / with -)
+    local repo_safe
+    repo_safe=$(echo "$repo_name" | tr '/' '-')
+    local cache_file="$CACHE_DIR/pr_${pr_number}_${repo_safe}_${fetch_mode}.json"
 
     # Check cache
     if [[ "$use_cache" == "true" ]] && check_cache "$cache_file"; then
@@ -317,9 +369,6 @@ fetch_pr_data() {
     fi
 
     print_status "Fetching PR #$pr_number data from all endpoints..."
-
-    # Get repo name
-    repo_name=$(get_repo_name)
     print_status "Repository: $repo_name"
 
     # Create temporary files for parallel fetching
@@ -531,7 +580,9 @@ fetch_pr_data() {
 
 # Main
 main() {
+    local pr_input=""
     local pr_number=""
+    local repo_hint=""
     local limit=""
     local summary_only=false
     local use_cache=true
@@ -560,8 +611,8 @@ main() {
                 usage
                 ;;
             *)
-                if [[ -z "$pr_number" ]]; then
-                    pr_number="$1"
+                if [[ -z "$pr_input" ]]; then
+                    pr_input="$1"
                 else
                     print_error "Unknown argument: $1"
                     usage
@@ -571,15 +622,17 @@ main() {
         esac
     done
 
-    if [[ -z "$pr_number" ]]; then
+    if [[ -z "$pr_input" ]]; then
         usage
     fi
 
     check_dependencies
 
-    pr_number=$(extract_pr_number "$pr_number")
+    # Extract PR number and optionally repo from URL
+    pr_number=$(extract_pr_number "$pr_input")
+    repo_hint=$(extract_repo_from_url "$pr_input")
 
-    fetch_pr_data "$pr_number" "$limit" "$summary_only" "$use_cache" "$cache_only"
+    fetch_pr_data "$pr_number" "$limit" "$summary_only" "$use_cache" "$cache_only" "$repo_hint"
 }
 
 main "$@"

@@ -183,6 +183,26 @@ collate_pr_issues() {
                 null
             end;
 
+        # Function to extract nitpick items from CodeRabbit nested details blocks
+        # Format: <details><summary>🧹 Nitpick comments (N)</summary>...<summary>file.py (N)</summary>..`line`: **title**...
+        def parse_coderabbit_nitpicks:
+            if (. | test("🧹 Nitpick comments")) then
+                # Extract the nitpick section
+                (split("🧹 Nitpick comments")[1] // "" | split("📜 Review details")[0] // .) as $nitpick_section |
+                # Find all `line`: **title** patterns (CodeRabbit format for nitpicks)
+                # Format: `7-7`: **Title here**
+                [$nitpick_section | scan("`([^`]+)`[:\\s]*\\*\\*([^*]+)\\*\\*")] |
+                map({
+                    severity: "nit",
+                    location: "[\(.[0])]",
+                    summary: .[1]
+                }) |
+                # Filter out very short/empty summaries
+                map(select(.summary | length > 5))
+            else
+                []
+            end;
+
         # Function to extract actionable items from Claude bot structured reviews
         # Claude bot uses various formats including:
         #   - ## 🐛 Potential Issues & Concerns
@@ -447,6 +467,9 @@ collate_pr_issues() {
         # Pattern matches both Claude bot and CodeRabbit structured review formats
         ([$all_comments[] | select(.is_claude == true and (.body | test("## 🔴|## ⚠️|## 🐛|### 🔴|### ⚠️|### Must Fix|### Should Fix|## 🎯 Final|## 💡 Suggestion|## Issues & Concerns|## Recommendations|## Areas for Improvement|## Concerns|### Concerns|\\*\\*Concerns\\*\\*"))) | .body | parse_claude_review] | flatten | map(select(. != null and .summary != null))) as $claude_items |
 
+        # Extract CodeRabbit nitpicks from reviews (these are in collapsed details blocks)
+        ([$all_comments[] | select(.body | test("🧹 Nitpick comments")) | .body | parse_coderabbit_nitpicks] | flatten | map(select(. != null and .summary != null))) as $coderabbit_nitpicks |
+
         # Process non-Claude comments normally
         ([$all_comments[] |
             select(.is_claude == false or (.body | test("## 🔴|## ⚠️|## 🐛|### 🔴|### ⚠️|### Must Fix|### Should Fix|## 🎯 Final|## 💡 Suggestion|## Issues & Concerns|## Recommendations|## Areas for Improvement|## Concerns|### Concerns|\\*\\*Concerns\\*\\*") | not)) |
@@ -494,8 +517,8 @@ collate_pr_issues() {
             end
         ]) as $regular_items |
 
-        # Combine Claude items and regular items
-        ($claude_items + $regular_items) |
+        # Combine Claude items, CodeRabbit nitpicks, and regular items
+        ($claude_items + $coderabbit_nitpicks + $regular_items) |
 
         # Deduplicate by location + summary combination (keep first occurrence)
         # This prevents merging distinct issues that happen to have similar summaries

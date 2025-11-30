@@ -15,7 +15,7 @@ from typing import List
 
 import pytest
 
-from claude.lib.logging_event_publisher import (
+from agents.lib.logging_event_publisher import (
     LoggingEventPublisher,
     LoggingEventPublisherContext,
     _get_global_publisher,
