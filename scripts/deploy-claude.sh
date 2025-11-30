@@ -58,7 +58,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CLAUDE_DIR="$HOME/.claude"
 # Namespace for this project's artifacts within each artifact type directory
-ONEX_NAMESPACE="onex"
+ONEX_NAMESPACE="omniclaude"
 
 echo "=== OmniClaude Claude Artifacts Deployment ==="
 if [[ "$DRY_RUN" == "true" ]]; then

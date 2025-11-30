@@ -37,21 +37,33 @@ from pathlib import Path
 from typing import Any, Optional, TypedDict
 
 
-# Add script directory to path for relative imports
 SCRIPT_DIR = Path(__file__).parent
-if str(SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPT_DIR))
 
-from models import (
-    BotType,
-    CollatedIssues,
-    CommentSeverity,
-    CommentStatus,
-    PRComment,
-    PRCommentSource,
-    PRIssue,
-    detect_bot_type,
-)
+try:
+    from models import (
+        BotType,
+        CollatedIssues,
+        CommentSeverity,
+        CommentStatus,
+        PRComment,
+        PRCommentSource,
+        PRIssue,
+        detect_bot_type,
+    )
+except ImportError:
+    # Fallback for standalone execution
+    if str(SCRIPT_DIR) not in sys.path:
+        sys.path.insert(0, str(SCRIPT_DIR))
+    from models import (
+        BotType,
+        CollatedIssues,
+        CommentSeverity,
+        CommentStatus,
+        PRComment,
+        PRCommentSource,
+        PRIssue,
+        detect_bot_type,
+    )
 
 
 # =============================================================================
@@ -140,7 +152,25 @@ NITPICK_PATTERNS = [
 
 
 def classify_severity(body: str) -> CommentSeverity:
-    """Classify comment severity based on body content."""
+    """
+    Classify comment severity based on body content.
+
+    Analyzes the comment body for severity indicator patterns (critical,
+    major, minor, nitpick) and returns the appropriate severity level.
+
+    Args:
+        body: The comment body text to analyze for severity patterns.
+
+    Returns:
+        CommentSeverity enum value based on detected patterns.
+        Returns UNCLASSIFIED if no patterns match.
+
+    Example:
+        >>> classify_severity("This is a critical security issue")
+        CommentSeverity.CRITICAL
+        >>> classify_severity("Consider renaming this variable")
+        CommentSeverity.NITPICK
+    """
     if not body:
         return CommentSeverity.UNCLASSIFIED
 
@@ -457,7 +487,7 @@ def collate_pr_issues(
                 continue
 
             # Skip addressed comments
-            if "Addressed" in body and body.strip().startswith("Addressed"):
+            if body.strip().startswith("Addressed"):
                 continue
 
             # Skip positive feedback
@@ -723,14 +753,10 @@ Examples:
         help="Only show resolved issues",
     )
     parser.add_argument(
-        "--show-status",
-        action="store_true",
-        default=True,
-        help="Show resolution status indicators (default: True)",
-    )
-    parser.add_argument(
         "--no-status",
-        action="store_true",
+        dest="show_status",
+        action="store_false",
+        default=True,
         help="Hide resolution status indicators",
     )
     parser.add_argument(
@@ -765,7 +791,7 @@ Examples:
         if args.json:
             print(format_issues_json(issues))
         else:
-            show_status = args.show_status and not args.no_status
+            show_status = args.show_status
             print(
                 format_issues_human(
                     issues,

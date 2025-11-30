@@ -37,6 +37,37 @@ Execute the collate-issues helper to get PR review issues in /parallel-solve-rea
 
 **Save this output** - we'll need it for Step 3.
 
+### Resolution Filtering Options
+
+The collate-issues command supports filtering issues by their resolution status:
+
+| Flag | Behavior |
+|------|----------|
+| *(default)* | Shows all issues (resolved + open) |
+| `--hide-resolved` | Only show open issues (excludes resolved/outdated) |
+| `--show-resolved-only` | Only show resolved issues (for verification) |
+
+**Resolution Indicators** (when shown):
+- `[RESOLVED]` - Thread was manually marked as resolved on GitHub
+- `[OUTDATED]` - Code has changed since the comment was made (position no longer valid)
+
+**Examples with resolution filtering**:
+```bash
+# Default: show all issues
+~/.claude/skills/omniclaude/pr-review/collate-issues "${1:-}" --parallel-solve-format
+
+# Only show open issues (recommended for fixing)
+~/.claude/skills/omniclaude/pr-review/collate-issues "${1:-}" --parallel-solve-format --hide-resolved
+
+# Only show resolved issues (for verification)
+~/.claude/skills/omniclaude/pr-review/collate-issues "${1:-}" --show-resolved-only
+```
+
+**When to use each**:
+- **Default**: First pass to see everything
+- **`--hide-resolved`**: Focus on remaining work (exclude already-addressed issues)
+- **`--show-resolved-only`**: Verify which issues have been marked resolved
+
 ---
 
 ## Step 2: Fetch CI Failures
@@ -162,8 +193,14 @@ This script:
 **Manual Approach** (if you need finer control):
 
 ```bash
-# Step 1: PR review issues
+# Step 1: PR review issues (all issues)
 ~/.claude/skills/omniclaude/pr-review/collate-issues "${1:-}" --parallel-solve-format
+
+# Step 1 (alt): PR review issues (only open issues - recommended)
+~/.claude/skills/omniclaude/pr-review/collate-issues "${1:-}" --parallel-solve-format --hide-resolved
+
+# Step 1 (alt): PR review issues (only resolved - for verification)
+~/.claude/skills/omniclaude/pr-review/collate-issues "${1:-}" --show-resolved-only
 
 # Step 2: CI failures (JSON)
 ~/.claude/skills/omniclaude/ci-failures/ci-quick-review --json "${1:-}"
@@ -172,6 +209,11 @@ This script:
 ~/.claude/skills/omniclaude/ci-failures/ci-quick-review "${1:-}"
 ```
 
+**Resolution Filtering** (collate-issues):
+- *(default)* = Show all issues (resolved + open)
+- `--hide-resolved` = Only open issues (use when fixing remaining work)
+- `--show-resolved-only` = Only resolved issues (use to verify addressed items)
+
 **Exit Codes** (ci-quick-review):
 - 0 = CI failures found (parse and include)
 - 1 = Error fetching data (skip CI, continue with PR review only)
@@ -179,4 +221,5 @@ This script:
 
 **Format**: Location prefixes for clarity
 - PR Review: `[file.py:123]` or just description
+- PR Review (resolved): `[RESOLVED]` or `[OUTDATED]` prefix indicates status
 - CI Failures: `[Workflow:Job:Step]` for traceability

@@ -53,6 +53,36 @@ CACHE_DIR="$(get_project_cache_dir)"
 CACHE_TTL=300  # 5 minutes
 MAX_COMMENTS_DEFAULT=1000  # Default limit before summarization
 
+# jq function to clean base64 and encoded data from body fields
+# Removes:
+#   - Lines that are 60+ chars of base64-like content (A-Za-z0-9+/=)
+#   - HTML comment blocks containing encoded data
+#   - Empty lines left after cleanup
+# This is applied to all body fields to prevent noise from CodeRabbit, etc.
+JQ_CLEAN_BODY='
+def clean_body:
+  if . == null then null
+  elif type != "string" then .
+  else
+    # Split into lines for processing
+    split("\n") |
+    # Remove lines that are predominantly base64 (60+ chars of A-Za-z0-9+/=)
+    map(select(test("^[\\s]*[A-Za-z0-9+/=]{60,}[\\s]*$") | not)) |
+    # Join back
+    join("\n") |
+    # Remove HTML comment blocks with encoded data (CodeRabbit state)
+    gsub("<!--[^>]*[A-Za-z0-9+/=]{50,}[^>]*-->"; "") |
+    # Remove walkthrough markers and empty comment blocks
+    gsub("<!-- walkthrough_start -->"; "") |
+    gsub("<!-- walkthrough_end -->"; "") |
+    gsub("<!-- This is an auto-generated comment[^>]*-->"; "") |
+    # Collapse multiple blank lines into single blank line
+    gsub("\n{3,}"; "\n\n") |
+    # Trim leading/trailing whitespace
+    gsub("^\\s+|\\s+$"; "")
+  end;
+'
+
 # Fetch resolved review threads via GraphQL with full pagination
 # Returns JSON: [{path, line, isResolved, commentIds: [...]}]
 # Handles PRs with >100 review threads via cursor-based pagination
@@ -372,7 +402,9 @@ fetch_pr_data() {
     print_status "Repository: $repo_name"
 
     # Create temporary files for parallel fetching
-    local tmp_dir=$(mktemp -d)
+    # Use project-local temp directory (not system /var/folders/)
+    local tmp_dir="$CACHE_DIR/tmp_$$_$(date +%s)"
+    mkdir -p "$tmp_dir"
     local reviews_file="$tmp_dir/reviews.json"
     local inline_file="$tmp_dir/inline.json"
     local pr_comments_file="$tmp_dir/pr_comments.json"
@@ -525,6 +557,7 @@ fetch_pr_data() {
     local combined_file="$tmp_dir/combined.json"
 
     # Create combined JSON using slurpfile instead of --argjson (handles large data)
+    # Apply JQ_CLEAN_BODY function to strip base64 noise from body fields
     jq -n \
         --arg pr_num "$pr_number" \
         --arg repo "$repo_name" \
@@ -535,17 +568,31 @@ fetch_pr_data() {
         --slurpfile pr_comments "$pr_comments_file" \
         --slurpfile issue_comments "$issue_comments_file" \
         --slurpfile resolved_threads "$resolved_threads_file" \
-        '{
+        "${JQ_CLEAN_BODY}"'
+        # Helper to clean body fields in arrays
+        def clean_array_bodies:
+            if type == "array" then
+                map(if .body? then .body |= clean_body else . end)
+            else .
+            end;
+
+        {
             pr_number: ($pr_num | tonumber),
             repository: $repo,
             fetched_at: (now | todate),
             fetch_mode: (if $summary_only == "true" then "summary" elif $limit != "" then "limited" else "full" end),
             limit: (if $limit != "" then ($limit | tonumber) else null end),
-            reviews: $reviews[0],
-            inline_comments: $inline[0],
-            pr_comments: $pr_comments[0],
-            issue_comments: $issue_comments[0],
-            resolved_threads: $resolved_threads[0],
+            reviews: ($reviews[0] | clean_array_bodies),
+            inline_comments: ($inline[0] | clean_array_bodies),
+            pr_comments: ($pr_comments[0] | clean_array_bodies),
+            issue_comments: ($issue_comments[0] | clean_array_bodies),
+            resolved_threads: (
+                $resolved_threads[0] |
+                if type == "array" then
+                    map(.first_comment_body |= clean_body)
+                else .
+                end
+            ),
             summary: {
                 total_reviews: (if $reviews[0] | type == "array" then ($reviews[0] | length) elif $reviews[0].count? then $reviews[0].count else 0 end),
                 total_inline_comments: (if $inline[0] | type == "array" then ($inline[0] | length) elif $inline[0].count? then $inline[0].count else 0 end),
