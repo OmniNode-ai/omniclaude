@@ -32,7 +32,7 @@ class TestSingletonPattern:
     async def test_singleton_initialization(self):
         """Test that first call creates publisher."""
         # Reset global singleton (for testing)
-        from claude.lib import logging_event_publisher
+        from agents.lib import logging_event_publisher
 
         logging_event_publisher._global_publisher = None
 
@@ -49,7 +49,7 @@ class TestSingletonPattern:
     @pytest.mark.asyncio
     async def test_singleton_reuse(self):
         """Test that subsequent calls reuse connection."""
-        from claude.lib import logging_event_publisher
+        from agents.lib import logging_event_publisher
 
         # Reset global singleton (for testing)
         logging_event_publisher._global_publisher = None
@@ -68,7 +68,7 @@ class TestSingletonPattern:
     @pytest.mark.asyncio
     async def test_concurrent_singleton_access(self):
         """Test thread-safe singleton access with concurrent calls."""
-        from claude.lib import logging_event_publisher
+        from agents.lib import logging_event_publisher
 
         # Reset global singleton (for testing)
         logging_event_publisher._global_publisher = None
@@ -89,7 +89,7 @@ class TestSingletonPattern:
         - Context manager: ~50ms per call (creates new connection each time)
         - Singleton: ~50ms first call, <5ms subsequent calls
         """
-        from claude.lib import logging_event_publisher
+        from agents.lib import logging_event_publisher
 
         # Reset global singleton (for testing)
         logging_event_publisher._global_publisher = None
@@ -138,7 +138,7 @@ class TestSingletonPattern:
         - Singleton: Total time ~500ms (1st call: 50ms + 99 calls: 5ms each)
         - Context manager: Total time ~5000ms (100 calls * 50ms each)
         """
-        from claude.lib import logging_event_publisher
+        from agents.lib import logging_event_publisher
 
         # Reset global singleton (for testing)
         logging_event_publisher._global_publisher = None
@@ -162,7 +162,7 @@ class TestSingletonPattern:
     @pytest.mark.asyncio
     async def test_convenience_functions_use_singleton(self):
         """Test that convenience functions use singleton pattern."""
-        from claude.lib import logging_event_publisher
+        from agents.lib import logging_event_publisher
 
         # Reset global singleton (for testing)
         logging_event_publisher._global_publisher = None
@@ -203,7 +203,7 @@ class TestSingletonPattern:
     @pytest.mark.asyncio
     async def test_all_convenience_functions_share_singleton(self):
         """Test that all convenience functions share the same singleton."""
-        from claude.lib import logging_event_publisher
+        from agents.lib import logging_event_publisher
 
         # Reset global singleton (for testing)
         logging_event_publisher._global_publisher = None
@@ -275,7 +275,7 @@ class TestPerformanceBenchmarks:
     @pytest.mark.benchmark
     def test_benchmark_singleton_pattern(self, benchmark):
         """Benchmark singleton pattern (new approach)."""
-        from claude.lib import logging_event_publisher
+        from agents.lib import logging_event_publisher
 
         # Reset singleton for fair comparison
         logging_event_publisher._global_publisher = None
