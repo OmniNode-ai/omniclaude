@@ -66,6 +66,9 @@ COPY --chown=omniclaude:omniclaude agents/lib/structured_logger.py ./lib/
 COPY --chown=omniclaude:omniclaude agents/lib/kafka_rpk_client.py ./lib/
 COPY --chown=omniclaude:omniclaude agents/lib/data_sanitizer.py ./lib/
 
+# Copy kafka_types from skills/_shared (dependency of kafka_rpk_client)
+COPY --chown=omniclaude:omniclaude claude/skills/_shared/kafka_types.py ./lib/
+
 # Copy optional enhancers (action logging, notifications)
 COPY --chown=omniclaude:omniclaude agents/lib/action_logger.py ./lib/
 COPY --chown=omniclaude:omniclaude agents/lib/slack_notifier.py ./lib/
