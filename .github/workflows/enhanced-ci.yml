@@ -875,7 +875,7 @@ jobs:
       - hooks-tests
       - agent-framework-tests
       - database-validation
-      - docker compose-validation
+      - docker-compose-validation
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
