@@ -195,6 +195,229 @@ def classify_severity(body: str) -> CommentSeverity:
 
 
 # =============================================================================
+# Noise Filtering
+# =============================================================================
+
+# Patterns that indicate a line is NOT an actionable issue (praise, metadata, etc.)
+NOISE_PATTERNS = [
+    # Praise and approval indicators
+    r"^\s*\*?APPROVE\*?\*?\s*[✅🟢]?",
+    r"^\s*[✅✔🟢🎉👍👏💯🌟⭐]",
+    r"[✅✔🟢🎉👍👏💯🌟⭐]\s*$",  # Trailing positive emojis
+    r"^\s*great\s*(job|work)?",
+    r"^\s*excellent",
+    r"^\s*well\s*done",
+    r"^\s*looks?\s*good",
+    r"^\s*nice\s*(work|job)?",
+    r"^\s*perfect",
+    r"^\s*impressive",
+    r"^\s*thorough",
+    r"^\s*comprehensive",
+    r"^\s*solid",
+    r"^\s*clean\s*(code|implementation)?",
+    r"\blgtm\b",
+    r"\bapproved?\b",
+    r"^\s*no\s*(issues?|concerns?|problems?)",
+    r"^\s*ship\s*it",
+    r"^\s*ready\s*(to\s*)?(merge|ship)",
+    r"^\s*good\s*to\s*(go|merge)",
+    # Praise phrases anywhere in text
+    r"\bwell[\s-]*(written|designed|thought[\s-]*out|implemented|tested)\b",
+    r"\b(nicely|properly|correctly)\s*(handled|implemented|done)\b",
+    r"\bgood\s*(use|example|practice|pattern|approach)\b",
+    r"\bclean\s*(implementation|design|code|approach)\b",
+    r"\bsolid\s*(implementation|approach|foundation|work)\b",
+    # Review metadata
+    r"^\s*\*?\*?Review\s*(Date|completed|by|status)",
+    r"^\s*Reviewed\s*(by|on|at)",
+    r"^\s*Time\s*spent:",
+    r"^\s*Files\s*analyzed:",
+    r"^\s*lines?\s*of\s*(code|tests?)",
+    r"\+\d+\s*/\s*-\d+\s*lines?",
+    r"\d+\s*well-organized\s*tests?",
+    r"\d+%\s*(test\s*)?coverage",
+    r"\d+\s*additions?,?\s*\d+\s*deletions?",
+    r"^\s*Commit:\s*[a-f0-9]+",
+    r"^\s*Branch:\s*\S+",
+    r"^\s*Author:\s*\S+",
+    r"^\s*Date:\s*\d",
+    # Statistics and metrics (not actionable)
+    r"^\s*\d+\s*tests?\s*:",
+    r"^\s*providing\s*(excellent|good|comprehensive)",
+    r"^\s*total:\s*\d+",
+    r"^\s*\d+\s*files?\s*(changed|modified|added|deleted)",
+    r"^\s*\d+\s*insertions?",
+    r"^\s*\d+\s*functions?\s*(added|modified)",
+    # Checklist/test plan markers (these are tasks, not review issues)
+    r"^(UNCHECKED|CHECKED):",
+    r"^-\s*\[\s*[x ]?\s*\]",
+    r"^\s*\[\s*[x ]?\s*\]",
+    r"^TODO\s*:",
+    r"^TEST\s*PLAN",
+    # Section headers without content (just formatting)
+    r"^#{1,6}\s*$",  # Empty headers
+    r"^#{1,6}\s+[A-Za-z\s]+\s*$",  # Simple section headers like "### Summary"
+    r"^#{1,4}\s*\d+\.\s*\*\*[^*]+:\s*[^*]*\*\*\s*$",
+    r"^---+$",  # Horizontal rules
+    r"^===+$",
+    r"^\*\*\*+$",
+    # Positive summary sections
+    r"test\s*coverage.*\d+%",
+    r"excellent\s*type\s*safety",
+    r"good\s*architecture",
+    r"well[\s-]*structured",
+    r"well[\s-]*organized",
+    r"well[\s-]*documented",
+    # Generic section headers that aren't specific issues
+    r"^(issues?|improvements?|suggestions?|recommendations?)\s*\(\d+\)\s*$",
+    r"^\s*(non-blocking|optional|nice[\s-]*to[\s-]*have)\s*$",
+    r"^\s*(summary|overview|conclusion|verdict|assessment)\s*:?\s*$",
+    r"^\s*(strengths?|positives?|pros?|what.s\s*good)\s*:?\s*$",
+    r"^\s*(weaknesses?|negatives?|cons?|areas?\s*for\s*improvement)\s*:?\s*$",
+    # Section headers with parentheticals like "Improvements (Non-Blocking)"
+    r"^(improvements?|suggestions?|issues?|concerns?)\s*\([^)]+\)\s*$",
+    # Very short labels/headers (less than 15 chars with no action words)
+    r"^[A-Za-z\s]{1,15}$",
+    # Bot-specific noise
+    r"walkthrough",
+    r"sequence\s*diagram",
+    r"^\s*<details>",
+    r"^\s*</details>",
+    r"^\s*<summary>",
+    r"^\s*</summary>",
+    # Merge status indicators
+    r"^\s*mergeable\s*:\s*(true|false|yes|no)",
+    r"^\s*conflicts?\s*:\s*(none|0)",
+    r"^\s*ci\s*(status|checks?)\s*:\s*(passing|green|success)",
+]
+
+# Words/phrases that indicate something IS an actionable issue
+ACTIONABLE_INDICATORS = [
+    r"\bshould\b",
+    r"\bmust\b",
+    r"\bneed\s*to\b",
+    r"\bfix\b",
+    r"\bbug\b",
+    r"\berror\b",
+    r"\bmissing\b",
+    r"\bincorrect\b",
+    r"\bwrong\b",
+    r"\bfail",
+    r"\bbreak",
+    r"\bissue\b",
+    r"\bproblem\b",
+    r"\bvulnerab",
+    r"\bsecurity\b",
+    r"\bconsider\b",
+    r"\brefactor\b",
+    r"\bimprove\b",
+    r"\boptimize\b",
+    r"\badd\s+(a\s+)?test",
+    r"\btest\s+coverage\b(?!\s*\d)",  # "test coverage" not followed by percentage
+    r"\bhandle\b",
+    r"\bvalidat",
+    r"\bcheck\b",
+    r"\bensure\b",
+    r"\brename\b",
+    r"\bremove\b",
+    r"\bdelete\b",
+    r"\breplace\b",
+    r"\bupdate\b.*\bto\b",
+    r"\bchange\b.*\bto\b",
+]
+
+
+def is_noise(text: str) -> bool:
+    """
+    Check if text is noise (praise, metadata, statistics) rather than an actionable issue.
+
+    Args:
+        text: The text to check.
+
+    Returns:
+        True if the text appears to be noise, False if it might be actionable.
+    """
+    if not text or not text.strip():
+        return True
+
+    text_clean = text.strip()
+    text_lower = text_clean.lower()
+
+    # Strip markdown formatting for analysis
+    # Remove leading markdown headers (###, ##, #)
+    text_for_check = re.sub(r"^#{1,6}\s*", "", text_clean)
+    # Remove bold markers
+    text_for_check = re.sub(r"\*\*([^*]+)\*\*", r"\1", text_for_check)
+    # Remove italic markers
+    text_for_check = re.sub(r"\*([^*]+)\*", r"\1", text_for_check)
+    text_for_check = text_for_check.strip()
+
+    # Empty after stripping formatting
+    if not text_for_check:
+        return True
+
+    # Very short text (less than 10 chars) is likely a label/header
+    if len(text_for_check) < 10:
+        return True
+
+    # Pure header patterns (just a category name like "Summary", "Overview")
+    if re.match(r"^[A-Za-z\s]{1,25}:?\s*$", text_for_check):
+        return True
+
+    # Check against noise patterns
+    for pattern in NOISE_PATTERNS:
+        if re.search(pattern, text_lower, re.IGNORECASE):
+            return True
+
+    # Additional context-aware noise detection
+    # Lines that are mostly positive emoji
+    emoji_count = len(re.findall(r"[✅✔🟢🎉👍👏💯🌟⭐🚀💪✨🏆]", text_clean))
+    if emoji_count > 0 and len(text_for_check) < 50:
+        # Short text with positive emojis is likely praise
+        return True
+
+    # Lines that start with numbers followed by a noun (statistics)
+    if re.match(r"^\d+\s+(tests?|files?|functions?|classes?|methods?|lines?)\b", text_lower):
+        return True
+
+    return False
+
+
+def is_actionable_issue(text: str) -> bool:
+    """
+    Check if text describes an actionable issue that needs to be addressed.
+
+    An actionable issue typically:
+    - Contains problem-indicating words (should, must, fix, bug, etc.)
+    - Describes something that needs to be changed or addressed
+    - Is NOT praise, metadata, or statistics
+
+    Args:
+        text: The text to check.
+
+    Returns:
+        True if the text appears to be an actionable issue.
+    """
+    if not text or not text.strip():
+        return False
+
+    # First check if it's noise
+    if is_noise(text):
+        return False
+
+    text_lower = text.lower()
+
+    # Check for actionable indicators
+    for pattern in ACTIONABLE_INDICATORS:
+        if re.search(pattern, text_lower, re.IGNORECASE):
+            return True
+
+    # If no actionable indicators found, it's likely not an issue
+    # (e.g., just a section header or description)
+    return False
+
+
+# =============================================================================
 # Issue Extraction
 # =============================================================================
 
@@ -204,10 +427,15 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
     Extract individual issues from a structured comment body.
 
     Looks for patterns like:
-    - ### 1. **Title**
-    - - [ ] Unchecked item
+    - ### 1. **Title** (only if it describes an actionable issue)
     - **N. Title (PRIORITY)**
     - ### CRITICAL: description
+
+    Filters out:
+    - Praise and approval text
+    - Review metadata (dates, statistics)
+    - Checklist items from PR description
+    - Section headers without actionable content
 
     Args:
         body: Comment body text.
@@ -222,38 +450,52 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
     seen_summaries: set[str] = set()
 
     def add_issue(severity: CommentSeverity, summary: str) -> None:
-        """Add issue if not already seen (case-insensitive deduplication)."""
-        normalized = summary.lower().strip()
-        if normalized and normalized not in seen_summaries:
-            seen_summaries.add(normalized)
-            issues.append(
-                ExtractedIssue(
-                    severity=severity, location=source, summary=summary.strip()
-                )
+        """Add issue if not already seen and if it's actionable."""
+        summary = summary.strip()
+        normalized = summary.lower()
+
+        # Skip if empty, already seen, or not actionable
+        if not normalized:
+            return
+        if normalized in seen_summaries:
+            return
+        if is_noise(summary):
+            return
+
+        # For items that don't have explicit severity markers, require actionable content
+        if severity == CommentSeverity.UNCLASSIFIED or severity == CommentSeverity.MAJOR:
+            if not is_actionable_issue(summary):
+                return
+
+        seen_summaries.add(normalized)
+        issues.append(
+            ExtractedIssue(
+                severity=severity, location=source, summary=summary
             )
+        )
 
     if not body:
         return issues
 
     # Pattern: ### N. **Title** (CodeRabbit/Claude structured format)
+    # Only extract if the title contains actionable content
     numbered_bold = re.findall(r"### \d+\.\s*\*\*([^*]+)\*\*", body)
     for title in numbered_bold:
+        title = title.strip()
+        # Skip section headers that are just categories (e.g., "Documentation: Usage Examples")
+        if re.match(r"^[A-Za-z]+:\s*[A-Za-z\s]+$", title):
+            # Check if the following content has actionable items
+            continue
         severity = classify_severity(title)
         add_issue(severity, title)
 
-    # Pattern: - [ ] Unchecked item (test plan items)
-    unchecked = re.findall(r"- \[ \]\s*([^\n]+)", body)
-    for item in unchecked:
-        # Clean up status indicators
-        item = re.sub(r"\s*[⚠️❌✅].*$", "", item)
-        item = re.sub(r"\s*\(see issue[^)]*\)", "", item)
-        item = item.strip()
-        if item:
-            add_issue(CommentSeverity.MAJOR, f"UNCHECKED: {item}")
+    # NOTE: We intentionally do NOT extract unchecked items (- [ ]) from PR comments
+    # These are typically test plan items from the PR description, not review issues
 
     # Pattern: **N. Title (Priority)**
     priority_items = re.findall(r"\*\*\d+\.\s*([^(]+)\s*\(([^)]+)\)\*\*", body)
     for title, priority in priority_items:
+        title = title.strip()
         if "high" in priority.lower() or "critical" in priority.lower():
             severity = CommentSeverity.CRITICAL
         elif "medium" in priority.lower():
@@ -524,17 +766,16 @@ def collate_pr_issues(
             if body.strip().startswith("Addressed"):
                 continue
 
-            # Skip positive feedback
-            positive_patterns = [
-                r"^✅",
-                r"^✔",
-                r"excellent",
-                r"great job",
-                r"looks good",
-                r"lgtm",
-                r"approved",
-            ]
-            if any(re.search(p, body, re.IGNORECASE) for p in positive_patterns):
+            # Skip comments that are entirely noise (praise, metadata, etc.)
+            # Get first non-empty line to check
+            first_line = ""
+            for line_text in body.strip().split("\n"):
+                line_text = line_text.strip()
+                if line_text and not line_text.startswith("#") and not line_text.startswith("<!--"):
+                    first_line = line_text
+                    break
+
+            if is_noise(first_line) or is_noise(body[:200]):
                 continue
 
             author = comment.get("author", "")
@@ -560,13 +801,21 @@ def collate_pr_issues(
                 # Extract structured issues from bot comments
                 extracted = extract_issues_from_body(body, location)
                 for item in extracted:
+                    # Convert comment_id to int only if it's a pure numeric string
+                    # GraphQL node IDs like "IC_kwDOABC123" cannot be stored as int
+                    safe_comment_id = None
+                    if comment_id is not None:
+                        comment_id_str = str(comment_id)
+                        if comment_id_str.isdigit():
+                            safe_comment_id = int(comment_id_str)
+
                     issue = PRIssue(
                         file_path=path,
                         line_number=line,
                         severity=item["severity"],
                         description=item["summary"],
                         status=status,
-                        comment_id=comment_id,
+                        comment_id=safe_comment_id,
                         is_outdated=is_outdated,
                         resolved_by=resolved_by,
                     )
@@ -595,13 +844,31 @@ def collate_pr_issues(
                 if summary.startswith("<!--") and summary.endswith("-->"):
                     continue
 
+                # Skip noise (praise, metadata, statistics)
+                if is_noise(summary):
+                    continue
+
+                # For human comments, also check if it's actionable
+                # (unless it's clearly a critical/minor severity from classify_severity)
+                if severity in (CommentSeverity.UNCLASSIFIED, CommentSeverity.MAJOR):
+                    if not is_actionable_issue(summary):
+                        continue
+
+                # Convert comment_id to int only if it's a pure numeric string
+                # GraphQL node IDs like "IC_kwDOABC123" cannot be stored as int
+                safe_comment_id = None
+                if comment_id is not None:
+                    comment_id_str = str(comment_id)
+                    if comment_id_str.isdigit():
+                        safe_comment_id = int(comment_id_str)
+
                 issue = PRIssue(
                     file_path=path,
                     line_number=line if isinstance(line, int) else None,
                     severity=severity,
                     description=summary,
                     status=status,
-                    comment_id=comment_id,
+                    comment_id=safe_comment_id,
                     is_outdated=is_outdated,
                     resolved_by=resolved_by,
                 )

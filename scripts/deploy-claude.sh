@@ -81,6 +81,7 @@ preflight_validation() {
         "$REPO_ROOT/claude/agents"
         "$REPO_ROOT/claude/lib"
         "$REPO_ROOT/claude/plugins"
+        "$REPO_ROOT/claude/hooks"
         "$REPO_ROOT/config"
     )
 
@@ -304,6 +305,127 @@ else
     echo "Poetry venv not found. Run 'poetry install' first."
 fi
 
+# =============================================================================
+# Configure hooks in ~/.claude/settings.json
+# =============================================================================
+
+# Function to configure hooks in settings.json
+configure_hooks() {
+    local settings_file="$CLAUDE_DIR/settings.json"
+    local hooks_dir="$REPO_ROOT/claude/hooks"
+
+    echo ""
+    echo "Configuring hooks in settings.json..."
+
+    # Validate hooks exist
+    local user_prompt_hook="$hooks_dir/user-prompt-submit.sh"
+    local post_tool_hook="$hooks_dir/post_tool_use_enforcer.py"
+    local session_start_hook="$hooks_dir/session-start.sh"
+
+    local missing_hooks=()
+    [[ ! -f "$user_prompt_hook" ]] && missing_hooks+=("$user_prompt_hook")
+    [[ ! -f "$post_tool_hook" ]] && missing_hooks+=("$post_tool_hook")
+    [[ ! -f "$session_start_hook" ]] && missing_hooks+=("$session_start_hook")
+
+    if [[ ${#missing_hooks[@]} -gt 0 ]]; then
+        echo "  ERROR: Missing hook files:"
+        for hook in "${missing_hooks[@]}"; do
+            echo "    - $hook"
+        done
+        echo "  Hook configuration skipped."
+        return 1
+    fi
+
+    # Create hooks JSON structure
+    local hooks_json
+    hooks_json=$(jq -n \
+        --arg user_prompt "$user_prompt_hook" \
+        --arg post_tool "$post_tool_hook" \
+        --arg session_start "$session_start_hook" \
+        '{
+            "UserPromptSubmit": [
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": $user_prompt,
+                            "timeout": 10
+                        }
+                    ]
+                }
+            ],
+            "PostToolUse": [
+                {
+                    "matcher": "*",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": $post_tool,
+                            "timeout": 5
+                        }
+                    ]
+                }
+            ],
+            "SessionStart": [
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": $session_start,
+                            "timeout": 5
+                        }
+                    ]
+                }
+            ]
+        }')
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        echo "  [DRY] Would configure hooks in: $settings_file"
+        echo "  [DRY] UserPromptSubmit -> $user_prompt_hook"
+        echo "  [DRY] PostToolUse (*) -> $post_tool_hook"
+        echo "  [DRY] SessionStart -> $session_start_hook"
+        return 0
+    fi
+
+    # Create settings.json if it doesn't exist
+    if [[ ! -f "$settings_file" ]]; then
+        echo "  Creating new settings.json..."
+        echo '{}' > "$settings_file"
+    fi
+
+    # Backup existing settings.json
+    if [[ -f "$settings_file" ]]; then
+        cp "$settings_file" "${settings_file}.bak"
+    fi
+
+    # Merge hooks into existing settings (preserves other settings)
+    local updated_settings
+    updated_settings=$(jq --argjson hooks "$hooks_json" '.hooks = $hooks' "$settings_file")
+
+    if [[ -z "$updated_settings" ]]; then
+        echo "  ERROR: Failed to update settings.json"
+        # Restore backup
+        [[ -f "${settings_file}.bak" ]] && mv "${settings_file}.bak" "$settings_file"
+        return 1
+    fi
+
+    # Write updated settings
+    echo "$updated_settings" > "$settings_file"
+
+    echo "  + UserPromptSubmit -> $user_prompt_hook"
+    echo "  + PostToolUse (*) -> $post_tool_hook"
+    echo "  + SessionStart -> $session_start_hook"
+    echo "  Hooks configured successfully."
+
+    # Clean up backup on success
+    rm -f "${settings_file}.bak"
+
+    return 0
+}
+
+# Configure hooks (after symlink creation)
+configure_hooks || echo "WARNING: Hook configuration failed (non-fatal)"
+
 echo ""
 if [[ "$DRY_RUN" == "true" ]]; then
     echo "=== Dry Run Complete ==="
@@ -319,9 +441,13 @@ else
     echo "    |-- agents/$PROJECT_NAMESPACE/ -> $REPO_ROOT/claude/agents/"
     echo "    |-- lib/$PROJECT_NAMESPACE/ -> $REPO_ROOT/claude/lib/"
     echo "    |-- plugins/$PROJECT_NAMESPACE/ -> $REPO_ROOT/claude/plugins/"
-    echo "    \`-- config/$PROJECT_NAMESPACE/ -> $REPO_ROOT/config/"
+    echo "    |-- config/$PROJECT_NAMESPACE/ -> $REPO_ROOT/config/"
+    echo "    \`-- settings.json (hooks configured)"
     echo ""
-    echo "NOTE: Hooks are configured directly in settings.json (no symlink needed)"
+    echo "Hooks:"
+    echo "  UserPromptSubmit -> $REPO_ROOT/claude/hooks/user-prompt-submit.sh"
+    echo "  PostToolUse (*)  -> $REPO_ROOT/claude/hooks/post_tool_use_enforcer.py"
+    echo "  SessionStart     -> $REPO_ROOT/claude/hooks/session-start.sh"
     echo ""
     echo "Access pattern: ~/.claude/<type>/$PROJECT_NAMESPACE/<component>"
     echo "Example: ~/.claude/skills/$PROJECT_NAMESPACE/pr-review/collate-issues"
