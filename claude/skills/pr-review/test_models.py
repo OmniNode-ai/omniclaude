@@ -1274,11 +1274,11 @@ class TestFetchPRDataErrorHandling:
     def test_fetch_pr_data_empty_output_raises_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test that empty subprocess output raises RuntimeError."""
+        """Test that empty subprocess output raises OnexError."""
         import subprocess as sp
         from unittest.mock import MagicMock
 
-        from collate_issues import fetch_pr_data
+        from collate_issues import OnexError, fetch_pr_data
 
         # Mock subprocess.run to return empty stdout
         mock_result = MagicMock()
@@ -1291,17 +1291,17 @@ class TestFetchPRDataErrorHandling:
 
         monkeypatch.setattr(sp, "run", mock_run)
 
-        with pytest.raises(RuntimeError, match="empty output"):
+        with pytest.raises(OnexError, match="empty output"):
             fetch_pr_data(123)
 
     def test_fetch_pr_data_whitespace_only_raises_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test that whitespace-only output raises RuntimeError."""
+        """Test that whitespace-only output raises OnexError."""
         import subprocess as sp
         from unittest.mock import MagicMock
 
-        from collate_issues import fetch_pr_data
+        from collate_issues import OnexError, fetch_pr_data
 
         mock_result = MagicMock()
         mock_result.returncode = 0
@@ -1313,17 +1313,17 @@ class TestFetchPRDataErrorHandling:
 
         monkeypatch.setattr(sp, "run", mock_run)
 
-        with pytest.raises(RuntimeError, match="empty output"):
+        with pytest.raises(OnexError, match="empty output"):
             fetch_pr_data(123)
 
     def test_fetch_pr_data_invalid_json_raises_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test that invalid JSON raises RuntimeError."""
+        """Test that invalid JSON raises OnexError."""
         import subprocess as sp
         from unittest.mock import MagicMock
 
-        from collate_issues import fetch_pr_data
+        from collate_issues import OnexError, fetch_pr_data
 
         mock_result = MagicMock()
         mock_result.returncode = 0
@@ -1335,17 +1335,17 @@ class TestFetchPRDataErrorHandling:
 
         monkeypatch.setattr(sp, "run", mock_run)
 
-        with pytest.raises(RuntimeError, match="Failed to parse"):
+        with pytest.raises(OnexError, match="Failed to parse"):
             fetch_pr_data(123)
 
     def test_fetch_pr_data_nonzero_exit_raises_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test that non-zero exit code raises RuntimeError."""
+        """Test that non-zero exit code raises OnexError."""
         import subprocess as sp
         from unittest.mock import MagicMock
 
-        from collate_issues import fetch_pr_data
+        from collate_issues import OnexError, fetch_pr_data
 
         mock_result = MagicMock()
         mock_result.returncode = 1
@@ -1357,23 +1357,23 @@ class TestFetchPRDataErrorHandling:
 
         monkeypatch.setattr(sp, "run", mock_run)
 
-        with pytest.raises(RuntimeError, match="fetch-pr-data failed"):
+        with pytest.raises(OnexError, match="fetch-pr-data failed"):
             fetch_pr_data(123)
 
     def test_fetch_pr_data_timeout_raises_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test that subprocess timeout raises RuntimeError."""
+        """Test that subprocess timeout raises OnexError."""
         import subprocess as sp
 
-        from collate_issues import fetch_pr_data
+        from collate_issues import OnexError, fetch_pr_data
 
         def mock_run(*args, **kwargs):
             raise sp.TimeoutExpired(cmd=["fetch-pr-data"], timeout=120)
 
         monkeypatch.setattr(sp, "run", mock_run)
 
-        with pytest.raises(RuntimeError, match="timed out"):
+        with pytest.raises(OnexError, match="timed out"):
             fetch_pr_data(123)
 
 

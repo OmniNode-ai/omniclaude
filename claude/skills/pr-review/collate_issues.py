@@ -67,6 +67,39 @@ except ImportError:
 
 
 # =============================================================================
+# ONEX-Compliant Error Handling
+# =============================================================================
+
+
+class OnexError(Exception):
+    """ONEX-compliant error for PR review operations.
+
+    Provides structured error handling with error codes and context.
+
+    Args:
+        message: Human-readable error message.
+        code: Error code string (e.g., "FETCH_FAILED", "PARSE_ERROR").
+        context: Optional dict with additional error context.
+
+    Example:
+        >>> raise OnexError("Failed to fetch PR", code="FETCH_FAILED", context={"pr": 40})
+    """
+
+    def __init__(
+        self, message: str, code: str = "GENERAL_ERROR", context: dict | None = None
+    ):
+        super().__init__(message)
+        self.code = code
+        self.context = context or {}
+        self.message = message
+
+    def __str__(self) -> str:
+        if self.context:
+            return f"[{self.code}] {self.message} (context: {self.context})"
+        return f"[{self.code}] {self.message}"
+
+
+# =============================================================================
 # Constants
 # =============================================================================
 
@@ -168,7 +201,7 @@ def classify_severity(body: str) -> CommentSeverity:
     Example:
         >>> classify_severity("This is a critical security issue")
         CommentSeverity.CRITICAL
-        >>> classify_severity("Consider renaming this variable")
+        >>> classify_severity("nit: rename this variable")
         CommentSeverity.NITPICK
     """
     if not body:
@@ -449,23 +482,42 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
     # Track seen summaries to prevent duplicate issues from multiple patterns
     seen_summaries: set[str] = set()
 
-    def add_issue(severity: CommentSeverity, summary: str) -> None:
-        """Add issue if not already seen and if it's actionable."""
+    def add_issue(
+        severity: CommentSeverity, summary: str, from_structured_pattern: bool = False
+    ) -> None:
+        """Add issue if not already seen and if it's actionable.
+
+        Args:
+            severity: The severity level of the issue.
+            summary: The issue summary text.
+            from_structured_pattern: If True, the issue was extracted from a recognized
+                structured pattern (like ### N. **Title** or **N. Title (Priority)**).
+                These patterns indicate the text is an issue, so we skip aggressive
+                noise filtering that would reject valid issue titles.
+        """
         summary = summary.strip()
         normalized = summary.lower()
 
-        # Skip if empty, already seen, or not actionable
+        # Skip if empty or already seen
         if not normalized:
             return
         if normalized in seen_summaries:
             return
-        if is_noise(summary):
-            return
 
-        # For items that don't have explicit severity markers, require actionable content
-        if severity == CommentSeverity.UNCLASSIFIED or severity == CommentSeverity.MAJOR:
-            if not is_actionable_issue(summary):
+        # For items from structured patterns, trust the pattern - only apply minimal checks
+        if from_structured_pattern:
+            # Still skip truly empty or single-word items
+            if len(summary.split()) < 2:
                 return
+        else:
+            # Apply full noise filtering for unstructured content
+            if is_noise(summary):
+                return
+
+            # For items that don't have explicit severity markers, require actionable content
+            if severity == CommentSeverity.UNCLASSIFIED or severity == CommentSeverity.MAJOR:
+                if not is_actionable_issue(summary):
+                    return
 
         seen_summaries.add(normalized)
         issues.append(
@@ -478,7 +530,7 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
         return issues
 
     # Pattern: ### N. **Title** (CodeRabbit/Claude structured format)
-    # Only extract if the title contains actionable content
+    # These are structured issue patterns - trust the structure
     numbered_bold = re.findall(r"### \d+\.\s*\*\*([^*]+)\*\*", body)
     for title in numbered_bold:
         title = title.strip()
@@ -487,10 +539,16 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
             # Check if the following content has actionable items
             continue
         severity = classify_severity(title)
-        add_issue(severity, title)
+        add_issue(severity, title, from_structured_pattern=True)
 
-    # NOTE: We intentionally do NOT extract unchecked items (- [ ]) from PR comments
-    # These are typically test plan items from the PR description, not review issues
+    # Pattern: - [ ] unchecked items (uncompleted checklist items from reviews)
+    # These indicate pending items that need attention
+    unchecked_items = re.findall(r"-\s*\[\s*\]\s*([^\n]+)", body)
+    for item in unchecked_items:
+        item = item.strip()
+        if item:
+            severity = classify_severity(item)
+            add_issue(severity, item, from_structured_pattern=True)
 
     # Pattern: **N. Title (Priority)**
     priority_items = re.findall(r"\*\*\d+\.\s*([^(]+)\s*\(([^)]+)\)\*\*", body)
@@ -504,7 +562,7 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
             severity = CommentSeverity.MINOR
         else:
             severity = CommentSeverity.MAJOR
-        add_issue(severity, title)
+        add_issue(severity, title, from_structured_pattern=True)
 
     # Pattern: ### CRITICAL/MAJOR/MINOR: description
     for level, sev in [
@@ -514,7 +572,7 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
     ]:
         matches = re.findall(rf"### {level}[:\s]+([^\n]+)", body, re.IGNORECASE)
         for desc in matches:
-            add_issue(sev, desc)
+            add_issue(sev, desc, from_structured_pattern=True)
 
     # Pattern: Risk items (High Risk: / Medium Risk: / Low Risk:)
     risk_patterns = [
@@ -525,7 +583,7 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
     for pattern, sev in risk_patterns:
         matches = re.findall(pattern, body)
         for desc in matches:
-            add_issue(sev, desc)
+            add_issue(sev, desc, from_structured_pattern=True)
 
     return issues
 
@@ -655,7 +713,7 @@ def fetch_pr_data(pr_number: int) -> dict[str, Any]:
         Parsed JSON data from fetch-pr-data.
 
     Raises:
-        RuntimeError: If fetch fails.
+        OnexError: If fetch fails, with appropriate error code.
     """
     fetch_script = SCRIPT_DIR / "fetch-pr-data"
 
@@ -668,16 +726,32 @@ def fetch_pr_data(pr_number: int) -> dict[str, Any]:
         )
 
         if result.returncode != 0:
-            raise RuntimeError(f"fetch-pr-data failed: {result.stderr}")
+            raise OnexError(
+                f"fetch-pr-data failed: {result.stderr}",
+                code="FETCH_FAILED",
+                context={"pr_number": pr_number},
+            )
 
         if not result.stdout.strip():
-            raise RuntimeError("fetch-pr-data returned empty output")
+            raise OnexError(
+                "fetch-pr-data returned empty output",
+                code="EMPTY_OUTPUT",
+                context={"pr_number": pr_number},
+            )
 
         return json.loads(result.stdout)
     except subprocess.TimeoutExpired:
-        raise RuntimeError("fetch-pr-data timed out")
+        raise OnexError(
+            "fetch-pr-data timed out",
+            code="TIMEOUT",
+            context={"pr_number": pr_number},
+        )
     except json.JSONDecodeError as e:
-        raise RuntimeError(f"Failed to parse fetch-pr-data output: {e}")
+        raise OnexError(
+            f"Failed to parse fetch-pr-data output: {e}",
+            code="PARSE_ERROR",
+            context={"pr_number": pr_number},
+        )
 
 
 def get_repo_name() -> str:
@@ -725,11 +799,13 @@ def collate_pr_issues(
         CollatedIssues instance with categorized issues.
 
     Raises:
-        RuntimeError: If PR data fetch fails.
-        ValueError: If both hide_resolved and show_resolved_only are True.
+        OnexError: If PR data fetch fails or invalid options provided.
     """
     if hide_resolved and show_resolved_only:
-        raise ValueError("Cannot use both hide_resolved and show_resolved_only")
+        raise OnexError(
+            "Cannot use both hide_resolved and show_resolved_only",
+            code="INVALID_OPTIONS",
+        )
 
     # Fetch PR data
     pr_data = fetch_pr_data(pr_number)
@@ -811,7 +887,7 @@ def collate_pr_issues(
 
                     issue = PRIssue(
                         file_path=path,
-                        line_number=line,
+                        line_number=int(line) if isinstance(line, (int, str)) and str(line).isdigit() else None,
                         severity=item["severity"],
                         description=item["summary"],
                         status=status,
@@ -864,7 +940,7 @@ def collate_pr_issues(
 
                 issue = PRIssue(
                     file_path=path,
-                    line_number=line if isinstance(line, int) else None,
+                    line_number=int(line) if isinstance(line, (int, str)) and str(line).isdigit() else None,
                     severity=severity,
                     description=summary,
                     status=status,
@@ -1063,7 +1139,18 @@ def format_issues_json(issues: CollatedIssues) -> str:
 
 
 def main() -> int:
-    """CLI entry point."""
+    """CLI entry point for collate_issues.
+
+    Parses command-line arguments and runs the issue collation workflow.
+
+    Returns:
+        Exit code: 0 for success, 1 for validation errors, 2 for runtime errors.
+
+    Example:
+        >>> import sys
+        >>> sys.argv = ["collate_issues.py", "40", "--hide-resolved"]
+        >>> exit_code = main()
+    """
     parser = argparse.ArgumentParser(
         description="Collate PR review issues with resolution detection",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -1138,7 +1225,7 @@ Examples:
 
         return 0
 
-    except RuntimeError as e:
+    except OnexError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 2
     except ValueError as e:

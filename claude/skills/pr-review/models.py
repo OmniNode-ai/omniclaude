@@ -26,6 +26,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from enum import Enum
+from functools import cached_property
 from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -1401,6 +1402,11 @@ class CollatedIssues(BaseModel):
 
     This model represents the output of the collate-issues script,
     providing easy access to issues grouped by severity and status.
+
+    Note:
+        For optimal performance, treat instances as immutable after creation.
+        The ``all_issues`` property is cached and won't reflect post-creation
+        modifications to the issue lists.
     """
 
     model_config = ConfigDict(extra="allow", frozen=False)
@@ -1426,9 +1432,14 @@ class CollatedIssues(BaseModel):
         default_factory=list, description="Unclassified issues"
     )
 
-    @property
+    @cached_property
     def all_issues(self) -> list[PRIssue]:
-        """Get all issues across all severity levels."""
+        """Get all issues across all severity levels.
+
+        Returns a cached concatenation of all issue lists. The cache is
+        invalidated if the model is modified (note: Pydantic models should
+        be treated as immutable after creation for caching to work correctly).
+        """
         return (
             self.critical + self.major + self.minor + self.nitpick + self.unclassified
         )
@@ -1474,6 +1485,14 @@ class CollatedIssues(BaseModel):
 
         Returns:
             New CollatedIssues instance with filtered issues.
+
+        Raises:
+            ValueError: If both hide_resolved and show_resolved_only are True.
+
+        Example:
+            >>> issues = CollatedIssues(pr_number=40, critical=[...])
+            >>> open_only = issues.filter_by_status(hide_resolved=True)
+            >>> resolved_only = issues.filter_by_status(show_resolved_only=True)
         """
         if hide_resolved and show_resolved_only:
             raise ValueError("Cannot use both hide_resolved and show_resolved_only")

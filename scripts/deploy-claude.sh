@@ -18,6 +18,10 @@ set -euo pipefail
 #   --force       Skip existence checks for optional sources (security checks remain)
 #   --dry-run     Show what would be done without making changes
 #   --help        Show this help message
+#
+# Dependencies:
+#   - jq (for JSON manipulation in hook configuration)
+#   - bash 4.0+ (for associative arrays and advanced features)
 # =============================================================================
 
 # Parse command line arguments
@@ -268,7 +272,7 @@ create_symlink() {
 }
 
 # Create symlinks within each artifact type directory
-# Structure: ~/.claude/<type>/onex -> repo/claude/<type>
+# Structure: ~/.claude/<type>/omniclaude -> repo/claude/<type>
 # NOTE: Hooks are NOT symlinked - settings.json points directly to repo paths
 echo "Creating namespaced symlinks..."
 create_symlink "$REPO_ROOT/claude/skills" "$CLAUDE_DIR/skills/$PROJECT_NAMESPACE" "skills/$PROJECT_NAMESPACE"
@@ -296,7 +300,7 @@ else
 fi
 if [[ -n "$VENV_PATH" && -d "$VENV_PATH" ]]; then
     # Use create_symlink with required=false since venv is optional
-    # Place venv in lib/onex/.venv for Python import resolution
+    # Place venv in lib/omniclaude/.venv for Python import resolution
     create_symlink "$VENV_PATH" "$CLAUDE_DIR/lib/$PROJECT_NAMESPACE/.venv" "lib/$PROJECT_NAMESPACE/.venv" "false"
     echo ""
     echo "Poetry venv linked: $VENV_PATH"
@@ -333,6 +337,13 @@ configure_hooks() {
             echo "    - $hook"
         done
         echo "  Hook configuration skipped."
+        return 1
+    fi
+
+    # Verify jq is available for JSON manipulation
+    if ! command -v jq &> /dev/null; then
+        echo "  ERROR: jq is required for hook configuration but not found"
+        echo "  Install with: brew install jq"
         return 1
     fi
 
