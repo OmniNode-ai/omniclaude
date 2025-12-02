@@ -364,6 +364,7 @@ services:
       - '1'
       - --default-log-level=${REDPANDA_LOG_LEVEL:-info}
     ports:
+      - "9092:9092"  # Internal listener exposed for localhost:9092 access
       - "${REDPANDA_KAFKA_PORT:-29092}:29092"
       - "${REDPANDA_PROXY_PORT:-28082}:28082"
       - "${REDPANDA_SCHEMA_PORT:-28081}:28081"
