@@ -249,7 +249,13 @@ def log_session_end(
 
 
 def main():
-    """CLI entry point for session intelligence."""
+    """CLI entry point for session intelligence.
+
+    Graceful Degradation:
+        - Always exits with 0 to not block hooks
+        - Logs warnings when database is unavailable
+        - Continues even if logging fails
+    """
     parser = argparse.ArgumentParser(description="Log session lifecycle events")
     parser.add_argument(
         "--mode",
@@ -273,20 +279,34 @@ def main():
             logger.warning(f"Invalid metadata JSON: {e}")
 
     # Execute based on mode
-    if args.mode == "start":
-        event_id = log_session_start(
-            session_id=args.session_id,
-            project_path=args.project_path,
-            cwd=args.cwd,
+    event_id = None
+    try:
+        if args.mode == "start":
+            event_id = log_session_start(
+                session_id=args.session_id,
+                project_path=args.project_path,
+                cwd=args.cwd,
+            )
+        else:  # mode == "end"
+            event_id = log_session_end(
+                session_id=args.session_id,
+                metadata=metadata,
+            )
+    except Exception as e:
+        # Catch any unexpected error and log it, but don't crash
+        print(
+            f"Warning: session_intelligence failed to log {args.mode} event: {e}",
+            file=sys.stderr,
         )
-    else:  # mode == "end"
-        event_id = log_session_end(
-            session_id=args.session_id,
-            metadata=metadata,
-        )
+        event_id = None
 
-    # Exit with appropriate code
-    sys.exit(0 if event_id else 1)
+    # Always exit with 0 - don't block hook execution
+    # Log if we failed to record the event
+    if event_id is None:
+        logger.info(
+            f"Session {args.mode} event not logged (database may be unavailable)"
+        )
+    sys.exit(0)
 
 
 if __name__ == "__main__":

@@ -23,7 +23,7 @@ from typing import List, Tuple
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(__file__))
 
-from qdrant_helper import validate_qdrant_url
+from .qdrant_helper import validate_qdrant_url
 
 
 def test_valid_urls() -> List[Tuple[str, bool, str]]:

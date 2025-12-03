@@ -40,8 +40,8 @@ class TestQdrantHttpsSupport(unittest.TestCase):
         mock_settings.qdrant_port = 6333
 
         with (
-            patch("qdrant_helper.settings", mock_settings),
-            patch("qdrant_helper.os.getenv") as mock_getenv,
+            patch("skills._shared.qdrant_helper.settings", mock_settings),
+            patch("skills._shared.qdrant_helper.os.getenv") as mock_getenv,
         ):
             # Set production environment
             mock_getenv.side_effect = lambda key, default="": {
@@ -49,7 +49,7 @@ class TestQdrantHttpsSupport(unittest.TestCase):
                 "QDRANT_ALLOWED_HOSTS": "",
             }.get(key, default)
 
-            from qdrant_helper import get_qdrant_url
+            from .qdrant_helper import get_qdrant_url
 
             # Get URL - should return HTTPS
             url = get_qdrant_url()
@@ -64,8 +64,8 @@ class TestQdrantHttpsSupport(unittest.TestCase):
         mock_settings.qdrant_port = 6333
 
         with (
-            patch("qdrant_helper.settings", mock_settings),
-            patch("qdrant_helper.os.getenv") as mock_getenv,
+            patch("skills._shared.qdrant_helper.settings", mock_settings),
+            patch("skills._shared.qdrant_helper.os.getenv") as mock_getenv,
         ):
             # Set development environment
             mock_getenv.side_effect = lambda key, default="": {
@@ -73,7 +73,7 @@ class TestQdrantHttpsSupport(unittest.TestCase):
                 "QDRANT_ALLOWED_HOSTS": "",
             }.get(key, default)
 
-            from qdrant_helper import get_qdrant_url
+            from .qdrant_helper import get_qdrant_url
 
             # Get URL - should return HTTP
             url = get_qdrant_url()
@@ -88,8 +88,8 @@ class TestQdrantHttpsSupport(unittest.TestCase):
         mock_settings.qdrant_port = 6333
 
         with (
-            patch("qdrant_helper.settings", mock_settings),
-            patch("qdrant_helper.os.getenv") as mock_getenv,
+            patch("skills._shared.qdrant_helper.settings", mock_settings),
+            patch("skills._shared.qdrant_helper.os.getenv") as mock_getenv,
         ):
             # Set production environment
             mock_getenv.side_effect = lambda key, default="": {
@@ -97,7 +97,7 @@ class TestQdrantHttpsSupport(unittest.TestCase):
                 "QDRANT_ALLOWED_HOSTS": "",
             }.get(key, default)
 
-            from qdrant_helper import get_qdrant_url
+            from .qdrant_helper import get_qdrant_url
 
             # Get URL - should auto-select HTTPS
             url = get_qdrant_url()
@@ -114,8 +114,8 @@ class TestQdrantHttpsSupport(unittest.TestCase):
         mock_settings.qdrant_port = 6333
 
         with (
-            patch("qdrant_helper.settings", mock_settings),
-            patch("qdrant_helper.os.getenv") as mock_getenv,
+            patch("skills._shared.qdrant_helper.settings", mock_settings),
+            patch("skills._shared.qdrant_helper.os.getenv") as mock_getenv,
         ):
             # Set development environment
             mock_getenv.side_effect = lambda key, default="": {
@@ -123,7 +123,7 @@ class TestQdrantHttpsSupport(unittest.TestCase):
                 "QDRANT_ALLOWED_HOSTS": "",
             }.get(key, default)
 
-            from qdrant_helper import get_qdrant_url
+            from .qdrant_helper import get_qdrant_url
 
             # Get URL - should auto-select HTTP
             url = get_qdrant_url()
@@ -140,8 +140,8 @@ class TestQdrantHttpsSupport(unittest.TestCase):
         mock_settings.qdrant_port = 6333
 
         with (
-            patch("qdrant_helper.settings", mock_settings),
-            patch("qdrant_helper.os.getenv") as mock_getenv,
+            patch("skills._shared.qdrant_helper.settings", mock_settings),
+            patch("skills._shared.qdrant_helper.os.getenv") as mock_getenv,
         ):
             # Set production environment
             mock_getenv.side_effect = lambda key, default="": {
@@ -149,7 +149,7 @@ class TestQdrantHttpsSupport(unittest.TestCase):
                 "QDRANT_ALLOWED_HOSTS": "",
             }.get(key, default)
 
-            from qdrant_helper import get_qdrant_url
+            from .qdrant_helper import get_qdrant_url
 
             # Get URL - should construct with HTTPS in production
             url = get_qdrant_url()
@@ -166,8 +166,8 @@ class TestQdrantHttpsSupport(unittest.TestCase):
         mock_settings.qdrant_port = 6333
 
         with (
-            patch("qdrant_helper.settings", mock_settings),
-            patch("qdrant_helper.os.getenv") as mock_getenv,
+            patch("skills._shared.qdrant_helper.settings", mock_settings),
+            patch("skills._shared.qdrant_helper.os.getenv") as mock_getenv,
         ):
             # Set production environment
             mock_getenv.side_effect = lambda key, default="": {
@@ -175,7 +175,7 @@ class TestQdrantHttpsSupport(unittest.TestCase):
                 "QDRANT_ALLOWED_HOSTS": "",
             }.get(key, default)
 
-            from qdrant_helper import get_qdrant_url
+            from .qdrant_helper import get_qdrant_url
 
             # In production, HTTP URLs should fall through to HTTPS construction
             url = get_qdrant_url()

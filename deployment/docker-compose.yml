@@ -12,23 +12,11 @@
 #
 # PostgreSQL Environment Variable Convention:
 # -------------------------------------------
-# This compose file uses TWO sets of PostgreSQL variables with distinct purposes:
+# This compose file uses POSTGRES_* variables for all PostgreSQL configuration:
 #
-# 1. APP_POSTGRES_* → Local application database (containerized PostgreSQL)
-#    - Used by: app, postgres services
-#    - Database: omniclaude (local, containerized)
-#    - Example: APP_POSTGRES_USER=omniclaude, APP_POSTGRES_PASSWORD=<set_in_env>
+# POSTGRES_HOST, POSTGRES_PORT, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DATABASE
 #
-# 2. POSTGRES_* → Shared bridge database (remote infrastructure)
-#    - Used by: agent-observability-consumer, routing-adapter, archon-router-consumer, test-runner
-#    - Database: omninode_bridge (shared, 192.168.86.200:5436)
-#    - Example: POSTGRES_USER=postgres, POSTGRES_PASSWORD=<set_in_env>
-#
-# WHY TWO SETS?
-# - Local app database (APP_POSTGRES_*): Application-specific data, runs in Docker
-# - Shared bridge database (POSTGRES_*): Cross-service observability, agent routing,
-#   manifest injections, and all event-driven intelligence tracking
-#
+# All services (app, postgres, consumers) use the same POSTGRES_* variables from .env
 # See deployment/README.md for detailed configuration guide.
 # ==============================================================================
 
@@ -54,14 +42,13 @@ services:
       - "${APP_PORT:-8000}:8000"
       - "${APP_METRICS_PORT:-8001}:8001"
     environment:
-      # Database configuration - LOCAL APP DATABASE
-      # Uses APP_POSTGRES_* variables for local containerized PostgreSQL
-      - DATABASE_URL=postgresql://${APP_POSTGRES_USER:-omniclaude}:${APP_POSTGRES_PASSWORD:?APP_POSTGRES_PASSWORD must be set}@${APP_POSTGRES_HOST:-postgres}:${APP_POSTGRES_INTERNAL_PORT:-5432}/${APP_POSTGRES_DATABASE:-omniclaude}
-      - POSTGRES_HOST=${APP_POSTGRES_HOST:-postgres}
-      - POSTGRES_PORT=${APP_POSTGRES_INTERNAL_PORT:-5432}
-      - POSTGRES_USER=${APP_POSTGRES_USER:-omniclaude}
-      - POSTGRES_PASSWORD=${APP_POSTGRES_PASSWORD:?APP_POSTGRES_PASSWORD must be set}
-      - POSTGRES_DATABASE=${APP_POSTGRES_DATABASE:-omniclaude}
+      # Database configuration
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@${POSTGRES_HOST:-postgres}:${POSTGRES_PORT:-5432}/${POSTGRES_DATABASE:-omninode_bridge}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      - POSTGRES_DATABASE=${POSTGRES_DATABASE:-omninode_bridge}
 
       # Valkey configuration (Redis-compatible)
       - REDIS_URL=redis://${VALKEY_HOST:-valkey}:${VALKEY_INTERNAL_PORT:-6379}/${VALKEY_DB:-0}
@@ -69,7 +56,7 @@ services:
       # Application configuration
       - APP_ENV=${ENVIRONMENT:-production}
       - LOG_LEVEL=${LOG_LEVEL:-info}
-      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY must be set}
+      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
 
       # OpenTelemetry configuration
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://${OTEL_COLLECTOR_HOST:-otel-collector}:${OTEL_COLLECTOR_PORT:-4317}
@@ -144,11 +131,6 @@ services:
       # Health check and logging
       - HEALTH_CHECK_PORT=${CONSUMER_HEALTH_PORT:-8080}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
-    extra_hosts:
-      # DNS resolution for remote shared infrastructure
-      - "omninode-bridge-redpanda:${REMOTE_INFRASTRUCTURE_IP:?REMOTE_INFRASTRUCTURE_IP must be set}"
-      - "omninode-bridge-postgres:${REMOTE_INFRASTRUCTURE_IP:?REMOTE_INFRASTRUCTURE_IP must be set}"
-      - "omninode-bridge-consul:${REMOTE_INFRASTRUCTURE_IP:?REMOTE_INFRASTRUCTURE_IP must be set}"
     networks:
       - app_network
       - omninode-bridge-network
@@ -269,11 +251,6 @@ services:
 
       # Service configuration
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
-    extra_hosts:
-      # DNS resolution for remote shared infrastructure
-      - "omninode-bridge-redpanda:${REMOTE_INFRASTRUCTURE_IP:?REMOTE_INFRASTRUCTURE_IP must be set}"
-      - "omninode-bridge-postgres:${REMOTE_INFRASTRUCTURE_IP:?REMOTE_INFRASTRUCTURE_IP must be set}"
-      - "omninode-bridge-consul:${REMOTE_INFRASTRUCTURE_IP:?REMOTE_INFRASTRUCTURE_IP must be set}"
     volumes:
       - ${AGENT_DEFINITIONS_HOST_PATH:-$HOME/.claude/agent-definitions}:/agent-definitions:ro
     networks:
@@ -306,11 +283,10 @@ services:
     ports:
       - "${POSTGRES_EXTERNAL_PORT:-5432}:5432"
     environment:
-      # Local App Database Configuration
-      # Uses APP_POSTGRES_* variables for local containerized PostgreSQL
-      - POSTGRES_USER=${APP_POSTGRES_USER:-omniclaude}
-      - POSTGRES_PASSWORD=${APP_POSTGRES_PASSWORD:?APP_POSTGRES_PASSWORD must be set}
-      - POSTGRES_DB=${APP_POSTGRES_DATABASE:-omniclaude}
+      # PostgreSQL container configuration
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      - POSTGRES_DB=${POSTGRES_DATABASE:-omninode_bridge}
       - POSTGRES_INITDB_ARGS=${POSTGRES_INITDB_ARGS:---encoding=UTF-8 --lc-collate=C --lc-ctype=C}
       - PGDATA=/var/lib/postgresql/data/pgdata
     volumes:
@@ -319,7 +295,7 @@ services:
     networks:
       - app_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${APP_POSTGRES_USER:-omniclaude} -d ${APP_POSTGRES_DATABASE:-omniclaude}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DATABASE:-omninode_bridge}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -543,7 +519,7 @@ services:
       - "${GRAFANA_PORT:-3000}:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
       - GF_INSTALL_PLUGINS=${GRAFANA_PLUGINS:-grafana-clock-panel,grafana-simple-json-datasource}
       - GF_SERVER_ROOT_URL=${GRAFANA_ROOT_URL:-http://localhost:3000}
       - GF_ANALYTICS_REPORTING_ENABLED=${GRAFANA_ANALYTICS:-false}

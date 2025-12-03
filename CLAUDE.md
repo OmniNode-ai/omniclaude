@@ -18,6 +18,158 @@ OmniClaude enhances Claude Code with:
 - **Event-driven architecture** using Kafka for distributed intelligence
 - **Polymorphic agent framework** with ONEX compliance
 - **Complete observability** with manifest injection traceability
+- **Claude Code hooks** for agent routing, quality enforcement, and session tracking
+
+---
+
+## Claude Code Hooks Infrastructure
+
+**Location**: `claude/hooks/` directory
+**Configuration**: `~/.claude/settings.json`
+
+Claude Code supports hooks that execute at specific lifecycle events. OmniClaude uses these hooks to enable intelligent agent routing, quality enforcement, and session tracking.
+
+### Hooks Configuration
+
+Hooks are configured in `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "command": "/Users/jonah/Code/omniclaude/claude/hooks/user-prompt-submit.sh"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "command": "/Users/jonah/Code/omniclaude/claude/hooks/post-tool-use.sh"
+      }
+    ],
+    "SessionStart": [
+      {
+        "command": "/Users/jonah/Code/omniclaude/claude/hooks/session-start.sh"
+      }
+    ]
+  }
+}
+```
+
+### Hook Scripts
+
+| Hook | Script | Purpose |
+|------|--------|---------|
+| **UserPromptSubmit** | `user-prompt-submit.sh` | Agent routing, manifest injection, intelligence requests |
+| **PostToolUse** | `post-tool-use.sh` | Quality enforcement, pattern tracking |
+| **SessionStart** | `session-start.sh` | Session lifecycle logging, project context |
+
+### UserPromptSubmit Hook (Primary)
+
+The main intelligence hook that enables:
+
+1. **Event-Based Agent Routing** - Routes prompts to optimal agents via Kafka
+2. **Agent YAML Loading** - Loads agent definitions from `~/.claude/agent-definitions/`
+3. **Manifest Injection** - Injects system manifest with intelligence context
+4. **Intelligence Requests** - Publishes domain/implementation queries to event bus
+5. **Correlation Tracking** - Generates UUIDs for end-to-end traceability
+
+**Flow**:
+```
+User Prompt → Hook → Kafka Routing → Agent Detection → YAML Loading → Manifest Injection → Claude Response
+```
+
+### PostToolUse Hook
+
+Quality enforcement after tool operations:
+
+- **File Analysis** - Tracks file modifications
+- **Pattern Detection** - Monitors code patterns
+- **Quality Metrics** - Logs quality scores
+
+### SessionStart Hook
+
+Session lifecycle management:
+
+- **Session Metadata** - Logs session ID, project path, git branch
+- **Performance Target** - <50ms execution time
+- **Database Logging** - Records session start to PostgreSQL
+
+### Library Modules
+
+Located in `claude/hooks/lib/`:
+
+| Module | Purpose |
+|--------|---------|
+| `agent_detector.py` | Detects automated workflows |
+| `route_via_events_wrapper.py` | Kafka-based agent routing |
+| `simple_agent_loader.py` | Loads agent YAML definitions |
+| `hook_event_logger.py` | PostgreSQL event logging |
+| `correlation_manager.py` | Correlation ID management |
+| `metadata_extractor.py` | Extracts prompt metadata |
+| `publish_intelligence_request.py` | Publishes to event bus |
+| `session_intelligence.py` | Session tracking |
+| `track_intent.py` | Intent tracking |
+
+### Dependencies
+
+Hooks require a Python virtual environment with specific dependencies:
+
+**Venv Location**: `claude/lib/.venv`
+
+**Required Packages**:
+- `kafka-python`, `aiokafka` - Kafka integration
+- `psycopg2` - PostgreSQL connectivity
+- `pydantic` - Data validation
+
+**Setup**:
+```bash
+cd claude/lib
+python3 -m venv .venv
+source .venv/bin/activate
+pip install kafka-python aiokafka psycopg2-binary pydantic
+```
+
+### Log Files
+
+Hook logs are stored in `claude/hooks/logs/`:
+
+| Log File | Contents |
+|----------|----------|
+| `hook-enhanced.log` | UserPromptSubmit activity |
+| `hook-post-tool-use.log` | PostToolUse activity |
+| `hook-session-start.log` | SessionStart activity |
+
+### Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| Hooks not firing | Verify `~/.claude/settings.json` paths are absolute |
+| Import errors | Ensure `claude/lib/.venv` exists and has dependencies |
+| Kafka errors | Check `KAFKA_BOOTSTRAP_SERVERS` in `.env` |
+| Database errors | Verify `POSTGRES_*` variables and `source .env` |
+| Permission denied | Make hook scripts executable: `chmod +x claude/hooks/*.sh` |
+
+**Debug Commands**:
+```bash
+# Check hook logs
+tail -f claude/hooks/logs/hook-enhanced.log
+
+# Verify venv
+claude/lib/.venv/bin/python3 -c "import kafka; import psycopg2; print('OK')"
+
+# Test routing
+python3 claude/hooks/lib/route_via_events_wrapper.py "test prompt" "test-correlation-id"
+```
+
+### Performance Targets
+
+| Hook | Target | Critical |
+|------|--------|----------|
+| UserPromptSubmit | <500ms | >2000ms |
+| PostToolUse | <100ms | >500ms |
+| SessionStart | <50ms | >200ms |
+
+---
 
 ## Intelligence Infrastructure
 
@@ -460,6 +612,7 @@ python -c "from config import settings; settings.log_configuration()"
 - **Config**: `.env`, `config/settings.py`, `config/README.md`
 - **Deployment**: `deployment/docker-compose.yml`, `deployment/README.md`
 - **Intelligence**: `agents/lib/manifest_injector.py`, `agents/lib/routing_event_client.py`
+- **Hooks**: `claude/hooks/user-prompt-submit.sh`, `claude/hooks/lib/`
 - **Docs**: `docs/observability/`, `docs/configuration/`, `SECURITY_KEY_ROTATION.md`
 
 ### Performance Targets
@@ -497,14 +650,16 @@ python -c "from config import settings; settings.log_configuration()"
 - 15,689+ patterns from Qdrant (archon_vectors + code_generation_patterns)
 - 34 database tables with complete agent history
 - Router: 7-8ms routing, 100+ req/s throughput
+- **Hooks**: Claude Code hooks in `claude/hooks/` enable agent routing, quality enforcement, and session tracking
 - **Phase 2 Complete**: Type-safe config (Pydantic Settings), consolidated Docker Compose, external network references, environment validation
 
 ---
 
-**Last Updated**: 2025-11-10
-**Version**: 2.3.1
+**Last Updated**: 2025-12-02
+**Version**: 2.4.0
 **Intelligence**: Event-driven via Kafka
 **Router**: Event-based (Kafka consumer)
+**Hooks**: UserPromptSubmit, PostToolUse, SessionStart (claude/hooks/)
 **Configuration**: Pydantic Settings (ADR-001)
 **Docker**: Consolidated with profiles
 **Patterns**: 15,689+ (archon_vectors: 7,118 | code_generation_patterns: 8,571)
