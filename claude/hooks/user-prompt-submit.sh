@@ -7,10 +7,15 @@ set -euo pipefail
 # Config
 # -----------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 LOG_FILE="${SCRIPT_DIR}/logs/hook-enhanced.log"
 HOOKS_LIB="${SCRIPT_DIR}/lib"
 HOOK_DIR="${SCRIPT_DIR}"
+
+# Poetry venv path - use this for ALL Python calls
+POETRY_VENV="/Users/jonah/Library/Caches/pypoetry/virtualenvs/omniclaude-agents-kzVi5DqF-py3.12"
+# Fallback to symlink if direct path doesn't exist
+HOOKS_VENV="${PROJECT_ROOT}/claude/lib/.venv"
 
 # Ensure log directory exists
 mkdir -p "$(dirname "$LOG_FILE")"
@@ -18,9 +23,29 @@ mkdir -p "$(dirname "$LOG_FILE")"
 # Include project root so claude.lib.core and agents.lib can be found
 export PYTHONPATH="${PROJECT_ROOT}:${HOOKS_LIB}:${PYTHONPATH:-}"
 
-# Use hooks venv Python (has kafka-python, aiokafka, etc.)
-# The bin/python3 wrapper will fall back to system Python with a warning if venv missing
-export PATH="$HOOK_DIR/bin:$PATH"
+# Determine which Python to use - prefer Poetry venv, then symlink, then system
+if [[ -f "$POETRY_VENV/bin/python3" ]]; then
+    PYTHON_CMD="$POETRY_VENV/bin/python3"
+    export PATH="$POETRY_VENV/bin:$PATH"
+elif [[ -f "$HOOKS_VENV/bin/python3" ]]; then
+    PYTHON_CMD="$HOOKS_VENV/bin/python3"
+    export PATH="$HOOKS_VENV/bin:$PATH"
+else
+    echo "WARNING: Poetry venv not found, using system Python (modules may be missing)" >&2
+    PYTHON_CMD="python3"
+fi
+
+# Export PYTHON_CMD so subprocesses can use it
+export PYTHON_CMD
+
+# Define timeout function that works on macOS (no GNU timeout)
+# Uses perl as a portable alternative
+run_with_timeout() {
+    local timeout_sec="$1"
+    shift
+    # Use perl for portable timeout (macOS doesn't have GNU timeout)
+    perl -e 'alarm shift; exec @ARGV' "$timeout_sec" "$@"
+}
 
 # Create tmp directory for this session
 mkdir -p "$PROJECT_ROOT/tmp"
@@ -33,8 +58,12 @@ if [[ -f "$PROJECT_ROOT/.env" ]]; then
 fi
 
 # Load database credentials for all scripts (sets PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE)
+# Note: db-credentials.sh may fail if POSTGRES_* vars aren't set - this is OK, we continue without DB
+# Temporarily disable errexit and nounset to allow sourcing to fail gracefully
 if [[ -f "$PROJECT_ROOT/scripts/db-credentials.sh" ]]; then
-    source "$PROJECT_ROOT/scripts/db-credentials.sh" --silent
+    set +eu  # Temporarily disable errexit and nounset
+    source "$PROJECT_ROOT/scripts/db-credentials.sh" --silent 2>/dev/null
+    set -eu  # Re-enable errexit and nounset
 fi
 
 export ARCHON_INTELLIGENCE_URL="${ARCHON_INTELLIGENCE_URL:-http://localhost:8053}"
@@ -79,12 +108,12 @@ PROMPT_B64="$(b64 "$PROMPT")"
 if command -v uuidgen >/dev/null 2>&1; then
     CORRELATION_ID="$(uuidgen | tr '[:upper:]' '[:lower:]')"
 else
-    CORRELATION_ID="$(python3 -c 'import uuid; print(str(uuid.uuid4()))' | tr '[:upper:]' '[:lower:]')"
+    CORRELATION_ID="$($PYTHON_CMD -c 'import uuid; print(str(uuid.uuid4()))' | tr '[:upper:]' '[:lower:]')"
 fi
 
 # Log hook invocation (non-blocking)
 (
-  python3 "${HOOKS_LIB}/log_hook_event.py" invocation \
+  $PYTHON_CMD "${HOOKS_LIB}/log_hook_event.py" invocation \
     --hook-name "UserPromptSubmit" \
     --prompt "$PROMPT" \
     --correlation-id "$CORRELATION_ID" \
@@ -95,7 +124,7 @@ fi
 # Workflow detection
 # -----------------------------
 WORKFLOW_TRIGGER="$(
-  PROMPT_B64="$PROMPT_B64" HOOKS_LIB="$HOOKS_LIB" python3 - <<\PY 2>>"$LOG_FILE" || echo ""
+  PROMPT_B64="$PROMPT_B64" HOOKS_LIB="$HOOKS_LIB" $PYTHON_CMD - <<\PY 2>>"$LOG_FILE" || echo ""
 import os, sys, base64
 sys.path.insert(0, os.environ["HOOKS_LIB"])
 try:
@@ -119,7 +148,7 @@ fi
 log "Calling event-based routing service via Kafka..."
 
 # Call event-based routing wrapper (replaces HTTP call to port 8055)
-ROUTING_RESULT="$(python3 "${HOOKS_LIB}/route_via_events_wrapper.py" "$PROMPT" "$CORRELATION_ID" 2>>"$LOG_FILE" || echo "")"
+ROUTING_RESULT="$($PYTHON_CMD "${HOOKS_LIB}/route_via_events_wrapper.py" "$PROMPT" "$CORRELATION_ID" 2>>"$LOG_FILE" || echo "")"
 
 # Check if routing call succeeded
 ROUTING_EXIT_CODE=$?
@@ -128,7 +157,7 @@ if [ $ROUTING_EXIT_CODE -ne 0 ] || [ -z "$ROUTING_RESULT" ]; then
 
   # Log routing error (non-blocking)
   (
-    python3 "${HOOKS_LIB}/log_hook_event.py" error \
+    $PYTHON_CMD "${HOOKS_LIB}/log_hook_event.py" error \
       --hook-name "UserPromptSubmit" \
       --error-message "Event-based routing service unavailable (exit code: $ROUTING_EXIT_CODE)" \
       --error-type "ServiceUnavailable" \
@@ -166,7 +195,7 @@ log "Reasoning: ${SELECTION_REASONING:0:120}..."
 # Log routing decision (non-blocking)
 if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
   (
-    python3 "${HOOKS_LIB}/log_hook_event.py" routing \
+    $PYTHON_CMD "${HOOKS_LIB}/log_hook_event.py" routing \
       --agent "$AGENT_NAME" \
       --confidence "$CONFIDENCE" \
       --method "$SELECTION_METHOD" \
@@ -191,7 +220,7 @@ if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
     '{agent_name: $agent}')"
 
   # Call simple agent loader (lightweight, no framework dependencies)
-  INVOKE_RESULT="$(echo "$INVOKE_INPUT" | timeout 3 python3 "${HOOKS_LIB}/simple_agent_loader.py" 2>>"$LOG_FILE" || echo '{}')"
+  INVOKE_RESULT="$(echo "$INVOKE_INPUT" | run_with_timeout 3 $PYTHON_CMD "${HOOKS_LIB}/simple_agent_loader.py" 2>>"$LOG_FILE" || echo '{}')"
 
   # Check if invocation succeeded
   INVOKE_SUCCESS="$(echo "$INVOKE_RESULT" | jq -r '.success // false')"
@@ -222,7 +251,7 @@ if [[ "$AGENT_NAME" == "NO_AGENT_DETECTED" ]] || [[ -z "$AGENT_NAME" ]]; then
 
   # Log no agent detected error (non-blocking)
   (
-    python3 "${HOOKS_LIB}/log_hook_event.py" error \
+    $PYTHON_CMD "${HOOKS_LIB}/log_hook_event.py" error \
       --hook-name "UserPromptSubmit" \
       --error-message "No agent detected by router service" \
       --error-type "NoAgentDetected" \
@@ -232,12 +261,12 @@ if [[ "$AGENT_NAME" == "NO_AGENT_DETECTED" ]] || [[ -z "$AGENT_NAME" ]]; then
   ) &
 
   # Log detection failure
-  FAILURE_CORRELATION_ID="$(python3 -c 'import uuid; print(str(uuid.uuid4()))' | tr '[:upper:]' '[:lower:]')"
+  FAILURE_CORRELATION_ID="$($PYTHON_CMD -c 'import uuid; print(str(uuid.uuid4()))' | tr '[:upper:]' '[:lower:]')"
   FAILURE_PROMPT_B64="$(printf %s "${PROMPT:0:500}" | base64)"
   PROMPT_B64="$FAILURE_PROMPT_B64" FAILURE_CORRELATION_ID="$FAILURE_CORRELATION_ID" \
     PROJECT_PATH="${PROJECT_PATH:-}" PROJECT_NAME="${PROJECT_NAME:-}" SESSION_ID="${SESSION_ID:-}" \
     SERVICE_USED="$SERVICE_USED" \
-    python3 - <<'PYFAIL' 2>>"$LOG_FILE" || log "WARNING: Failed to log detection failure"
+    $PYTHON_CMD - <<'PYFAIL' 2>>"$LOG_FILE" || log "WARNING: Failed to log detection failure"
 import sys
 import os
 import base64
@@ -276,7 +305,7 @@ PROJECT_NAME="$(basename "$PROJECT_PATH")"
 if command -v uuidgen >/dev/null 2>&1; then
     SESSION_ID="${CLAUDE_SESSION_ID:-$(uuidgen | tr '[:upper:]' '[:lower:]')}"
 else
-    SESSION_ID="${CLAUDE_SESSION_ID:-$(python3 -c 'import uuid; print(str(uuid.uuid4()))')}"
+    SESSION_ID="${CLAUDE_SESSION_ID:-$($PYTHON_CMD -c 'import uuid; print(str(uuid.uuid4()))')}"
 fi
 
 log "Project: $PROJECT_NAME, Session: ${SESSION_ID:0:8}..., Correlation: ${CORRELATION_ID:0:8}..."
@@ -298,7 +327,7 @@ if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
       LATENCY_INT="0"
     fi
 
-    python3 "$SKILL_PATH" \
+    $PYTHON_CMD "$SKILL_PATH" \
         --agent "$AGENT_NAME" \
         --confidence "$CONFIDENCE" \
         --strategy "$SELECTION_METHOD" \
@@ -327,7 +356,7 @@ if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
       --arg latency "$LATENCY_MS" \
       '{selection_method: $method, confidence: $confidence, latency_ms: $latency}')"
 
-    python3 "$ACTION_SKILL_PATH" \
+    $PYTHON_CMD "$ACTION_SKILL_PATH" \
         --agent "$AGENT_NAME" \
         --action-type "decision" \
         --action-name "agent_selected" \
@@ -347,7 +376,7 @@ if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
     CORRELATION_ID="$CORRELATION_ID" SELECTION_METHOD="$SELECTION_METHOD" \
     CONFIDENCE="$CONFIDENCE" LATENCY_MS="$LATENCY_MS" \
     SELECTION_REASONING="$SELECTION_REASONING" \
-    python3 - <<'PYLOG' 2>>"$LOG_FILE" || log "WARNING: Failed to log UserPromptSubmit to hook_events"
+    $PYTHON_CMD - <<'PYLOG' 2>>"$LOG_FILE" || log "WARNING: Failed to log UserPromptSubmit to hook_events"
 import sys
 import os
 import base64
@@ -386,7 +415,7 @@ fi
 if [[ -f "${HOOKS_LIB}/metadata_extractor.py" ]] && [[ -f "${HOOKS_LIB}/correlation_manager.py" ]]; then
   log "Extracting enhanced metadata"
   METADATA_JSON="$(
-    PROMPT_B64="$PROMPT_B64" HOOKS_LIB="$HOOKS_LIB" AGENT_NAME="$AGENT_NAME" python3 - <<\PY 2>>"$LOG_FILE" || echo "{}"
+    PROMPT_B64="$PROMPT_B64" HOOKS_LIB="$HOOKS_LIB" AGENT_NAME="$AGENT_NAME" $PYTHON_CMD - <<\PY 2>>"$LOG_FILE" || echo "{}"
 import os, sys, json, base64
 sys.path.insert(0, os.environ["HOOKS_LIB"])
 try:
@@ -416,7 +445,7 @@ fi
 if [[ -n "${AGENT_NAME:-}" ]] && [[ -n "${AGENT_DOMAIN:-}" ]] && [[ -n "${AGENT_PURPOSE:-}" ]]; then
   log "Tracking intent for $AGENT_NAME"
   (
-    printf %s "$PROMPT" | timeout 3 python3 "${HOOKS_LIB}/track_intent.py" \
+    printf %s "$PROMPT" | run_with_timeout 3 $PYTHON_CMD "${HOOKS_LIB}/track_intent.py" \
       --prompt - \
       --agent "$AGENT_NAME" \
       --domain "$AGENT_DOMAIN" \
@@ -433,7 +462,7 @@ fi
 if [[ -n "${DOMAIN_QUERY:-}" ]]; then
   log "Publishing domain intelligence request to event bus"
   (
-    python3 "${HOOKS_LIB}/publish_intelligence_request.py" \
+    $PYTHON_CMD "${HOOKS_LIB}/publish_intelligence_request.py" \
       --query-type "domain" \
       --query "$DOMAIN_QUERY" \
       --correlation-id "$CORRELATION_ID" \
@@ -449,7 +478,7 @@ fi
 if [[ -n "${IMPL_QUERY:-}" ]]; then
   log "Publishing implementation intelligence request to event bus"
   (
-    python3 "${HOOKS_LIB}/publish_intelligence_request.py" \
+    $PYTHON_CMD "${HOOKS_LIB}/publish_intelligence_request.py" \
       --query-type "implementation" \
       --query "$IMPL_QUERY" \
       --correlation-id "$CORRELATION_ID" \
@@ -463,22 +492,12 @@ if [[ -n "${IMPL_QUERY:-}" ]]; then
 fi
 
 # -----------------------------
-# System Manifest Injection
+# System Manifest Injection (DISABLED - path issue)
 # -----------------------------
-log "Loading system manifest for agent context..."
-
-# Use manifest_loader.py to avoid heredoc quoting issues
-# The manifest_loader is in claude/lib/utils/ (sibling to hooks dir)
-MANIFEST_LOADER="${SCRIPT_DIR}/../lib/utils/manifest_loader.py"
-
-SYSTEM_MANIFEST="$(PROJECT_PATH="$PROJECT_PATH" CORRELATION_ID="$CORRELATION_ID" AGENT_NAME="${AGENT_NAME:-unknown}" python3 "$MANIFEST_LOADER" --correlation-id "$CORRELATION_ID" --agent-name "${AGENT_NAME:-unknown}" 2>>"$LOG_FILE" || echo "System Manifest: Not available")"
-
-if [[ -n "$SYSTEM_MANIFEST" ]]; then
-  log "System manifest loaded successfully (${#SYSTEM_MANIFEST} chars)"
-else
-  log "System manifest not available, continuing without it"
-  SYSTEM_MANIFEST="System Manifest: Not available"
-fi
+# TODO: Fix path - manifest_loader.py is at claude/lib/utils/ not scripts/../lib/utils/
+# MANIFEST_LOADER="${SCRIPT_DIR}/../lib/utils/manifest_loader.py"
+SYSTEM_MANIFEST=""
+log "System manifest injection disabled (path fix pending)"
 
 # -----------------------------
 # Context blocks - AGENT DISPATCH DIRECTIVE
@@ -577,7 +596,7 @@ if [[ "$WORKFLOW_DETECTED" == "true" ]]; then
 
   (
     cd "$REPO_ROOT/agents/parallel_execution" 2>/dev/null || cd "${WORKSPACE_PATH:-$PWD}/agents/parallel_execution"
-    echo "$WORKFLOW_JSON" | python3 dispatch_runner.py --enable-context --enable-quorum > "$OUTPUT_FILE" 2>&1
+    echo "$WORKFLOW_JSON" | $PYTHON_CMD dispatch_runner.py --enable-context --enable-quorum > "$OUTPUT_FILE" 2>&1
   ) &
   WORKFLOW_PID=$!
 

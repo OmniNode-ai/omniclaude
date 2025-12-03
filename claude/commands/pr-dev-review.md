@@ -10,7 +10,7 @@ For the fastest workflow, use the unified helper script:
 
 1. **Run the unified helper**:
    ```bash
-   ~/.claude/skills/pr-review/collate-issues-with-ci "${1:-}" 2>&1
+   ~/.claude/skills/omniclaude/pr-review/collate-issues-with-ci "${1:-}" 2>&1
    ```
 
 2. **Fire /parallel-solve** with the output (exclude ⚪ NITPICK sections)
@@ -32,10 +32,41 @@ For more control over each step, follow the detailed workflow below:
 Execute the collate-issues helper to get PR review issues in /parallel-solve-ready format:
 
 ```bash
-~/.claude/skills/pr-review/collate-issues "${1:-}" --parallel-solve-format 2>&1
+~/.claude/skills/omniclaude/pr-review/collate-issues "${1:-}" --parallel-solve-format 2>&1
 ```
 
 **Save this output** - we'll need it for Step 3.
+
+### Resolution Filtering Options
+
+The collate-issues command supports filtering issues by their resolution status:
+
+| Flag | Behavior |
+|------|----------|
+| *(default)* | Shows all issues (resolved + open) |
+| `--hide-resolved` | Only show open issues (excludes resolved/outdated) |
+| `--show-resolved-only` | Only show resolved issues (for verification) |
+
+**Resolution Indicators** (when shown):
+- `[RESOLVED]` - Thread was manually marked as resolved on GitHub
+- `[OUTDATED]` - Code has changed since the comment was made (position no longer valid)
+
+**Examples with resolution filtering**:
+```bash
+# Default: show all issues
+~/.claude/skills/omniclaude/pr-review/collate-issues "${1:-}" --parallel-solve-format
+
+# Only show open issues (recommended for fixing)
+~/.claude/skills/omniclaude/pr-review/collate-issues "${1:-}" --parallel-solve-format --hide-resolved
+
+# Only show resolved issues (for verification)
+~/.claude/skills/omniclaude/pr-review/collate-issues "${1:-}" --show-resolved-only
+```
+
+**When to use each**:
+- **Default**: First pass to see everything
+- **`--hide-resolved`**: Focus on remaining work (exclude already-addressed issues)
+- **`--show-resolved-only`**: Verify which issues have been marked resolved
 
 ---
 
@@ -44,7 +75,7 @@ Execute the collate-issues helper to get PR review issues in /parallel-solve-rea
 Execute the ci-quick-review helper to get CI failure data in JSON format:
 
 ```bash
-~/.claude/skills/ci-failures/ci-quick-review --json "${1:-}" 2>&1
+~/.claude/skills/omniclaude/ci-failures/ci-quick-review --json "${1:-}" 2>&1
 ```
 
 **What this returns**:
@@ -148,7 +179,7 @@ Use the unified helper script that combines both PR review issues and CI failure
 
 ```bash
 # Combines PR review + CI failures in one command
-~/.claude/skills/pr-review/collate-issues-with-ci "${1:-}" 2>&1
+~/.claude/skills/omniclaude/pr-review/collate-issues-with-ci "${1:-}" 2>&1
 ```
 
 This script:
@@ -162,15 +193,26 @@ This script:
 **Manual Approach** (if you need finer control):
 
 ```bash
-# Step 1: PR review issues
-~/.claude/skills/pr-review/collate-issues "${1:-}" --parallel-solve-format
+# Step 1: PR review issues (all issues)
+~/.claude/skills/omniclaude/pr-review/collate-issues "${1:-}" --parallel-solve-format
+
+# Step 1 (alt): PR review issues (only open issues - recommended)
+~/.claude/skills/omniclaude/pr-review/collate-issues "${1:-}" --parallel-solve-format --hide-resolved
+
+# Step 1 (alt): PR review issues (only resolved - for verification)
+~/.claude/skills/omniclaude/pr-review/collate-issues "${1:-}" --show-resolved-only
 
 # Step 2: CI failures (JSON)
-~/.claude/skills/ci-failures/ci-quick-review --json "${1:-}"
+~/.claude/skills/omniclaude/ci-failures/ci-quick-review --json "${1:-}"
 
 # Step 2 (alternative): CI failures (human-readable)
-~/.claude/skills/ci-failures/ci-quick-review "${1:-}"
+~/.claude/skills/omniclaude/ci-failures/ci-quick-review "${1:-}"
 ```
+
+**Resolution Filtering** (collate-issues):
+- *(default)* = Show all issues (resolved + open)
+- `--hide-resolved` = Only open issues (use when fixing remaining work)
+- `--show-resolved-only` = Only resolved issues (use to verify addressed items)
 
 **Exit Codes** (ci-quick-review):
 - 0 = CI failures found (parse and include)
@@ -179,4 +221,5 @@ This script:
 
 **Format**: Location prefixes for clarity
 - PR Review: `[file.py:123]` or just description
+- PR Review (resolved): `[RESOLVED]` or `[OUTDATED]` prefix indicates status
 - CI Failures: `[Workflow:Job:Step]` for traceability

@@ -28,7 +28,7 @@ from typing import Any, Dict, List, Optional
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 # Import shared timeout utility to avoid duplication
-from common_utils import get_timeout_seconds
+from .common_utils import get_timeout_seconds
 
 from config import settings
 

@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, patch
 # Add _shared to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from qdrant_helper import get_collection_health, get_collection_stats
+from .qdrant_helper import get_collection_health, get_collection_stats
 
 
 class MockResponse:

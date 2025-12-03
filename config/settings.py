@@ -169,52 +169,51 @@ class Settings(BaseSettings):
     """
 
     # =========================================================================
-    # EXTERNAL SERVICE DISCOVERY (from omniarchon)
+    # EXTERNAL SERVICE DISCOVERY (legacy - being migrated to Kafka)
     # =========================================================================
-    # Services provided by omniarchon repository (192.168.86.101)
-    # Note: All URLs use HttpUrl validation for type safety
+    # These fields are kept for backward compatibility during migration
+    # New code should use Kafka event-driven patterns instead
 
     archon_intelligence_url: str = Field(
-        default="http://192.168.86.101:8053",
-        description="Archon Intelligence API - Code quality, pattern discovery, RAG queries",
+        default="",
+        description="Archon Intelligence API (legacy - use Kafka instead)",
     )
 
     archon_search_url: str = Field(
-        default="http://192.168.86.101:8055",
-        description="Archon Search API - Vector search, semantic search",
+        default="",
+        description="Archon Search API (legacy - use Kafka instead)",
     )
 
     archon_bridge_url: str = Field(
-        default="http://192.168.86.101:8054",
-        description="Archon Bridge API - Bridge services between systems",
+        default="",
+        description="Archon Bridge API (legacy - use Kafka instead)",
     )
 
     archon_mcp_url: str = Field(
-        default="http://192.168.86.101:8051",
-        description="Archon MCP Server - Model Context Protocol server",
+        default="",
+        description="Archon MCP Server (legacy - deprecated)",
     )
 
     intelligence_service_url: Optional[str] = Field(
         default=None,
-        description="Legacy alias for intelligence service (backward compatibility)",
+        description="Legacy alias for intelligence service",
     )
 
     main_server_url: str = Field(
-        default="http://192.168.86.101:8181",
-        description="Archon Main Server (if different from intelligence)",
+        default="",
+        description="Archon Main Server (legacy - deprecated)",
     )
 
-    # ONEX MCP Service Configuration
     onex_mcp_host: str = Field(
-        default="192.168.86.101",
-        description="ONEX MCP service host (Model Context Protocol)",
+        default="",
+        description="ONEX MCP service host (legacy - deprecated)",
     )
 
     onex_mcp_port: int = Field(
         default=8151,
         ge=1,
         le=65535,
-        description="ONEX MCP service port",
+        description="ONEX MCP service port (legacy - deprecated)",
     )
 
     # =========================================================================
@@ -224,11 +223,11 @@ class Settings(BaseSettings):
     # Running on 192.168.86.200
 
     kafka_bootstrap_servers: str = Field(
-        default="omninode-bridge-redpanda:9092",
+        default="",
         description=(
-            "Kafka broker addresses. "
+            "Kafka broker addresses (REQUIRED - set in .env). "
             "Use omninode-bridge-redpanda:9092 for Docker services, "
-            "192.168.86.200:29092 for host scripts"
+            "localhost:29092 for host scripts"
         ),
     )
 
@@ -315,8 +314,7 @@ class Settings(BaseSettings):
     # Database: omninode_bridge (34+ tables)
 
     postgres_host: str = Field(
-        default="192.168.86.200",
-        description="PostgreSQL server host (use omninode-bridge-postgres for Docker)",
+        description="PostgreSQL server host (REQUIRED - set in .env)",
     )
 
     postgres_port: int = Field(
@@ -688,12 +686,12 @@ class Settings(BaseSettings):
     # The validators provide sensible defaults, so None is never the final value.
     agent_registry_path: str = Field(
         default="",
-        description="Path to agent registry YAML (defaults to ~/.claude/agents/onex/agent-registry.yaml)",
+        description="Path to agent registry YAML (defaults to ~/.claude/agents/omniclaude/agent-registry.yaml)",
     )
 
     agent_definitions_path: str = Field(
         default="",
-        description="Path to agent definitions directory (defaults to ~/.claude/agents/onex/)",
+        description="Path to agent definitions directory (defaults to ~/.claude/agents/omniclaude/)",
     )
 
     # Kafka Consumer Configuration
@@ -852,7 +850,7 @@ class Settings(BaseSettings):
         Priority:
         1. AGENT_REGISTRY_PATH environment variable (explicit override)
         2. REGISTRY_PATH environment variable (Docker compatibility)
-        3. Default: ~/.claude/agents/onex/agent-registry.yaml
+        3. Default: ~/.claude/agents/omniclaude/agent-registry.yaml
 
         Returns:
             str: Resolved path to agent registry (never None or empty)
@@ -871,7 +869,7 @@ class Settings(BaseSettings):
         # Fall back to home directory default
         home_dir = Path.home()
         default_path = str(
-            home_dir / ".claude" / "agents" / "onex" / "agent-registry.yaml"
+            home_dir / ".claude" / "agents" / "omniclaude" / "agent-registry.yaml"
         )
 
         if not default_path:
@@ -898,7 +896,7 @@ class Settings(BaseSettings):
             return v
 
         home_dir = Path.home()
-        default_path = str(home_dir / ".claude" / "agents" / "onex")
+        default_path = str(home_dir / ".claude" / "agents" / "omniclaude")
 
         if not default_path:
             raise ValueError(

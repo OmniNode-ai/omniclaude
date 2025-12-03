@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """
-Node generation pipeline components.
+Node generation tools.
 
-Tools for autonomous node generation including:
+Tools for node file generation including:
 - FileWriter: Atomic file writing with rollback
-- PromptParser: Natural language prompt parsing
-- GenerationPipeline: End-to-end node generation orchestration
 """
 
 from .file_writer import FileWriter

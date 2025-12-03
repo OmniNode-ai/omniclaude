@@ -54,7 +54,7 @@ This creates the following symlinks:
 ├── hooks/              → claude/hooks/
 ├── skills/             → claude/skills/
 ├── commands/           → claude/commands/
-├── agents/onex/        → claude/agents/
+├── agents/omniclaude/        → claude/agents/
 ├── .env                → .env
 └── onex/               # Namespace directory with all symlinks
     ├── hooks/

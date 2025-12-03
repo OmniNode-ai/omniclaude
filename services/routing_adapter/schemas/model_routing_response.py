@@ -25,7 +25,7 @@ Examples:
                     historical_score=0.95
                 ),
                 reason="Strong trigger match with 'optimize' keyword",
-                definition_path="/Users/jonah/.claude/agents/onex/agent-performance.yaml"
+                definition_path="/Users/jonah/.claude/agents/omniclaude/agent-performance.yaml"
             )
         ],
         routing_metadata=ModelRoutingMetadata(

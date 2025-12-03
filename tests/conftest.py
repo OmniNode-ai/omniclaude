@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Test fixtures and configuration for Phase 2 Stream D testing.
+Test fixtures and configuration for omniclaude testing.
 
 Provides comprehensive fixtures for:
-- Contract validation testing
-- Pipeline execution testing
-- Node generation testing
+- Kafka producer mocking (prevents real connections during tests)
+- Sample contract YAML fixtures
+- Database wait helpers
 - Performance benchmarking
 """
 
@@ -34,10 +34,6 @@ if not os.getenv("CI"):
         print(f"No .env file found at {env_path}, using system environment variables")
 else:
     print("Running in CI environment - using GitHub Actions environment variables")
-
-# Import project modules
-from claude.lib.generation.contract_validator import ContractValidator, ValidationResult
-
 
 # -------------------------------------------------------------------------
 # Mock Kafka Producer - Prevents Real Connections During Tests
@@ -265,25 +261,6 @@ input_model: ModelInput
 
 
 # -------------------------------------------------------------------------
-# Contract Validator Fixtures
-# -------------------------------------------------------------------------
-
-
-@pytest.fixture
-def contract_validator() -> ContractValidator:
-    """Create contract validator instance."""
-    return ContractValidator()
-
-
-@pytest.fixture
-def contract_validator_with_search_paths(tmp_path: Path) -> ContractValidator:
-    """Create contract validator with model search paths."""
-    models_dir = tmp_path / "models"
-    models_dir.mkdir()
-    return ContractValidator(model_search_paths=[models_dir])
-
-
-# -------------------------------------------------------------------------
 # Temporary Directory Fixtures
 # -------------------------------------------------------------------------
 
@@ -373,35 +350,6 @@ def mock_parsed_data() -> Dict:
 def correlation_id() -> str:
     """Generate correlation ID for testing."""
     return str(uuid4())
-
-
-# -------------------------------------------------------------------------
-# Validation Result Helpers
-# -------------------------------------------------------------------------
-
-
-def create_valid_validation_result(
-    node_type: str = "EFFECT",
-) -> ValidationResult:
-    """Helper to create valid validation result for testing."""
-    return ValidationResult(
-        valid=True,
-        node_type=node_type,
-        schema_compliance=True,
-        model_references_valid=True,
-    )
-
-
-def create_invalid_validation_result(
-    node_type: str = "EFFECT", errors: list | None = None
-) -> ValidationResult:
-    """Helper to create invalid validation result for testing."""
-    return ValidationResult(
-        valid=False,
-        node_type=node_type,
-        schema_compliance=False,
-        errors=errors or [{"loc": ["test"], "msg": "Test error", "type": "test"}],
-    )
 
 
 # -------------------------------------------------------------------------

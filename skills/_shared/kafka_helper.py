@@ -39,7 +39,7 @@ import sys
 from typing import Any, Dict, List, Optional
 
 # Import standardized Kafka result types
-from kafka_types import (
+from .kafka_types import (
     KafkaConnectionResult,
     KafkaConsumerGroupsResult,
     KafkaMessageCountResult,
@@ -51,7 +51,7 @@ from kafka_types import (
 # Import type-safe configuration (Phase 2 - Pydantic Settings migration)
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 # Import shared timeout utility to avoid duplication
-from common_utils import get_timeout_seconds
+from .common_utils import get_timeout_seconds
 
 from config import settings
 

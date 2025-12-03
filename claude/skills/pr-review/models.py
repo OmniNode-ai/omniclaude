@@ -26,6 +26,7 @@ from __future__ import annotations
 import re
 from datetime import datetime
 from enum import Enum
+from functools import cached_property
 from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -173,13 +174,15 @@ class CommentStatus(str, Enum):
 
     - UNADDRESSED: Not yet addressed by the PR author
     - POTENTIALLY_ADDRESSED: May have been addressed (needs verification)
-    - RESOLVED: Confirmed resolved
+    - RESOLVED: Confirmed resolved (GitHub thread marked resolved)
+    - OUTDATED: Code has changed since the comment was made
     - WONT_FIX: Acknowledged but won't be fixed
     """
 
     UNADDRESSED = "unaddressed"
     POTENTIALLY_ADDRESSED = "potentially_addressed"
     RESOLVED = "resolved"
+    OUTDATED = "outdated"
     WONT_FIX = "wont_fix"
 
     def __str__(self) -> str:
@@ -189,6 +192,20 @@ class CommentStatus(str, Enum):
     def needs_attention(self) -> bool:
         """Returns True if this status needs attention."""
         return self in (CommentStatus.UNADDRESSED, CommentStatus.POTENTIALLY_ADDRESSED)
+
+    @property
+    def is_resolved(self) -> bool:
+        """Returns True if this status indicates resolution."""
+        return self in (
+            CommentStatus.RESOLVED,
+            CommentStatus.OUTDATED,
+            CommentStatus.WONT_FIX,
+        )
+
+
+# Alias for backward compatibility and task specification
+IssueStatus = CommentStatus
+IssueSeverity = CommentSeverity
 
 
 class BotType(str, Enum):
@@ -403,6 +420,19 @@ class PRComment(BaseModel):
     )
     raw_json: dict[str, Any] = Field(
         default_factory=dict, description="Original GitHub API response"
+    )
+    # Resolution tracking fields
+    thread_id: Optional[str] = Field(
+        None, description="GitHub review thread ID if part of a thread"
+    )
+    resolved_at: Optional[datetime] = Field(
+        None, description="When the thread was resolved"
+    )
+    resolved_by: Optional[str] = Field(
+        None, description="Username who resolved the thread"
+    )
+    is_outdated: bool = Field(
+        default=False, description="True if the code has changed since comment"
     )
 
     @model_validator(mode="after")
@@ -1184,6 +1214,336 @@ class PRAnalysis(BaseModel):
         return self.model_dump()
 
 
+class PRIssue(BaseModel):
+    """
+    A collated PR review issue with resolution tracking.
+
+    This model is used by the collate-issues script to represent
+    a single actionable issue extracted from PR review comments.
+    It includes resolution status detection based on GitHub thread
+    status and file modification tracking.
+
+    Usage:
+        from models import PRIssue, IssueSeverity, IssueStatus
+
+        issue = PRIssue(
+            file_path="src/main.py",
+            line_number=42,
+            severity=IssueSeverity.CRITICAL,
+            description="Missing null check",
+            status=IssueStatus.UNADDRESSED,
+        )
+
+        if issue.is_resolved:
+            print(f"Resolved at {issue.resolved_at}")
+    """
+
+    model_config = ConfigDict(extra="allow", frozen=False)
+
+    file_path: str = Field(
+        default="", description="File path relative to repository root"
+    )
+    line_number: Optional[int] = Field(
+        None, ge=1, description="Line number (1-indexed) if applicable"
+    )
+    severity: CommentSeverity = Field(
+        ..., description="Issue severity level (critical/major/minor/nitpick)"
+    )
+    description: str = Field(..., description="Issue description/summary")
+    status: CommentStatus = Field(
+        default=CommentStatus.UNADDRESSED, description="Resolution status"
+    )
+    comment_id: Optional[int] = Field(
+        None, description="GitHub comment ID for tracking"
+    )
+    thread_id: Optional[str] = Field(
+        None, description="GitHub review thread ID if part of a thread"
+    )
+    resolved_at: Optional[datetime] = Field(
+        None, description="When the issue was resolved"
+    )
+    resolved_by: Optional[str] = Field(
+        None, description="Username who resolved the issue"
+    )
+    is_outdated: bool = Field(
+        default=False, description="True if file changed after comment"
+    )
+    source_comment: Optional[PRComment] = Field(
+        None, description="Original PRComment this issue was extracted from"
+    )
+
+    @property
+    def is_resolved(self) -> bool:
+        """Check if this issue is resolved (any resolution status)."""
+        return self.status.is_resolved
+
+    @property
+    def is_open(self) -> bool:
+        """Check if this issue is still open."""
+        return not self.is_resolved
+
+    @property
+    def location(self) -> str:
+        """Get formatted location string like '[path:line]'."""
+        if not self.file_path:
+            return ""
+        if self.line_number:
+            return f"[{self.file_path}:{self.line_number}]"
+        return f"[{self.file_path}]"
+
+    @property
+    def severity_emoji(self) -> str:
+        """Get emoji indicator for severity level."""
+        emoji_map = {
+            CommentSeverity.CRITICAL: "🔴",
+            CommentSeverity.MAJOR: "🟠",
+            CommentSeverity.MINOR: "🟡",
+            CommentSeverity.NITPICK: "⚪",
+            CommentSeverity.UNCLASSIFIED: "❓",
+        }
+        return emoji_map.get(self.severity, "❓")
+
+    @property
+    def status_indicator(self) -> str:
+        """Get status indicator prefix for display."""
+        if self.status == CommentStatus.RESOLVED:
+            return "[RESOLVED]"
+        if self.status == CommentStatus.OUTDATED or self.is_outdated:
+            return "[OUTDATED]"
+        if self.status == CommentStatus.WONT_FIX:
+            return "[WONT_FIX]"
+        return ""
+
+    def format_display(self, show_status: bool = True) -> str:
+        """Format issue for display output.
+
+        Args:
+            show_status: Whether to include resolution status indicator.
+
+        Returns:
+            Formatted string like "🔴 [RESOLVED] [path:42] Issue description"
+        """
+        parts = [self.severity_emoji]
+        if show_status and self.status_indicator:
+            parts.append(self.status_indicator)
+        if self.location:
+            parts.append(self.location)
+        parts.append(self.description)
+        return " ".join(parts)
+
+    @classmethod
+    def from_pr_comment(
+        cls,
+        comment: PRComment,
+        description: Optional[str] = None,
+        severity: Optional[CommentSeverity] = None,
+    ) -> PRIssue:
+        """Create a PRIssue from a PRComment.
+
+        Args:
+            comment: The source PRComment.
+            description: Override description (defaults to first line of body).
+            severity: Override severity (defaults to comment's severity).
+
+        Returns:
+            PRIssue instance linked to the source comment.
+        """
+        # Extract file path and line from file_ref
+        file_path = ""
+        line_number = None
+        if comment.file_ref:
+            file_path = comment.file_ref.path
+            line_number = comment.file_ref.line
+
+        # Use first meaningful line of body as description if not provided
+        if description is None:
+            lines = comment.body.strip().split("\n")
+            for line in lines:
+                line = line.strip()
+                # Skip headers, empty lines, and common prefixes
+                if line and not line.startswith("#") and not line.startswith("<!--"):
+                    description = line[:200]  # Truncate if very long
+                    break
+            if not description:
+                description = comment.body[:200]
+
+        # Determine status based on resolution fields
+        status = comment.status
+        if comment.is_outdated:
+            status = CommentStatus.OUTDATED
+        elif comment.resolved_at or comment.resolved_by:
+            status = CommentStatus.RESOLVED
+
+        return cls(
+            file_path=file_path,
+            line_number=line_number,
+            severity=severity or comment.severity,
+            description=description,
+            status=status,
+            # Safe conversion: only convert purely numeric IDs (REST API)
+            # GraphQL node IDs like "IC_kwDOABC123" cannot be stored as int
+            comment_id=int(comment.id) if comment.id and comment.id.isdigit() else None,
+            thread_id=comment.thread_id,
+            resolved_at=comment.resolved_at,
+            resolved_by=comment.resolved_by,
+            is_outdated=comment.is_outdated,
+            source_comment=comment,
+        )
+
+    def __repr__(self) -> str:
+        status_str = f" [{self.status.value}]" if self.is_resolved else ""
+        loc = self.location or "(no location)"
+        return f"PRIssue({self.severity.value}{status_str}, {loc}, {self.description[:40]}...)"
+
+
+class CollatedIssues(BaseModel):
+    """
+    Container for collated PR issues organized by severity.
+
+    This model represents the output of the collate-issues script,
+    providing easy access to issues grouped by severity and status.
+
+    Note:
+        For optimal performance, treat instances as immutable after creation.
+        The ``all_issues`` property is cached and won't reflect post-creation
+        modifications to the issue lists.
+    """
+
+    model_config = ConfigDict(extra="allow", frozen=False)
+
+    pr_number: int = Field(..., ge=1, description="PR number")
+    repository: str = Field(default="", description="Repository in owner/repo format")
+    collated_at: datetime = Field(
+        default_factory=datetime.now, description="When issues were collated"
+    )
+    critical: list[PRIssue] = Field(
+        default_factory=list, description="Critical severity issues"
+    )
+    major: list[PRIssue] = Field(
+        default_factory=list, description="Major severity issues"
+    )
+    minor: list[PRIssue] = Field(
+        default_factory=list, description="Minor severity issues"
+    )
+    nitpick: list[PRIssue] = Field(
+        default_factory=list, description="Nitpick severity issues"
+    )
+    unclassified: list[PRIssue] = Field(
+        default_factory=list, description="Unclassified issues"
+    )
+
+    @cached_property
+    def all_issues(self) -> list[PRIssue]:
+        """Get all issues across all severity levels.
+
+        Returns a cached concatenation of all issue lists. The cache is
+        invalidated if the model is modified (note: Pydantic models should
+        be treated as immutable after creation for caching to work correctly).
+        """
+        return (
+            self.critical + self.major + self.minor + self.nitpick + self.unclassified
+        )
+
+    @property
+    def open_issues(self) -> list[PRIssue]:
+        """Get all issues that are not resolved."""
+        return [i for i in self.all_issues if i.is_open]
+
+    @property
+    def resolved_issues(self) -> list[PRIssue]:
+        """Get all resolved issues."""
+        return [i for i in self.all_issues if i.is_resolved]
+
+    @property
+    def total_count(self) -> int:
+        """Total number of issues."""
+        return len(self.all_issues)
+
+    @property
+    def open_count(self) -> int:
+        """Number of open issues."""
+        return len(self.open_issues)
+
+    @property
+    def resolved_count(self) -> int:
+        """Number of resolved issues."""
+        return len(self.resolved_issues)
+
+    @property
+    def blocking_count(self) -> int:
+        """Number of open critical + major issues (blocking merge)."""
+        return sum(1 for i in self.critical + self.major if i.is_open)
+
+    def filter_by_status(
+        self, hide_resolved: bool = False, show_resolved_only: bool = False
+    ) -> CollatedIssues:
+        """Return a new CollatedIssues with filtered issues.
+
+        Args:
+            hide_resolved: If True, exclude resolved issues.
+            show_resolved_only: If True, only include resolved issues.
+
+        Returns:
+            New CollatedIssues instance with filtered issues.
+
+        Raises:
+            ValueError: If both hide_resolved and show_resolved_only are True.
+
+        Example:
+            >>> issues = CollatedIssues(pr_number=40, critical=[...])
+            >>> open_only = issues.filter_by_status(hide_resolved=True)
+            >>> resolved_only = issues.filter_by_status(show_resolved_only=True)
+        """
+        if hide_resolved and show_resolved_only:
+            raise ValueError("Cannot use both hide_resolved and show_resolved_only")
+
+        def filter_list(issues: list[PRIssue]) -> list[PRIssue]:
+            if hide_resolved:
+                return [i for i in issues if i.is_open]
+            if show_resolved_only:
+                return [i for i in issues if i.is_resolved]
+            return issues
+
+        return CollatedIssues(
+            pr_number=self.pr_number,
+            repository=self.repository,
+            collated_at=self.collated_at,
+            critical=filter_list(self.critical),
+            major=filter_list(self.major),
+            minor=filter_list(self.minor),
+            nitpick=filter_list(self.nitpick),
+            unclassified=filter_list(self.unclassified),
+        )
+
+    def get_summary(self, include_nitpicks: bool = False) -> str:
+        """Generate a human-readable summary string.
+
+        Args:
+            include_nitpicks: Whether to include nitpicks in count.
+
+        Returns:
+            Summary string like "3 critical, 5 major, 2 minor = 10 actionable"
+        """
+        parts = []
+        if self.critical:
+            parts.append(f"{len(self.critical)} critical")
+        if self.major:
+            parts.append(f"{len(self.major)} major")
+        if self.minor:
+            parts.append(f"{len(self.minor)} minor")
+        if include_nitpicks and self.nitpick:
+            parts.append(f"{len(self.nitpick)} nitpick")
+
+        actionable = len(self.critical) + len(self.major) + len(self.minor)
+        if include_nitpicks:
+            actionable += len(self.nitpick)
+
+        if not parts:
+            return "No issues found"
+
+        return f"Summary: {', '.join(parts)} = {actionable} actionable issues"
+
+
 # =============================================================================
 # Utility Functions
 # =============================================================================
@@ -1254,25 +1614,30 @@ def classify_severity(body: str) -> CommentSeverity:
 # =============================================================================
 
 __all__ = [
-    # Enums
-    "PRCommentSource",
-    "CommentSeverity",
-    "CommentStatus",
-    "BotType",
-    # Models
-    "FileReference",
-    "StructuredSection",
-    "PRComment",
-    "PRReview",
-    "PRData",
-    "PRAnalysis",
-    # Functions
-    "detect_bot_type",
-    "parse_github_datetime",
-    "merge_comments_by_id",
-    "classify_severity",
     # Constants
     "CLAUDE_BOT_PATTERNS",
     "CODERABBIT_PATTERNS",
     "GITHUB_ACTIONS_PATTERNS",
+    "BotType",
+    "CollatedIssues",
+    "CommentSeverity",
+    "CommentStatus",
+    # Models
+    "FileReference",
+    # Enum aliases (for backward compatibility)
+    "IssueSeverity",
+    "IssueStatus",
+    "PRAnalysis",
+    "PRComment",
+    # Enums
+    "PRCommentSource",
+    "PRData",
+    "PRIssue",
+    "PRReview",
+    "StructuredSection",
+    "classify_severity",
+    # Functions
+    "detect_bot_type",
+    "merge_comments_by_id",
+    "parse_github_datetime",
 ]

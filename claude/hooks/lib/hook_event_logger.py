@@ -4,6 +4,11 @@ Hook Event Logger - Fast synchronous database logging for Claude Code hooks
 
 Writes hook events to PostgreSQL hook_events table with minimal overhead.
 Target: < 50ms per event for production use.
+
+Graceful Degradation:
+- If config/settings is unavailable, logs warning and returns None for all operations
+- If database is unavailable, logs warning and returns None
+- Never blocks hook execution
 """
 
 import sys
@@ -12,13 +17,26 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-import psycopg2
-import psycopg2.extensions
-from psycopg2.extras import Json
+# psycopg2 imports - these are required, fail early if missing
+try:
+    import psycopg2
+    import psycopg2.extensions
+    from psycopg2.extras import Json
+
+    _PSYCOPG2_AVAILABLE = True
+except ImportError as e:
+    _PSYCOPG2_AVAILABLE = False
+    print(
+        f"Warning: psycopg2 not available, database logging disabled: {e}",
+        file=sys.stderr,
+    )
+    # Create stub types for type hints
+    psycopg2 = None  # type: ignore
+    Json = dict  # type: ignore
 
 
 # Type alias for connection - use Any to avoid strict type checking on psycopg2 internals
-Connection = psycopg2.extensions.connection
+Connection = Any  # psycopg2.extensions.connection when available
 
 
 # Add project root to path for config import
@@ -27,7 +45,35 @@ project_root = (
 )  # lib → hooks → claude → omniclaude root
 sys.path.insert(0, str(project_root))
 
-from config import settings
+# Lazy config import - defer to avoid import-time failures
+_settings = None
+_settings_error: Optional[str] = None
+
+
+def _get_settings():
+    """Lazily load settings, returning None if unavailable."""
+    global _settings, _settings_error
+
+    if _settings is not None:
+        return _settings
+
+    if _settings_error is not None:
+        # Already tried and failed, don't retry
+        return None
+
+    try:
+        from config import settings
+
+        _settings = settings
+        return _settings
+    except ImportError as e:
+        _settings_error = f"config module not available: {e}"
+        print(f"Warning: {_settings_error}", file=sys.stderr)
+        return None
+    except Exception as e:
+        _settings_error = f"failed to load config.settings: {e}"
+        print(f"Warning: {_settings_error}", file=sys.stderr)
+        return None
 
 
 class HookEventLogger:
@@ -38,11 +84,44 @@ class HookEventLogger:
 
         Args:
             connection_string: PostgreSQL connection string (uses default if None)
+
+        Graceful Degradation:
+            - If psycopg2 is unavailable, self._available = False
+            - If settings is unavailable, self._available = False
+            - All operations return None when unavailable
         """
+        self._available = False
+        self._conn: Optional[Any] = None
+        self.connection_string: Optional[str] = None
+
+        # Check psycopg2 availability
+        if not _PSYCOPG2_AVAILABLE:
+            print(
+                "Warning: HookEventLogger unavailable (psycopg2 not installed)",
+                file=sys.stderr,
+            )
+            return
+
         if connection_string is None:
             # Use Pydantic Settings to generate connection string
             # This provides type-safe configuration with validation
-            connection_string = settings.get_postgres_dsn()
+            settings = _get_settings()
+            if settings is None:
+                print(
+                    "Warning: HookEventLogger unavailable (config.settings not loaded)",
+                    file=sys.stderr,
+                )
+                return
+
+            try:
+                connection_string = settings.get_postgres_dsn()
+            except Exception as e:
+                print(
+                    f"Warning: HookEventLogger unavailable (failed to get DSN: {e})",
+                    file=sys.stderr,
+                )
+                return
+
             # Convert SQLAlchemy-style DSN to psycopg2 format
             # psycopg2 uses: host=... port=... dbname=... user=... password=...
             connection_string = connection_string.replace("postgresql://", "")
@@ -76,10 +155,17 @@ class HookEventLogger:
                 )
 
         self.connection_string = connection_string
-        self._conn: Optional[psycopg2.extensions.connection] = None
+        self._available = True
 
-    def _get_connection(self) -> psycopg2.extensions.connection:
-        """Get or create database connection."""
+    def _get_connection(self) -> Optional[Any]:
+        """Get or create database connection.
+
+        Returns:
+            Database connection if available, None otherwise
+        """
+        if not self._available:
+            return None
+
         if self._conn is None or self._conn.closed:
             self._conn = psycopg2.connect(self.connection_string)
         return self._conn
@@ -104,10 +190,16 @@ class HookEventLogger:
             metadata: Additional metadata
 
         Returns:
-            Event ID if successful, None if failed
+            Event ID if successful, None if failed (including when unavailable)
         """
+        # Early exit if logger is not available (graceful degradation)
+        if not self._available:
+            return None
+
         try:
             conn = self._get_connection()
+            if conn is None:
+                return None
 
             # Generate event ID
             event_id = str(uuid.uuid4())
@@ -300,13 +392,19 @@ class HookEventLogger:
 
     def close(self) -> None:
         """Close database connection."""
+        if not self._available:
+            return
         if self._conn is not None and not self._conn.closed:
             self._conn.close()
             self._conn = None
 
     def __del__(self):
         """Cleanup on deletion."""
-        self.close()
+        try:
+            self.close()
+        except Exception:
+            # Suppress errors during cleanup - don't break the process
+            pass
 
 
 # Singleton instance for reuse across hook invocations

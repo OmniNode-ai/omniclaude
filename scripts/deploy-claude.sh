@@ -18,6 +18,10 @@ set -euo pipefail
 #   --force       Skip existence checks for optional sources (security checks remain)
 #   --dry-run     Show what would be done without making changes
 #   --help        Show this help message
+#
+# Dependencies:
+#   - jq (for JSON manipulation in hook configuration)
+#   - bash 4.0+ (for associative arrays and advanced features)
 # =============================================================================
 
 # Parse command line arguments
@@ -58,7 +62,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 CLAUDE_DIR="$HOME/.claude"
 # Namespace for this project's artifacts within each artifact type directory
-ONEX_NAMESPACE="onex"
+PROJECT_NAMESPACE="omniclaude"
 
 echo "=== OmniClaude Claude Artifacts Deployment ==="
 if [[ "$DRY_RUN" == "true" ]]; then
@@ -68,7 +72,7 @@ if [[ "$FORCE_MODE" == "true" ]]; then
     echo "[FORCE MODE - Optional source checks relaxed]"
 fi
 echo "Repo: $REPO_ROOT"
-echo "Target: $CLAUDE_DIR/<artifact-type>/$ONEX_NAMESPACE"
+echo "Target: $CLAUDE_DIR/<artifact-type>/$PROJECT_NAMESPACE"
 echo ""
 
 # Pre-flight validation: Check all required source paths exist before deployment
@@ -81,6 +85,7 @@ preflight_validation() {
         "$REPO_ROOT/claude/agents"
         "$REPO_ROOT/claude/lib"
         "$REPO_ROOT/claude/plugins"
+        "$REPO_ROOT/claude/hooks"
         "$REPO_ROOT/config"
     )
 
@@ -115,8 +120,8 @@ if [[ "$FORCE_MODE" != "true" ]]; then
     preflight_validation
 fi
 
-# Create artifact type directories with onex namespace
-# Structure: ~/.claude/<artifact-type>/onex/ -> repo/claude/<artifact-type>/
+# Create artifact type directories with project namespace
+# Structure: ~/.claude/<artifact-type>/omniclaude/ -> repo/claude/<artifact-type>/
 ARTIFACT_TYPES=("skills" "commands" "agents" "lib" "plugins")
 for type in "${ARTIFACT_TYPES[@]}"; do
     type_dir="$CLAUDE_DIR/$type"
@@ -267,20 +272,20 @@ create_symlink() {
 }
 
 # Create symlinks within each artifact type directory
-# Structure: ~/.claude/<type>/onex -> repo/claude/<type>
+# Structure: ~/.claude/<type>/omniclaude -> repo/claude/<type>
 # NOTE: Hooks are NOT symlinked - settings.json points directly to repo paths
 echo "Creating namespaced symlinks..."
-create_symlink "$REPO_ROOT/claude/skills" "$CLAUDE_DIR/skills/$ONEX_NAMESPACE" "skills/$ONEX_NAMESPACE"
-create_symlink "$REPO_ROOT/claude/commands" "$CLAUDE_DIR/commands/$ONEX_NAMESPACE" "commands/$ONEX_NAMESPACE"
-create_symlink "$REPO_ROOT/claude/agents" "$CLAUDE_DIR/agents/$ONEX_NAMESPACE" "agents/$ONEX_NAMESPACE"
-create_symlink "$REPO_ROOT/claude/lib" "$CLAUDE_DIR/lib/$ONEX_NAMESPACE" "lib/$ONEX_NAMESPACE"
-create_symlink "$REPO_ROOT/claude/plugins" "$CLAUDE_DIR/plugins/$ONEX_NAMESPACE" "plugins/$ONEX_NAMESPACE"
+create_symlink "$REPO_ROOT/claude/skills" "$CLAUDE_DIR/skills/$PROJECT_NAMESPACE" "skills/$PROJECT_NAMESPACE"
+create_symlink "$REPO_ROOT/claude/commands" "$CLAUDE_DIR/commands/$PROJECT_NAMESPACE" "commands/$PROJECT_NAMESPACE"
+create_symlink "$REPO_ROOT/claude/agents" "$CLAUDE_DIR/agents/$PROJECT_NAMESPACE" "agents/$PROJECT_NAMESPACE"
+create_symlink "$REPO_ROOT/claude/lib" "$CLAUDE_DIR/lib/$PROJECT_NAMESPACE" "lib/$PROJECT_NAMESPACE"
+create_symlink "$REPO_ROOT/claude/plugins" "$CLAUDE_DIR/plugins/$PROJECT_NAMESPACE" "plugins/$PROJECT_NAMESPACE"
 
 echo ""
 echo "Symlinking shared resources..."
 # .env is optional - warn but don't fail if missing
 create_symlink "$REPO_ROOT/.env" "$CLAUDE_DIR/.env" ".env" "false"
-create_symlink "$REPO_ROOT/config" "$CLAUDE_DIR/config/$ONEX_NAMESPACE" "config/$ONEX_NAMESPACE"
+create_symlink "$REPO_ROOT/config" "$CLAUDE_DIR/config/$PROJECT_NAMESPACE" "config/$PROJECT_NAMESPACE"
 
 # Symlink the poetry venv for Python imports
 # Check if poetry is installed before attempting to get venv path
@@ -295,14 +300,142 @@ else
 fi
 if [[ -n "$VENV_PATH" && -d "$VENV_PATH" ]]; then
     # Use create_symlink with required=false since venv is optional
-    # Place venv in lib/onex/.venv for Python import resolution
-    create_symlink "$VENV_PATH" "$CLAUDE_DIR/lib/$ONEX_NAMESPACE/.venv" "lib/$ONEX_NAMESPACE/.venv" "false"
+    # Place venv in lib/omniclaude/.venv for Python import resolution
+    create_symlink "$VENV_PATH" "$CLAUDE_DIR/lib/$PROJECT_NAMESPACE/.venv" "lib/$PROJECT_NAMESPACE/.venv" "false"
     echo ""
     echo "Poetry venv linked: $VENV_PATH"
 else
     echo ""
     echo "Poetry venv not found. Run 'poetry install' first."
 fi
+
+# =============================================================================
+# Configure hooks in ~/.claude/settings.json
+# =============================================================================
+
+# Function to configure hooks in settings.json
+configure_hooks() {
+    local settings_file="$CLAUDE_DIR/settings.json"
+    local hooks_dir="$REPO_ROOT/claude/hooks"
+
+    echo ""
+    echo "Configuring hooks in settings.json..."
+
+    # Validate hooks exist
+    local user_prompt_hook="$hooks_dir/user-prompt-submit.sh"
+    local post_tool_hook="$hooks_dir/post_tool_use_enforcer.py"
+    local session_start_hook="$hooks_dir/session-start.sh"
+
+    local missing_hooks=()
+    [[ ! -f "$user_prompt_hook" ]] && missing_hooks+=("$user_prompt_hook")
+    [[ ! -f "$post_tool_hook" ]] && missing_hooks+=("$post_tool_hook")
+    [[ ! -f "$session_start_hook" ]] && missing_hooks+=("$session_start_hook")
+
+    if [[ ${#missing_hooks[@]} -gt 0 ]]; then
+        echo "  ERROR: Missing hook files:"
+        for hook in "${missing_hooks[@]}"; do
+            echo "    - $hook"
+        done
+        echo "  Hook configuration skipped."
+        return 1
+    fi
+
+    # Verify jq is available for JSON manipulation
+    if ! command -v jq &> /dev/null; then
+        echo "  ERROR: jq is required for hook configuration but not found"
+        echo "  Install with: brew install jq"
+        return 1
+    fi
+
+    # Create hooks JSON structure
+    local hooks_json
+    hooks_json=$(jq -n \
+        --arg user_prompt "$user_prompt_hook" \
+        --arg post_tool "$post_tool_hook" \
+        --arg session_start "$session_start_hook" \
+        '{
+            "UserPromptSubmit": [
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": $user_prompt,
+                            "timeout": 10
+                        }
+                    ]
+                }
+            ],
+            "PostToolUse": [
+                {
+                    "matcher": "*",
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": $post_tool,
+                            "timeout": 5
+                        }
+                    ]
+                }
+            ],
+            "SessionStart": [
+                {
+                    "hooks": [
+                        {
+                            "type": "command",
+                            "command": $session_start,
+                            "timeout": 5
+                        }
+                    ]
+                }
+            ]
+        }')
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        echo "  [DRY] Would configure hooks in: $settings_file"
+        echo "  [DRY] UserPromptSubmit -> $user_prompt_hook"
+        echo "  [DRY] PostToolUse (*) -> $post_tool_hook"
+        echo "  [DRY] SessionStart -> $session_start_hook"
+        return 0
+    fi
+
+    # Create settings.json if it doesn't exist
+    if [[ ! -f "$settings_file" ]]; then
+        echo "  Creating new settings.json..."
+        echo '{}' > "$settings_file"
+    fi
+
+    # Backup existing settings.json
+    if [[ -f "$settings_file" ]]; then
+        cp "$settings_file" "${settings_file}.bak"
+    fi
+
+    # Merge hooks into existing settings (preserves other settings)
+    local updated_settings
+    updated_settings=$(jq --argjson hooks "$hooks_json" '.hooks = $hooks' "$settings_file")
+
+    if [[ -z "$updated_settings" ]]; then
+        echo "  ERROR: Failed to update settings.json"
+        # Restore backup
+        [[ -f "${settings_file}.bak" ]] && mv "${settings_file}.bak" "$settings_file"
+        return 1
+    fi
+
+    # Write updated settings
+    echo "$updated_settings" > "$settings_file"
+
+    echo "  + UserPromptSubmit -> $user_prompt_hook"
+    echo "  + PostToolUse (*) -> $post_tool_hook"
+    echo "  + SessionStart -> $session_start_hook"
+    echo "  Hooks configured successfully."
+
+    # Clean up backup on success
+    rm -f "${settings_file}.bak"
+
+    return 0
+}
+
+# Configure hooks (after symlink creation)
+configure_hooks || echo "WARNING: Hook configuration failed (non-fatal)"
 
 echo ""
 if [[ "$DRY_RUN" == "true" ]]; then
@@ -314,15 +447,19 @@ else
     echo ""
     echo "Structure:"
     echo "  ~/.claude/"
-    echo "    |-- skills/$ONEX_NAMESPACE/ -> $REPO_ROOT/claude/skills/"
-    echo "    |-- commands/$ONEX_NAMESPACE/ -> $REPO_ROOT/claude/commands/"
-    echo "    |-- agents/$ONEX_NAMESPACE/ -> $REPO_ROOT/claude/agents/"
-    echo "    |-- lib/$ONEX_NAMESPACE/ -> $REPO_ROOT/claude/lib/"
-    echo "    |-- plugins/$ONEX_NAMESPACE/ -> $REPO_ROOT/claude/plugins/"
-    echo "    \`-- config/$ONEX_NAMESPACE/ -> $REPO_ROOT/config/"
+    echo "    |-- skills/$PROJECT_NAMESPACE/ -> $REPO_ROOT/claude/skills/"
+    echo "    |-- commands/$PROJECT_NAMESPACE/ -> $REPO_ROOT/claude/commands/"
+    echo "    |-- agents/$PROJECT_NAMESPACE/ -> $REPO_ROOT/claude/agents/"
+    echo "    |-- lib/$PROJECT_NAMESPACE/ -> $REPO_ROOT/claude/lib/"
+    echo "    |-- plugins/$PROJECT_NAMESPACE/ -> $REPO_ROOT/claude/plugins/"
+    echo "    |-- config/$PROJECT_NAMESPACE/ -> $REPO_ROOT/config/"
+    echo "    \`-- settings.json (hooks configured)"
     echo ""
-    echo "NOTE: Hooks are configured directly in settings.json (no symlink needed)"
+    echo "Hooks:"
+    echo "  UserPromptSubmit -> $REPO_ROOT/claude/hooks/user-prompt-submit.sh"
+    echo "  PostToolUse (*)  -> $REPO_ROOT/claude/hooks/post_tool_use_enforcer.py"
+    echo "  SessionStart     -> $REPO_ROOT/claude/hooks/session-start.sh"
     echo ""
-    echo "Access pattern: ~/.claude/<type>/$ONEX_NAMESPACE/<component>"
-    echo "Example: ~/.claude/skills/$ONEX_NAMESPACE/pr-review/collate-issues"
+    echo "Access pattern: ~/.claude/<type>/$PROJECT_NAMESPACE/<component>"
+    echo "Example: ~/.claude/skills/$PROJECT_NAMESPACE/pr-review/collate-issues"
 fi
