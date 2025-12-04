@@ -322,7 +322,7 @@ check_cache() {
     fi
 
     # Check age
-    local cache_age=$(($(date +%s) - $(stat -f %m "$cache_file" 2>/dev/null || stat -c %Y "$cache_file" 2>/dev/null)))
+    local cache_age=$(($(date +%s) - $(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null)))
 
     if [[ $cache_age -gt $CACHE_TTL ]]; then
         print_warning "Cache expired (${cache_age}s old, TTL: ${CACHE_TTL}s)"

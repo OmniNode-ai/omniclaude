@@ -144,13 +144,13 @@ auto_clear_stale_cache() {
     # Check if fetch script is newer than any cached files for this PR
     if [[ -d "$cache_dir" ]]; then
         local fetch_script_mtime
-        fetch_script_mtime=$(stat -f %m "$FETCH_SCRIPT" 2>/dev/null || stat -c %Y "$FETCH_SCRIPT" 2>/dev/null || echo "0")
+        fetch_script_mtime=$(stat -c %Y "$FETCH_SCRIPT" 2>/dev/null || stat -f %m "$FETCH_SCRIPT" 2>/dev/null || echo "0")
 
         # Find and remove cache files older than the fetch script
         for cache_file in "$cache_dir"/pr_"${pr_number}"_*.json; do
             if [[ -f "$cache_file" ]]; then
                 local cache_mtime
-                cache_mtime=$(stat -f %m "$cache_file" 2>/dev/null || stat -c %Y "$cache_file" 2>/dev/null || echo "0")
+                cache_mtime=$(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null || echo "0")
 
                 if [[ "$fetch_script_mtime" -gt "$cache_mtime" ]]; then
                     echo "Cache invalidated: fetch-pr-data script updated" >&2
@@ -276,7 +276,7 @@ collate_pr_issues() {
                     (if ($body | test("## [^#\\n]*Critical"; "i")) then
                         # Split on the Critical header (with any prefix)
                         ($body | split("\n") | map(select(test("^## [^#\\n]*Critical"; "i"))) | first // "") as $header |
-                        ($body | split($header)[1] // "" | split("\n## ")[0]) |
+                        (if ($header | length) > 0 then ($body | split($header)[1] // "") else "" end | split("\n## ")[0]) |
                         [scan("### \\d+\\.\\s*\\*\\*([^*]+)\\*\\*")] |
                         map({severity: "critical", location: "", summary: .[0]})
                     else [] end),
@@ -285,7 +285,7 @@ collate_pr_issues() {
                     # EMOJI-AGNOSTIC: Matches "## ⚠️ Moderate", "## Moderate", etc.
                     (if ($body | test("## [^#\\n]*Moderate"; "i")) then
                         ($body | split("\n") | map(select(test("^## [^#\\n]*Moderate"; "i"))) | first // "") as $header |
-                        ($body | split($header)[1] // "" | split("\n## ")[0]) |
+                        (if ($header | length) > 0 then ($body | split($header)[1] // "") else "" end | split("\n## ")[0]) |
                         [scan("### \\d+\\.\\s*\\*\\*([^*]+)\\*\\*")] |
                         map({severity: "major", location: "", summary: .[0]})
                     else [] end),
@@ -294,7 +294,7 @@ collate_pr_issues() {
                     # EMOJI-AGNOSTIC: Matches "## 💡 Suggestion", "## Suggestions", "## Suggestions for Improvement", etc.
                     (if ($body | test("## [^#\\n]*Suggestion"; "i")) then
                         ($body | split("\n") | map(select(test("^## [^#\\n]*Suggestion"; "i"))) | first // "") as $header |
-                        ($body | split($header)[1] // "" | split("\n## ")[0]) |
+                        (if ($header | length) > 0 then ($body | split($header)[1] // "") else "" end | split("\n## ")[0]) |
                         [scan("### \\d+\\.\\s*\\*\\*([^*]+)\\*\\*|\\d+\\.\\s*\\*\\*([^*]+)\\*\\*|[-*]\\s*\\*\\*([^*]+)\\*\\*|[-*]\\s*([^\n]{10,})")] |
                         map(.[0] // .[1] // .[2] // .[3]) | map(select(. != null)) |
                         map({severity: "minor", location: "", summary: .})
@@ -318,7 +318,7 @@ collate_pr_issues() {
                     # EMOJI-AGNOSTIC: Matches "## 🐛 Potential Issues", "## Potential Issues", "## Bug", etc.
                     (if ($body | test("## [^#\\n]*(Potential|Bug)"; "i")) then
                         ($body | split("\n") | map(select(test("^## [^#\\n]*(Potential|Bug)"; "i"))) | first // "") as $header |
-                        ($body | split($header)[1] // "" | split("\n## ")[0]) |
+                        (if ($header | length) > 0 then ($body | split($header)[1] // "") else "" end | split("\n## ")[0]) |
                         [scan("### \\d+\\.\\s*\\*\\*([^*]+)\\*\\*")] |
                         map({severity: "major", location: "", summary: .[0]})
                     else [] end),
@@ -341,7 +341,7 @@ collate_pr_issues() {
                     # EMOJI-AGNOSTIC: Matches "## 🎯 Final", "## Final Recommendations", etc.
                     (if ($body | test("## [^#\\n]*Final"; "i")) then
                         ($body | split("\n") | map(select(test("^## [^#\\n]*Final"; "i"))) | first // "") as $header |
-                        ($body | split($header)[1] // "" | split("\n## ")[0]) |
+                        (if ($header | length) > 0 then ($body | split($header)[1] // "") else "" end | split("\n## ")[0]) |
                         [scan("[-*]\\s*\\*\\*([^*]+)\\*\\*|[-*]\\s*([^\n]{10,})")] |
                         map(.[0] // .[1]) | map(select(. != null)) |
                         map({severity: "major", location: "", summary: .})
@@ -368,11 +368,11 @@ collate_pr_issues() {
                     # EMOJI-AGNOSTIC: Matches "## Issues & Concerns", "## Issues & Recommendations", "## 🔍 Issues", etc.
                     (if ($body | test("## [^#\\n]*Issues"; "i")) then
                         ($body | split("\n") | map(select(test("^## [^#\\n]*Issues"; "i"))) | first // "") as $header |
-                        ($body | split($header)[1] // "" | split("\n## ")[0]) as $issues_section |
+                        (if ($header | length) > 0 then ($body | split($header)[1] // "") else "" end | split("\n## ")[0]) as $issues_section |
                         [
                             # Format: **N. Title (Priority)** - with explicit priority
                             ([($issues_section | scan("\\*\\*\\d+\\.\\s*([^(]+)\\s*\\(([^)]+)\\)\\*\\*"))] |
-                                map({
+                                map(select(.[1] != null) | {
                                     severity: (if (.[1] | test("High|Critical"; "i")) then "critical"
                                               elif (.[1] | test("Medium"; "i")) then "major"
                                               elif (.[1] | test("Low"; "i")) then "minor"
@@ -395,7 +395,7 @@ collate_pr_issues() {
                     # EMOJI-AGNOSTIC: Matches "## 📋 Recommendations", "## Recommendations", etc.
                     (if ($body | test("## [^#\\n]*Recommendations"; "i")) then
                         ($body | split("\n") | map(select(test("^## [^#\\n]*Recommendations"; "i"))) | first // "") as $header |
-                        ($body | split($header)[1] // "" | split("\n## ")[0]) as $rec_section |
+                        (if ($header | length) > 0 then ($body | split($header)[1] // "") else "" end | split("\n## ")[0]) as $rec_section |
                         [
                             # High Priority (Before Merge) -> critical
                             (if ($rec_section | test("\\*\\*High Priority \\(Before Merge\\)")) then
@@ -427,7 +427,7 @@ collate_pr_issues() {
                     # EMOJI-AGNOSTIC: Matches "## Areas for Improvement", "## 📋 Areas for Improvement", etc.
                     (if ($body | test("## [^#\\n]*Improvement"; "i")) then
                         ($body | split("\n") | map(select(test("^## [^#\\n]*Improvement"; "i"))) | first // "") as $header |
-                        ($body | split($header)[1] // "" | split("\n## ")[0]) |
+                        (if ($header | length) > 0 then ($body | split($header)[1] // "") else "" end | split("\n## ")[0]) |
                         [scan("\\d+\\.\\s*\\*\\*([^*]+)\\*\\*|\\d+\\.\\s*([^\n]+)")] |
                         map(.[0] // .[1]) | map(select(. != null and (. | length) > 3)) |
                         map({severity: "major", location: "", summary: .})
@@ -467,7 +467,7 @@ collate_pr_issues() {
                     # Format: **Title** (HIGH PRIORITY) or ### 1. **Title** (MEDIUM PRIORITY)
                     (if ($body | test("\\([^)]*PRIORITY\\)"; "i")) then
                         [scan("\\*\\*([^*]+)\\*\\*\\s*\\(([^)]*PRIORITY)\\)"; "i")] |
-                        map({
+                        map(select(.[1] != null) | {
                             severity: (if (.[1] | test("HIGH|URGENT"; "i")) then "critical"
                                       elif (.[1] | test("MEDIUM"; "i")) then "major"
                                       elif (.[1] | test("LOW"; "i")) then "minor"
