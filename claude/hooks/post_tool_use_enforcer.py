@@ -304,8 +304,11 @@ async def apply_fixes_to_file_async(file_path_str: str, config: dict) -> bool:
 
     print(f"[PostToolUse] Found {len(violations)} violation(s):", file=sys.stderr)
     for v in violations[:3]:  # Show first 3
+        # Violation is a Pydantic model, use attribute access not .get()
+        old_name = getattr(v, 'old_name', 'unknown')
+        line = getattr(v, 'line', '?')
         print(
-            f"  - {v.get('old_name', 'unknown')} (line {v.get('line', '?')})",
+            f"  - {old_name} (line {line})",
             file=sys.stderr,
         )
     if len(violations) > 3:
