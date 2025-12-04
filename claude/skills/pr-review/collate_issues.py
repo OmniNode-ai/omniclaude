@@ -684,6 +684,69 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
                 item_title = re.sub(r"\s*\(REQUIRED\)\s*", "", item_title, flags=re.IGNORECASE)
                 add_issue(effective_severity, item_title.strip(), from_structured_pattern=True)
 
+    # Pattern: Section-aware extraction for "Suggestions" and "Observations"
+    # Claude uses sections like:
+    #   ## Suggestions for Improvement
+    #   ### 1. Title
+    #   ### 2. Another Title
+    # Or:
+    #   ### 💡 Observations & Suggestions
+    #   #### 1. **Title**
+    #   #### 2. **Another**
+    suggestion_sections = [
+        (r"##\s*Suggestions?\s+for\s+Improvement", CommentSeverity.MINOR),
+        (r"###\s*💡?\s*Observations?\s*&?\s*Suggestions?", CommentSeverity.MINOR),
+        (r"##\s*Potential\s+Issues?", CommentSeverity.MAJOR),
+        (r"###\s*Potential\s+Issues?", CommentSeverity.MAJOR),
+    ]
+
+    for section_pattern, section_severity in suggestion_sections:
+        section_match = re.search(section_pattern, body, re.IGNORECASE)
+        if section_match:
+            # Find content between this section and next ## header
+            section_start = section_match.end()
+            next_section = re.search(r"\n##\s", body[section_start:])
+            if next_section:
+                section_content = body[section_start : section_start + next_section.start()]
+            else:
+                section_content = body[section_start:]
+
+            # Extract ### N. Title or #### N. **Title** patterns within this section
+            # Pattern matches both:
+            #   ### 1. Plain title
+            #   #### 1. **Bold title**
+            section_items_plain = re.findall(r"#{3,4}\s*\d+\.\s*([^\n]+)", section_content)
+            for item_title in section_items_plain:
+                item_title = item_title.strip()
+
+                # Skip if it's a bold pattern (will be caught by next pattern)
+                if item_title.startswith("**") and "**" in item_title[2:]:
+                    continue
+
+                # Remove emoji and clean up
+                emojis_to_remove = ["⭐", "📚", "🧪", "⚠️", "✅", "🔍", "❌", "⚡", "📝", "💡"]
+                for emoji in emojis_to_remove:
+                    item_title = item_title.replace(emoji, "")
+
+                item_title = item_title.strip()
+
+                # Skip if title is too short or looks like section header
+                if len(item_title.split()) < 3:
+                    continue
+
+                # Determine severity from content
+                title_lower = item_title.lower()
+                if "critical" in title_lower or "must" in title_lower or "required" in title_lower:
+                    effective_severity = CommentSeverity.CRITICAL
+                elif "should" in title_lower or "important" in title_lower:
+                    effective_severity = CommentSeverity.MAJOR
+                elif "consider" in title_lower or "potential" in title_lower or "enhancement" in title_lower:
+                    effective_severity = CommentSeverity.MINOR
+                else:
+                    effective_severity = section_severity
+
+                add_issue(effective_severity, item_title, from_structured_pattern=True)
+
     # Pattern: ### N. **Title** or #### N. **Title** (CodeRabbit/Claude structured format)
     # Claude Code uses #### for numbered issues under section headers like "### **Critical Issues**"
     # Claude also uses format: ### N. **Title** ⚠️ (Non-Blocking) or ### N. **Title** ✅ (Safe)
