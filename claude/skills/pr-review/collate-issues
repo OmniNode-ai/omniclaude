@@ -79,18 +79,42 @@ EOF
 
 # Determine Python executable (prefer poetry if available)
 get_python_executable() {
-    # Check if we're in a poetry project and poetry is available
-    if command -v poetry &> /dev/null; then
-        # Check if poetry env exists
+    # Find project root by searching upward for pyproject.toml
+    local current_dir="$SCRIPT_DIR"
+    local project_root=""
+
+    # Search up to 5 levels up for pyproject.toml
+    for i in {1..5}; do
+        if [[ -f "$current_dir/pyproject.toml" ]]; then
+            project_root="$current_dir"
+            break
+        fi
+        current_dir="$(dirname "$current_dir")"
+    done
+
+    # If found pyproject.toml, try Poetry from that directory
+    if [[ -n "$project_root" ]] && command -v poetry &> /dev/null; then
         local poetry_python
-        poetry_python=$(poetry env info --executable 2>/dev/null)
+        poetry_python=$(cd "$project_root" && poetry env info --executable 2>/dev/null)
         if [[ -n "$poetry_python" && -x "$poetry_python" ]]; then
             echo "$poetry_python"
             return
         fi
     fi
 
-    # Fallback to system python3
+    # Fallback: Try /workspace/omniclaude (Docker container working directory)
+    # This handles case where script is called via ~/.claude/skills (Mac mount)
+    # but Poetry venv is only active at /workspace/omniclaude (container path)
+    if [[ -f "/workspace/omniclaude/pyproject.toml" ]] && command -v poetry &> /dev/null; then
+        local poetry_python
+        poetry_python=$(cd "/workspace/omniclaude" && poetry env info --executable 2>/dev/null)
+        if [[ -n "$poetry_python" && -x "$poetry_python" ]]; then
+            echo "$poetry_python"
+            return
+        fi
+    fi
+
+    # Final fallback to system python3
     if command -v python3 &> /dev/null; then
         echo "python3"
         return

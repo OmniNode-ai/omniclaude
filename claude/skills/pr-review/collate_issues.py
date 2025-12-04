@@ -686,16 +686,60 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
 
     # Pattern: ### N. **Title** or #### N. **Title** (CodeRabbit/Claude structured format)
     # Claude Code uses #### for numbered issues under section headers like "### **Critical Issues**"
+    # Claude also uses format: ### N. **Title** ⚠️ (Non-Blocking) or ### N. **Title** ✅ (Safe)
     # NOTE: This runs AFTER section-aware extraction, so items already found will be skipped
-    numbered_bold = re.findall(r"#{3,4} \d+\.\s*\*\*([^*]+)\*\*", body)
-    for title in numbered_bold:
+    #
+    # Need to capture both the title AND any indicators that follow (emoji + status label)
+    # Pattern: ### N. **Title** [optional emoji] [optional (Status)]
+    numbered_bold_matches = re.findall(r"#{3,4} \d+\.\s*\*\*([^*]+)\*\*\s*([^\n]*)", body)
+    for title, indicators in numbered_bold_matches:
         title = title.strip()
+        indicators = indicators.strip()
+
+        # Extract and handle Claude bot status indicators (emoji + status label)
+        # Common patterns: ⚠️ (Non-Blocking), ✅ (Safe), 🔍 (Review), ❌ (BLOCKING), etc.
+        effective_severity = None
+
+        # Combine title and indicators for checking (indicators may contain emoji/status)
+        full_text = f"{title} {indicators}"
+
+        # Check for status labels and map to severity (check indicators first, then title)
+        if re.search(r"\(BLOCKING\)", full_text, re.IGNORECASE) or re.search(r"\(CRITICAL\)", full_text, re.IGNORECASE) or re.search(r"\(REQUIRED\)", full_text, re.IGNORECASE):
+            effective_severity = CommentSeverity.CRITICAL
+        elif re.search(r"\(NON-BLOCKING\)", full_text, re.IGNORECASE) or "⚠️" in full_text:
+            effective_severity = CommentSeverity.MAJOR
+        elif re.search(r"\(SAFE\)", full_text, re.IGNORECASE) or "✅" in full_text:
+            effective_severity = CommentSeverity.MINOR
+        elif "🔍" in full_text or re.search(r"\(REVIEW\)", full_text, re.IGNORECASE):
+            effective_severity = CommentSeverity.MINOR
+        elif "❌" in full_text:
+            effective_severity = CommentSeverity.CRITICAL
+        elif "⚡" in full_text:
+            effective_severity = CommentSeverity.MAJOR
+        elif "📝" in full_text:
+            effective_severity = CommentSeverity.MINOR
+
+        # Strip all emoji indicators (common ones from Claude bot reviews)
+        emojis_to_remove = ["⚠️", "✅", "🔍", "❌", "⚡", "📝", "🔴", "🟡", "🟢", "⚫", "🔵", "🟣", "🟠"]
+        for emoji in emojis_to_remove:
+            title = title.replace(emoji, "")
+
+        # Strip status labels in parentheses
+        title = re.sub(r"\s*\((BLOCKING|NON-BLOCKING|CRITICAL|SAFE|REQUIRED|REVIEW)\)\s*", "", title, flags=re.IGNORECASE)
+
+        # Clean up extra whitespace
+        title = title.strip()
+
         # Skip section headers that are just categories (e.g., "Documentation: Usage Examples")
         if re.match(r"^[A-Za-z]+:\s*[A-Za-z\s]+$", title):
             # Check if the following content has actionable items
             continue
-        severity = classify_severity(title)
-        add_issue(severity, title, from_structured_pattern=True)
+
+        # Use effective severity if determined from indicators, otherwise classify from title
+        if effective_severity is None:
+            effective_severity = classify_severity(title)
+
+        add_issue(effective_severity, title, from_structured_pattern=True)
 
     # Pattern: - [ ] unchecked items (uncompleted checklist items from reviews)
     # These indicate pending items that need attention
