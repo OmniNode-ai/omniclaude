@@ -185,28 +185,59 @@ echo ""
 # ============================================================================
 
 extract_error_from_logs() {
-    local run_id="$1"
+    local job_id="$1"
+    local repo_owner_name="$2"
 
-    # Validate run_id parameter
-    if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
+    # Validate job_id parameter
+    if [ -z "$job_id" ] || [ "$job_id" = "null" ]; then
         return 1
     fi
 
-    # Validate run_id is numeric (workflow run IDs are always numeric)
-    if ! [[ "$run_id" =~ ^[0-9]+$ ]]; then
+    # Validate job_id is numeric
+    if ! [[ "$job_id" =~ ^[0-9]+$ ]]; then
         return 1
     fi
 
-    # Fetch logs for the run and extract errors
-    # Use gh run view with --log to get full logs
+    # Fetch job logs directly using GitHub API
+    # This provides much more detailed error information than gh run view
     local logs
-    logs=$(gh run view "$run_id" --log 2>/dev/null | grep -A 10 -B 2 -i "error\|fatal\|failed" | head -20 || echo "")
+    logs=$(gh api "repos/$repo_owner_name/actions/jobs/$job_id/logs" 2>/dev/null || echo "")
 
     if [ -z "$logs" ]; then
         return 1
     fi
 
-    echo "$logs"
+    # Extract the most relevant error lines with multiple strategies
+    local error_output=""
+
+    # Strategy 1: Look for pytest FAILED lines with context (most common for Python tests)
+    error_output=$(echo "$logs" | grep -B 3 -A 10 "FAILED.*::" | tail -20 || echo "")
+
+    # Strategy 2: Look for assertion errors and exceptions
+    if [ -z "$error_output" ]; then
+        error_output=$(echo "$logs" | grep -B 2 -A 8 -E "(AssertionError|Exception:|Error:|Traceback)" | tail -20 || echo "")
+    fi
+
+    # Strategy 3: Look for ERROR markers from GitHub Actions
+    if [ -z "$error_output" ]; then
+        error_output=$(echo "$logs" | grep -B 1 -A 5 -E "##\[error\]|ERROR:" | tail -15 || echo "")
+    fi
+
+    # Strategy 4: Look for validation errors or violations
+    if [ -z "$error_output" ]; then
+        error_output=$(echo "$logs" | grep -B 2 -A 5 -i "violation\|failed\|error" | tail -20 || echo "")
+    fi
+
+    # Strategy 5: Fall back to generic error patterns
+    if [ -z "$error_output" ]; then
+        error_output=$(echo "$logs" | grep -B 1 -A 3 -i -E "(^Error |^FAIL:|^fatal:|npm ERR!)" | tail -15 || echo "")
+    fi
+
+    if [ -z "$error_output" ]; then
+        return 1
+    fi
+
+    echo "$error_output"
 }
 
 detect_error_pattern() {
@@ -323,8 +354,8 @@ while IFS= read -r workflow; do
     echo "$CI_JSON" | jq -r --arg workflow "$workflow" '
         .failures[] |
         select(.workflow == $workflow) |
-        "\(.severity)\t\(.workflow_id)\t\(.job)\t\(.step)"
-    ' | while IFS=$'\t' read -r severity run_id job step; do
+        "\(.severity)\t\(.workflow_id)\t\(.job_id)\t\(.job)\t\(.step)"
+    ' | while IFS=$'\t' read -r severity run_id job_id job step; do
         # Color code by severity
         case $severity in
             critical)
@@ -342,23 +373,24 @@ while IFS= read -r workflow; do
         esac
 
         # Fetch and display error logs for this failure
-        if [ -n "$run_id" ] && [ "$run_id" != "null" ]; then
-            # Extract errors from logs
-            error_logs=$(extract_error_from_logs "$run_id" 2>/dev/null || echo "")
+        if [ -n "$job_id" ] && [ "$job_id" != "null" ]; then
+            # Extract errors from logs (pass job_id and repository)
+            error_logs=$(extract_error_from_logs "$job_id" "$REPO" 2>/dev/null || echo "")
 
             if [ -n "$error_logs" ]; then
-                # Detect error pattern and provide diagnosis
-                diagnosis=$(detect_error_pattern "$error_logs" 2>/dev/null || echo "")
+                # Always show actual error details first (most valuable info)
+                echo -e "       ${MAGENTA}Error details:${NC}"
+                # Show up to 12 lines of error context with highlighting
+                echo "$error_logs" | head -12 | sed 's/^/         /' | \
+                    sed -E "s/(Error|ERROR|Fatal|FATAL|Failed|FAILED|Exception|Traceback|AssertionError|violation|VIOLATION)/${RED}\1${MAGENTA}/g"
 
-                if [ -n "$diagnosis" ]; then
+                # Then optionally add diagnosis if pattern is recognized
+                diagnosis=$(detect_error_pattern "$error_logs" 2>/dev/null || echo "")
+                if [ -n "$diagnosis" ] && ! echo "$diagnosis" | grep -qi "unknown"; then
+                    echo ""
                     echo "$diagnosis" | while IFS= read -r line; do
-                        echo -e "       ${MAGENTA}${line}${NC}"
+                        echo -e "       ${CYAN}💡 ${line}${NC}"
                     done
-                else
-                    # Show first few lines of error log
-                    echo -e "       ${MAGENTA}Error snippet:${NC}"
-                    # Use -E for extended regex (portable BSD/GNU) and character classes for case-insensitivity
-                    echo "$error_logs" | head -3 | sed 's/^/         /' | sed -E "s/([Ee][Rr][Rr][Oo][Rr]|[Ff][Aa][Tt][Aa][Ll]|[Ff][Aa][Ii][Ll][Ee][Dd])/${RED}\1${MAGENTA}/g"
                 fi
             fi
         fi

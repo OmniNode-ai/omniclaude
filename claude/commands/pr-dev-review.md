@@ -1,23 +1,48 @@
 # PR Dev Review - Fix Critical/Major/Minor Issues (PR Review + CI Failures)
 
-**Workflow**: Fetch PR issues → Fetch CI failures → Combine → Fire `/parallel-solve` (non-nits) → Ask about nitpicks
+**Workflow**: Fetch PR issues → Fetch CI failures → Combine → **AUTO-RUN** `/parallel-solve` (non-nits) → Ask about nitpicks
 
 ---
 
-## TL;DR - Quick Workflow (Automated)
+## TL;DR - Quick Workflow (Fully Automated)
 
-For the fastest workflow, use the unified helper script:
-
-1. **Run the unified helper**:
+1. **Fetch and collate all issues** (PR review + CI failures):
    ```bash
    ~/.claude/skills/omniclaude/pr-review/collate-issues-with-ci "${1:-}" 2>&1
    ```
 
-2. **Fire /parallel-solve** with the output (exclude ⚪ NITPICK sections)
+2. **Automatically fire /parallel-solve** with the collated output (excluding ⚪ NITPICK sections)
 
 3. **Ask about nitpicks** after /parallel-solve completes
 
-**Done!** This automatically combines PR review issues + CI failures in one command.
+**Done!** This fully automated workflow fetches issues AND runs parallel-solve automatically.
+
+---
+
+## Implementation Instructions
+
+**CRITICAL**: After fetching and collating issues, you MUST automatically invoke the `/parallel-solve` command.
+
+**Steps**:
+
+1. **Fetch collated issues**:
+   - Run the unified helper script: `~/.claude/skills/omniclaude/pr-review/collate-issues-with-ci "${1:-}" 2>&1`
+   - Save the output
+
+2. **Extract non-nitpick issues**:
+   - Take sections: 🔴 CRITICAL, 🟠 MAJOR, 🟡 MINOR
+   - **EXCLUDE**: ⚪ NITPICK section (ask about these separately)
+   - **EXCLUDE**: ❓ UNMATCHED section
+
+3. **Auto-invoke /parallel-solve**:
+   - Use the SlashCommand tool to invoke `/parallel-solve`
+   - Pass the extracted non-nitpick issues as the command argument
+   - Example: `/parallel-solve Fix all PR #33 issues:\n\n🔴 CRITICAL:\n- [file:line] issue\n\n🟠 MAJOR:\n- [file:line] issue`
+
+4. **Ask about nitpicks** (after /parallel-solve completes):
+   - Check if the collated output contained a ⚪ NITPICK section
+   - If yes, ask: "Critical/major/minor issues fixed. Found N nitpick items. Address them now?"
+   - If user approves, run `/parallel-solve` again with just the nitpick items
 
 ---
 
