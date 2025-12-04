@@ -7,6 +7,10 @@ set -euo pipefail
 # Fetches, parses, categorizes, and prioritizes all PR review issues
 # in a single automated command.
 #
+# This is a thin bash wrapper that delegates to the Python implementation
+# (collate_issues.py) for robust text processing. The Python version uses
+# Pydantic models for type safety and avoids memory issues with large PRs.
+#
 # Features:
 #   - Single command execution: collate-issues <PR#>
 #   - Automatic caching via fetch-pr-data
@@ -14,27 +18,15 @@ set -euo pipefail
 #   - Deduplication of similar issues
 #   - Token-efficient output (< 2000 tokens)
 #   - Ready for agent consumption (no parsing needed)
-#   - Captures unmatched comments for manual review (never silently drops)
-#
-# Supported Formats (EMOJI-AGNOSTIC - works with or without emoji prefixes):
-#   - CodeRabbit emoji indicators (## Critical, ## Moderate, ## Suggestion)
-#   - Claude text headers (### CRITICAL:, ### MAJOR:, ### MINOR:, ### MEDIUM:, ### LOW:)
-#   - Priority suffixes (**Title** (HIGH PRIORITY), (MEDIUM PRIORITY), (LOW PRIORITY))
-#   - Unchecked items (- [ ] Description)
-#   - Risk indicators (High Risk:, Medium Risk:, Low Risk:)
-#   - Action items (Must Fix, Should Fix, Final Recommendations)
-#   - Issues sections (## Issues & Concerns, ## Issues & Recommendations)
-#   - Suggestions (## Suggestions for Improvement, ## Suggestions)
+#   - Resolution detection via GitHub review threads
 # ============================================================================
 
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FETCH_SCRIPT="$SCRIPT_DIR/fetch-pr-data"
+PYTHON_SCRIPT="$SCRIPT_DIR/collate_issues.py"
 SHOW_STATS=false
 INCLUDE_NITPICKS=false
-INCLUDE_PRAISE=false
 PARALLEL_SOLVE_FORMAT=false
-UNFINISHED_ONLY=false
 HIDE_RESOLVED=false
 SHOW_RESOLVED_ONLY=false
 
@@ -50,11 +42,7 @@ Arguments:
 
 Options:
   --include-nitpicks       Include nitpick issues in output (default: excluded)
-  --include-praise         Include positive/praise comments in output (default: excluded)
-                           By default, praise comments are filtered out to save tokens.
-                           Filters: "What I Liked", "Strengths", "Excellent", "LGTM", etc.
   --parallel-solve-format  Output in format ready for /parallel-solve command
-  --unfinished-only        Only show issues NOT marked as addressed (filters checkmarks)
   --hide-resolved          Hide issues that have been resolved on GitHub
                            (uses GitHub's native thread resolution status)
   --show-resolved-only     Only show resolved issues (inverse of --hide-resolved)
@@ -63,43 +51,65 @@ Options:
 
 Output:
   Clean prioritized list of all PR issues by severity:
-    🔴 CRITICAL - Must address before merge
-    🟠 MAJOR    - Must address before merge
-    🟡 MINOR    - Must address before merge
-    ⚪ NITPICK  - Optional improvements (only with --include-nitpicks)
-    ❓ UNMATCHED - Comments not matching any pattern (review manually)
+    CRITICAL - Must address before merge
+    MAJOR    - Must address before merge
+    MINOR    - Must address before merge
+    NITPICK  - Optional improvements (only with --include-nitpicks)
+    UNMATCHED - Comments not matching any pattern (review manually)
 
   Resolution indicators (when showing resolved issues):
     [RESOLVED] - Issue thread marked as resolved on GitHub
     [OUTDATED] - Code has changed since the comment was made
 
 Examples:
-  collate-issues 33                      # Critical, Major, Minor only (praise filtered)
+  collate-issues 33                      # Critical, Major, Minor only
   collate-issues 33 --include-nitpicks   # Include nitpicks too
-  collate-issues 33 --include-praise     # Include positive/praise comments
-  collate-issues 33 --unfinished-only    # Only unaddressed issues
   collate-issues 33 --hide-resolved      # Hide resolved GitHub threads
   collate-issues 33 --show-resolved-only # Show only resolved issues
   collate-issues 33 --stats              # With statistics summary
+  collate-issues 33 --parallel-solve-format  # For /parallel-solve command
 
 Exit codes:
   0 - Success
   1 - Missing arguments or dependencies
-  2 - PR data fetch failed
+  2 - PR data fetch failed or processing error
 EOF
     exit 1
+}
+
+# Determine Python executable (prefer poetry if available)
+get_python_executable() {
+    # Check if we're in a poetry project and poetry is available
+    if command -v poetry &> /dev/null; then
+        # Check if poetry env exists
+        local poetry_python
+        poetry_python=$(poetry env info --executable 2>/dev/null)
+        if [[ -n "$poetry_python" && -x "$poetry_python" ]]; then
+            echo "$poetry_python"
+            return
+        fi
+    fi
+
+    # Fallback to system python3
+    if command -v python3 &> /dev/null; then
+        echo "python3"
+        return
+    fi
+
+    echo ""
 }
 
 # Check dependencies
 check_dependencies() {
     local missing_deps=()
 
-    if [[ ! -x "$FETCH_SCRIPT" ]]; then
-        missing_deps+=("fetch-pr-data script (not found or not executable)")
+    if [[ ! -f "$PYTHON_SCRIPT" ]]; then
+        missing_deps+=("collate_issues.py (Python implementation not found)")
     fi
 
-    if ! command -v jq &> /dev/null; then
-        missing_deps+=("jq")
+    PYTHON_EXEC=$(get_python_executable)
+    if [[ -z "$PYTHON_EXEC" ]]; then
+        missing_deps+=("python3 (neither poetry env nor system python3 found)")
     fi
 
     if [ ${#missing_deps[@]} -ne 0 ]; then
@@ -111,13 +121,13 @@ check_dependencies() {
     fi
 }
 
-# Extract PR number from argument (handles URLs)
-extract_pr_number() {
+# Validate PR input (handles URLs or numbers)
+validate_pr_input() {
     local input="$1"
 
-    # If it's a URL, extract the PR number
-    if [[ "$input" =~ pull/([0-9]+) ]]; then
-        echo "${BASH_REMATCH[1]}"
+    # If it's a URL, validate and pass through
+    if [[ "$input" =~ github\.com/.*/pull/([0-9]+) ]]; then
+        echo "$input"  # Pass full URL to preserve repo context
     # If it's already a number, use it
     elif [[ "$input" =~ ^[0-9]+$ ]]; then
         echo "$input"
@@ -127,774 +137,45 @@ extract_pr_number() {
     fi
 }
 
-# Auto-clear stale cache when fetch script has been modified
-# This ensures new filtering logic (like base64 cleanup) takes effect
-auto_clear_stale_cache() {
-    local pr_number="$1"
-
-    # Get cache directory (same logic as fetch-pr-data)
-    local cache_dir
-    local repo_root
-    if repo_root=$(git rev-parse --show-toplevel 2>/dev/null); then
-        cache_dir="$repo_root/tmp/pr-review-cache"
-    else
-        cache_dir="./tmp/pr-review-cache"
-    fi
-
-    # Check if fetch script is newer than any cached files for this PR
-    if [[ -d "$cache_dir" ]]; then
-        local fetch_script_mtime
-        fetch_script_mtime=$(stat -c %Y "$FETCH_SCRIPT" 2>/dev/null || stat -f %m "$FETCH_SCRIPT" 2>/dev/null || echo "0")
-
-        # Find and remove cache files older than the fetch script
-        for cache_file in "$cache_dir"/pr_"${pr_number}"_*.json; do
-            if [[ -f "$cache_file" ]]; then
-                local cache_mtime
-                cache_mtime=$(stat -c %Y "$cache_file" 2>/dev/null || stat -f %m "$cache_file" 2>/dev/null || echo "0")
-
-                if [[ "$fetch_script_mtime" -gt "$cache_mtime" ]]; then
-                    echo "Cache invalidated: fetch-pr-data script updated" >&2
-                    rm -f "$cache_file"
-                fi
-            fi
-        done
-    fi
-}
-
-# Main collation function
-collate_pr_issues() {
-    local pr_number="$1"
-
-    # Auto-clear cache if fetch script has been updated (ensures new filtering takes effect)
-    auto_clear_stale_cache "$pr_number"
-
-    # Fetch PR data (uses cache if available)
-    local pr_data
-    pr_data=$("$FETCH_SCRIPT" "$pr_number" 2>/dev/null) || {
-        echo "ERROR: Failed to fetch PR data for PR #$pr_number" >&2
-        echo "Try running: $FETCH_SCRIPT $pr_number" >&2
-        exit 2
-    }
-
-    # If --unfinished-only, get list of modified files to filter out addressed issues
-    local modified_files=""
-    if [[ "$UNFINISHED_ONLY" == "true" ]]; then
-        # Check if we're in a git repository first
-        if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-            echo "WARNING: Not in a git repository. --unfinished-only requires git to detect modified files." >&2
-            echo "         Proceeding without filtering (showing all issues)." >&2
-            modified_files="__NO_MODIFIED_FILES__"
-        else
-            # Get modified files from git (both staged and unstaged)
-            # This helps filter out issues for files that have already been fixed
-            local git_output
-            git_output=$(git diff --name-only HEAD 2>&1) || {
-                echo "WARNING: git diff command failed: $git_output" >&2
-                echo "         Proceeding without filtering (showing all issues)." >&2
-                modified_files="__NO_MODIFIED_FILES__"
-            }
-            if [[ -n "$git_output" && "$modified_files" != "__NO_MODIFIED_FILES__" ]]; then
-                modified_files=$(echo "$git_output" | tr '\n' '|' | sed 's/|$//')
-            fi
-            if [[ -z "$modified_files" ]]; then
-                modified_files="__NO_MODIFIED_FILES__"
-            fi
-        fi
-    fi
-
-    # Use jq to do ALL parsing and categorization
-    # This is much more efficient and handles multiline bodies correctly
-    local categorized
-    categorized=$(echo "$pr_data" | jq -r --arg modified_files "$modified_files" --arg unfinished_only "$UNFINISHED_ONLY" --arg hide_resolved "$HIDE_RESOLVED" --arg show_resolved_only "$SHOW_RESOLVED_ONLY" --arg include_praise "$INCLUDE_PRAISE" '
-        # Function to extract severity and summary from CodeRabbit comments
-        def parse_coderabbit:
-            if (. | test("^_⚠️ Potential issue_|^_🛠️ Refactor suggestion_")) then
-                # Extract severity from first line
-                (split("\n")[0] |
-                    if test("🔴.*Critical") then "critical"
-                    elif test("🟠.*Major") then "major"
-                    elif test("🟡.*Minor") then "minor"
-                    else "nit"
-                    end
-                ) as $severity |
-
-                # Extract bold summary (look for **text**)
-                ((split("\n") | map(select(test("^\\*\\*[^*]")) | gsub("^\\*\\*|\\*\\*$"; "")) | first) //
-                 (split("\n")[1:3] | map(gsub("^[[:space:]]*|[[:space:]]*$"; "")) | map(select(length > 0)) | first)) as $summary |
-
-                {severity: $severity, summary: $summary}
-            else
-                null
-            end;
-
-        # Function to extract nitpick items from CodeRabbit nested details blocks
-        # Format: <details><summary>🧹 Nitpick comments (N)</summary>...<summary>file.py (N)</summary>..`line`: **title**...
-        def parse_coderabbit_nitpicks:
-            if (. | test("🧹 Nitpick comments")) then
-                # Extract the nitpick section
-                (split("🧹 Nitpick comments")[1] // "" | split("📜 Review details")[0] // .) as $nitpick_section |
-                # Find all `line`: **title** patterns (CodeRabbit format for nitpicks)
-                # Format: `7-7`: **Title here**
-                [$nitpick_section | scan("`([^`]+)`[:\\s]*\\*\\*([^*]+)\\*\\*")] |
-                map({
-                    severity: "nit",
-                    location: "[\(.[0])]",
-                    summary: .[1]
-                }) |
-                # Filter out very short/empty summaries
-                map(select(.summary | length > 5))
-            else
-                []
-            end;
-
-        # Function to extract actionable items from Claude bot structured reviews
-        # Claude bot uses various formats including:
-        #   - ## 🐛 Potential Issues & Concerns
-        #   - ### 🔴 Critical: [title]
-        #   - ### ⚠️ Minor Concerns
-        #   - ### Must Fix (Before Merge)
-        #   - ### Should Fix (Near Term)
-        #   - ## 🎯 Final Recommendations
-        #   - ## Issues & Concerns with **N. Title (Priority)** items
-        #   - ## Recommendations with **High Priority (Before Merge):** subsections
-        #   - ## Areas for Improvement with numbered items
-        #   - ## Concerns ⚠️ or ### Concerns with Risk items:
-        #       - "High Risk: description" -> major
-        #       - "Medium Risk: description" -> minor
-        #       - "Low Risk: description" -> nit
-        # Also supports CodeRabbit format: ## 🔴, ## ⚠️ Moderate, ## 💡 Suggestion
-        # EMOJI-AGNOSTIC: Matches patterns regardless of emoji presence/absence
-        def parse_claude_review:
-            # Emoji-agnostic trigger - matches headers with or without emoji prefixes
-            # Uses [^#\n]* to skip any emoji/decoration between ## and keyword
-            if (. | test("## [^#\\n]*(Issues|Recommendations|Suggestions|Concerns|Critical|Potential|Final|Moderate|Improvement|Strengths|Weaknesses|Bug)|### [^#\\n]*(CRITICAL|MAJOR|MINOR|MEDIUM|LOW|Must Fix|Should Fix|Concerns|Critical|Warning|Minor|Moderate)|\\*\\*Concerns\\*\\*"; "i")) then
-                # Use simpler string splitting approach
-                . as $body |
-                [
-                    # CodeRabbit: Critical Issues - extract ### N. **Title** items
-                    # EMOJI-AGNOSTIC: Matches "## 🔴 Critical", "## Critical", "## ❌ Critical", etc.
-                    (if ($body | test("## [^#\\n]*Critical"; "i")) then
-                        # Split on the Critical header (with any prefix)
-                        ($body | split("\n") | map(select(test("^## [^#\\n]*Critical"; "i"))) | first // "") as $header |
-                        (if ($header | length) > 0 then ($body | split($header)[1] // "") else "" end | split("\n## ")[0]) |
-                        [scan("### \\d+\\.\\s*\\*\\*([^*]+)\\*\\*")] |
-                        map({severity: "critical", location: "", summary: .[0]})
-                    else [] end),
-
-                    # CodeRabbit: Moderate Issues (Major) - extract ### N. **Title** items
-                    # EMOJI-AGNOSTIC: Matches "## ⚠️ Moderate", "## Moderate", etc.
-                    (if ($body | test("## [^#\\n]*Moderate"; "i")) then
-                        ($body | split("\n") | map(select(test("^## [^#\\n]*Moderate"; "i"))) | first // "") as $header |
-                        (if ($header | length) > 0 then ($body | split($header)[1] // "") else "" end | split("\n## ")[0]) |
-                        [scan("### \\d+\\.\\s*\\*\\*([^*]+)\\*\\*")] |
-                        map({severity: "major", location: "", summary: .[0]})
-                    else [] end),
-
-                    # CodeRabbit: Suggestions (Minor) - extract ### N. **Title** items
-                    # EMOJI-AGNOSTIC: Matches "## 💡 Suggestion", "## Suggestions", "## Suggestions for Improvement", etc.
-                    (if ($body | test("## [^#\\n]*Suggestion"; "i")) then
-                        ($body | split("\n") | map(select(test("^## [^#\\n]*Suggestion"; "i"))) | first // "") as $header |
-                        (if ($header | length) > 0 then ($body | split($header)[1] // "") else "" end | split("\n## ")[0]) |
-                        [scan("### \\d+\\.\\s*\\*\\*([^*]+)\\*\\*|\\d+\\.\\s*\\*\\*([^*]+)\\*\\*|[-*]\\s*\\*\\*([^*]+)\\*\\*|[-*]\\s*([^\n]{10,})")] |
-                        map(.[0] // .[1] // .[2] // .[3]) | map(select(. != null)) |
-                        map({severity: "minor", location: "", summary: .})
-                    else [] end),
-
-                    # Claude: ### Critical: [title] inline headers (with or without emoji)
-                    # EMOJI-AGNOSTIC: Matches "### 🔴 Critical:", "### CRITICAL:", "### Critical:", etc.
-                    (if ($body | test("### [^#\\n]*Critical[:\\s]"; "i")) then
-                        [scan("### [^#\\n]*Critical[:\\s]+([^\n]+)"; "i")] |
-                        map({severity: "critical", location: "", summary: .[0]})
-                    else [] end),
-
-                    # Claude: ### Warning/Minor sections (with or without emoji)
-                    # EMOJI-AGNOSTIC: Matches "### ⚠️ Warning:", "### Warning:", "### 🟡 Minor:", etc.
-                    (if ($body | test("### [^#\\n]*(Warning|Minor)[:\\s]"; "i")) then
-                        [scan("### [^#\\n]*(Warning|Minor)[:\\s]+([^\n]+)"; "i")] |
-                        map({severity: "minor", location: "", summary: .[1]})
-                    else [] end),
-
-                    # Claude: ## Potential Issues section - extract numbered items
-                    # EMOJI-AGNOSTIC: Matches "## 🐛 Potential Issues", "## Potential Issues", "## Bug", etc.
-                    (if ($body | test("## [^#\\n]*(Potential|Bug)"; "i")) then
-                        ($body | split("\n") | map(select(test("^## [^#\\n]*(Potential|Bug)"; "i"))) | first // "") as $header |
-                        (if ($header | length) > 0 then ($body | split($header)[1] // "") else "" end | split("\n## ")[0]) |
-                        [scan("### \\d+\\.\\s*\\*\\*([^*]+)\\*\\*")] |
-                        map({severity: "major", location: "", summary: .[0]})
-                    else [] end),
-
-                    # Claude: ### Must Fix (Before Merge) items
-                    (if ($body | test("### Must Fix")) then
-                        ($body | split("### Must Fix")[1] // "" | split("\n### ")[0]) |
-                        [scan("[-*]\\s*([^\n]+)")] |
-                        map({severity: "critical", location: "", summary: .[0]})
-                    else [] end),
-
-                    # Claude: ### Should Fix (Near Term) items
-                    (if ($body | test("### Should Fix")) then
-                        ($body | split("### Should Fix")[1] // "" | split("\n### ")[0]) |
-                        [scan("[-*]\\s*([^\n]+)")] |
-                        map({severity: "major", location: "", summary: .[0]})
-                    else [] end),
-
-                    # Claude: ## Final Recommendations - extract action items
-                    # EMOJI-AGNOSTIC: Matches "## 🎯 Final", "## Final Recommendations", etc.
-                    (if ($body | test("## [^#\\n]*Final"; "i")) then
-                        ($body | split("\n") | map(select(test("^## [^#\\n]*Final"; "i"))) | first // "") as $header |
-                        (if ($header | length) > 0 then ($body | split($header)[1] // "") else "" end | split("\n## ")[0]) |
-                        [scan("[-*]\\s*\\*\\*([^*]+)\\*\\*|[-*]\\s*([^\n]{10,})")] |
-                        map(.[0] // .[1]) | map(select(. != null)) |
-                        map({severity: "major", location: "", summary: .})
-                    else [] end),
-
-                    # Action Items - Before Merge (Critical)
-                    (if ($body | test("Before Merge \\(Critical\\)")) then
-                        ($body | split("Before Merge (Critical)")[1] // "" |
-                            split("Before Merge (Recommended)")[0] // split("Post-Merge")[0] // split("\n## ")[0]) |
-                        [scan("\\d+\\.\\s*[✅⚠️💡❓]*\\s*(Fix[^\n]+|Standardize[^\n]+|Simplify[^\n]+)")] |
-                        map({severity: "critical", location: "", summary: .[0]})
-                    else [] end),
-
-                    # Action Items - Before Merge (Recommended)
-                    (if ($body | test("Before Merge \\(Recommended\\)")) then
-                        ($body | split("Before Merge (Recommended)")[1] // "" |
-                            split("Post-Merge")[0] // split("\n## ")[0]) |
-                        [scan("\\d+\\.\\s*[✅⚠️💡❓]*\\s*([^\n]+)")] |
-                        map({severity: "major", location: "", summary: .[0]})
-                    else [] end),
-
-                    # Claude: ## Issues section - extract **N. Title (Priority)** items
-                    # Format: **1. Title (Medium Priority)**
-                    # EMOJI-AGNOSTIC: Matches "## Issues & Concerns", "## Issues & Recommendations", "## 🔍 Issues", etc.
-                    (if ($body | test("## [^#\\n]*Issues"; "i")) then
-                        ($body | split("\n") | map(select(test("^## [^#\\n]*Issues"; "i"))) | first // "") as $header |
-                        (if ($header | length) > 0 then ($body | split($header)[1] // "") else "" end | split("\n## ")[0]) as $issues_section |
-                        [
-                            # Format: **N. Title (Priority)** - with explicit priority
-                            ([($issues_section | scan("\\*\\*\\d+\\.\\s*([^(]+)\\s*\\(([^)]+)\\)\\*\\*"))] |
-                                map(select(.[1] != null) | {
-                                    severity: (if (.[1] | test("High|Critical"; "i")) then "critical"
-                                              elif (.[1] | test("Medium"; "i")) then "major"
-                                              elif (.[1] | test("Low"; "i")) then "minor"
-                                              else "major" end),
-                                    location: "",
-                                    summary: .[0]
-                                })),
-
-                            # Format: ### N. **Title** or ### **Title** - without explicit priority (default: major)
-                            ([($issues_section | scan("### \\d*\\.?\\s*\\*\\*([^*]+)\\*\\*"))] |
-                                map({severity: "major", location: "", summary: .[0]})),
-
-                            # Format: - **Title**: Description - bullet points (default: major)
-                            ([($issues_section | scan("[-*]\\s*\\*\\*([^*:]+)\\*\\*[:\\s]*([^\n]*)"))] |
-                                map({severity: "major", location: "", summary: (.[0] + ": " + .[1])}))
-                        ] | flatten
-                    else [] end),
-
-                    # Claude: ## Recommendations with **High Priority (Before Merge):** subsection
-                    # EMOJI-AGNOSTIC: Matches "## 📋 Recommendations", "## Recommendations", etc.
-                    (if ($body | test("## [^#\\n]*Recommendations"; "i")) then
-                        ($body | split("\n") | map(select(test("^## [^#\\n]*Recommendations"; "i"))) | first // "") as $header |
-                        (if ($header | length) > 0 then ($body | split($header)[1] // "") else "" end | split("\n## ")[0]) as $rec_section |
-                        [
-                            # High Priority (Before Merge) -> critical
-                            (if ($rec_section | test("\\*\\*High Priority \\(Before Merge\\)")) then
-                                ($rec_section | split("**High Priority (Before Merge)")[1] // "" |
-                                    split("**Medium Priority")[0] // split("**Low Priority")[0] // split("\n## ")[0]) |
-                                [scan("\\d+\\.\\s*([^\n]+)")] |
-                                map({severity: "critical", location: "", summary: .[0]})
-                            else [] end),
-
-                            # Medium Priority -> major
-                            (if ($rec_section | test("\\*\\*Medium Priority")) then
-                                ($rec_section | split("**Medium Priority")[1] // "" |
-                                    split("**Low Priority")[0] // split("**High Priority")[0] // split("\n## ")[0]) |
-                                [scan("\\d+\\.\\s*([^\n]+)")] |
-                                map({severity: "major", location: "", summary: .[0]})
-                            else [] end),
-
-                            # Low Priority -> minor
-                            (if ($rec_section | test("\\*\\*Low Priority")) then
-                                ($rec_section | split("**Low Priority")[1] // "" |
-                                    split("**Medium Priority")[0] // split("**High Priority")[0] // split("\n## ")[0]) |
-                                [scan("\\d+\\.\\s*([^\n]+)")] |
-                                map({severity: "minor", location: "", summary: .[0]})
-                            else [] end)
-                        ] | flatten
-                    else [] end),
-
-                    # Claude: ## Areas for Improvement section - extract numbered items as major
-                    # EMOJI-AGNOSTIC: Matches "## Areas for Improvement", "## 📋 Areas for Improvement", etc.
-                    (if ($body | test("## [^#\\n]*Improvement"; "i")) then
-                        ($body | split("\n") | map(select(test("^## [^#\\n]*Improvement"; "i"))) | first // "") as $header |
-                        (if ($header | length) > 0 then ($body | split($header)[1] // "") else "" end | split("\n## ")[0]) |
-                        [scan("\\d+\\.\\s*\\*\\*([^*]+)\\*\\*|\\d+\\.\\s*([^\n]+)")] |
-                        map(.[0] // .[1]) | map(select(. != null and (. | length) > 3)) |
-                        map({severity: "major", location: "", summary: .})
-                    else [] end),
-
-                    # Claude text-based severity markers (### CRITICAL:, ### MAJOR:, ### MINOR:, ### MEDIUM:, ### LOW:)
-                    # Format: ### CRITICAL: Title or ### MAJOR: Description
-                    # EMOJI-AGNOSTIC: Also matches "### 🔴 CRITICAL:", "### ⚠️ MAJOR:", etc.
-                    (if ($body | test("### [^#\\n]*CRITICAL[:\\s]"; "i")) then
-                        [scan("### [^#\\n]*CRITICAL[:\\s]+([^\n]+)"; "i")] |
-                        map({severity: "critical", location: "", summary: .[0]})
-                    else [] end),
-
-                    (if ($body | test("### [^#\\n]*MAJOR[:\\s]"; "i")) then
-                        [scan("### [^#\\n]*MAJOR[:\\s]+([^\n]+)"; "i")] |
-                        map({severity: "major", location: "", summary: .[0]})
-                    else [] end),
-
-                    (if ($body | test("### [^#\\n]*MINOR[:\\s]"; "i")) then
-                        [scan("### [^#\\n]*MINOR[:\\s]+([^\n]+)"; "i")] |
-                        map({severity: "minor", location: "", summary: .[0]})
-                    else [] end),
-
-                    # MEDIUM severity (maps to major)
-                    (if ($body | test("### [^#\\n]*MEDIUM[:\\s]"; "i")) then
-                        [scan("### [^#\\n]*MEDIUM[:\\s]+([^\n]+)"; "i")] |
-                        map({severity: "major", location: "", summary: .[0]})
-                    else [] end),
-
-                    # LOW severity (maps to minor)
-                    (if ($body | test("### [^#\\n]*LOW[:\\s]"; "i")) then
-                        [scan("### [^#\\n]*LOW[:\\s]+([^\n]+)"; "i")] |
-                        map({severity: "minor", location: "", summary: .[0]})
-                    else [] end),
-
-                    # NEW: Items with (HIGH/MEDIUM/LOW PRIORITY) suffix
-                    # Format: **Title** (HIGH PRIORITY) or ### 1. **Title** (MEDIUM PRIORITY)
-                    (if ($body | test("\\([^)]*PRIORITY\\)"; "i")) then
-                        [scan("\\*\\*([^*]+)\\*\\*\\s*\\(([^)]*PRIORITY)\\)"; "i")] |
-                        map(select(.[1] != null) | {
-                            severity: (if (.[1] | test("HIGH|URGENT"; "i")) then "critical"
-                                      elif (.[1] | test("MEDIUM"; "i")) then "major"
-                                      elif (.[1] | test("LOW"; "i")) then "minor"
-                                      else "major" end),
-                            location: "",
-                            summary: .[0]
-                        })
-                    else [] end),
-
-                    # NEW: Unchecked test plan items
-                    # Format: - [ ] Description (unchecked checkbox)
-                    (if ($body | test("- \\[ \\]")) then
-                        [scan("- \\[ \\]\\s*([^\n]+)")] |
-                        map(.[0]) | map(select(. != null)) |
-                        # Strip trailing status indicators and clean up
-                        map(gsub("\\s*⚠️.*$|\\s*❌.*$|\\s*✅.*$|\\s*NOT CHECKED.*$"; "")) |
-                        map(gsub("\\s*\\(see issue[^)]*\\)"; "")) |
-                        map(gsub("\\s+$"; "")) |
-                        unique |
-                        map({severity: "major", location: "", summary: ("UNCHECKED: " + .)})
-                    else [] end),
-
-                    # NEW: Failed/blocked items with ❌ emoji prefix
-                    # Format: - ❌ Description or ❌ **Title**
-                    (if ($body | test("❌")) then
-                        [scan("[-*]\\s*❌\\s*([^\n]+)|❌\\s*\\*\\*([^*]+)\\*\\*")] |
-                        map(.[0] // .[1]) | map(select(. != null and (. | length) > 3)) |
-                        unique |
-                        map({severity: "major", location: "", summary: ("FAILED: " + .)})
-                    else [] end),
-
-                    # Claude: ## Concerns, ### Concerns, or **Concerns** section - extract Risk items
-                    # Format: "High Risk: description" or "Medium Risk: description" or "Low Risk: description"
-                    # Mapping: High Risk -> major, Medium Risk -> minor, Low Risk -> nit
-                    # EMOJI-AGNOSTIC: Matches "## ⚠️ Concerns", "## Concerns", "### Concerns", etc.
-                    (if ($body | test("## [^#\\n]*Concerns|### [^#\\n]*Concerns|\\*\\*Concerns\\*\\*"; "i")) then
-                        # Find the Concerns header and extract section
-                        ($body | split("\n") | map(select(test("^## [^#\\n]*Concerns|^### [^#\\n]*Concerns|^\\*\\*Concerns"; "i"))) | first // "") as $header |
-                        (if ($header | length) > 0 then ($body | split($header)[1] // "") else "" end | split("\n## ")[0] | split("\n### ")[0] | split("\n**")[0]) as $concerns_section |
-                        [
-                            # High Risk items -> major
-                            ([($concerns_section | scan("High Risk[:\\s]+([^\n]+)"))] |
-                                map({severity: "major", location: "", summary: .[0]})),
-
-                            # Medium Risk items -> minor
-                            ([($concerns_section | scan("Medium Risk[:\\s]+([^\n]+)"))] |
-                                map({severity: "minor", location: "", summary: .[0]})),
-
-                            # Low Risk items -> nit
-                            ([($concerns_section | scan("Low Risk[:\\s]+([^\n]+)"))] |
-                                map({severity: "nit", location: "", summary: .[0]}))
-                        ] | flatten
-                    else [] end)
-                ] | flatten | map(select(.summary != null and (.summary | type == "string") and (.summary | length) > 3))
-            else
-                []
-            end;
-
-        # Function to extract first non-empty line
-        def extract_summary:
-            split("\n") | map(gsub("^[[:space:]]*|[[:space:]]*$"; "")) | map(select(length > 0)) | first // "";
-
-        # Capture resolved_threads for resolution detection
-        (.resolved_threads // []) as $resolved_threads |
-
-        # Process all comments - split into regular and Claude bot reviews
-        (
-            [
-                # Reviews (no ID tracking - reviews use different resolution mechanism)
-                (.reviews[]? |
-                    {location: "", body: (.body // ""), is_claude: false, comment_id: null}),
-
-                # Inline comments (include ID for resolution matching)
-                (.inline_comments[]? |
-                    {location: "[\(.path):\(.line)]", body: (.body // ""), is_claude: false, comment_id: .id}),
-
-                # PR comments
-                # Claude detection: match "claude" as whole word, or common bot patterns
-                # Avoids false positives like "claudesmith" or "myclauderepo"
-                (.pr_comments[]? |
-                    {location: "", body: (.body // ""), is_claude: (.author | test("^claude$|^claude[-_]|[-_]claude$|claude.?bot|claude.?code"; "i")), comment_id: .id}),
-
-                # Issue comments
-                # Claude detection: match "claude" as whole word, or common bot patterns
-                (.issue_comments[]? |
-                    {location: "", body: (.body // ""), is_claude: (.author | test("^claude$|^claude[-_]|[-_]claude$|claude.?bot|claude.?code"; "i")), comment_id: .id})
-            ]
-        ) as $all_comments |
-
-        # Process Claude bot reviews separately to extract structured items
-        # Pattern matches both Claude bot and CodeRabbit structured review formats
-        # EMOJI-AGNOSTIC: Uses [^#\n]* to skip any emoji/decoration between ## and keyword
-        ([$all_comments[] | select(.is_claude == true and (.body | test("## [^#\\n]*(Issues|Recommendations|Suggestions|Concerns|Critical|Potential|Final|Moderate|Improvement|Strengths|Weaknesses|Bug)|### [^#\\n]*(CRITICAL|MAJOR|MINOR|MEDIUM|LOW|Must Fix|Should Fix|Concerns|Critical|Warning|Minor|Moderate)|\\*\\*Concerns\\*\\*"; "i"))) | .body | parse_claude_review] | flatten | map(select(. != null and .summary != null))) as $claude_items |
-
-        # Extract CodeRabbit nitpicks from reviews (these are in collapsed details blocks)
-        ([$all_comments[] | select(.body | test("🧹 Nitpick comments")) | .body | parse_coderabbit_nitpicks] | flatten | map(select(. != null and .summary != null))) as $coderabbit_nitpicks |
-
-        # Process non-Claude comments normally
-        # EMOJI-AGNOSTIC: Same pattern as above to correctly filter out structured reviews
-        ([$all_comments[] |
-            select(.is_claude == false or (.body | test("## [^#\\n]*(Issues|Recommendations|Suggestions|Concerns|Critical|Potential|Final|Moderate|Improvement|Strengths|Weaknesses|Bug)|### [^#\\n]*(CRITICAL|MAJOR|MINOR|MEDIUM|LOW|Must Fix|Should Fix|Concerns|Critical|Warning|Minor|Moderate)|\\*\\*Concerns\\*\\*"; "i") | not)) |
-            select(.body != "" and .body != null) |
-
-            # Skip already addressed
-            select(.body | test("✅ Addressed") | not) |
-
-            # Skip auto-generated summary headers and standalone HTML comments
-            select(.body | test("^\\*\\*Actionable comments posted:|^## Summary by CodeRabbit|^[[:space:]]*<!--.*-->[[:space:]]*$") | not) |
-
-            # Skip positive feedback / praise (unless --include-praise is set)
-            # Filters out: praise sections, praise comments, high ratings, and praise summaries
-            (if $include_praise != "true" then
-                select(.body | test(
-                    # Praise section headers (What I Liked, Strengths, Excellent, Highlights, etc.)
-                    "## [^#\\n]*(What I Liked|Strengths|Excellent|Highlights|Great Work|Well Done|Kudos|Praise|Positives|Good Job)|" +
-                    # Comments starting with praise indicators
-                    "^\\s*(Great job|Excellent work|Well done|LGTM|Approved|Nice|Perfect|Awesome|Brilliant|Fantastic|Wonderful|Beautiful|Clean|Solid|Good work|Love it|Ship it)|" +
-                    # Emoji praise indicators at start
-                    "^\\s*[✅✔👍🎉🏆⭐💯🙌👏🌟💪🔥]+\\s*(Great|Excellent|Well|Nice|Perfect|Good|Love|Awesome|Approved|LGTM)?|" +
-                    # High rating patterns (8+/10, 4-5 stars)
-                    "\\b(10|[89](\\.\\d)?)/10\\b|⭐{4,5}|\\*{4,5}/5|" +
-                    # Overall positive assessment patterns
-                    "overall.*(excellent|outstanding|great|impressive|solid)|" +
-                    # Common approval phrases
-                    "^\\s*(Looks good to me|This is great|Nice work|Nicely done|Ship it|Ready to merge|Good to go)"; "i") | not)
-            else . end) |
-
-            # Parse CodeRabbit or extract summary
-            (.body | parse_coderabbit) as $cr |
-
-            if $cr != null then
-                # Use CodeRabbit categorization
-                {
-                    severity: $cr.severity,
-                    location: .location,
-                    summary: $cr.summary,
-                    comment_id: .comment_id
-                }
-            else
-                # Manual categorization based on keywords
-                (.body | extract_summary) as $summary |
-
-                select($summary | length > 10) |
-                select($summary | test("^<!--.*-->$") | not) |
-
-                if (.body | test("(missing|vulnerable|unprotected|exposed|insecure).*(security|SQL|injection|XSS|CSRF)|deprecated.*(flag|option|command)|(test|tests).*(fail|failing|failure)|pytest-xdist.*(conflict|incompatible)|breaking.?change|crashes|critical.?bug"; "i")) then
-                    {severity: "critical", location: .location, summary: $summary, comment_id: .comment_id}
-                elif (.body | test("(inconsistent|missing|should|need).*(API|contract|pattern|architecture)|(missing|no|lacks).*(error.?handling|validation|exit.?code)|standardize.*(exit.?code|error)|race.?condition|deadlock|performance.?issue"; "i")) then
-                    {severity: "major", location: .location, summary: $summary, comment_id: .comment_id}
-                elif (.body | test("missing.*(documentation|docstring|YAML|frontmatter|test|type.?hint)|(should|need).*(document|test|edge.?case)|consider.*(add|document|test)"; "i")) then
-                    {severity: "minor", location: .location, summary: $summary, comment_id: .comment_id}
-                elif (.body | test("nitpick|nit:|style|consider.?renaming|optional|minor.?improvement"; "i")) then
-                    {severity: "nit", location: .location, summary: $summary, comment_id: .comment_id}
-                else
-                    # CHANGED: Keep as unmatched for visibility instead of dropping
-                    {severity: "unmatched", location: .location, summary: $summary, comment_id: .comment_id}
-                end
-            end
-        ]) as $regular_items |
-
-        # Combine Claude items, CodeRabbit nitpicks, and regular items
-        ($claude_items + $coderabbit_nitpicks + $regular_items) |
-
-        # Deduplicate by location + summary combination (keep first occurrence)
-        # This prevents merging distinct issues that happen to have similar summaries
-        # but are in different files/locations
-        unique_by("\(.location // "")|\(.summary)") |
-
-        # Filter out praise items from extracted summaries (unless --include-praise is set)
-        (if $include_praise != "true" then
-            map(select(.summary |
-                test(
-                    # Praise keywords in summaries
-                    "^(excellent|outstanding|great job|well done|nice work|good work|impressive|beautiful|clean|solid|perfect|wonderful|awesome|brilliant|fantastic)|" +
-                    # Summaries that are just approval
-                    "^(LGTM|approved|looks good|ship it|ready to merge)|" +
-                    # Rating summaries (X/10 patterns, especially positive 8+)
-                    "^[A-Za-z\\s]+:\\s*(10|[89])(\\.\\d)?/10|" +
-                    # Star ratings
-                    "⭐{3,}|\\*{4,}/5|" +
-                    # High praise patterns
-                    "(excellent|outstanding|exceptional|impressive|superb|flawless)\\s+(implementation|code|work|job|design|approach)|" +
-                    # Positive quality assessments
-                    "^(quality work|high quality|well structured|well organized|well designed|well implemented|clean separation|good separation|proper separation)|" +
-                    # Praise at start of sentence
-                    "^(this is|these are)\\s+(excellent|great|good|nice|solid|clean|well)|" +
-                    # Generic positive summaries
-                    "significantly improves|excellent additions|great additions|good additions"; "i") | not
-            ))
-        else . end) |
-
-        # Filter out issues for files that have been modified (if --unfinished-only)
-        # This removes issues where the file has already been touched/fixed
-        (if $unfinished_only == "true" and $modified_files != "" and $modified_files != "__NO_MODIFIED_FILES__" then
-            # Convert pipe-separated modified files to array for exact matching
-            ($modified_files | split("|")) as $modified_array |
-            map(select(
-                # Keep items without file locations (general issues)
-                (.location == "" or .location == null) or
-                # Extract file path from location like "[path/to/file.py:123]" and check
-                # Keep items where extracted path does NOT exactly match any modified file
-                # Use exact string matching (IN array) instead of regex to avoid false positives
-                # e.g., "foo.py" in modified files should NOT match "foobar.py"
-                ((.location // "") | gsub("^\\[|:\\d*\\]$|:null\\]$"; "") as $extracted_path |
-                    ($modified_array | map(. == $extracted_path) | any | not)
-                )
-            ))
-        else
-            .
-        end) |
-
-        # Build separate resolved and outdated comment ID sets from resolved_threads GraphQL data
-        # resolved_threads contains: {is_resolved, is_outdated, comment_ids: [...]}
-        ([$resolved_threads[]? | select(.is_resolved == true) | .comment_ids[]?] | map(tostring) | unique) as $resolved_only_ids |
-        ([$resolved_threads[]? | select(.is_outdated == true) | .comment_ids[]?] | map(tostring) | unique) as $outdated_only_ids |
-
-        # Add resolution and outdated status to each item
-        map(
-            # Check if this item has a comment_id that is in either set
-            (.comment_id // null | tostring) as $cid |
-            (if $cid != "null" and ($resolved_only_ids | index($cid)) then true else false end) as $is_resolved |
-            (if $cid != "null" and ($outdated_only_ids | index($cid)) then true else false end) as $is_outdated |
-            . + {is_resolved: $is_resolved, is_outdated: $is_outdated}
-        ) |
-
-        # Filter by resolution status (--hide-resolved / --show-resolved-only)
-        # Note: Both resolved AND outdated issues are filtered when using these flags
-        (if $hide_resolved == "true" then
-            map(select(.is_resolved == false and .is_outdated == false))
-        elif $show_resolved_only == "true" then
-            map(select(.is_resolved == true or .is_outdated == true))
-        else
-            .
-        end) |
-
-        # Group by severity
-        group_by(.severity) |
-        map({
-            key: .[0].severity,
-            value: map(
-                # Add resolution indicator prefix - outdated takes precedence over resolved
-                (if .is_outdated then "[OUTDATED] "
-                 elif .is_resolved then "[RESOLVED] "
-                 else "" end) as $prefix |
-                if .location != "" then ($prefix + .location + " " + .summary) else ($prefix + .summary) end
-            )
-        }) |
-        from_entries
-    ')
-
-    # Extract counts
-    local critical_count=$(echo "$categorized" | jq -r '.critical // [] | length')
-    local major_count=$(echo "$categorized" | jq -r '.major // [] | length')
-    local minor_count=$(echo "$categorized" | jq -r '.minor // [] | length')
-    local nit_count=$(echo "$categorized" | jq -r '.nit // [] | length')
-    local unmatched_count=$(echo "$categorized" | jq -r '.unmatched // [] | length')
-    # Note: unmatched items are NOT included in total_count as they represent
-    # pattern-matching failures, not actionable issues
-    local total_count=$((critical_count + major_count + minor_count + nit_count))
-
-    # Output results
-    if [[ "$PARALLEL_SOLVE_FORMAT" == "true" ]]; then
-        # Parallel-solve format - ready to pass to /parallel-solve command
-        if [[ "$UNFINISHED_ONLY" == "true" ]]; then
-            echo "Fix remaining (unaddressed) PR #${pr_number} review issues:"
-        else
-            echo "Fix all PR #${pr_number} review issues:"
-        fi
-        echo ""
-
-        # Critical issues
-        if [[ $critical_count -gt 0 ]]; then
-            echo "🔴 CRITICAL:"
-            echo "$categorized" | jq -r '.critical // [] | to_entries | map("- \(.value)") | .[]'
-            echo ""
-        fi
-
-        # Major issues
-        if [[ $major_count -gt 0 ]]; then
-            echo "🟠 MAJOR:"
-            echo "$categorized" | jq -r '.major // [] | to_entries | map("- \(.value)") | .[]'
-            echo ""
-        fi
-
-        # Minor issues
-        if [[ $minor_count -gt 0 ]]; then
-            echo "🟡 MINOR:"
-            echo "$categorized" | jq -r '.minor // [] | to_entries | map("- \(.value)") | .[]'
-            echo ""
-        fi
-
-        # Nitpicks (only if flag is set)
-        if [[ "$INCLUDE_NITPICKS" == "true" ]] && [[ $nit_count -gt 0 ]]; then
-            echo "⚪ NITPICK:"
-            echo "$categorized" | jq -r '.nit // [] | to_entries | map("- \(.value)") | .[]'
-            echo ""
-        fi
-
-        # Unmatched items (format may have changed - review manually)
-        if [[ $unmatched_count -gt 0 ]]; then
-            echo "❓ UNMATCHED (review manually - format may have changed):"
-            echo "$categorized" | jq -r '.unmatched // [] | to_entries | map("- \(.value)") | .[]'
-            echo ""
-        fi
-    else
-        # Regular human-readable format
-        if [[ "$UNFINISHED_ONLY" == "true" ]]; then
-            echo "PR #${pr_number} Remaining Issues (unaddressed) - Prioritized"
-        else
-            echo "PR #${pr_number} Issues - Prioritized"
-        fi
-        echo ""
-
-        # Critical issues
-        if [[ $critical_count -gt 0 ]]; then
-            echo "🔴 CRITICAL ($critical_count):"
-            echo "$categorized" | jq -r '.critical // [] | to_entries | map("\(.key + 1). \(.value)") | .[]'
-            echo ""
-        fi
-
-        # Major issues
-        if [[ $major_count -gt 0 ]]; then
-            echo "🟠 MAJOR ($major_count):"
-            echo "$categorized" | jq -r '.major // [] | to_entries | map("\(.key + 1). \(.value)") | .[]'
-            echo ""
-        fi
-
-        # Minor issues
-        if [[ $minor_count -gt 0 ]]; then
-            echo "🟡 MINOR ($minor_count):"
-            echo "$categorized" | jq -r '.minor // [] | to_entries | map("\(.key + 1). \(.value)") | .[]'
-            echo ""
-        fi
-
-        # Nitpicks (only if flag is set)
-        if [[ "$INCLUDE_NITPICKS" == "true" ]] && [[ $nit_count -gt 0 ]]; then
-            echo "⚪ NITPICK ($nit_count):"
-            echo "$categorized" | jq -r '.nit // [] | to_entries | map("\(.key + 1). \(.value)") | .[]'
-            echo ""
-        fi
-
-        # Unmatched items (format may have changed - review manually)
-        if [[ $unmatched_count -gt 0 ]]; then
-            echo "❓ UNMATCHED ($unmatched_count) - Review manually, format may have changed:"
-            echo "$categorized" | jq -r '.unmatched // [] | to_entries | map("\(.key + 1). \(.value)") | .[]'
-            echo ""
-        fi
-
-        # Summary
-        local filter_note=""
-        if [[ "$UNFINISHED_ONLY" == "true" ]]; then
-            filter_note=" (filtered to unaddressed only)"
-        fi
-
-        # Build unmatched suffix if any
-        local unmatched_note=""
-        if [[ $unmatched_count -gt 0 ]]; then
-            unmatched_note=", ${unmatched_count} unmatched"
-        fi
-
-        if [[ "$INCLUDE_NITPICKS" == "true" ]]; then
-            echo "Summary: ${critical_count} critical, ${major_count} major, ${minor_count} minor, ${nit_count} nitpick${unmatched_note} = ${total_count} issues total${filter_note}"
-        else
-            local actionable_count=$((critical_count + major_count + minor_count))
-            echo "Summary: ${critical_count} critical, ${major_count} major, ${minor_count} minor${unmatched_note} = ${actionable_count} actionable issues (nitpicks excluded)${filter_note}"
-        fi
-
-        # Add note when unmatched items exist
-        if [[ $unmatched_count -gt 0 ]]; then
-            echo ""
-            echo "NOTE: Found ${unmatched_count} unmatched comments. Check if PR review format has changed."
-        fi
-    fi
-
-    # Optional statistics
-    if [[ "$SHOW_STATS" == "true" ]]; then
-        echo ""
-        echo "Statistics:"
-        local stats
-        stats=$(echo "$pr_data" | jq -r '.summary |
-            "  Total comments: \(.total_all_comments)",
-            "  Reviews: \(.total_reviews)",
-            "  Inline: \(.total_inline_comments)",
-            "  PR comments: \(.total_pr_comments)",
-            "  Issue comments: \(.total_issue_comments)"
-        ')
-        echo "$stats"
-    fi
-}
-
 # Main
 main() {
     local pr_number=""
+    local python_args=()
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
         case $1 in
             --include-nitpicks)
                 INCLUDE_NITPICKS=true
-                shift
-                ;;
-            --include-praise)
-                INCLUDE_PRAISE=true
+                python_args+=("--include-nitpicks")
                 shift
                 ;;
             --parallel-solve-format)
                 PARALLEL_SOLVE_FORMAT=true
-                shift
-                ;;
-            --unfinished-only)
-                UNFINISHED_ONLY=true
+                python_args+=("--parallel-solve-format")
                 shift
                 ;;
             --hide-resolved)
                 HIDE_RESOLVED=true
+                python_args+=("--hide-resolved")
                 shift
                 ;;
             --show-resolved-only)
                 SHOW_RESOLVED_ONLY=true
+                python_args+=("--show-resolved-only")
                 shift
                 ;;
             --stats)
                 SHOW_STATS=true
+                python_args+=("--stats")
                 shift
                 ;;
             -h|--help)
                 usage
+                ;;
+            # Legacy options (silently ignored for backward compatibility)
+            --include-praise|--unfinished-only)
+                shift
                 ;;
             *)
                 if [[ -z "$pr_number" ]]; then
@@ -920,9 +201,11 @@ main() {
 
     check_dependencies
 
-    pr_number=$(extract_pr_number "$pr_number")
+    pr_input=$(validate_pr_input "$pr_number")
 
-    collate_pr_issues "$pr_number"
+    # Call the Python implementation
+    # Pass the original input (URL or number) so Python can preserve repo context
+    exec "$PYTHON_EXEC" "$PYTHON_SCRIPT" "$pr_input" "${python_args[@]}"
 }
 
 main "$@"
