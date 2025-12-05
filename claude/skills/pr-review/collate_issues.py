@@ -769,6 +769,8 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
         (r"###\s*💡?\s*Observations?\s*&?\s*Suggestions?", CommentSeverity.MINOR),
         (r"##\s*Potential\s+Issues?", CommentSeverity.MAJOR),
         (r"###\s*Potential\s+Issues?", CommentSeverity.MAJOR),
+        # Claude "Areas for Improvement" section - items have inline severity hints
+        (r"###?\s*🔍?\s*Areas?\s+for\s+Improvement", CommentSeverity.MINOR),
     ]
 
     for section_pattern, section_severity in suggestion_sections:
@@ -805,16 +807,31 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
                 if len(item_title.split()) < 3:
                     continue
 
-                # Determine severity from content
+                # Determine severity from content - check for inline severity hints first
+                # Format: **Title** (Minor) or **Title** (Critical) or **Title** (Very Minor)
                 title_lower = item_title.lower()
-                if "critical" in title_lower or "must" in title_lower or "required" in title_lower:
+                effective_severity = section_severity
+
+                # Check for parenthesized severity hints (common in "Areas for Improvement")
+                severity_hint_match = re.search(r"\((Critical|Major|Minor|Very\s+Minor|Nitpick|Bug|Security|Potential\s+Bug|Security\s+Best\s+Practice)\)", item_title, re.IGNORECASE)
+                if severity_hint_match:
+                    hint = severity_hint_match.group(1).lower()
+                    if "critical" in hint or "security" in hint:
+                        effective_severity = CommentSeverity.CRITICAL
+                    elif "major" in hint or "bug" in hint:
+                        effective_severity = CommentSeverity.MAJOR
+                    elif "minor" in hint:
+                        effective_severity = CommentSeverity.MINOR
+                    elif "nitpick" in hint:
+                        effective_severity = CommentSeverity.NITPICK
+                    # Clean up the title by removing the severity hint
+                    item_title = re.sub(r"\s*\([^)]*\)\s*$", "", item_title).strip()
+                elif "critical" in title_lower or "must" in title_lower or "required" in title_lower:
                     effective_severity = CommentSeverity.CRITICAL
                 elif "should" in title_lower or "important" in title_lower:
                     effective_severity = CommentSeverity.MAJOR
                 elif "consider" in title_lower or "potential" in title_lower or "enhancement" in title_lower:
                     effective_severity = CommentSeverity.MINOR
-                else:
-                    effective_severity = section_severity
 
                 add_issue(effective_severity, item_title, from_structured_pattern=True)
 
@@ -838,14 +855,23 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
         full_text = f"{title} {indicators}"
 
         # Check for status labels and map to severity (check indicators first, then title)
+        # Also check for inline severity hints like (Minor), (Major), (Critical), (Very Minor)
         if re.search(r"\(BLOCKING\)", full_text, re.IGNORECASE) or re.search(r"\(CRITICAL\)", full_text, re.IGNORECASE) or re.search(r"\(REQUIRED\)", full_text, re.IGNORECASE):
             effective_severity = CommentSeverity.CRITICAL
+        elif re.search(r"\(Security|Security\s+Best\s+Practice|Potential\s+Bug\)", full_text, re.IGNORECASE):
+            effective_severity = CommentSeverity.CRITICAL
+        elif re.search(r"\(Major\)", full_text, re.IGNORECASE) or re.search(r"\(Bug\)", full_text, re.IGNORECASE):
+            effective_severity = CommentSeverity.MAJOR
         elif re.search(r"\(NON-BLOCKING\)", full_text, re.IGNORECASE) or "⚠️" in full_text:
             effective_severity = CommentSeverity.MAJOR
+        elif re.search(r"\(Minor\)", full_text, re.IGNORECASE) or re.search(r"\(Very\s+Minor\)", full_text, re.IGNORECASE):
+            effective_severity = CommentSeverity.MINOR
         elif re.search(r"\(SAFE\)", full_text, re.IGNORECASE) or "✅" in full_text:
             effective_severity = CommentSeverity.MINOR
         elif "🔍" in full_text or re.search(r"\(REVIEW\)", full_text, re.IGNORECASE):
             effective_severity = CommentSeverity.MINOR
+        elif re.search(r"\(Nitpick\)", full_text, re.IGNORECASE):
+            effective_severity = CommentSeverity.NITPICK
         elif "❌" in full_text:
             effective_severity = CommentSeverity.CRITICAL
         elif "⚡" in full_text:
@@ -858,8 +884,8 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
         for emoji in emojis_to_remove:
             title = title.replace(emoji, "")
 
-        # Strip status labels in parentheses
-        title = re.sub(r"\s*\((BLOCKING|NON-BLOCKING|CRITICAL|SAFE|REQUIRED|REVIEW)\)\s*", "", title, flags=re.IGNORECASE)
+        # Strip status labels and severity hints in parentheses
+        title = re.sub(r"\s*\((BLOCKING|NON-BLOCKING|CRITICAL|SAFE|REQUIRED|REVIEW|Minor|Major|Very\s+Minor|Nitpick|Bug|Security|Potential\s+Bug|Security\s+Best\s+Practice)\)\s*", "", title, flags=re.IGNORECASE)
 
         # Clean up extra whitespace
         title = title.strip()
