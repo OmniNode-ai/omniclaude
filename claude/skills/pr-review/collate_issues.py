@@ -464,6 +464,7 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
     - **N. Title (PRIORITY)**
     - ### CRITICAL: description
     - CodeRabbit format: `line-range`: **Title** in <details> blocks
+    - CodeRabbit inline format: _⚠️ Potential issue_ | _🔴 Critical_ followed by **Title**
 
     Filters out:
     - Praise and approval text
@@ -535,6 +536,76 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
 
     if not body:
         return issues
+
+    # ==========================================================================
+    # CodeRabbit Inline Comment Format (from pulls/{pr}/comments endpoint)
+    # ==========================================================================
+    # CodeRabbit inline comments use format:
+    #   _⚠️ Potential issue_ | _🔴 Critical_
+    #   <details>...analysis...</details>
+    #   **Issue title/description**
+    #
+    # Or:
+    #   _🛠️ Refactor suggestion_ | _🟠 Major_
+    #   <details>...</details>
+    #   **Suggestion title**
+
+    # Pattern to detect CodeRabbit inline severity indicators
+    # Format: _emoji Type_ | _emoji Severity_
+    # Note: Emojis can be multi-byte, so we use a more flexible pattern
+    # Examples:
+    #   _⚠️ Potential issue_ | _🔴 Critical_
+    #   _🛠️ Refactor suggestion_ | _🟠 Major_
+    coderabbit_inline_pattern = r"_[^\s_]+\s*(?:Potential\s+issue|Refactor\s+suggestion|Suggestion|Note|Tip|Warning)_\s*\|\s*_([^\s_]+)\s*(Critical|Major|Minor|Low|Nitpick|Info)_"
+    inline_match = re.search(coderabbit_inline_pattern, body, re.IGNORECASE)
+
+    if inline_match:
+        # This is a CodeRabbit inline comment - extract severity and title
+        severity_emoji = inline_match.group(1) if inline_match.group(1) else ""
+        severity_text = inline_match.group(2).lower() if inline_match.group(2) else ""
+
+        # Map CodeRabbit severity to our severity
+        if "🔴" in severity_emoji or severity_text == "critical":
+            cr_severity = CommentSeverity.CRITICAL
+        elif "🟠" in severity_emoji or severity_text == "major":
+            cr_severity = CommentSeverity.MAJOR
+        elif "🟡" in severity_emoji or severity_text in ("minor", "low"):
+            cr_severity = CommentSeverity.MINOR
+        else:
+            cr_severity = CommentSeverity.NITPICK
+
+        # Find the issue title - there are two CodeRabbit formats:
+        # Format A (with analysis): _severity_ ... <details>analysis</details> **Title**
+        # Format B (direct):        _severity_ ... **Title** ... <details>AI prompt</details>
+        #
+        # Key insight: In Format A, the <details> block appears RIGHT AFTER the severity line
+        # In Format B, **Title** appears directly after severity, with <details> at the end
+
+        after_severity = body[inline_match.end():]
+
+        # Check if there's a <details> block immediately after the severity line (within first 50 chars)
+        # This indicates Format A (analysis chain format)
+        details_start_near = after_severity[:100].find("<details>")
+
+        if details_start_near >= 0 and details_start_near < 50:
+            # Format A: Look for title AFTER the first </details>
+            first_details_end = after_severity.find("</details>")
+            if first_details_end > 0:
+                after_first_details = after_severity[first_details_end + 10:]
+                bold_match = re.search(r"^\s*\*\*([^*]+)\*\*", after_first_details, re.MULTILINE)
+                if bold_match:
+                    title = bold_match.group(1).strip()
+                    title = re.sub(r"\s+", " ", title)  # Normalize whitespace
+                    if len(title) > 10 and not title.startswith("🤖"):  # Skip AI prompt markers
+                        add_issue(cr_severity, title, location=source, from_structured_pattern=True)
+        else:
+            # Format B: Look for first bold text directly after severity line
+            bold_match = re.search(r"\*\*([^*]+)\*\*", after_severity)
+            if bold_match:
+                title = bold_match.group(1).strip()
+                title = re.sub(r"\s+", " ", title)
+                if len(title) > 10 and not title.startswith("🤖"):
+                    add_issue(cr_severity, title, location=source, from_structured_pattern=True)
 
     # ==========================================================================
     # CodeRabbit HTML Format Extraction
