@@ -771,6 +771,11 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
         (r"###\s*Potential\s+Issues?", CommentSeverity.MAJOR),
         # Claude "Areas for Improvement" section - items have inline severity hints
         (r"###?\s*🔍?\s*Areas?\s+for\s+Improvement", CommentSeverity.MINOR),
+        # Claude "Minor Suggestions" / "Future Optimization" sections
+        (r"###?\s*📝?\s*Minor\s+Suggestions?(?:\s*\([^)]+\))?", CommentSeverity.MINOR),
+        (r"###?\s*💡?\s*Future\s+Optimizations?(?:\s*\([^)]+\))?", CommentSeverity.NITPICK),
+        (r"###?\s*💡?\s*Recommendations?", CommentSeverity.MINOR),
+        (r"###?\s*📋?\s*Follow[- ]?ups?(?:\s*\([^)]+\))?", CommentSeverity.MINOR),
     ]
 
     for section_pattern, section_severity in suggestion_sections:
@@ -784,11 +789,22 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
             else:
                 section_content = body[section_start:]
 
-            # Extract ### N. Title or #### N. **Title** patterns within this section
-            # Pattern matches both:
-            #   ### 1. Plain title
-            #   #### 1. **Bold title**
+            # Extract numbered items within this section
+            # Pattern matches multiple formats:
+            #   ### 1. Plain title (markdown header)
+            #   #### 1. **Bold title** (markdown header with bold)
+            #   1. Plain numbered item (simple list)
+            #   - Bullet item (simple list)
+            # First try markdown headers
             section_items_plain = re.findall(r"#{3,4}\s*\d+\.\s*([^\n]+)", section_content)
+
+            # Also capture plain numbered lists (1. Item, 2. Item, etc.)
+            plain_numbered = re.findall(r"^\s*\d+\.\s+([^\n]+)", section_content, re.MULTILINE)
+            section_items_plain.extend(plain_numbered)
+
+            # Also capture bullet items (- Item)
+            bullet_items = re.findall(r"^\s*[-*]\s+([^\n]+)", section_content, re.MULTILINE)
+            section_items_plain.extend(bullet_items)
             for item_title in section_items_plain:
                 item_title = item_title.strip()
 
