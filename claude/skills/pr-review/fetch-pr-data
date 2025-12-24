@@ -410,6 +410,7 @@ fetch_pr_data() {
     local pr_comments_file="$tmp_dir/pr_comments.json"
     local issue_comments_file="$tmp_dir/issue_comments.json"
     local resolved_threads_file="$tmp_dir/resolved_threads.json"
+    local error_file="$tmp_dir/fetch_error.txt"
 
     # Fetch in parallel for speed
     print_status "Fetching from 5 endpoints in parallel..."
@@ -534,11 +535,11 @@ fetch_pr_data() {
                 }]' 2>&1); then
                 echo "$api_output" > "$issue_comments_file"
             else
-                # GitHub API error - surface to user and exit with error code
+                # GitHub API error - signal error via file (don't delete tmp_dir from subshell)
                 echo "[]" > "$issue_comments_file"
                 print_error "GitHub API error fetching issue comments: $api_output"
                 print_error "Endpoint: $endpoint"
-                rm -rf "$tmp_dir"
+                echo "GitHub API error: $api_output (endpoint: $endpoint)" > "$error_file"
                 exit 2
             fi
         fi
@@ -547,6 +548,15 @@ fetch_pr_data() {
 
     # Wait for all parallel fetches to complete
     wait
+
+    # Check for errors from parallel subshells
+    if [[ -f "$error_file" ]]; then
+        local error_msg
+        error_msg=$(cat "$error_file")
+        rm -rf "$tmp_dir"
+        print_error "[FETCH_FAILED] $error_msg"
+        exit 2
+    fi
 
     print_status "All endpoints fetched successfully"
 
