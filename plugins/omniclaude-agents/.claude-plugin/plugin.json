@@ -1,0 +1,96 @@
+{
+  "name": "omniclaude-agents",
+  "version": "1.1.0",
+  "description": "53 polymorphic YAML agents for OmniClaude with programmatic routing support. Includes PR review, debugging, testing, security auditing, API architecture, performance analysis, and intelligent workflow orchestration.",
+  "author": {
+    "name": "OmniNode",
+    "email": "dev@omninode.ai"
+  },
+  "repository": "https://github.com/OmniNode-ai/omniclaude",
+  "license": "MIT",
+  "keywords": [
+    "agents",
+    "polymorphic",
+    "yaml-agents",
+    "programmatic-routing",
+    "pr-review",
+    "debugging",
+    "testing",
+    "security",
+    "onex",
+    "api-architecture",
+    "performance",
+    "documentation",
+    "code-quality",
+    "devops",
+    "observability",
+    "intelligence",
+    "workflow-automation"
+  ],
+  "agents": "./agents/",
+  "agentFormat": "yaml",
+  "agentCount": 53,
+  "capabilities": {
+    "coordination": {
+      "description": "Multi-agent orchestration and workflow coordination",
+      "agents": ["polymorphic-agent", "onex-coordinator", "workflow-generator"]
+    },
+    "quality": {
+      "description": "Code quality, testing, type validation, and PR review",
+      "agents": ["pr-review", "testing", "code-quality-analyzer", "type-validator", "contract-validator"]
+    },
+    "security": {
+      "description": "Security auditing and vulnerability assessment",
+      "agents": ["security-audit"]
+    },
+    "architecture": {
+      "description": "API design, documentation architecture, and AST generation",
+      "agents": ["api-architect", "documentation-architect", "ast-generator"]
+    },
+    "development": {
+      "description": "Debugging, performance analysis, and development support",
+      "agents": ["debug", "debug-database", "debug-intelligence", "debug-log-writer", "performance", "structured-logging"]
+    },
+    "research": {
+      "description": "Repository analysis, research, RAG operations, and documentation indexing",
+      "agents": ["repository-crawler", "repository-crawler-claude-code", "research", "rag-query", "rag-update", "documentation-indexer"]
+    },
+    "devops": {
+      "description": "Infrastructure management, production monitoring, and automation",
+      "agents": ["devops-infrastructure", "production-monitor", "overnight-automation", "repository-setup"]
+    },
+    "frontend": {
+      "description": "Frontend development and UI testing",
+      "agents": ["frontend-developer", "ui-testing"]
+    },
+    "workflow": {
+      "description": "PR workflows, commits, and ticket management",
+      "agents": ["pr-create", "pr-workflow", "pr-ticket-writer", "commit", "ticket-manager", "address-pr-comments", "agent-address-pr-comments"]
+    },
+    "intelligence": {
+      "description": "Intelligence initialization, context gathering, and content summarization",
+      "agents": ["intelligence-initializer", "context-gatherer", "content-summarizer"]
+    },
+    "observability": {
+      "description": "Agent observability, velocity tracking, and metrics logging",
+      "agents": ["agent-observability", "velocity-tracker", "velocity-log-writer"]
+    },
+    "generation": {
+      "description": "Contract-driven code generation and multi-step frameworks",
+      "agents": ["contract-driven-generator", "parameter-collector", "multi-step-framework"]
+    },
+    "specialized": {
+      "description": "Domain-specific agents for tickets, batch processing, and smart responses",
+      "agents": ["omniagent-archon-tickets", "omniagent-batch-processor", "omniagent-smart-responder", "python-fastapi-expert", "quota-optimizer", "onex-readme"]
+    }
+  },
+  "routing": {
+    "note": "All agents are in YAML format for programmatic routing via the polymorphic agent framework",
+    "registryFile": "agent-registry.yaml",
+    "supportsEventRouting": true,
+    "supportsManifestInjection": true
+  },
+  "requirements": {
+    "claude_code_version": ">=1.0.0"
+  }
+}

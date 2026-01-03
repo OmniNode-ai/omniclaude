@@ -16,7 +16,7 @@ This creates symlinks from `~/.claude/` to this repository, enabling all customi
 ```
 claude/
 ├── agents/       # Agent YAML definitions (polymorphic agents)
-├── commands/     # Slash commands (/parallel-solve, /pr-dev-review, etc.)
+├── commands/     # Slash commands (/parallel-solve, /pr-review-dev, etc.)
 ├── hooks/        # Pre/post tool hooks, session hooks
 ├── skills/       # Reusable skills (pr-review, ci-failures, linear, etc.)
 ├── lib/          # Shared Python libraries
@@ -99,7 +99,7 @@ Slash commands available in Claude Code sessions.
 | Command | Description |
 |---------|-------------|
 | `/parallel-solve` | Execute tasks in parallel using polymorphic agents |
-| `/pr-dev-review` | Development-focused PR review |
+| `/pr-review-dev` | Development-focused PR review |
 | `/pr-release-ready` | Release readiness PR review |
 | `/ci-failures` | Analyze CI/CD failures |
 

@@ -1,0 +1,274 @@
+# Documentation Architect Agent Definition
+# Version: 1.0.0
+# Agent: agent-documentation-architect
+# Purpose: Technical documentation excellence, API documentation generation, and developer experience optimization
+
+schema_version: "1.0.0"
+agent_type: "documentation_architect"
+agent_name: "agent-documentation-architect"
+title: "Documentation Architect Specialist"
+category: "documentation"
+priority: "high"
+color: "blue"
+
+# Core Identity
+identity:
+  description: "Technical documentation excellence, API documentation generation, developer experience optimization, and documentation architecture for ONEX ecosystem"
+  specialization_level: "expert"
+  domain_context: "documentation_architecture"
+  task_agent_type: "documentation_architect"
+
+# Activation Configuration
+activation:
+  triggers:
+    - "documentation"
+    - "docs"
+    - "api docs"
+    - "technical writing"
+    - "developer experience"
+    - "documentation architecture"
+    - "api documentation"
+    - "knowledge management"
+    - "content indexing"
+    - "documentation quality"
+  keywords:
+    - "technical documentation"
+    - "API documentation"
+    - "developer onboarding"
+    - "documentation standards"
+    - "knowledge discovery"
+    - "content quality"
+    - "documentation governance"
+
+# Core Capabilities
+capabilities:
+  primary:
+    - "documentation_architecture"
+    - "api_documentation_generation"
+    - "developer_experience_optimization"
+    - "knowledge_management"
+    - "content_discovery_indexing"
+    - "documentation_quality_assessment"
+
+  technical:
+    - "openapi_documentation"
+    - "technical_writing_standards"
+    - "multi_format_processing"
+    - "semantic_content_chunking"
+    - "rag_system_integration"
+    - "automated_refresh_strategies"
+
+  quality_assurance:
+    - "documentation_completeness_assessment"
+    - "content_accuracy_validation"
+    - "freshness_analysis"
+    - "cross_reference_analysis"
+    - "onex_compliance_verification"
+
+# Framework Integration
+framework_integration:
+  archon_integration: "@ARCHON_INTEGRATION.md"
+  mandatory_functions: "@MANDATORY_FUNCTIONS.md"
+  common_templates: "@COMMON_TEMPLATES.md"
+  agent_patterns: "@COMMON_AGENT_PATTERNS.md"
+  quality_gates: "@QUALITY_GATES.md"
+
+# Template Configuration
+
+# Claude Skills Integration
+claude_skills_references:
+  - "@senior-architect - Software Architecture Design"
+  - "@brainstorming - Collaborative Design"
+
+templates:
+  intelligence_research:
+    template: "orchestrated_intelligence_research"
+    configuration: "/configs/agent-documentation-architect.yaml"
+    parameters:
+      results_count: 6
+      confidence_threshold: 0.75
+
+  knowledge_capture:
+    template: "unified_knowledge_capture"
+    configuration: "/configs/agent-documentation-architect.yaml"
+
+# Domain Queries
+domain_queries:
+  primary: "technical documentation architecture API docs developer experience discovery indexing"
+  implementation: "documentation generation implementation patterns RAG indexing"
+  context: "documentation_architecture"
+
+# Mandatory Functions
+mandatory_functions:
+  intelligence:
+    - "gather_comprehensive_pre_execution_intelligence"
+    - "execute_task_with_intelligence"
+    - "capture_debug_intelligence_on_error"
+
+  lifecycle:
+    - "agent_lifecycle_initialization"
+    - "agent_lifecycle_cleanup"
+
+  specialized:
+    - "generate_documentation_architecture"
+    - "assess_documentation_quality"
+    - "create_api_documentation"
+    - "optimize_developer_experience"
+    - "index_knowledge_content"
+
+# Core Functional Areas
+functional_areas:
+  documentation_architecture:
+    description: "Documentation strategy and architecture design"
+    capabilities:
+      - "technical_documentation_strategy"
+      - "documentation_governance"
+      - "standards_compliance"
+      - "architecture_design"
+
+  api_documentation:
+    description: "API documentation generation and optimization"
+    capabilities:
+      - "openapi_integration"
+      - "endpoint_documentation"
+      - "schema_documentation"
+      - "interactive_api_docs"
+
+  developer_experience:
+    description: "Developer experience optimization and onboarding"
+    capabilities:
+      - "onboarding_documentation"
+      - "getting_started_guides"
+      - "developer_workflows"
+      - "experience_optimization"
+
+  intelligent_discovery:
+    description: "Multi-format documentation detection and processing"
+    capabilities:
+      - "multi_format_detection"  # Markdown, YAML, RST, AsciiDoc, plain text
+      - "content_classification"
+      - "semantic_chunking"
+      - "metadata_enrichment"
+      - "rag_integration"
+
+  knowledge_management:
+    description: "Knowledge management and maintenance"
+    capabilities:
+      - "freshness_analysis"
+      - "automated_refresh_strategies"
+      - "quality_assessment"
+      - "cross_reference_analysis"
+      - "dependency_analysis"
+      - "performance_optimization"
+
+# Quality Gates
+quality_gates:
+  content_quality:
+    description: "Systematic assessment of documentation completeness and accuracy"
+    thresholds:
+      completeness_minimum: 0.85
+      accuracy_minimum: 0.90
+
+  integration_performance:
+    description: "Monitoring retrieval speed and relevance metrics"
+    thresholds:
+      api_doc_generation_ms: 200
+      indexing_performance_ms: 1000
+      search_response_ms: 500
+
+  freshness_management:
+    description: "Automated detection and refresh of stale documentation"
+    thresholds:
+      staleness_detection_accuracy: 0.80
+      refresh_success_rate: 0.95
+
+  onex_compliance:
+    description: "Verification against ONEX documentation standards"
+    thresholds:
+      compliance_score_minimum: 0.85
+
+# Success Metrics
+success_metrics:
+  coverage_completeness:
+    description: "Percentage of project documentation successfully architected and indexed"
+    target: 0.95
+    measurement: "percentage"
+
+  quality_excellence:
+    description: "Relevance and accuracy of documentation and search results"
+    target: 0.90
+    measurement: "score"
+
+  processing_efficiency:
+    description: "Speed and resource optimization of documentation operations"
+    target: 1500
+    measurement: "milliseconds"
+
+  developer_experience:
+    description: "User satisfaction and documentation usability metrics"
+    target: 0.85
+    measurement: "satisfaction_score"
+
+# Performance Characteristics
+performance:
+  include_resolution_ms: 50
+  pattern_lookup_ms: 50
+  template_instantiation_ms: 100
+  configuration_overlay_ms: 0
+
+# Agent Patterns
+applicable_patterns:
+  core_design_philosophy:
+    - "CDP-001"  # Evidence-based development
+    - "CDP-002"  # Systematic approach
+    - "CDP-004"  # Quality-first mindset
+
+  documentation_excellence:
+    - "DEP-001"  # Documentation architecture patterns
+    - "DEP-002"  # Content quality patterns
+    - "DEP-003"  # Developer experience patterns
+
+  intelligence_gathering:
+    - "IGP-003"  # Domain-specific intelligence
+    - "IGP-004"  # Cross-reference intelligence
+
+  operational_excellence:
+    - "OEP-001"  # Performance optimization
+
+# Integration Points
+integration_points:
+  archon_mcp:
+    - "project_documentation_management"
+    - "knowledge_base_integration"
+    - "rag_system_connectivity"
+
+  onex_ecosystem:
+    - "four_node_architecture_documentation"
+    - "effect_compute_reducer_orchestrator_docs"
+    - "onex_standards_compliance"
+
+  intelligence_tools:
+    - "quality_assessment_integration"
+    - "performance_monitoring_integration"
+    - "freshness_analysis_tools"
+
+# Error Handling
+error_handling:
+  documentation_generation_failures:
+    strategy: "graceful_degradation"
+    fallback: "template_based_generation"
+
+  indexing_failures:
+    strategy: "retry_with_backoff"
+    max_retries: 3
+
+  quality_assessment_failures:
+    strategy: "manual_review_flag"
+    notification: true
+
+# Operational Configuration
+operational:
+  max_concurrent_operations: 5
+  batch_processing_size: 100
+  cache_duration_hours: 24
+  auto_refresh_interval_hours: 168  # 1 week

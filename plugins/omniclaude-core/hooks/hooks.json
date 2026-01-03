@@ -1,0 +1,65 @@
+{
+  "$schema": "https://claude.ai/schemas/hooks.json",
+  "description": "OmniClaude Core Hooks - Agent routing, quality enforcement, and session tracking",
+  "version": "1.0.0",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "type": "command",
+        "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/user-prompt-submit.sh",
+        "description": "Intelligent agent routing via Kafka, manifest injection, and correlation tracking",
+        "timeout_ms": 2000
+      }
+    ],
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session-start.sh",
+        "description": "Session lifecycle logging with project context",
+        "timeout_ms": 100
+      }
+    ],
+    "SessionEnd": [
+      {
+        "type": "command",
+        "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session-end.sh",
+        "description": "Session completion and aggregate statistics",
+        "timeout_ms": 100
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre-tool-use-quality.sh",
+            "description": "Quality validation before file writes",
+            "timeout_ms": 500
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|Bash|Read|Glob|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post-tool-use-quality.sh",
+            "description": "Auto-fix naming conventions and log tool executions",
+            "timeout_ms": 500
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/stop.sh",
+        "description": "Response completion intelligence and summary banner",
+        "timeout_ms": 100
+      }
+    ]
+  }
+}

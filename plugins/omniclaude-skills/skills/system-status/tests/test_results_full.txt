@@ -1,0 +1,369 @@
+/Users/jonah/Library/Python/3.11/lib/python/site-packages/pytest_asyncio/plugin.py:207: PytestDeprecationWarning: The configuration option "asyncio_default_fixture_loop_scope" is unset.
+The event loop scope for asynchronous fixtures will default to the fixture caching scope. Future versions of pytest-asyncio will default the loop scope for asynchronous fixtures to function scope. Set the default fixture loop scope explicitly in order to avoid unexpected behavior in the future. Valid fixture loop scopes are: "function", "class", "module", "package", "session"
+
+  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))
+============================= test session starts ==============================
+platform darwin -- Python 3.11.2, pytest-8.3.5, pluggy-1.5.0 -- /Library/Frameworks/Python.framework/Versions/3.11/bin/python3
+cachedir: .pytest_cache
+metadata: {'Python': '3.11.2', 'Platform': 'macOS-15.7.1-arm64-arm-64bit', 'Packages': {'pytest': '8.3.5', 'pluggy': '1.5.0'}, 'Plugins': {'logfire': '4.11.0', 'timeout': '2.2.0', 'anyio': '4.11.0', 'html': '4.1.1', 'json-report': '1.5.0', 'metadata': '3.1.1', 'cov': '4.1.0', 'asyncio': '0.25.3', 'order': '1.3.0', 'benchmark': '5.1.0', 'mock': '3.14.0', 'xdist': '3.6.1', 'docker': '3.1.1'}}
+benchmark: 5.1.0 (defaults: timer=time.perf_counter disable_gc=False min_rounds=5 min_time=0.000005 max_time=1.0 calibration_precision=10 warmup=False warmup_iterations=100000)
+rootdir: /Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests
+configfile: pytest.ini
+testpaths: .
+plugins: logfire-4.11.0, timeout-2.2.0, anyio-4.11.0, html-4.1.1, json-report-1.5.0, metadata-3.1.1, cov-4.1.0, asyncio-0.25.3, order-1.3.0, benchmark-5.1.0, mock-3.14.0, xdist-3.6.1, docker-3.1.1
+asyncio: mode=Mode.STRICT, asyncio_default_fixture_loop_scope=None
+collecting ... collected 138 items
+
+test_check_agent_performance.py::TestCheckAgentPerformance::test_top_agents_query FAILED [  0%]
+test_check_agent_performance.py::TestCheckAgentPerformance::test_timeframe_parameter FAILED [  1%]
+test_check_agent_performance.py::TestCheckAgentPerformance::test_empty_results PASSED [  2%]
+test_check_agent_performance.py::TestCheckAgentPerformance::test_database_error FAILED [  2%]
+test_check_agent_performance.py::TestCheckAgentPerformance::test_validate_top_agents_bounds FAILED [  3%]
+test_check_database_health.py::TestCheckDatabaseHealth::test_connection_pool_stats FAILED [  4%]
+test_check_database_health.py::TestCheckDatabaseHealth::test_query_performance_metrics FAILED [  5%]
+test_check_database_health.py::TestCheckDatabaseHealth::test_recent_errors_retrieval FAILED [  5%]
+test_check_database_health.py::TestCheckDatabaseHealth::test_validate_log_lines FAILED [  6%]
+test_check_database_health.py::TestCheckDatabaseHealth::test_database_unavailable PASSED [  7%]
+test_check_infrastructure.py::TestCheckInfrastructure::test_check_kafka_success FAILED [  7%]
+test_check_infrastructure.py::TestCheckInfrastructure::test_check_kafka_failure FAILED [  8%]
+test_check_infrastructure.py::TestCheckInfrastructure::test_check_postgres_success FAILED [  9%]
+test_check_infrastructure.py::TestCheckInfrastructure::test_check_postgres_failure FAILED [ 10%]
+test_check_infrastructure.py::TestCheckInfrastructure::test_check_qdrant_success FAILED [ 10%]
+test_check_infrastructure.py::TestCheckInfrastructure::test_check_qdrant_failure FAILED [ 11%]
+test_check_infrastructure.py::TestCheckInfrastructure::test_component_filtering FAILED [ 12%]
+test_check_infrastructure.py::TestCheckInfrastructure::test_detailed_output_flag FAILED [ 13%]
+test_check_infrastructure.py::TestCheckInfrastructure::test_all_components_default FAILED [ 13%]
+test_check_infrastructure.py::TestCheckInfrastructure::test_error_handling FAILED [ 14%]
+test_check_kafka_topics.py::TestCheckKafkaTopics::test_list_all_topics FAILED [ 15%]
+test_check_kafka_topics.py::TestCheckKafkaTopics::test_filter_topics_by_pattern FAILED [ 15%]
+test_check_kafka_topics.py::TestCheckKafkaTopics::test_kafka_unavailable FAILED [ 16%]
+test_check_kafka_topics.py::TestCheckKafkaTopics::test_empty_topic_list FAILED [ 17%]
+test_check_pattern_discovery.py::TestCheckPatternDiscovery::test_get_all_collections FAILED [ 18%]
+test_check_pattern_discovery.py::TestCheckPatternDiscovery::test_empty_collections FAILED [ 18%]
+test_check_pattern_discovery.py::TestCheckPatternDiscovery::test_qdrant_unavailable FAILED [ 19%]
+test_check_pattern_discovery.py::TestCheckPatternDiscovery::test_collection_statistics FAILED [ 20%]
+test_check_recent_activity.py::TestCheckRecentActivity::test_manifest_injection_stats FAILED [ 21%]
+test_check_recent_activity.py::TestCheckRecentActivity::test_routing_decision_metrics FAILED [ 21%]
+test_check_recent_activity.py::TestCheckRecentActivity::test_agent_actions_breakdown FAILED [ 22%]
+test_check_recent_activity.py::TestCheckRecentActivity::test_recent_errors_included FAILED [ 23%]
+test_check_recent_activity.py::TestCheckRecentActivity::test_limit_parameter FAILED [ 23%]
+test_check_recent_activity.py::TestCheckRecentActivity::test_timeframe_validation FAILED [ 24%]
+test_check_recent_activity.py::TestCheckRecentActivity::test_empty_results_handled PASSED [ 25%]
+test_check_recent_activity.py::TestCheckRecentActivity::test_database_error_handled PASSED [ 26%]
+test_check_recent_activity.py::TestCheckRecentActivity::test_null_values_handled FAILED [ 26%]
+test_check_service_status.py::TestCheckServiceStatus::test_list_all_services FAILED [ 27%]
+test_check_service_status.py::TestCheckServiceStatus::test_filter_services_by_pattern FAILED [ 28%]
+test_check_service_status.py::TestCheckServiceStatus::test_docker_unavailable FAILED [ 28%]
+test_check_service_status.py::TestCheckServiceStatus::test_unhealthy_services_detected FAILED [ 29%]
+test_check_service_status.py::TestCheckServiceStatus::test_stopped_services_detected FAILED [ 30%]
+test_diagnose_issues.py::TestDiagnoseIssues::test_detect_kafka_issues FAILED [ 31%]
+test_diagnose_issues.py::TestDiagnoseIssues::test_detect_postgres_issues FAILED [ 31%]
+test_diagnose_issues.py::TestDiagnoseIssues::test_detect_qdrant_issues FAILED [ 32%]
+test_diagnose_issues.py::TestDiagnoseIssues::test_no_issues_detected FAILED [ 33%]
+test_diagnose_issues.py::TestDiagnoseIssues::test_severity_classification FAILED [ 34%]
+test_error_handling.py::TestDatabaseErrorHandling::test_connection_timeout PASSED [ 34%]
+test_error_handling.py::TestDatabaseErrorHandling::test_query_syntax_error PASSED [ 35%]
+test_error_handling.py::TestDatabaseErrorHandling::test_authentication_failure FAILED [ 36%]
+test_error_handling.py::TestDatabaseErrorHandling::test_database_not_found FAILED [ 36%]
+test_error_handling.py::TestNetworkErrorHandling::test_kafka_connection_refused FAILED [ 37%]
+test_error_handling.py::TestNetworkErrorHandling::test_qdrant_timeout FAILED [ 38%]
+test_error_handling.py::TestNetworkErrorHandling::test_network_unreachable FAILED [ 39%]
+test_error_handling.py::TestDataErrorHandling::test_null_values_in_results FAILED [ 39%]
+test_error_handling.py::TestDataErrorHandling::test_empty_result_set PASSED [ 40%]
+test_error_handling.py::TestDataErrorHandling::test_missing_columns PASSED [ 41%]
+test_error_handling.py::TestDataErrorHandling::test_malformed_json FAILED [ 42%]
+test_error_handling.py::TestExceptionHandling::test_unexpected_exception FAILED [ 42%]
+test_error_handling.py::TestExceptionHandling::test_keyboard_interrupt PASSED [ 43%]
+test_error_handling.py::TestExceptionHandling::test_import_error_graceful PASSED [ 44%]
+test_error_handling.py::TestResourceCleanup::test_connection_closed_on_error PASSED [ 44%]
+test_error_handling.py::TestResourceCleanup::test_no_resource_leaks FAILED [ 45%]
+test_generate_status_report.py::TestGenerateStatusReport::test_comprehensive_report FAILED [ 46%]
+test_generate_status_report.py::TestGenerateStatusReport::test_report_with_errors FAILED [ 47%]
+test_generate_status_report.py::TestGenerateStatusReport::test_all_components_failed FAILED [ 47%]
+test_helper_modules.py::TestStatusFormatter::test_format_json_basic PASSED [ 48%]
+test_helper_modules.py::TestStatusFormatter::test_format_json_pretty_print PASSED [ 49%]
+test_helper_modules.py::TestStatusFormatter::test_format_json_with_none PASSED [ 50%]
+test_helper_modules.py::TestStatusFormatter::test_format_json_with_floats PASSED [ 50%]
+test_helper_modules.py::TestTimeframeHelper::test_import_module PASSED   [ 51%]
+test_helper_modules.py::TestDatabaseHelper::test_execute_query_success PASSED [ 52%]
+test_helper_modules.py::TestDatabaseHelper::test_execute_query_params PASSED [ 52%]
+test_helper_modules.py::TestKafkaHelper::test_check_kafka_connection_exists PASSED [ 53%]
+test_helper_modules.py::TestKafkaHelper::test_list_topics_exists PASSED  [ 54%]
+test_helper_modules.py::TestQdrantHelper::test_check_qdrant_connection_exists PASSED [ 55%]
+test_helper_modules.py::TestQdrantHelper::test_get_all_collections_stats_exists PASSED [ 55%]
+test_helper_modules.py::TestQdrantHelper::test_url_validation_exists PASSED [ 56%]
+test_input_validation.py::TestBoundsChecking::test_limit_bounds FAILED   [ 57%]
+test_input_validation.py::TestBoundsChecking::test_log_lines_bounds FAILED [ 57%]
+test_input_validation.py::TestBoundsChecking::test_top_agents_bounds FAILED [ 58%]
+test_input_validation.py::TestInputSanitization::test_numeric_validation FAILED [ 59%]
+test_input_validation.py::TestInputSanitization::test_negative_numbers_rejected FAILED [ 60%]
+test_input_validation.py::TestInputSanitization::test_floating_point_rejected FAILED [ 60%]
+test_input_validation.py::TestInputSanitization::test_scientific_notation_rejected FAILED [ 61%]
+test_input_validation.py::TestInputSanitization::test_hexadecimal_rejected FAILED [ 62%]
+test_input_validation.py::TestInputSanitization::test_whitespace_handling FAILED [ 63%]
+test_input_validation.py::TestInputSanitization::test_empty_string_rejected FAILED [ 63%]
+test_input_validation.py::TestComponentValidation::test_valid_components PASSED [ 64%]
+test_input_validation.py::TestComponentValidation::test_component_case_sensitivity PASSED [ 65%]
+test_input_validation.py::TestTimeframeValidation::test_valid_timeframes PASSED [ 65%]
+test_input_validation.py::TestTimeframeValidation::test_invalid_timeframes PASSED [ 66%]
+test_input_validation.py::TestEdgeCases::test_maximum_integer_value FAILED [ 67%]
+test_input_validation.py::TestEdgeCases::test_unicode_characters FAILED  [ 68%]
+test_input_validation.py::TestEdgeCases::test_null_byte_injection FAILED [ 68%]
+test_input_validation.py::TestEdgeCases::test_special_characters FAILED  [ 69%]
+test_sql_injection_prevention.py::TestSQLInjectionAttacks::test_union_based_injection ERROR [ 70%]
+test_sql_injection_prevention.py::TestSQLInjectionAttacks::test_boolean_based_injection ERROR [ 71%]
+test_sql_injection_prevention.py::TestSQLInjectionAttacks::test_time_based_injection ERROR [ 71%]
+test_sql_injection_prevention.py::TestSQLInjectionAttacks::test_comment_injection ERROR [ 72%]
+test_sql_injection_prevention.py::TestSQLInjectionAttacks::test_stacked_queries ERROR [ 73%]
+test_sql_injection_prevention.py::TestSQLInjectionAttacks::test_encoded_injection ERROR [ 73%]
+test_sql_injection_prevention.py::TestSQLInjectionAttacks::test_timeframe_injection ERROR [ 74%]
+test_sql_injection_prevention.py::TestSQLInjectionAttacks::test_second_order_injection ERROR [ 75%]
+test_sql_security.py::TestSQLParameterization::test_no_fstring_in_sql FAILED [ 76%]
+test_sql_security.py::TestSQLParameterization::test_no_string_concat_in_sql PASSED [ 76%]
+test_sql_security.py::TestSQLParameterization::test_uses_parameterized_queries FAILED [ 77%]
+test_sql_security.py::TestSQLParameterization::test_interval_concatenation_safe PASSED [ 78%]
+test_sql_security.py::TestSQLInjectionPrevention::test_malicious_limit_rejected FAILED [ 78%]
+test_sql_security.py::TestSQLInjectionPrevention::test_malicious_timeframe_rejected PASSED [ 79%]
+test_sql_security.py::TestSQLInjectionPrevention::test_no_raw_user_input_in_queries PASSED [ 80%]
+test_ssrf_protection.py::TestSSRFProtection::test_internal_ip_blocked FAILED [ 81%]
+test_ssrf_protection.py::TestSSRFProtection::test_file_protocol_blocked FAILED [ 81%]
+test_ssrf_protection.py::TestSSRFProtection::test_redirect_blocked PASSED [ 82%]
+test_ssrf_protection.py::TestSSRFProtection::test_unicode_encoding_blocked PASSED [ 83%]
+test_ssrf_protection.py::TestSSRFProtection::test_valid_urls_allowed FAILED [ 84%]
+test_ssrf_protection.py::TestSSRFProtection::test_port_scanning_prevented PASSED [ 84%]
+test_ssrf_protection.py::TestSSRFProtection::test_dns_rebinding_protection FAILED [ 85%]
+test_ssrf_protection.py::TestQdrantURLParsing::test_url_components_extracted PASSED [ 86%]
+test_ssrf_protection.py::TestQdrantURLParsing::test_malformed_url_rejected FAILED [ 86%]
+test_timeframe_parser.py::TestParseTimeframe::test_valid_minutes PASSED  [ 87%]
+test_timeframe_parser.py::TestParseTimeframe::test_valid_hours PASSED    [ 88%]
+test_timeframe_parser.py::TestParseTimeframe::test_valid_days PASSED     [ 89%]
+test_timeframe_parser.py::TestParseTimeframe::test_invalid_timeframe PASSED [ 89%]
+test_timeframe_parser.py::TestParseTimeframe::test_invalid_format PASSED [ 90%]
+test_timeframe_parser.py::TestParseTimeframe::test_case_sensitive PASSED [ 91%]
+test_timeframe_parser.py::TestParseTimeframe::test_empty_string PASSED   [ 92%]
+test_timeframe_parser.py::TestParseTimeframe::test_none_value PASSED     [ 92%]
+test_validators.py::TestLimitValidator::test_valid_limits FAILED         [ 93%]
+test_validators.py::TestLimitValidator::test_limit_below_minimum FAILED  [ 94%]
+test_validators.py::TestLimitValidator::test_limit_above_maximum FAILED  [ 94%]
+test_validators.py::TestLimitValidator::test_limit_invalid_type FAILED   [ 95%]
+test_validators.py::TestLogLinesValidator::test_valid_log_lines FAILED   [ 96%]
+test_validators.py::TestLogLinesValidator::test_log_lines_below_minimum FAILED [ 97%]
+test_validators.py::TestLogLinesValidator::test_log_lines_above_maximum FAILED [ 97%]
+test_validators.py::TestTopAgentsValidator::test_valid_top_agents PASSED [ 98%]
+test_validators.py::TestTopAgentsValidator::test_top_agents_below_minimum PASSED [ 99%]
+test_validators.py::TestTopAgentsValidator::test_top_agents_above_maximum FAILED [100%]
+
+==================================== ERRORS ====================================
+_____ ERROR at setup of TestSQLInjectionAttacks.test_union_based_injection _____
+E   ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+____ ERROR at setup of TestSQLInjectionAttacks.test_boolean_based_injection ____
+E   ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+_____ ERROR at setup of TestSQLInjectionAttacks.test_time_based_injection ______
+E   ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+_______ ERROR at setup of TestSQLInjectionAttacks.test_comment_injection _______
+E   ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+________ ERROR at setup of TestSQLInjectionAttacks.test_stacked_queries ________
+E   ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+_______ ERROR at setup of TestSQLInjectionAttacks.test_encoded_injection _______
+E   ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+______ ERROR at setup of TestSQLInjectionAttacks.test_timeframe_injection ______
+E   ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+____ ERROR at setup of TestSQLInjectionAttacks.test_second_order_injection _____
+E   ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+=================================== FAILURES ===================================
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/argparse.py:2608: SystemExit: 2
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/argparse.py:2608: SystemExit: 2
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_check_agent_performance.py:106: assert 0 == 1
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_check_agent_performance.py:121: Failed: DID NOT RAISE <class 'Exception'>
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_check_database_health.py:48: assert 1 == 0
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_check_database_health.py:73: assert 1 == 0
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/argparse.py:2608: SystemExit: 2
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_check_database_health.py:106: ImportError: cannot import name 'validate_log_lines' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_check_infrastructure.py:29: ImportError: cannot import name 'check_kafka' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_check_infrastructure.py:51: ImportError: cannot import name 'check_kafka' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_check_infrastructure.py:69: ImportError: cannot import name 'check_postgres' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_check_infrastructure.py:95: ImportError: cannot import name 'check_postgres' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_check_infrastructure.py:111: ImportError: cannot import name 'check_qdrant' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_check_infrastructure.py:142: ImportError: cannot import name 'check_qdrant' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1410: AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'check_kafka'
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_check_infrastructure.py:175: ImportError: cannot import name 'check_kafka' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1410: AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'check_kafka'
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1410: AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'check_kafka'
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1410: AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'list_topics'
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1410: AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'list_topics'
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1410: AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'list_topics'
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1410: AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'list_topics'
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1410: AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'get_all_collections_stats'
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1410: AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'get_all_collections_stats'
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1410: AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'get_all_collections_stats'
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1410: AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'get_all_collections_stats'
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/argparse.py:2608: SystemExit: 2
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/argparse.py:2608: SystemExit: 2
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/argparse.py:2608: SystemExit: 2
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/argparse.py:2608: SystemExit: 2
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/argparse.py:2608: SystemExit: 2
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/argparse.py:2608: SystemExit: 2
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_check_recent_activity.py:239: assert 1 == 0
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1410: AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'get_service_summary'
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1410: AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'get_service_summary'
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1410: AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'get_service_summary'
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1410: AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'get_service_summary'
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1410: AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'get_service_summary'
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1410: AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'check_infrastructure'
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1410: AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'check_infrastructure'
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1410: AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'check_infrastructure'
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1410: AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'check_infrastructure'
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1410: AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'check_infrastructure'
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_error_handling.py:64: ImportError: cannot import name 'check_postgres' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_error_handling.py:81: ImportError: cannot import name 'check_postgres' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_error_handling.py:101: ImportError: cannot import name 'check_kafka' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_error_handling.py:119: ImportError: cannot import name 'check_qdrant' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_error_handling.py:137: ImportError: cannot import name 'check_kafka' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_error_handling.py:180: assert 1 == 0
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/argparse.py:2608: SystemExit: 2
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_error_handling.py:250: ImportError: cannot import name 'check_postgres' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_error_handling.py:293: ImportError: cannot import name 'check_postgres' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1410: AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'check_infrastructure'
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1410: AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'check_infrastructure'
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/unittest/mock.py:1410: AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'check_infrastructure'
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_input_validation.py:21: ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_input_validation.py:37: ImportError: cannot import name 'validate_log_lines' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_input_validation.py:63: Failed: DID NOT RAISE <class 'Exception'>
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_input_validation.py:73: ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_input_validation.py:92: ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_input_validation.py:103: ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_input_validation.py:114: ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_input_validation.py:125: ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_input_validation.py:136: ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_input_validation.py:151: ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_input_validation.py:230: ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_input_validation.py:242: ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_input_validation.py:255: ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_input_validation.py:264: ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_sql_security.py:47: AssertionError: Found 1 files with f-string SQL queries:
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_sql_security.py:93: AssertionError: Found 6 files with SQL but no parameterization:
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_sql_security.py:128: ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_ssrf_protection.py:45: Failed: DID NOT RAISE <class 'ValueError'>
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_ssrf_protection.py:58: Failed: DID NOT RAISE <class 'ValueError'>
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_ssrf_protection.py:107: Failed: Valid URL http://example.com:6333 was rejected: Qdrant host not in whitelist: example.com. Allowed hosts: localhost, 127.0.0.1, ::1, qdrant.internal, 192.168.86.101, 192.168.86.200. Add to QDRANT_ALLOWED_HOSTS environment variable if needed.
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_ssrf_protection.py:138: AssertionError: check_qdrant_connection should validate URLs before connecting
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/urllib/parse.py:474: ValueError: Invalid IPv6 URL
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_validators.py:30: ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_validators.py:39: ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_validators.py:49: ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_validators.py:59: ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_validators.py:73: ImportError: cannot import name 'validate_log_lines' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_validators.py:81: ImportError: cannot import name 'validate_log_lines' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_validators.py:88: ImportError: cannot import name 'validate_log_lines' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/tests/test_validators.py:119: Failed: DID NOT RAISE <class 'argparse.ArgumentTypeError'>
+=========================== short test summary info ============================
+FAILED test_check_agent_performance.py::TestCheckAgentPerformance::test_top_agents_query - SystemExit: 2
+FAILED test_check_agent_performance.py::TestCheckAgentPerformance::test_timeframe_parameter - SystemExit: 2
+FAILED test_check_agent_performance.py::TestCheckAgentPerformance::test_database_error - assert 0 == 1
+FAILED test_check_agent_performance.py::TestCheckAgentPerformance::test_validate_top_agents_bounds - Failed: DID NOT RAISE <class 'Exception'>
+FAILED test_check_database_health.py::TestCheckDatabaseHealth::test_connection_pool_stats - assert 1 == 0
+FAILED test_check_database_health.py::TestCheckDatabaseHealth::test_query_performance_metrics - assert 1 == 0
+FAILED test_check_database_health.py::TestCheckDatabaseHealth::test_recent_errors_retrieval - SystemExit: 2
+FAILED test_check_database_health.py::TestCheckDatabaseHealth::test_validate_log_lines - ImportError: cannot import name 'validate_log_lines' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_check_infrastructure.py::TestCheckInfrastructure::test_check_kafka_success - ImportError: cannot import name 'check_kafka' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_check_infrastructure.py::TestCheckInfrastructure::test_check_kafka_failure - ImportError: cannot import name 'check_kafka' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_check_infrastructure.py::TestCheckInfrastructure::test_check_postgres_success - ImportError: cannot import name 'check_postgres' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_check_infrastructure.py::TestCheckInfrastructure::test_check_postgres_failure - ImportError: cannot import name 'check_postgres' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_check_infrastructure.py::TestCheckInfrastructure::test_check_qdrant_success - ImportError: cannot import name 'check_qdrant' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_check_infrastructure.py::TestCheckInfrastructure::test_check_qdrant_failure - ImportError: cannot import name 'check_qdrant' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_check_infrastructure.py::TestCheckInfrastructure::test_component_filtering - AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'check_kafka'
+FAILED test_check_infrastructure.py::TestCheckInfrastructure::test_detailed_output_flag - ImportError: cannot import name 'check_kafka' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_check_infrastructure.py::TestCheckInfrastructure::test_all_components_default - AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'check_kafka'
+FAILED test_check_infrastructure.py::TestCheckInfrastructure::test_error_handling - AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'check_kafka'
+FAILED test_check_kafka_topics.py::TestCheckKafkaTopics::test_list_all_topics - AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'list_topics'
+FAILED test_check_kafka_topics.py::TestCheckKafkaTopics::test_filter_topics_by_pattern - AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'list_topics'
+FAILED test_check_kafka_topics.py::TestCheckKafkaTopics::test_kafka_unavailable - AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'list_topics'
+FAILED test_check_kafka_topics.py::TestCheckKafkaTopics::test_empty_topic_list - AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'list_topics'
+FAILED test_check_pattern_discovery.py::TestCheckPatternDiscovery::test_get_all_collections - AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'get_all_collections_stats'
+FAILED test_check_pattern_discovery.py::TestCheckPatternDiscovery::test_empty_collections - AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'get_all_collections_stats'
+FAILED test_check_pattern_discovery.py::TestCheckPatternDiscovery::test_qdrant_unavailable - AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'get_all_collections_stats'
+FAILED test_check_pattern_discovery.py::TestCheckPatternDiscovery::test_collection_statistics - AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'get_all_collections_stats'
+FAILED test_check_recent_activity.py::TestCheckRecentActivity::test_manifest_injection_stats - SystemExit: 2
+FAILED test_check_recent_activity.py::TestCheckRecentActivity::test_routing_decision_metrics - SystemExit: 2
+FAILED test_check_recent_activity.py::TestCheckRecentActivity::test_agent_actions_breakdown - SystemExit: 2
+FAILED test_check_recent_activity.py::TestCheckRecentActivity::test_recent_errors_included - SystemExit: 2
+FAILED test_check_recent_activity.py::TestCheckRecentActivity::test_limit_parameter - SystemExit: 2
+FAILED test_check_recent_activity.py::TestCheckRecentActivity::test_timeframe_validation - SystemExit: 2
+FAILED test_check_recent_activity.py::TestCheckRecentActivity::test_null_values_handled - assert 1 == 0
+FAILED test_check_service_status.py::TestCheckServiceStatus::test_list_all_services - AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'get_service_summary'
+FAILED test_check_service_status.py::TestCheckServiceStatus::test_filter_services_by_pattern - AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'get_service_summary'
+FAILED test_check_service_status.py::TestCheckServiceStatus::test_docker_unavailable - AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'get_service_summary'
+FAILED test_check_service_status.py::TestCheckServiceStatus::test_unhealthy_services_detected - AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'get_service_summary'
+FAILED test_check_service_status.py::TestCheckServiceStatus::test_stopped_services_detected - AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'get_service_summary'
+FAILED test_diagnose_issues.py::TestDiagnoseIssues::test_detect_kafka_issues - AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'check_infrastructure'
+FAILED test_diagnose_issues.py::TestDiagnoseIssues::test_detect_postgres_issues - AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'check_infrastructure'
+FAILED test_diagnose_issues.py::TestDiagnoseIssues::test_detect_qdrant_issues - AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'check_infrastructure'
+FAILED test_diagnose_issues.py::TestDiagnoseIssues::test_no_issues_detected - AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'check_infrastructure'
+FAILED test_diagnose_issues.py::TestDiagnoseIssues::test_severity_classification - AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'check_infrastructure'
+FAILED test_error_handling.py::TestDatabaseErrorHandling::test_authentication_failure - ImportError: cannot import name 'check_postgres' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_error_handling.py::TestDatabaseErrorHandling::test_database_not_found - ImportError: cannot import name 'check_postgres' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_error_handling.py::TestNetworkErrorHandling::test_kafka_connection_refused - ImportError: cannot import name 'check_kafka' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_error_handling.py::TestNetworkErrorHandling::test_qdrant_timeout - ImportError: cannot import name 'check_qdrant' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_error_handling.py::TestNetworkErrorHandling::test_network_unreachable - ImportError: cannot import name 'check_kafka' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_error_handling.py::TestDataErrorHandling::test_null_values_in_results - assert 1 == 0
+FAILED test_error_handling.py::TestDataErrorHandling::test_malformed_json - SystemExit: 2
+FAILED test_error_handling.py::TestExceptionHandling::test_unexpected_exception - ImportError: cannot import name 'check_postgres' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_error_handling.py::TestResourceCleanup::test_no_resource_leaks - ImportError: cannot import name 'check_postgres' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_generate_status_report.py::TestGenerateStatusReport::test_comprehensive_report - AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'check_infrastructure'
+FAILED test_generate_status_report.py::TestGenerateStatusReport::test_report_with_errors - AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'check_infrastructure'
+FAILED test_generate_status_report.py::TestGenerateStatusReport::test_all_components_failed - AttributeError: <module 'execute' from '/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py'> does not have the attribute 'check_infrastructure'
+FAILED test_input_validation.py::TestBoundsChecking::test_limit_bounds - ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_input_validation.py::TestBoundsChecking::test_log_lines_bounds - ImportError: cannot import name 'validate_log_lines' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_input_validation.py::TestBoundsChecking::test_top_agents_bounds - Failed: DID NOT RAISE <class 'Exception'>
+FAILED test_input_validation.py::TestInputSanitization::test_numeric_validation - ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_input_validation.py::TestInputSanitization::test_negative_numbers_rejected - ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_input_validation.py::TestInputSanitization::test_floating_point_rejected - ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_input_validation.py::TestInputSanitization::test_scientific_notation_rejected - ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_input_validation.py::TestInputSanitization::test_hexadecimal_rejected - ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_input_validation.py::TestInputSanitization::test_whitespace_handling - ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_input_validation.py::TestInputSanitization::test_empty_string_rejected - ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_input_validation.py::TestEdgeCases::test_maximum_integer_value - ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_input_validation.py::TestEdgeCases::test_unicode_characters - ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_input_validation.py::TestEdgeCases::test_null_byte_injection - ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_input_validation.py::TestEdgeCases::test_special_characters - ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_sql_security.py::TestSQLParameterization::test_no_fstring_in_sql - AssertionError: Found 1 files with f-string SQL queries:
+    - generate-status-report/execute.py: 3 violations
+assert 1 == 0
+ +  where 1 = len([{'file': 'execute.py', 'skill': 'generate-status-report', 'count': 3}])
+FAILED test_sql_security.py::TestSQLParameterization::test_uses_parameterized_queries - AssertionError: Found 6 files with SQL but no parameterization:
+    - check-database-health
+    - check-infrastructure
+    - check-kafka-topics
+    - check-pattern-discovery
+    - check-service-status
+    - check-system-health
+assert 6 == 0
+ +  where 6 = len({'check-database-health', 'check-service-status', 'check-infrastructure', 'check-kafka-topics', 'check-system-health', 'check-pattern-discovery'})
+FAILED test_sql_security.py::TestSQLInjectionPrevention::test_malicious_limit_rejected - ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_ssrf_protection.py::TestSSRFProtection::test_internal_ip_blocked - Failed: DID NOT RAISE <class 'ValueError'>
+FAILED test_ssrf_protection.py::TestSSRFProtection::test_file_protocol_blocked - Failed: DID NOT RAISE <class 'ValueError'>
+FAILED test_ssrf_protection.py::TestSSRFProtection::test_valid_urls_allowed - Failed: Valid URL http://example.com:6333 was rejected: Qdrant host not in whitelist: example.com. Allowed hosts: localhost, 127.0.0.1, ::1, qdrant.internal, 192.168.86.101, 192.168.86.200. Add to QDRANT_ALLOWED_HOSTS environment variable if needed.
+FAILED test_ssrf_protection.py::TestSSRFProtection::test_dns_rebinding_protection - AssertionError: check_qdrant_connection should validate URLs before connecting
+assert ('validate' in 'def check_qdrant_connection() -> dict[str, any]:\n    """\n    check if qdrant is reachable and responsive.\n\n    returns:\n        dictionary with connection status\n    """\n    qdrant_url = get_qdrant_url()\n\n    try:\n        req = urllib.request.request(f"{qdrant_url}/", method="get")  # noqa: s310\n        with urllib.request.urlopen(  # noqa: s310\n            req, timeout=get_timeout_seconds()\n        ) as response:\n            if response.status == 200:\n                return {\n                    "status": "connected",\n                    "url": qdrant_url,\n                    "reachable": true,\n                    "error": none,\n                }\n            else:\n                return {\n                    "status": "error",\n                    "url": qdrant_url,\n                    "reachable": false,\n                    "error": f"http {response.status}",\n                }\n    except urllib.error.urlerror as e:\n        return {\n            "status": "unreachable",\n            "url": qdrant_url,\n            "reachable": false,\n            "error": str(e.reason),\n        }\n    except exception as e:\n        return {\n            "status": "error",\n            "url": qdrant_url,\n            "reachable": false,\n            "error": str(e),\n        }\n' or 'parse' in 'def check_qdrant_connection() -> dict[str, any]:\n    """\n    check if qdrant is reachable and responsive.\n\n    returns:\n        dictionary with connection status\n    """\n    qdrant_url = get_qdrant_url()\n\n    try:\n        req = urllib.request.request(f"{qdrant_url}/", method="get")  # noqa: s310\n        with urllib.request.urlopen(  # noqa: s310\n            req, timeout=get_timeout_seconds()\n        ) as response:\n            if response.status == 200:\n                return {\n                    "status": "connected",\n                    "url": qdrant_url,\n                    "reachable": true,\n                    "error": none,\n                }\n            else:\n                return {\n                    "status": "error",\n                    "url": qdrant_url,\n                    "reachable": false,\n                    "error": f"http {response.status}",\n                }\n    except urllib.error.urlerror as e:\n        return {\n            "status": "unreachable",\n            "url": qdrant_url,\n            "reachable": false,\n            "error": str(e.reason),\n        }\n    except exception as e:\n        return {\n            "status": "error",\n            "url": qdrant_url,\n            "reachable": false,\n            "error": str(e),\n        }\n')
+ +  where 'def check_qdrant_connection() -> dict[str, any]:\n    """\n    check if qdrant is reachable and responsive.\n\n    returns:\n        dictionary with connection status\n    """\n    qdrant_url = get_qdrant_url()\n\n    try:\n        req = urllib.request.request(f"{qdrant_url}/", method="get")  # noqa: s310\n        with urllib.request.urlopen(  # noqa: s310\n            req, timeout=get_timeout_seconds()\n        ) as response:\n            if response.status == 200:\n                return {\n                    "status": "connected",\n                    "url": qdrant_url,\n                    "reachable": true,\n                    "error": none,\n                }\n            else:\n                return {\n                    "status": "error",\n                    "url": qdrant_url,\n                    "reachable": false,\n                    "error": f"http {response.status}",\n                }\n    except urllib.error.urlerror as e:\n        return {\n            "status": "unreachable",\n            "url": qdrant_url,\n            "reachable": false,\n            "error": str(e.reason),\n        }\n    except exception as e:\n        return {\n            "status": "error",\n            "url": qdrant_url,\n            "reachable": false,\n            "error": str(e),\n        }\n' = <built-in method lower of str object at 0x106888200>()
+ +    where <built-in method lower of str object at 0x106888200> = 'def check_qdrant_connection() -> Dict[str, Any]:\n    """\n    Check if Qdrant is reachable and responsive.\n\n    Returns:\n        Dictionary with connection status\n    """\n    qdrant_url = get_qdrant_url()\n\n    try:\n        req = urllib.request.Request(f"{qdrant_url}/", method="GET")  # noqa: S310\n        with urllib.request.urlopen(  # noqa: S310\n            req, timeout=get_timeout_seconds()\n        ) as response:\n            if response.status == 200:\n                return {\n                    "status": "connected",\n                    "url": qdrant_url,\n                    "reachable": True,\n                    "error": None,\n                }\n            else:\n                return {\n                    "status": "error",\n                    "url": qdrant_url,\n                    "reachable": False,\n                    "error": f"HTTP {response.status}",\n                }\n    except urllib.error.URLError as e:\n        return {\n            "status": "unreachable",\n            "url": qdrant_url,\n            "reachable": False,\n            "error": str(e.reason),\n        }\n    except Exception as e:\n        return {\n            "status": "error",\n            "url": qdrant_url,\n            "reachable": False,\n            "error": str(e),\n        }\n'.lower
+ +  and   'def check_qdrant_connection() -> dict[str, any]:\n    """\n    check if qdrant is reachable and responsive.\n\n    returns:\n        dictionary with connection status\n    """\n    qdrant_url = get_qdrant_url()\n\n    try:\n        req = urllib.request.request(f"{qdrant_url}/", method="get")  # noqa: s310\n        with urllib.request.urlopen(  # noqa: s310\n            req, timeout=get_timeout_seconds()\n        ) as response:\n            if response.status == 200:\n                return {\n                    "status": "connected",\n                    "url": qdrant_url,\n                    "reachable": true,\n                    "error": none,\n                }\n            else:\n                return {\n                    "status": "error",\n                    "url": qdrant_url,\n                    "reachable": false,\n                    "error": f"http {response.status}",\n                }\n    except urllib.error.urlerror as e:\n        return {\n            "status": "unreachable",\n            "url": qdrant_url,\n            "reachable": false,\n            "error": str(e.reason),\n        }\n    except exception as e:\n        return {\n            "status": "error",\n            "url": qdrant_url,\n            "reachable": false,\n            "error": str(e),\n        }\n' = <built-in method lower of str object at 0x106888200>()
+ +    where <built-in method lower of str object at 0x106888200> = 'def check_qdrant_connection() -> Dict[str, Any]:\n    """\n    Check if Qdrant is reachable and responsive.\n\n    Returns:\n        Dictionary with connection status\n    """\n    qdrant_url = get_qdrant_url()\n\n    try:\n        req = urllib.request.Request(f"{qdrant_url}/", method="GET")  # noqa: S310\n        with urllib.request.urlopen(  # noqa: S310\n            req, timeout=get_timeout_seconds()\n        ) as response:\n            if response.status == 200:\n                return {\n                    "status": "connected",\n                    "url": qdrant_url,\n                    "reachable": True,\n                    "error": None,\n                }\n            else:\n                return {\n                    "status": "error",\n                    "url": qdrant_url,\n                    "reachable": False,\n                    "error": f"HTTP {response.status}",\n                }\n    except urllib.error.URLError as e:\n        return {\n            "status": "unreachable",\n            "url": qdrant_url,\n            "reachable": False,\n            "error": str(e.reason),\n        }\n    except Exception as e:\n        return {\n            "status": "error",\n            "url": qdrant_url,\n            "reachable": False,\n            "error": str(e),\n        }\n'.lower
+FAILED test_ssrf_protection.py::TestQdrantURLParsing::test_malformed_url_rejected - ValueError: Invalid IPv6 URL
+FAILED test_validators.py::TestLimitValidator::test_valid_limits - ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_validators.py::TestLimitValidator::test_limit_below_minimum - ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_validators.py::TestLimitValidator::test_limit_above_maximum - ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_validators.py::TestLimitValidator::test_limit_invalid_type - ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_validators.py::TestLogLinesValidator::test_valid_log_lines - ImportError: cannot import name 'validate_log_lines' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_validators.py::TestLogLinesValidator::test_log_lines_below_minimum - ImportError: cannot import name 'validate_log_lines' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_validators.py::TestLogLinesValidator::test_log_lines_above_maximum - ImportError: cannot import name 'validate_log_lines' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+FAILED test_validators.py::TestTopAgentsValidator::test_top_agents_above_maximum - Failed: DID NOT RAISE <class 'argparse.ArgumentTypeError'>
+ERROR test_sql_injection_prevention.py::TestSQLInjectionAttacks::test_union_based_injection - ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+ERROR test_sql_injection_prevention.py::TestSQLInjectionAttacks::test_boolean_based_injection - ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+ERROR test_sql_injection_prevention.py::TestSQLInjectionAttacks::test_time_based_injection - ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+ERROR test_sql_injection_prevention.py::TestSQLInjectionAttacks::test_comment_injection - ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+ERROR test_sql_injection_prevention.py::TestSQLInjectionAttacks::test_stacked_queries - ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+ERROR test_sql_injection_prevention.py::TestSQLInjectionAttacks::test_encoded_injection - ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+ERROR test_sql_injection_prevention.py::TestSQLInjectionAttacks::test_timeframe_injection - ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+ERROR test_sql_injection_prevention.py::TestSQLInjectionAttacks::test_second_order_injection - ImportError: cannot import name 'validate_limit' from 'execute' (/Volumes/PRO-G40/Code/omniclaude/claude-artifacts/skills/system-status/check-agent-performance/execute.py)
+=================== 85 failed, 45 passed, 8 errors in 0.24s ====================
