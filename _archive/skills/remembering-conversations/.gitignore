@@ -1,0 +1,16 @@
+# Editor files
+*.swp
+.*.swp
+*~
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Node modules (for remembering-conversations tool)
+node_modules/

@@ -1,102 +1,27 @@
 #!/bin/bash
-# SessionStart Hook - Portable Plugin Version
-# Captures session initialization intelligence
+# SessionStart Hook - ONEX Event Emission Stub
+# OMN-1399: Schema definition only, emission in OMN-1400
 # Performance target: <50ms execution time
 
 set -euo pipefail
 
-# Portable Plugin Configuration
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
-HOOKS_DIR="${PLUGIN_ROOT}/hooks"
-HOOKS_LIB="${HOOKS_DIR}/lib"
-LOG_FILE="${HOOKS_DIR}/logs/hook-session-start.log"
-
-# Detect project root
-PROJECT_ROOT="${PLUGIN_ROOT}/../.."
-if [[ -f "${PROJECT_ROOT}/.env" ]]; then
-    PROJECT_ROOT="$(cd "${PROJECT_ROOT}" && pwd)"
-elif [[ -n "${CLAUDE_PROJECT_DIR:-}" ]]; then
-    PROJECT_ROOT="${CLAUDE_PROJECT_DIR}"
-else
-    PROJECT_ROOT="$(pwd)"
-fi
-
-# Ensure log directory exists
-mkdir -p "$(dirname "$LOG_FILE")"
-
-# Python environment detection
-find_python() {
-    if command -v poetry >/dev/null 2>&1 && [[ -f "${PROJECT_ROOT}/pyproject.toml" ]]; then
-        POETRY_VENV="$(poetry env info --path 2>/dev/null || true)"
-        if [[ -n "$POETRY_VENV" && -f "$POETRY_VENV/bin/python3" ]]; then
-            echo "$POETRY_VENV/bin/python3"
-            return
-        fi
-    fi
-    if [[ -f "${PLUGIN_ROOT}/lib/.venv/bin/python3" ]]; then
-        echo "${PLUGIN_ROOT}/lib/.venv/bin/python3"
-        return
-    fi
-    if [[ -f "${PROJECT_ROOT}/.venv/bin/python3" ]]; then
-        echo "${PROJECT_ROOT}/.venv/bin/python3"
-        return
-    fi
-    echo "python3"
-}
-
-PYTHON_CMD="$(find_python)"
-export PYTHONPATH="${PROJECT_ROOT}:${PLUGIN_ROOT}/lib:${HOOKS_LIB}:${PYTHONPATH:-}"
-
-# Load environment variables
-if [[ -f "$PROJECT_ROOT/.env" ]]; then
-    set -a
-    source "$PROJECT_ROOT/.env" 2>/dev/null || true
-    set +a
-fi
-
-# Performance tracking
-START_TIME=$($PYTHON_CMD -c "import time; print(int(time.time() * 1000))")
-
-# Read stdin
+# Read hook input from stdin
 INPUT=$(cat)
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] SessionStart hook triggered (plugin mode)" >> "$LOG_FILE"
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Using Python: $PYTHON_CMD" >> "$LOG_FILE"
+# Log for debugging (optional)
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+HOOKS_DIR="${PLUGIN_ROOT}/hooks"
+LOG_FILE="${HOOKS_DIR}/logs/hook-session-start.log"
+mkdir -p "$(dirname "$LOG_FILE")"
 
-# Extract session information
-SESSION_ID=$(echo "$INPUT" | jq -r '.sessionId // .session_id // ""')
-PROJECT_PATH=$(echo "$INPUT" | jq -r '.projectPath // .project_path // ""')
-CWD=$(echo "$INPUT" | jq -r '.cwd // ""' || pwd)
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] SessionStart hook triggered (stub mode)" >> "$LOG_FILE"
 
-if [[ -z "$CWD" ]]; then
-    CWD=$(pwd)
-fi
-
+# Extract session info for logging
+SESSION_ID=$(echo "$INPUT" | jq -r '.sessionId // .session_id // "unknown"' 2>/dev/null || echo "unknown")
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Session ID: $SESSION_ID" >> "$LOG_FILE"
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Project Path: $PROJECT_PATH" >> "$LOG_FILE"
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] CWD: $CWD" >> "$LOG_FILE"
 
-# Log session start to database (async, non-blocking)
-if [[ -f "${HOOKS_LIB}/session_intelligence.py" ]]; then
-    (
-        "$PYTHON_CMD" "${HOOKS_LIB}/session_intelligence.py" \
-            --mode start \
-            --session-id "$SESSION_ID" \
-            --project-path "$PROJECT_PATH" \
-            --cwd "$CWD" \
-            >> "$LOG_FILE" 2>&1
-    ) &
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Session intelligence logging started" >> "$LOG_FILE"
-fi
+# OMN-1400 will add: Event emission to Kafka using ModelSessionStarted schema
 
-# Performance tracking
-END_TIME=$($PYTHON_CMD -c "import time; print(int(time.time() * 1000))")
-ELAPSED_MS=$((END_TIME - START_TIME))
-
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Hook execution time: ${ELAPSED_MS}ms" >> "$LOG_FILE"
-
-if [[ $ELAPSED_MS -gt 50 ]]; then
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] WARNING: Exceeded 50ms target: ${ELAPSED_MS}ms" >> "$LOG_FILE"
-fi
-
+# Return valid response (continue hook execution)
+echo '{"continue": true}'
 exit 0

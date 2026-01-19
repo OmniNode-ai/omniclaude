@@ -8,8 +8,9 @@ repos:
       - id: end-of-file-fixer
         exclude: '\.github/workflows(?:-generated)?/.*\.ya?ml$'
       - id: check-yaml
-        exclude: '\.github/workflows/.*\.ya?ml$|agents/definitions/.*\.yaml$|agents/templates/.*\.yaml$'
+        exclude: '\.github/workflows/.*\.ya?ml$|agents/definitions/.*\.yaml$|agents/templates/.*\.yaml$|^_archive/.*'
       - id: check-added-large-files
+        exclude: '^_archive/.*'
       - id: check-merge-conflict
       - id: check-toml
 
@@ -28,7 +29,7 @@ repos:
         entry: poetry run ruff check --fix
         language: system
         types: [python]
-        exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|agents/templates/.*|agents/parallel_execution/templates/.*'
+        exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|^_archive/.*'
         stages: [pre-commit]
 
       - id: black-format
@@ -36,7 +37,7 @@ repos:
         entry: poetry run black
         language: system
         types: [python]
-        exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|agents/templates/.*|agents/parallel_execution/templates/.*'
+        exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|^_archive/.*'
         stages: [pre-commit]
 
       - id: ruff-check
@@ -44,12 +45,12 @@ repos:
         entry: poetry run ruff check
         language: system
         types: [python]
-        exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|agents/templates/.*|agents/parallel_execution/templates/.*'
+        exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|^_archive/.*'
         stages: [pre-commit]
 
       - id: bandit-security
         name: bandit (security scanner - match CI)
-        entry: bash -c 'poetry run bandit -r agents/ claude/ -c .bandit || true'
+        entry: bash -c 'poetry run bandit -r src/ -c pyproject.toml --exclude _archive/ || true'
         language: system
         types: [python]
         stages: [pre-commit]
@@ -57,7 +58,7 @@ repos:
 
       - id: mypy-typecheck
         name: mypy (type checking - match CI)
-        entry: bash -c 'poetry run mypy agents/ --ignore-missing-imports || true'
+        entry: bash -c 'poetry run mypy src/ --ignore-missing-imports || true'
         language: system
         types: [python]
         stages: [pre-commit]

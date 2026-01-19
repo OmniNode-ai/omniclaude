@@ -1,0 +1,453 @@
+#!/usr/bin/env bash
+
+# Repository Digest Generator
+# Creates a text summary of a git repository or specific directory
+# Version: 2.3 (macOS optimized)
+
+set -e
+
+# Default settings
+MAX_FILE_SIZE=100000   # Skip files larger than 100KB
+MAX_TOTAL_SIZE=1000000 # Target maximum output size (~1MB)
+CHARS_PER_TOKEN=4      # Estimated characters per token for English text
+TARGET_DIR=""          # Default to whole repo
+EXCLUDE_PATTERNS=()    # Array of patterns to exclude
+
+# Function to check if we're in a git repository
+check_git_repo() {
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "Error: Not in a git repository"
+    exit 1
+  fi
+}
+
+# Function to format file size
+format_file_size() {
+  local size=$1
+  if [[ $size -gt 1048576 ]]; then # 1 MB
+    printf "%.2fMB" "$(echo "scale=2; $size/1048576" | bc)"
+  elif [[ $size -gt 1024 ]]; then # 1 KB
+    printf "%.2fKB" "$(echo "scale=2; $size/1024" | bc)"
+  else
+    printf "%dB" "$size"
+  fi
+}
+
+# Calculate estimated token count from character count
+estimate_tokens() {
+  local chars=$1
+  echo $((chars / CHARS_PER_TOKEN))
+}
+
+# Improved binary detection for macOS
+is_binary() {
+  local file="$1"
+
+  # Skip empty files
+  if [[ ! -s "$file" ]]; then
+    return 1
+  fi
+
+  # Check git attributes if possible (can override other checks)
+  if git check-attr --all "$file" 2>/dev/null | grep -q "binary: set"; then
+    return 0
+  fi
+
+  # Common binary extensions
+  local binary_extensions=".png .jpg .jpeg .gif .bmp .ico .webp .mp3 .mp4 .wav .flac .ogg .avi .mov .zip .tar .gz .7z .rar .jar .war .class .exe .dll .so .dylib .pyc .o .a .obj .lib .bin .pdf .ttf .otf .eot .woff .woff2 .svg"
+
+  local ext=".${file##*.}"
+  if [[ "$file" != "$ext" && "$binary_extensions" == *"$ext"* ]]; then
+    return 0
+  fi
+
+  # Use the file command to detect binary files
+  if file -b --mime-encoding "$file" | grep -q -v "utf-8\|us-ascii\|ascii"; then
+    return 0
+  fi
+
+  # Additional check for binary content within first 1000 bytes
+  if head -c 1000 "$file" | tr -d '[:print:][:space:]' | grep -q '[^ ]'; then
+    return 0
+  fi
+
+  return 1
+}
+
+# Check if a file matches any exclusion pattern
+is_excluded() {
+  local file="$1"
+
+  # If there are no exclusion patterns, nothing is excluded
+  if [ ${#EXCLUDE_PATTERNS[@]} -eq 0 ]; then
+    return 1
+  fi
+
+  # Check each exclusion pattern
+  for pattern in "${EXCLUDE_PATTERNS[@]}"; do
+    # Simple glob matching using case statement
+    case "$file" in
+    $pattern)
+      return 0 # File matches exclusion pattern
+      ;;
+    esac
+
+    # Also check if file starts with the pattern (for directory exclusions)
+    if [[ "$pattern" == */ && "$file" == ${pattern}* ]]; then
+      return 0
+    fi
+  done
+
+  return 1 # No exclusion pattern matched
+}
+
+# Get list of files to process (filtered by target dir and exclusions)
+get_file_list() {
+  if [[ -n "$TARGET_DIR" ]]; then
+    # Normalize path (ensure it ends with slash for proper prefix matching)
+    if [[ "$TARGET_DIR" != */ && -d "$TARGET_DIR" ]]; then
+      TARGET_DIR="$TARGET_DIR/"
+    fi
+
+    # Get files only within the target directory and filter exclusions
+    git ls-files "$TARGET_DIR" | while read -r file; do
+      if ! is_excluded "$file"; then
+        echo "$file"
+      fi
+    done
+  else
+    # Get all files (except excluded patterns)
+    git ls-files | while read -r file; do
+      if ! is_excluded "$file"; then
+        echo "$file"
+      fi
+    done
+  fi
+}
+
+# Function to generate repository summary
+generate_summary() {
+  echo -e "\n## Repository Summary"
+  echo '```'
+
+  # Count files
+  local all_files=$(get_file_list | wc -l | tr -d ' ')
+  echo "Total files: $all_files"
+
+  # Setting scope text
+  local scope_text="repository"
+  if [[ -n "$TARGET_DIR" ]]; then
+    scope_text="directory '$TARGET_DIR'"
+  fi
+
+  # Count only non-binary files for lines of code
+  local loc=0
+  local non_binary_files=0
+
+  while IFS= read -r file; do
+    if [[ -f "$file" ]]; then
+      if ! is_binary "$file"; then
+        file_size=$(stat -f %z "$file")
+
+        # Skip large files
+        if [[ $file_size -le $MAX_FILE_SIZE ]]; then
+          non_binary_files=$((non_binary_files + 1))
+          loc=$((loc + $(wc -l <"$file")))
+        fi
+      fi
+    fi
+  done < <(get_file_list)
+
+  echo "Text files: $non_binary_files"
+  echo "Total lines of code (text files): $loc"
+
+  # Only include git stats for whole repo or if we're at repo root
+  if [[ -z "$TARGET_DIR" || "$TARGET_DIR" == "./" ]]; then
+    echo "Contributors: $(git shortlog -sn --no-merges | wc -l | tr -d ' ')"
+    echo "First commit: $(git log --reverse --format="%cr" | head -n 1)"
+    echo "Latest commit: $(git log -1 --format="%cr")"
+
+    # Commit frequency if repo has sufficient history
+    if [[ $(git log --since='1 year ago' --format=oneline | wc -l) -gt 0 ]]; then
+      echo "Average commits per month: $(git log --format=oneline --since='1 year ago' | wc -l | awk '{print int($1/12)}')"
+    fi
+  fi
+
+  # File type statistics (excluding binary files)
+  echo -e "\nFile types (excluding binary files):"
+  get_file_list | while read -r file; do
+    if [[ -f "$file" ]] && ! is_binary "$file"; then
+      echo "$file"
+    fi
+  done | grep -v "^$" | sed -E 's/.*\.([^.]+)$/\1/' | sort | uniq -c | sort -nr | head -10
+  echo '```'
+}
+
+# Function to generate detailed directory structure
+generate_directory_structure() {
+  echo -e "\n## Directory Structure with File Sizes"
+  echo '```'
+
+  # Generate tree with file sizes
+  get_file_list | sort | while read -r file; do
+    if [[ -f "$file" ]]; then
+      local size=$(stat -f %z "$file" 2>/dev/null)
+      if [[ $size -le $MAX_FILE_SIZE ]]; then
+        hr_size=$(format_file_size "$size")
+        if is_binary "$file"; then
+          binary_label="[BINARY]"
+          printf "%-60s %8s\n" "$file" "$binary_label"
+        else
+          printf "%-60s %8s\n" "$file" "$hr_size"
+        fi
+      fi
+    fi
+  done
+
+  echo '```'
+
+  # Add directory summary
+  echo -e "\n### Directory Summary"
+  echo '```'
+  # Use our file list to get directories that actually exist
+  get_file_list | xargs -n1 dirname 2>/dev/null | sort | uniq -c | sort -nr | head -20 |
+    while read count dir; do
+      echo "${dir} (${count} files)"
+    done
+  echo '```'
+}
+
+# Function to show .gitignore patterns
+show_gitignore() {
+  echo -e "\n## Git Ignore Patterns"
+  echo '```'
+  # Find the most relevant .gitignore file
+  local gitignore_path=""
+
+  if [[ -n "$TARGET_DIR" && -f "$TARGET_DIR/.gitignore" ]]; then
+    gitignore_path="$TARGET_DIR/.gitignore"
+  elif [[ -f ".gitignore" ]]; then
+    gitignore_path=".gitignore"
+  fi
+
+  if [[ -n "$gitignore_path" ]]; then
+    cat "$gitignore_path"
+  else
+    echo "No .gitignore file found"
+  fi
+  echo '```'
+}
+
+# List exclusion patterns
+show_exclusions() {
+  if [ ${#EXCLUDE_PATTERNS[@]} -gt 0 ]; then
+    echo -e "\n## Excluded Patterns"
+    echo '```'
+    for pattern in "${EXCLUDE_PATTERNS[@]}"; do
+      echo "$pattern"
+    done
+    echo '```'
+  fi
+}
+
+# Create the digest
+create_digest() {
+  local total_size=0
+  local total_tokens=0
+  local digest=""
+
+  # Set title based on whether we're looking at whole repo or specific dir
+  if [[ -n "$TARGET_DIR" ]]; then
+    digest+="# Directory Digest: $TARGET_DIR\n"
+  else
+    digest+="# Repository Digest\n"
+  fi
+
+  digest+="Generated on: $(date)\n"
+  digest+="\n## Repository Information\n"
+  digest+='```\n'
+  digest+="Remote origin: $(git remote get-url origin 2>/dev/null || echo 'No remote origin')\n"
+  digest+="Current branch: $(git branch --show-current)\n"
+  digest+="Last commit: $(git log -1 --pretty=format:'%h - %s (%cr) <%an>')\n"
+
+  # If targeting a directory, add its specific last commit
+  if [[ -n "$TARGET_DIR" ]]; then
+    digest+="Last commit in $TARGET_DIR: $(git log -1 --pretty=format:'%h - %s (%cr) <%an>' -- "$TARGET_DIR")\n"
+  fi
+
+  digest+='```\n'
+
+  # Add exclusion information
+  digest+=$(show_exclusions)
+
+  # Generate summary
+  digest+=$(generate_summary)
+
+  # Generate directory structure
+  digest+=$(generate_directory_structure)
+
+  # Git ignore patterns
+  digest+=$(show_gitignore)
+
+  # File contents (excluding binary files)
+  digest+="\n## File Contents\n"
+  local content_size=0
+  local file_count=0
+
+  while IFS= read -r file; do
+    if [[ $content_size -ge $MAX_TOTAL_SIZE ]]; then
+      digest+="\n### [TRUNCATED: Size limit reached]\n"
+      break
+    fi
+
+    if [[ -f "$file" ]]; then
+      local file_size=$(stat -f %z "$file" 2>/dev/null)
+
+      # Skip large files
+      if [[ $file_size -gt $MAX_FILE_SIZE ]]; then
+        continue
+      fi
+
+      if ! is_binary "$file"; then
+        digest+="\n### $file\n"
+        digest+='```\n'
+        # Add file size and last modified date
+        local mod_date=$(stat -f "%Sm" "$file")
+        local est_tokens=$(estimate_tokens "$file_size")
+        digest+="Size: $(format_file_size "$file_size"), Est. tokens: $est_tokens, Last modified: $mod_date\n\n"
+
+        # Get file contents and append to digest
+        local content=$(cat "$file")
+        digest+="$content\n"
+        digest+='```\n'
+
+        file_count=$((file_count + 1))
+        content_size=$((content_size + file_size + 100)) # Add overhead for formatting
+        total_tokens=$((total_tokens + est_tokens))
+
+        # Break if we've reached size limit
+        if [[ $content_size -ge $MAX_TOTAL_SIZE ]]; then
+          digest+="\n### [TRUNCATED: Size limit reached]\n"
+          break
+        fi
+      fi
+    fi
+  done < <(get_file_list | sort)
+
+  # Add token count summary at the end
+  total_size=${#digest}
+  total_tokens=$(estimate_tokens "$total_size")
+  digest+="\n## Summary Statistics\n"
+  digest+="Total size: $(format_file_size "$total_size")\n"
+  digest+="Estimated token count: $total_tokens\n"
+  digest+="Files included: $file_count\n"
+
+  if [[ -n "$TARGET_DIR" ]]; then
+    digest+="Directory: $TARGET_DIR\n"
+  fi
+
+  if [ ${#EXCLUDE_PATTERNS[@]} -gt 0 ]; then
+    digest+="Exclusion patterns: ${#EXCLUDE_PATTERNS[@]}\n"
+  fi
+
+  echo -e "$digest"
+}
+
+# Display help message
+show_help() {
+  echo "Usage: $0 [OPTIONS] [DIRECTORY]"
+  echo
+  echo "Creates a digest of a git repository or specific directory."
+  echo
+  echo "Options:"
+  echo "  --max-file-size BYTES   Maximum size of individual files to include"
+  echo "  --max-total-size BYTES  Maximum total size of the digest"
+  echo "  --chars-per-token N     Number of characters per token (for estimation)"
+  echo "  --exclude PATTERN       Exclude files/dirs matching pattern (can be used multiple times)"
+  echo "  --help, -h              Show this help message"
+  echo
+  echo "Examples:"
+  echo "  $0                                # Digest entire repo"
+  echo "  $0 src/                           # Digest only the src directory"
+  echo "  $0 --exclude 'node_modules/*'     # Exclude node_modules directory"
+  echo "  $0 --exclude '*.json' --exclude '*.md' src/  # Multiple exclusions"
+  echo
+  echo "Glob patterns are supported for exclusions. Add trailing slash to exclude directories."
+  echo "  node_modules/*   # Exclude everything in node_modules/"
+  echo "  *.json           # Exclude all JSON files"
+  echo "  test_*           # Exclude files/dirs starting with test_"
+  exit 0
+}
+
+# Process arguments
+process_args() {
+  while [[ "$#" -gt 0 ]]; do
+    case $1 in
+    --max-file-size)
+      MAX_FILE_SIZE="$2"
+      shift 2
+      ;;
+    --max-total-size)
+      MAX_TOTAL_SIZE="$2"
+      shift 2
+      ;;
+    --chars-per-token)
+      CHARS_PER_TOKEN="$2"
+      shift 2
+      ;;
+    --exclude)
+      EXCLUDE_PATTERNS+=("$2")
+      shift 2
+      ;;
+    --help | -h)
+      show_help
+      ;;
+    -*)
+      echo "Unknown option: $1"
+      echo "Use --help for usage information"
+      exit 1
+      ;;
+    *)
+      # First non-option argument is the target directory
+      if [[ -z "$TARGET_DIR" ]]; then
+        TARGET_DIR="$1"
+        # Validate the directory exists
+        if [[ ! -d "$TARGET_DIR" ]]; then
+          echo "Error: Directory '$TARGET_DIR' does not exist"
+          exit 1
+        fi
+      else
+        echo "Error: Only one directory can be specified"
+        exit 1
+      fi
+      shift
+      ;;
+    esac
+  done
+}
+
+# Main execution
+check_git_repo
+process_args "$@"
+
+digest=$(create_digest)
+digest_size=$(echo -n "$digest" | wc -c | tr -d ' ')
+formatted_size=$(format_file_size "$digest_size")
+token_estimate=$(estimate_tokens "$digest_size")
+
+# Generate context message
+context_msg="Repository"
+if [[ -n "$TARGET_DIR" ]]; then
+  context_msg="Directory '$TARGET_DIR'"
+fi
+
+# Add exclusion info to message
+if [ ${#EXCLUDE_PATTERNS[@]} -gt 0 ]; then
+  context_msg+=" (with ${#EXCLUDE_PATTERNS[@]} exclusion patterns)"
+fi
+
+# Copy to clipboard
+echo "$digest" | pbcopy
+echo "$context_msg digest (${formatted_size}, ~${token_estimate} tokens) copied to clipboard!"
+
+exit 0

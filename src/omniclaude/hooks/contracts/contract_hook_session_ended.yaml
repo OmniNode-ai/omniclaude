@@ -1,0 +1,167 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 OmniNode Team
+#
+# ONEX Node Contract
+# Node: NodeHookSessionEndedEffect
+#
+# This contract defines the interface for the session ended hook effect node,
+# which emits events to Kafka when a Claude Code session ends.
+
+# Contract identifiers
+name: "hook_session_ended"
+contract_name: "hook_session_ended"
+node_name: "hook_session_ended"
+
+# Version (semantic versioning)
+version:
+  major: 1
+  minor: 0
+  patch: 0
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+node_version:
+  major: 0
+  minor: 1
+  patch: 0
+
+# Node type - EFFECT because it publishes to Kafka (side effect)
+node_type: "EFFECT"
+
+# Description
+description: >
+  Effect node for emitting session ended events. When a Claude Code session
+  ends (via SessionEnd hook), this node publishes a ModelHookSessionEndedPayload
+  event to Kafka for downstream analytics. Captures session duration, end reason,
+  and tool usage count for learning pipeline feedback.
+
+# Strongly typed I/O models
+input_model:
+  name: "ModelHookSessionEndedPayload"
+  module: "omniclaude.hooks.schemas"
+  description: "Session ended event payload with session metrics."
+output_model:
+  name: "ModelEventPublishResult"
+  module: "omniclaude.hooks.models"
+  description: "Result of publishing event to Kafka (success, offset, partition)."
+
+# Event bus configuration
+event_bus:
+  topic_base: "omniclaude.session.ended.v1"
+  partition_key_field: "entity_id"
+  partition_strategy: "hash"
+  # Events use entity_id (session UUID) for ordering guarantees within a session
+
+# Runtime configuration
+runtime:
+  # Invoked by Claude Code hooks (not orchestrator)
+  supports_direct_call: true
+  # Can be event-driven in future learning pipelines
+  supports_event_driven: true
+  # Publishes to Kafka - has side effects
+  side_effects: true
+  # Hook must complete quickly
+  timeout_ms: 500
+  # Same input always produces same event (deterministic serialization)
+  deterministic: true
+
+# ONEX timestamp policy
+timestamp_policy:
+  # emitted_at has NO default_factory per ONEX architecture
+  explicit_injection: true
+  timezone_required: true
+  rationale: >
+    Producers must explicitly inject timestamps. This ensures deterministic
+    testing (fixed time in tests), consistent ordering (no clock skew between
+    services), and explicit time dependencies.
+
+# Dependencies
+dependencies:
+  - name: "kafka_producer"
+    type: "service"
+    description: "Kafka producer for publishing events"
+  - name: "topic_builder"
+    type: "utility"
+    class_name: "build_topic"
+    module: "omniclaude.hooks.topics"
+    description: "Utility for building full topic names with prefix"
+  - name: "validate_timezone_aware_datetime"
+    type: "utility"
+    module: "omnibase_infra.utils"
+    description: "Validates timestamp is timezone-aware"
+
+# Capabilities provided by this node
+capabilities:
+  - name: "session_event_emission"
+    description: "Emit session ended events to Kafka"
+  - name: "causation_tracking"
+    description: "Include causation_id for event chain tracing"
+  - name: "correlation_tracking"
+    description: "Include correlation_id for distributed tracing"
+  - name: "session_metrics"
+    description: "Capture duration and tool usage metrics"
+
+# Model definitions (reference - actual models in schemas.py)
+definitions:
+  ModelHookSessionEndedPayload:
+    type: object
+    description: "Event payload for Claude Code session end"
+    properties:
+      entity_id:
+        type: string
+        format: uuid
+        description: "Session identifier as UUID (partition key for ordering)"
+      session_id:
+        type: string
+        minLength: 1
+        description: "Session identifier string"
+      correlation_id:
+        type: string
+        format: uuid
+        description: "Correlation ID for distributed tracing"
+      causation_id:
+        type: string
+        format: uuid
+        description: "ID of the previous event in the session chain"
+      emitted_at:
+        type: string
+        format: date-time
+        description: "Timestamp when the hook emitted this event (UTC, timezone-aware)"
+      reason:
+        type: string
+        enum: ["clear", "logout", "prompt_input_exit", "other"]
+        description: "What caused the session to end"
+      duration_seconds:
+        type: number
+        nullable: true
+        minimum: 0
+        description: "Total session duration in seconds if available"
+      tools_used_count:
+        type: integer
+        minimum: 0
+        default: 0
+        description: "Number of tool invocations during the session"
+    required:
+      - entity_id
+      - session_id
+      - correlation_id
+      - causation_id
+      - emitted_at
+      - reason
+
+# Metadata
+metadata:
+  author: "OmniNode Team"
+  license: "MIT"
+  created: "2025-01-19"
+  ticket: "OMN-1399"
+  tags:
+    - effect
+    - hook
+    - session
+    - kafka
+    - event
+    - omniclaude
+    - analytics
+    - onex

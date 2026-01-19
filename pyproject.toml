@@ -1,264 +1,62 @@
-[tool.poetry]
-name = "omniclaude-agents"
+[project]
+name = "omniclaude"
 version = "0.1.0"
-description = "Parallel agent execution framework with MCP integration"
-authors = ["OmniClaude Team"]
-readme = "README.md"
-packages = [
-    {include = "claude"},                                # Source of truth for hooks/skills/commands
-    {include = "parallel_execution", from = "agents"},
-    {include = "agents"},
-    {include = "cli"},
-    {include = "config"},
-    {include = "services"},
+description = "Claude Code hooks + learning loop integration"
+requires-python = ">=3.12,<4.0"
+dependencies = [
+    "omnibase-core>=0.8.0,<0.9.0",
+    "omnibase-spi>=0.5.0,<0.6.0",
+    "omnibase-infra>=0.2.1,<0.3.0",
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.6.0",
 ]
 
-[tool.poetry.dependencies]
-python = "^3.12"
-
-# ONEX dependencies - Using public GitHub repos with stable tags
-omnibase-spi = {git = "https://github.com/OmniNode-ai/omnibase_spi.git", tag = "v0.1.0"}
-omnibase_core = {git = "https://github.com/OmniNode-ai/omnibase_core.git", tag = "v0.1.0"}
-
-# Core dependencies
-pydantic = "^2.0.0"
-pyyaml = "^6.0"
-httpx = "^0.28.1"
-aiofiles = "^23.0.0"
-mcp = "^1.0.0"
-pydantic-ai = "^1.0.15"
-opentelemetry-api = "^1.37.0"
-opentelemetry-sdk = "^1.37.0"
-python-dotenv = "^1.1.1"
-asyncpg = "^0.29.0"
-watchdog = "^6.0.0"
-numpy = "^2.3.3"
-aiokafka = "^0.10.0"
-scikit-learn = "^1.7.2"
-fastapi = "^0.115.0"
-uvicorn = "^0.32.0"
-psycopg2-binary = "^2.9.10"
-jinja2 = "^3.1.0"
-rich = "^13.7.0"
-dependency-injector = "^4.48.1"
-prometheus-client = "^0.21.0"
-qdrant-client = "^1.16.0"
-
-[tool.poetry.group.kafka.dependencies]
-confluent-kafka = "^2.6.0"
-kafka-python = "^2.0.2"
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.0.0"
-pytest-asyncio = "^0.23.0"
-pytest-split = "^0.9.0"
-black = "^24.0.0"
-ruff = "^0.3.0"
-mypy = "^1.11.0"
-bandit = "^1.8.0"
-google-generativeai = "^0.8.5"
-jsonschema = "^4.23.0"
-pyyaml = "^6.0.3"
-neo4j = "^6.0.2"
-asyncpg = "^0.29.0"
-pytest-benchmark = "^4.0.0"
-pytest-cov = "^7.0.0"
-psutil = "^6.1.0"
-isort = "^7.0.0"
-pre-commit = "^4.3.0"
-tabulate = "^0.9.0"
-pytest-xdist = "^3.8.0"
-types-psycopg2 = "^2.9.21.20251012"
-types-redis = "^4.6.0.20241004"
-types-aiofiles = "^25.1.0.20251011"
-types-pyyaml = "^6.0.12.20250915"
-types-requests = "^2.32.4.20250913"
-types-urllib3 = "^1.26.25.14"
-types-protobuf = "^6.32.1.20251105"
-types-psutil = "^7.1.1.20251122"
-types-docker = "^7.1.0.20251009"
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "ruff>=0.12.5",
+    "mypy>=1.17.0",
+]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.black]
-line-length = 88
-target-version = ['py312']
-exclude = '''
-/(
-    agents/templates
-  | agents/parallel_execution/templates
-  | skills
-)/
-'''
-
-[tool.isort]
-profile = "black"
-line_length = 88
-multi_line_output = 3
-
-[tool.mypy]
-python_version = "3.12"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = false
-explicit_package_bases = true
-namespace_packages = true
-plugins = ["pydantic.mypy"]
-exclude = [
-    "^agents/templates/",  # Template files with placeholder syntax
-    "^agents/parallel_execution/templates/",  # More template files
-    "^skills/",  # Third-party skills - not our code to lint
-]
-
-[tool.pydantic]
-# Pydantic settings for mypy plugin
-mypy_init_subclass_as_base = true
+[tool.hatch.build.targets.wheel]
+packages = ["src/omniclaude"]
 
 [tool.ruff]
-line-length = 88
+line-length = 100
 target-version = "py312"
-exclude = [
-    "agents/templates/*.py",  # Template files with placeholder syntax
-    "**/archived/**",
-    "**/archive/**",
-    "**/__pycache__/**",
-    "**/site-packages/**",
-    "skills/**",  # Third-party skills - not our code to lint
-]
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "N", "UP", "S", "B", "C4", "PT", "RUF"]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+    "ARG",    # flake8-unused-arguments
+    "SIM",    # flake8-simplify
+]
 ignore = [
-    "S101",      # Allow assert statements in tests
-    "ISC001",    # Implicit string concatenation (conflicts with formatter)
-    "E501",      # Line too long (technical debt - will fix incrementally)
-    "E402",      # Module level import not at top (technical debt)
-    "F841",      # Unused variable (technical debt - demo files)
-    "F401",      # Unused import (technical debt)
-    "F541",      # F-string without placeholders (technical debt)
-    "T201",      # Print statements (technical debt - scripts)
-    "UP017",     # datetime.UTC alias (technical debt)
-    "UP024",     # OSError aliases (technical debt)
-    "UP035",     # Deprecated imports (typing.Dict → dict, etc.)
-    "UP006",     # Type annotation upgrades (technical debt)
-    "UP007",     # Use X | Y for type annotations (technical debt)
-    "UP015",     # Unnecessary open mode parameters (technical debt)
-    "UP038",     # isinstance with tuple (technical debt)
-    "UP041",     # Replace aliased errors with builtin (technical debt)
-    "S110",      # Try except pass (technical debt)
-    "S603",      # Subprocess without shell (technical debt)
-    "S607",      # Start process with partial path (technical debt)
-    "S105",      # Hardcoded password string (technical debt)
-    "S108",      # Insecure temp file usage (technical debt)
-    "S608",      # SQL injection (false positives in parameterized queries)
-    "RUF001",    # Ambiguous unicode characters (technical debt)
-    "RUF005",    # Collection literal concatenation (technical debt)
-    "RUF006",    # Asyncio task reference (technical debt)
-    "RUF012",    # Mutable class attributes should use ClassVar (technical debt)
-    "RUF010",    # Use explicit conversion flag (technical debt)
-    "RUF013",    # PEP 484 prohibits implicit Optional (technical debt)
-    "RUF100",    # Unused noqa directive (technical debt)
-    "B007",      # Unused loop variable (technical debt)
-    "B904",      # Raise from exception (technical debt)
-    "B905",      # Zip without explicit strict (technical debt)
-    "C401",      # Unnecessary generator (technical debt)
-    "C416",      # Unnecessary list comprehension (technical debt)
-    "PT001",     # Pytest fixture parentheses (technical debt)
-    "PT004",     # Pytest fixture doesn't return - underscore convention (style)
-    "PT006",     # Pytest parametrize names as tuple (style)
-    "PT017",     # Pytest raises in except (technical debt)
-    "PT023",     # Pytest mark parentheses (technical debt)
+    "E501",   # line too long (handled by formatter)
 ]
 
 [tool.ruff.lint.isort]
-# Configure ruff's import sorting to match Black profile (same as old isort config)
-combine-as-imports = true
-force-sort-within-sections = false
-lines-after-imports = 2
-known-first-party = ["claude", "agents", "parallel_execution", "config"]
+known-first-party = ["omniclaude"]
 
-[tool.ruff.lint.per-file-ignores]
-"agents/tests/test_parallel_generation.py" = ["B017", "PT011"]  # Intentionally broad exception for error handling tests
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
 asyncio_mode = "auto"
-testpaths = ["agents/tests"]
-markers = [
-    "unit: Unit tests with no external dependencies (fast)",
-    "integration: Integration tests requiring external services (DB, Kafka, Qdrant)",
-    "e2e: End-to-end tests requiring full system",
-    "benchmark: mark benchmark tests using pytest-benchmark",
-    "database: marks tests that require database connectivity",
-    "slow: marks tests as slow (>2 seconds)",
-    "performance: marks tests that measure performance metrics",
-]
-filterwarnings = [
-    "ignore:Task was destroyed but it is pending:RuntimeWarning",
-    "ignore::pytest.PytestUnraisableExceptionWarning",
-]
-
-# Sane defaults optimized for 3499 tests on M2 Ultra (10 cores)
-# Uses pytest-xdist for parallel execution with smart load balancing
-#
-# Performance characteristics:
-# - Fast mode: `pytest -n 8 -m "not slow"` (~30s, 99% coverage)
-# - Full run: `pytest -n 8` (~45-60s with loadscope, 100% coverage)
-# - CI mode: `pytest --splits 10 --group N` (parallel CI jobs)
-#
-# Configuration details:
-# - `-n 8`: 8 parallel workers (optimal for 10-core M2 Ultra)
-# - `--dist=loadscope`: Distribute tests by module/class for better isolation
-# - `--tb=short`: Shorter tracebacks for faster reading
-# - `-ra`: Show summary of all test results (skipped, failed, etc.)
-addopts = [
-    "-n", "8",                    # 8 workers (optimal for 10-core M2 Ultra)
-    "--dist=loadscope",           # Distribute by module/class (NOT random)
-    "--tb=short",                 # Shorter tracebacks for faster reading
-    "-ra",                        # Show summary of all test results
-    # Skip tests with import collection issues (will be fixed in Week 4)
-    # These tests have detailed documentation explaining the import issues
-    "--ignore=agents/tests/test_casing_preservation.py",
-    "--ignore=agents/tests/test_generation_all_node_types.py",
-    "--ignore=agents/tests/test_pipeline_integration.py",
-    "--ignore=agents/tests/test_interactive_pipeline.py",
-    "--ignore=agents/tests/test_template_intelligence.py",
-    "--ignore=agents/tests/tools/node_gen/test_file_writer.py",  # Missing omnibase_core dependency
-]
-[tool.bandit]
-# Bandit security scanner configuration - matches CI workflow
-# Severity and confidence levels are controlled via CI command-line args
-exclude_dirs = [
-    "agents/templates",
-    "agents/parallel_execution/templates",
-    "agents/tests",
-    "claude/tests",  # Consolidated from claude_hooks/tests
-    "skills",  # Third-party skills - not our code to scan
-    ".venv",
-    "__pycache__",
-    "build",
-    "dist",
-]
-skips = [
-    # Skip codes that produce false positives - matches .bandit (primary config)
-    # IMPORTANT: Keep in sync with .bandit file
-    #
-    # LOW-SIGNAL CHECKS (safe to skip globally):
-    "B101",  # assert_used - tests excluded via exclude_dirs
-    "B104",  # hardcoded_bind_all_interfaces - development only
-    "B105",  # hardcoded_password_string - false positives; real secrets via env
-    "B106",  # hardcoded_password_funcarg - false positives on parameter names
-    "B107",  # hardcoded_password_default - false positives on default values
-    "B108",  # hardcoded_tmp_directory - controlled tmp usage
-    "B201",  # flask_debug_true - controlled via environment variables
-    "B311",  # random - non-crypto use only; secrets module for security
-    "B404",  # subprocess_import - required for system calls, inputs validated
-    "B603",  # subprocess_without_shell_equals_true - we validate all inputs
-    "B607",  # start_process_with_partial_path - development environment
-    #
-    # HIGH-SIGNAL CHECKS - NOW ENABLED (not in this list):
-    # B110 - try_except_pass: Silent catches can hide security issues
-    # B608 - sql_statements_without_placeholders: SQL injection is critical
-    # Use inline `# nosec B110/B608 - <reason>` for justified exceptions
-]
+asyncio_default_fixture_loop_scope = "function"

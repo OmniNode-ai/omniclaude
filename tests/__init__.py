@@ -1,1 +1,1 @@
-"""Tests package for omniclaude."""
+"""OmniClaude test suite."""
