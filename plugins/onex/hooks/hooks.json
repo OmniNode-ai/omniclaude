@@ -1,0 +1,6 @@
+{
+  "$schema": "https://claude.ai/schemas/hooks.json",
+  "description": "OmniClaude Core Hooks - Agent routing, quality enforcement, and session tracking",
+  "version": "1.0.0",
+  "hooks": {}
+}

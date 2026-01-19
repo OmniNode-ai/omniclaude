@@ -1,102 +1,19 @@
 {
   "$schema": "https://claude.ai/schemas/marketplace.json",
   "name": "omninode-tools",
-  "description": "OmniNode development tools for Claude Code: intelligent agent routing, polymorphic agents, PR review, CI analysis, and more",
-  "version": "1.0.0",
+  "description": "Unified ONEX architecture framework for Claude Code: intelligent agent routing, polymorphic agents, PR review, CI analysis, system monitoring, and custom automation commands",
+  "version": "2.0.0",
   "owner": {
     "name": "OmniNode",
-    "email": "dev@omninode.ai",
-    "url": "https://omninode.ai"
+    "email": "dev@omninode.ai"
   },
-  "homepage": "https://github.com/OmniNode-ai/omniclaude",
-  "repository": "https://github.com/OmniNode-ai/omniclaude",
-  "license": "MIT",
   "plugins": [
     {
-      "name": "omniclaude-core",
-      "source": "./omniclaude-core",
-      "description": "Core infrastructure: intelligent agent routing, manifest injection, quality enforcement, and observability hooks",
-      "version": "1.0.0",
-      "tags": ["hooks", "routing", "infrastructure", "observability"],
-      "required": true
-    },
-    {
-      "name": "omniclaude-agents",
-      "source": "./omniclaude-agents",
-      "description": "53 polymorphic agents for development workflows: PR review, debugging, testing, security, architecture",
-      "version": "1.0.0",
-      "tags": ["agents", "polymorphic", "onex", "workflows"],
-      "required": false
-    },
-    {
-      "name": "omniclaude-skills",
-      "source": "./omniclaude-skills",
-      "description": "16+ reusable skills: PR review, CI analysis, Linear integration, system monitoring",
-      "version": "1.0.0",
-      "tags": ["skills", "pr-review", "ci", "linear", "monitoring"],
-      "required": false
-    },
-    {
-      "name": "omniclaude-commands",
-      "source": "./omniclaude-commands",
-      "description": "10+ custom slash commands: /parallel-solve, /pr-review-dev, /ci-failures, /project-status",
-      "version": "1.0.0",
-      "tags": ["commands", "automation", "parallel", "pr-review"],
-      "required": false
-    }
-  ],
-  "installation": {
-    "instructions": [
-      "Clone or add this repository as a marketplace",
-      "Install individual plugins or all at once",
-      "Configure environment variables for Kafka/PostgreSQL integration"
-    ],
-    "commands": {
-      "add_marketplace": "/plugin marketplace add OmniNode-ai/omniclaude",
-      "install_all": "/plugin install omniclaude-core@omninode-tools && /plugin install omniclaude-agents@omninode-tools && /plugin install omniclaude-skills@omninode-tools && /plugin install omniclaude-commands@omninode-tools",
-      "install_core": "/plugin install omniclaude-core@omninode-tools",
-      "install_agents": "/plugin install omniclaude-agents@omninode-tools",
-      "install_skills": "/plugin install omniclaude-skills@omninode-tools",
-      "install_commands": "/plugin install omniclaude-commands@omninode-tools"
-    }
-  },
-  "requirements": {
-    "claude_code_version": ">=1.0.0",
-    "dependencies": {
-      "required": ["jq", "gh"],
-      "optional": ["docker", "psql", "kcat", "poetry"]
-    },
-    "environment": {
-      "optional": [
-        "KAFKA_BOOTSTRAP_SERVERS",
-        "POSTGRES_HOST",
-        "POSTGRES_PORT",
-        "POSTGRES_DATABASE",
-        "POSTGRES_PASSWORD",
-        "QDRANT_URL"
-      ]
-    }
-  },
-  "categories": [
-    {
-      "name": "Infrastructure",
-      "plugins": ["omniclaude-core"],
-      "description": "Core hooks and routing infrastructure"
-    },
-    {
-      "name": "Agents",
-      "plugins": ["omniclaude-agents"],
-      "description": "Polymorphic AI agents for development"
-    },
-    {
-      "name": "Skills",
-      "plugins": ["omniclaude-skills"],
-      "description": "Reusable capability modules"
-    },
-    {
-      "name": "Commands",
-      "plugins": ["omniclaude-commands"],
-      "description": "Custom slash commands"
+      "name": "onex",
+      "source": "./onex",
+      "description": "Unified ONEX framework with hooks, agents, skills, and commands for event-driven development workflows",
+      "version": "2.0.0",
+      "tags": ["onex", "hooks", "agents", "skills", "commands", "routing", "infrastructure", "observability", "polymorphic", "pr-review", "ci", "linear", "monitoring", "automation"]
     }
   ]
 }
