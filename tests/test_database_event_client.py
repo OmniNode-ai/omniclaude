@@ -8,6 +8,9 @@ This script tests the complete event-driven database query flow:
 3. Adapter executes query against PostgreSQL
 4. Adapter publishes response to Kafka
 5. Client receives response with correlation tracking
+
+Note: These tests require Kafka and PostgreSQL to be running.
+Marked as integration tests - skipped in CI.
 """
 
 import asyncio
@@ -15,12 +18,16 @@ import sys
 import time
 from datetime import datetime
 
+import pytest
+
 
 sys.path.insert(0, "agents/lib")
 
 from database_event_client import DatabaseEventClient
 
 
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_simple_query():
     """Test simple SELECT query via Kafka events"""
     print("=" * 60)
@@ -66,6 +73,8 @@ async def test_simple_query():
         print("✅ Client stopped\n")
 
 
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_query_with_filter():
     """Test query with WHERE clause"""
     print("=" * 60)
@@ -126,6 +135,8 @@ async def test_query_with_filter():
         print("✅ Client stopped\n")
 
 
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_correlation_tracking():
     """Test correlation ID preservation across request-response"""
     print("=" * 60)
@@ -164,6 +175,8 @@ async def test_correlation_tracking():
         print("✅ Client stopped\n")
 
 
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_timeout_handling():
     """Test timeout handling for slow queries"""
     print("=" * 60)

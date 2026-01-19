@@ -9,10 +9,15 @@ Usage:
     python3 tests/test_auto_env_loading.py
     cd tests && python3 test_auto_env_loading.py
     cd / && python3 <project_root>/tests/test_auto_env_loading.py
+
+Note: This test requires .env with Kafka/Postgres configuration.
+Marked as integration test - skipped in CI.
 """
 
 import sys
 from pathlib import Path
+
+import pytest
 
 
 # Add project root to path
@@ -21,6 +26,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import settings
 
 
+@pytest.mark.integration
 def test_auto_env_loading():
     """Test that .env is loaded automatically."""
     print("=" * 80)

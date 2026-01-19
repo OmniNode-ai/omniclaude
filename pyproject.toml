@@ -87,7 +87,9 @@ line-length = 88
 target-version = ['py312']
 exclude = '''
 /(
-    agents/templates
+    \.venv
+  | _archive
+  | agents/templates
   | agents/parallel_execution/templates
   | skills
 )/

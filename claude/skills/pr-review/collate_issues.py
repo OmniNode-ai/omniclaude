@@ -410,7 +410,9 @@ def is_noise(text: str) -> bool:
         return True
 
     # Lines that start with numbers followed by a noun (statistics)
-    if re.match(r"^\d+\s+(tests?|files?|functions?|classes?|methods?|lines?)\b", text_lower):
+    if re.match(
+        r"^\d+\s+(tests?|files?|functions?|classes?|methods?|lines?)\b", text_lower
+    ):
         return True
 
     return False
@@ -521,7 +523,10 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
                 return
 
             # For items that don't have explicit severity markers, require actionable content
-            if severity == CommentSeverity.UNCLASSIFIED or severity == CommentSeverity.MAJOR:
+            if (
+                severity == CommentSeverity.UNCLASSIFIED
+                or severity == CommentSeverity.MAJOR
+            ):
                 if not is_actionable_issue(summary):
                     return
 
@@ -529,9 +534,7 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
         # Use provided location override if given, otherwise use source
         issue_location = location if location else source
         issues.append(
-            ExtractedIssue(
-                severity=severity, location=issue_location, summary=summary
-            )
+            ExtractedIssue(severity=severity, location=issue_location, summary=summary)
         )
 
     if not body:
@@ -581,7 +584,7 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
         # Key insight: In Format A, the <details> block appears RIGHT AFTER the severity line
         # In Format B, **Title** appears directly after severity, with <details> at the end
 
-        after_severity = body[inline_match.end():]
+        after_severity = body[inline_match.end() :]
 
         # Check if there's a <details> block immediately after the severity line (within first 50 chars)
         # This indicates Format A (analysis chain format)
@@ -591,13 +594,22 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
             # Format A: Look for title AFTER the first </details>
             first_details_end = after_severity.find("</details>")
             if first_details_end > 0:
-                after_first_details = after_severity[first_details_end + 10:]
-                bold_match = re.search(r"^\s*\*\*([^*]+)\*\*", after_first_details, re.MULTILINE)
+                after_first_details = after_severity[first_details_end + 10 :]
+                bold_match = re.search(
+                    r"^\s*\*\*([^*]+)\*\*", after_first_details, re.MULTILINE
+                )
                 if bold_match:
                     title = bold_match.group(1).strip()
                     title = re.sub(r"\s+", " ", title)  # Normalize whitespace
-                    if len(title) > 10 and not title.startswith("🤖"):  # Skip AI prompt markers
-                        add_issue(cr_severity, title, location=source, from_structured_pattern=True)
+                    if len(title) > 10 and not title.startswith(
+                        "🤖"
+                    ):  # Skip AI prompt markers
+                        add_issue(
+                            cr_severity,
+                            title,
+                            location=source,
+                            from_structured_pattern=True,
+                        )
         else:
             # Format B: Look for first bold text directly after severity line
             bold_match = re.search(r"\*\*([^*]+)\*\*", after_severity)
@@ -605,7 +617,12 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
                 title = bold_match.group(1).strip()
                 title = re.sub(r"\s+", " ", title)
                 if len(title) > 10 and not title.startswith("🤖"):
-                    add_issue(cr_severity, title, location=source, from_structured_pattern=True)
+                    add_issue(
+                        cr_severity,
+                        title,
+                        location=source,
+                        from_structured_pattern=True,
+                    )
 
     # ==========================================================================
     # CodeRabbit HTML Format Extraction
@@ -631,11 +648,15 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
     if nitpick_header:
         nitpick_section_start = nitpick_header.start()
 
-    actionable_header = re.search(r"<summary>[^<]*[Aa]ctionable\s+comments[^<]*\(\d+\)</summary>", body)
+    actionable_header = re.search(
+        r"<summary>[^<]*[Aa]ctionable\s+comments[^<]*\(\d+\)</summary>", body
+    )
     if actionable_header:
         actionable_section_start = actionable_header.start()
 
-    additional_header = re.search(r"<summary>[^<]*[Aa]dditional\s+comments[^<]*\(\d+\)</summary>", body)
+    additional_header = re.search(
+        r"<summary>[^<]*[Aa]dditional\s+comments[^<]*\(\d+\)</summary>", body
+    )
     if additional_header:
         additional_section_start = additional_header.start()
 
@@ -643,7 +664,9 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
     # Pattern: <summary>path/to/file.ext (N)</summary> OR <summary>path/to/file (N)</summary>
     # Note: Some files don't have extensions (e.g., shell scripts like "ci-quick-review")
     # The pattern matches: filename with optional extension, space, (number)
-    file_section_pattern = r"<summary>([a-zA-Z0-9_./-]+(?:\.[a-zA-Z0-9]+)?)\s*\(\d+\)</summary>"
+    file_section_pattern = (
+        r"<summary>([a-zA-Z0-9_./-]+(?:\.[a-zA-Z0-9]+)?)\s*\(\d+\)</summary>"
+    )
     file_sections = re.finditer(file_section_pattern, body)
 
     for file_match in file_sections:
@@ -657,21 +680,42 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
         # Check if in Additional comments section - SKIP these (they're positive acknowledgments)
         if additional_section_start >= 0 and file_pos > additional_section_start:
             # Check if there's no other section header between additional and file
-            if (nitpick_section_start < 0 or nitpick_section_start < additional_section_start or nitpick_section_start > file_pos) and \
-               (actionable_section_start < 0 or actionable_section_start < additional_section_start or actionable_section_start > file_pos):
+            if (
+                nitpick_section_start < 0
+                or nitpick_section_start < additional_section_start
+                or nitpick_section_start > file_pos
+            ) and (
+                actionable_section_start < 0
+                or actionable_section_start < additional_section_start
+                or actionable_section_start > file_pos
+            ):
                 # This file is in the Additional comments section - SKIP IT
                 continue
 
         # Check if in Nitpick section
         if nitpick_section_start >= 0 and file_pos > nitpick_section_start:
-            if (actionable_section_start < 0 or actionable_section_start > file_pos or actionable_section_start < nitpick_section_start) and \
-               (additional_section_start < 0 or additional_section_start > file_pos or additional_section_start < nitpick_section_start):
+            if (
+                actionable_section_start < 0
+                or actionable_section_start > file_pos
+                or actionable_section_start < nitpick_section_start
+            ) and (
+                additional_section_start < 0
+                or additional_section_start > file_pos
+                or additional_section_start < nitpick_section_start
+            ):
                 section_type = "nitpick"
 
         # Check if in Actionable section
         if actionable_section_start >= 0 and file_pos > actionable_section_start:
-            if (nitpick_section_start < 0 or nitpick_section_start > file_pos or nitpick_section_start < actionable_section_start) and \
-               (additional_section_start < 0 or additional_section_start > file_pos or additional_section_start < actionable_section_start):
+            if (
+                nitpick_section_start < 0
+                or nitpick_section_start > file_pos
+                or nitpick_section_start < actionable_section_start
+            ) and (
+                additional_section_start < 0
+                or additional_section_start > file_pos
+                or additional_section_start < actionable_section_start
+            ):
                 section_type = "actionable"
 
         if section_type is None:
@@ -679,7 +723,11 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
             continue
 
         # Set default severity based on section
-        default_severity = CommentSeverity.NITPICK if section_type == "nitpick" else CommentSeverity.MAJOR
+        default_severity = (
+            CommentSeverity.NITPICK
+            if section_type == "nitpick"
+            else CommentSeverity.MAJOR
+        )
 
         # Find the content after this file section up to the next </blockquote></details>
         start_pos = file_match.end()
@@ -738,22 +786,35 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
             section_start = section_match.end()
             next_section = re.search(r"\n###\s", body[section_start:])
             if next_section:
-                section_content = body[section_start : section_start + next_section.start()]
+                section_content = body[
+                    section_start : section_start + next_section.start()
+                ]
             else:
                 section_content = body[section_start:]
 
             # Extract #### N. **Title** patterns within this section
-            section_items = re.findall(r"####\s*\d+\.\s*\*\*([^*]+)\*\*", section_content)
+            section_items = re.findall(
+                r"####\s*\d+\.\s*\*\*([^*]+)\*\*", section_content
+            )
             for item_title in section_items:
                 item_title = item_title.strip()
                 # Check for BLOCKING indicator to upgrade severity
                 effective_severity = section_severity
-                if "(BLOCKING)" in item_title.upper() or "(REQUIRED)" in item_title.upper():
+                if (
+                    "(BLOCKING)" in item_title.upper()
+                    or "(REQUIRED)" in item_title.upper()
+                ):
                     effective_severity = CommentSeverity.CRITICAL
                 # Clean up the title
-                item_title = re.sub(r"\s*\(BLOCKING\)\s*", "", item_title, flags=re.IGNORECASE)
-                item_title = re.sub(r"\s*\(REQUIRED\)\s*", "", item_title, flags=re.IGNORECASE)
-                add_issue(effective_severity, item_title.strip(), from_structured_pattern=True)
+                item_title = re.sub(
+                    r"\s*\(BLOCKING\)\s*", "", item_title, flags=re.IGNORECASE
+                )
+                item_title = re.sub(
+                    r"\s*\(REQUIRED\)\s*", "", item_title, flags=re.IGNORECASE
+                )
+                add_issue(
+                    effective_severity, item_title.strip(), from_structured_pattern=True
+                )
 
     # Pattern: Section-aware extraction for "Suggestions" and "Observations"
     # Claude uses sections like:
@@ -773,7 +834,10 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
         (r"###?\s*🔍?\s*Areas?\s+for\s+Improvement", CommentSeverity.MINOR),
         # Claude "Minor Suggestions" / "Future Optimization" sections
         (r"###?\s*📝?\s*Minor\s+Suggestions?(?:\s*\([^)]+\))?", CommentSeverity.MINOR),
-        (r"###?\s*💡?\s*Future\s+Optimizations?(?:\s*\([^)]+\))?", CommentSeverity.NITPICK),
+        (
+            r"###?\s*💡?\s*Future\s+Optimizations?(?:\s*\([^)]+\))?",
+            CommentSeverity.NITPICK,
+        ),
         (r"###?\s*💡?\s*Recommendations?", CommentSeverity.MINOR),
         (r"###?\s*📋?\s*Follow[- ]?ups?(?:\s*\([^)]+\))?", CommentSeverity.MINOR),
     ]
@@ -785,7 +849,9 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
             section_start = section_match.end()
             next_section = re.search(r"\n##\s", body[section_start:])
             if next_section:
-                section_content = body[section_start : section_start + next_section.start()]
+                section_content = body[
+                    section_start : section_start + next_section.start()
+                ]
             else:
                 section_content = body[section_start:]
 
@@ -796,14 +862,20 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
             #   1. Plain numbered item (simple list)
             #   - Bullet item (simple list)
             # First try markdown headers
-            section_items_plain = re.findall(r"#{3,4}\s*\d+\.\s*([^\n]+)", section_content)
+            section_items_plain = re.findall(
+                r"#{3,4}\s*\d+\.\s*([^\n]+)", section_content
+            )
 
             # Also capture plain numbered lists (1. Item, 2. Item, etc.)
-            plain_numbered = re.findall(r"^\s*\d+\.\s+([^\n]+)", section_content, re.MULTILINE)
+            plain_numbered = re.findall(
+                r"^\s*\d+\.\s+([^\n]+)", section_content, re.MULTILINE
+            )
             section_items_plain.extend(plain_numbered)
 
             # Also capture bullet items (- Item)
-            bullet_items = re.findall(r"^\s*[-*]\s+([^\n]+)", section_content, re.MULTILINE)
+            bullet_items = re.findall(
+                r"^\s*[-*]\s+([^\n]+)", section_content, re.MULTILINE
+            )
             section_items_plain.extend(bullet_items)
             for item_title in section_items_plain:
                 item_title = item_title.strip()
@@ -813,7 +885,18 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
                     continue
 
                 # Remove emoji and clean up
-                emojis_to_remove = ["⭐", "📚", "🧪", "⚠️", "✅", "🔍", "❌", "⚡", "📝", "💡"]
+                emojis_to_remove = [
+                    "⭐",
+                    "📚",
+                    "🧪",
+                    "⚠️",
+                    "✅",
+                    "🔍",
+                    "❌",
+                    "⚡",
+                    "📝",
+                    "💡",
+                ]
                 for emoji in emojis_to_remove:
                     item_title = item_title.replace(emoji, "")
 
@@ -829,7 +912,11 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
                 effective_severity = section_severity
 
                 # Check for parenthesized severity hints (common in "Areas for Improvement")
-                severity_hint_match = re.search(r"\((Critical|Major|Minor|Very\s+Minor|Nitpick|Bug|Security|Potential\s+Bug|Security\s+Best\s+Practice)\)", item_title, re.IGNORECASE)
+                severity_hint_match = re.search(
+                    r"\((Critical|Major|Minor|Very\s+Minor|Nitpick|Bug|Security|Potential\s+Bug|Security\s+Best\s+Practice)\)",
+                    item_title,
+                    re.IGNORECASE,
+                )
                 if severity_hint_match:
                     hint = severity_hint_match.group(1).lower()
                     if "critical" in hint or "security" in hint:
@@ -842,11 +929,19 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
                         effective_severity = CommentSeverity.NITPICK
                     # Clean up the title by removing the severity hint
                     item_title = re.sub(r"\s*\([^)]*\)\s*$", "", item_title).strip()
-                elif "critical" in title_lower or "must" in title_lower or "required" in title_lower:
+                elif (
+                    "critical" in title_lower
+                    or "must" in title_lower
+                    or "required" in title_lower
+                ):
                     effective_severity = CommentSeverity.CRITICAL
                 elif "should" in title_lower or "important" in title_lower:
                     effective_severity = CommentSeverity.MAJOR
-                elif "consider" in title_lower or "potential" in title_lower or "enhancement" in title_lower:
+                elif (
+                    "consider" in title_lower
+                    or "potential" in title_lower
+                    or "enhancement" in title_lower
+                ):
                     effective_severity = CommentSeverity.MINOR
 
                 add_issue(effective_severity, item_title, from_structured_pattern=True)
@@ -858,7 +953,9 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
     #
     # Need to capture both the title AND any indicators that follow (emoji + status label)
     # Pattern: ### N. **Title** [optional emoji] [optional (Status)]
-    numbered_bold_matches = re.findall(r"#{3,4} \d+\.\s*\*\*([^*]+)\*\*\s*([^\n]*)", body)
+    numbered_bold_matches = re.findall(
+        r"#{3,4} \d+\.\s*\*\*([^*]+)\*\*\s*([^\n]*)", body
+    )
     for title, indicators in numbered_bold_matches:
         title = title.strip()
         indicators = indicators.strip()
@@ -872,15 +969,29 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
 
         # Check for status labels and map to severity (check indicators first, then title)
         # Also check for inline severity hints like (Minor), (Major), (Critical), (Very Minor)
-        if re.search(r"\(BLOCKING\)", full_text, re.IGNORECASE) or re.search(r"\(CRITICAL\)", full_text, re.IGNORECASE) or re.search(r"\(REQUIRED\)", full_text, re.IGNORECASE):
+        if (
+            re.search(r"\(BLOCKING\)", full_text, re.IGNORECASE)
+            or re.search(r"\(CRITICAL\)", full_text, re.IGNORECASE)
+            or re.search(r"\(REQUIRED\)", full_text, re.IGNORECASE)
+        ):
             effective_severity = CommentSeverity.CRITICAL
-        elif re.search(r"\(Security|Security\s+Best\s+Practice|Potential\s+Bug\)", full_text, re.IGNORECASE):
+        elif re.search(
+            r"\(Security|Security\s+Best\s+Practice|Potential\s+Bug\)",
+            full_text,
+            re.IGNORECASE,
+        ):
             effective_severity = CommentSeverity.CRITICAL
-        elif re.search(r"\(Major\)", full_text, re.IGNORECASE) or re.search(r"\(Bug\)", full_text, re.IGNORECASE):
+        elif re.search(r"\(Major\)", full_text, re.IGNORECASE) or re.search(
+            r"\(Bug\)", full_text, re.IGNORECASE
+        ):
             effective_severity = CommentSeverity.MAJOR
-        elif re.search(r"\(NON-BLOCKING\)", full_text, re.IGNORECASE) or "⚠️" in full_text:
+        elif (
+            re.search(r"\(NON-BLOCKING\)", full_text, re.IGNORECASE) or "⚠️" in full_text
+        ):
             effective_severity = CommentSeverity.MAJOR
-        elif re.search(r"\(Minor\)", full_text, re.IGNORECASE) or re.search(r"\(Very\s+Minor\)", full_text, re.IGNORECASE):
+        elif re.search(r"\(Minor\)", full_text, re.IGNORECASE) or re.search(
+            r"\(Very\s+Minor\)", full_text, re.IGNORECASE
+        ):
             effective_severity = CommentSeverity.MINOR
         elif re.search(r"\(SAFE\)", full_text, re.IGNORECASE) or "✅" in full_text:
             effective_severity = CommentSeverity.MINOR
@@ -896,12 +1007,31 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
             effective_severity = CommentSeverity.MINOR
 
         # Strip all emoji indicators (common ones from Claude bot reviews)
-        emojis_to_remove = ["⚠️", "✅", "🔍", "❌", "⚡", "📝", "🔴", "🟡", "🟢", "⚫", "🔵", "🟣", "🟠"]
+        emojis_to_remove = [
+            "⚠️",
+            "✅",
+            "🔍",
+            "❌",
+            "⚡",
+            "📝",
+            "🔴",
+            "🟡",
+            "🟢",
+            "⚫",
+            "🔵",
+            "🟣",
+            "🟠",
+        ]
         for emoji in emojis_to_remove:
             title = title.replace(emoji, "")
 
         # Strip status labels and severity hints in parentheses
-        title = re.sub(r"\s*\((BLOCKING|NON-BLOCKING|CRITICAL|SAFE|REQUIRED|REVIEW|Minor|Major|Very\s+Minor|Nitpick|Bug|Security|Potential\s+Bug|Security\s+Best\s+Practice)\)\s*", "", title, flags=re.IGNORECASE)
+        title = re.sub(
+            r"\s*\((BLOCKING|NON-BLOCKING|CRITICAL|SAFE|REQUIRED|REVIEW|Minor|Major|Very\s+Minor|Nitpick|Bug|Security|Potential\s+Bug|Security\s+Best\s+Practice)\)\s*",
+            "",
+            title,
+            flags=re.IGNORECASE,
+        )
 
         # Clean up extra whitespace
         title = title.strip()
@@ -1044,9 +1174,9 @@ def build_resolution_map(
 
 
 def determine_comment_status(
-    comment_id: Optional[int],
+    comment_id: int | None,
     resolution_map: dict[int, dict[str, Any]],
-) -> tuple[CommentStatus, bool, Optional[str]]:
+) -> tuple[CommentStatus, bool, str | None]:
     """
     Determine comment resolution status from resolution map.
 
@@ -1236,7 +1366,11 @@ def collate_pr_issues(
                 first_line = ""
                 for line_text in body.strip().split("\n"):
                     line_text = line_text.strip()
-                    if line_text and not line_text.startswith("#") and not line_text.startswith("<!--"):
+                    if (
+                        line_text
+                        and not line_text.startswith("#")
+                        and not line_text.startswith("<!--")
+                    ):
                         first_line = line_text
                         break
 
@@ -1271,7 +1405,11 @@ def collate_pr_issues(
 
                     issue = PRIssue(
                         file_path=path,
-                        line_number=int(line) if isinstance(line, (int, str)) and str(line).isdigit() else None,
+                        line_number=(
+                            int(line)
+                            if isinstance(line, (int, str)) and str(line).isdigit()
+                            else None
+                        ),
                         severity=item["severity"],
                         description=item["summary"],
                         status=status,
@@ -1324,7 +1462,11 @@ def collate_pr_issues(
 
                 issue = PRIssue(
                     file_path=path,
-                    line_number=int(line) if isinstance(line, (int, str)) and str(line).isdigit() else None,
+                    line_number=(
+                        int(line)
+                        if isinstance(line, (int, str)) and str(line).isdigit()
+                        else None
+                    ),
                     severity=severity,
                     description=summary,
                     status=status,
