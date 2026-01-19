@@ -27,6 +27,7 @@ import sys
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
+
 # Add project root to path for config imports
 _PROJECT_ROOT = os.path.join(os.path.dirname(__file__), "..", "..", "..")
 sys.path.insert(0, _PROJECT_ROOT)
@@ -37,6 +38,7 @@ sys.path.insert(0, _SKILLS_ROOT)
 
 # Import directly from db_helper module to avoid __init__.py import chain issues
 from _shared.db_helper import execute_query, get_correlation_id
+
 
 # Configure logging
 logging.basicConfig(
@@ -58,7 +60,7 @@ def log_routing_decision(
     session_id: str,
     correlation_id: str,
     reasoning: str,
-) -> Optional[str]:
+) -> str | None:
     """
     Log a routing decision to the database.
 
@@ -128,9 +130,7 @@ def main():
     parser.add_argument(
         "--confidence", type=float, default=0.5, help="Confidence score (0.0-1.0)"
     )
-    parser.add_argument(
-        "--strategy", default="unknown", help="Selection strategy used"
-    )
+    parser.add_argument("--strategy", default="unknown", help="Selection strategy used")
     parser.add_argument(
         "--latency-ms", type=int, default=0, help="Routing latency in milliseconds"
     )

@@ -27,7 +27,7 @@ if TYPE_CHECKING:
         PatternTrackerSync as PatternTrackerSyncType,
     )
 
-_PatternTrackerSyncClass: Optional[Type[Any]] = None
+_PatternTrackerSyncClass: Type[Any] | None = None
 _PATTERN_TRACKING_ENABLED = False
 
 try:
@@ -224,7 +224,7 @@ async def apply_fixes_to_file_async(file_path_str: str, config: dict) -> bool:
         return False
 
     # Initialize pattern tracker if enabled
-    pattern_tracker: Optional[Any] = None
+    pattern_tracker: Any | None = None
     if _PATTERN_TRACKING_ENABLED and _PatternTrackerSyncClass is not None:
         try:
             pattern_tracker = _PatternTrackerSyncClass()
@@ -305,8 +305,8 @@ async def apply_fixes_to_file_async(file_path_str: str, config: dict) -> bool:
     print(f"[PostToolUse] Found {len(violations)} violation(s):", file=sys.stderr)
     for v in violations[:3]:  # Show first 3
         # Violation is a Pydantic model, use attribute access not .get()
-        old_name = getattr(v, 'old_name', 'unknown')
-        line = getattr(v, 'line', '?')
+        old_name = getattr(v, "old_name", "unknown")
+        line = getattr(v, "line", "?")
         print(
             f"  - {old_name} (line {line})",
             file=sys.stderr,

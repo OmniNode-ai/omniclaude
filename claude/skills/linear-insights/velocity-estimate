@@ -1,0 +1,819 @@
+#!/bin/bash
+set -euo pipefail
+
+# ============================================================================
+# Velocity & ETA Estimator
+# ============================================================================
+# Calculates project velocity from deep dive historical data and estimates
+# milestone completion dates using current Linear backlog.
+#
+# Data Sources:
+#   - Historical: Deep dive documents in omni_save (parsed for "Tickets Closed")
+#   - Current: Linear MCP for backlog counts (queried separately)
+# ============================================================================
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Configurable directories
+DEFAULT_DEEP_DIVE_DIR="/Users/jonah/Code/omni_save"
+DEEP_DIVE_DIR="${LINEAR_INSIGHTS_DEEP_DIVE_DIR:-$DEFAULT_DEEP_DIVE_DIR}"
+
+usage() {
+    cat << EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Calculate project velocity and estimate completion dates for milestones.
+
+Options:
+  --project PROJECT   Project name or ID (MVP, Beta, Production, or full name)
+  --all               Show all milestones overview
+  --confidence        Include confidence intervals
+  --history           Show velocity history (last 30 days)
+  --weighted          Use weighted rolling average (recent data weighted higher)
+  --method METHOD     Velocity calculation method (default: simple)
+                      Available methods:
+                        simple     - Ticket count / days (Signal-grade)
+                        priority   - Priority-weighted points (Signal-grade)
+                        points     - Story point estimates (ETA-grade)
+                        labels     - Label-weighted velocity (Signal-grade)
+                        cycle_time - Cycle time based (ETA-grade)
+  --deep-dive-dir DIR Directory containing deep dive files (default: omni_save)
+  --json              Output as JSON
+  -h, --help          Show this help
+
+Metric Grades:
+  ETA-grade:    Suitable for predictive ETA calculations (points, cycle_time)
+  Signal-grade: Useful for dashboards but NOT for ETA (simple, priority, labels)
+
+Projects Available:
+  MVP        - MVP - OmniNode Platform Foundation
+  Beta       - Beta - OmniNode Platform Hardening
+  Production - Production - OmniNode Platform Scale
+  NodeReducer - NodeReducer v1.0 - Contract-Driven FSM
+
+Examples:
+  # Estimate for MVP
+  $(basename "$0") --project MVP
+
+  # All milestones
+  $(basename "$0") --all
+
+  # With confidence intervals
+  $(basename "$0") --project MVP --confidence
+
+  # With weighted velocity (recent bias)
+  $(basename "$0") --project MVP --weighted
+
+  # Use story points for ETA-grade velocity
+  $(basename "$0") --project MVP --method points
+
+  # Compare methods with JSON output
+  $(basename "$0") --project MVP --method priority --json
+
+Data Sources:
+  - Deep dive files: $DEEP_DIVE_DIR/*_DEEP_DIVE.md
+  - Linear MCP: Current backlog counts (via mcp__linear-server__list_issues)
+
+Velocity Formulas:
+  Simple:   Average of tickets closed per day from deep dive history
+  Weighted: 50% last 7 days + 30% days 8-14 + 20% days 15-30
+EOF
+    exit 0
+}
+
+# Project name mapping (bash 3.x compatible)
+expand_project_name() {
+    case "$1" in
+        MVP|mvp)
+            echo "MVP - OmniNode Platform Foundation"
+            ;;
+        Beta|beta)
+            echo "Beta - OmniNode Platform Hardening"
+            ;;
+        Production|production|prod)
+            echo "Production - OmniNode Platform Scale"
+            ;;
+        NodeReducer|nodereducer|nr)
+            echo "NodeReducer v1.0 - Contract-Driven FSM"
+            ;;
+        *)
+            echo "$1"
+            ;;
+    esac
+}
+
+# Month name to number mapping (bash 3.x compatible)
+month_to_number() {
+    case "$(echo "$1" | tr '[:upper:]' '[:lower:]')" in
+        january)   echo "01" ;;
+        february)  echo "02" ;;
+        march)     echo "03" ;;
+        april)     echo "04" ;;
+        may)       echo "05" ;;
+        june)      echo "06" ;;
+        july)      echo "07" ;;
+        august)    echo "08" ;;
+        september) echo "09" ;;
+        october)   echo "10" ;;
+        november)  echo "11" ;;
+        december)  echo "12" ;;
+        *)         echo "" ;;
+    esac
+}
+
+# Parse filename date (e.g., DECEMBER_9_2025) to YYYY-MM-DD
+parse_filename_date() {
+    local date_part="$1"
+    # Format: MONTH_DAY_YEAR (e.g., DECEMBER_9_2025)
+    local month_name day year month_num
+
+    # Extract parts using underscore separator
+    month_name=$(echo "$date_part" | cut -d'_' -f1)
+    day=$(echo "$date_part" | cut -d'_' -f2)
+    year=$(echo "$date_part" | cut -d'_' -f3)
+
+    month_num=$(month_to_number "$month_name")
+
+    if [[ -n "$month_num" && -n "$day" && -n "$year" ]]; then
+        # Zero-pad day if needed
+        printf "%s-%s-%02d" "$year" "$month_num" "$day"
+    else
+        echo ""
+    fi
+}
+
+# Calculate days between two dates (YYYY-MM-DD format)
+# Returns days ago (positive number) or empty on error
+# Edge cases:
+#   - Same-day data returns 0 (not empty)
+#   - Future dates treated as 0 (today)
+#   - Invalid dates return empty (function returns non-zero)
+days_ago() {
+    local file_date="$1"
+    local today_epoch file_epoch diff_days
+
+    # Get today's date as epoch seconds
+    # macOS: date -j -f "%Y-%m-%d" "2025-12-13" "+%s"
+    # Linux: date -d "2025-12-13" "+%s"
+    if [[ "$(uname)" == "Darwin" ]]; then
+        today_epoch=$(date "+%s")
+        file_epoch=$(date -j -f "%Y-%m-%d" "$file_date" "+%s" 2>/dev/null) || return
+    else
+        today_epoch=$(date "+%s")
+        file_epoch=$(date -d "$file_date" "+%s" 2>/dev/null) || return
+    fi
+
+    if [[ -n "$file_epoch" && -n "$today_epoch" ]]; then
+        diff_days=$(( (today_epoch - file_epoch) / 86400 ))
+        # Handle edge case: future dates or same-day should return 0, not negative
+        if [[ "$diff_days" -lt 0 ]]; then
+            diff_days=0
+        fi
+        echo "$diff_days"
+    fi
+}
+
+# Default values
+PROJECT=""
+ALL=false
+CONFIDENCE=false
+HISTORY=false
+WEIGHTED=false
+METHOD="simple"
+JSON_OUTPUT=false
+
+# Valid methods for velocity calculation
+VALID_METHODS="simple priority points labels cycle_time"
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --project)
+            PROJECT=$(expand_project_name "$2")
+            shift 2
+            ;;
+        --all)
+            ALL=true
+            shift
+            ;;
+        --confidence)
+            CONFIDENCE=true
+            shift
+            ;;
+        --history)
+            HISTORY=true
+            shift
+            ;;
+        --weighted)
+            WEIGHTED=true
+            shift
+            ;;
+        --method)
+            METHOD="$2"
+            # Validate method
+            if [[ ! " $VALID_METHODS " =~ " $METHOD " ]]; then
+                echo "Error: Invalid method '$METHOD'"
+                echo "Valid methods: $VALID_METHODS"
+                exit 1
+            fi
+            shift 2
+            ;;
+        --deep-dive-dir)
+            DEEP_DIVE_DIR="$2"
+            shift 2
+            ;;
+        --json)
+            JSON_OUTPUT=true
+            shift
+            ;;
+        -h|--help)
+            usage
+            ;;
+        *)
+            echo "Error: Unknown argument: $1"
+            usage
+            ;;
+    esac
+done
+
+if [[ "$ALL" == "false" && -z "$PROJECT" ]]; then
+    echo "Error: Must specify --project or --all"
+    usage
+fi
+
+# ============================================================================
+# Parse Deep Dive Files for Historical Velocity
+# ============================================================================
+
+# Helper function: output markdown only when not in JSON mode
+md_echo() {
+    if [[ "$JSON_OUTPUT" != "true" ]]; then
+        echo "$@"
+    fi
+}
+
+md_echo ""
+md_echo "# Velocity Report"
+md_echo ""
+md_echo "**Generated**: $(date '+%Y-%m-%d %H:%M:%S')"
+md_echo "**Deep Dive Source**: $DEEP_DIVE_DIR"
+md_echo ""
+md_echo "---"
+md_echo ""
+
+# Find all deep dive files and extract ticket counts
+md_echo "## Historical Velocity (from Deep Dives)"
+md_echo ""
+
+TOTAL_TICKETS=0
+TOTAL_DAYS=0
+
+# Array to store daily breakdown for JSON output (bash 3.x compatible - use string)
+DAILY_BREAKDOWN_JSON=""
+
+# Weighted calculation buckets (for --weighted flag)
+# Bucket 1: Last 7 days (50% weight)
+# Bucket 2: Days 8-14 (30% weight)
+# Bucket 3: Days 15-30 (20% weight)
+BUCKET_7_TICKETS=0
+BUCKET_7_DAYS=0
+BUCKET_14_TICKETS=0
+BUCKET_14_DAYS=0
+BUCKET_30_TICKETS=0
+BUCKET_30_DAYS=0
+
+# Parse each deep dive file
+for file in "$DEEP_DIVE_DIR"/*_DEEP_DIVE.md; do
+    if [[ -f "$file" ]]; then
+        filename=$(basename "$file")
+
+        # Extract date from filename (e.g., DECEMBER_9_2025_DEEP_DIVE.md)
+        # Format: MONTH_DAY_YEAR_DEEP_DIVE.md
+        date_part=$(echo "$filename" | sed 's/_DEEP_DIVE.md//')
+
+        # Extract ticket count from "Tickets Closed: N+" pattern
+        ticket_line=$(grep -i "Tickets Closed" "$file" 2>/dev/null | head -1 || echo "")
+
+        if [[ -n "$ticket_line" ]]; then
+            # Extract number (handle "10+" format)
+            ticket_count=$(echo "$ticket_line" | grep -oE '[0-9]+' | head -1 || echo "0")
+
+            if [[ -n "$ticket_count" && "$ticket_count" -gt 0 ]]; then
+                md_echo "| $date_part | $ticket_count tickets |"
+                TOTAL_TICKETS=$((TOTAL_TICKETS + ticket_count))
+                TOTAL_DAYS=$((TOTAL_DAYS + 1))
+
+                # Store for daily breakdown JSON
+                parsed_date_for_json=$(parse_filename_date "$date_part")
+                if [[ -n "$DAILY_BREAKDOWN_JSON" ]]; then
+                    DAILY_BREAKDOWN_JSON+=","
+                fi
+                DAILY_BREAKDOWN_JSON+="{\"date\":\"$date_part\",\"iso_date\":\"$parsed_date_for_json\",\"tickets\":$ticket_count}"
+
+                # Calculate days ago for weighted buckets
+                if [[ "$WEIGHTED" == "true" ]]; then
+                    parsed_date=$(parse_filename_date "$date_part")
+                    if [[ -n "$parsed_date" ]]; then
+                        file_days_ago=$(days_ago "$parsed_date")
+                        if [[ -n "$file_days_ago" ]]; then
+                            if [[ "$file_days_ago" -le 7 ]]; then
+                                BUCKET_7_TICKETS=$((BUCKET_7_TICKETS + ticket_count))
+                                BUCKET_7_DAYS=$((BUCKET_7_DAYS + 1))
+                            elif [[ "$file_days_ago" -le 14 ]]; then
+                                BUCKET_14_TICKETS=$((BUCKET_14_TICKETS + ticket_count))
+                                BUCKET_14_DAYS=$((BUCKET_14_DAYS + 1))
+                            elif [[ "$file_days_ago" -le 30 ]]; then
+                                BUCKET_30_TICKETS=$((BUCKET_30_TICKETS + ticket_count))
+                                BUCKET_30_DAYS=$((BUCKET_30_DAYS + 1))
+                            fi
+                            # Data older than 30 days not included in weighted calc
+                        fi
+                    fi
+                fi
+            fi
+        fi
+    fi
+done
+
+md_echo ""
+
+# Initialize variables that will be used in JSON output (must be set even if no data)
+VELOCITY_RESULT_JSON=""
+METRIC_GRADE="signal"
+CONFIDENCE_LEVEL="low"
+STD_DEV="0.0"
+CV="0.0"
+UNIT="issues/day"
+IS_ETA_GRADE="false"
+ETA_WARNING=""
+
+if [[ $TOTAL_DAYS -gt 0 ]]; then
+    # Calculate simple velocity (use bc for floating point, fallback to integer)
+    if command -v bc &> /dev/null; then
+        VELOCITY=$(echo "scale=1; $TOTAL_TICKETS / $TOTAL_DAYS" | bc)
+    else
+        VELOCITY=$((TOTAL_TICKETS / TOTAL_DAYS))
+    fi
+
+    # Calculate weighted velocity if requested
+    WEIGHTED_VELOCITY=""
+    ALL_IN_SINGLE_BUCKET=false
+    if [[ "$WEIGHTED" == "true" ]]; then
+        # Calculate velocity for each bucket (tickets per day)
+        # Then apply weights: 50% for 0-7 days, 30% for 8-14 days, 20% for 15-30 days
+        if command -v bc &> /dev/null; then
+            # Calculate per-bucket velocities (avoid division by zero)
+            if [[ $BUCKET_7_DAYS -gt 0 ]]; then
+                VEL_7=$(echo "scale=4; $BUCKET_7_TICKETS / $BUCKET_7_DAYS" | bc)
+            else
+                VEL_7="0"
+            fi
+            if [[ $BUCKET_14_DAYS -gt 0 ]]; then
+                VEL_14=$(echo "scale=4; $BUCKET_14_TICKETS / $BUCKET_14_DAYS" | bc)
+            else
+                VEL_14="0"
+            fi
+            if [[ $BUCKET_30_DAYS -gt 0 ]]; then
+                VEL_30=$(echo "scale=4; $BUCKET_30_TICKETS / $BUCKET_30_DAYS" | bc)
+            else
+                VEL_30="0"
+            fi
+
+            # Calculate total weight based on which buckets have data
+            TOTAL_WEIGHT="0"
+            if [[ $BUCKET_7_DAYS -gt 0 ]]; then
+                TOTAL_WEIGHT=$(echo "scale=2; $TOTAL_WEIGHT + 0.50" | bc)
+            fi
+            if [[ $BUCKET_14_DAYS -gt 0 ]]; then
+                TOTAL_WEIGHT=$(echo "scale=2; $TOTAL_WEIGHT + 0.30" | bc)
+            fi
+            if [[ $BUCKET_30_DAYS -gt 0 ]]; then
+                TOTAL_WEIGHT=$(echo "scale=2; $TOTAL_WEIGHT + 0.20" | bc)
+            fi
+
+            # Calculate weighted average (normalize weights if not all buckets have data)
+            if [[ $(echo "$TOTAL_WEIGHT > 0" | bc) -eq 1 ]]; then
+                WEIGHT_7="0"
+                WEIGHT_14="0"
+                WEIGHT_30="0"
+                if [[ $BUCKET_7_DAYS -gt 0 ]]; then
+                    WEIGHT_7=$(echo "scale=4; 0.50 / $TOTAL_WEIGHT" | bc)
+                fi
+                if [[ $BUCKET_14_DAYS -gt 0 ]]; then
+                    WEIGHT_14=$(echo "scale=4; 0.30 / $TOTAL_WEIGHT" | bc)
+                fi
+                if [[ $BUCKET_30_DAYS -gt 0 ]]; then
+                    WEIGHT_30=$(echo "scale=4; 0.20 / $TOTAL_WEIGHT" | bc)
+                fi
+
+                WEIGHTED_VELOCITY=$(echo "scale=1; ($VEL_7 * $WEIGHT_7) + ($VEL_14 * $WEIGHT_14) + ($VEL_30 * $WEIGHT_30)" | bc)
+            else
+                WEIGHTED_VELOCITY="$VELOCITY"
+            fi
+        else
+            # Fallback without bc: use simple average
+            WEIGHTED_VELOCITY="$VELOCITY"
+        fi
+
+        # Edge case: All data in a single bucket means weighted equals simple average
+        # This happens when all deep dive files are within the last 7 days
+        if [[ $BUCKET_7_DAYS -eq $TOTAL_DAYS && $BUCKET_14_DAYS -eq 0 && $BUCKET_30_DAYS -eq 0 ]]; then
+            ALL_IN_SINGLE_BUCKET=true
+            WEIGHTED_VELOCITY="$VELOCITY"
+        elif [[ $BUCKET_7_DAYS -eq 0 && $BUCKET_14_DAYS -eq $TOTAL_DAYS && $BUCKET_30_DAYS -eq 0 ]]; then
+            ALL_IN_SINGLE_BUCKET=true
+            WEIGHTED_VELOCITY="$VELOCITY"
+        elif [[ $BUCKET_7_DAYS -eq 0 && $BUCKET_14_DAYS -eq 0 && $BUCKET_30_DAYS -eq $TOTAL_DAYS ]]; then
+            ALL_IN_SINGLE_BUCKET=true
+            WEIGHTED_VELOCITY="$VELOCITY"
+        fi
+    fi
+
+    # =========================================================================
+    # Use VelocityCalculator library for enhanced metrics
+    # =========================================================================
+    # Calculate enhanced metrics using VelocityCalculator library
+    VELOCITY_RESULT_JSON=$(python3 << PYTHON_CALC
+import sys
+import json
+
+# Add lib directory to path
+sys.path.insert(0, "$SCRIPT_DIR/lib")
+
+try:
+    from velocity_calculator import (
+        VelocityCalculator,
+        Issue,
+        ConfidenceLevel,
+        MetricGrade,
+    )
+
+    # Create calculator instance
+    calc = VelocityCalculator()
+
+    # Create issue objects from daily data
+    # For deep dive data, we only have counts, not full issue details
+    # We'll create placeholder issues for the count
+    issues = [Issue(id=f"DEEP-{i}") for i in range($TOTAL_TICKETS)]
+
+    # Build daily breakdown dict from shell data
+    daily_breakdown_str = '''[$DAILY_BREAKDOWN_JSON]'''
+    daily_breakdown = {}
+    try:
+        import json as json_mod
+        daily_data = json_mod.loads(daily_breakdown_str)
+        for entry in daily_data:
+            date_key = entry.get("iso_date", entry.get("date", ""))
+            tickets = entry.get("tickets", 0)
+            if date_key:
+                daily_breakdown[date_key] = [Issue(id=f"{date_key}-{i}") for i in range(tickets)]
+    except:
+        pass
+
+    # Calculate velocity using specified method
+    method = "$METHOD"
+    days = $TOTAL_DAYS if $TOTAL_DAYS > 0 else 1
+
+    result = calc.calculate(issues, days, method, daily_breakdown if daily_breakdown else None)
+
+    # Get confidence level
+    confidence = result.get_confidence(churn_ratio=0.0)
+
+    # Validate for ETA
+    is_eta_valid, eta_warning = calc.validate_for_eta(method)
+
+    # Output as JSON for bash to parse
+    output = {
+        "value": result.value,
+        "std_dev": result.std_dev,
+        "cv": result.cv,
+        "grade": result.grade.value,
+        "unit": result.unit,
+        "method": result.method,
+        "days_analyzed": result.days_analyzed,
+        "confidence": confidence.value,
+        "is_eta_grade": result.is_eta_grade(),
+        "eta_warning": eta_warning if not is_eta_valid else ""
+    }
+    print(json.dumps(output))
+except ImportError as e:
+    # Fallback if library not available
+    output = {
+        "value": $VELOCITY,
+        "std_dev": 0.0,
+        "cv": 0.0,
+        "grade": "signal",
+        "unit": "issues/day",
+        "method": "$METHOD",
+        "days_analyzed": $TOTAL_DAYS,
+        "confidence": "low" if $TOTAL_DAYS < 3 else ("medium" if $TOTAL_DAYS < 7 else "high"),
+        "is_eta_grade": False,
+        "eta_warning": "",
+        "library_error": str(e)
+    }
+    print(json.dumps(output))
+except Exception as e:
+    # Fallback on any error
+    output = {
+        "value": $VELOCITY,
+        "std_dev": 0.0,
+        "cv": 0.0,
+        "grade": "signal",
+        "unit": "issues/day",
+        "method": "$METHOD",
+        "days_analyzed": $TOTAL_DAYS,
+        "confidence": "low" if $TOTAL_DAYS < 3 else ("medium" if $TOTAL_DAYS < 7 else "high"),
+        "is_eta_grade": False,
+        "eta_warning": "",
+        "error": str(e)
+    }
+    print(json.dumps(output))
+PYTHON_CALC
+)
+
+    # Parse the velocity result JSON to extract values for markdown output
+    if command -v jq &> /dev/null; then
+        METRIC_GRADE=$(echo "$VELOCITY_RESULT_JSON" | jq -r '.grade // "signal"')
+        CONFIDENCE_LEVEL=$(echo "$VELOCITY_RESULT_JSON" | jq -r '.confidence // "low"')
+        STD_DEV=$(echo "$VELOCITY_RESULT_JSON" | jq -r '.std_dev // 0')
+        CV=$(echo "$VELOCITY_RESULT_JSON" | jq -r '.cv // 0')
+        UNIT=$(echo "$VELOCITY_RESULT_JSON" | jq -r '.unit // "issues/day"')
+        IS_ETA_GRADE=$(echo "$VELOCITY_RESULT_JSON" | jq -r '.is_eta_grade // false')
+        ETA_WARNING=$(echo "$VELOCITY_RESULT_JSON" | jq -r '.eta_warning // ""')
+        LIB_VELOCITY=$(echo "$VELOCITY_RESULT_JSON" | jq -r '.value // 0')
+    else
+        # Fallback: use Python to parse if jq not available
+        read METRIC_GRADE CONFIDENCE_LEVEL STD_DEV CV UNIT IS_ETA_GRADE LIB_VELOCITY < <(python3 << PARSE_EOF
+import json
+import sys
+try:
+    data = json.loads('''$VELOCITY_RESULT_JSON''')
+    print(
+        data.get("grade", "signal"),
+        data.get("confidence", "low"),
+        data.get("std_dev", 0),
+        data.get("cv", 0),
+        data.get("unit", "issues/day"),
+        str(data.get("is_eta_grade", False)).lower(),
+        data.get("value", 0)
+    )
+except:
+    print("signal low 0 0 issues/day false 0")
+PARSE_EOF
+)
+        ETA_WARNING=""
+    fi
+
+    md_echo "### Summary"
+    md_echo ""
+    md_echo "| Metric | Value |"
+    md_echo "|--------|-------|"
+    md_echo "| **Days Analyzed** | $TOTAL_DAYS |"
+    md_echo "| **Total Tickets Closed** | $TOTAL_TICKETS |"
+    md_echo "| **Average Velocity** | $VELOCITY $UNIT |"
+    md_echo "| **Method** | $METHOD |"
+    md_echo "| **Metric Grade** | ${METRIC_GRADE^^} ($([ "$METRIC_GRADE" == "eta" ] && echo "suitable for ETA" || echo "dashboard signal only")) |"
+    md_echo "| **Confidence** | ${CONFIDENCE_LEVEL^^} |"
+
+    # Only show std_dev and CV if they have meaningful values
+    if [[ "$STD_DEV" != "0" && "$STD_DEV" != "0.0" ]]; then
+        md_echo "| **Std Deviation** | $STD_DEV |"
+        md_echo "| **CV (Coefficient of Variation)** | $CV |"
+    fi
+
+    # Show ETA warning if method is not ETA-grade
+    if [[ -n "$ETA_WARNING" && "$ETA_WARNING" != "null" ]]; then
+        md_echo ""
+        md_echo "> **Warning**: $ETA_WARNING"
+    fi
+
+    if [[ "$WEIGHTED" == "true" && -n "$WEIGHTED_VELOCITY" ]]; then
+        md_echo ""
+        md_echo "### Velocity Comparison"
+        md_echo ""
+        md_echo "| Method | Velocity |"
+        md_echo "|--------|----------|"
+        md_echo "| Simple Average | $VELOCITY tickets/day |"
+        md_echo "| Weighted (recent bias) | $WEIGHTED_VELOCITY tickets/day |"
+        md_echo ""
+
+        # Show note if all data is in a single bucket (edge case)
+        if [[ "$ALL_IN_SINGLE_BUCKET" == "true" ]]; then
+            md_echo "**Note**: All $TOTAL_DAYS days of data are within a single time bucket."
+            md_echo "Weighted velocity equals simple average: $VELOCITY tickets/day"
+            md_echo ""
+        fi
+
+        md_echo "**Weighted breakdown**:"
+        md_echo "- Last 7 days: $BUCKET_7_TICKETS tickets / $BUCKET_7_DAYS days (50% weight)"
+        md_echo "- Days 8-14: $BUCKET_14_TICKETS tickets / $BUCKET_14_DAYS days (30% weight)"
+        md_echo "- Days 15-30: $BUCKET_30_TICKETS tickets / $BUCKET_30_DAYS days (20% weight)"
+    fi
+    md_echo ""
+else
+    md_echo "No deep dive data found in $DEEP_DIVE_DIR"
+    md_echo ""
+    VELOCITY=0
+    WEIGHTED_VELOCITY=""
+fi
+
+# ============================================================================
+# Current Backlog (requires Linear MCP query)
+# ============================================================================
+
+md_echo "---"
+md_echo ""
+md_echo "## Current Backlog & ETA"
+md_echo ""
+md_echo "To get the current backlog and calculate ETA, query Linear:"
+md_echo ""
+md_echo '```'
+md_echo "# Get project backlog count"
+md_echo "mcp__linear-server__list_issues("
+md_echo "  project=\"$PROJECT\","
+md_echo "  limit=250"
+md_echo ")"
+md_echo ""
+md_echo "# Then calculate:"
+md_echo "# - Total issues in project"
+md_echo "# - Issues with status='Done'"
+md_echo "# - Remaining = Total - Done"
+md_echo "# - ETA = Remaining / $VELOCITY days"
+md_echo '```'
+md_echo ""
+
+if [[ "$VELOCITY" != "0" ]]; then
+    md_echo "### ETA Calculator"
+    md_echo ""
+    md_echo "With velocity of **$VELOCITY tickets/day**:"
+    md_echo ""
+    md_echo "| Remaining | Estimated Days | Target Date |"
+    md_echo "|-----------|----------------|-------------|"
+
+    # Calculate ETAs for different remaining counts
+    for remaining in 20 30 40 50 60 70; do
+        if command -v bc &> /dev/null; then
+            days=$(echo "scale=0; $remaining / $VELOCITY" | bc)
+        else
+            days=$((remaining / VELOCITY))
+        fi
+        target_date=$(date -v+${days}d '+%Y-%m-%d' 2>/dev/null || date -d "+$days days" '+%Y-%m-%d' 2>/dev/null || echo "N/A")
+        md_echo "| $remaining | $days | $target_date |"
+    done
+    md_echo ""
+fi
+
+# ============================================================================
+# Confidence Analysis (if requested)
+# ============================================================================
+
+if [[ "$CONFIDENCE" == "true" ]]; then
+    md_echo "---"
+    md_echo ""
+    md_echo "## Confidence Analysis"
+    md_echo ""
+    md_echo "Based on $TOTAL_DAYS days of data:"
+    md_echo ""
+
+    if [[ $TOTAL_DAYS -ge 7 ]]; then
+        md_echo "- **Confidence**: High (7+ days of velocity data)"
+    elif [[ $TOTAL_DAYS -ge 3 ]]; then
+        md_echo "- **Confidence**: Medium (3-6 days of velocity data)"
+    else
+        md_echo "- **Confidence**: Low (<3 days of velocity data)"
+    fi
+    md_echo ""
+fi
+
+# ============================================================================
+# History (if requested)
+# ============================================================================
+
+if [[ "$HISTORY" == "true" ]]; then
+    md_echo "---"
+    md_echo ""
+    md_echo "## Velocity History"
+    md_echo ""
+    md_echo "| Date | Tickets | Velocity Chart |"
+    md_echo "|------|---------|----------------|"
+
+    for file in "$DEEP_DIVE_DIR"/*_DEEP_DIVE.md; do
+        if [[ -f "$file" ]]; then
+            filename=$(basename "$file")
+            date_part=$(echo "$filename" | sed 's/_DEEP_DIVE.md//')
+
+            ticket_line=$(grep -i "Tickets Closed" "$file" 2>/dev/null | head -1 || echo "")
+            ticket_count=$(echo "$ticket_line" | grep -oE '[0-9]+' | head -1 || echo "0")
+
+            if [[ -n "$ticket_count" && "$ticket_count" -gt 0 ]]; then
+                # Create visual bar (1 block per 2 tickets)
+                bars=""
+                for ((i=0; i<ticket_count/2; i++)); do
+                    bars="${bars}█"
+                done
+                md_echo "| $date_part | $ticket_count | $bars |"
+            fi
+        fi
+    done
+    md_echo ""
+fi
+
+# ============================================================================
+# JSON Output (if requested)
+# ============================================================================
+
+if [[ "$JSON_OUTPUT" == "true" ]]; then
+    # Use Python for reliable JSON generation with proper escaping
+    python3 << PYTHON_EOF
+import json
+import sys
+from datetime import datetime, timezone
+
+# Build the result dictionary
+result = {
+    "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "deep_dive_source": "$DEEP_DIVE_DIR",
+    "project": "$PROJECT",
+    "days_analyzed": $TOTAL_DAYS,
+    "total_tickets_closed": $TOTAL_TICKETS,
+    "velocity": $VELOCITY,
+    "method": "$METHOD"
+}
+
+# Add velocity calculator result if available
+velocity_result_str = '''$VELOCITY_RESULT_JSON'''
+try:
+    velocity_result = json.loads(velocity_result_str)
+    result["velocity_metrics"] = {
+        "value": velocity_result.get("value", $VELOCITY),
+        "std_dev": velocity_result.get("std_dev", 0.0),
+        "cv": velocity_result.get("cv", 0.0),
+        "grade": velocity_result.get("grade", "signal"),
+        "unit": velocity_result.get("unit", "issues/day"),
+        "confidence": velocity_result.get("confidence", "low"),
+        "is_eta_grade": velocity_result.get("is_eta_grade", False)
+    }
+    # Add ETA warning if present
+    eta_warning = velocity_result.get("eta_warning", "")
+    if eta_warning:
+        result["velocity_metrics"]["eta_warning"] = eta_warning
+    # Add any library errors for debugging
+    if "library_error" in velocity_result:
+        result["velocity_metrics"]["library_error"] = velocity_result["library_error"]
+    if "error" in velocity_result:
+        result["velocity_metrics"]["error"] = velocity_result["error"]
+except json.JSONDecodeError:
+    # Fallback if velocity result not available
+    result["velocity_metrics"] = {
+        "value": $VELOCITY,
+        "std_dev": 0.0,
+        "cv": 0.0,
+        "grade": "signal",
+        "unit": "issues/day",
+        "confidence": "low" if $TOTAL_DAYS < 3 else ("medium" if $TOTAL_DAYS < 7 else "high"),
+        "is_eta_grade": False
+    }
+
+# Add daily breakdown
+daily_breakdown_str = '''[$DAILY_BREAKDOWN_JSON]'''
+try:
+    result["daily_breakdown"] = json.loads(daily_breakdown_str)
+except json.JSONDecodeError:
+    result["daily_breakdown"] = []
+
+# Add weighted data if available
+weighted = "$WEIGHTED"
+weighted_velocity = "$WEIGHTED_VELOCITY"
+if weighted == "true" and weighted_velocity:
+    try:
+        result["weighted_velocity"] = float(weighted_velocity)
+    except (ValueError, TypeError):
+        result["weighted_velocity"] = None
+    result["weighted_breakdown"] = {
+        "bucket_7_days": {
+            "tickets": $BUCKET_7_TICKETS,
+            "days": $BUCKET_7_DAYS,
+            "weight": 0.50
+        },
+        "bucket_8_14_days": {
+            "tickets": $BUCKET_14_TICKETS,
+            "days": $BUCKET_14_DAYS,
+            "weight": 0.30
+        },
+        "bucket_15_30_days": {
+            "tickets": $BUCKET_30_TICKETS,
+            "days": $BUCKET_30_DAYS,
+            "weight": 0.20
+        }
+    }
+
+# Output clean JSON
+print(json.dumps(result, indent=2))
+PYTHON_EOF
+else
+    # Only output footer in markdown mode
+    md_echo ""
+    md_echo "---"
+    md_echo ""
+    md_echo "*Report generated by linear-insights velocity-estimate skill*"
+fi

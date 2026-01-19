@@ -1,0 +1,700 @@
+#!/bin/bash
+set -euo pipefail
+
+# ============================================================================
+# Deep Dive Report Generator
+# ============================================================================
+# Generates comprehensive daily work analysis from Linear and GitHub data.
+# Output format matches ${LINEAR_INSIGHTS_OUTPUT_DIR}/DECEMBER_*_DEEP_DIVE.md
+# ============================================================================
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Configurable output directory
+# Priority: --output-dir flag > LINEAR_INSIGHTS_OUTPUT_DIR env > default
+# Default: ${HOME}/Code/omni_save (cross-platform fallback)
+DEFAULT_OUTPUT_DIR="${HOME}/Code/omni_save"
+OUTPUT_DIR="${LINEAR_INSIGHTS_OUTPUT_DIR:-$DEFAULT_OUTPUT_DIR}"
+
+usage() {
+    cat << EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Generate a comprehensive deep dive analysis of work completed.
+
+Options:
+  --date DATE         Specific date (YYYY-MM-DD), default: today
+  --days N            Analyze last N days (for weekly summary)
+  --save              Save to output directory (default: omni_save)
+  --output FILE       Save to specific file (overrides --save)
+  --output-dir DIR    Set output directory (default: \$LINEAR_INSIGHTS_OUTPUT_DIR or omni_save)
+  --json              Output as JSON (for programmatic processing)
+  --generate          Output MCP tool call instructions for direct execution
+  --repos REPOS       Comma-separated list of repos to analyze
+                      (default: omnibase_core,omnibase_spi,omnibase_infra,omniclaude)
+  --snapshot-only     Create snapshot without markdown output
+  --no-snapshot       Skip snapshot creation (markdown only)
+  --project-id ID     Linear project UUID for snapshot (default: MVP project)
+  -h, --help          Show this help
+
+Environment Variables:
+  LINEAR_INSIGHTS_OUTPUT_DIR    Default output directory for saved reports
+                                (default: ${HOME}/Code/omni_save)
+
+Examples:
+  # Today's deep dive (display only)
+  $(basename "$0")
+
+  # Specific date
+  $(basename "$0") --date 2025-12-09
+
+  # Weekly summary
+  $(basename "$0") --days 7
+
+  # Save to default directory (omni_save)
+  $(basename "$0") --save
+
+  # Save to custom directory
+  $(basename "$0") --save --output-dir ~/reports
+
+  # Use environment variable for output
+  LINEAR_INSIGHTS_OUTPUT_DIR=~/reports $(basename "$0") --save
+
+  # Generate MCP tool call instructions
+  $(basename "$0") --generate
+
+  # Generate with JSON output (for programmatic use)
+  $(basename "$0") --generate --json
+
+Data Sources:
+  - Linear MCP: Issues completed/updated, project progress
+  - GitHub CLI: Commits, PRs merged, file changes
+  - Git: Local commit analysis
+
+Output Format:
+  Matches the established deep dive pattern with:
+  - Executive Summary (Velocity/Effectiveness scores)
+  - Repository Activity Overview
+  - Major Components & Work Completed
+  - Metrics & Statistics
+  - Velocity/Effectiveness Analysis
+  - Lessons Learned
+  - Next Day Preview
+EOF
+    exit 0
+}
+
+# Default values
+TARGET_DATE=$(date +%Y-%m-%d)
+DAYS=1
+SAVE=false
+OUTPUT_FILE=""
+JSON_OUTPUT=false
+GENERATE=false
+REPOS="omnibase_core,omnibase_spi,omnibase_infra,omniclaude"
+SNAPSHOT_ONLY=false
+NO_SNAPSHOT=false
+# Default to MVP project from config.yaml
+PROJECT_ID="e44ddbf4-b4c7-40dc-84fa-f402ec27b38e"
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --date)
+            TARGET_DATE="$2"
+            shift 2
+            ;;
+        --days)
+            DAYS="$2"
+            shift 2
+            ;;
+        --save)
+            SAVE=true
+            shift
+            ;;
+        --output)
+            OUTPUT_FILE="$2"
+            shift 2
+            ;;
+        --output-dir)
+            OUTPUT_DIR="$2"
+            shift 2
+            ;;
+        --json)
+            JSON_OUTPUT=true
+            shift
+            ;;
+        --repos)
+            REPOS="$2"
+            shift 2
+            ;;
+        --generate)
+            GENERATE=true
+            shift
+            ;;
+        --snapshot-only)
+            SNAPSHOT_ONLY=true
+            shift
+            ;;
+        --no-snapshot)
+            NO_SNAPSHOT=true
+            shift
+            ;;
+        --project-id)
+            PROJECT_ID="$2"
+            shift 2
+            ;;
+        -h|--help)
+            usage
+            ;;
+        *)
+            echo "Error: Unknown argument: $1"
+            usage
+            ;;
+    esac
+done
+
+# Validate conflicting flags
+if [[ "$SNAPSHOT_ONLY" == "true" && "$NO_SNAPSHOT" == "true" ]]; then
+    echo "Error: Cannot use both --snapshot-only and --no-snapshot"
+    exit 1
+fi
+
+# =============================================================================
+# Snapshot Helper Function
+# =============================================================================
+# Creates a daily snapshot using the snapshot_manager.py library
+create_daily_snapshot() {
+    local date_str="$1"
+    local project_id="$2"
+    local issues_completed="${3:-0}"
+    local estimate_points="${4:-0.0}"
+
+    python3 - "$date_str" "$project_id" "$issues_completed" "$estimate_points" << 'PYEOF'
+import sys
+import os
+
+# Add lib directory to path
+script_dir = os.path.dirname(os.path.abspath(sys.argv[0])) if len(sys.argv) > 0 else os.getcwd()
+lib_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "lib") if "__file__" in dir() else None
+
+# Find the lib directory relative to this script
+# The script runs from stdin, so we need to find the skill directory
+skill_dir = None
+
+# Try environment variable first
+if "OMNICLAUDE_PATH" in os.environ:
+    candidate = os.path.join(os.environ["OMNICLAUDE_PATH"], "claude/skills/linear-insights")
+    if os.path.exists(os.path.join(candidate, "lib", "snapshot_manager.py")):
+        skill_dir = candidate
+
+# Fall back to common locations (generic patterns only, no user-specific paths)
+if skill_dir is None:
+    for path in [
+        os.path.expanduser("~/Code/omniclaude/claude/skills/linear-insights"),
+        "/workspace/omniclaude/claude/skills/linear-insights",
+        # Also check if we're running from plugin cache
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))) if "__file__" in dir() else None,
+    ]:
+        if path and os.path.exists(os.path.join(path, "lib", "snapshot_manager.py")):
+            skill_dir = path
+            break
+
+if skill_dir is None:
+    # Try relative to current working directory
+    cwd = os.getcwd()
+    if os.path.exists(os.path.join(cwd, "lib", "snapshot_manager.py")):
+        skill_dir = cwd
+    elif os.path.exists(os.path.join(cwd, "claude/skills/linear-insights/lib/snapshot_manager.py")):
+        skill_dir = os.path.join(cwd, "claude/skills/linear-insights")
+
+if skill_dir:
+    sys.path.insert(0, os.path.join(skill_dir, "lib"))
+
+import json
+
+try:
+    from snapshot_manager import SnapshotManager, create_snapshot, SnapshotError
+except ImportError as e:
+    print(json.dumps({
+        "success": False,
+        "error": f"Failed to import snapshot_manager: {e}",
+        "snapshot_path": None,
+        "created_new": False
+    }))
+    sys.exit(1)
+
+# Parse arguments
+date_str = sys.argv[1]
+project_id = sys.argv[2]
+issues_completed = int(sys.argv[3]) if len(sys.argv) > 3 else 0
+estimate_points = float(sys.argv[4]) if len(sys.argv) > 4 else 0.0
+
+# Initialize snapshot manager with default directory
+snapshot_dir = os.path.join(skill_dir, ".cache", "snapshots") if skill_dir else ".cache/snapshots"
+manager = SnapshotManager(snapshot_dir)
+
+# Check if snapshot already exists
+if manager.exists(date_str, project_id):
+    existing = manager.load(date_str, project_id)
+    print(json.dumps({
+        "success": True,
+        "error": None,
+        "snapshot_path": str(manager._get_snapshot_path(date_str, project_id)),
+        "created_new": False,
+        "date": date_str,
+        "project_id": project_id,
+        "issues_completed": existing.issues_count if existing else 0,
+        "message": "Snapshot already exists for this date/project"
+    }))
+    sys.exit(0)
+
+# Create new snapshot
+snapshot = create_snapshot(
+    date_str=date_str,
+    project_id=project_id,
+    issues_completed=issues_completed,
+    issue_ids=[],  # Will be populated by actual Linear data
+    estimate_points=estimate_points
+)
+
+try:
+    path = manager.save(snapshot)
+    print(json.dumps({
+        "success": True,
+        "error": None,
+        "snapshot_path": str(path),
+        "created_new": True,
+        "date": date_str,
+        "project_id": project_id,
+        "issues_completed": issues_completed,
+        "message": "Snapshot created successfully"
+    }))
+except SnapshotError as e:
+    print(json.dumps({
+        "success": False,
+        "error": str(e),
+        "snapshot_path": None,
+        "created_new": False
+    }))
+    sys.exit(1)
+PYEOF
+}
+
+# Format date for display
+DAY_NAME=$(date -j -f "%Y-%m-%d" "$TARGET_DATE" "+%A" 2>/dev/null || date -d "$TARGET_DATE" "+%A")
+MONTH_NAME=$(date -j -f "%Y-%m-%d" "$TARGET_DATE" "+%B" 2>/dev/null || date -d "$TARGET_DATE" "+%B")
+DAY_NUM=$(date -j -f "%Y-%m-%d" "$TARGET_DATE" "+%-d" 2>/dev/null || date -d "$TARGET_DATE" "+%-d")
+YEAR=$(date -j -f "%Y-%m-%d" "$TARGET_DATE" "+%Y" 2>/dev/null || date -d "$TARGET_DATE" "+%Y")
+WEEK_START=$(date -j -v-$(($(date -j -f "%Y-%m-%d" "$TARGET_DATE" "+%u" 2>/dev/null || echo 1)-1))d -f "%Y-%m-%d" "$TARGET_DATE" "+%B %-d" 2>/dev/null || echo "Week")
+
+# Generate output filename
+if [[ -n "$OUTPUT_FILE" ]]; then
+    OUTFILE="$OUTPUT_FILE"
+elif [[ "$SAVE" == "true" ]]; then
+    MONTH_UPPER=$(echo "$MONTH_NAME" | tr '[:lower:]' '[:upper:]')
+    OUTFILE="${OUTPUT_DIR}/${MONTH_UPPER}_${DAY_NUM}_${YEAR}_DEEP_DIVE.md"
+else
+    OUTFILE=""
+fi
+
+# Convert repos to JSON array
+repos_json_array=""
+IFS=',' read -ra REPO_ARRAY <<< "$REPOS"
+for i in "${!REPO_ARRAY[@]}"; do
+    if [[ $i -gt 0 ]]; then
+        repos_json_array="$repos_json_array, "
+    fi
+    repos_json_array="$repos_json_array\"${REPO_ARRAY[$i]}\""
+done
+
+# Build gh commands array for JSON
+gh_commands_json=""
+for i in "${!REPO_ARRAY[@]}"; do
+    repo="${REPO_ARRAY[$i]}"
+    if [[ $i -gt 0 ]]; then
+        gh_commands_json="$gh_commands_json,"
+    fi
+    gh_commands_json="$gh_commands_json
+    \"gh pr list --repo OmniNode-ai/${repo} --state merged --search \\\"merged:>=${TARGET_DATE}\\\" --json number,title,url,files,additions,deletions\""
+done
+
+# =============================================================================
+# Snapshot-only mode
+# =============================================================================
+if [[ "$SNAPSHOT_ONLY" == "true" ]]; then
+    SNAPSHOT_RESULT=$(create_daily_snapshot "$TARGET_DATE" "$PROJECT_ID" 0 0.0)
+    if [[ "$JSON_OUTPUT" == "true" ]]; then
+        echo "$SNAPSHOT_RESULT"
+    else
+        # Parse JSON result for human-readable output
+        snapshot_success=$(echo "$SNAPSHOT_RESULT" | python3 -c "import sys, json; d=json.load(sys.stdin); print(d.get('success', False))" 2>/dev/null || echo "false")
+        snapshot_path=$(echo "$SNAPSHOT_RESULT" | python3 -c "import sys, json; d=json.load(sys.stdin); print(d.get('snapshot_path', ''))" 2>/dev/null || echo "")
+        created_new=$(echo "$SNAPSHOT_RESULT" | python3 -c "import sys, json; d=json.load(sys.stdin); print(d.get('created_new', False))" 2>/dev/null || echo "false")
+        message=$(echo "$SNAPSHOT_RESULT" | python3 -c "import sys, json; d=json.load(sys.stdin); print(d.get('message', ''))" 2>/dev/null || echo "")
+
+        echo "============================================================"
+        echo "Snapshot Creation (--snapshot-only)"
+        echo "============================================================"
+        echo ""
+        echo "Date: $TARGET_DATE"
+        echo "Project ID: $PROJECT_ID"
+        echo ""
+        if [[ "$snapshot_success" == "True" ]]; then
+            echo "Status: SUCCESS"
+            if [[ "$created_new" == "True" ]]; then
+                echo "Action: Created new snapshot"
+            else
+                echo "Action: Snapshot already exists"
+            fi
+            echo "Path: $snapshot_path"
+        else
+            echo "Status: FAILED"
+            echo "Error: $(echo "$SNAPSHOT_RESULT" | python3 -c "import sys, json; d=json.load(sys.stdin); print(d.get('error', 'Unknown error'))" 2>/dev/null)"
+        fi
+        echo ""
+        echo "Note: Use --json flag for machine-readable output"
+    fi
+    exit 0
+fi
+
+# JSON output mode with --generate
+if [[ "$JSON_OUTPUT" == "true" && "$GENERATE" == "true" ]]; then
+    # Create snapshot unless --no-snapshot
+    SNAPSHOT_JSON="null"
+    if [[ "$NO_SNAPSHOT" != "true" ]]; then
+        SNAPSHOT_RESULT=$(create_daily_snapshot "$TARGET_DATE" "$PROJECT_ID" 0 0.0)
+        SNAPSHOT_JSON="$SNAPSHOT_RESULT"
+    fi
+
+    printf '{\n'
+    printf '  "mode": "generate",\n'
+    printf '  "target_date": "%s",\n' "$TARGET_DATE"
+    printf '  "day_name": "%s",\n' "$DAY_NAME"
+    printf '  "analysis_days": %d,\n' "$DAYS"
+    printf '  "repositories": [%s],\n' "$repos_json_array"
+    printf '  "output_file": "%s",\n' "${OUTFILE:-${OUTPUT_DIR}/${MONTH_NAME^^}_${DAY_NUM}_${YEAR}_DEEP_DIVE.md}"
+    printf '  "snapshot": %s,\n' "$SNAPSHOT_JSON"
+    printf '  "mcp_calls": [\n'
+    printf '    {\n'
+    printf '      "tool": "mcp__linear-server__list_issues",\n'
+    printf '      "params": {\n'
+    printf '        "assignee": "me",\n'
+    printf '        "updatedAt": "-P%dD",\n' "$DAYS"
+    printf '        "limit": 100\n'
+    printf '      },\n'
+    printf '      "purpose": "Fetch all issues updated in analysis period"\n'
+    printf '    },\n'
+    printf '    {\n'
+    printf '      "tool": "mcp__linear-server__list_projects",\n'
+    printf '      "params": {\n'
+    printf '        "member": "me",\n'
+    printf '        "limit": 50\n'
+    printf '      },\n'
+    printf '      "purpose": "Fetch project progress for context"\n'
+    printf '    }\n'
+    printf '  ],\n'
+    printf '  "gh_commands": [%s\n  ],\n' "$gh_commands_json"
+    printf '  "git_commands": [\n'
+    printf '    "git log --oneline --since=\\"%s\\\" --until=\\\"%s 23:59:59\\\" --author=\\\"Jonah\\\""\n' "$TARGET_DATE" "$TARGET_DATE"
+    printf '  ],\n'
+    printf '  "report_sections": [\n'
+    printf '    "Executive Summary (Velocity/Effectiveness scores)",\n'
+    printf '    "Repository Activity Overview",\n'
+    printf '    "Major Components & Work Completed",\n'
+    printf '    "Detailed Commit Analysis",\n'
+    printf '    "Metrics & Statistics",\n'
+    printf '    "Work Breakdown by Category",\n'
+    printf '    "Key Achievements",\n'
+    printf '    "Challenges & Issues",\n'
+    printf '    "Velocity Analysis",\n'
+    printf '    "Effectiveness Analysis",\n'
+    printf '    "Lessons Learned",\n'
+    printf '    "Next Day Preview"\n'
+    printf '  ]\n'
+    printf '}\n'
+    exit 0
+fi
+
+# JSON output mode (without --generate)
+if [[ "$JSON_OUTPUT" == "true" ]]; then
+    # Create snapshot unless --no-snapshot
+    SNAPSHOT_JSON="null"
+    if [[ "$NO_SNAPSHOT" != "true" ]]; then
+        SNAPSHOT_RESULT=$(create_daily_snapshot "$TARGET_DATE" "$PROJECT_ID" 0 0.0)
+        SNAPSHOT_JSON="$SNAPSHOT_RESULT"
+    fi
+
+    printf '{\n'
+    printf '  "type": "deep-dive-generator",\n'
+    printf '  "target_date": "%s",\n' "$TARGET_DATE"
+    printf '  "day_name": "%s",\n' "$DAY_NAME"
+    printf '  "analysis_days": %d,\n' "$DAYS"
+    printf '  "repositories": [%s],\n' "$repos_json_array"
+    printf '  "output_file": "%s",\n' "$OUTFILE"
+    printf '  "output_directory": "%s",\n' "$OUTPUT_DIR"
+    printf '  "save_mode": %s,\n' "$SAVE"
+    printf '  "snapshot": %s,\n' "$SNAPSHOT_JSON"
+    printf '  "data_sources": {\n'
+    printf '    "linear_mcp": true,\n'
+    printf '    "github_cli": true,\n'
+    printf '    "git_log": true\n'
+    printf '  }\n'
+    printf '}\n'
+    exit 0
+fi
+
+# Standard prompt output mode
+echo "============================================================"
+echo "Deep Dive Report Generator"
+echo "============================================================"
+echo ""
+echo "Target Date: $TARGET_DATE ($DAY_NAME)"
+echo "Analysis Period: $DAYS day(s)"
+echo "Repositories: $REPOS"
+echo "Output Directory: $OUTPUT_DIR"
+if [[ -n "$OUTFILE" ]]; then
+    echo "Output File: $OUTFILE"
+fi
+echo ""
+echo "============================================================"
+echo ""
+echo "This skill generates comprehensive deep dive reports by:"
+echo ""
+echo "1. Fetching Linear data via MCP:"
+echo "   - Issues updated/completed by 'me' in the time period"
+echo "   - Project progress for MVP/Beta/Production"
+echo ""
+echo "2. Fetching GitHub data via 'gh' CLI:"
+echo "   - PRs merged in the time period"
+echo "   - Commit counts and file changes"
+echo ""
+echo "3. Analyzing and formatting into deep dive structure"
+echo ""
+echo "============================================================"
+echo ""
+echo "To generate the report, use the polymorphic agent with this prompt:"
+echo ""
+cat << 'PROMPT'
+Task(
+  subagent_type="polymorphic-agent",
+  description="Generate deep dive report",
+  prompt="""Generate a comprehensive deep dive report for {DATE}.
+
+## Data Collection
+
+### Step 1: Fetch Linear Issues
+Use mcp__linear-server__list_issues with:
+- assignee: "me"
+- updatedAt: "-P1D" (or "-P{DAYS}D" for multi-day)
+- limit: 100
+
+Categorize by status: Done, In Progress, Backlog
+
+### Step 2: Fetch PR Data (for each repo)
+For each of: omnibase_core, omnibase_spi, omnibase_infra, omniclaude
+
+```bash
+gh pr list --repo OmniNode-ai/{repo} --state merged \
+  --search "merged:>={DATE}" --json number,title,url,files,additions,deletions
+```
+
+### Step 3: Fetch Commit Data
+```bash
+git log --oneline --since="{DATE}" --until="{DATE} 23:59:59" --author="Jonah"
+```
+
+## Report Format
+
+Follow the exact format from ${LINEAR_INSIGHTS_OUTPUT_DIR}/DECEMBER_9_2025_DEEP_DIVE.md:
+
+1. **Executive Summary** with Velocity (0-100) and Effectiveness (0-100) scores
+2. **Repository Activity Overview** - commits, PRs, files per repo
+3. **Major Components & Work Completed** - detailed PR-by-PR breakdown
+4. **Detailed Commit Analysis** - commits by category
+5. **Metrics & Statistics** - PR table, ticket progress
+6. **Work Breakdown by Category** - percentage allocation
+7. **Key Achievements** - bullet points
+8. **Challenges & Issues** - technical/process observations
+9. **Velocity Analysis** - factors and score justification
+10. **Effectiveness Analysis** - strategic impact
+11. **Lessons Learned** - takeaways
+12. **Next Day Preview** - upcoming focus
+13. **Appendix** - complete commit log
+
+## Scoring Guidelines
+
+**Velocity Score (0-100)**:
+- 90+: Exceptional (50+ commits, 8+ PRs, 500+ files)
+- 80-89: Strong (30-50 commits, 5-8 PRs, 200-500 files)
+- 70-79: Good (15-30 commits, 3-5 PRs, 50-200 files)
+- 60-69: Moderate (5-15 commits, 1-3 PRs, 20-50 files)
+- <60: Light (minimal activity)
+
+**Effectiveness Score (0-100)**:
+- 90+: All work directly advances MVP/strategic goals
+- 80-89: Most work is high-value, some maintenance
+- 70-79: Mix of strategic and tactical work
+- 60-69: Mostly tactical/maintenance work
+- <60: Primarily unplanned/reactive work
+
+Save the report to: {OUTPUT_FILE}
+"""
+)
+PROMPT
+
+echo ""
+echo "============================================================"
+echo "Replace {DATE}, {DAYS}, and {OUTPUT_FILE} with actual values"
+echo "============================================================"
+
+# Generate mode - output specific MCP tool call instructions
+if [[ "$GENERATE" == "true" ]]; then
+    echo ""
+    echo ""
+    echo "============================================================"
+    echo "Direct Generation Mode (--generate)"
+    echo "============================================================"
+    echo ""
+    echo "Execute these MCP tool calls and commands in sequence to generate"
+    echo "the deep dive report for: $TARGET_DATE ($DAY_NAME)"
+    echo ""
+    echo "============================================================"
+    echo "STEP 1: Fetch Linear Issues"
+    echo "============================================================"
+    echo ""
+    echo "Call this MCP tool to get all issues updated in the analysis period:"
+    echo ""
+    echo '```python'
+    echo "mcp__linear-server__list_issues("
+    echo "    assignee=\"me\","
+    echo "    updatedAt=\"-P${DAYS}D\","
+    echo "    limit=100"
+    echo ")"
+    echo '```'
+    echo ""
+    echo "Categorize returned issues by state:"
+    echo "- Done: Completed work"
+    echo "- In Progress: Active work"
+    echo "- Todo/Backlog: Planned work"
+    echo ""
+    echo "============================================================"
+    echo "STEP 2: Fetch Project Progress"
+    echo "============================================================"
+    echo ""
+    echo "Call this MCP tool to get project context:"
+    echo ""
+    echo '```python'
+    echo "mcp__linear-server__list_projects("
+    echo "    member=\"me\","
+    echo "    limit=50"
+    echo ")"
+    echo '```'
+    echo ""
+    echo "============================================================"
+    echo "STEP 3: Fetch GitHub PR Data"
+    echo "============================================================"
+    echo ""
+    echo "Execute these commands for each repository:"
+    echo ""
+    for repo in "${REPO_ARRAY[@]}"; do
+        echo "# ${repo}"
+        echo '```bash'
+        echo "gh pr list --repo OmniNode-ai/${repo} --state merged \\"
+        echo "  --search \"merged:>=${TARGET_DATE}\" \\"
+        echo "  --json number,title,url,files,additions,deletions"
+        echo '```'
+        echo ""
+    done
+    echo "============================================================"
+    echo "STEP 4: Fetch Git Commit Data"
+    echo "============================================================"
+    echo ""
+    echo "Execute in each repository directory:"
+    echo ""
+    echo '```bash'
+    echo "git log --oneline --since=\"${TARGET_DATE}\" --until=\"${TARGET_DATE} 23:59:59\" --author=\"Jonah\""
+    echo '```'
+    echo ""
+    echo "============================================================"
+    echo "STEP 5: Generate Report"
+    echo "============================================================"
+    echo ""
+    echo "Compile the collected data into the deep dive format:"
+    echo ""
+    echo "1. Executive Summary with Velocity (0-100) and Effectiveness (0-100) scores"
+    echo "2. Repository Activity Overview - commits, PRs, files per repo"
+    echo "3. Major Components & Work Completed - detailed PR-by-PR breakdown"
+    echo "4. Detailed Commit Analysis - commits by category"
+    echo "5. Metrics & Statistics - PR table, ticket progress"
+    echo "6. Work Breakdown by Category - percentage allocation"
+    echo "7. Key Achievements - bullet points"
+    echo "8. Challenges & Issues - technical/process observations"
+    echo "9. Velocity Analysis - factors and score justification"
+    echo "10. Effectiveness Analysis - strategic impact"
+    echo "11. Lessons Learned - takeaways"
+    echo "12. Next Day Preview - upcoming focus"
+    echo ""
+    if [[ -n "$OUTFILE" ]]; then
+        echo "Save report to: $OUTFILE"
+    else
+        echo "Output file: ${OUTPUT_DIR}/${MONTH_NAME^^}_${DAY_NUM}_${YEAR}_DEEP_DIVE.md"
+    fi
+    echo ""
+    echo "============================================================"
+    echo "Scoring Guidelines"
+    echo "============================================================"
+    echo ""
+    echo "Velocity Score (0-100):"
+    echo "  90+: Exceptional (50+ commits, 8+ PRs, 500+ files)"
+    echo "  80-89: Strong (30-50 commits, 5-8 PRs, 200-500 files)"
+    echo "  70-79: Good (15-30 commits, 3-5 PRs, 50-200 files)"
+    echo "  60-69: Moderate (5-15 commits, 1-3 PRs, 20-50 files)"
+    echo "  <60: Light (minimal activity)"
+    echo ""
+    echo "Effectiveness Score (0-100):"
+    echo "  90+: All work directly advances MVP/strategic goals"
+    echo "  80-89: Most work is high-value, some maintenance"
+    echo "  70-79: Mix of strategic and tactical work"
+    echo "  60-69: Mostly tactical/maintenance work"
+    echo "  <60: Primarily unplanned/reactive work"
+    echo ""
+fi
+
+# =============================================================================
+# Snapshot Creation (standard text output mode)
+# =============================================================================
+# Creates a daily snapshot as canonical data source (per DESIGN_V2.md)
+# Snapshots are created unless --no-snapshot is specified
+if [[ "$NO_SNAPSHOT" != "true" ]]; then
+    echo ""
+    echo "============================================================"
+    echo "Snapshot Creation"
+    echo "============================================================"
+    echo ""
+    SNAPSHOT_RESULT=$(create_daily_snapshot "$TARGET_DATE" "$PROJECT_ID" 0 0.0)
+
+    # Parse JSON result for human-readable output
+    snapshot_success=$(echo "$SNAPSHOT_RESULT" | python3 -c "import sys, json; d=json.load(sys.stdin); print(d.get('success', False))" 2>/dev/null || echo "false")
+    snapshot_path=$(echo "$SNAPSHOT_RESULT" | python3 -c "import sys, json; d=json.load(sys.stdin); print(d.get('snapshot_path', ''))" 2>/dev/null || echo "")
+    created_new=$(echo "$SNAPSHOT_RESULT" | python3 -c "import sys, json; d=json.load(sys.stdin); print(d.get('created_new', False))" 2>/dev/null || echo "false")
+
+    echo "Date: $TARGET_DATE"
+    echo "Project ID: $PROJECT_ID"
+    echo ""
+    if [[ "$snapshot_success" == "True" ]]; then
+        if [[ "$created_new" == "True" ]]; then
+            echo "Status: Created new snapshot"
+        else
+            echo "Status: Snapshot already exists"
+        fi
+        echo "Path: $snapshot_path"
+    else
+        echo "Status: Failed to create snapshot"
+        echo "Error: $(echo "$SNAPSHOT_RESULT" | python3 -c "import sys, json; d=json.load(sys.stdin); print(d.get('error', 'Unknown error'))" 2>/dev/null)"
+    fi
+    echo ""
+    echo "Note: Snapshots are the canonical data source (per DESIGN_V2.md)."
+    echo "      Markdown files are presentation artifacts only."
+    echo "      Use --no-snapshot to skip snapshot creation."
+fi

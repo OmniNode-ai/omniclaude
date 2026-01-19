@@ -1,0 +1,40 @@
+#!/bin/bash
+# Claude Code Skill: Trace Correlation ID
+# Provides complete observability trace for agent executions
+
+# Detect project root
+# Priority: OMNICLAUDE_PATH env var > .env detection > common locations
+if [[ -n "${OMNICLAUDE_PATH:-}" ]]; then
+    PROJECT_ROOT="$OMNICLAUDE_PATH"
+elif [[ -n "${PROJECT_ROOT:-}" ]]; then
+    PROJECT_ROOT="$PROJECT_ROOT"
+else
+    # Auto-detect from common locations (generic patterns only, no user-specific paths)
+    for candidate in \
+        "${HOME}/Code/omniclaude" \
+        "/workspace/omniclaude" \
+        "$(pwd)"
+    do
+        if [[ -f "$candidate/scripts/trace-correlation-id.sh" ]]; then
+            PROJECT_ROOT="$candidate"
+            break
+        fi
+    done
+fi
+
+# Validate project root
+if [[ -z "$PROJECT_ROOT" ]]; then
+    echo "❌ ERROR: Cannot detect omniclaude project root"
+    echo "Set OMNICLAUDE_PATH or PROJECT_ROOT environment variable"
+    exit 1
+fi
+
+# Check if trace script exists
+if [[ ! -f "$PROJECT_ROOT/scripts/trace-correlation-id.sh" ]]; then
+    echo "❌ ERROR: trace-correlation-id.sh not found at $PROJECT_ROOT/scripts/"
+    echo "PROJECT_ROOT: $PROJECT_ROOT"
+    exit 1
+fi
+
+# Pass all arguments to the trace script
+exec "$PROJECT_ROOT/scripts/trace-correlation-id.sh" "$@"

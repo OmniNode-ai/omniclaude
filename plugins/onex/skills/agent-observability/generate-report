@@ -1,0 +1,383 @@
+#!/usr/bin/env python3
+"""
+Agent Observability: Comprehensive Report Generation
+Target: <30 seconds execution
+
+Full observability analysis:
+- All metrics from check-health
+- Error analysis from diagnose-errors
+- Performance trends
+- Agent usage patterns
+- Actionable insights
+"""
+
+import argparse
+import sys
+from pathlib import Path
+
+
+# Add shared utilities to path
+SKILLS_DIR = Path(__file__).parent.parent
+sys.path.insert(0, str(SKILLS_DIR / "_shared"))
+
+from db_helper import execute_query
+
+
+def get_comprehensive_metrics(time_range="7d"):
+    """Get all observability metrics."""
+    # Parse time range
+    interval_map = {"24h": "24 hours", "7d": "7 days", "30d": "30 days"}
+    interval = interval_map.get(time_range, "7 days")
+
+    # Execution summary
+    exec_summary = execute_query(
+        """
+        SELECT
+            COUNT(*) as total,
+            COUNT(*) FILTER (WHERE status = 'success') as success,
+            COUNT(*) FILTER (WHERE status = 'error') as error,
+            COUNT(*) FILTER (WHERE status = 'in_progress') as in_progress,
+            ROUND(AVG(duration_ms)::numeric, 0) as avg_duration,
+            PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY duration_ms) as p50_duration,
+            PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_ms) as p95_duration,
+            PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY duration_ms) as p99_duration
+        FROM agent_execution_logs
+        WHERE started_at > NOW() - INTERVAL %s
+        """,
+        (interval,),
+        fetch=True,
+    )
+
+    # Agent usage
+    agent_usage = execute_query(
+        """
+        SELECT
+            agent_name,
+            COUNT(*) as executions,
+            COUNT(*) FILTER (WHERE status = 'success') as successful,
+            COUNT(*) FILTER (WHERE status = 'error') as failed,
+            ROUND(AVG(duration_ms)::numeric, 0) as avg_duration,
+            MAX(started_at) as last_used
+        FROM agent_execution_logs
+        WHERE started_at > NOW() - INTERVAL %s
+        AND agent_name IS NOT NULL
+        GROUP BY agent_name
+        ORDER BY executions DESC
+        """,
+        (interval,),
+        fetch=True,
+    )
+
+    # Routing intelligence
+    routing_intel = execute_query(
+        """
+        SELECT
+            routing_strategy,
+            COUNT(*) as count,
+            ROUND(AVG(confidence_score)::numeric, 3) as avg_confidence,
+            ROUND(AVG(routing_time_ms)::numeric, 2) as avg_routing_ms
+        FROM agent_routing_decisions
+        WHERE created_at > NOW() - INTERVAL %s
+        GROUP BY routing_strategy
+        ORDER BY count DESC
+        """,
+        (interval,),
+        fetch=True,
+    )
+
+    # Hook events status
+    hook_status = execute_query(
+        """
+        SELECT
+            source,
+            COUNT(*) as total,
+            COUNT(*) FILTER (WHERE processed = FALSE) as unprocessed,
+            COUNT(*) FILTER (WHERE retry_count > 0) as with_retries,
+            MAX(created_at) as last_event
+        FROM hook_events
+        WHERE created_at > NOW() - INTERVAL %s
+        GROUP BY source
+        ORDER BY total DESC
+        """,
+        (interval,),
+        fetch=True,
+    )
+
+    # Daily trends (last 7 days)
+    daily_trends = execute_query(
+        """
+        SELECT
+            DATE(started_at) as day,
+            COUNT(*) as total,
+            COUNT(*) FILTER (WHERE status = 'success') as success,
+            COUNT(*) FILTER (WHERE status = 'error') as error,
+            ROUND(AVG(duration_ms)::numeric, 0) as avg_duration
+        FROM agent_execution_logs
+        WHERE started_at > NOW() - INTERVAL '7 days'
+        GROUP BY day
+        ORDER BY day DESC
+        """,
+        fetch=True,
+    )
+
+    # Correlation tracking
+    correlation_stats = execute_query(
+        """
+        SELECT
+            COUNT(*) as total_executions,
+            COUNT(DISTINCT correlation_id) as unique_correlations,
+            COUNT(*) FILTER (WHERE correlation_id IS NOT NULL) as with_correlation
+        FROM agent_execution_logs
+        WHERE started_at > NOW() - INTERVAL %s
+        """,
+        (interval,),
+        fetch=True,
+    )
+
+    return {
+        "summary": (
+            exec_summary["rows"][0]
+            if exec_summary["success"] and exec_summary["rows"]
+            else None
+        ),
+        "agent_usage": agent_usage["rows"] if agent_usage["success"] else [],
+        "routing": routing_intel["rows"] if routing_intel["success"] else [],
+        "hooks": hook_status["rows"] if hook_status["success"] else [],
+        "trends": daily_trends["rows"] if daily_trends["success"] else [],
+        "correlation": (
+            correlation_stats["rows"][0]
+            if correlation_stats["success"] and correlation_stats["rows"]
+            else None
+        ),
+    }
+
+
+def format_report(metrics, time_range):
+    """Format comprehensive report."""
+    output = []
+    output.append("# 📊 Agent Observability Comprehensive Report")
+    output.append("")
+    output.append(f"**Report Period**: Last {time_range}")
+    output.append(
+        f"**Generated**: {__import__('datetime').datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+    )
+    output.append("")
+
+    # Executive Summary
+    if metrics["summary"]:
+        s = metrics["summary"]
+        total = s["total"]
+        success_rate = (s["success"] / total * 100) if total > 0 else 0
+
+        status = (
+            "🟢 HEALTHY"
+            if success_rate >= 90
+            else "🟡 WARNING" if success_rate >= 80 else "🔴 CRITICAL"
+        )
+
+        output.append(f"## Executive Summary: {status}")
+        output.append("")
+        output.append("| Metric | Value |")
+        output.append("|--------|-------|")
+        output.append(f"| Total Executions | {total} |")
+        output.append(f"| **Success Rate** | **{success_rate:.1f}%** |")
+        output.append(f"| Successful | {s['success']} |")
+        output.append(f"| Failed | {s['error']} |")
+        output.append(f"| In Progress | {s['in_progress']} |")
+        output.append(f"| Avg Duration | {s['avg_duration']:.0f}ms |")
+        output.append(f"| P50 Duration | {s['p50_duration']:.0f}ms |")
+        output.append(f"| P95 Duration | {s['p95_duration']:.0f}ms |")
+        output.append(f"| P99 Duration | {s['p99_duration']:.0f}ms |")
+        output.append("")
+
+    # Agent Usage Analysis
+    if metrics["agent_usage"]:
+        output.append("## Agent Usage Analysis")
+        output.append("")
+        output.append(
+            "| Agent | Executions | Success Rate | Avg Duration | Last Used |"
+        )
+        output.append(
+            "|-------|------------|--------------|--------------|-----------|"
+        )
+        for row in metrics["agent_usage"][:15]:
+            agent = row["agent_name"]
+            total = row["executions"]
+            success_rate = (row["successful"] / total * 100) if total > 0 else 0
+            indicator = (
+                "🟢" if success_rate >= 90 else "🟡" if success_rate >= 80 else "🔴"
+            )
+            duration = f"{row['avg_duration']:.0f}ms"
+            last_used = (
+                row["last_used"].strftime("%m-%d %H:%M") if row["last_used"] else "N/A"
+            )
+            output.append(
+                f"| {agent[:30]} | {total} | {indicator} {success_rate:.0f}% | {duration} | {last_used} |"
+            )
+        output.append("")
+
+    # Routing Intelligence
+    if metrics["routing"]:
+        output.append("## Routing Intelligence")
+        output.append("")
+        output.append(
+            "| Routing Strategy | Count | Avg Confidence | Avg Routing Time |"
+        )
+        output.append(
+            "|------------------|-------|----------------|------------------|"
+        )
+        for row in metrics["routing"]:
+            strategy = row["routing_strategy"] or "Unknown"
+            count = row["count"]
+            confidence = (
+                f"{row['avg_confidence']:.3f}" if row["avg_confidence"] else "N/A"
+            )
+            routing_time = (
+                f"{row['avg_routing_ms']:.0f}ms" if row["avg_routing_ms"] else "N/A"
+            )
+            output.append(f"| {strategy} | {count} | {confidence} | {routing_time} |")
+        output.append("")
+
+    # Hook Events Status
+    if metrics["hooks"]:
+        output.append("## Hook Events Status")
+        output.append("")
+        output.append("| Source | Total | Unprocessed | With Retries | Last Event |")
+        output.append("|--------|-------|-------------|--------------|------------|")
+        for row in metrics["hooks"]:
+            source = row["source"]
+            total = row["total"]
+            unprocessed = row["unprocessed"]
+            retries = row["with_retries"]
+            last = (
+                row["last_event"].strftime("%m-%d %H:%M")
+                if row["last_event"]
+                else "N/A"
+            )
+            indicator = "🔴" if unprocessed > 50 else "🟡" if unprocessed > 10 else "🟢"
+            output.append(
+                f"| {source} | {total} | {indicator} {unprocessed} | {retries} | {last} |"
+            )
+        output.append("")
+
+    # Daily Trends
+    if metrics["trends"]:
+        output.append("## Daily Trends")
+        output.append("")
+        output.append(
+            "| Date | Total | Success | Error | Success Rate | Avg Duration |"
+        )
+        output.append(
+            "|------|-------|---------|-------|--------------|--------------|"
+        )
+        for row in metrics["trends"]:
+            day = row["day"].strftime("%m-%d")
+            total = row["total"]
+            success = row["success"]
+            error = row["error"]
+            success_rate = (success / total * 100) if total > 0 else 0
+            indicator = (
+                "🟢" if success_rate >= 90 else "🟡" if success_rate >= 80 else "🔴"
+            )
+            duration = f"{row['avg_duration']:.0f}ms"
+            output.append(
+                f"| {day} | {total} | {success} | {error} | {indicator} {success_rate:.0f}% | {duration} |"
+            )
+        output.append("")
+
+    # Correlation Tracking
+    if metrics["correlation"]:
+        c = metrics["correlation"]
+        total = c["total_executions"]
+        with_corr = c["with_correlation"]
+        correlation_rate = (with_corr / total * 100) if total > 0 else 0
+
+        output.append("## Correlation Tracking")
+        output.append("")
+        output.append("| Metric | Value |")
+        output.append("|--------|-------|")
+        output.append(f"| Total Executions | {total} |")
+        output.append(
+            f"| With Correlation ID | {with_corr} ({correlation_rate:.1f}%) |"
+        )
+        output.append(f"| Unique Correlation Chains | {c['unique_correlations']} |")
+        output.append("")
+
+    # Key Insights
+    output.append("## 💡 Key Insights")
+    output.append("")
+
+    if metrics["summary"]:
+        s = metrics["summary"]
+        total = s["total"]
+        success_rate = (s["success"] / total * 100) if total > 0 else 0
+
+        if success_rate >= 95:
+            output.append("- ✅ **Excellent** success rate - system performing well")
+        elif success_rate >= 90:
+            output.append("- ✅ **Good** success rate - minor improvements possible")
+        elif success_rate >= 80:
+            output.append(
+                "- ⚠️ **Warning** - success rate below target, investigation recommended"
+            )
+        else:
+            output.append(
+                "- 🚨 **Critical** - success rate requires immediate attention"
+            )
+
+        if s["p95_duration"] > 60000:
+            output.append(
+                f"- ⚠️ P95 duration high ({s['p95_duration']:.0f}ms) - performance optimization needed"
+            )
+
+    if metrics["agent_usage"]:
+        most_used = metrics["agent_usage"][0]
+        output.append(
+            f"- 📊 Most used agent: {most_used['agent_name']} ({most_used['executions']} executions)"
+        )
+
+        # Find agents with low success rates
+        problem_agents = [
+            a
+            for a in metrics["agent_usage"]
+            if (a["successful"] / a["executions"] * 100) < 80
+        ]
+        if problem_agents:
+            output.append(
+                f"- 🔍 {len(problem_agents)} agent(s) with success rate <80% - requires investigation"
+            )
+
+    output.append("")
+
+    return "\n".join(output)
+
+
+def main():
+    """Main execution."""
+    parser = argparse.ArgumentParser(
+        description="Generate comprehensive observability report"
+    )
+    parser.add_argument(
+        "--time-range",
+        default="7d",
+        choices=["24h", "7d", "30d"],
+        help="Time range for report",
+    )
+
+    args = parser.parse_args()
+
+    try:
+        metrics = get_comprehensive_metrics(args.time_range)
+        report = format_report(metrics, args.time_range)
+        print(report)
+        return 0
+    except Exception as e:
+        print(f"❌ Report generation failed: {e}", file=sys.stderr)
+        import traceback
+
+        traceback.print_exc()
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

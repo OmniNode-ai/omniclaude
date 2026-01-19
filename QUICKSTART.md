@@ -108,7 +108,7 @@ poetry install
 # Expected output:
 # Installing dependencies from lock file
 # ...
-# Installing the current project: omniclaude-agents (0.1.0)
+# Installing the current project: omniclaude (0.1.0)
 
 # Activate virtual environment
 poetry shell

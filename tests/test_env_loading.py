@@ -7,6 +7,9 @@ Migration Status: Migrated to Pydantic Settings (Phase 2)
 - Uses type-safe configuration from config/settings.py
 - Maintains backward compatibility for TRACEABILITY_DB_* variables
 - All environment variables now accessed via Pydantic Settings framework
+
+Note: These tests require .env with Kafka/Postgres configuration.
+Marked as integration tests - skipped in CI.
 """
 
 import pytest
@@ -14,6 +17,7 @@ import pytest
 from config import settings
 
 
+@pytest.mark.integration
 def test_env_configuration_loaded():
     """Verify .env configuration is loaded correctly into Pydantic Settings."""
     # Test Kafka configuration
@@ -48,6 +52,7 @@ def test_env_configuration_loaded():
     assert ":@" not in pg_dsn, "DSN should contain a password (not empty)"
 
 
+@pytest.mark.integration
 def test_postgres_dsn_construction():
     """Verify PostgreSQL DSN is constructed correctly using Pydantic Settings."""
     # Use settings helper method for DSN construction (replaces manual construction)
@@ -68,6 +73,7 @@ def test_postgres_dsn_construction():
     print(f"\n✅ PostgreSQL DSN constructed: {dsn.split(':')[0]}://[redacted]")
 
 
+@pytest.mark.integration
 def test_kafka_brokers_configuration():
     """Verify Kafka brokers configuration uses Pydantic Settings."""
     # Get Kafka bootstrap servers from settings (with legacy alias support)

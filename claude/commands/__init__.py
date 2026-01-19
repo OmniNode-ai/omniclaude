@@ -7,7 +7,7 @@ Available Commands:
   in parallel using polymorphic agents
 - /ci-failures: Fetch and analyze GitHub Actions CI failures for debugging with
   severity classification (CRITICAL/MAJOR/MINOR) and quick fix guidance
-- /pr-dev-review: Fix Critical/Major/Minor issues from PR review + CI failures
+- /pr-review-dev: Fix Critical/Major/Minor issues from PR review + CI failures
   (excludes nitpicks by default)
 - /pr-release-ready: Fix ALL issues from PR review including nitpicks
   (for production releases)
@@ -16,7 +16,7 @@ Available Commands:
 
 Path References (may need updating if commands are moved):
 - ci-failures.md references: ~/.claude/skills/onex/ci-failures/ci-quick-review
-- pr-dev-review.md references:
+- pr-review-dev.md references:
   - ~/.claude/skills/onex/pr-review/collate-issues
   - ~/.claude/skills/onex/pr-review/collate-issues-with-ci
   - ~/.claude/skills/onex/ci-failures/ci-quick-review

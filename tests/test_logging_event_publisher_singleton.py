@@ -7,6 +7,9 @@ overhead per call and ensures thread safety and proper resource management.
 
 Created: 2025-11-14
 Reference: PR #32 review (performance optimization)
+
+Note: These tests require Kafka to be running and are marked as integration tests.
+They will be skipped in CI (which runs with -m "not integration").
 """
 
 import asyncio
@@ -25,6 +28,7 @@ from agents.lib.logging_event_publisher import (
 )
 
 
+@pytest.mark.integration
 class TestSingletonPattern:
     """Test singleton pattern for convenience functions."""
 
@@ -252,6 +256,7 @@ class TestSingletonPattern:
         # Note: _started is False when enable_events=False (expected behavior)
 
 
+@pytest.mark.integration
 class TestPerformanceBenchmarks:
     """Performance benchmarks for singleton vs context manager."""
 
