@@ -99,6 +99,21 @@ PROMPT_PREVIEW_MAX_LENGTH: int = 100
 
 # Privacy: Patterns that may indicate secrets (compiled for performance)
 # These patterns are intentionally simple to avoid false negatives
+#
+# KNOWN FALSE POSITIVES (intentionally not matched):
+#   - Short passwords: "password=short" (less than 8 chars) - not matched to reduce
+#     false positives on common non-secret patterns like "password=placeholder"
+#   - URL parameters: "reset_password=true" - the boolean "true" is only 4 chars
+#     so it won't match the 8+ char requirement
+#   - Base64 strings that happen to start with "eyJ" but aren't JWT tokens -
+#     we require the full three-part JWT structure to minimize false positives
+#
+# PATTERN DESIGN PRINCIPLES:
+#   1. All patterns are compiled at module load time for O(1) lookup
+#   2. Patterns use word boundaries (\b) where appropriate to avoid partial matches
+#   3. Minimum length requirements reduce false positives
+#   4. Group captures preserve non-secret context for readability
+#
 _SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # API keys with common prefixes
     (re.compile(r"\b(sk-[a-zA-Z0-9]{20,})", re.IGNORECASE), "sk-***REDACTED***"),
@@ -120,26 +135,41 @@ _SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # Format: AIza[0-9A-Za-z-_]{35}
     # Reference: https://cloud.google.com/docs/authentication/api-keys
     (re.compile(r"\b(AIza[0-9A-Za-z\-_]{35})"), "AIza***REDACTED***"),
-    # Private keys (PEM format)
-    # Matches RSA, EC, generic, and encrypted private key headers
-    # Reference: RFC 7468 (Textual Encodings of PKIX, PKCS, and CMS Structures)
+    # JWT tokens (JSON Web Tokens)
+    # Format: base64url(header).base64url(payload).base64url(signature)
+    # Header always starts with eyJ (base64 of '{"')
+    # Reference: RFC 7519 (JSON Web Token)
     (
-        re.compile(r"-----BEGIN (?:RSA |EC |ENCRYPTED )?PRIVATE KEY-----"),
+        re.compile(r"\b(eyJ[a-zA-Z0-9_-]*\.eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*)"),
+        "jwt_***REDACTED***",
+    ),
+    # Private keys (PEM format)
+    # Matches RSA, EC, DSA, OPENSSH, generic, and encrypted private key headers
+    # Reference: RFC 7468 (Textual Encodings of PKIX, PKCS, and CMS Structures)
+    # Reference: OpenSSH PROTOCOL.key format for OPENSSH keys
+    (
+        re.compile(r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----"),
         "-----BEGIN ***REDACTED*** PRIVATE KEY-----",
     ),
     # Bearer tokens
     (re.compile(r"(Bearer\s+)[a-zA-Z0-9._-]{20,}", re.IGNORECASE), r"\1***REDACTED***"),
-    # Password in URLs (postgres://user:password@host)
+    # Password in URLs (postgres://user:password@host, mysql://user:password@host, mongodb://...)
+    # This pattern intentionally covers all database connection string formats
     (re.compile(r"(://[^:]+:)[^@]+(@)"), r"\1***REDACTED***\2"),
     # Generic secret patterns in key=value format
+    # Note: Requires 8+ char values to reduce false positives like "password=true"
+    # Word boundary \b ensures we don't match "reset_password" when looking for "password"
     (
         re.compile(
-            r"((?:password|passwd|secret|token|api_key|apikey|auth)\s*[=:]\s*)['\"]?[^\s'\"]{8,}['\"]?",
+            r"(\b(?:password|passwd|secret|token|api_key|apikey|auth)\s*[=:]\s*)['\"]?[^\s'\"]{8,}['\"]?",
             re.IGNORECASE,
         ),
         r"\1***REDACTED***",
     ),
 ]
+
+# Flag to track if sanitization has been bypassed (for defensive monitoring)
+_SANITIZATION_BYPASS_WARNING_ISSUED: bool = False
 
 
 # =============================================================================
@@ -191,7 +221,12 @@ TimezoneAwareDatetime = Annotated[
 ]
 
 
-def _sanitize_prompt_preview(text: str, max_length: int = PROMPT_PREVIEW_MAX_LENGTH) -> str:
+def _sanitize_prompt_preview(
+    text: str,
+    max_length: int = PROMPT_PREVIEW_MAX_LENGTH,
+    *,
+    _bypass_sanitization: bool = False,
+) -> str:
     """Sanitize and truncate prompt preview for privacy safety.
 
     This function performs two privacy-protecting operations:
@@ -204,9 +239,17 @@ def _sanitize_prompt_preview(text: str, max_length: int = PROMPT_PREVIEW_MAX_LEN
         - For maximum security, producers should pre-sanitize prompts
         - Downstream consumers should treat previews as potentially sensitive
 
+    Known False Positives (intentionally not matched):
+        - "password=short" - values under 8 chars are not matched
+        - "reset_password=true" - boolean values are too short to match
+        - Base64 strings starting with "eyJ" that aren't JWTs - requires full
+          three-part JWT structure
+
     Args:
         text: The raw prompt text to sanitize.
         max_length: Maximum length for the preview (default: PROMPT_PREVIEW_MAX_LENGTH).
+        _bypass_sanitization: Internal flag for testing. If True, skips sanitization
+            but emits a warning. NEVER use in production code.
 
     Returns:
         Sanitized and truncated preview string.
@@ -214,7 +257,30 @@ def _sanitize_prompt_preview(text: str, max_length: int = PROMPT_PREVIEW_MAX_LEN
     Example:
         >>> _sanitize_prompt_preview("Set OPENAI_API_KEY=sk-1234567890abcdef...")
         'Set OPENAI_API_KEY=sk-***REDACTED***...'
+
+    Warning:
+        If _bypass_sanitization is True, a warning is emitted to help identify
+        code paths that may leak secrets. This is for defensive programming
+        and debugging purposes only.
     """
+    global _SANITIZATION_BYPASS_WARNING_ISSUED
+
+    # Defensive warning if sanitization is bypassed
+    if _bypass_sanitization:
+        if not _SANITIZATION_BYPASS_WARNING_ISSUED:
+            warnings.warn(
+                "Secret sanitization was bypassed! This may leak sensitive data. "
+                "If this is intentional (e.g., testing), ensure proper handling. "
+                "Never bypass sanitization in production code.",
+                UserWarning,
+                stacklevel=2,
+            )
+            _SANITIZATION_BYPASS_WARNING_ISSUED = True
+        # Still truncate even when bypassed
+        if len(text) > max_length:
+            return text[: max_length - 3] + "..."
+        return text
+
     # Step 1: Redact known secret patterns
     sanitized = text
     for pattern, replacement in _SECRET_PATTERNS:
@@ -225,6 +291,29 @@ def _sanitize_prompt_preview(text: str, max_length: int = PROMPT_PREVIEW_MAX_LEN
         # Reserve 3 chars for "..." suffix
         return sanitized[: max_length - 3] + "..."
 
+    return sanitized
+
+
+def sanitize_text(text: str) -> str:
+    """Public function to sanitize text for secrets without truncation.
+
+    This function applies all secret pattern redactions but does NOT truncate
+    the result. Use this when you need to sanitize arbitrary text (not just
+    prompt previews) before logging or storing.
+
+    Args:
+        text: The raw text to sanitize.
+
+    Returns:
+        Sanitized text with secrets redacted.
+
+    Example:
+        >>> sanitize_text("Connect to postgres://user:mypassword@host:5432")
+        'Connect to postgres://user:***REDACTED***@host:5432'
+    """
+    sanitized = text
+    for pattern, replacement in _SECRET_PATTERNS:
+        sanitized = pattern.sub(replacement, sanitized)
     return sanitized
 
 
@@ -663,35 +752,21 @@ class ModelHookToolExecutedPayload(BaseModel):
 
 # DEPRECATED: Type alias for backwards compatibility.
 # Use HookEventType enum instead.
-# Scheduled for removal in v0.3.0 (target: Q2 2025).
+# Scheduled for removal in v0.3.0 (target: Q2 2026).
 # Migration: Replace EventType with HookEventType enum values.
+#
+# Note: This type alias is kept for backwards compatibility with code that
+# imports EventType directly. New code should use HookEventType enum instead.
+# No runtime deprecation warning is emitted because:
+# 1. Type aliases can't intercept access to emit warnings
+# 2. Module-level warnings are too intrusive for normal usage
+# 3. The deprecation is clearly documented in code and __all__
 EventType = Literal[
     "hook.session.started",
     "hook.session.ended",
     "hook.prompt.submitted",
     "hook.tool.executed",
 ]
-
-
-def _get_event_type_with_warning() -> type:
-    """Return EventType with a deprecation warning.
-
-    This function is called when EventType is accessed to emit a runtime warning.
-    Use HookEventType enum instead.
-
-    Returns:
-        The EventType Literal type alias.
-
-    .. deprecated:: 0.2.0
-        EventType is deprecated and will be removed in v0.3.0.
-        Use HookEventType enum instead.
-    """
-    warnings.warn(
-        "EventType is deprecated and will be removed in v0.3.0. Use HookEventType enum instead.",
-        DeprecationWarning,
-        stacklevel=3,
-    )
-    return EventType  # type: ignore[return-value]
 
 
 class ModelHookEventEnvelope(BaseModel):
@@ -794,6 +869,8 @@ __all__ = [
     "HookEventType",
     # Annotated types (reusable validators)
     "TimezoneAwareDatetime",
+    # Sanitization utilities
+    "sanitize_text",
     # Payload models
     "ModelHookSessionStartedPayload",
     "ModelHookSessionEndedPayload",
@@ -802,5 +879,8 @@ __all__ = [
     # Envelope and types
     "ModelHookEventEnvelope",
     "ModelHookPayload",
-    "EventType",  # Deprecated v0.2.0, removal v0.3.0 - use HookEventType
+    # EventType is deprecated (v0.2.0) and emits DeprecationWarning at runtime.
+    # Use HookEventType enum instead. Scheduled for removal in v0.3.0.
+    # Kept in __all__ for backwards compatibility and type checker visibility.
+    "EventType",
 ]

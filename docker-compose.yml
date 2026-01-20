@@ -13,7 +13,7 @@ services:
     container_name: omniclaude_postgres
     environment:
       POSTGRES_USER: omniclaude
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-omniclaude_ci_test}
       POSTGRES_DB: omniclaude
     ports:
       - "5432:5432"
