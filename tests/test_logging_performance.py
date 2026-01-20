@@ -15,6 +15,7 @@ Requires: Docker environment with Kafka/Redpanda and PostgreSQL
 """
 
 import asyncio
+import contextlib
 import json
 import os
 import sys
@@ -305,10 +306,8 @@ class TestConsumerPerformance:
         # Stop consumer
         await consumer.stop()
         consumer_task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await consumer_task
-        except asyncio.CancelledError:
-            pass
 
         # Get final count
         async with db_pool.acquire() as conn:
@@ -407,10 +406,8 @@ class TestConsumerPerformance:
             # Stop consumer gracefully
             await consumer.stop()
             consumer_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await consumer_task
-            except asyncio.CancelledError:
-                pass
 
     @pytest.mark.asyncio
     @pytest.mark.performance
@@ -481,10 +478,8 @@ class TestConsumerPerformance:
             # Stop consumer gracefully
             await consumer.stop()
             consumer_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await consumer_task
-            except asyncio.CancelledError:
-                pass
 
 
 @pytest.mark.integration
@@ -556,10 +551,8 @@ class TestBatchSizeOptimization:
 
             await consumer.stop()
             consumer_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await consumer_task
-            except asyncio.CancelledError:
-                pass
 
             throughput = num_events / elapsed
             results[batch_size] = {

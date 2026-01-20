@@ -166,6 +166,36 @@ definitions:
       - prompt_preview
       - prompt_length
 
+  ModelEventPublishResult:
+    type: object
+    description: "Result of publishing event to Kafka"
+    properties:
+      success:
+        type: boolean
+        description: "Whether the event was successfully published"
+      topic:
+        type: string
+        minLength: 1
+        description: "The Kafka topic the event was published to"
+      partition:
+        type: integer
+        nullable: true
+        minimum: 0
+        description: "The partition the event was assigned to (if successful)"
+      offset:
+        type: integer
+        nullable: true
+        minimum: 0
+        description: "The offset within the partition (if successful)"
+      error_message:
+        type: string
+        nullable: true
+        maxLength: 1000
+        description: "Error details if publishing failed"
+    required:
+      - success
+      - topic
+
 # Metadata
 metadata:
   author: "OmniNode Team"

@@ -225,7 +225,7 @@ def test_usage_pattern():
     print("\n=== Testing Usage Pattern ===")
 
     # Simulated publish operation
-    def simulated_publish(topic: str, data: dict) -> KafkaPublishResult:
+    def simulated_publish(topic: str, _data: dict) -> KafkaPublishResult:
         """Simulated publish that returns standardized result."""
         return {
             "success": True,

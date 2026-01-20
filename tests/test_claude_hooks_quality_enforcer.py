@@ -119,7 +119,7 @@ def mock_settings():
 class TestViolationsLogger:
     """Tests for ViolationsLogger class."""
 
-    def test_logger_creates_log_directories(self, tmp_path: Path, monkeypatch):
+    def test_logger_creates_log_directories(self, tmp_path: Path):
         """Test that logger creates necessary directories."""
         # Patch CONFIG for test
         with patch(
@@ -194,7 +194,7 @@ class TestViolationsLogger:
             assert "total_violations_today" in summary
             assert summary["total_violations_today"] == 1
 
-    def test_log_violations_handles_empty_list(self, tmp_path: Path, monkeypatch):
+    def test_log_violations_handles_empty_list(self, tmp_path: Path):
         """Test that empty violations list is handled gracefully."""
         with patch(
             "quality_enforcer.CONFIG",
@@ -519,9 +519,11 @@ class TestEnforceWorkflow:
         """Test that tool calls without content pass through."""
         from quality_enforcer import QualityEnforcer
 
-        with patch("quality_enforcer.CONFIG", {}):
-            with patch("quality_enforcer.ENABLE_PHASE_1_VALIDATION", True):
-                enforcer = QualityEnforcer()
+        with (
+            patch("quality_enforcer.CONFIG", {}),
+            patch("quality_enforcer.ENABLE_PHASE_1_VALIDATION", True),
+        ):
+            enforcer = QualityEnforcer()
 
         tool_call = {"tool_name": "Bash", "tool_input": {"command": "ls"}}
 
@@ -533,9 +535,11 @@ class TestEnforceWorkflow:
         """Test that tool calls without file_path pass through."""
         from quality_enforcer import QualityEnforcer
 
-        with patch("quality_enforcer.CONFIG", {}):
-            with patch("quality_enforcer.ENABLE_PHASE_1_VALIDATION", True):
-                enforcer = QualityEnforcer()
+        with (
+            patch("quality_enforcer.CONFIG", {}),
+            patch("quality_enforcer.ENABLE_PHASE_1_VALIDATION", True),
+        ):
+            enforcer = QualityEnforcer()
 
         tool_call = {"tool_name": "Write", "tool_input": {"content": "test"}}
 
@@ -547,9 +551,11 @@ class TestEnforceWorkflow:
         """Test that unsupported file types pass through."""
         from quality_enforcer import QualityEnforcer
 
-        with patch("quality_enforcer.CONFIG", {}):
-            with patch("quality_enforcer.ENABLE_PHASE_1_VALIDATION", True):
-                enforcer = QualityEnforcer()
+        with (
+            patch("quality_enforcer.CONFIG", {}),
+            patch("quality_enforcer.ENABLE_PHASE_1_VALIDATION", True),
+        ):
+            enforcer = QualityEnforcer()
 
         tool_call = {
             "tool_name": "Write",
@@ -564,20 +570,22 @@ class TestEnforceWorkflow:
         """Test that tool calls pass through when Phase 1 is disabled."""
         from quality_enforcer import QualityEnforcer
 
-        with patch("quality_enforcer.CONFIG", {}):
-            with patch("quality_enforcer.ENABLE_PHASE_1_VALIDATION", False):
-                enforcer = QualityEnforcer()
+        with (
+            patch("quality_enforcer.CONFIG", {}),
+            patch("quality_enforcer.ENABLE_PHASE_1_VALIDATION", False),
+        ):
+            enforcer = QualityEnforcer()
 
-                tool_call = {
-                    "tool_name": "Write",
-                    "tool_input": {
-                        "file_path": "/test/file.py",
-                        "content": "def calculateTotal(): pass",
-                    },
-                }
+            tool_call = {
+                "tool_name": "Write",
+                "tool_input": {
+                    "file_path": "/test/file.py",
+                    "content": "def calculateTotal(): pass",
+                },
+            }
 
-                result = await enforcer.enforce(tool_call)
-                assert result == tool_call
+            result = await enforcer.enforce(tool_call)
+            assert result == tool_call
 
 
 # =============================================================================
@@ -618,9 +626,11 @@ class TestEdgeCases:
         """Test that exceptions during enforcement return original tool call."""
         from quality_enforcer import QualityEnforcer
 
-        with patch("quality_enforcer.CONFIG", {}):
-            with patch("quality_enforcer.ENABLE_PHASE_1_VALIDATION", True):
-                enforcer = QualityEnforcer()
+        with (
+            patch("quality_enforcer.CONFIG", {}),
+            patch("quality_enforcer.ENABLE_PHASE_1_VALIDATION", True),
+        ):
+            enforcer = QualityEnforcer()
 
         # Patch _detect_language to raise exception
         with patch.object(enforcer, "_detect_language", side_effect=RuntimeError("Test error")):
@@ -723,14 +733,16 @@ class TestMainEntryPoint:
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
-        with patch("sys.stdin", StringIO("")):
-            with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-                from quality_enforcer import main
+        with (
+            patch("sys.stdin", StringIO("")),
+            patch("sys.stdout", new_callable=StringIO) as mock_stdout,
+        ):
+            from quality_enforcer import main
 
-                exit_code = await main()
+            exit_code = await main()
 
-        assert exit_code == 0
-        assert mock_stdout.getvalue().strip() == "{}"
+            assert exit_code == 0
+            assert mock_stdout.getvalue().strip() == "{}"
 
     @pytest.mark.asyncio
     async def test_main_invalid_json(self, tmp_path: Path, monkeypatch):
@@ -740,15 +752,17 @@ class TestMainEntryPoint:
 
         monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
-        with patch("sys.stdin", StringIO("{invalid json}")):
-            with patch("sys.stdout", new_callable=StringIO):
-                with patch("sys.stderr", new_callable=StringIO):
-                    from quality_enforcer import main
+        with (
+            patch("sys.stdin", StringIO("{invalid json}")),
+            patch("sys.stdout", new_callable=StringIO),
+            patch("sys.stderr", new_callable=StringIO),
+        ):
+            from quality_enforcer import main
 
-                    exit_code = await main()
+            exit_code = await main()
 
-        # Should return error code on invalid JSON
-        assert exit_code == 1
+            # Should return error code on invalid JSON
+            assert exit_code == 1
 
 
 # =============================================================================
@@ -773,7 +787,7 @@ class TestConfigLoading:
             config = load_config()
             assert isinstance(config, dict)
 
-    def test_load_config_invalid_yaml(self, tmp_path: Path, monkeypatch):
+    def test_load_config_invalid_yaml(self, tmp_path: Path):
         """Test load_config handles invalid YAML gracefully."""
         config_file = tmp_path / "config.yaml"
         config_file.write_text("invalid: yaml: content: [")
@@ -782,7 +796,7 @@ class TestConfigLoading:
             mock_path_instance = MagicMock()
             mock_path_instance.parent = tmp_path
             mock_path_instance.exists.return_value = True
-            mock_path_instance.__truediv__ = lambda self, x: config_file
+            mock_path_instance.__truediv__ = lambda _self, _x: config_file
             mock_path.return_value = mock_path_instance
 
             # The function should handle the error gracefully

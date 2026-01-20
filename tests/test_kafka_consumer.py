@@ -14,6 +14,7 @@ Coverage:
 """
 
 import asyncio
+import contextlib
 import json
 import os
 import sys
@@ -70,7 +71,7 @@ async def db_pool(postgres_dsn):
 
 
 @pytest.fixture
-async def _clean_database(db_pool):
+async def _clean_database(_db_pool):
     """Clean test data from database before each test."""
     # Cleanup happens at the end of each test
     return
@@ -191,10 +192,8 @@ class TestKafkaConsumerIntegration:
         finally:
             await consumer.stop()
             consumer_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await consumer_task
-            except asyncio.CancelledError:
-                pass
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("_clean_database")
@@ -275,10 +274,8 @@ class TestKafkaConsumerIntegration:
         finally:
             await consumer.stop()
             consumer_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await consumer_task
-            except asyncio.CancelledError:
-                pass
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("_clean_database")
@@ -356,15 +353,13 @@ class TestKafkaConsumerIntegration:
         finally:
             await consumer.stop()
             consumer_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await consumer_task
-            except asyncio.CancelledError:
-                pass
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("_clean_database")
     async def test_error_handling_invalid_json(
-        self, kafka_brokers, postgres_dsn, db_pool, test_topic
+        self, kafka_brokers, postgres_dsn, _db_pool, test_topic
     ):
         """Test consumer handles invalid JSON gracefully."""
         # Publish invalid JSON directly (bypass producer serializer)
@@ -562,10 +557,8 @@ class TestKafkaConsumerIntegration:
         finally:
             await consumer.stop()
             consumer_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await consumer_task
-            except asyncio.CancelledError:
-                pass
 
 
 @pytest.mark.integration
@@ -649,10 +642,8 @@ class TestConsumerPerformance:
         finally:
             await consumer.stop()
             consumer_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await consumer_task
-            except asyncio.CancelledError:
-                pass
 
 
 if __name__ == "__main__":

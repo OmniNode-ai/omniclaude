@@ -9,6 +9,7 @@ Tests cleanup_async exception propagation behavior:
 - __aexit__ returns False (allows exception propagation)
 """
 
+import contextlib
 import logging
 import sys
 from pathlib import Path
@@ -126,10 +127,12 @@ async def test_cleanup_async_logs_but_propagates_exception(
     mock_template_cache.cleanup_async.side_effect = cache_error
 
     # Capture logs at DEBUG level to catch all logs
-    with caplog.at_level(logging.DEBUG):
+    with (
+        caplog.at_level(logging.DEBUG),
+        pytest.raises(ValueError, match="Cache persistence error"),
+    ):
         # Act & Assert: Exception propagates
-        with pytest.raises(ValueError, match="Cache persistence error"):
-            await template_engine_with_cache.cleanup_async(timeout=2.0)
+        await template_engine_with_cache.cleanup_async(timeout=2.0)
 
     # Assert: Debug log confirms cleanup attempt
     # Engine might log "Template cache cleanup complete" if successful,
@@ -214,11 +217,13 @@ async def test_aexit_cleanup_exception_propagates(
     mock_template_cache.cleanup_async.side_effect = cleanup_error
 
     # Capture logs
-    with caplog.at_level(logging.ERROR):
+    with (
+        caplog.at_level(logging.ERROR),
+        pytest.raises(ValueError, match="Cache cleanup error"),
+    ):
         # Act & Assert: Cleanup exception propagates
-        with pytest.raises(ValueError, match="Cache cleanup error"):
-            async with template_engine_with_cache:
-                pass  # Normal operation, but cleanup fails
+        async with template_engine_with_cache:
+            pass  # Normal operation, but cleanup fails
 
     # Assert: Error log might be present (implementation-dependent)
     error_logs = [record for record in caplog.records if record.levelname == "ERROR"]
@@ -274,10 +279,8 @@ async def test_cleanup_async_state_after_exception(template_engine_with_cache, m
     mock_template_cache.cleanup_async.side_effect = RuntimeError("Cleanup error")
 
     # Act - expect exception
-    try:
+    with contextlib.suppress(RuntimeError):
         await template_engine_with_cache.cleanup_async(timeout=1.0)
-    except RuntimeError:
-        pass  # Expected
 
     # Assert: State consistency
     assert template_engine_with_cache.template_cache == mock_template_cache

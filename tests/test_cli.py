@@ -35,7 +35,7 @@ from agents.lib.models.pipeline_models import (
 class _CLIHandlerNotAvailable:
     """Placeholder class when CLIHandler cannot be imported."""
 
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(self, **_kwargs: Any) -> None:
         raise ImportError("CLIHandler not available - CI cache issue with cli.lib package")
 
 

@@ -79,7 +79,7 @@ class TestSingletonPattern:
         publishers = await asyncio.gather(*[_get_global_publisher() for _ in range(10)])
 
         # All should be the same instance
-        assert len(set(id(p) for p in publishers)) == 1
+        assert len({id(p) for p in publishers}) == 1
         assert all(p._started for p in publishers)
 
     @pytest.mark.asyncio
@@ -100,7 +100,7 @@ class TestSingletonPattern:
         context_manager_times = []
         for _ in range(3):
             start = time.time()
-            async with LoggingEventPublisherContext(enable_events=False) as publisher:
+            async with LoggingEventPublisherContext(enable_events=False) as _publisher:
                 pass  # Just measure overhead
             context_manager_times.append(time.time() - start)
 
@@ -108,9 +108,9 @@ class TestSingletonPattern:
 
         # Test singleton approach (new pattern)
         singleton_times = []
-        for i in range(3):
+        for _ in range(3):
             start = time.time()
-            publisher = await _get_global_publisher(enable_events=False)
+            await _get_global_publisher(enable_events=False)
             singleton_times.append(time.time() - start)
 
         first_call_time = singleton_times[0]  # Includes initialization
@@ -147,8 +147,8 @@ class TestSingletonPattern:
 
         # Test singleton approach
         start = time.time()
-        for i in range(num_calls):
-            publisher = await _get_global_publisher(enable_events=False)
+        for _ in range(num_calls):
+            await _get_global_publisher(enable_events=False)
         singleton_total_time = time.time() - start
 
         print(f"\n=== High-Frequency Logging ({num_calls} calls) ===")
@@ -169,9 +169,9 @@ class TestSingletonPattern:
 
         # Call convenience function multiple times
         times = []
-        for i in range(10):
+        for _ in range(10):
             start = time.time()
-            result = await publish_application_log(
+            await publish_application_log(
                 service_name="test",
                 instance_id="test-1",
                 level="INFO",
@@ -271,7 +271,7 @@ class TestPerformanceBenchmarks:
         asyncio.run(create_publisher_context_manager())
 
         # Benchmark
-        result = benchmark(sync_wrapper)
+        benchmark(sync_wrapper)
 
     @pytest.mark.benchmark
     def test_benchmark_singleton_pattern(self, benchmark):
@@ -291,7 +291,7 @@ class TestPerformanceBenchmarks:
         asyncio.run(get_singleton_publisher())
 
         # Benchmark subsequent calls (reuses singleton)
-        result = benchmark(sync_wrapper)
+        benchmark(sync_wrapper)
 
 
 if __name__ == "__main__":

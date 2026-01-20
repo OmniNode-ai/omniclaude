@@ -16,6 +16,7 @@ Requires: Docker environment with Kafka/Redpanda and PostgreSQL
 """
 
 import asyncio
+import contextlib
 import json
 import os
 import subprocess
@@ -76,7 +77,7 @@ async def db_pool(postgres_dsn):
 
 
 @pytest.fixture
-async def __clean_database(db_pool):
+async def __clean_database(_db_pool):
     """Clean test data before/after each test."""
     # Cleanup no longer needed - using unique UUIDs that do not conflict
     return
@@ -117,7 +118,7 @@ class TestEndToEndAgentLogging:
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("__clean_database")
-    async def test_complete_workflow_simulation(self, running_consumer, db_pool, wait_for_records):
+    async def test_complete_workflow_simulation(self, _running_consumer, db_pool, wait_for_records):
         """
         Simulate complete agent workflow:
         1. Agent executes action
@@ -233,7 +234,7 @@ class TestEndToEndAgentLogging:
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("__clean_database")
-    async def test_multi_agent_scenario(self, running_consumer, db_pool, wait_for_records):
+    async def test_multi_agent_scenario(self, _running_consumer, db_pool, wait_for_records):
         """
         Test multiple agents logging concurrently.
         """
@@ -307,7 +308,7 @@ class TestEndToEndAgentLogging:
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("__clean_database")
-    async def test_data_integrity_verification(self, running_consumer, db_pool, wait_for_records):
+    async def test_data_integrity_verification(self, _running_consumer, db_pool, wait_for_records):
         """
         Verify data integrity across the pipeline:
         - No data loss
@@ -393,7 +394,7 @@ class TestEndToEndAgentLogging:
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("__clean_database")
-    async def test_latency_measurement(self, running_consumer, db_pool):
+    async def test_latency_measurement(self, _running_consumer, db_pool):
         """
         Measure end-to-end latency from skill execution to database persistence.
 
@@ -547,10 +548,8 @@ class TestEndToEndAgentLogging:
         # Simulate crash - stop consumer
         await consumer.stop()
         consumer_task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await consumer_task
-        except asyncio.CancelledError:
-            pass
 
         # Restart consumer with same group_id
         consumer2 = KafkaAgentActionConsumer(
@@ -582,10 +581,8 @@ class TestEndToEndAgentLogging:
         # Cleanup
         await consumer2.stop()
         consumer_task2.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await consumer_task2
-        except asyncio.CancelledError:
-            pass
 
 
 if __name__ == "__main__":

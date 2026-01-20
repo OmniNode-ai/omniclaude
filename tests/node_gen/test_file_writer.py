@@ -219,7 +219,7 @@ class TestFileWriter:
                 allow_overwrite=False,
             )
 
-    def test_allow_overwrite(self, temp_dir, sample_files):
+    def test_allow_overwrite(self, temp_dir, sample_files):  # noqa: ARG002
         """Test that allow_overwrite flag works."""
         writer = FileWriter(enable_rollback=True)
 
@@ -419,7 +419,7 @@ class TestFileWriter:
         # Files should be deleted
         # Note: Directories might remain if not tracked in _created_paths
 
-    def test_multiple_writes_with_context(self, temp_dir, sample_files):
+    def test_multiple_writes_with_context(self, temp_dir, sample_files):  # noqa: ARG002
         """Test multiple write operations with context manager."""
         writer = FileWriter(enable_rollback=True)
 

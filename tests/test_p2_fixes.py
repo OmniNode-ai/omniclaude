@@ -9,6 +9,10 @@ NOTE: This test file references archived code (omniclaude.debug_loop) that has b
 moved to _archive/. The tests are skipped until the code is migrated or removed.
 """
 
+from __future__ import annotations
+
+from unittest.mock import AsyncMock
+
 import pytest
 
 # Skip entire module - these tests reference archived code
@@ -18,6 +22,22 @@ pytest.skip(
     "Skipping test_p2_fixes.py - references archived code (omniclaude.debug_loop)",
     allow_module_level=True,
 )
+
+# These imports are guarded because the omnibase components are not available in omniclaude.
+# The module is skipped above, so these will never actually execute, but we need to define
+# the names to satisfy static analysis (Ruff F821).
+try:
+    from omnibase_core.enums import EnumCoreErrorCode, EnumProvider
+    from omnibase_core.models import ModelONEXContainer, ModelOnexError
+    from omnibase_core.nodes import NodeModelPriceCatalogEffect, NodeSTFHashCompute
+except ImportError:
+    # Define placeholders for static analysis - module is skipped so these won't be used
+    EnumProvider = None  # type: ignore[misc, assignment]
+    NodeSTFHashCompute = None  # type: ignore[misc, assignment]
+    NodeModelPriceCatalogEffect = None  # type: ignore[misc, assignment]
+    ModelONEXContainer = None  # type: ignore[misc, assignment]
+    ModelOnexError = None  # type: ignore[misc, assignment]
+    EnumCoreErrorCode = None  # type: ignore[misc, assignment]
 
 
 @pytest.fixture

@@ -50,16 +50,20 @@ def test_validation_logic_across_phases():
         assert in_pytest_collection is True, "Collection phase should skip validation (skip=True)"
 
     # Test setup phase (pytest imported, PYTEST_CURRENT_TEST set to "setup")
-    with patch.dict(sys.modules, {"pytest": None}):
-        with patch.dict(os.environ, {"PYTEST_CURRENT_TEST": "test.py::test (setup)"}, clear=True):
-            in_pytest_collection = "pytest" in sys.modules and not os.getenv("PYTEST_CURRENT_TEST")
-            assert in_pytest_collection is False, "Setup phase should validate (skip=False)"
+    with (
+        patch.dict(sys.modules, {"pytest": None}),
+        patch.dict(os.environ, {"PYTEST_CURRENT_TEST": "test.py::test (setup)"}, clear=True),
+    ):
+        in_pytest_collection = "pytest" in sys.modules and not os.getenv("PYTEST_CURRENT_TEST")
+        assert in_pytest_collection is False, "Setup phase should validate (skip=False)"
 
     # Test call phase (pytest imported, PYTEST_CURRENT_TEST set to "call")
-    with patch.dict(sys.modules, {"pytest": None}):
-        with patch.dict(os.environ, {"PYTEST_CURRENT_TEST": "test.py::test (call)"}, clear=True):
-            in_pytest_collection = "pytest" in sys.modules and not os.getenv("PYTEST_CURRENT_TEST")
-            assert in_pytest_collection is False, "Call phase should validate (skip=False)"
+    with (
+        patch.dict(sys.modules, {"pytest": None}),
+        patch.dict(os.environ, {"PYTEST_CURRENT_TEST": "test.py::test (call)"}, clear=True),
+    ):
+        in_pytest_collection = "pytest" in sys.modules and not os.getenv("PYTEST_CURRENT_TEST")
+        assert in_pytest_collection is False, "Call phase should validate (skip=False)"
 
     # Test teardown phase (pytest imported, PYTEST_CURRENT_TEST set to "teardown")
     with (

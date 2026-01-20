@@ -21,6 +21,39 @@ Key Design Decisions:
       the previous event's message_id.
     - correlation_id: Groups all events in a logical workflow for tracing.
 
+Privacy Considerations:
+    This module handles potentially sensitive data from user sessions. Key
+    privacy-sensitive fields and their handling:
+
+    - **prompt_preview**: User prompt content, truncated to 100 chars and
+      automatically sanitized to redact common secret patterns (API keys,
+      passwords, tokens). Despite sanitization, treat as potentially sensitive.
+      See _sanitize_prompt_preview() and PROMPT_PREVIEW_MAX_LENGTH.
+
+    - **working_directory**: File system path that may reveal usernames,
+      project names, or organizational structure. Consider anonymizing in
+      aggregated analytics.
+
+    - **git_branch**: Branch names may contain ticket IDs, feature names,
+      or developer identifiers. Treat as potentially identifying.
+
+    - **summary** (tool execution): May contain file paths, code snippets,
+      or error messages with sensitive data. Limited to 500 chars.
+
+    - **session_id / entity_id**: Tracking identifiers that link user activity.
+      Implement appropriate data retention policies.
+
+    Data Retention Recommendations:
+        - Raw events: 30-90 days (operational needs)
+        - Aggregated metrics: Longer retention acceptable
+        - Prompt previews: Shortest possible retention
+        - Apply GDPR/CCPA deletion requirements as applicable
+
+    Access Control Recommendations:
+        - Limit access to raw events to authorized operators
+        - Anonymize data for analytics and ML training
+        - Audit access to privacy-sensitive fields
+
 See Also:
     - omnibase_infra/models/registration/events/ for pattern reference
     - docs/design/ONEX_RUNTIME_REGISTRATION_TICKET_PLAN.md
@@ -232,13 +265,23 @@ class ModelHookSessionStartedPayload(BaseModel):
         return _validate_timezone_aware(v)
 
     # Session-specific fields
+    # PRIVACY: working_directory may reveal usernames, project names, or org structure.
+    # Consider anonymizing in aggregated analytics or when sharing externally.
     working_directory: str = Field(
         ...,
-        description="Current working directory of the session",
+        description=(
+            "Current working directory of the session. "
+            "PRIVACY: May contain usernames or organizational paths. "
+            "Anonymize in aggregated analytics."
+        ),
     )
+    # PRIVACY: git_branch may contain ticket IDs, feature names, or developer identifiers.
     git_branch: str | None = Field(
         default=None,
-        description="Current git branch if in a git repository",
+        description=(
+            "Current git branch if in a git repository. "
+            "PRIVACY: May contain ticket IDs or developer identifiers."
+        ),
     )
     hook_source: Literal["startup", "resume", "clear", "compact"] = Field(
         ...,
@@ -571,10 +614,17 @@ class ModelHookToolExecutedPayload(BaseModel):
         le=3600000,  # Max 1 hour (3,600,000 milliseconds)
         description="Tool execution duration in milliseconds (max 1 hour)",
     )
+    # PRIVACY: summary may contain file paths, code snippets, or error messages
+    # that could include sensitive data. Apply same caution as prompt_preview.
     summary: str | None = Field(
         default=None,
         max_length=500,
-        description="Brief summary of the tool execution result",
+        description=(
+            "Brief summary of the tool execution result. "
+            "PRIVACY: May contain file paths, code snippets, or error messages "
+            "with sensitive data. Not automatically sanitized - producers should "
+            "avoid including secrets. Apply appropriate access controls."
+        ),
     )
 
 

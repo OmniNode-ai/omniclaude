@@ -116,7 +116,7 @@ async def test_cleanup_async_cancels_all_pending_tasks_on_timeout(template_cache
     """
 
     # Arrange - create multiple slow tasks
-    async def slow_task(task_id):
+    async def slow_task(_task_id):
         await asyncio.sleep(100)
 
     tasks = [asyncio.create_task(slow_task(i)) for i in range(5)]

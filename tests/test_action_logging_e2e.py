@@ -475,7 +475,7 @@ class ActionLoggingE2ETest:
     reason="Requires asyncpg and PostgreSQL connection",
 )
 @pytest.mark.asyncio
-async def test_action_logging_e2e(running_consumer, db_pool):
+async def test_action_logging_e2e(_running_consumer, db_pool):
     """
     End-to-end test for action logging with Kafka consumer.
 

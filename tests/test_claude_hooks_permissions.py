@@ -814,9 +814,11 @@ class TestMainEntryPoint:
         """Test main handles malformed JSON gracefully."""
         mock_stdin.set_input("{invalid json}")
 
-        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-            with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
-                exit_code = main()
+        with (
+            patch("sys.stdout", new_callable=StringIO) as mock_stdout,
+            patch("sys.stderr", new_callable=StringIO) as mock_stderr,
+        ):
+            exit_code = main()
 
         # Should succeed (fail-safe) even with invalid JSON
         assert exit_code == 0
@@ -833,7 +835,7 @@ class TestMainEntryPoint:
         )
         mock_stdin.set_input(input_data)
 
-        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+        with patch("sys.stdout", new_callable=StringIO):
             exit_code = main()
 
         assert exit_code == 0
@@ -850,7 +852,7 @@ class TestMainEntryPoint:
         )
         mock_stdin.set_input(input_data)
 
-        with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
+        with patch("sys.stdout", new_callable=StringIO):
             exit_code = main()
 
         assert exit_code == 0
@@ -909,9 +911,11 @@ class TestMainEntryPoint:
         with patch("pre_tool_use_permissions.make_permission_decision") as mock_decision:
             mock_decision.side_effect = RuntimeError("Unexpected error")
 
-            with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-                with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
-                    exit_code = main()
+            with (
+                patch("sys.stdout", new_callable=StringIO) as mock_stdout,
+                patch("sys.stderr", new_callable=StringIO) as mock_stderr,
+            ):
+                exit_code = main()
 
         # Should fail-safe and return 0
         assert exit_code == 0
@@ -1024,9 +1028,11 @@ class TestStdinStdoutIntegration:
         for input_data in test_inputs:
             mock_stdin.set_input(input_data)
 
-            with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
-                with patch("sys.stderr", new_callable=StringIO):
-                    main()
+            with (
+                patch("sys.stdout", new_callable=StringIO) as mock_stdout,
+                patch("sys.stderr", new_callable=StringIO),
+            ):
+                main()
 
             output = mock_stdout.getvalue().strip()
             # Output should be valid JSON

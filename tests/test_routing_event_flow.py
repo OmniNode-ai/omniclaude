@@ -32,6 +32,7 @@ Correlation ID: 2ae9c54b-73e4-42df-a902-cf41503efa56
 """
 
 import asyncio
+import contextlib
 import json
 import sys
 import time
@@ -148,10 +149,8 @@ class RoutingEventTestClient:
         # Cancel consumer task
         if self._consume_task:
             self._consume_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._consume_task
-            except asyncio.CancelledError:
-                pass
 
         # Stop producer
         if self.producer:

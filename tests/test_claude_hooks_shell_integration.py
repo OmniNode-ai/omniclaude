@@ -441,17 +441,15 @@ class TestScriptCompatibility:
             # Check for unquoted variable expansions in risky contexts
             # This is a heuristic check - not comprehensive
             lines = content.split("\n")
-            for i, line in enumerate(lines, 1):
+            for _i, line in enumerate(lines, 1):
                 # Skip comments
                 if line.strip().startswith("#"):
                     continue
 
                 # Check for potential issues with unquoted variables in paths
-                if "cd $" in line and 'cd "$' not in line:
-                    # Allow if it's intentional (e.g., cd $HOME)
-                    if "cd $HOME" not in line:
-                        # This could be an issue
-                        pass  # Just document, don't fail
+                if "cd $" in line and 'cd "$' not in line and "cd $HOME" not in line:
+                    # This could be an issue
+                    pass  # Just document, don't fail
 
     def test_jq_availability_check(self, hooks_dir: Path):
         """Test that scripts check for jq availability if using it."""

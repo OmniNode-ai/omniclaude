@@ -303,7 +303,7 @@ class TestAgentActionsLogging:
         db_connection,
         action_logger: ActionLogger,
         correlation_id: str,
-        kafka_available: bool,
+        _kafka_available: bool,
         consumer_wait_time: int,
     ):
         """
@@ -353,7 +353,7 @@ class TestAgentActionsLogging:
         db_connection,
         action_logger: ActionLogger,
         correlation_id: str,
-        kafka_available: bool,
+        _kafka_available: bool,
         consumer_wait_time: int,
     ):
         """
@@ -402,7 +402,7 @@ class TestAgentActionsLogging:
         db_connection,
         action_logger: ActionLogger,
         correlation_id: str,
-        kafka_available: bool,
+        _kafka_available: bool,
         consumer_wait_time: int,
     ):
         """
@@ -468,7 +468,7 @@ class TestAgentActionsLogging:
         db_connection,
         action_logger: ActionLogger,
         correlation_id: str,
-        kafka_available: bool,
+        _kafka_available: bool,
         consumer_wait_time: int,
     ):
         """
@@ -527,7 +527,7 @@ class TestAgentActionsLogging:
         db_connection,
         action_logger: ActionLogger,
         correlation_id: str,
-        kafka_available: bool,
+        _kafka_available: bool,
         consumer_wait_time: int,
     ):
         """
@@ -611,7 +611,7 @@ class TestTransformationEvents:
         self,
         db_connection,
         correlation_id: str,
-        kafka_available: bool,
+        _kafka_available: bool,
         consumer_wait_time: int,
     ):
         """
@@ -669,7 +669,7 @@ class TestTransformationEvents:
         self,
         db_connection,
         correlation_id: str,
-        kafka_available: bool,
+        _kafka_available: bool,
         consumer_wait_time: int,
     ):
         """
@@ -717,7 +717,7 @@ class TestTransformationEvents:
         self,
         db_connection,
         correlation_id: str,
-        kafka_available: bool,
+        _kafka_available: bool,
         consumer_wait_time: int,
     ):
         """
@@ -762,7 +762,7 @@ class TestTransformationEvents:
         self,
         db_connection,
         correlation_id: str,
-        kafka_available: bool,
+        _kafka_available: bool,
         consumer_wait_time: int,
     ):
         """
@@ -960,7 +960,7 @@ class TestManifestInjections:
                 '{"test": "data"}',
             ),
         )
-        manifest_id = cursor.fetchone()[0]
+        _manifest_id = cursor.fetchone()[0]
 
         db_connection.commit()
         cursor.close()
