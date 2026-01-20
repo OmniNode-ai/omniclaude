@@ -70,7 +70,7 @@ jobs:
         run: |
           echo "::group::Ruff Linting"
           # Scan only project source directories, aligned with pre-commit config
-          uv run ruff check src/ tests/ --show-source --show-fixes
+          uv run ruff check src/ tests/ --output-format=full
           echo "::endgroup::"
 
       - name: Run type checking (mypy - strict mode)
