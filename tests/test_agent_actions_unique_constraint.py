@@ -25,7 +25,7 @@ import json
 import os
 import sys
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import asyncpg
 import pytest
@@ -259,7 +259,7 @@ async def test_different_timestamps_allowed(db_pool):
     correlation_id = uuid.uuid4()
     action_name = "timestamp_test_action"
     timestamp1 = datetime.now(UTC)
-    timestamp2 = datetime.now(UTC).replace(microsecond=timestamp1.microsecond + 1000)
+    timestamp2 = timestamp1 + timedelta(microseconds=1000)
 
     async with db_pool.acquire() as conn:
         # Clean up any existing test data

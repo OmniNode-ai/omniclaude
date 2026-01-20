@@ -137,7 +137,7 @@ jobs:
             echo "No ONEX node files found in src/omniclaude/ - skipping validation"
             echo "This is expected for schema-only phase (OMN-1399)"
           else
-            echo "$NODE_FILES" | while read -r file; do
+            while read -r file; do
               echo "Checking $file..."
 
               # Validate Effect nodes
@@ -179,7 +179,7 @@ jobs:
                   echo "$file: ONEX Orchestrator naming convention passed"
                 fi
               fi
-            done
+            done <<< "$NODE_FILES"
           fi
 
           echo "All ONEX naming conventions validated successfully"
@@ -196,13 +196,13 @@ jobs:
             echo "No ONEX node files found in src/omniclaude/ - skipping contract validation"
             echo "This is expected for schema-only phase (OMN-1399)"
           else
-            echo "$NODE_FILES" | while read -r file; do
+            while read -r file; do
               if ! grep -q "ModelContract" "$file" 2>/dev/null; then
                 echo "WARNING: $file may be missing ModelContract usage"
               else
                 echo "$file: Uses ModelContract"
               fi
-            done
+            done <<< "$NODE_FILES"
           fi
 
           echo "Contract validation completed"
@@ -219,7 +219,7 @@ jobs:
             echo "No ONEX Effect node files found in src/omniclaude/ - skipping method validation"
             echo "This is expected for schema-only phase (OMN-1399)"
           else
-            echo "$EFFECT_FILES" | while read -r file; do
+            while read -r file; do
               if grep -q "class Node.*Effect" "$file"; then
                 if ! grep -q "async def execute_effect" "$file"; then
                   echo "WARNING: $file Effect node should implement async def execute_effect()"
@@ -227,7 +227,7 @@ jobs:
                   echo "$file: Implements execute_effect()"
                 fi
               fi
-            done
+            done <<< "$EFFECT_FILES"
           fi
 
           echo "Method signature validation completed"
@@ -904,13 +904,13 @@ jobs:
           docker compose ps
 
           # Validate PostgreSQL
-          docker compose exec -T postgres pg_isready -U omniclaude || echo "PostgreSQL not ready"
+          docker compose exec -T postgres pg_isready -U omniclaude || exit 1
 
           # Validate Redis
-          docker compose exec -T redis redis-cli ping || echo "Redis not ready"
+          docker compose exec -T redis redis-cli ping || exit 1
 
           # Check app health endpoint
-          curl -f http://localhost:8000/health || echo "App health check failed"
+          curl -f http://localhost:8000/health || exit 1
 
           echo "::endgroup::"
 

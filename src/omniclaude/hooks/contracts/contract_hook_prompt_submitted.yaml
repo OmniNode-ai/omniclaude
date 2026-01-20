@@ -35,7 +35,7 @@ description: >
   (via UserPromptSubmit hook), this node publishes a ModelHookPromptSubmittedPayload
   event to Kafka. Captures a truncated preview, length, prompt_id, and optional
   detected intent for learning pipeline analysis. Privacy-preserving: only
-  preview (max 200 chars).
+  preview (max 100 chars).
 
 # Strongly typed I/O models
 input_model:
@@ -82,7 +82,7 @@ privacy:
   # Only send truncated preview, not full prompt
   data_minimization: true
   # Max preview length to protect sensitive content
-  preview_max_length: 200
+  preview_max_length: 100
   # No PII should be in events
   pii_policy: "exclude"
 
@@ -146,7 +146,7 @@ definitions:
         description: "Unique identifier for this specific prompt"
       prompt_preview:
         type: string
-        maxLength: 200
+        maxLength: 100
         description: "First N characters of the prompt (privacy-safe preview)"
       prompt_length:
         type: integer

@@ -303,7 +303,7 @@ ls -la plugins/onex/hooks/scripts/*.sh
 
 ---
 
-**Last Updated**: 2025-01-19
+**Last Updated**: 2026-01-20
 **Version**: 0.1.0
 **Status**: Reset in progress (OMN-1399)
 **Schemas**: ONEX-compatible event envelopes

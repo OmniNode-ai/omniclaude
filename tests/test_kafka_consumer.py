@@ -71,8 +71,9 @@ async def db_pool(postgres_dsn):
 
 
 @pytest.fixture
-async def _clean_database(_db_pool):
+async def _clean_database(db_pool):
     """Clean test data from database before each test."""
+    _ = db_pool  # Mark as intentionally unused (fixture ensures db is available)
     # Cleanup happens at the end of each test
     return
     # Note: Individual tests verify their own data, no pattern-based cleanup needed
@@ -359,9 +360,10 @@ class TestKafkaConsumerIntegration:
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("_clean_database")
     async def test_error_handling_invalid_json(
-        self, kafka_brokers, postgres_dsn, _db_pool, test_topic
+        self, kafka_brokers, postgres_dsn, db_pool, test_topic
     ):
         """Test consumer handles invalid JSON gracefully."""
+        _ = db_pool  # Mark as intentionally unused (fixture ensures db is available)
         # Publish invalid JSON directly (bypass producer serializer)
         raw_producer = KafkaProducer(
             bootstrap_servers=kafka_brokers.split(","),

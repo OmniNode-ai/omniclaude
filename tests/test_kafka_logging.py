@@ -135,8 +135,9 @@ class TestKafkaLoggingUnit:
             mock_producer_class, mock_instance = mock_kafka_producer
             assert mock_instance.send.called
 
-    def test_correlation_id_generation(self, _mock_kafka_producer):
+    def test_correlation_id_generation(self, mock_kafka_producer):
         """Test correlation ID is auto-generated if not provided."""
+        _ = mock_kafka_producer  # Mark as intentionally unused (fixture provides mock)
         with patch.dict(os.environ, {"DEBUG": "true"}):
             args = Mock(
                 agent="test-agent",
@@ -291,8 +292,9 @@ class TestKafkaLoggingUnit:
             # Should have empty details
             assert event["action_details"] == {}
 
-    def test_action_type_validation(self, _mock_kafka_producer):
+    def test_action_type_validation(self, mock_kafka_producer):
         """Test all valid action types are accepted."""
+        _ = mock_kafka_producer  # Mark as intentionally unused (fixture provides mock)
         with patch.dict(os.environ, {"DEBUG": "true"}):
             valid_types = ["tool_call", "decision", "error", "success"]
 
@@ -490,7 +492,7 @@ class TestKafkaProducerConfiguration:
             ]
 
     def test_default_kafka_broker(self):
-        """Test default Kafka broker is 192.168.86.200:9092."""
+        """Test default Kafka broker is 192.168.86.200:29092 (external port for host scripts)."""
         with (
             patch.dict(os.environ, {}, clear=True),
             patch("kafka.KafkaProducer") as mock_producer_class,
@@ -502,7 +504,7 @@ class TestKafkaProducerConfiguration:
             self.kafka_publisher.get_kafka_producer()
 
             call_kwargs = mock_producer_class.call_args[1]
-            assert call_kwargs["bootstrap_servers"] == ["192.168.86.200:9092"]
+            assert call_kwargs["bootstrap_servers"] == ["192.168.86.200:29092"]
 
 
 if __name__ == "__main__":

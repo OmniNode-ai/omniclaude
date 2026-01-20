@@ -49,7 +49,7 @@ repos:
 
       - id: bandit-security
         name: bandit (security scanner - match CI)
-        entry: bash -c 'uv run bandit -r src/ -c .bandit || true'
+        entry: bash -c 'uv run bandit -r src/ -c .bandit'
         language: system
         types: [python]
         stages: [pre-commit]
@@ -57,7 +57,7 @@ repos:
 
       - id: mypy-typecheck
         name: mypy (type checking - match CI)
-        entry: bash -c 'uv run mypy src/ --ignore-missing-imports || true'
+        entry: bash -c 'uv run mypy src/ --ignore-missing-imports'
         language: system
         types: [python]
         stages: [pre-commit]

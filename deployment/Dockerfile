@@ -33,11 +33,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install uv for dependency management
 # Using pip to install uv for simplicity and reliability
+ARG UV_VERSION=0.5.0
 ENV UV_LINK_MODE=copy \
     UV_COMPILE_BYTECODE=1 \
     UV_PYTHON_DOWNLOADS=never
 
-RUN pip install --no-cache-dir uv
+RUN pip install --no-cache-dir "uv==${UV_VERSION}"
 
 # Set working directory
 WORKDIR /app

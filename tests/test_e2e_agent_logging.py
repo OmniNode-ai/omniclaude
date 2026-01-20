@@ -77,8 +77,9 @@ async def db_pool(postgres_dsn):
 
 
 @pytest.fixture
-async def __clean_database(_db_pool):
+async def __clean_database(db_pool):
     """Clean test data before/after each test."""
+    _ = db_pool  # Mark as intentionally unused - fixture ensures DB is available
     # Cleanup no longer needed - using unique UUIDs that do not conflict
     return
     # Cleanup no longer needed - using unique UUIDs that do not conflict
@@ -118,7 +119,7 @@ class TestEndToEndAgentLogging:
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("__clean_database")
-    async def test_complete_workflow_simulation(self, _running_consumer, db_pool, wait_for_records):
+    async def test_complete_workflow_simulation(self, running_consumer, db_pool, wait_for_records):
         """
         Simulate complete agent workflow:
         1. Agent executes action
@@ -126,6 +127,7 @@ class TestEndToEndAgentLogging:
         3. Consumer persists to PostgreSQL
         4. Verify data integrity
         """
+        _ = running_consumer  # Fixture ensures consumer is running
         correlation_id = str(uuid.uuid4())
 
         # Simulate agent workflow with multiple actions
@@ -234,10 +236,11 @@ class TestEndToEndAgentLogging:
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("__clean_database")
-    async def test_multi_agent_scenario(self, _running_consumer, db_pool, wait_for_records):
+    async def test_multi_agent_scenario(self, running_consumer, db_pool, wait_for_records):
         """
         Test multiple agents logging concurrently.
         """
+        _ = running_consumer  # Fixture ensures consumer is running
         correlation_id = str(uuid.uuid4())
 
         # Simulate multiple agents working in parallel
@@ -308,13 +311,14 @@ class TestEndToEndAgentLogging:
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("__clean_database")
-    async def test_data_integrity_verification(self, _running_consumer, db_pool, wait_for_records):
+    async def test_data_integrity_verification(self, running_consumer, db_pool, wait_for_records):
         """
         Verify data integrity across the pipeline:
         - No data loss
         - No corruption
         - Correct ordering
         """
+        _ = running_consumer  # Fixture ensures consumer is running
         correlation_id = str(uuid.uuid4())
 
         # Create structured test data with checksums
@@ -394,7 +398,7 @@ class TestEndToEndAgentLogging:
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("__clean_database")
-    async def test_latency_measurement(self, _running_consumer, db_pool):
+    async def test_latency_measurement(self, running_consumer, db_pool):
         """
         Measure end-to-end latency from skill execution to database persistence.
 
@@ -410,6 +414,7 @@ class TestEndToEndAgentLogging:
 
         The 1000ms threshold is realistic for test environments with remote Kafka brokers.
         """
+        _ = running_consumer  # Fixture ensures consumer is running
         correlation_id = str(uuid.uuid4())
 
         # Measure subprocess execution latency (not pure Kafka publish time)

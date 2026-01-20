@@ -62,6 +62,7 @@ See Also:
 from __future__ import annotations
 
 import re
+import warnings
 from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Literal
@@ -69,6 +70,7 @@ from uuid import UUID
 
 from omnibase_infra.utils import ensure_timezone_aware
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic.functional_validators import BeforeValidator
 
 # =============================================================================
 # Event Types
@@ -159,9 +161,22 @@ def _validate_timezone_aware(v: datetime) -> datetime:
 
     Raises:
         ValueError: If the datetime cannot be made timezone-aware.
+
+    Example:
+        >>> from datetime import datetime, UTC
+        >>> _validate_timezone_aware(datetime(2025, 1, 15, 12, 0, 0, tzinfo=UTC))
+        datetime.datetime(2025, 1, 15, 12, 0, 0, tzinfo=datetime.timezone.utc)
     """
     result: datetime = ensure_timezone_aware(v)
     return result
+
+
+# Annotated type for timezone-aware datetime fields.
+# Use this instead of datetime + @field_validator to eliminate duplication.
+TimezoneAwareDatetime = Annotated[
+    datetime,
+    BeforeValidator(_validate_timezone_aware),
+]
 
 
 def _sanitize_prompt_preview(text: str, max_length: int = PROMPT_PREVIEW_MAX_LENGTH) -> str:
@@ -274,16 +289,11 @@ class ModelHookSessionStartedPayload(BaseModel):
     )
 
     # Timestamps - MUST be explicitly injected (no default_factory for testability)
-    emitted_at: datetime = Field(
+    # Uses TimezoneAwareDatetime for automatic timezone validation
+    emitted_at: TimezoneAwareDatetime = Field(
         ...,
         description="Timestamp when the hook emitted this event (UTC)",
     )
-
-    @field_validator("emitted_at")
-    @classmethod
-    def validate_emitted_at_timezone_aware(cls, v: datetime) -> datetime:
-        """Validate that emitted_at is timezone-aware."""
-        return _validate_timezone_aware(v)
 
     # Session-specific fields
     # PRIVACY: working_directory may reveal usernames, project names, or org structure.
@@ -370,16 +380,11 @@ class ModelHookSessionEndedPayload(BaseModel):
     )
 
     # Timestamps - MUST be explicitly injected (no default_factory for testability)
-    emitted_at: datetime = Field(
+    # Uses TimezoneAwareDatetime for automatic timezone validation
+    emitted_at: TimezoneAwareDatetime = Field(
         ...,
         description="Timestamp when the hook emitted this event (UTC)",
     )
-
-    @field_validator("emitted_at")
-    @classmethod
-    def validate_emitted_at_timezone_aware(cls, v: datetime) -> datetime:
-        """Validate that emitted_at is timezone-aware."""
-        return _validate_timezone_aware(v)
 
     # Session end-specific fields
     reason: Literal["clear", "logout", "prompt_input_exit", "other"] = Field(
@@ -479,16 +484,11 @@ class ModelHookPromptSubmittedPayload(BaseModel):
     )
 
     # Timestamps - MUST be explicitly injected (no default_factory for testability)
-    emitted_at: datetime = Field(
+    # Uses TimezoneAwareDatetime for automatic timezone validation
+    emitted_at: TimezoneAwareDatetime = Field(
         ...,
         description="Timestamp when the hook emitted this event (UTC)",
     )
-
-    @field_validator("emitted_at")
-    @classmethod
-    def validate_emitted_at_timezone_aware(cls, v: datetime) -> datetime:
-        """Validate that emitted_at is timezone-aware."""
-        return _validate_timezone_aware(v)
 
     # Prompt-specific fields
     prompt_id: UUID = Field(
@@ -604,16 +604,11 @@ class ModelHookToolExecutedPayload(BaseModel):
     )
 
     # Timestamps - MUST be explicitly injected (no default_factory for testability)
-    emitted_at: datetime = Field(
+    # Uses TimezoneAwareDatetime for automatic timezone validation
+    emitted_at: TimezoneAwareDatetime = Field(
         ...,
         description="Timestamp when the hook emitted this event (UTC)",
     )
-
-    @field_validator("emitted_at")
-    @classmethod
-    def validate_emitted_at_timezone_aware(cls, v: datetime) -> datetime:
-        """Validate that emitted_at is timezone-aware."""
-        return _validate_timezone_aware(v)
 
     # Tool execution-specific fields
     tool_execution_id: UUID = Field(
@@ -654,13 +649,37 @@ class ModelHookToolExecutedPayload(BaseModel):
 # =============================================================================
 
 
-# Type alias for backwards compatibility (deprecated, use HookEventType instead)
+# DEPRECATED: Type alias for backwards compatibility.
+# Use HookEventType enum instead.
+# Scheduled for removal in v0.3.0 (target: Q2 2025).
+# Migration: Replace EventType with HookEventType enum values.
 EventType = Literal[
     "hook.session.started",
     "hook.session.ended",
     "hook.prompt.submitted",
     "hook.tool.executed",
 ]
+
+
+def _get_event_type_with_warning() -> type:
+    """Return EventType with a deprecation warning.
+
+    This function is called when EventType is accessed to emit a runtime warning.
+    Use HookEventType enum instead.
+
+    Returns:
+        The EventType Literal type alias.
+
+    .. deprecated:: 0.2.0
+        EventType is deprecated and will be removed in v0.3.0.
+        Use HookEventType enum instead.
+    """
+    warnings.warn(
+        "EventType is deprecated and will be removed in v0.3.0. Use HookEventType enum instead.",
+        DeprecationWarning,
+        stacklevel=3,
+    )
+    return EventType  # type: ignore[return-value]
 
 
 class ModelHookEventEnvelope(BaseModel):
@@ -761,6 +780,8 @@ __all__ = [
     "PROMPT_PREVIEW_MAX_LENGTH",
     # Event type enum
     "HookEventType",
+    # Annotated types (reusable validators)
+    "TimezoneAwareDatetime",
     # Payload models
     "ModelHookSessionStartedPayload",
     "ModelHookSessionEndedPayload",
@@ -769,5 +790,5 @@ __all__ = [
     # Envelope and types
     "ModelHookEventEnvelope",
     "ModelHookPayload",
-    "EventType",  # Deprecated, kept for backwards compatibility
+    "EventType",  # Deprecated v0.2.0, removal v0.3.0 - use HookEventType
 ]
