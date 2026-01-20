@@ -20,7 +20,6 @@ from datetime import datetime
 
 import pytest
 
-
 sys.path.insert(0, "agents/lib")
 
 from database_event_client import DatabaseEventClient
@@ -201,7 +200,7 @@ async def test_timeout_handling():
 
         return True
 
-    except asyncio.TimeoutError:
+    except TimeoutError:
         print("❌ Query timed out (expected for slow queries)")
         return False
     except Exception as e:

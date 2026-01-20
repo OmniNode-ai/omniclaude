@@ -16,12 +16,9 @@ Test Categories:
 import json
 import os
 import subprocess
-import tempfile
 from pathlib import Path
-from typing import Optional
 
 import pytest
-
 
 # =============================================================================
 # TEST FIXTURES
@@ -61,7 +58,7 @@ def sample_tool_json() -> str:
 def run_script(
     script_path: Path,
     stdin_input: str = "",
-    env: Optional[dict] = None,
+    env: dict | None = None,
     timeout: int = 10,
 ) -> tuple[int, str, str]:
     """
@@ -109,9 +106,7 @@ class TestPreToolUseLog:
         """Verify the script has a bash shebang."""
         script_path = hooks_dir / "pre-tool-use-log.sh"
         content = script_path.read_text()
-        assert content.startswith("#!/usr/bin/env bash") or content.startswith(
-            "#!/bin/bash"
-        )
+        assert content.startswith("#!/usr/bin/env bash") or content.startswith("#!/bin/bash")
 
     def test_script_uses_pipefail(self, hooks_dir: Path):
         """Verify the script uses set -euo pipefail."""
@@ -250,9 +245,7 @@ class TestPreToolUseQuality:
         assert "CORRELATION_ID" in content
         assert "uuidgen" in content or "uuid" in content.lower()
 
-    def test_script_passes_through_non_write_tools(
-        self, hooks_dir: Path, tmp_path: Path
-    ):
+    def test_script_passes_through_non_write_tools(self, hooks_dir: Path, tmp_path: Path):
         """Test that non-Write/Edit tools are passed through."""
         script_path = hooks_dir / "pre-tool-use-quality.sh"
 
@@ -354,9 +347,7 @@ class TestScriptSecurity:
                 # Allow patterns that use environment variables
                 if pattern in content:
                     # Check it's not a hardcoded value
-                    lines_with_pattern = [
-                        line for line in content.split("\n") if pattern in line
-                    ]
+                    lines_with_pattern = [line for line in content.split("\n") if pattern in line]
                     for line in lines_with_pattern:
                         # Should be using env vars or placeholders
                         assert (
@@ -414,9 +405,9 @@ class TestScriptSecurity:
                     or "|| true" in content  # Explicit error suppression is OK
                 )
 
-                assert (
-                    has_error_handling
-                ), f"Core hook {script_path.name} should have error handling"
+                assert has_error_handling, (
+                    f"Core hook {script_path.name} should have error handling"
+                )
 
 
 # =============================================================================
@@ -450,17 +441,15 @@ class TestScriptCompatibility:
             # Check for unquoted variable expansions in risky contexts
             # This is a heuristic check - not comprehensive
             lines = content.split("\n")
-            for i, line in enumerate(lines, 1):
+            for _i, line in enumerate(lines, 1):
                 # Skip comments
                 if line.strip().startswith("#"):
                     continue
 
                 # Check for potential issues with unquoted variables in paths
-                if "cd $" in line and 'cd "$' not in line:
-                    # Allow if it's intentional (e.g., cd $HOME)
-                    if "cd $HOME" not in line:
-                        # This could be an issue
-                        pass  # Just document, don't fail
+                if "cd $" in line and 'cd "$' not in line and "cd $HOME" not in line:
+                    # This could be an issue
+                    pass  # Just document, don't fail
 
     def test_jq_availability_check(self, hooks_dir: Path):
         """Test that scripts check for jq availability if using it."""

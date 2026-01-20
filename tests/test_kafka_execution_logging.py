@@ -10,13 +10,12 @@ import os
 import subprocess
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
 import psycopg2
 import pytest
-
 
 # Load environment variables (no fallback values)
 POSTGRES_HOST = os.getenv("POSTGRES_HOST")
@@ -71,9 +70,7 @@ def verify_in_database(execution_id):
                 POSTGRES_PASSWORD,
             ]
         ):
-            print(
-                "⚠️  PostgreSQL environment variables not set, skipping database verification"
-            )
+            print("⚠️  PostgreSQL environment variables not set, skipping database verification")
             return None
 
         conn = psycopg2.connect(
@@ -143,7 +140,7 @@ def main():
     session_id = str(uuid4())
     agent_name = "test-kafka-direct-logging"
     user_prompt = "Test direct Kafka event publishing"
-    started_at = datetime.now(timezone.utc)
+    started_at = datetime.now(UTC)
 
     print(f"📝 Execution ID: {execution_id}")
     print(f"📝 Agent: {agent_name}")
@@ -163,7 +160,7 @@ def main():
         "metadata": {},
         "project_path": str(Path(__file__).parent.parent.resolve()),
         "project_name": "omniclaude",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
     if not publish_to_kafka("agent-execution-logs", start_event):
@@ -178,7 +175,7 @@ def main():
 
     # Publish complete event
     print("✅ Publishing COMPLETE event to Kafka...")
-    completed_at = datetime.now(timezone.utc)
+    completed_at = datetime.now(UTC)
     duration_ms = int((completed_at - started_at).total_seconds() * 1000)
 
     complete_event = {
@@ -191,7 +188,7 @@ def main():
         "duration_ms": duration_ms,
         "quality_score": 0.95,
         "metadata": {"completed": True},
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
     if not publish_to_kafka("agent-execution-logs", complete_event):

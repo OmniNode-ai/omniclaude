@@ -6,7 +6,6 @@ import json
 from confluent_kafka import Producer
 from confluent_kafka.admin import AdminClient
 
-
 # Test 1: AdminClient to check broker connectivity
 print("=" * 60)
 print("TEST 1: AdminClient connectivity test")
@@ -45,9 +44,7 @@ def delivery_callback(err, msg):
         delivery_results.append(("error", str(err)))
         print(f"✗ Delivery failed: {err}")
     else:
-        print(
-            f"✓ Message delivered to {msg.topic()} [{msg.partition()}] @ offset {msg.offset()}"
-        )
+        print(f"✓ Message delivered to {msg.topic()} [{msg.partition()}] @ offset {msg.offset()}")
         delivery_results.append(("success", msg.topic()))
 
 
@@ -61,9 +58,7 @@ producer_config = {
     "debug": "broker,topic,msg",  # Verbose debugging
 }
 
-print(
-    f"Config: {json.dumps({k: v for k, v in producer_config.items() if k != 'debug'}, indent=2)}"
-)
+print(f"Config: {json.dumps({k: v for k, v in producer_config.items() if k != 'debug'}, indent=2)}")
 
 try:
     producer = Producer(producer_config)

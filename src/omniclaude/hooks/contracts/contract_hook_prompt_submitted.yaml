@@ -1,0 +1,214 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 OmniNode Team
+#
+# ONEX Node Contract
+# Node: NodeHookPromptSubmittedEffect
+#
+# This contract defines the interface for the prompt submitted hook effect node,
+# which emits events to Kafka when a user submits a prompt in Claude Code.
+
+# Contract identifiers
+name: "hook_prompt_submitted"
+contract_name: "hook_prompt_submitted"
+node_name: "hook_prompt_submitted"
+
+# Version (semantic versioning)
+version:
+  major: 1
+  minor: 0
+  patch: 0
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+node_version:
+  major: 0
+  minor: 1
+  patch: 0
+
+# Node type - EFFECT because it publishes to Kafka (side effect)
+node_type: "EFFECT"
+
+# Description
+description: >
+  Effect node for emitting prompt submitted events. When a user submits a prompt
+  (via UserPromptSubmit hook), this node publishes a ModelHookPromptSubmittedPayload
+  event to Kafka. Captures a truncated preview, length, prompt_id, and optional
+  detected intent for learning pipeline analysis. Privacy-preserving: only
+  preview (max 100 chars).
+
+# Strongly typed I/O models
+input_model:
+  name: "ModelHookPromptSubmittedPayload"
+  module: "omniclaude.hooks.schemas"
+  description: "Prompt submitted event payload with preview and metrics."
+output_model:
+  name: "ModelEventPublishResult"
+  module: "omniclaude.hooks.models"
+  description: "Result of publishing event to Kafka (success, offset, partition)."
+
+# Event bus configuration
+event_bus:
+  topic_base: "omniclaude.prompt.submitted.v1"
+  partition_key_field: "entity_id"
+  partition_strategy: "hash"
+  # Events use entity_id (session UUID) for ordering guarantees within a session
+
+# Runtime configuration
+runtime:
+  # Invoked by Claude Code hooks (not orchestrator)
+  supports_direct_call: true
+  # Can be event-driven in future learning pipelines
+  supports_event_driven: true
+  # Publishes to Kafka - has side effects
+  side_effects: true
+  # Hook must complete quickly (user is waiting)
+  timeout_ms: 500
+  # Same input always produces same event (deterministic serialization)
+  deterministic: true
+
+# ONEX timestamp policy
+timestamp_policy:
+  # emitted_at has NO default_factory per ONEX architecture
+  explicit_injection: true
+  timezone_required: true
+  rationale: >
+    Producers must explicitly inject timestamps. This ensures deterministic
+    testing (fixed time in tests), consistent ordering (no clock skew between
+    services), and explicit time dependencies.
+
+# Privacy considerations
+privacy:
+  # Only send truncated preview, not full prompt
+  data_minimization: true
+  # Max preview length to protect sensitive content
+  preview_max_length: 100
+  # No PII should be in events
+  pii_policy: "exclude"
+
+# Dependencies
+dependencies:
+  - name: "kafka_producer"
+    type: "service"
+    description: "Kafka producer for publishing events"
+  - name: "topic_builder"
+    type: "utility"
+    class_name: "build_topic"
+    module: "omniclaude.hooks.topics"
+    description: "Utility for building full topic names with prefix"
+  - name: "validate_timezone_aware_datetime"
+    type: "utility"
+    module: "omnibase_infra.utils"
+    description: "Validates timestamp is timezone-aware"
+
+# Capabilities provided by this node
+capabilities:
+  - name: "prompt_event_emission"
+    description: "Emit prompt submitted events to Kafka"
+  - name: "causation_tracking"
+    description: "Include causation_id for event chain tracing"
+  - name: "correlation_tracking"
+    description: "Include correlation_id for distributed tracing"
+  - name: "intent_detection"
+    description: "Optionally classify prompt intent (workflow, question, fix, etc.)"
+  - name: "privacy_preservation"
+    description: "Only emit truncated preview, not full prompt content"
+
+# Model definitions (reference - actual models in schemas.py)
+definitions:
+  ModelHookPromptSubmittedPayload:
+    type: object
+    description: "Event payload for user prompt submission"
+    properties:
+      entity_id:
+        type: string
+        format: uuid
+        description: "Session identifier as UUID (partition key for ordering)"
+      session_id:
+        type: string
+        minLength: 1
+        description: "Session identifier string"
+      correlation_id:
+        type: string
+        format: uuid
+        description: "Correlation ID for distributed tracing"
+      causation_id:
+        type: string
+        format: uuid
+        description: "ID of the previous event in the session chain"
+      emitted_at:
+        type: string
+        format: date-time
+        description: "Timestamp when the hook emitted this event (UTC, timezone-aware)"
+      prompt_id:
+        type: string
+        format: uuid
+        description: "Unique identifier for this specific prompt"
+      prompt_preview:
+        type: string
+        maxLength: 100
+        description: "First N characters of the prompt (privacy-safe preview)"
+      prompt_length:
+        type: integer
+        minimum: 0
+        description: "Total character count of the prompt"
+      detected_intent:
+        type: string
+        nullable: true
+        description: "Classified intent if available (workflow, question, fix, etc.)"
+    required:
+      - entity_id
+      - session_id
+      - correlation_id
+      - causation_id
+      - emitted_at
+      - prompt_id
+      - prompt_preview
+      - prompt_length
+
+  ModelEventPublishResult:
+    type: object
+    description: "Result of publishing event to Kafka"
+    properties:
+      success:
+        type: boolean
+        description: "Whether the event was successfully published"
+      topic:
+        type: string
+        minLength: 1
+        description: "The Kafka topic the event was published to"
+      partition:
+        type: integer
+        nullable: true
+        minimum: 0
+        description: "The partition the event was assigned to (if successful)"
+      offset:
+        type: integer
+        nullable: true
+        minimum: 0
+        description: "The offset within the partition (if successful)"
+      error_message:
+        type: string
+        nullable: true
+        maxLength: 1000
+        description: "Error details if publishing failed"
+    required:
+      - success
+      - topic
+
+# Metadata
+metadata:
+  author: "OmniNode Team"
+  license: "MIT"
+  created: "2025-01-19"
+  ticket: "OMN-1399"
+  tags:
+    - effect
+    - hook
+    - prompt
+    - kafka
+    - event
+    - omniclaude
+    - learning
+    - privacy
+    - onex

@@ -12,33 +12,43 @@ Measures the performance gains from implemented optimizations:
 """
 
 import asyncio
+import contextlib
 import json
+import os
+import sys
 import time
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Union
+from typing import TYPE_CHECKING, Any
 
+# Add parent directory to path for imports when running standalone
+# This allows importing from 'agents.lib' when agents is not installed as a package
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 if TYPE_CHECKING:
     from agents.lib.input_validator import ValidationResult
 
-from agents.lib.agent_analytics import AgentAnalytics, track_agent_performance
-from agents.lib.circuit_breaker import (
-    CircuitBreaker,
-    CircuitBreakerConfig,
-    call_with_breaker,
-)
-from agents.lib.context_optimizer import ContextOptimizer
-from agents.lib.input_validator import InputValidator
-from agents.lib.performance_monitor import PerformanceMonitor
-from agents.lib.performance_optimization import BatchOperation, PerformanceOptimizer
-from agents.lib.retry_manager import RetryConfig, RetryManager, execute_with_retry
-from agents.parallel_execution.context_manager import ContextManager
-from agents.parallel_execution.quorum_validator import (
-    QuorumResult,
-    QuorumValidator,
-    ValidationDecision,
-)
+try:
+    from agents.lib.agent_analytics import AgentAnalytics, track_agent_performance
+    from agents.lib.circuit_breaker import (
+        CircuitBreaker,
+        CircuitBreakerConfig,
+        call_with_breaker,
+    )
+    from agents.lib.context_optimizer import ContextOptimizer
+    from agents.lib.input_validator import InputValidator
+    from agents.lib.performance_monitor import PerformanceMonitor
+    from agents.lib.performance_optimization import BatchOperation, PerformanceOptimizer
+    from agents.lib.retry_manager import RetryConfig, RetryManager, execute_with_retry
+    from agents.parallel_execution.context_manager import ContextManager
+    from agents.parallel_execution.quorum_validator import (
+        QuorumResult,
+        QuorumValidator,
+        ValidationDecision,
+    )
+except ImportError as e:
+    print(f"Skipping benchmark - agents module not installed: {e}")
+    sys.exit(0)
 
 
 class PerformanceBenchmark:
@@ -49,9 +59,7 @@ class PerformanceBenchmark:
         self.context_manager = ContextManager()
         self.quorum_validator = QuorumValidator()
         self.performance_optimizer = PerformanceOptimizer()
-        self.circuit_breaker = CircuitBreaker(
-            "benchmark_breaker", CircuitBreakerConfig()
-        )
+        self.circuit_breaker = CircuitBreaker("benchmark_breaker", CircuitBreakerConfig())
         self.retry_manager = RetryManager()
         self.performance_monitor = PerformanceMonitor()
         self.input_validator = InputValidator()
@@ -84,9 +92,7 @@ class PerformanceBenchmark:
         sequential_context = await self._simulate_sequential_rag(rag_queries)
         sequential_duration = time.time() - start_time
 
-        improvement = (
-            (sequential_duration - parallel_duration) / sequential_duration
-        ) * 100
+        improvement = ((sequential_duration - parallel_duration) / sequential_duration) * 100
 
         return {
             "parallel_duration": parallel_duration,
@@ -139,9 +145,7 @@ class PerformanceBenchmark:
         sequential_result = await self._simulate_sequential_models()
         sequential_duration = time.time() - start_time
 
-        improvement = (
-            (sequential_duration - parallel_duration) / sequential_duration
-        ) * 100
+        improvement = ((sequential_duration - parallel_duration) / sequential_duration) * 100
 
         return {
             "parallel_duration": parallel_duration,
@@ -194,9 +198,7 @@ class PerformanceBenchmark:
         await self._simulate_individual_operations(test_data)
         individual_duration = time.time() - start_time
 
-        improvement = (
-            (individual_duration - batch_duration) / individual_duration
-        ) * 100
+        improvement = ((individual_duration - batch_duration) / individual_duration) * 100
 
         return {
             "batch_duration": batch_duration,
@@ -224,9 +226,7 @@ class PerformanceBenchmark:
         """Benchmark circuit breaker effectiveness."""
         print("Benchmarking circuit breaker effectiveness...")
 
-        config = CircuitBreakerConfig(
-            failure_threshold=3, timeout_seconds=1.0, success_threshold=2
-        )
+        config = CircuitBreakerConfig(failure_threshold=3, timeout_seconds=1.0, success_threshold=2)
 
         # Test with failing service
         failure_count = 0
@@ -239,32 +239,24 @@ class PerformanceBenchmark:
         start_time = time.time()
 
         # Test circuit breaker with failing service
-        try:
+        with contextlib.suppress(Exception):
             await call_with_breaker(
                 breaker_name="benchmark_breaker", config=config, func=failing_service
             )
-        except Exception:
-            pass  # Expected to fail
 
         circuit_breaker_duration = time.time() - start_time
 
         # Test without circuit breaker (would keep trying)
         start_time = time.time()
 
-        try:
-            for _ in range(10):  # Simulate 10 attempts without circuit breaker
-                try:
-                    await failing_service()
-                except Exception:
-                    pass  # nosec B110 - intentional: benchmark measures failure handling overhead
-        except Exception:
-            pass  # nosec B110 - intentional: benchmark wrapper catches all for timing
+        for _ in range(10):  # Simulate 10 attempts without circuit breaker
+            with contextlib.suppress(Exception):
+                await failing_service()
 
         no_circuit_breaker_duration = time.time() - start_time
 
         improvement = (
-            (no_circuit_breaker_duration - circuit_breaker_duration)
-            / no_circuit_breaker_duration
+            (no_circuit_breaker_duration - circuit_breaker_duration) / no_circuit_breaker_duration
         ) * 100
 
         return {
@@ -304,10 +296,8 @@ class PerformanceBenchmark:
         # Test without retry manager (would fail immediately)
         start_time = time.time()
 
-        try:
+        with contextlib.suppress(Exception):
             await flaky_service()
-        except Exception:
-            pass  # Expected to fail
 
         no_retry_duration = time.time() - start_time
 
@@ -347,9 +337,7 @@ class PerformanceBenchmark:
 
         unoptimized_duration = time.time() - start_time
 
-        improvement = (
-            (unoptimized_duration - optimized_duration) / unoptimized_duration
-        ) * 100
+        improvement = ((unoptimized_duration - optimized_duration) / unoptimized_duration) * 100
 
         return {
             "optimized_duration": optimized_duration,
@@ -435,13 +423,11 @@ class PerformanceBenchmark:
             user_prompt_str = str(test_input["user_prompt"])
             tasks_data_dict = test_input["tasks_data"]
             # Using user_prompt/tasks_data pattern - returns dict[str, Any]
-            result: Union[dict[str, Any], "ValidationResult"] = (
-                await self.input_validator.validate_and_sanitize(
-                    user_prompt=user_prompt_str,
-                    tasks_data=(
-                        tasks_data_dict if isinstance(tasks_data_dict, dict) else None
-                    ),
-                )
+            result: (
+                dict[str, Any] | ValidationResult
+            ) = await self.input_validator.validate_and_sanitize(
+                user_prompt=user_prompt_str,
+                tasks_data=(tasks_data_dict if isinstance(tasks_data_dict, dict) else None),
             )
             # When using user_prompt/tasks_data, returns dict with 'is_valid' key
             if isinstance(result, dict):
@@ -458,9 +444,7 @@ class PerformanceBenchmark:
         validation_duration = time.time() - start_time
 
         # Calculate statistics
-        valid_count = sum(
-            1 for result in validation_results if result.get("is_valid", False)
-        )
+        valid_count = sum(1 for result in validation_results if result.get("is_valid", False))
         invalid_count = len(validation_results) - valid_count
 
         return {
@@ -495,14 +479,12 @@ class PerformanceBenchmark:
 
         # Calculate overall statistics
         total_improvements = []
-        for benchmark_name, results in benchmarks.items():
+        for _benchmark_name, results in benchmarks.items():
             if "improvement_percent" in results:
                 total_improvements.append(results["improvement_percent"])
 
         avg_improvement = (
-            sum(total_improvements) / len(total_improvements)
-            if total_improvements
-            else 0
+            sum(total_improvements) / len(total_improvements) if total_improvements else 0
         )
 
         # Generate summary
@@ -526,9 +508,7 @@ class PerformanceBenchmark:
         print("=" * 60)
 
         print(f"Benchmark completed at: {results['benchmark_timestamp']}")
-        print(
-            f"Total benchmark duration: {results['total_benchmark_duration']:.2f} seconds"
-        )
+        print(f"Total benchmark duration: {results['total_benchmark_duration']:.2f} seconds")
         print(
             f"Average improvement: {results['overall_statistics']['average_improvement_percent']:.1f}%"
         )
@@ -551,9 +531,7 @@ class PerformanceBenchmark:
                 print(f"  Individual: {benchmark_results['individual_duration']:.3f}s")
 
             if "validation_duration" in benchmark_results:
-                print(
-                    f"  Validation rate: {benchmark_results['validation_rate']:.1f} inputs/sec"
-                )
+                print(f"  Validation rate: {benchmark_results['validation_rate']:.1f} inputs/sec")
                 print(f"  Success rate: {benchmark_results['success_rate']:.1%}")
 
             print()

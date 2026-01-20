@@ -8,10 +8,9 @@ Tests atomic file writing, rollback, validation, and error handling.
 import os
 import tempfile
 from pathlib import Path
-from typing import Dict
 
 import pytest
-from omnibase_core.errors.model_onex_error import ModelOnexError
+from omnibase_core.models.errors.model_onex_error import ModelOnexError
 
 from tools.node_gen.file_writer import FileWriter
 from tools.node_gen.models.file_write_result import FileWriteResult
@@ -81,7 +80,7 @@ class TestFileWriter:
             yield Path(tmpdir)
 
     @pytest.fixture
-    def sample_files(self) -> Dict[str, str]:
+    def sample_files(self) -> dict[str, str]:
         """Sample files for testing."""
         return {
             "v1_0_0/node.py": "# Node implementation\nclass NodeTest:\n    pass\n",
@@ -220,7 +219,7 @@ class TestFileWriter:
                 allow_overwrite=False,
             )
 
-    def test_allow_overwrite(self, temp_dir, sample_files):
+    def test_allow_overwrite(self, temp_dir):
         """Test that allow_overwrite flag works."""
         writer = FileWriter(enable_rollback=True)
 
@@ -420,7 +419,7 @@ class TestFileWriter:
         # Files should be deleted
         # Note: Directories might remain if not tracked in _created_paths
 
-    def test_multiple_writes_with_context(self, temp_dir, sample_files):
+    def test_multiple_writes_with_context(self, temp_dir):
         """Test multiple write operations with context manager."""
         writer = FileWriter(enable_rollback=True)
 

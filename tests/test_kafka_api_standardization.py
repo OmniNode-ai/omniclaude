@@ -11,8 +11,7 @@ Purpose: Validate standardized Kafka helper API contracts
 
 import sys
 from pathlib import Path
-from typing import Any, Dict
-
+from typing import Any
 
 # Add paths for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "skills" / "_shared"))
@@ -21,7 +20,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from kafka_types import (
     KafkaConnectionResult,
     KafkaConsumeResult,
-    KafkaConsumerGroupsResult,
     KafkaMessageCountResult,
     KafkaPublishResult,
     KafkaTopicsResult,
@@ -29,7 +27,7 @@ from kafka_types import (
 )
 
 
-def validate_result_structure(result: Dict[str, Any], expected_fields: list) -> bool:
+def validate_result_structure(result: dict[str, Any], expected_fields: list) -> bool:
     """
     Validate that a result dictionary has all expected fields.
 
@@ -227,7 +225,7 @@ def test_usage_pattern():
     print("\n=== Testing Usage Pattern ===")
 
     # Simulated publish operation
-    def simulated_publish(topic: str, data: dict) -> KafkaPublishResult:
+    def simulated_publish(topic: str, _data: dict) -> KafkaPublishResult:
         """Simulated publish that returns standardized result."""
         return {
             "success": True,

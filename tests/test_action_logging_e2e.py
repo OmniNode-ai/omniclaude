@@ -24,13 +24,15 @@ import logging
 import os
 import sys
 import time
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
 import pytest
 
+# Skip entire module if kafka-python is not installed
+# This is an E2E integration test that requires actual Kafka infrastructure
+pytest.importorskip("kafka", reason="kafka-python not installed - skipping E2E tests")
 
 # Add agents/lib to path
 SCRIPT_DIR = Path(__file__).parent
@@ -53,7 +55,6 @@ except ImportError:
 
 from action_logger import ActionLogger
 from kafka_agent_action_consumer import KafkaAgentActionConsumer
-
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -177,9 +178,7 @@ class ActionLoggingE2ETest:
                 user=postgres_user,
                 password=postgres_password,
             )
-            logger.info(
-                f"✓ Database connection established: {postgres_host}:{postgres_port}"
-            )
+            logger.info(f"✓ Database connection established: {postgres_host}:{postgres_port}")
             return True
 
         except Exception as e:
@@ -314,9 +313,7 @@ class ActionLoggingE2ETest:
             logger.warning("No database connection, skipping verification")
             return False
 
-        logger.info(
-            f"Waiting up to {max_wait_seconds}s for consumer to process events..."
-        )
+        logger.info(f"Waiting up to {max_wait_seconds}s for consumer to process events...")
 
         # Wait for consumer to process events
         start_time = time.time()
@@ -375,7 +372,7 @@ class ActionLoggingE2ETest:
         for i, action in enumerate(found_actions):
             expected = self.test_actions[i] if i < len(self.test_actions) else None
 
-            logger.info(f"\nAction {i+1}:")
+            logger.info(f"\nAction {i + 1}:")
             logger.info(f"  Type: {action['action_type']}")
             logger.info(f"  Name: {action['action_name']}")
             logger.info(f"  Agent: {action['agent_name']}")
@@ -396,7 +393,7 @@ class ActionLoggingE2ETest:
                     )
                     all_valid = False
                 else:
-                    logger.info(f"  ✓ Type and name match")
+                    logger.info("  ✓ Type and name match")
 
                 # Validate action details
                 if expected["expected_details"]:
@@ -412,7 +409,7 @@ class ActionLoggingE2ETest:
                             f"  ⚠️  Missing expected fields in action_details: {missing_fields}"
                         )
                     else:
-                        logger.info(f"  ✓ Action details contain expected fields")
+                        logger.info("  ✓ Action details contain expected fields")
 
             # Validate correlation ID
             if str(action["correlation_id"]) != self.correlation_id:
@@ -422,7 +419,7 @@ class ActionLoggingE2ETest:
                 )
                 all_valid = False
             else:
-                logger.info(f"  ✓ Correlation ID matches")
+                logger.info("  ✓ Correlation ID matches")
 
         return all_valid and len(found_actions) >= len(self.test_actions)
 
@@ -452,9 +449,7 @@ class ActionLoggingE2ETest:
         try:
             await self.publish_test_actions()
         except Exception as e:
-            logger.error(
-                f"❌ Failed to publish test actions: {e}", exc_info=self.verbose
-            )
+            logger.error(f"❌ Failed to publish test actions: {e}", exc_info=self.verbose)
             return False
 
         # Verify actions in database
@@ -480,7 +475,7 @@ class ActionLoggingE2ETest:
     reason="Requires asyncpg and PostgreSQL connection",
 )
 @pytest.mark.asyncio
-async def test_action_logging_e2e(running_consumer, db_pool):
+async def test_action_logging_e2e(_running_consumer, db_pool):
     """
     End-to-end test for action logging with Kafka consumer.
 
@@ -645,9 +640,9 @@ async def test_action_logging_e2e(running_consumer, db_pool):
         )
 
     # Verify count
-    assert len(results) >= len(
-        test_actions
-    ), f"Expected at least {len(test_actions)} actions, found {len(results)}"
+    assert len(results) >= len(test_actions), (
+        f"Expected at least {len(test_actions)} actions, found {len(results)}"
+    )
     logger.info(f"✓ Found all {len(results)} actions in database")
 
     # Verify each action
@@ -656,26 +651,22 @@ async def test_action_logging_e2e(running_consumer, db_pool):
             expected = test_actions[i]
 
             assert result["action_type"] == expected["action_type"], (
-                f"Action {i+1}: Type mismatch - expected {expected['action_type']}, "
+                f"Action {i + 1}: Type mismatch - expected {expected['action_type']}, "
                 f"got {result['action_type']}"
             )
 
             assert result["action_name"] == expected["action_name"], (
-                f"Action {i+1}: Name mismatch - expected {expected['action_name']}, "
+                f"Action {i + 1}: Name mismatch - expected {expected['action_name']}, "
                 f"got {result['action_name']}"
             )
 
-            assert (
-                str(result["correlation_id"]) == correlation_id
-            ), f"Action {i+1}: Correlation ID mismatch"
-
-            assert (
-                result["agent_name"] == "test-agent-e2e"
-            ), f"Action {i+1}: Agent name mismatch"
-
-            logger.info(
-                f"✓ Action {i+1}: {result['action_type']} - {result['action_name']}"
+            assert str(result["correlation_id"]) == correlation_id, (
+                f"Action {i + 1}: Correlation ID mismatch"
             )
+
+            assert result["agent_name"] == "test-agent-e2e", f"Action {i + 1}: Agent name mismatch"
+
+            logger.info(f"✓ Action {i + 1}: {result['action_type']} - {result['action_name']}")
 
     logger.info("\n" + "=" * 60)
     logger.info("✅ Test PASSED - All actions logged and verified")
@@ -684,12 +675,8 @@ async def test_action_logging_e2e(running_consumer, db_pool):
 
 async def main():
     """Main entry point."""
-    parser = argparse.ArgumentParser(
-        description="End-to-end test for agent action logging"
-    )
-    parser.add_argument(
-        "--verbose", "-v", action="store_true", help="Enable verbose logging"
-    )
+    parser = argparse.ArgumentParser(description="End-to-end test for agent action logging")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose logging")
 
     args = parser.parse_args()
 

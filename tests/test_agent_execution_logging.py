@@ -18,12 +18,10 @@ from pathlib import Path
 
 import pytest
 
-
 # Add agents/lib to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "agents" / "lib"))
 
 from agent_execution_logger import AgentExecutionLogger
-
 
 # Load environment variables (no fallback values)
 POSTGRES_HOST = os.getenv("POSTGRES_HOST")

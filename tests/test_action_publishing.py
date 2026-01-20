@@ -17,14 +17,12 @@ import sys
 from pathlib import Path
 from uuid import uuid4
 
-
 # Add agents/lib to path
 SCRIPT_DIR = Path(__file__).parent
 AGENTS_LIB = SCRIPT_DIR.parent / "agents" / "lib"
 sys.path.insert(0, str(AGENTS_LIB))
 
 from action_logger import ActionLogger
-
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -94,9 +92,7 @@ async def test_action_publishing(verbose: bool = False):
             logger.info("✓ Write action published successfully")
             results.append(True)
         else:
-            logger.warning(
-                "⚠️  Write action publish returned False (Kafka may be unavailable)"
-            )
+            logger.warning("⚠️  Write action publish returned False (Kafka may be unavailable)")
             results.append(False)
 
     except Exception as e:
@@ -187,13 +183,9 @@ async def test_action_publishing(verbose: bool = False):
         logger.info("✅ All publishing tests PASSED")
         logger.info("\nNext steps:")
         logger.info("1. Check Kafka topic: kcat -C -b localhost:29092 -t agent-actions")
-        logger.info(
-            "2. Verify consumer is running: docker ps | grep agent-actions-consumer"
-        )
+        logger.info("2. Verify consumer is running: docker ps | grep agent-actions-consumer")
         logger.info("3. Query database (if consumer running):")
-        logger.info(
-            f"   SELECT * FROM agent_actions WHERE correlation_id = '{correlation_id}';"
-        )
+        logger.info(f"   SELECT * FROM agent_actions WHERE correlation_id = '{correlation_id}';")
     elif any(results):
         logger.warning("⚠️  Some tests PASSED, some FAILED")
         logger.warning("Check if Kafka is running and accessible")
@@ -209,12 +201,8 @@ async def test_action_publishing(verbose: bool = False):
 
 async def main():
     """Main entry point."""
-    parser = argparse.ArgumentParser(
-        description="Simple test for agent action publishing"
-    )
-    parser.add_argument(
-        "--verbose", "-v", action="store_true", help="Enable verbose logging"
-    )
+    parser = argparse.ArgumentParser(description="Simple test for agent action publishing")
+    parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose logging")
 
     args = parser.parse_args()
 

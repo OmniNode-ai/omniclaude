@@ -9,17 +9,32 @@ Provides comprehensive fixtures for:
 - Performance benchmarking
 """
 
-import asyncio
 import os
 import sys
 from pathlib import Path
-from typing import Dict
-from unittest.mock import AsyncMock, MagicMock
-from uuid import uuid4
 
-import pytest
-from dotenv import load_dotenv
+# CRITICAL: sys.path manipulation for proper package discovery
+#
+# Why this is necessary (not removable without breaking tests):
+# 1. The project has both src/omniclaude/ (new) and legacy omniclaude/ directory
+# 2. pytest's pythonpath setting in pyproject.toml doesn't guarantee import order
+# 3. Without this, tests may import from the legacy directory causing import errors
+# 4. This runs BEFORE any imports to ensure src/omniclaude takes precedence
+#
+# Alternative considered: Using pytest's pythonpath in pyproject.toml alone doesn't
+# work reliably because the legacy directory name conflicts with the package name.
+# This explicit path manipulation is the most reliable solution until the legacy
+# directory is fully archived/removed.
+_src_path = str(Path(__file__).parent.parent / "src")
+if _src_path not in sys.path:
+    sys.path.insert(0, _src_path)
 
+import asyncio  # noqa: E402
+from unittest.mock import AsyncMock, MagicMock  # noqa: E402
+from uuid import uuid4  # noqa: E402
+
+import pytest  # noqa: E402
+from dotenv import load_dotenv  # noqa: E402
 
 # Only load .env in local development (not in CI)
 # In CI, environment variables are set by GitHub Actions and should not be overridden
@@ -114,7 +129,7 @@ def _create_mock_kafka_producer():
     return mock
 
 
-def _get_mock_kafka_producer(*args, **kwargs):
+def _get_mock_kafka_producer(*args, **kwargs):  # noqa: ARG001
     """
     Factory function that returns the global mock producer instance.
 
@@ -333,7 +348,7 @@ def all_node_types() -> list[str]:
 
 
 @pytest.fixture
-def mock_parsed_data() -> Dict:
+def mock_parsed_data() -> dict:
     """Mock parsed data from prompt parser."""
     return {
         "node_type": "EFFECT",
@@ -364,7 +379,7 @@ def benchmark_iterations() -> int:
 
 
 @pytest.fixture
-def performance_thresholds() -> Dict[str, float]:
+def performance_thresholds() -> dict[str, float]:
     """Performance thresholds for different operations."""
     return {
         "contract_validation_ms": 200,
@@ -426,7 +441,7 @@ def pytest_configure(config):
         pass
 
 
-def pytest_collection_modifyitems(config, items):
+def pytest_collection_modifyitems(config, items):  # noqa: ARG001
     """
     Auto-skip integration tests when Kafka is mocked.
 
@@ -498,14 +513,11 @@ async def wait_for_db_condition(
     # Timeout - get final result for error message
     async with db_pool.acquire() as conn:
         final_result = (
-            await conn.fetchval(query, *query_args)
-            if query_args
-            else await conn.fetchval(query)
+            await conn.fetchval(query, *query_args) if query_args else await conn.fetchval(query)
         )
 
     raise TimeoutError(
-        f"Database condition not met within {timeout_seconds}s. "
-        f"Final result: {final_result}"
+        f"Database condition not met within {timeout_seconds}s. Final result: {final_result}"
     )
 
 
@@ -537,9 +549,7 @@ async def wait_for_records():
             query = "SELECT COUNT(*) FROM agent_actions WHERE correlation_id = $1"
             args = (correlation_id,)
         elif agent_name:
-            query = (
-                f"SELECT COUNT(*) FROM agent_actions WHERE agent_name = '{agent_name}'"
-            )
+            query = f"SELECT COUNT(*) FROM agent_actions WHERE agent_name = '{agent_name}'"
         else:
             raise ValueError("Must provide either correlation_id or agent_name")
 
@@ -607,9 +617,7 @@ def _cleanup_all_kafka_producers_sync():
     try:
         loop = asyncio.get_running_loop()
         # Loop is running, can't cleanup synchronously
-        print(
-            "Warning: Event loop is running during Kafka cleanup, skipping sync cleanup"
-        )
+        print("Warning: Event loop is running during Kafka cleanup, skipping sync cleanup")
         return
     except RuntimeError:
         pass
@@ -669,9 +677,7 @@ def _cleanup_all_kafka_producers_sync():
                 try:
                     loop.run_until_complete(publisher.stop())
                 except Exception as e:
-                    print(
-                        f"Warning: Async cleanup failed for logging_event_publisher: {e}"
-                    )
+                    print(f"Warning: Async cleanup failed for logging_event_publisher: {e}")
                     if publisher._producer is not None:
                         _force_close_producer(publisher._producer)
             else:
@@ -699,11 +705,14 @@ def _force_close_producer(producer):
 
     try:
         # Cancel background tasks first
-        if hasattr(producer, "_sender") and producer._sender is not None:
-            if hasattr(producer._sender, "_sender_task"):
-                task = producer._sender._sender_task
-                if task is not None and not task.done():
-                    task.cancel()
+        if (
+            hasattr(producer, "_sender")
+            and producer._sender is not None
+            and hasattr(producer._sender, "_sender_task")
+        ):
+            task = producer._sender._sender_task
+            if task is not None and not task.done():
+                task.cancel()
 
         # Close the client connection
         if hasattr(producer, "_client") and producer._client is not None:
@@ -741,7 +750,7 @@ def pytest_unconfigure(config):
     _mock_kafka_producer_instance = None
 
 
-def pytest_sessionfinish(session, exitstatus):
+def pytest_sessionfinish(session, exitstatus):  # noqa: ARG001
     """
     Pytest hook called after all tests complete, BEFORE fixture teardown.
 
@@ -782,10 +791,7 @@ def _mock_kafka_producer_globally():
     # Hook has already installed the mock in pytest_configure()
     # Verify it's active by checking the global instance
     global _mock_kafka_producer_instance
-    assert (
-        _mock_kafka_producer_instance is not None
-        or _get_mock_kafka_producer() is not None
-    )
+    assert _mock_kafka_producer_instance is not None or _get_mock_kafka_producer() is not None
 
     # Yield to run all tests with the mock active
     yield

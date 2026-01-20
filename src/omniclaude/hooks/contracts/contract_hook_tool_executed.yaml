@@ -1,0 +1,217 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 OmniNode Team
+#
+# ONEX Node Contract
+# Node: NodeHookToolExecutedEffect
+#
+# This contract defines the interface for the tool executed hook effect node,
+# which emits events to Kafka after a tool completes in Claude Code.
+
+# Contract identifiers
+name: "hook_tool_executed"
+contract_name: "hook_tool_executed"
+node_name: "hook_tool_executed"
+
+# Version (semantic versioning)
+version:
+  major: 1
+  minor: 0
+  patch: 0
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+node_version:
+  major: 0
+  minor: 1
+  patch: 0
+
+# Node type - EFFECT because it publishes to Kafka (side effect)
+node_type: "EFFECT"
+
+# Description
+description: >
+  Effect node for emitting tool executed events. When a tool completes execution
+  (via PostToolUse hook), this node publishes a ModelHookToolExecutedPayload event
+  to Kafka. Captures tool_execution_id, tool name, success status, duration, and
+  optional summary for learning pipeline analysis and developer productivity insights.
+
+# Strongly typed I/O models
+input_model:
+  name: "ModelHookToolExecutedPayload"
+  module: "omniclaude.hooks.schemas"
+  description: "Tool executed event payload with execution metrics."
+output_model:
+  name: "ModelEventPublishResult"
+  module: "omniclaude.hooks.models"
+  description: "Result of publishing event to Kafka (success, offset, partition)."
+
+# Event bus configuration
+event_bus:
+  topic_base: "omniclaude.tool.executed.v1"
+  partition_key_field: "entity_id"
+  partition_strategy: "hash"
+  # Events use entity_id (session UUID) for ordering guarantees within a session
+
+# Runtime configuration
+runtime:
+  # Invoked by Claude Code hooks (not orchestrator)
+  supports_direct_call: true
+  # Can be event-driven in future learning pipelines
+  supports_event_driven: true
+  # Publishes to Kafka - has side effects
+  side_effects: true
+  # Hook must complete quickly
+  timeout_ms: 100
+  # Same input always produces same event (deterministic serialization)
+  deterministic: true
+
+# ONEX timestamp policy
+timestamp_policy:
+  # emitted_at has NO default_factory per ONEX architecture
+  explicit_injection: true
+  timezone_required: true
+  rationale: >
+    Producers must explicitly inject timestamps. This ensures deterministic
+    testing (fixed time in tests), consistent ordering (no clock skew between
+    services), and explicit time dependencies.
+
+# Tool matching configuration
+tool_matching:
+  # Tools that trigger this hook (regex pattern)
+  pattern: "^(Read|Write|Edit|Bash|Grep|Glob|WebFetch|WebSearch|Task|Skill|NotebookEdit|TodoWrite|mcp__.*)$"
+  # High-frequency tools may be sampled in production
+  sampling_enabled: false
+  sampling_rate: 1.0
+
+# Dependencies
+dependencies:
+  - name: "kafka_producer"
+    type: "service"
+    description: "Kafka producer for publishing events"
+  - name: "topic_builder"
+    type: "utility"
+    class_name: "build_topic"
+    module: "omniclaude.hooks.topics"
+    description: "Utility for building full topic names with prefix"
+  - name: "validate_timezone_aware_datetime"
+    type: "utility"
+    module: "omnibase_infra.utils"
+    description: "Validates timestamp is timezone-aware"
+
+# Capabilities provided by this node
+capabilities:
+  - name: "tool_event_emission"
+    description: "Emit tool executed events to Kafka"
+  - name: "causation_tracking"
+    description: "Include causation_id linking to triggering prompt event"
+  - name: "correlation_tracking"
+    description: "Include correlation_id for distributed tracing"
+  - name: "execution_metrics"
+    description: "Capture duration and success status"
+  - name: "tool_classification"
+    description: "Identify tool by name for analytics"
+
+# Model definitions (reference - actual models in schemas.py)
+definitions:
+  ModelHookToolExecutedPayload:
+    type: object
+    description: "Event payload for tool execution (PostToolUse hook)"
+    properties:
+      entity_id:
+        type: string
+        format: uuid
+        description: "Session identifier as UUID (partition key for ordering)"
+      session_id:
+        type: string
+        minLength: 1
+        description: "Session identifier string"
+      correlation_id:
+        type: string
+        format: uuid
+        description: "Correlation ID for distributed tracing"
+      causation_id:
+        type: string
+        format: uuid
+        description: "ID of the prompt event that triggered this tool use"
+      emitted_at:
+        type: string
+        format: date-time
+        description: "Timestamp when the hook emitted this event (UTC, timezone-aware)"
+      tool_execution_id:
+        type: string
+        format: uuid
+        description: "Unique identifier for this tool execution"
+      tool_name:
+        type: string
+        minLength: 1
+        description: "Name of the tool (Read, Write, Edit, Bash, Grep, Glob, Task, etc.)"
+      success:
+        type: boolean
+        default: true
+        description: "Whether the tool execution succeeded"
+      duration_ms:
+        type: integer
+        nullable: true
+        minimum: 0
+        description: "Tool execution duration in milliseconds"
+      summary:
+        type: string
+        nullable: true
+        maxLength: 500
+        description: "Brief summary of the tool execution result"
+    required:
+      - entity_id
+      - session_id
+      - correlation_id
+      - causation_id
+      - emitted_at
+      - tool_execution_id
+      - tool_name
+
+  ModelEventPublishResult:
+    type: object
+    description: "Result of publishing event to Kafka"
+    properties:
+      success:
+        type: boolean
+        description: "Whether the event was successfully published"
+      topic:
+        type: string
+        minLength: 1
+        description: "The Kafka topic the event was published to"
+      partition:
+        type: integer
+        nullable: true
+        minimum: 0
+        description: "The partition the event was assigned to (if successful)"
+      offset:
+        type: integer
+        nullable: true
+        minimum: 0
+        description: "The offset within the partition (if successful)"
+      error_message:
+        type: string
+        nullable: true
+        maxLength: 1000
+        description: "Error details if publishing failed"
+    required:
+      - success
+      - topic
+
+# Metadata
+metadata:
+  author: "OmniNode Team"
+  license: "MIT"
+  created: "2025-01-19"
+  ticket: "OMN-1399"
+  tags:
+    - effect
+    - hook
+    - tool
+    - kafka
+    - event
+    - omniclaude
+    - analytics
+    - productivity
+    - onex

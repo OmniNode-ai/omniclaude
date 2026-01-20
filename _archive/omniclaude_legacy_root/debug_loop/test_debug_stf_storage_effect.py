@@ -6,12 +6,10 @@ Demonstrates ONEX compliance with type-safe contracts and error handling.
 """
 
 import sys
-from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
-
 
 # Add repository root to path for module imports
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent

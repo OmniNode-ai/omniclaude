@@ -19,7 +19,6 @@ from textwrap import dedent
 
 import pytest
 
-
 # Add parent directory to path to import tools module
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -55,16 +54,14 @@ class TestImportValidation:
 
     def test_valid_imports(self, validator, temp_file):
         """Test that valid omnibase_core imports pass"""
-        code = dedent(
-            """
+        code = dedent("""
             from omnibase_core.nodes.node_effect import NodeEffect
             from omnibase_core.errors.model_onex_error import ModelOnexError
             from omnibase_core.models.container.model_onex_container import ModelONEXContainer
 
             class TestNode:
                 pass
-        """
-        )
+        """)
         temp_file.write_text(code)
 
         result = validator.validate_file(temp_file)
@@ -75,14 +72,12 @@ class TestImportValidation:
 
     def test_incorrect_import_paths(self, validator, temp_file):
         """Test that incorrect import paths are detected"""
-        code = dedent(
-            """
+        code = dedent("""
             from omnibase_core.core.node_effect import ModelEffectInput
 
             class TestNode:
                 pass
-        """
-        )
+        """)
         temp_file.write_text(code)
 
         result = validator.validate_file(temp_file)
@@ -94,23 +89,19 @@ class TestImportValidation:
 
     def test_unknown_module_import(self, validator, temp_file):
         """Test that unknown modules are detected"""
-        code = dedent(
-            """
+        code = dedent("""
             from omnibase_core.nonexistent.module import Something
 
             class TestNode:
                 pass
-        """
-        )
+        """)
         temp_file.write_text(code)
 
         result = validator.validate_file(temp_file)
 
         import_checks = [c for c in result.checks if c.check_type == CheckType.IMPORT]
         # Should either fail or warn about unknown import
-        assert any(
-            c.status in [CheckStatus.FAIL, CheckStatus.WARNING] for c in import_checks
-        )
+        assert any(c.status in [CheckStatus.FAIL, CheckStatus.WARNING] for c in import_checks)
 
 
 class TestONEXNaming:
@@ -118,8 +109,7 @@ class TestONEXNaming:
 
     def test_valid_node_naming(self, validator, temp_file):
         """Test valid ONEX node naming"""
-        code = dedent(
-            """
+        code = dedent("""
             from omnibase_core.nodes.node_effect import NodeEffect
 
             class NodeUserServiceEffect(NodeEffect):
@@ -127,8 +117,7 @@ class TestONEXNaming:
 
             class NodeDataProcessorCompute:
                 pass
-        """
-        )
+        """)
         temp_file.write_text(code)
 
         result = validator.validate_file(temp_file)
@@ -139,15 +128,13 @@ class TestONEXNaming:
 
     def test_invalid_node_naming(self, validator, temp_file):
         """Test invalid ONEX node naming"""
-        code = dedent(
-            """
+        code = dedent("""
             class NodeInvalid:
                 pass
 
             class NodeNoType:
                 pass
-        """
-        )
+        """)
         temp_file.write_text(code)
 
         result = validator.validate_file(temp_file)
@@ -157,8 +144,7 @@ class TestONEXNaming:
 
     def test_model_naming(self, validator, temp_file):
         """Test Model class naming"""
-        code = dedent(
-            """
+        code = dedent("""
             from pydantic import BaseModel
 
             class ModelUserInput(BaseModel):
@@ -166,8 +152,7 @@ class TestONEXNaming:
 
             class ModelServiceConfig(BaseModel):
                 pass
-        """
-        )
+        """)
         temp_file.write_text(code)
 
         result = validator.validate_file(temp_file)
@@ -182,58 +167,46 @@ class TestBaseClassValidation:
 
     def test_correct_base_class(self, validator, temp_file):
         """Test that correct base class inheritance is detected"""
-        code = dedent(
-            """
+        code = dedent("""
             from omnibase_core.nodes.node_effect import NodeEffect
 
             class NodeUserServiceEffect(NodeEffect):
                 pass
-        """
-        )
+        """)
         temp_file.write_text(code)
 
         result = validator.validate_file(temp_file)
 
-        base_class_checks = [
-            c for c in result.checks if c.check_type == CheckType.BASE_CLASS
-        ]
+        base_class_checks = [c for c in result.checks if c.check_type == CheckType.BASE_CLASS]
         assert len(base_class_checks) > 0
         assert all(c.status == CheckStatus.PASS for c in base_class_checks)
 
     def test_missing_base_class(self, validator, temp_file):
         """Test that missing base class is detected"""
-        code = dedent(
-            """
+        code = dedent("""
             class NodeUserServiceEffect:
                 pass
-        """
-        )
+        """)
         temp_file.write_text(code)
 
         result = validator.validate_file(temp_file)
 
-        base_class_checks = [
-            c for c in result.checks if c.check_type == CheckType.BASE_CLASS
-        ]
+        base_class_checks = [c for c in result.checks if c.check_type == CheckType.BASE_CLASS]
         assert any(c.status == CheckStatus.FAIL for c in base_class_checks)
 
     def test_wrong_base_class(self, validator, temp_file):
         """Test that wrong base class is detected"""
-        code = dedent(
-            """
+        code = dedent("""
             from omnibase_core.nodes.node_compute import NodeCompute
 
             class NodeUserServiceEffect(NodeCompute):  # Wrong base class
                 pass
-        """
-        )
+        """)
         temp_file.write_text(code)
 
         result = validator.validate_file(temp_file)
 
-        base_class_checks = [
-            c for c in result.checks if c.check_type == CheckType.BASE_CLASS
-        ]
+        base_class_checks = [c for c in result.checks if c.check_type == CheckType.BASE_CLASS]
         assert any(c.status == CheckStatus.FAIL for c in base_class_checks)
 
 
@@ -242,16 +215,14 @@ class TestContainerDI:
 
     def test_container_di_present(self, validator, temp_file):
         """Test that container DI is detected"""
-        code = dedent(
-            """
+        code = dedent("""
             from omnibase_core.nodes.node_effect import NodeEffect
             from omnibase_core.models.container.model_onex_container import ModelONEXContainer
 
             class NodeUserServiceEffect(NodeEffect):
                 def __init__(self, container: ModelONEXContainer):
                     super().__init__(container)
-        """
-        )
+        """)
         temp_file.write_text(code)
 
         result = validator.validate_file(temp_file)
@@ -262,15 +233,13 @@ class TestContainerDI:
 
     def test_container_di_missing(self, validator, temp_file):
         """Test that missing container DI is detected"""
-        code = dedent(
-            """
+        code = dedent("""
             from omnibase_core.nodes.node_effect import NodeEffect
 
             class NodeUserServiceEffect(NodeEffect):
                 def __init__(self):
                     pass
-        """
-        )
+        """)
         temp_file.write_text(code)
 
         result = validator.validate_file(temp_file)
@@ -284,8 +253,7 @@ class TestPydanticV2:
 
     def test_pydantic_v1_dict_method(self, validator, temp_file):
         """Test that Pydantic v1 .dict() is detected"""
-        code = dedent(
-            """
+        code = dedent("""
             from pydantic import BaseModel
 
             class MyModel(BaseModel):
@@ -293,25 +261,19 @@ class TestPydanticV2:
 
             m = MyModel(name="test")
             data = m.dict()
-        """
-        )
+        """)
         temp_file.write_text(code)
 
         result = validator.validate_file(temp_file)
 
-        pydantic_checks = [
-            c for c in result.checks if c.check_type == CheckType.PYDANTIC
-        ]
+        pydantic_checks = [c for c in result.checks if c.check_type == CheckType.PYDANTIC]
         assert len(pydantic_checks) > 0
         assert any(c.status == CheckStatus.FAIL for c in pydantic_checks)
-        assert any(
-            ".model_dump(" in c.suggestion for c in pydantic_checks if c.suggestion
-        )
+        assert any(".model_dump(" in c.suggestion for c in pydantic_checks if c.suggestion)
 
     def test_pydantic_v1_json_method(self, validator, temp_file):
         """Test that Pydantic v1 .json() is detected"""
-        code = dedent(
-            """
+        code = dedent("""
             from pydantic import BaseModel
 
             class MyModel(BaseModel):
@@ -319,21 +281,17 @@ class TestPydanticV2:
 
             m = MyModel(name="test")
             json_str = m.json()
-        """
-        )
+        """)
         temp_file.write_text(code)
 
         result = validator.validate_file(temp_file)
 
-        pydantic_checks = [
-            c for c in result.checks if c.check_type == CheckType.PYDANTIC
-        ]
+        pydantic_checks = [c for c in result.checks if c.check_type == CheckType.PYDANTIC]
         assert any(c.status == CheckStatus.FAIL for c in pydantic_checks)
 
     def test_pydantic_v2_compliant(self, validator, temp_file):
         """Test that Pydantic v2 code passes"""
-        code = dedent(
-            """
+        code = dedent("""
             from pydantic import BaseModel
 
             class MyModel(BaseModel):
@@ -342,15 +300,12 @@ class TestPydanticV2:
             m = MyModel(name="test")
             data = m.model_dump()
             json_str = m.model_dump_json()
-        """
-        )
+        """)
         temp_file.write_text(code)
 
         result = validator.validate_file(temp_file)
 
-        pydantic_checks = [
-            c for c in result.checks if c.check_type == CheckType.PYDANTIC
-        ]
+        pydantic_checks = [c for c in result.checks if c.check_type == CheckType.PYDANTIC]
         # Should have no failed checks
         assert not any(c.status == CheckStatus.FAIL for c in pydantic_checks)
 
@@ -360,39 +315,31 @@ class TestTypeHints:
 
     def test_any_type_detection(self, validator, temp_file):
         """Test that Any types are detected"""
-        code = dedent(
-            """
+        code = dedent("""
             from typing import Any
 
             def process_data(data: Any) -> Any:
                 return data
-        """
-        )
+        """)
         temp_file.write_text(code)
 
         result = validator.validate_file(temp_file)
 
-        type_hint_checks = [
-            c for c in result.checks if c.check_type == CheckType.TYPE_HINT
-        ]
+        type_hint_checks = [c for c in result.checks if c.check_type == CheckType.TYPE_HINT]
         assert any(c.status == CheckStatus.WARNING for c in type_hint_checks)
         assert any("Any" in c.message for c in type_hint_checks)
 
     def test_missing_return_type(self, validator, temp_file):
         """Test that missing return types are detected"""
-        code = dedent(
-            """
+        code = dedent("""
             def process_data(data: str):
                 return data.upper()
-        """
-        )
+        """)
         temp_file.write_text(code)
 
         result = validator.validate_file(temp_file)
 
-        type_hint_checks = [
-            c for c in result.checks if c.check_type == CheckType.TYPE_HINT
-        ]
+        type_hint_checks = [c for c in result.checks if c.check_type == CheckType.TYPE_HINT]
         assert any(c.status == CheckStatus.WARNING for c in type_hint_checks)
 
 
@@ -401,22 +348,18 @@ class TestForbiddenPatterns:
 
     def test_wildcard_imports(self, validator, temp_file):
         """Test that wildcard imports are detected"""
-        code = dedent(
-            """
+        code = dedent("""
             from typing import *
             from pathlib import *
 
             class MyClass:
                 pass
-        """
-        )
+        """)
         temp_file.write_text(code)
 
         result = validator.validate_file(temp_file)
 
-        forbidden_checks = [
-            c for c in result.checks if c.check_type == CheckType.FORBIDDEN
-        ]
+        forbidden_checks = [c for c in result.checks if c.check_type == CheckType.FORBIDDEN]
         assert len(forbidden_checks) >= 2  # Should catch both wildcard imports
 
 
@@ -425,14 +368,12 @@ class TestTemplateMode:
 
     def test_template_detection(self, validator, temp_file):
         """Test that templates are auto-detected"""
-        code = dedent(
-            """
+        code = dedent("""
             from omnibase_core.nodes.node_effect import NodeEffect
 
             class Node{MICROSERVICE_NAME_PASCAL}Effect(NodeEffect):
                 pass
-        """
-        )
+        """)
         temp_file.write_text(code)
 
         result = validator.validate_file(temp_file)
@@ -443,16 +384,14 @@ class TestTemplateMode:
 
     def test_template_substitution(self, validator, temp_file):
         """Test that template placeholders are substituted"""
-        code = dedent(
-            """
+        code = dedent("""
             from omnibase_core.nodes.node_effect import NodeEffect
             from omnibase_core.models.container.model_onex_container import ModelONEXContainer
 
             class Node{MICROSERVICE_NAME_PASCAL}Effect(NodeEffect):
                 def __init__(self, container: ModelONEXContainer):
                     super().__init__(container)
-        """
-        )
+        """)
         temp_file.write_text(code)
 
         result = validator.validate_file(temp_file)
@@ -466,14 +405,12 @@ class TestStrictMode:
 
     def test_strict_mode_warnings_become_errors(self, strict_validator, temp_file):
         """Test that warnings become failures in strict mode"""
-        code = dedent(
-            """
+        code = dedent("""
             from typing import Any
 
             def process(data):
                 return data
-        """
-        )
+        """)
         temp_file.write_text(code)
 
         result = strict_validator.validate_file(temp_file)
@@ -488,16 +425,14 @@ class TestValidationResult:
 
     def test_summary_statistics(self, validator, temp_file):
         """Test that summary statistics are correct"""
-        code = dedent(
-            """
+        code = dedent("""
             from omnibase_core.nodes.node_effect import NodeEffect
             from typing import Any
 
             class NodeTestEffect(NodeEffect):
                 def process(self, data: Any) -> Any:
                     return data
-        """
-        )
+        """)
         temp_file.write_text(code)
 
         result = validator.validate_file(temp_file)
@@ -518,14 +453,12 @@ class TestValidationResult:
 
     def test_to_dict_serialization(self, validator, temp_file):
         """Test that results can be serialized to dict"""
-        code = dedent(
-            """
+        code = dedent("""
             from omnibase_core.nodes.node_effect import NodeEffect
 
             class NodeTestEffect(NodeEffect):
                 pass
-        """
-        )
+        """)
         temp_file.write_text(code)
 
         result = validator.validate_file(temp_file)
@@ -558,9 +491,7 @@ class TestDirectoryValidation:
         if not agents_dir.exists():
             pytest.skip("Agents directory not found")
 
-        results = validator.validate_directory(
-            agents_dir, recursive=True, pattern="*.py"
-        )
+        results = validator.validate_directory(agents_dir, recursive=True, pattern="*.py")
 
         assert len(results) > 0
 

@@ -15,7 +15,6 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 
-
 # Add parent directory to path for imports
 parent_path = Path(__file__).parent.parent
 sys.path.insert(0, str(parent_path))
@@ -116,9 +115,7 @@ def test_manifest_cache():
     # Test cache info
     info = cache.get_cache_info()
     assert info["cache_size"] == 1
-    print(
-        f"✅ Cache info: {info['cache_size']} entries, {info['total_size_bytes']} bytes"
-    )
+    print(f"✅ Cache info: {info['cache_size']} entries, {info['total_size_bytes']} bytes")
 
     # Test expiration (filesystem uses 1x TTL = 2 seconds)
     print("⏳ Waiting for cache expiration (2 seconds)...")
@@ -164,9 +161,9 @@ def test_per_query_type_ttls():
 
     for query_type, expected_ttl in expected_ttls.items():
         actual_ttl = cache._ttls.get(query_type)
-        assert (
-            actual_ttl == expected_ttl
-        ), f"{query_type}: expected {expected_ttl}, got {actual_ttl}"
+        assert actual_ttl == expected_ttl, (
+            f"{query_type}: expected {expected_ttl}, got {actual_ttl}"
+        )
         print(f"✅ {query_type}: TTL={actual_ttl}s")
 
     print("✅ Per-query-type TTL tests passed")

@@ -14,12 +14,10 @@ They will be skipped in CI (which runs with -m "not integration").
 
 import asyncio
 import time
-from typing import List
 
 import pytest
 
 from agents.lib.logging_event_publisher import (
-    LoggingEventPublisher,
     LoggingEventPublisherContext,
     _get_global_publisher,
     publish_application_log,
@@ -81,7 +79,7 @@ class TestSingletonPattern:
         publishers = await asyncio.gather(*[_get_global_publisher() for _ in range(10)])
 
         # All should be the same instance
-        assert len(set(id(p) for p in publishers)) == 1
+        assert len({id(p) for p in publishers}) == 1
         assert all(p._started for p in publishers)
 
     @pytest.mark.asyncio
@@ -102,28 +100,26 @@ class TestSingletonPattern:
         context_manager_times = []
         for _ in range(3):
             start = time.time()
-            async with LoggingEventPublisherContext(enable_events=False) as publisher:
+            async with LoggingEventPublisherContext(enable_events=False) as _publisher:
                 pass  # Just measure overhead
             context_manager_times.append(time.time() - start)
 
-        avg_context_manager_time = sum(context_manager_times) / len(
-            context_manager_times
-        )
+        avg_context_manager_time = sum(context_manager_times) / len(context_manager_times)
 
         # Test singleton approach (new pattern)
         singleton_times = []
-        for i in range(3):
+        for _ in range(3):
             start = time.time()
-            publisher = await _get_global_publisher(enable_events=False)
+            await _get_global_publisher(enable_events=False)
             singleton_times.append(time.time() - start)
 
         first_call_time = singleton_times[0]  # Includes initialization
         subsequent_avg_time = sum(singleton_times[1:]) / len(singleton_times[1:])
 
         print("\n=== Performance Comparison ===")
-        print(f"Context Manager (avg): {avg_context_manager_time*1000:.2f}ms")
-        print(f"Singleton (first call): {first_call_time*1000:.2f}ms")
-        print(f"Singleton (subsequent): {subsequent_avg_time*1000:.2f}ms")
+        print(f"Context Manager (avg): {avg_context_manager_time * 1000:.2f}ms")
+        print(f"Singleton (first call): {first_call_time * 1000:.2f}ms")
+        print(f"Singleton (subsequent): {subsequent_avg_time * 1000:.2f}ms")
         print(f"Speedup: {avg_context_manager_time / subsequent_avg_time:.1f}x faster")
 
         # Assertions
@@ -151,13 +147,13 @@ class TestSingletonPattern:
 
         # Test singleton approach
         start = time.time()
-        for i in range(num_calls):
-            publisher = await _get_global_publisher(enable_events=False)
+        for _ in range(num_calls):
+            await _get_global_publisher(enable_events=False)
         singleton_total_time = time.time() - start
 
         print(f"\n=== High-Frequency Logging ({num_calls} calls) ===")
-        print(f"Singleton total time: {singleton_total_time*1000:.2f}ms")
-        print(f"Singleton avg per call: {singleton_total_time*1000/num_calls:.2f}ms")
+        print(f"Singleton total time: {singleton_total_time * 1000:.2f}ms")
+        print(f"Singleton avg per call: {singleton_total_time * 1000 / num_calls:.2f}ms")
 
         # Singleton should be fast (avg <10ms per call including first call)
         assert singleton_total_time < 1.0  # Total should be <1s
@@ -173,9 +169,9 @@ class TestSingletonPattern:
 
         # Call convenience function multiple times
         times = []
-        for i in range(10):
+        for _ in range(10):
             start = time.time()
-            result = await publish_application_log(
+            await publish_application_log(
                 service_name="test",
                 instance_id="test-1",
                 level="INFO",
@@ -189,9 +185,9 @@ class TestSingletonPattern:
         first_call_time = times[0]
         subsequent_avg_time = sum(times[1:]) / len(times[1:])
 
-        print(f"\n=== Convenience Function Performance ===")
-        print(f"First call: {first_call_time*1000:.2f}ms")
-        print(f"Subsequent avg: {subsequent_avg_time*1000:.2f}ms")
+        print("\n=== Convenience Function Performance ===")
+        print(f"First call: {first_call_time * 1000:.2f}ms")
+        print(f"Subsequent avg: {subsequent_avg_time * 1000:.2f}ms")
         print(f"Speedup: {first_call_time / subsequent_avg_time:.1f}x faster")
 
         # Verify singleton is created and reused
@@ -275,7 +271,7 @@ class TestPerformanceBenchmarks:
         asyncio.run(create_publisher_context_manager())
 
         # Benchmark
-        result = benchmark(sync_wrapper)
+        benchmark(sync_wrapper)
 
     @pytest.mark.benchmark
     def test_benchmark_singleton_pattern(self, benchmark):
@@ -295,7 +291,7 @@ class TestPerformanceBenchmarks:
         asyncio.run(get_singleton_publisher())
 
         # Benchmark subsequent calls (reuses singleton)
-        result = benchmark(sync_wrapper)
+        benchmark(sync_wrapper)
 
 
 if __name__ == "__main__":

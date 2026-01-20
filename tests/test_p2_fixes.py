@@ -4,25 +4,40 @@ Tests for P2 code quality fixes (TASK-8 and TASK-9).
 Verifies:
 - TASK-8: AST-based code normalization in node_stf_hash_compute.py
 - TASK-9: Provider validation in node_model_price_catalog_effect.py
+
+NOTE: This test file references archived code (omniclaude.debug_loop) that has been
+moved to _archive/. The tests are skipped until the code is migrated or removed.
 """
 
-import ast
-from unittest.mock import AsyncMock, MagicMock
+from __future__ import annotations
+
+from unittest.mock import AsyncMock
 
 import pytest
-from omnibase_core.errors.error_codes import EnumCoreErrorCode
-from omnibase_core.errors.model_onex_error import ModelOnexError
-from omnibase_core.models.container.model_onex_container import ModelONEXContainer
 
-from omniclaude.debug_loop.enum_provider import EnumProvider
-
-# TASK-9: Import Model Price Catalog Node and Provider Enum
-from omniclaude.debug_loop.node_model_price_catalog_effect import (
-    NodeModelPriceCatalogEffect,
+# Skip entire module - these tests reference archived code
+# The omniclaude.debug_loop module has been moved to _archive/omniclaude_legacy_root/debug_loop/
+# This test file should be removed or migrated when the debug_loop code is properly refactored
+pytest.skip(
+    "Skipping test_p2_fixes.py - references archived code (omniclaude.debug_loop)",
+    allow_module_level=True,
 )
 
-# TASK-8: Import STF Hash Compute Node
-from omniclaude.debug_loop.node_stf_hash_compute import NodeSTFHashCompute
+# These imports are guarded because the omnibase components are not available in omniclaude.
+# The module is skipped above, so these will never actually execute, but we need to define
+# the names to satisfy static analysis (Ruff F821).
+try:
+    from omnibase_core.enums import EnumCoreErrorCode, EnumProvider
+    from omnibase_core.models import ModelONEXContainer, ModelOnexError
+    from omnibase_core.nodes import NodeModelPriceCatalogEffect, NodeSTFHashCompute
+except ImportError:
+    # Define placeholders for static analysis - module is skipped so these won't be used
+    EnumProvider = None  # type: ignore[misc, assignment]
+    NodeSTFHashCompute = None  # type: ignore[misc, assignment]
+    NodeModelPriceCatalogEffect = None  # type: ignore[misc, assignment]
+    ModelONEXContainer = None  # type: ignore[misc, assignment]
+    ModelOnexError = None  # type: ignore[misc, assignment]
+    EnumCoreErrorCode = None  # type: ignore[misc, assignment]
 
 
 @pytest.fixture
@@ -272,9 +287,7 @@ async def test_all_enum_providers_valid():
     # Note: EnumProvider uses "google" not "gemini" for Google models
     expected_providers = ["anthropic", "openai", "google"]
     for provider in expected_providers:
-        assert (
-            provider in valid_providers
-        ), f"Expected provider '{provider}' not in EnumProvider"
+        assert provider in valid_providers, f"Expected provider '{provider}' not in EnumProvider"
         assert EnumProvider.is_valid(provider), f"Provider '{provider}' should be valid"
 
 

@@ -14,7 +14,6 @@ import uuid
 
 from agents.lib.manifest_injector import ManifestInjector
 
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -41,7 +40,7 @@ async def test_debug_loop_query():
     assert "top_stfs" in result, "Missing 'top_stfs' key"
     assert "query_time_ms" in result, "Missing 'query_time_ms' key"
 
-    logger.info(f"✓ Debug loop query structure valid")
+    logger.info("✓ Debug loop query structure valid")
     logger.info(f"  Available: {result['available']}")
     logger.info(f"  STF Count: {result['stf_count']}")
     logger.info(f"  Query Time: {result['query_time_ms']}ms")
@@ -72,7 +71,7 @@ async def test_manifest_includes_debug_loop():
         debug_loop = manifest["debug_loop"]
         assert "available" in debug_loop, "Debug loop missing 'available' key"
 
-        logger.info(f"✓ Debug loop section present in manifest")
+        logger.info("✓ Debug loop section present in manifest")
         logger.info(f"  Available: {debug_loop['available']}")
         logger.info(f"  STF Count: {debug_loop.get('stf_count', 0)}")
 
@@ -101,7 +100,7 @@ async def test_format_debug_loop():
             "DEBUG PATTERNS (STFs)" in formatted
         ), "Debug loop section missing from formatted output"
 
-        logger.info(f"✓ Debug loop section formatted correctly")
+        logger.info("✓ Debug loop section formatted correctly")
         logger.info(f"  Formatted manifest length: {len(formatted)} bytes")
 
         # Extract debug loop section
@@ -139,7 +138,7 @@ async def test_performance():
     logger.info(f"  Query time: {elapsed_ms:.2f}ms")
 
     if elapsed_ms < 500:
-        logger.info(f"✓ Performance within budget (<500ms)")
+        logger.info("✓ Performance within budget (<500ms)")
     else:
         logger.warning(f"⚠️  Performance exceeds budget: {elapsed_ms:.2f}ms > 500ms")
 
@@ -172,10 +171,10 @@ async def main():
         logger.info("=" * 70)
         logger.info("ALL TESTS PASSED ✓")
         logger.info("=" * 70)
-        logger.info(f"Summary:")
-        logger.info(f"  - Debug loop query method: ✓")
-        logger.info(f"  - Manifest includes debug loop: ✓")
-        logger.info(f"  - Formatting works correctly: ✓")
+        logger.info("Summary:")
+        logger.info("  - Debug loop query method: ✓")
+        logger.info("  - Manifest includes debug loop: ✓")
+        logger.info("  - Formatting works correctly: ✓")
         logger.info(f"  - Performance: {elapsed:.2f}ms {'✓' if elapsed < 500 else '⚠️'}")
 
     except Exception as e:

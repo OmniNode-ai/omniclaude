@@ -21,17 +21,14 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+# Skip entire module if kafka-python is not installed
+# This test mocks kafka.KafkaProducer which requires the kafka module to exist
+pytest.importorskip("kafka", reason="kafka-python not installed - skipping kafka logging tests")
 
 # Add skills path (updated for claude/ consolidation)
 sys.path.insert(
     0,
-    str(
-        Path(__file__).parent.parent
-        / "claude"
-        / "skills"
-        / "agent-tracking"
-        / "log-agent-action"
-    ),
+    str(Path(__file__).parent.parent / "claude" / "skills" / "agent-tracking" / "log-agent-action"),
 )
 sys.path.insert(0, str(Path(__file__).parent.parent / "claude" / "skills" / "_shared"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "shared_lib"))
@@ -51,7 +48,6 @@ class TestKafkaLoggingUnit:
         # Import kafka_publisher to reset singleton
         sys.path.insert(0, str(Path(__file__).parent.parent / "shared_lib"))
         import kafka_publisher
-        from kafka_publisher import close_kafka_producer
 
         self.kafka_publisher = kafka_publisher
 
@@ -74,9 +70,7 @@ class TestKafkaLoggingUnit:
 
             # Mock successful send
             mock_future = MagicMock()
-            mock_future.get.return_value = MagicMock(
-                topic="agent-actions", partition=0, offset=42
-            )
+            mock_future.get.return_value = MagicMock(topic="agent-actions", partition=0, offset=42)
             mock_instance.send.return_value = mock_future
 
             yield mock_producer_class, mock_instance
@@ -143,6 +137,7 @@ class TestKafkaLoggingUnit:
 
     def test_correlation_id_generation(self, mock_kafka_producer):
         """Test correlation ID is auto-generated if not provided."""
+        _ = mock_kafka_producer  # Mark as intentionally unused (fixture provides mock)
         with patch.dict(os.environ, {"DEBUG": "true"}):
             args = Mock(
                 agent="test-agent",
@@ -251,26 +246,28 @@ class TestKafkaLoggingUnit:
 
     def test_kafka_connection_failure(self):
         """Test graceful handling of Kafka connection failure."""
-        with patch.dict(os.environ, {"DEBUG": "true"}):
-            with patch("kafka.KafkaProducer") as mock_producer_class:
-                # Simulate connection failure
-                mock_producer_class.side_effect = Exception("Cannot connect to Kafka")
+        with (
+            patch.dict(os.environ, {"DEBUG": "true"}),
+            patch("kafka.KafkaProducer") as mock_producer_class,
+        ):
+            # Simulate connection failure
+            mock_producer_class.side_effect = Exception("Cannot connect to Kafka")
 
-                args = Mock(
-                    agent="test-agent",
-                    action_type="error",
-                    action_name="connection_failed",
-                    details='{"error": "timeout"}',
-                    correlation_id=str(uuid.uuid4()),
-                    debug_mode=False,
-                    duration_ms=None,
-                )
+            args = Mock(
+                agent="test-agent",
+                action_type="error",
+                action_name="connection_failed",
+                details='{"error": "timeout"}',
+                correlation_id=str(uuid.uuid4()),
+                debug_mode=False,
+                duration_ms=None,
+            )
 
-                with patch("sys.stderr"):
-                    result = self.execute_kafka.log_agent_action_kafka(args)
+            with patch("sys.stderr"):
+                result = self.execute_kafka.log_agent_action_kafka(args)
 
-                    # Should return error code
-                    assert result == 1
+                # Should return error code
+                assert result == 1
 
     def test_invalid_json_details_handling(self, mock_kafka_producer):
         """Test handling of invalid JSON in details field."""
@@ -297,6 +294,7 @@ class TestKafkaLoggingUnit:
 
     def test_action_type_validation(self, mock_kafka_producer):
         """Test all valid action types are accepted."""
+        _ = mock_kafka_producer  # Mark as intentionally unused (fixture provides mock)
         with patch.dict(os.environ, {"DEBUG": "true"}):
             valid_types = ["tool_call", "decision", "error", "success"]
 
@@ -477,32 +475,36 @@ class TestKafkaProducerConfiguration:
             "KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS": "",
             "KAFKA_BROKERS": "kafka1:9092,kafka2:9092",
         }
-        with patch.dict(os.environ, env_vars, clear=False):
-            with patch("kafka.KafkaProducer") as mock_producer_class:
-                # Force reimport by resetting singleton
-                self.kafka_publisher._producer_instance = None
-                self.kafka_publisher.KafkaProducer = None
+        with (
+            patch.dict(os.environ, env_vars, clear=False),
+            patch("kafka.KafkaProducer") as mock_producer_class,
+        ):
+            # Force reimport by resetting singleton
+            self.kafka_publisher._producer_instance = None
+            self.kafka_publisher.KafkaProducer = None
 
-                self.kafka_publisher.get_kafka_producer()
+            self.kafka_publisher.get_kafka_producer()
 
-                call_kwargs = mock_producer_class.call_args[1]
-                assert call_kwargs["bootstrap_servers"] == [
-                    "kafka1:9092",
-                    "kafka2:9092",
-                ]
+            call_kwargs = mock_producer_class.call_args[1]
+            assert call_kwargs["bootstrap_servers"] == [
+                "kafka1:9092",
+                "kafka2:9092",
+            ]
 
     def test_default_kafka_broker(self):
-        """Test default Kafka broker is 192.168.86.200:9092."""
-        with patch.dict(os.environ, {}, clear=True):
-            with patch("kafka.KafkaProducer") as mock_producer_class:
-                # Force reimport by resetting singleton
-                self.kafka_publisher._producer_instance = None
-                self.kafka_publisher.KafkaProducer = None
+        """Test default Kafka broker is 192.168.86.200:29092 (external port for host scripts)."""
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch("kafka.KafkaProducer") as mock_producer_class,
+        ):
+            # Force reimport by resetting singleton
+            self.kafka_publisher._producer_instance = None
+            self.kafka_publisher.KafkaProducer = None
 
-                self.kafka_publisher.get_kafka_producer()
+            self.kafka_publisher.get_kafka_producer()
 
-                call_kwargs = mock_producer_class.call_args[1]
-                assert call_kwargs["bootstrap_servers"] == ["192.168.86.200:9092"]
+            call_kwargs = mock_producer_class.call_args[1]
+            assert call_kwargs["bootstrap_servers"] == ["192.168.86.200:29092"]
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 # Multi-Stage Dockerfile for OmniClaude
-# Production-ready Python 3.12 application with Poetry dependency management
+# Production-ready Python 3.12 application with uv dependency management
 # Security-hardened with non-root user, minimal base image, and health checks
 
 # ============================================================================
@@ -31,35 +31,35 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Poetry for dependency management
-ENV POETRY_VERSION=1.8.3 \
-    POETRY_HOME=/opt/poetry \
-    POETRY_NO_INTERACTION=1 \
-    POETRY_VIRTUALENVS_IN_PROJECT=true \
-    POETRY_VIRTUALENVS_CREATE=true \
-    POETRY_CACHE_DIR=/tmp/poetry_cache
+# Install uv for dependency management
+# Using pip to install uv for simplicity and reliability
+ARG UV_VERSION=0.5.0
+ENV UV_LINK_MODE=copy \
+    UV_COMPILE_BYTECODE=1 \
+    UV_PYTHON_DOWNLOADS=never
 
-RUN curl -sSL https://install.python-poetry.org | python3 - && \
-    ln -s /opt/poetry/bin/poetry /usr/local/bin/poetry
+RUN pip install --no-cache-dir "uv==${UV_VERSION}"
 
 # Set working directory
 WORKDIR /app
 
 # Copy dependency files first for optimal layer caching
 # Changes to source code won't invalidate dependency layers
-COPY pyproject.toml poetry.lock* ./
+COPY pyproject.toml uv.lock ./
 
-# Install dependencies
-# --only main excludes dev dependencies for production
-# --no-root prevents installing the package itself (done later with source)
-RUN poetry install --only main --no-root && \
-    rm -rf $POETRY_CACHE_DIR
+# Create virtual environment and install dependencies
+# --frozen ensures lockfile is used exactly as-is
+# --no-dev excludes development dependencies for production
+RUN uv venv /app/.venv && \
+    . /app/.venv/bin/activate && \
+    uv sync --frozen --no-dev --no-install-project
 
 # Copy application source code
 COPY . .
 
-# Install the application package
-RUN poetry install --only-root
+# Install the application package itself
+RUN . /app/.venv/bin/activate && \
+    uv sync --frozen --no-dev
 
 # ============================================================================
 # Stage 2: Runtime - Minimal production image

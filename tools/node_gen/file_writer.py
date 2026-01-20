@@ -8,15 +8,14 @@ Supports ONEX directory structure generation for node files.
 
 import logging
 import os
+from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Dict, Generator, List
 
-from omnibase_core.errors.error_codes import EnumCoreErrorCode
-from omnibase_core.errors.model_onex_error import ModelOnexError
+from omnibase_core.enums.enum_core_error_code import EnumCoreErrorCode
+from omnibase_core.models.errors.model_onex_error import ModelOnexError
 
 from .models.file_write_result import FileWriteResult
-
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +63,7 @@ class FileWriter:
             enable_rollback: Enable automatic rollback on errors (default: True)
         """
         self.enable_rollback = enable_rollback
-        self._created_paths: List[Path] = []
+        self._created_paths: list[Path] = []
         self._logger = logger
 
     @contextmanager
@@ -87,9 +86,7 @@ class FileWriter:
             yield self
         except Exception as e:
             if self.enable_rollback:
-                self._logger.warning(
-                    f"Exception during write operation, rolling back: {e}"
-                )
+                self._logger.warning(f"Exception during write operation, rolling back: {e}")
                 self.rollback()
             raise
         finally:
@@ -102,7 +99,7 @@ class FileWriter:
         node_name: str,
         node_type: str,
         domain: str,
-        files: Dict[str, str],
+        files: dict[str, str],
         allow_overwrite: bool = False,
     ) -> FileWriteResult:
         """Write node files atomically with rollback support.
@@ -164,15 +161,15 @@ class FileWriter:
             self._validate_output_directory(output_path)
 
             # Prepare full paths for collision detection
-            file_paths = [node_path / relative_path for relative_path in files.keys()]
+            file_paths = [node_path / relative_path for relative_path in files]
 
             # Check for file collisions
             if not allow_overwrite:
                 self._check_file_collisions(file_paths)
 
             # Track created directories and files
-            directories_created: List[str] = []
-            files_written: List[str] = []
+            directories_created: list[str] = []
+            files_written: list[str] = []
             total_bytes = 0
 
             # Create node directory
@@ -267,18 +264,14 @@ class FileWriter:
                             path.rmdir()
                             self._logger.debug(f"Deleted empty directory: {path}")
                         else:
-                            self._logger.warning(
-                                f"Directory not empty, skipping: {path}"
-                            )
+                            self._logger.warning(f"Directory not empty, skipping: {path}")
             except Exception as e:
                 # Log but don't raise during rollback
                 self._logger.warning(f"Failed to delete {path} during rollback: {e}")
 
         self._logger.info("Rollback complete")
 
-    def _create_node_directory_name(
-        self, domain: str, node_name: str, node_type: str
-    ) -> str:
+    def _create_node_directory_name(self, domain: str, node_name: str, node_type: str) -> str:
         """Create ONEX-compliant node directory name.
 
         Follows pattern: node_{domain}_{name}_{type}
@@ -332,7 +325,7 @@ class FileWriter:
                 context={"path": str(path)},
             )
 
-    def _check_file_collisions(self, paths: List[Path]) -> None:
+    def _check_file_collisions(self, paths: list[Path]) -> None:
         """Ensure no files will be overwritten.
 
         Args:

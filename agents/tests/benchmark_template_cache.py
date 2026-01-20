@@ -19,13 +19,22 @@ Setup:
         PYTHONPATH=/path/to/omniclaude python agents/tests/benchmark_template_cache.py
 """
 
+import os
 import statistics
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from agents.lib.template_cache import TemplateCache
+# Add parent directories to path for imports when running standalone
+# This allows importing from 'agents.lib' when agents is not installed as a package
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+try:
+    from agents.lib.template_cache import TemplateCache
+except ImportError as e:
+    print(f"Skipping benchmark - agents module not installed: {e}")
+    sys.exit(0)
 
 
 # Try to import template engine, but make it optional
@@ -46,7 +55,7 @@ def benchmark_uncached_loads(templates_dir: Path, iterations: int = 100):
     template_types = ["EFFECT", "COMPUTE", "REDUCER", "ORCHESTRATOR"]
     load_times = []
 
-    for i in range(iterations):
+    for _ in range(iterations):
         for template_type in template_types:
             template_path = templates_dir / f"{template_type.lower()}_node_template.py"
 
@@ -98,11 +107,9 @@ def benchmark_cached_loads(templates_dir: Path, iterations: int = 100):
         print("\n  Benchmarking cached loads...")
         load_times = []
 
-        for i in range(iterations):
+        for _ in range(iterations):
             for template_type in template_types:
-                template_path = (
-                    templates_dir / f"{template_type.lower()}_node_template.py"
-                )
+                template_path = templates_dir / f"{template_type.lower()}_node_template.py"
 
                 if template_path.exists():
                     start = time.perf_counter()
@@ -164,13 +171,11 @@ def benchmark_concurrent_loads(
         # Warmup
         cache.warmup(templates_dir, template_types)
 
-        def worker_task(worker_id: int):
+        def worker_task(_worker_id: int):
             """Worker task for concurrent loading"""
             for _ in range(iterations_per_thread):
                 for template_type in template_types:
-                    template_path = (
-                        templates_dir / f"{template_type.lower()}_node_template.py"
-                    )
+                    template_path = templates_dir / f"{template_type.lower()}_node_template.py"
                     if template_path.exists():
                         cache.get(
                             template_name=f"{template_type}_template",
@@ -217,7 +222,7 @@ def benchmark_concurrent_loads(
         cache._background_tasks.clear()
 
 
-def benchmark_template_engine_integration(templates_dir: Path):
+def benchmark_template_engine_integration(_templates_dir: Path):
     """Benchmark OmniNodeTemplateEngine with caching"""
     if not HAS_TEMPLATE_ENGINE:
         print("\n" + "=" * 70)
@@ -267,16 +272,14 @@ def print_summary(uncached_results, cached_results):
 
     # Calculate improvements
     avg_improvement_pct = (
-        (uncached_results["avg_ms"] - cached_results["avg_ms"])
-        / uncached_results["avg_ms"]
+        (uncached_results["avg_ms"] - cached_results["avg_ms"]) / uncached_results["avg_ms"]
     ) * 100
     median_improvement_pct = (
         (uncached_results["median_ms"] - cached_results["median_ms"])
         / uncached_results["median_ms"]
     ) * 100
     total_time_improvement_pct = (
-        (uncached_results["total_ms"] - cached_results["total_ms"])
-        / uncached_results["total_ms"]
+        (uncached_results["total_ms"] - cached_results["total_ms"]) / uncached_results["total_ms"]
     ) * 100
 
     print("\n  Average Load Time:")
@@ -293,9 +296,7 @@ def print_summary(uncached_results, cached_results):
     print(f"    Uncached: {uncached_results['total_ms']:.2f}ms")
     print(f"    Cached:   {cached_results['total_ms']:.2f}ms")
     print(f"    Improvement: {total_time_improvement_pct:.1f}%")
-    print(
-        f"    Time saved: {uncached_results['total_ms'] - cached_results['total_ms']:.2f}ms"
-    )
+    print(f"    Time saved: {uncached_results['total_ms'] - cached_results['total_ms']:.2f}ms")
 
     print(f"\n  Cache Hit Rate: {cached_results['hit_rate']:.1%}")
 

@@ -15,7 +15,7 @@ import ast
 import hashlib
 import time
 from datetime import UTC, datetime
-from typing import Any, Dict, List
+from typing import Any
 
 from omnibase_core.errors.error_codes import EnumCoreErrorCode
 from omnibase_core.errors.model_onex_error import ModelOnexError
@@ -31,7 +31,7 @@ class NodeSTFHashCompute(NodeCompute):
     Pure ONEX Compute pattern - deterministic, no side effects, thread-safe.
     """
 
-    async def execute_compute(self, contract: Dict[str, Any]) -> Dict[str, Any]:
+    async def execute_compute(self, contract: dict[str, Any]) -> dict[str, Any]:
         """
         Generate SHA-256 hash of normalized STF code.
 
@@ -106,7 +106,7 @@ class NodeSTFHashCompute(NodeCompute):
         strip_comments: bool = True,
         normalize_indentation: bool = True,
         remove_docstrings: bool = False,
-    ) -> tuple[str, List[str]]:
+    ) -> tuple[str, list[str]]:
         """
         Normalize code according to options using AST.
 
@@ -211,9 +211,12 @@ class NodeSTFHashCompute(NodeCompute):
                     value = node.body[0].value
                     # Handle both ast.Constant (Python 3.8+) and ast.Str (Python 3.7)
                     is_string = False
-                    if isinstance(value, ast.Constant) and isinstance(value.value, str):
-                        is_string = True
-                    elif hasattr(ast, "Str") and isinstance(value, ast.Str):
+                    if (
+                        isinstance(value, ast.Constant)
+                        and isinstance(value.value, str)
+                        or hasattr(ast, "Str")
+                        and isinstance(value, ast.Str)
+                    ):
                         is_string = True
 
                     if is_string:

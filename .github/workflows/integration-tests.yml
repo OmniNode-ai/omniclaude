@@ -19,7 +19,6 @@ on:
 
 env:
   PYTHON_VERSION: '3.12'
-  POETRY_VERSION: '1.8.3'
   # Minimum table count validation threshold (update as schema evolves)
   EXPECTED_MIN_TABLES: 10
 
@@ -56,21 +55,17 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: ${{ env.POETRY_VERSION }}
-          virtualenvs-create: true
-          virtualenvs-in-project: true
+      - name: Install uv
+        run: pip install --no-cache-dir uv
 
       - name: Load cached venv
-        id: cached-poetry-dependencies
+        id: cached-uv-dependencies
         uses: actions/cache@v4
         with:
           path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+          key: venv-${{ runner.os }}-${{ hashFiles('**/uv.lock') }}
 
-      # OPTIONAL: Only needed if poetry.lock references private GitHub repositories
+      # OPTIONAL: Only needed if uv.lock references private GitHub repositories
       # The workflow will continue without this if all dependencies are public
       # Set GH_PAT secret in repository settings if you have private dependencies
       - name: Configure Git authentication for private repositories (OPTIONAL)
@@ -79,10 +74,10 @@ jobs:
         continue-on-error: true
 
       - name: Install dependencies
-        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        if: steps.cached-uv-dependencies.outputs.cache-hit != 'true'
         run: |
-          poetry install --no-interaction --with dev || {
-            echo "⚠️  Warning: Some dependencies failed - continuing with available packages"
+          uv sync --frozen --group dev || {
+            echo "Warning: Some dependencies failed - continuing with available packages"
             true
           }
 
@@ -118,12 +113,12 @@ jobs:
             if [ -f "$migration" ] && [[ ! "$migration" =~ rollback ]]; then
               echo "Running migration: $migration"
               psql -h localhost -U test_user -d test_omninode_bridge -f "$migration" || {
-                echo "❌ Migration failed: $migration"
+                echo "Migration failed: $migration"
                 exit 1
               }
             fi
           done
-          echo "✅ All migrations applied successfully"
+          echo "All migrations applied successfully"
 
           echo "::endgroup::"
 
@@ -158,12 +153,12 @@ jobs:
           MIN_TABLES="${EXPECTED_MIN_TABLES:-10}"
 
           if [ "$TABLE_COUNT" -lt "$MIN_TABLES" ]; then
-            echo "❌ ERROR: Expected at least $MIN_TABLES tables, found $TABLE_COUNT"
+            echo "ERROR: Expected at least $MIN_TABLES tables, found $TABLE_COUNT"
             exit 1
           fi
 
-          echo "✅ Table count validation passed: $TABLE_COUNT tables (minimum: $MIN_TABLES)"
-          echo "✅ Database schema verification passed"
+          echo "Table count validation passed: $TABLE_COUNT tables (minimum: $MIN_TABLES)"
+          echo "Database schema verification passed"
           echo "::endgroup::"
 
       - name: Test database operations
@@ -177,11 +172,11 @@ jobs:
           echo "::group::Database Operations Tests"
 
           # Run database integration tests (with timeout)
-          timeout 300 poetry run pytest tests/test_database_event_client.py -v --tb=short || {
+          timeout 300 uv run pytest tests/test_database_event_client.py -v --tb=short || {
             echo "::error::Database event client tests exceeded 5 minute timeout or failed"
             exit 1
           }
-          timeout 300 poetry run pytest tests/test_agent_execution_logging.py -v --tb=short || {
+          timeout 300 uv run pytest tests/test_agent_execution_logging.py -v --tb=short || {
             echo "::error::Agent execution logging tests exceeded 5 minute timeout or failed"
             exit 1
           }
@@ -244,11 +239,11 @@ jobs:
           RESULT=$(psql -h localhost -U test_user -d test_omninode_bridge -t -c "SELECT COUNT(*) FROM agent_routing_decisions WHERE user_request = 'Test request';")
 
           if [ "$RESULT" -eq 0 ]; then
-            echo "❌ ERROR: UUID field handling test failed"
+            echo "ERROR: UUID field handling test failed"
             exit 1
           fi
 
-          echo "✅ UUID field handling test passed"
+          echo "UUID field handling test passed"
           echo "::endgroup::"
 
       - name: Upload database test results
@@ -286,12 +281,10 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: ${{ env.POETRY_VERSION }}
+      - name: Install uv
+        run: pip install --no-cache-dir uv
 
-      # OPTIONAL: Only needed if poetry.lock references private GitHub repositories
+      # OPTIONAL: Only needed if uv.lock references private GitHub repositories
       # The workflow will continue without this if all dependencies are public
       # Set GH_PAT secret in repository settings if you have private dependencies
       - name: Configure Git authentication for private repositories (OPTIONAL)
@@ -301,8 +294,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          poetry install --no-interaction --with dev || {
-            echo "⚠️  Warning: Some dependencies failed - continuing"
+          uv sync --frozen --group dev || {
+            echo "Warning: Some dependencies failed - continuing"
             true
           }
 
@@ -315,7 +308,7 @@ jobs:
           sleep 10
 
           # Test Kafka connectivity
-          poetry run python -c "
+          uv run python -c "
           from kafka import KafkaProducer, KafkaConsumer
           import json
 
@@ -329,7 +322,7 @@ jobs:
           producer.send('test-topic', {'test': 'message'})
           producer.flush()
 
-          print('✅ Kafka producer test passed')
+          print('Kafka producer test passed')
 
           # Test consumer
           consumer = KafkaConsumer(
@@ -340,7 +333,7 @@ jobs:
           )
 
           messages = list(consumer)
-          print(f'✅ Kafka consumer test passed (received {len(messages)} messages)')
+          print(f'Kafka consumer test passed (received {len(messages)} messages)')
           "
 
           echo "::endgroup::"
@@ -358,11 +351,11 @@ jobs:
         run: |
           echo "::group::Kafka Event Publishing Tests"
 
-          timeout 300 poetry run pytest tests/test_kafka_logging.py -v --tb=short || {
+          timeout 300 uv run pytest tests/test_kafka_logging.py -v --tb=short || {
             echo "::error::Kafka logging tests exceeded 5 minute timeout or failed"
             exit 1
           }
-          timeout 300 poetry run pytest tests/test_action_publishing.py -v --tb=short || {
+          timeout 300 uv run pytest tests/test_action_publishing.py -v --tb=short || {
             echo "::error::Action publishing tests exceeded 5 minute timeout or failed"
             exit 1
           }
@@ -382,11 +375,11 @@ jobs:
         run: |
           echo "::group::Routing Event Flow Tests"
 
-          timeout 300 poetry run pytest tests/test_routing_event_flow.py -v --tb=short || {
+          timeout 300 uv run pytest tests/test_routing_event_flow.py -v --tb=short || {
             echo "::error::Routing event flow tests exceeded 5 minute timeout or failed"
             exit 1
           }
-          timeout 300 poetry run pytest tests/test_routing_flow.py -v --tb=short || {
+          timeout 300 uv run pytest tests/test_routing_flow.py -v --tb=short || {
             echo "::error::Routing flow tests exceeded 5 minute timeout or failed"
             exit 1
           }
@@ -465,12 +458,10 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: ${{ env.POETRY_VERSION }}
+      - name: Install uv
+        run: pip install --no-cache-dir uv
 
-      # OPTIONAL: Only needed if poetry.lock references private GitHub repositories
+      # OPTIONAL: Only needed if uv.lock references private GitHub repositories
       # The workflow will continue without this if all dependencies are public
       # Set GH_PAT secret in repository settings if you have private dependencies
       - name: Configure Git authentication for private repositories (OPTIONAL)
@@ -480,8 +471,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          poetry install --no-interaction --with dev || {
-            echo "⚠️  Warning: Some dependencies failed - continuing"
+          uv sync --frozen --group dev || {
+            echo "Warning: Some dependencies failed - continuing"
             true
           }
 
@@ -505,12 +496,12 @@ jobs:
             if [ -f "$migration" ] && [[ ! "$migration" =~ rollback ]]; then
               echo "Running migration: $migration"
               psql -h localhost -U test_user -d test_omninode_bridge -f "$migration" || {
-                echo "❌ Migration failed: $migration"
+                echo "Migration failed: $migration"
                 exit 1
               }
             fi
           done
-          echo "✅ All migrations applied successfully"
+          echo "All migrations applied successfully"
 
       - name: Test agent execution logging
         env:
@@ -523,9 +514,9 @@ jobs:
           echo "::group::Agent Execution Logging Tests"
 
           # Test agent execution logger
-          poetry run pytest tests/test_agent_execution_logging.py -v --tb=short
-          poetry run pytest tests/test_e2e_agent_logging.py -v --tb=short
-          poetry run pytest tests/test_kafka_execution_logging.py -v --tb=short
+          uv run pytest tests/test_agent_execution_logging.py -v --tb=short
+          uv run pytest tests/test_e2e_agent_logging.py -v --tb=short
+          uv run pytest tests/test_kafka_execution_logging.py -v --tb=short
 
           echo "::endgroup::"
 
@@ -539,7 +530,7 @@ jobs:
         run: |
           echo "::group::Action Logging E2E Tests"
 
-          poetry run pytest tests/test_action_logging_e2e.py -v --tb=short
+          uv run pytest tests/test_action_logging_e2e.py -v --tb=short
 
           echo "::endgroup::"
 
@@ -553,7 +544,7 @@ jobs:
         run: |
           echo "::group::Transformation Event Logging Tests"
 
-          poetry run pytest tests/test_transformation_event_logging.py -v --tb=short
+          uv run pytest tests/test_transformation_event_logging.py -v --tb=short
 
           echo "::endgroup::"
 
@@ -578,11 +569,11 @@ jobs:
           NULL_CORR_COUNT=$(psql -h localhost -U test_user -d test_omninode_bridge -t -c "SELECT COUNT(*) FROM agent_execution_logs WHERE correlation_id IS NULL;")
 
           if [ "$NULL_CORR_COUNT" -gt 0 ]; then
-            echo "❌ ERROR: Found $NULL_CORR_COUNT execution logs with NULL correlation_id"
+            echo "ERROR: Found $NULL_CORR_COUNT execution logs with NULL correlation_id"
             exit 1
           fi
 
-          echo "✅ Logging completeness verification passed"
+          echo "Logging completeness verification passed"
           echo "::endgroup::"
 
       - name: Upload observability test results
@@ -636,12 +627,10 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: ${{ env.POETRY_VERSION }}
+      - name: Install uv
+        run: pip install --no-cache-dir uv
 
-      # OPTIONAL: Only needed if poetry.lock references private GitHub repositories
+      # OPTIONAL: Only needed if uv.lock references private GitHub repositories
       # The workflow will continue without this if all dependencies are public
       # Set GH_PAT secret in repository settings if you have private dependencies
       - name: Configure Git authentication for private repositories (OPTIONAL)
@@ -651,8 +640,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          poetry install --no-interaction --with dev || {
-            echo "⚠️  Warning: Some dependencies failed - continuing"
+          uv sync --frozen --group dev || {
+            echo "Warning: Some dependencies failed - continuing"
             true
           }
 
@@ -676,12 +665,12 @@ jobs:
             if [ -f "$migration" ] && [[ ! "$migration" =~ rollback ]]; then
               echo "Running migration: $migration"
               psql -h localhost -U test_user -d test_omninode_bridge -f "$migration" || {
-                echo "❌ Migration failed: $migration"
+                echo "Migration failed: $migration"
                 exit 1
               }
             fi
           done
-          echo "✅ All migrations applied successfully"
+          echo "All migrations applied successfully"
 
       - name: Run full pipeline integration tests
         env:
@@ -694,7 +683,7 @@ jobs:
         run: |
           echo "::group::Full Pipeline Integration Tests"
 
-          poetry run pytest tests/integration/test_full_pipeline.py \
+          uv run pytest tests/integration/test_full_pipeline.py \
             -v \
             -m integration \
             --cov=agents \
@@ -741,37 +730,37 @@ jobs:
 
       - name: Generate summary report
         run: |
-          echo "# 🧪 Integration Tests Summary" >> $GITHUB_STEP_SUMMARY
+          echo "# Integration Tests Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Test Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
           # Database Integration
           if [ -d "test-results/database-test-results" ]; then
-            echo "✅ **Database Integration**: Passed" >> $GITHUB_STEP_SUMMARY
+            echo "**Database Integration**: Passed" >> $GITHUB_STEP_SUMMARY
           else
-            echo "❌ **Database Integration**: Failed" >> $GITHUB_STEP_SUMMARY
+            echo "**Database Integration**: Failed" >> $GITHUB_STEP_SUMMARY
           fi
 
           # Kafka Integration
           if [ -d "test-results/kafka-test-results" ]; then
-            echo "✅ **Kafka Integration**: Passed" >> $GITHUB_STEP_SUMMARY
+            echo "**Kafka Integration**: Passed" >> $GITHUB_STEP_SUMMARY
           else
-            echo "❌ **Kafka Integration**: Failed" >> $GITHUB_STEP_SUMMARY
+            echo "**Kafka Integration**: Failed" >> $GITHUB_STEP_SUMMARY
           fi
 
           # Agent Observability
           if [ -d "test-results/observability-test-results" ]; then
-            echo "✅ **Agent Observability**: Passed" >> $GITHUB_STEP_SUMMARY
+            echo "**Agent Observability**: Passed" >> $GITHUB_STEP_SUMMARY
           else
-            echo "❌ **Agent Observability**: Failed" >> $GITHUB_STEP_SUMMARY
+            echo "**Agent Observability**: Failed" >> $GITHUB_STEP_SUMMARY
           fi
 
           # Full Pipeline
           if [ -d "test-results/full-pipeline-test-results" ]; then
-            echo "✅ **Full Pipeline**: Passed" >> $GITHUB_STEP_SUMMARY
+            echo "**Full Pipeline**: Passed" >> $GITHUB_STEP_SUMMARY
           else
-            echo "❌ **Full Pipeline**: Failed" >> $GITHUB_STEP_SUMMARY
+            echo "**Full Pipeline**: Failed" >> $GITHUB_STEP_SUMMARY
           fi
 
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -793,22 +782,22 @@ jobs:
           FAILED=0
 
           if [ ! -d "test-results/database-test-results" ]; then
-            echo "❌ Database integration tests failed"
+            echo "Database integration tests failed"
             FAILED=1
           fi
 
           if [ ! -d "test-results/kafka-test-results" ]; then
-            echo "❌ Kafka integration tests failed"
+            echo "Kafka integration tests failed"
             FAILED=1
           fi
 
           if [ ! -d "test-results/observability-test-results" ]; then
-            echo "❌ Agent observability tests failed"
+            echo "Agent observability tests failed"
             FAILED=1
           fi
 
           if [ ! -d "test-results/full-pipeline-test-results" ]; then
-            echo "❌ Full pipeline integration tests failed"
+            echo "Full pipeline integration tests failed"
             FAILED=1
           fi
 
@@ -817,4 +806,4 @@ jobs:
             exit 1
           fi
 
-          echo "✅ All integration tests passed!"
+          echo "All integration tests passed!"

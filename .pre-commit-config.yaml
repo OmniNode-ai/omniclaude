@@ -25,31 +25,31 @@ repos:
 
       - id: ruff-fix
         name: ruff (auto-fix linting issues + sort imports)
-        entry: poetry run ruff check --fix
+        entry: uv run ruff check --fix
         language: system
         types: [python]
-        exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|agents/templates/.*|agents/parallel_execution/templates/.*'
+        exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|_archive/.*'
         stages: [pre-commit]
 
-      - id: black-format
-        name: black (auto-format)
-        entry: poetry run black
+      - id: ruff-format
+        name: ruff format (auto-format)
+        entry: uv run ruff format
         language: system
         types: [python]
-        exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|agents/templates/.*|agents/parallel_execution/templates/.*'
+        exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|_archive/.*'
         stages: [pre-commit]
 
       - id: ruff-check
         name: ruff (strict check - match CI)
-        entry: poetry run ruff check
+        entry: uv run ruff check
         language: system
         types: [python]
-        exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|agents/templates/.*|agents/parallel_execution/templates/.*'
+        exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|_archive/.*'
         stages: [pre-commit]
 
       - id: bandit-security
         name: bandit (security scanner - match CI)
-        entry: bash -c 'poetry run bandit -r agents/ claude/ -c .bandit || true'
+        entry: bash -c 'uv run bandit -r src/ -c .bandit'
         language: system
         types: [python]
         stages: [pre-commit]
@@ -57,7 +57,7 @@ repos:
 
       - id: mypy-typecheck
         name: mypy (type checking - match CI)
-        entry: bash -c 'poetry run mypy agents/ --ignore-missing-imports || true'
+        entry: bash -c 'uv run mypy src/ --ignore-missing-imports'
         language: system
         types: [python]
         stages: [pre-commit]

@@ -16,6 +16,7 @@ Requires: Docker environment with Kafka/Redpanda and PostgreSQL
 """
 
 import asyncio
+import contextlib
 import json
 import os
 import subprocess
@@ -24,27 +25,24 @@ import subprocess
 import sys
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
-import asyncpg
 import pytest
 
+# Skip entire module if kafka-python is not installed
+# This is an E2E integration test that requires actual Kafka infrastructure
+pytest.importorskip("kafka", reason="kafka-python not installed - skipping E2E tests")
+
+import asyncpg
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import settings
 
-
 # Add paths (updated for claude/ consolidation)
 sys.path.insert(
     0,
-    str(
-        Path(__file__).parent.parent
-        / "claude"
-        / "skills"
-        / "agent-tracking"
-        / "log-agent-action"
-    ),
+    str(Path(__file__).parent.parent / "claude" / "skills" / "agent-tracking" / "log-agent-action"),
 )
 sys.path.insert(0, str(Path(__file__).parent.parent / "claude" / "skills" / "_shared"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "agents" / "lib"))
@@ -79,8 +77,9 @@ async def db_pool(postgres_dsn):
 
 
 @pytest.fixture
-async def __clean_database(db_pool):
+async def clean_database(db_pool):
     """Clean test data before/after each test."""
+    _ = db_pool  # Mark as intentionally unused - fixture ensures DB is available
     # Cleanup no longer needed - using unique UUIDs that do not conflict
     return
     # Cleanup no longer needed - using unique UUIDs that do not conflict
@@ -119,10 +118,8 @@ class TestEndToEndAgentLogging:
     """End-to-end tests for agent logging system."""
 
     @pytest.mark.asyncio
-    @pytest.mark.usefixtures("__clean_database")
-    async def test_complete_workflow_simulation(
-        self, running_consumer, db_pool, wait_for_records
-    ):
+    @pytest.mark.usefixtures("clean_database")
+    async def test_complete_workflow_simulation(self, running_consumer, db_pool, wait_for_records):
         """
         Simulate complete agent workflow:
         1. Agent executes action
@@ -130,6 +127,7 @@ class TestEndToEndAgentLogging:
         3. Consumer persists to PostgreSQL
         4. Verify data integrity
         """
+        _ = running_consumer  # Fixture ensures consumer is running
         correlation_id = str(uuid.uuid4())
 
         # Simulate agent workflow with multiple actions
@@ -223,9 +221,9 @@ class TestEndToEndAgentLogging:
                 correlation_id,
             )
 
-            assert len(results) == len(
-                workflow_actions
-            ), f"Expected {len(workflow_actions)} records, got {len(results)}"
+            assert len(results) == len(workflow_actions), (
+                f"Expected {len(workflow_actions)} records, got {len(results)}"
+            )
 
             for i, row in enumerate(results):
                 expected = workflow_actions[i]
@@ -237,13 +235,12 @@ class TestEndToEndAgentLogging:
                     assert row["duration_ms"] == expected["duration_ms"]
 
     @pytest.mark.asyncio
-    @pytest.mark.usefixtures("__clean_database")
-    async def test_multi_agent_scenario(
-        self, running_consumer, db_pool, wait_for_records
-    ):
+    @pytest.mark.usefixtures("clean_database")
+    async def test_multi_agent_scenario(self, running_consumer, db_pool, wait_for_records):
         """
         Test multiple agents logging concurrently.
         """
+        _ = running_consumer  # Fixture ensures consumer is running
         correlation_id = str(uuid.uuid4())
 
         # Simulate multiple agents working in parallel
@@ -310,21 +307,18 @@ class TestEndToEndAgentLogging:
             )
 
             logged_agents = {row["agent_name"] for row in results}
-            assert logged_agents == set(
-                agents
-            ), f"Expected {set(agents)}, got {logged_agents}"
+            assert logged_agents == set(agents), f"Expected {set(agents)}, got {logged_agents}"
 
     @pytest.mark.asyncio
-    @pytest.mark.usefixtures("__clean_database")
-    async def test_data_integrity_verification(
-        self, running_consumer, db_pool, wait_for_records
-    ):
+    @pytest.mark.usefixtures("clean_database")
+    async def test_data_integrity_verification(self, running_consumer, db_pool, wait_for_records):
         """
         Verify data integrity across the pipeline:
         - No data loss
         - No corruption
         - Correct ordering
         """
+        _ = running_consumer  # Fixture ensures consumer is running
         correlation_id = str(uuid.uuid4())
 
         # Create structured test data with checksums
@@ -332,7 +326,7 @@ class TestEndToEndAgentLogging:
         for i in range(10):
             data = {
                 "index": i,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "checksum": f"checksum-{i}",
             }
             test_data.append(data)
@@ -389,9 +383,9 @@ class TestEndToEndAgentLogging:
                 correlation_id,
             )
 
-            assert len(results) == len(
-                test_data
-            ), f"Expected {len(test_data)} records, got {len(results)}"
+            assert len(results) == len(test_data), (
+                f"Expected {len(test_data)} records, got {len(results)}"
+            )
 
             for i, row in enumerate(results):
                 details = json.loads(row["action_details"])
@@ -403,7 +397,7 @@ class TestEndToEndAgentLogging:
                 assert row["action_name"] == f"action_{i}"
 
     @pytest.mark.asyncio
-    @pytest.mark.usefixtures("__clean_database")
+    @pytest.mark.usefixtures("clean_database")
     async def test_latency_measurement(self, running_consumer, db_pool):
         """
         Measure end-to-end latency from skill execution to database persistence.
@@ -420,6 +414,7 @@ class TestEndToEndAgentLogging:
 
         The 1000ms threshold is realistic for test environments with remote Kafka brokers.
         """
+        _ = running_consumer  # Fixture ensures consumer is running
         correlation_id = str(uuid.uuid4())
 
         # Measure subprocess execution latency (not pure Kafka publish time)
@@ -456,9 +451,9 @@ class TestEndToEndAgentLogging:
         publish_latency = (time.time() - start_time) * 1000  # ms
 
         assert result.returncode == 0
-        assert (
-            publish_latency < 1000
-        ), f"Publish latency {publish_latency:.2f}ms exceeds 1000ms target"
+        assert publish_latency < 1000, (
+            f"Publish latency {publish_latency:.2f}ms exceeds 1000ms target"
+        )
 
         # Measure end-to-end latency
         e2e_start = time.time()
@@ -476,9 +471,7 @@ class TestEndToEndAgentLogging:
                     print(f"✅ E2E latency: {e2e_latency:.2f}ms")
                     print(f"✅ Publish latency: {publish_latency:.2f}ms")
 
-                    assert (
-                        e2e_latency < 5000
-                    ), f"E2E latency {e2e_latency:.2f}ms exceeds 5s target"
+                    assert e2e_latency < 5000, f"E2E latency {e2e_latency:.2f}ms exceeds 5s target"
                     return
 
             await asyncio.sleep(0.1)
@@ -486,10 +479,8 @@ class TestEndToEndAgentLogging:
         pytest.fail(f"Event not persisted within {max_wait}s")
 
     @pytest.mark.asyncio
-    @pytest.mark.usefixtures("__clean_database")
-    async def test_error_recovery(
-        self, kafka_brokers, postgres_dsn, db_pool, wait_for_records
-    ):
+    @pytest.mark.usefixtures("clean_database")
+    async def test_error_recovery(self, kafka_brokers, postgres_dsn, db_pool, wait_for_records):
         """
         Test error recovery scenarios:
         - Consumer restarts after crash
@@ -557,17 +548,13 @@ class TestEndToEndAgentLogging:
                 "SELECT COUNT(*) FROM agent_actions WHERE correlation_id = $1",
                 correlation_id,
             )
-            assert (
-                count1 == 1
-            ), f"Expected 1 record after first processing, got {count1}"
+            assert count1 == 1, f"Expected 1 record after first processing, got {count1}"
 
         # Simulate crash - stop consumer
         await consumer.stop()
         consumer_task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await consumer_task
-        except asyncio.CancelledError:
-            pass
 
         # Restart consumer with same group_id
         consumer2 = KafkaAgentActionConsumer(
@@ -599,10 +586,8 @@ class TestEndToEndAgentLogging:
         # Cleanup
         await consumer2.stop()
         consumer_task2.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await consumer_task2
-        except asyncio.CancelledError:
-            pass
 
 
 if __name__ == "__main__":

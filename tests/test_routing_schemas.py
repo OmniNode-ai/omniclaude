@@ -13,7 +13,6 @@ import sys
 from pathlib import Path
 from uuid import uuid4
 
-
 # Add schemas directory to path
 # Navigate from tests/ to project root, then to services/routing_adapter/schemas
 schemas_path = Path(__file__).parent.parent / "services" / "routing_adapter" / "schemas"
@@ -74,9 +73,7 @@ try:
             routing_strategy="enhanced_fuzzy_matching",
         ),
     )
-    print(
-        f"  ✅ Response created with {len(response.recommendations)} recommendation(s)"
-    )
+    print(f"  ✅ Response created with {len(response.recommendations)} recommendation(s)")
     print(f"  ✅ Selected agent: {response.recommendations[0].agent_name}")
     print(f"  ✅ Confidence: {response.recommendations[0].confidence.total:.2%}")
     print(f"  ✅ Routing time: {response.routing_metadata.routing_time_ms}ms")

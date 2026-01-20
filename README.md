@@ -2,571 +2,231 @@
 
 [![License](https://img.shields.io/badge/license-OmniNode-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![AI Providers](https://img.shields.io/badge/AI%20providers-7-green.svg)](#supported-providers)
-[![Agents](https://img.shields.io/badge/agents-52-purple.svg)](#agent-framework-highlights)
-[![Quality Gates](https://img.shields.io/badge/quality%20gates-23-orange.svg)](#key-features)
-[![Test Coverage](https://img.shields.io/badge/tests-2940%20passing-success.svg)](#testing--quality)
-[![Production Ready](https://img.shields.io/badge/production-ready-success.svg)](#production-infrastructure)
+[![Status](https://img.shields.io/badge/status-in%20development-yellow.svg)](#status)
 
-A production-ready toolkit for extending Claude Code with multi-provider AI support, intelligent agent orchestration, and comprehensive development workflows.
+Claude Code hooks and learning loop integration with the omnibase ecosystem.
 
 ## Overview
 
-OmniClaude transforms Claude Code into a powerful AI development platform with 100+ working features across intelligent routing, quality gates, parallel execution, and production infrastructure. Built on ONEX architecture principles with enterprise-grade monitoring and validation.
+OmniClaude provides:
 
-## Why OmniClaude?
+- **ONEX-compatible event schemas** for Claude Code hook events
+- **Claude Code plugin** with hooks for session, prompt, and tool lifecycle
+- **Event-driven architecture** using Kafka for learning and intelligence
+- **Integration with omnibase ecosystem** (omnibase-core, omnibase-spi, omnibase-infra)
 
-**Beyond Single-Provider Limitations**: Switch between 7 AI providers based on speed, cost, or capability requirements. No vendor lock-in.
+## Status
 
-**Intelligent Agent Orchestration**: 52 specialized agents that automatically route tasks, coordinate parallel execution, and learn from patterns - reducing manual workflow management by 80%.
+**Currently in development** - Reset in progress as part of OMN-1399.
 
-**Production-Grade Quality**: 23 automated quality gates and 33 performance thresholds ensure code meets standards before execution. Real-time monitoring catches issues before they impact production.
-
-**Battle-Tested Infrastructure**: Proven in production with PostgreSQL-backed pattern tracking, Docker orchestration, and comprehensive CI/CD pipelines.
-
-**Developer Experience First**: One-command provider switching, automatic hook activation, and zero-configuration intelligence gathering. Setup in minutes, not hours.
-
-## Recent Achievements
-
-**Phase 2 Infrastructure Improvements** (November 2025):
-
-- ✅ **Pydantic Settings Framework** - Type-safe configuration management with 90+ validated variables, eliminating scattered `os.getenv()` calls
-- ✅ **Docker Compose Consolidation** - Single compose file with environment-based deployment (`.env.dev`, `.env.test`, `.env.prod`)
-- ✅ **Network Architecture Hardening** - External network references for seamless cross-repository communication
-- ✅ **Security Hardening** - All hardcoded passwords removed, comprehensive environment validation, simplified setup
-- ✅ **Test Coverage Expansion** - 2,940 tests passing with high coverage across all major components
-- ✅ **Documentation Overhaul** - New specialized guides for configuration, deployment, and quick start
-
-**Status**: All Priority 2 work completed. Infrastructure hardened, tested, and production-ready.
-
-## Key Features
-
-### 🤖 Multi-Provider AI Management
-- **7 AI providers** ready-to-use (Anthropic, Z.ai, Together AI, OpenRouter, Gemini variants)
-- **Dynamic provider switching** with one-command setup
-- **Rate limit optimization** across 35+ concurrent requests
-- **Model mapping** for cost/performance optimization
-- **Automatic backup/restore** of configuration settings
-
-### 🧠 Polymorphic Agent Framework
-- **52 specialized agents** for diverse workflows (debugging, testing, architecture, performance)
-- **Intelligent routing** with fuzzy matching and confidence scoring (>95% accuracy, <100ms)
-- **Dynamic transformation** between agent personas based on task requirements
-- **Multi-agent coordination** with parallel execution and shared state
-- **Context inheritance** across agent delegations
-
-### 🔌 Event-Based Intelligence & Router Service
-- **Dynamic pattern discovery** via Kafka event-driven architecture
-- **Event-based agent routing** with 7-13ms routing time (93% faster than target)
-- **Zero hard-coded paths** - replaces filesystem scanning with event requests
-- **Graceful fallback** to built-in patterns on event timeout/failure
-- **Request-response pattern** with correlation tracking (<100ms p95)
-- **Production-ready** with 100% test coverage and 1,408+ routing decisions logged
-- **Configuration-driven** feature flags for easy enable/disable
-- **Horizontally scalable** via Kafka partitions
-
-**Event-Based Router Service** (NEW - Oct 30, 2025):
-- **Architecture**: Kafka event-driven (no HTTP endpoints)
-- **Performance**: 7-13ms routing time, <500ms total latency
-- **Topics**: agent.routing.{requested,completed,failed}.v1
-- **Database Logging**: 1,408+ routing decisions with correlation tracking
-- **Deployment**: archon-router-consumer (Docker container, healthy)
-- **Scalability**: Horizontally scalable, no single point of failure
-- **Testing**: 100% integration test coverage (4/4 passing)
-
-**Integration Points**:
-- `IntelligenceGatherer`: Event-based pattern discovery with 0.9 confidence boost
-- `CodeRefiner`: Event-driven production node discovery for refinement
-- `IntelligenceConfig`: Centralized configuration with environment variables
-- `AgentRouter`: Event-driven agent selection with fuzzy matching and confidence scoring
-
-**Architecture**:
-- aiokafka client for async request-response pattern
-- Kafka topics: code-analysis-requested/completed/failed.v1, agent.routing.*
-- Health checks for circuit breaker integration
-- Timeout handling with configurable fallback
-- PostgreSQL database logging with correlation tracking
-
-**Performance Targets**:
-- Router response time: <100ms (achieved: 7-13ms)
-- Intelligence response time: <100ms p95
-- Success rate: >95% (with fallback)
-- Memory overhead: <20MB
-- Request timeout: 5000ms (configurable)
-
-### 🪝 Claude Code Hooks (Production-Ready)
-- **Lifecycle hooks** for session start/end, tool execution
-- **Quality enforcement** with real-time validation
-- **Pattern tracking** for learning and optimization
-- **Debug intelligence** capture and analysis
-- **Naming validation** for code standards
-- **Performance monitoring** with threshold alerts
-
-### 🏗️ Framework Requirements
-- **47 mandatory functions** across 11 categories for agent standardization
-- **Intelligence capture** (pre-execution research and learning)
-- **Execution lifecycle** (initialization, delegation, cleanup)
-- **Context management** (preservation, validation, tracking)
-- **Performance monitoring** (baselines, real-time tracking, optimization)
-
-### ✅ Quality Gates System
-- **23 automated gates** across 8 validation types (<200ms execution target)
-- **ONEX compliance** validation
-- **Anti-YOLO methodology** enforcement
-- **Type safety** checking
-- **Parallel coordination** validation
-- **Knowledge capture** verification
-
-### 🏭 Production Infrastructure
-- **Pydantic Settings Framework** - Type-safe configuration with 90+ validated variables
-- **PostgreSQL database** for pattern storage and analytics (34 tables)
-- **Docker containerization** with consolidated compose files
-- **Environment-based deployment** (dev/test/prod configurations)
-- **Database migrations** with versioning
-- **Health checks** across all services
-- **Performance dashboards** for observability
-- **Violation tracking** and alerting
-
-### 🔄 CI/CD & Testing
-- **GitHub Actions workflows** for automated testing
-- **Security scanning** with vulnerability detection
-- **Claude Code review** automation
-- **Multi-stage testing** (unit, integration, performance)
-- **Hook validation** test suites
-- **Database validation** checks
-
-### 📊 Quality & Performance
-- **Performance thresholds** with 33+ validation checkpoints
-- **Code quality metrics** and enforcement
-- **Real-time monitoring** dashboards
-- **Optimization recommendations** based on historical data
-- **Pattern recognition** for continuous learning
+- [x] Archive old code
+- [x] Create new package structure
+- [x] Define ONEX event schemas
+- [x] Configure hook scripts (stubs)
+- [ ] Implement event emission (OMN-1400)
+- [ ] Session storage integration (OMN-1401)
+- [ ] Learning compute node (OMN-1402)
 
 ## Quick Start
 
-### Provider Toggle Script
+### Installation
 
 ```bash
-# Switch between providers
-./toggle-claude-provider.sh zai       # Use Z.ai GLM models
-./toggle-claude-provider.sh anthropic # Use native Claude models
-./toggle-claude-provider.sh together  # Use Together AI models
+# Clone repository
+git clone https://github.com/OmniNode-ai/omniclaude.git
+cd omniclaude
 
-# Check current status
-./toggle-claude-provider.sh status
+# Install with uv (recommended)
+uv sync
 
-# List available providers
-./toggle-claude-provider.sh list
+# Or with pip
+pip install -e .
 ```
-
-### Event-Based Intelligence Setup
-
-Enable dynamic pattern discovery from omniarchon intelligence service:
-
-```bash
-# 1. Ensure Redpanda and omniarchon services are running
-docker ps | grep redpanda              # Should show redpanda container
-docker ps | grep archon-intelligence   # Should show intelligence service
-
-# 2. Configure environment variables (in .env)
-KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS=localhost:29092
-KAFKA_ENABLE_INTELLIGENCE=true
-ENABLE_EVENT_BASED_DISCOVERY=true
-
-# 3. Verify connectivity
-poetry run python -c "
-from agents.lib.intelligence_event_client import IntelligenceEventClient
-import asyncio
-
-async def test():
-    client = IntelligenceEventClient(bootstrap_servers='localhost:29092')
-    await client.start()
-    health = await client.health_check()
-    print(f'Event client health: {health}')
-    await client.stop()
-
-asyncio.run(test())
-"
-
-# 4. Check logs for event-based discovery
-# Look for: "Event-based pattern discovery enabled"
-```
-
-**Graceful Fallback**: If event discovery fails or times out, the system automatically falls back to built-in patterns. No disruption to development workflow.
-
-**Documentation**:
-- See `EVENT_INTELLIGENCE_INTEGRATION_PLAN.md` for architecture details
-- See `CLIENT_WORKS_EVIDENCE.md` for validation evidence
-- See `EVENT_INTELLIGENCE_DEVELOPER_GUIDE.md` for integration guide
 
 ### Configuration
 
-Edit `claude-providers.json` to customize provider settings, add new providers, or adjust model mappings.
-
-### Environment Variables
-
-Before using the provider toggle script, you must set the required API keys as environment variables:
-
 ```bash
-# Option 1: Copy and edit the example file (recommended)
+# Copy and configure environment
 cp .env.example .env
-# Edit .env with your actual API keys, then:
+nano .env
 source .env
-
-# Option 2: Add to your shell profile
-# Add to your ~/.bashrc, ~/.zshrc, or ~/.profile
-export GEMINI_API_KEY="your_gemini_api_key_here"
-export ZAI_API_KEY="your_zai_api_key_here"
 ```
 
-**Security Note**: Never commit API keys directly to the repository. Always use environment variables or secure credential management systems.
+### Testing
 
-**Important**: See [SECURITY_KEY_ROTATION.md](SECURITY_KEY_ROTATION.md) for:
-- How to obtain API keys from provider dashboards
-- Step-by-step key rotation procedures
-- Testing and troubleshooting guides
-- Security best practices
+```bash
+# Run tests
+pytest tests/ -v
 
-## Repository Structure
+# Validate hooks.json
+jq . plugins/onex/hooks/hooks.json
+```
+
+## Project Structure
 
 ```
 omniclaude/
-├── README.md                         # This file
-├── QUICK_START.md                    # Quick start guide
-├── SECURITY_KEY_ROTATION.md          # API key security guide
-├── CLAUDE.md                         # Claude Code project instructions
-├── .env.example                      # Environment template
-├── .env.dev                          # Development environment template
-├── .env.test                         # Test environment template
-├── .env.prod                         # Production environment template
-├── toggle-claude-provider.sh         # Main provider toggle script
-├── claude-providers.json             # Provider configuration (7 providers)
-├── config/                           # Pydantic Settings Framework
-│   ├── README.md                     # Configuration documentation
-│   ├── settings.py                   # Type-safe settings (90+ variables)
-│   ├── __init__.py                   # Package initialization
-│   └── test_settings.py              # Configuration tests
-├── deployment/                       # Docker deployment files
-│   ├── README.md                     # Deployment guide
-│   ├── Dockerfile                    # Main application container
-│   ├── Dockerfile.consumer           # Agent observability consumer
-│   ├── docker-compose.yml            # Consolidated multi-service orchestration
-│   └── .dockerignore                 # Docker build exclusions
-├── agents/                           # Polymorphic agent framework
-│   ├── configs/                      # 52 agent definitions (YAML)
-│   ├── lib/                          # Agent framework libraries
-│   │   ├── intelligence_event_client.py  # Event-based intelligence client
-│   │   ├── intelligence_gatherer.py      # Pattern discovery with events
-│   │   ├── code_refiner.py               # Event-driven code refinement
-│   │   └── intelligence_config.py        # Centralized configuration
-│   ├── core-requirements.yaml        # 47 mandatory functions specification
-│   ├── quality-gates-spec.yaml       # 23 quality gates specification
-│   ├── performance-thresholds.yaml   # 33 performance thresholds
-│   ├── templates-spec.yaml           # Agent template specifications
-│   └── parallel_execution/           # Parallel coordination system
-│       └── migrations/               # Database schema migrations
-├── claude_hooks/                     # Production Claude Code hooks
-│   ├── user-prompt-submit.sh         # Prompt preprocessing hook
-│   ├── pre-tool-use-quality.sh       # Pre-execution validation
-│   ├── post-tool-use-quality.sh      # Post-execution validation
-│   ├── session-start.sh              # Session initialization
-│   ├── session-end.sh                # Session cleanup
-│   ├── quality_enforcer.py           # Quality enforcement engine
-│   ├── pattern_tracker.py            # Pattern learning system
-│   ├── naming_validator.py           # Code standards validation
-│   ├── performance_dashboard.py      # Real-time monitoring
-│   ├── health_checks.py              # Service health validation
-│   ├── error_handling.py             # Graceful error recovery
-│   ├── bin/                          # Utilities (violations, analysis)
-│   └── tests/                        # Hook validation test suites
-├── scripts/                          # Database and utility scripts
-│   └── init-db.sh                    # Database initialization
-├── .github/workflows/                # CI/CD automation
-│   ├── enhanced-ci.yml               # Main CI pipeline
-│   ├── security-scan.yml             # Security scanning
-│   ├── claude-code-review.yml        # Automated code review
-│   └── claude.yml                    # Claude integration workflow
-└── docs/                             # Additional documentation
+├── src/omniclaude/           # Main Python package
+│   ├── hooks/                # Event schemas and topics
+│   │   ├── schemas.py        # ONEX event models
+│   │   └── topics.py         # Kafka topic definitions
+│   └── config/               # Configuration (future)
+├── plugins/onex/             # Claude Code plugin
+│   ├── hooks/                # Hook configuration
+│   │   ├── hooks.json        # Hook definitions
+│   │   └── scripts/          # Shell handlers
+│   ├── agents/               # Agent YAML configs
+│   ├── commands/             # Command definitions
+│   └── skills/               # Skill definitions
+├── tests/                    # Test suite
+├── _archive/                 # Archived legacy code
+├── pyproject.toml            # Package config
+└── CLAUDE.md                 # Development guide
 ```
 
-## Statistics
+## Event Schemas
 
-| Category | Count | Status |
-|----------|-------|--------|
-| AI Providers | 7 | ✅ Production |
-| Specialized Agents | 52 | ✅ Production |
-| Mandatory Functions | 47 | ✅ Specified |
-| Quality Gates | 23 | ✅ Automated |
-| Performance Thresholds | 33 | ✅ Enforced |
-| Claude Code Hooks | 12+ | ✅ Production |
-| CI/CD Workflows | 4 | ✅ Automated |
-| Test Suites | 212 files | ✅ Active |
-| Test Coverage | 2,940 tests | ✅ Passing |
-| Configuration Variables | 90+ | ✅ Type-safe |
-| Database Tables | 34 | ✅ Migrated |
+ONEX-compatible event schemas for Claude Code hooks:
 
-## Supported Providers
+| Event | Schema | Purpose |
+|-------|--------|---------|
+| Session Start | `ModelSessionStarted` | Session initialization |
+| Session End | `ModelSessionEnded` | Session completion |
+| Prompt Submit | `ModelPromptSubmitted` | User prompt submission |
+| Tool Execute | `ModelToolExecuted` | Tool completion |
 
-| Provider | Models | Concurrent Requests | Description |
-|----------|--------|-------------------|-------------|
-| **Anthropic** | Claude 3.5 Haiku/Sonnet, Claude 3 Opus | Standard limits | Official Anthropic models |
-| **Z.ai** | GLM-4.5-Air, GLM-4.5, GLM-4.6 | 35 total (5+20+10) | High-concurrency GLM models |
-| **Together AI** | Llama 3.1 8B/70B/405B Turbo | 80 total (50+20+10) | Open-source hosted models |
-| **OpenRouter** | Multiple Claude/Llama models | OpenRouter limits | Model marketplace access |
-| **Gemini Pro** | Gemini 1.5 Flash/Pro | No rate limits | Google's Pro models |
-| **Gemini Flash** | Gemini 1.5 Flash (optimized) | No rate limits | Speed-optimized |
-| **Gemini 2.5** | Gemini 2.5 Flash/Pro (latest) | No rate limits | Latest capabilities |
+```python
+from omniclaude.hooks import (
+    ModelSessionStarted,
+    TopicBase,
+    build_topic,
+)
 
-### Provider Switching
+# Create event
+event = ModelSessionStarted(
+    session_id="abc123",
+    working_directory="/workspace/project",
+    hook_source="startup",
+)
 
-Switch providers instantly with automatic configuration:
-
-```bash
-# High-speed models
-./toggle-claude-provider.sh gemini-2.5-flash  # Latest Gemini (fastest)
-./toggle-claude-provider.sh zai               # Z.ai GLM (35 concurrent)
-
-# Quality-focused models
-./toggle-claude-provider.sh anthropic         # Official Claude (baseline)
-./toggle-claude-provider.sh gemini-pro        # Gemini Pro (quality)
-
-# Open-source alternatives
-./toggle-claude-provider.sh together          # Llama 3.1 (80 concurrent)
-./toggle-claude-provider.sh openrouter        # Multi-provider marketplace
-
-# Status and management
-./toggle-claude-provider.sh status            # Check current provider
-./toggle-claude-provider.sh list              # List all providers
+# Get Kafka topic
+topic = build_topic("dev", TopicBase.SESSION_STARTED)
+# → "dev.omniclaude.session.started.v1"
 ```
 
-## Agent Framework Highlights
+## Privacy Considerations
 
-### Available Agent Types (52 Total)
+The event schemas are designed with privacy in mind using a **data minimization** approach.
 
-**Workflow Orchestration**:
-- `agent-polymorphic-agent` (aka Polly, agent-workflow-coordinator) - Unified multi-agent coordination with dynamic transformation
-- `agent-multi-step-framework` - Complex multi-step execution
-- `agent-onex-coordinator` - ONEX architecture coordination
-- `agent-parallel-execution` - Parallel task coordination
+### Prompt Preview Field
 
-**Development & Quality**:
-- `agent-debug-intelligence` - Intelligent debugging with pattern learning
-- `agent-code-quality-analyzer` - Code quality assessment
-- `agent-testing` - Test generation and execution
-- `agent-refactoring` - Safe refactoring with validation
-- `agent-type-validator` - Type safety enforcement
-- `agent-security-audit` - Security vulnerability scanning
+The `prompt_preview` field captures a **truncated preview** of user prompts:
 
-**Architecture & Design**:
-- `agent-architect` - System architecture design
-- `agent-api-architect` - API design and planning
-- `agent-documentation-architect` - Documentation strategy
-- `agent-contract-driven-generator` - Contract-first code generation
+| Attribute | Value | Rationale |
+|-----------|-------|-----------|
+| Max Length | 200 characters | Limits exposure while preserving intent detection |
+| Truncation | Hard cut at 200 chars | No smart truncation to avoid unintended data exposure |
+| Full Content | **Never stored** | Only preview + length metadata |
+| PII Handling | **User responsibility** | Prompts may contain sensitive data |
 
-**Performance & Monitoring**:
-- `agent-performance` - Performance optimization
-- `agent-production-monitor` - Production health monitoring
-- `agent-quota-optimizer` - Resource optimization
+**What is captured**:
+- First 200 characters of the prompt text
+- Total character count (`prompt_length`)
+- Optional classified intent (`detected_intent`)
 
-**PR & Collaboration**:
-- `agent-pr-workflow` - Pull request automation
-- `agent-pr-review` - Automated code review
-- `agent-address-pr-comments` - PR comment resolution
-- `agent-commit` - Intelligent commit generation
+**What is NOT captured**:
+- Full prompt content beyond 200 chars
+- File contents read/written by tools
+- API keys, credentials, or secrets (unless in first 200 chars of prompt)
 
-**Research & Intelligence**:
-- `agent-research` - Comprehensive research tasks
-- `agent-rag-query` - RAG-based knowledge retrieval
-- `agent-repository-crawler` - Codebase analysis
+### Other Privacy Considerations
 
-[View all 52 agents in `agents/configs/`](agents/configs/)
+- **Working Directory**: Paths may reveal project names. Consider this when configuring consumers.
+- **Tool Summaries**: The `summary` field (max 500 chars) on tool events may contain file paths.
+- **Session IDs**: UUIDs are pseudonymous but can be correlated within a session.
 
-## Testing & Quality
+### Recommendations
 
-OmniClaude maintains high code quality through comprehensive testing and automated quality gates.
+1. **Access Control**: Use Kafka topic-level ACLs to restrict access to event streams
+2. **Data Retention**: Configure appropriate retention (e.g., 7-30 days for learning events)
+3. **Audit Logging**: Track access to event consumers
+4. **Encryption**: Enable TLS for Kafka connections
+5. **User Consent**: Inform users that session metadata is collected for learning
 
-### Test Coverage
+## Schema Evolution
 
-- **2,940 tests passing** across 212 test files
-- **Unit tests** for all core components
-- **Integration tests** for event-driven architecture
-- **End-to-end tests** for agent workflows
-- **Performance tests** for routing and intelligence gathering
+Event schemas follow **semantic versioning** for backwards compatibility.
 
-### Test Categories
+### Version Change Rules
 
-| Category | Test Files | Coverage |
-|----------|-----------|----------|
-| Configuration | 1 | Type-safe settings validation |
-| Agent Framework | 50+ | Agent routing, execution, quality gates |
-| Event Intelligence | 10+ | Kafka integration, pattern discovery |
-| Service Layer | 20+ | Routing adapter, consumers, APIs |
-| Infrastructure | 15+ | Database, migrations, health checks |
-| Hooks | 30+ | Claude Code lifecycle hooks |
+| Change Type | Version Bump | Example | Consumer Impact |
+|-------------|--------------|---------|-----------------|
+| **Patch** (1.0.x) | Bug fixes, docs | Field description update | None |
+| **Minor** (1.x.0) | New optional fields | Adding `metadata` field with default | None (backwards compatible) |
+| **Major** (x.0.0) | Breaking changes | Renaming/removing fields | Requires consumer update |
 
-### Quality Assurance
+### Current Schema Version
 
-- **23 automated quality gates** enforcing ONEX compliance
-- **33 performance thresholds** ensuring optimal execution
-- **Type safety** via Pydantic Settings Framework
-- **Linting & formatting** with pre-commit hooks
-- **Security scanning** via GitHub Actions
-- **Continuous integration** with automated test runs
+**Version**: 1.0.0 (initial release)
 
-### Running Tests
+### Evolution Strategy
 
-```bash
-# Run all tests
-pytest
+**Adding Fields (Minor Version)**:
+1. New fields MUST be optional with sensible defaults
+2. Use `Field(default=None)` or `Field(default_factory=...)` in Pydantic
+3. Producers upgrade first, then consumers
+4. No topic version change required
 
-# Run with coverage report
-pytest --cov=. --cov-report=html
+**Breaking Changes (Major Version)**:
+1. Create new topic version (e.g., `omniclaude.session.started.v2`)
+2. Run old and new topics in parallel during migration
+3. Producers emit to both topics temporarily
+4. Consumers migrate to new topic at their pace
+5. Deprecate old topic after migration window
 
-# Run specific test category
-pytest agents/tests/
-pytest config/test_settings.py
-pytest services/routing_adapter/
+**Consumer Guidelines**:
+- Use `extra="ignore"` in Pydantic models to ignore unknown fields
+- Always check schema version in envelope before processing
+- Implement graceful degradation for missing optional fields
 
-# Run integration tests
-pytest -m integration
+### Example: Adding a New Field
 
-# Run performance tests
-pytest -m performance
+```python
+# Version 1.0.0
+class ModelHookSessionStartedPayload(BaseModel):
+    session_id: str
+    working_directory: str
+    # ... existing fields
+
+# Version 1.1.0 - Adding optional field (backwards compatible)
+class ModelHookSessionStartedPayload(BaseModel):
+    session_id: str
+    working_directory: str
+    # New optional field with default
+    user_agent: str | None = Field(default=None, description="Client user agent")
 ```
 
-### Agent Routing Example
+## Dependencies
 
-```bash
-# Agents automatically route based on task context
-# Example: "Debug this performance issue" → agent-debug-intelligence
-# Example: "Review this PR" → agent-pr-review
-# Example: "Optimize database queries" → agent-performance
-
-# Manual agent invocation (if needed)
-# Agents load dynamically from ~/.claude/agent-definitions/
+```toml
+dependencies = [
+    "omnibase-core>=0.8.0,<0.9.0",
+    "omnibase-spi>=0.5.0,<0.6.0",
+    "omnibase-infra>=0.2.1,<0.3.0",
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.6.0",
+]
 ```
-
-## Getting Started
-
-### Prerequisites
-
-- Claude Code CLI installed
-- `jq` for JSON processing (`brew install jq` on macOS)
-- Docker (optional, for production infrastructure)
-- PostgreSQL 15+ (optional, for pattern tracking)
-
-### Quick Setup
-
-1. **Clone and configure environment**:
-```bash
-git clone https://github.com/yourusername/omniclaude.git
-cd omniclaude
-
-# Copy environment template
-cp .env.example .env
-
-# Edit .env with your API keys (REQUIRED: POSTGRES_PASSWORD, GEMINI_API_KEY, etc.)
-nano .env
-
-# Validate configuration
-./scripts/validate-env.sh .env
-```
-
-2. **Install dependencies**:
-```bash
-# Install Python dependencies with Poetry
-poetry install
-
-# Install shared library (for hooks and agents)
-./shared_lib/setup.sh
-```
-
-3. **Test provider switching**:
-```bash
-./toggle-claude-provider.sh status
-./toggle-claude-provider.sh list
-./toggle-claude-provider.sh gemini-2.5-flash
-```
-
-4. **Optional: Deploy with Docker**:
-```bash
-# For development environment (default)
-cd deployment && docker-compose up -d
-
-# For specific environment (.env.dev, .env.test, .env.prod)
-cd deployment && docker-compose --env-file ../.env.dev up -d
-
-# Verify health
-./scripts/health_check.sh
-
-# View logs
-cd deployment && docker-compose logs -f
-
-# Stop services
-cd deployment && docker-compose down
-```
-
-See **[QUICK_START.md](QUICK_START.md)** for detailed Docker deployment instructions.
-
-5. **Restart Claude Code** to apply changes
-
-### Using Claude Code Hooks
-
-Hooks automatically activate on Claude Code operations:
-- **user-prompt-submit**: Preprocesses your requests
-- **pre-tool-use**: Validates before tool execution
-- **post-tool-use**: Captures patterns and validates results
-- **session-start/end**: Manages session lifecycle
-
-No additional configuration needed - hooks are active once installed.
 
 ## Documentation
 
-### Core Documentation
-- **[README.md](README.md)** - This file (project overview and quick start)
-- **[QUICK_START.md](QUICK_START.md)** - Quick start guide for Docker Compose
-- **[CLAUDE.md](CLAUDE.md)** - Project instructions and architecture
-- **[SECURITY_KEY_ROTATION.md](SECURITY_KEY_ROTATION.md)** - API key security guide
-
-### Configuration & Deployment
-- **[config/README.md](config/README.md)** - Pydantic Settings Framework guide (90+ variables)
-- **[deployment/README.md](deployment/README.md)** - Docker Compose deployment guide
-- **[.env.example](.env.example)** - Environment variable template with descriptions
-
-### Intelligence & Events
-- **[EVENT_INTELLIGENCE_INTEGRATION_PLAN.md](EVENT_INTELLIGENCE_INTEGRATION_PLAN.md)** - Event-based intelligence architecture
-- **[CLIENT_WORKS_EVIDENCE.md](CLIENT_WORKS_EVIDENCE.md)** - Intelligence client validation evidence
-- **[EVENT_INTELLIGENCE_DEVELOPER_GUIDE.md](EVENT_INTELLIGENCE_DEVELOPER_GUIDE.md)** - Integration guide for developers
-
-### Agent Framework
-- **[agents/core-requirements.yaml](agents/core-requirements.yaml)** - 47 mandatory functions
-- **[agents/quality-gates-spec.yaml](agents/quality-gates-spec.yaml)** - 23 quality gates
-- **[agents/performance-thresholds.yaml](agents/performance-thresholds.yaml)** - Performance thresholds
-
-### CI/CD
-- **[.github/workflows/](/.github/workflows/)** - CI/CD documentation and workflows
+- [CLAUDE.md](CLAUDE.md) - Development guide and reference
+- [_archive/README_ARCHIVE.md](_archive/README_ARCHIVE.md) - Archived code documentation
 
 ## Contributing
 
-OmniClaude is part of the OmniNode ecosystem. We welcome contributions!
-
-**Ways to contribute**:
-- 🐛 Report bugs or issues
-- 💡 Suggest new features or agents
-- 📝 Improve documentation
-- 🧪 Add test coverage
-- 🔌 Create new provider integrations
-- 🤖 Design new specialized agents
-
-**Development workflow**:
-1. Fork the repository
-2. Create a feature branch
-3. Make changes with tests
-4. Run validation: `./claude_hooks/tests/run_all_tests.sh`
-5. Submit a pull request
-
-See [CLAUDE.md](CLAUDE.md) for development patterns and architecture details.
+This project is part of the OmniNode ecosystem. See the main documentation for contribution guidelines.
 
 ## License
 
-Part of the OmniNode project ecosystem.
+OmniNode License - See LICENSE file for details.
