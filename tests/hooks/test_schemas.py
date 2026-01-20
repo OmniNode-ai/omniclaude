@@ -1,0 +1,958 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 OmniNode Team
+"""Tests for OmniClaude hook event schemas.
+
+Validates ONEX-compliant event schemas for Claude Code hooks following
+the registration events pattern from omnibase_infra.
+
+ONEX Compliance Tests:
+- entity_id: Required partition key (no default)
+- correlation_id: Required for distributed tracing (no default)
+- causation_id: Required for event chain tracking (no default)
+- emitted_at: Required, must be timezone-aware (no default_factory!)
+- Immutability (frozen=True)
+- Extra fields forbidden (extra="forbid")
+- from_attributes=True for ORM compatibility
+"""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from uuid import UUID, uuid4
+
+import pytest
+from pydantic import ValidationError
+
+from omniclaude.hooks.schemas import (
+    ModelHookEventEnvelope,
+    ModelHookPromptSubmittedPayload,
+    ModelHookSessionEndedPayload,
+    ModelHookSessionStartedPayload,
+    ModelHookToolExecutedPayload,
+)
+from omniclaude.hooks.topics import TopicBase, build_topic
+
+# =============================================================================
+# Helper Factories
+# =============================================================================
+
+
+def make_timestamp() -> datetime:
+    """Create a valid timezone-aware timestamp."""
+    return datetime.now(UTC)
+
+
+def make_entity_id() -> UUID:
+    """Create a valid entity ID."""
+    return uuid4()
+
+
+def make_correlation_id() -> UUID:
+    """Create a valid correlation ID."""
+    return uuid4()
+
+
+def make_causation_id() -> UUID:
+    """Create a valid causation ID."""
+    return uuid4()
+
+
+# =============================================================================
+# Session Started Payload Tests
+# =============================================================================
+
+
+class TestModelHookSessionStartedPayload:
+    """Tests for session started event payloads."""
+
+    def test_has_required_fields(self) -> None:
+        """Payload defines all required ONEX envelope fields."""
+        fields = ModelHookSessionStartedPayload.model_fields
+        # ONEX envelope fields
+        assert "entity_id" in fields
+        assert "session_id" in fields
+        assert "correlation_id" in fields
+        assert "causation_id" in fields
+        assert "emitted_at" in fields
+        # Domain-specific fields
+        assert "working_directory" in fields
+        assert "git_branch" in fields
+        assert "hook_source" in fields
+
+    def test_entity_id_is_required(self) -> None:
+        """entity_id is required, not auto-generated."""
+        with pytest.raises(ValidationError) as exc_info:
+            ModelHookSessionStartedPayload(
+                # Missing entity_id - should fail!
+                session_id="test",
+                correlation_id=make_correlation_id(),
+                causation_id=make_causation_id(),
+                emitted_at=make_timestamp(),
+                working_directory="/tmp",
+                hook_source="startup",
+            )
+        assert "entity_id" in str(exc_info.value)
+
+    def test_correlation_id_is_required(self) -> None:
+        """correlation_id is required, not auto-generated."""
+        with pytest.raises(ValidationError) as exc_info:
+            ModelHookSessionStartedPayload(
+                entity_id=make_entity_id(),
+                session_id="test",
+                # Missing correlation_id - should fail!
+                causation_id=make_causation_id(),
+                emitted_at=make_timestamp(),
+                working_directory="/tmp",
+                hook_source="startup",
+            )
+        assert "correlation_id" in str(exc_info.value)
+
+    def test_causation_id_is_required(self) -> None:
+        """causation_id is required for event chain tracking."""
+        with pytest.raises(ValidationError) as exc_info:
+            ModelHookSessionStartedPayload(
+                entity_id=make_entity_id(),
+                session_id="test",
+                correlation_id=make_correlation_id(),
+                # Missing causation_id - should fail!
+                emitted_at=make_timestamp(),
+                working_directory="/tmp",
+                hook_source="startup",
+            )
+        assert "causation_id" in str(exc_info.value)
+
+    def test_emitted_at_is_required(self) -> None:
+        """emitted_at is required, not auto-generated."""
+        with pytest.raises(ValidationError) as exc_info:
+            ModelHookSessionStartedPayload(
+                entity_id=make_entity_id(),
+                session_id="test",
+                correlation_id=make_correlation_id(),
+                causation_id=make_causation_id(),
+                # Missing emitted_at - should fail!
+                working_directory="/tmp",
+                hook_source="startup",
+            )
+        assert "emitted_at" in str(exc_info.value)
+
+    def test_emitted_at_naive_datetime_converted_to_utc(self) -> None:
+        """Naive datetimes are converted to UTC with warning (graceful degradation).
+
+        Note: omnibase_infra.utils.ensure_timezone_aware converts naive datetimes
+        to UTC rather than rejecting them. This is intentional for graceful
+        degradation. A warning is logged when this happens.
+        """
+        naive_dt = datetime(2025, 1, 19, 12, 0, 0)  # No tzinfo
+        # Should NOT raise - graceful degradation converts to UTC
+        event = ModelHookSessionStartedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=naive_dt,  # Converted to UTC
+            working_directory="/tmp",
+            hook_source="startup",
+        )
+        # Resulting timestamp should be timezone-aware (UTC)
+        assert event.emitted_at.tzinfo is not None
+
+    def test_emitted_at_accepts_utc(self) -> None:
+        """UTC timezone is accepted."""
+        utc_dt = datetime(2025, 1, 19, 12, 0, 0, tzinfo=UTC)
+        event = ModelHookSessionStartedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=utc_dt,
+            working_directory="/tmp",
+            hook_source="startup",
+        )
+        assert event.emitted_at == utc_dt
+        assert event.emitted_at.tzinfo is not None
+
+    def test_create_minimal(self) -> None:
+        """Create with minimal required fields."""
+        entity_id = make_entity_id()
+        correlation_id = make_correlation_id()
+        causation_id = make_causation_id()
+        emitted_at = make_timestamp()
+        event = ModelHookSessionStartedPayload(
+            entity_id=entity_id,
+            session_id="session-123",
+            correlation_id=correlation_id,
+            causation_id=causation_id,
+            emitted_at=emitted_at,
+            working_directory="/workspace/project",
+            hook_source="startup",
+        )
+        assert event.entity_id == entity_id
+        assert event.session_id == "session-123"
+        assert event.correlation_id == correlation_id
+        assert event.causation_id == causation_id
+        assert event.emitted_at == emitted_at
+        assert event.working_directory == "/workspace/project"
+        assert event.hook_source == "startup"
+        assert event.git_branch is None
+
+    def test_create_full(self) -> None:
+        """Create with all fields."""
+        entity_id = uuid4()
+        correlation_id = uuid4()
+        causation_id = uuid4()
+        emitted_at = datetime(2025, 1, 19, 12, 0, 0, tzinfo=UTC)
+
+        event = ModelHookSessionStartedPayload(
+            entity_id=entity_id,
+            session_id="session-123",
+            correlation_id=correlation_id,
+            causation_id=causation_id,
+            emitted_at=emitted_at,
+            working_directory="/workspace/project",
+            git_branch="main",
+            hook_source="resume",
+        )
+        assert event.entity_id == entity_id
+        assert event.git_branch == "main"
+        assert event.hook_source == "resume"
+        assert event.correlation_id == correlation_id
+        assert event.causation_id == causation_id
+        assert event.emitted_at == emitted_at
+
+    def test_hook_source_validation(self) -> None:
+        """Hook source must be valid literal."""
+        for hook_source in ["startup", "resume", "clear", "compact"]:
+            event = ModelHookSessionStartedPayload(
+                entity_id=make_entity_id(),
+                session_id="test",
+                correlation_id=make_correlation_id(),
+                causation_id=make_causation_id(),
+                emitted_at=make_timestamp(),
+                working_directory="/tmp",
+                hook_source=hook_source,  # type: ignore[arg-type]
+            )
+            assert event.hook_source == hook_source
+
+    def test_invalid_hook_source(self) -> None:
+        """Invalid hook source raises validation error."""
+        with pytest.raises(ValidationError):
+            ModelHookSessionStartedPayload(
+                entity_id=make_entity_id(),
+                session_id="test",
+                correlation_id=make_correlation_id(),
+                causation_id=make_causation_id(),
+                emitted_at=make_timestamp(),
+                working_directory="/tmp",
+                hook_source="invalid",  # type: ignore[arg-type]
+            )
+
+    def test_frozen_immutable(self) -> None:
+        """Events are immutable (frozen)."""
+        event = ModelHookSessionStartedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            working_directory="/tmp",
+            hook_source="startup",
+        )
+        with pytest.raises(ValidationError):
+            event.session_id = "changed"  # type: ignore[misc]
+
+    def test_extra_fields_forbidden(self) -> None:
+        """Extra fields are not allowed."""
+        with pytest.raises(ValidationError):
+            ModelHookSessionStartedPayload(
+                entity_id=make_entity_id(),
+                session_id="test",
+                correlation_id=make_correlation_id(),
+                causation_id=make_causation_id(),
+                emitted_at=make_timestamp(),
+                working_directory="/tmp",
+                hook_source="startup",
+                extra_field="not allowed",  # type: ignore[call-arg]
+            )
+
+
+# =============================================================================
+# Session Ended Payload Tests
+# =============================================================================
+
+
+class TestModelHookSessionEndedPayload:
+    """Tests for session ended event payloads."""
+
+    def test_create_minimal(self) -> None:
+        """Create with minimal required fields."""
+        entity_id = make_entity_id()
+        emitted_at = make_timestamp()
+        event = ModelHookSessionEndedPayload(
+            entity_id=entity_id,
+            session_id="session-123",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=emitted_at,
+            reason="clear",
+        )
+        assert event.entity_id == entity_id
+        assert event.session_id == "session-123"
+        assert event.emitted_at == emitted_at
+        assert event.reason == "clear"
+        assert event.duration_seconds is None
+        assert event.tools_used_count == 0
+
+    def test_create_full(self) -> None:
+        """Create with all fields."""
+        event = ModelHookSessionEndedPayload(
+            entity_id=make_entity_id(),
+            session_id="session-123",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            reason="logout",
+            duration_seconds=3600.5,
+            tools_used_count=42,
+        )
+        assert event.reason == "logout"
+        assert event.duration_seconds == 3600.5
+        assert event.tools_used_count == 42
+
+    def test_reason_validation(self) -> None:
+        """Reason must be valid literal."""
+        for reason in ["clear", "logout", "prompt_input_exit", "other"]:
+            event = ModelHookSessionEndedPayload(
+                entity_id=make_entity_id(),
+                session_id="test",
+                correlation_id=make_correlation_id(),
+                causation_id=make_causation_id(),
+                emitted_at=make_timestamp(),
+                reason=reason,  # type: ignore[arg-type]
+            )
+            assert event.reason == reason
+
+    def test_required_fields(self) -> None:
+        """All ONEX envelope fields are required."""
+        with pytest.raises(ValidationError) as exc_info:
+            ModelHookSessionEndedPayload(
+                # Missing all required fields
+                reason="clear",  # type: ignore[call-arg]
+            )
+        error_str = str(exc_info.value)
+        assert "entity_id" in error_str
+        assert "session_id" in error_str
+        assert "correlation_id" in error_str
+        assert "causation_id" in error_str
+        assert "emitted_at" in error_str
+
+
+# =============================================================================
+# Prompt Submitted Payload Tests
+# =============================================================================
+
+
+class TestModelHookPromptSubmittedPayload:
+    """Tests for prompt submitted event payloads."""
+
+    def test_create_minimal(self) -> None:
+        """Create with minimal required fields."""
+        entity_id = make_entity_id()
+        prompt_id = uuid4()
+        emitted_at = make_timestamp()
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=entity_id,
+            session_id="session-123",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=emitted_at,
+            prompt_id=prompt_id,
+            prompt_preview="Help me with...",
+            prompt_length=100,
+        )
+        assert event.entity_id == entity_id
+        assert event.prompt_id == prompt_id
+        assert event.emitted_at == emitted_at
+        assert event.prompt_preview == "Help me with..."
+        assert event.prompt_length == 100
+        assert event.detected_intent is None
+
+    def test_create_full(self) -> None:
+        """Create with all fields."""
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="session-123",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview="Implement feature X",
+            prompt_length=500,
+            detected_intent="workflow",
+        )
+        assert event.detected_intent == "workflow"
+
+    def test_prompt_preview_max_length(self) -> None:
+        """Prompt preview is limited to 200 characters."""
+        # Valid at exactly 200
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview="x" * 200,
+            prompt_length=200,
+        )
+        assert len(event.prompt_preview) == 200
+
+        # Invalid at 201
+        with pytest.raises(ValidationError):
+            ModelHookPromptSubmittedPayload(
+                entity_id=make_entity_id(),
+                session_id="test",
+                correlation_id=make_correlation_id(),
+                causation_id=make_causation_id(),
+                emitted_at=make_timestamp(),
+                prompt_id=uuid4(),
+                prompt_preview="x" * 201,
+                prompt_length=201,
+            )
+
+    def test_prompt_length_non_negative(self) -> None:
+        """Prompt length must be non-negative."""
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview="test",
+            prompt_length=0,
+        )
+        assert event.prompt_length == 0
+
+        with pytest.raises(ValidationError):
+            ModelHookPromptSubmittedPayload(
+                entity_id=make_entity_id(),
+                session_id="test",
+                correlation_id=make_correlation_id(),
+                causation_id=make_causation_id(),
+                emitted_at=make_timestamp(),
+                prompt_id=uuid4(),
+                prompt_preview="test",
+                prompt_length=-1,
+            )
+
+    def test_prompt_id_is_required(self) -> None:
+        """prompt_id is required."""
+        with pytest.raises(ValidationError) as exc_info:
+            ModelHookPromptSubmittedPayload(
+                entity_id=make_entity_id(),
+                session_id="test",
+                correlation_id=make_correlation_id(),
+                causation_id=make_causation_id(),
+                emitted_at=make_timestamp(),
+                # Missing prompt_id
+                prompt_preview="test",
+                prompt_length=4,
+            )
+        assert "prompt_id" in str(exc_info.value)
+
+
+# =============================================================================
+# Tool Executed Payload Tests
+# =============================================================================
+
+
+class TestModelHookToolExecutedPayload:
+    """Tests for tool executed event payloads."""
+
+    def test_create_minimal(self) -> None:
+        """Create with minimal required fields."""
+        entity_id = make_entity_id()
+        tool_execution_id = uuid4()
+        emitted_at = make_timestamp()
+        event = ModelHookToolExecutedPayload(
+            entity_id=entity_id,
+            session_id="session-123",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=emitted_at,
+            tool_execution_id=tool_execution_id,
+            tool_name="Read",
+        )
+        assert event.entity_id == entity_id
+        assert event.tool_execution_id == tool_execution_id
+        assert event.emitted_at == emitted_at
+        assert event.tool_name == "Read"
+        assert event.success is True
+        assert event.duration_ms is None
+        assert event.summary is None
+
+    def test_create_full(self) -> None:
+        """Create with all fields."""
+        event = ModelHookToolExecutedPayload(
+            entity_id=make_entity_id(),
+            session_id="session-123",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            tool_execution_id=uuid4(),
+            tool_name="Bash",
+            success=False,
+            duration_ms=150,
+            summary="Command failed with exit code 1",
+        )
+        assert event.success is False
+        assert event.duration_ms == 150
+        assert event.summary == "Command failed with exit code 1"
+
+    def test_summary_max_length(self) -> None:
+        """Summary is limited to 500 characters."""
+        # Valid at exactly 500
+        event = ModelHookToolExecutedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            tool_execution_id=uuid4(),
+            tool_name="Test",
+            summary="x" * 500,
+        )
+        assert len(event.summary) == 500  # type: ignore[arg-type]
+
+        # Invalid at 501
+        with pytest.raises(ValidationError):
+            ModelHookToolExecutedPayload(
+                entity_id=make_entity_id(),
+                session_id="test",
+                correlation_id=make_correlation_id(),
+                causation_id=make_causation_id(),
+                emitted_at=make_timestamp(),
+                tool_execution_id=uuid4(),
+                tool_name="Test",
+                summary="x" * 501,
+            )
+
+    def test_tool_execution_id_is_required(self) -> None:
+        """tool_execution_id is required."""
+        with pytest.raises(ValidationError) as exc_info:
+            ModelHookToolExecutedPayload(
+                entity_id=make_entity_id(),
+                session_id="test",
+                correlation_id=make_correlation_id(),
+                causation_id=make_causation_id(),
+                emitted_at=make_timestamp(),
+                # Missing tool_execution_id
+                tool_name="Read",
+            )
+        assert "tool_execution_id" in str(exc_info.value)
+
+
+# =============================================================================
+# Causation Chain Tests
+# =============================================================================
+
+
+class TestCausationChain:
+    """Tests for causation chain tracking (ONEX pattern)."""
+
+    def test_causation_chain_linkage(self) -> None:
+        """Events can form a causation chain using entity_id -> causation_id."""
+        session_entity_id = make_entity_id()
+        correlation_id = uuid4()
+        synthetic_trigger_id = uuid4()  # External trigger
+
+        # Parent event (session start)
+        parent = ModelHookSessionStartedPayload(
+            entity_id=session_entity_id,
+            session_id="test",
+            correlation_id=correlation_id,
+            causation_id=synthetic_trigger_id,  # Caused by external trigger
+            emitted_at=make_timestamp(),
+            working_directory="/tmp",
+            hook_source="startup",
+        )
+
+        # Child event (prompt submitted) - links to parent via causation_id
+        prompt_entity_id = uuid4()
+        child = ModelHookPromptSubmittedPayload(
+            entity_id=prompt_entity_id,
+            session_id="test",
+            correlation_id=correlation_id,  # Same correlation
+            causation_id=parent.entity_id,  # Caused by session start
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview="Hello",
+            prompt_length=5,
+        )
+
+        assert child.causation_id == parent.entity_id
+        assert child.correlation_id == parent.correlation_id
+
+    def test_causation_chain_multiple_events(self) -> None:
+        """Multiple events can chain together via causation_id."""
+        correlation_id = uuid4()
+        synthetic_trigger = uuid4()
+
+        # Event 1: Session started
+        event1_entity_id = uuid4()
+        event1 = ModelHookSessionStartedPayload(
+            entity_id=event1_entity_id,
+            session_id="test",
+            correlation_id=correlation_id,
+            causation_id=synthetic_trigger,
+            emitted_at=make_timestamp(),
+            working_directory="/tmp",
+            hook_source="startup",
+        )
+
+        # Event 2: Prompt submitted (caused by session)
+        event2_entity_id = uuid4()
+        event2 = ModelHookPromptSubmittedPayload(
+            entity_id=event2_entity_id,
+            session_id="test",
+            correlation_id=correlation_id,
+            causation_id=event1.entity_id,
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview="Hello",
+            prompt_length=5,
+        )
+
+        # Event 3: Tool executed (caused by prompt)
+        event3 = ModelHookToolExecutedPayload(
+            entity_id=uuid4(),
+            session_id="test",
+            correlation_id=correlation_id,
+            causation_id=event2.entity_id,
+            emitted_at=make_timestamp(),
+            tool_execution_id=uuid4(),
+            tool_name="Read",
+        )
+
+        # Verify chain
+        assert event2.causation_id == event1.entity_id
+        assert event3.causation_id == event2.entity_id
+        # All share same correlation
+        assert event1.correlation_id == event2.correlation_id == event3.correlation_id
+
+
+# =============================================================================
+# Event Envelope Tests
+# =============================================================================
+
+
+class TestModelHookEventEnvelope:
+    """Tests for the event envelope wrapper."""
+
+    def test_create_envelope(self) -> None:
+        """Create envelope with payload."""
+        payload = ModelHookSessionStartedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            working_directory="/tmp",
+            hook_source="startup",
+        )
+        envelope = ModelHookEventEnvelope(
+            event_type="hook.session.started",
+            payload=payload,
+        )
+        assert envelope.event_type == "hook.session.started"
+        assert envelope.schema_version == "1.0.0"
+        assert envelope.source == "omniclaude"
+        assert envelope.payload == payload
+
+    def test_envelope_event_types(self) -> None:
+        """Envelope accepts all valid event types."""
+        payloads_and_types = [
+            (
+                ModelHookSessionStartedPayload(
+                    entity_id=make_entity_id(),
+                    session_id="test",
+                    correlation_id=make_correlation_id(),
+                    causation_id=make_causation_id(),
+                    emitted_at=make_timestamp(),
+                    working_directory="/tmp",
+                    hook_source="startup",
+                ),
+                "hook.session.started",
+            ),
+            (
+                ModelHookSessionEndedPayload(
+                    entity_id=make_entity_id(),
+                    session_id="test",
+                    correlation_id=make_correlation_id(),
+                    causation_id=make_causation_id(),
+                    emitted_at=make_timestamp(),
+                    reason="clear",
+                ),
+                "hook.session.ended",
+            ),
+            (
+                ModelHookPromptSubmittedPayload(
+                    entity_id=make_entity_id(),
+                    session_id="test",
+                    correlation_id=make_correlation_id(),
+                    causation_id=make_causation_id(),
+                    emitted_at=make_timestamp(),
+                    prompt_id=uuid4(),
+                    prompt_preview="test",
+                    prompt_length=4,
+                ),
+                "hook.prompt.submitted",
+            ),
+            (
+                ModelHookToolExecutedPayload(
+                    entity_id=make_entity_id(),
+                    session_id="test",
+                    correlation_id=make_correlation_id(),
+                    causation_id=make_causation_id(),
+                    emitted_at=make_timestamp(),
+                    tool_execution_id=uuid4(),
+                    tool_name="Read",
+                ),
+                "hook.tool.executed",
+            ),
+        ]
+        for payload, event_type in payloads_and_types:
+            envelope = ModelHookEventEnvelope(
+                event_type=event_type,  # type: ignore[arg-type]
+                payload=payload,
+            )
+            assert envelope.event_type == event_type
+
+    def test_envelope_frozen(self) -> None:
+        """Envelope is immutable."""
+        envelope = ModelHookEventEnvelope(
+            event_type="hook.session.started",
+            payload=ModelHookSessionStartedPayload(
+                entity_id=make_entity_id(),
+                session_id="test",
+                correlation_id=make_correlation_id(),
+                causation_id=make_causation_id(),
+                emitted_at=make_timestamp(),
+                working_directory="/tmp",
+                hook_source="startup",
+            ),
+        )
+        with pytest.raises(ValidationError):
+            envelope.event_type = "hook.session.ended"  # type: ignore[misc]
+
+
+# =============================================================================
+# Topic Tests
+# =============================================================================
+
+
+class TestTopics:
+    """Tests for topic names and helpers."""
+
+    def test_topic_base_names(self) -> None:
+        """Topic base names are defined correctly."""
+        assert TopicBase.SESSION_STARTED == "omniclaude.session.started.v1"
+        assert TopicBase.SESSION_ENDED == "omniclaude.session.ended.v1"
+        assert TopicBase.PROMPT_SUBMITTED == "omniclaude.prompt.submitted.v1"
+        assert TopicBase.TOOL_EXECUTED == "omniclaude.tool.executed.v1"
+        assert TopicBase.LEARNING_PATTERN == "omniclaude.learning.pattern.v1"
+
+    def test_build_topic(self) -> None:
+        """Build full topic name from prefix and base."""
+        topic = build_topic("dev", TopicBase.SESSION_STARTED)
+        assert topic == "dev.omniclaude.session.started.v1"
+
+        topic = build_topic("prod", TopicBase.TOOL_EXECUTED)
+        assert topic == "prod.omniclaude.tool.executed.v1"
+
+    def test_build_topic_empty_prefix(self) -> None:
+        """Build topic with empty prefix."""
+        topic = build_topic("", TopicBase.SESSION_STARTED)
+        assert topic == ".omniclaude.session.started.v1"
+
+
+# =============================================================================
+# Serialization Tests
+# =============================================================================
+
+
+class TestSerialization:
+    """Tests for JSON serialization."""
+
+    def test_serialize_to_json(self) -> None:
+        """Event can be serialized to JSON."""
+        entity_id = make_entity_id()
+        event = ModelHookSessionStartedPayload(
+            entity_id=entity_id,
+            session_id="test-123",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            working_directory="/workspace",
+            hook_source="startup",
+        )
+        json_str = event.model_dump_json()
+        assert '"session_id":"test-123"' in json_str
+        assert f'"entity_id":"{entity_id}"' in json_str
+        assert '"emitted_at"' in json_str
+
+    def test_deserialize_from_json(self) -> None:
+        """Event can be deserialized from JSON."""
+        entity_id = str(uuid4())
+        correlation_id = str(uuid4())
+        causation_id = str(uuid4())
+        emitted_at = datetime.now(UTC).isoformat()
+        json_str = (
+            f'{{"entity_id":"{entity_id}",'
+            f'"session_id":"test",'
+            f'"correlation_id":"{correlation_id}",'
+            f'"causation_id":"{causation_id}",'
+            f'"emitted_at":"{emitted_at}",'
+            f'"working_directory":"/tmp",'
+            f'"hook_source":"startup"}}'
+        )
+        event = ModelHookSessionStartedPayload.model_validate_json(json_str)
+        assert event.session_id == "test"
+        assert event.working_directory == "/tmp"
+        assert str(event.entity_id) == entity_id
+
+    def test_roundtrip_serialization(self) -> None:
+        """Event survives JSON roundtrip."""
+        entity_id = make_entity_id()
+        correlation_id = make_correlation_id()
+        causation_id = make_causation_id()
+        emitted_at = make_timestamp()
+        prompt_id = uuid4()
+
+        original = ModelHookPromptSubmittedPayload(
+            entity_id=entity_id,
+            session_id="test",
+            correlation_id=correlation_id,
+            causation_id=causation_id,
+            emitted_at=emitted_at,
+            prompt_id=prompt_id,
+            prompt_preview="Hello world",
+            prompt_length=11,
+            detected_intent="greeting",
+        )
+        json_str = original.model_dump_json()
+        restored = ModelHookPromptSubmittedPayload.model_validate_json(json_str)
+
+        assert restored.entity_id == original.entity_id
+        assert restored.session_id == original.session_id
+        assert restored.correlation_id == original.correlation_id
+        assert restored.causation_id == original.causation_id
+        assert restored.emitted_at == original.emitted_at
+        assert restored.prompt_id == original.prompt_id
+        assert restored.prompt_preview == original.prompt_preview
+        assert restored.prompt_length == original.prompt_length
+        assert restored.detected_intent == original.detected_intent
+
+    def test_serialization_preserves_timezone(self) -> None:
+        """Serialization preserves timezone information."""
+        emitted_at = datetime(2025, 1, 19, 12, 0, 0, tzinfo=UTC)
+        event = ModelHookSessionStartedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=emitted_at,
+            working_directory="/tmp",
+            hook_source="startup",
+        )
+        json_str = event.model_dump_json()
+        restored = ModelHookSessionStartedPayload.model_validate_json(json_str)
+
+        # Restored timestamp should still be timezone-aware
+        assert restored.emitted_at.tzinfo is not None
+        # And equal to original
+        assert restored.emitted_at == emitted_at
+
+
+# =============================================================================
+# Entity ID Partition Key Tests
+# =============================================================================
+
+
+class TestEntityIdAsPartitionKey:
+    """Tests for entity_id usage as Kafka partition key."""
+
+    def test_entity_id_is_uuid(self) -> None:
+        """entity_id is a UUID type."""
+        entity_id = make_entity_id()
+        event = ModelHookSessionStartedPayload(
+            entity_id=entity_id,
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            working_directory="/tmp",
+            hook_source="startup",
+        )
+        assert isinstance(event.entity_id, UUID)
+
+    def test_entity_id_from_string(self) -> None:
+        """entity_id can be created from string UUID."""
+        entity_id_str = "12345678-1234-5678-1234-567812345678"
+        event = ModelHookSessionStartedPayload(
+            entity_id=entity_id_str,  # type: ignore[arg-type]
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            working_directory="/tmp",
+            hook_source="startup",
+        )
+        assert str(event.entity_id) == entity_id_str
+
+    def test_entity_id_invalid_format(self) -> None:
+        """Invalid entity_id format raises validation error."""
+        with pytest.raises(ValidationError):
+            ModelHookSessionStartedPayload(
+                entity_id="not-a-valid-uuid",  # type: ignore[arg-type]
+                session_id="test",
+                correlation_id=make_correlation_id(),
+                causation_id=make_causation_id(),
+                emitted_at=make_timestamp(),
+                working_directory="/tmp",
+                hook_source="startup",
+            )
+
+    def test_different_events_have_unique_entity_ids(self) -> None:
+        """Different events have unique entity_ids (partition keys)."""
+        session_id = "shared-session"
+        correlation_id = uuid4()
+        synthetic_trigger = uuid4()
+
+        event1_entity_id = uuid4()
+        event1 = ModelHookSessionStartedPayload(
+            entity_id=event1_entity_id,
+            session_id=session_id,
+            correlation_id=correlation_id,
+            causation_id=synthetic_trigger,
+            emitted_at=make_timestamp(),
+            working_directory="/tmp",
+            hook_source="startup",
+        )
+
+        event2_entity_id = uuid4()
+        event2 = ModelHookPromptSubmittedPayload(
+            entity_id=event2_entity_id,
+            session_id=session_id,
+            correlation_id=correlation_id,
+            causation_id=event1.entity_id,
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview="test",
+            prompt_length=4,
+        )
+
+        # Same session and correlation, but different entity_ids
+        assert event1.session_id == event2.session_id
+        assert event1.correlation_id == event2.correlation_id
+        assert event1.entity_id != event2.entity_id
