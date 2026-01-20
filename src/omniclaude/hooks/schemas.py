@@ -103,7 +103,10 @@ _SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\b(AKIA[A-Z0-9]{16})", re.IGNORECASE), "AKIA***REDACTED***"),
     (re.compile(r"\b(ghp_[a-zA-Z0-9]{36})", re.IGNORECASE), "ghp_***REDACTED***"),
     (re.compile(r"\b(gho_[a-zA-Z0-9]{36})", re.IGNORECASE), "gho_***REDACTED***"),
-    (re.compile(r"\b(xox[baprs]-[a-zA-Z0-9-]{10,})", re.IGNORECASE), "xox*-***REDACTED***"),
+    (
+        re.compile(r"\b(xox[baprs]-[a-zA-Z0-9-]{10,})", re.IGNORECASE),
+        "xox*-***REDACTED***",
+    ),
     # Stripe API keys (publishable, secret, and restricted)
     # Format: (sk|pk|rk)_(live|test)_[a-zA-Z0-9]{24,}
     # Reference: https://stripe.com/docs/keys

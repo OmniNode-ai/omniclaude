@@ -40,12 +40,18 @@ def test_validation_logic_across_phases():
         - Setup/Call/Teardown (pytest in modules, PYTEST_CURRENT_TEST set): Validation RUNS
     """
     # Test normal run (no pytest)
-    with patch.dict(sys.modules, {}, clear=True), patch.dict(os.environ, {}, clear=True):
+    with (
+        patch.dict(sys.modules, {}, clear=True),
+        patch.dict(os.environ, {}, clear=True),
+    ):
         in_pytest_collection = "pytest" in sys.modules and not os.getenv("PYTEST_CURRENT_TEST")
         assert in_pytest_collection is False, "Normal run should validate (skip=False)"
 
     # Test collection phase (pytest imported, PYTEST_CURRENT_TEST not set)
-    with patch.dict(sys.modules, {"pytest": None}), patch.dict(os.environ, {}, clear=True):
+    with (
+        patch.dict(sys.modules, {"pytest": None}),
+        patch.dict(os.environ, {}, clear=True),
+    ):
         in_pytest_collection = "pytest" in sys.modules and not os.getenv("PYTEST_CURRENT_TEST")
         assert in_pytest_collection is True, "Collection phase should skip validation (skip=True)"
 
@@ -121,7 +127,10 @@ def test_collection_phase_skips_validation():
     Expected: Validation should be skipped
     """
     # Simulate collection phase
-    with patch.dict(sys.modules, {"pytest": None}), patch.dict(os.environ, {}, clear=True):
+    with (
+        patch.dict(sys.modules, {"pytest": None}),
+        patch.dict(os.environ, {}, clear=True),
+    ):
         # Remove PYTEST_CURRENT_TEST to simulate collection
         os.environ.pop("PYTEST_CURRENT_TEST", None)
 

@@ -1005,14 +1005,12 @@ class TestDatabaseSchemaValidation:
     def test_agent_actions_table_exists(self, db_connection):
         """Test that agent_actions table exists with correct schema."""
         cursor = db_connection.cursor()
-        cursor.execute(
-            """
+        cursor.execute("""
             SELECT EXISTS (
                 SELECT FROM information_schema.tables
                 WHERE table_name = 'agent_actions'
             )
-        """
-        )
+        """)
         exists = cursor.fetchone()[0]
         cursor.close()
 
@@ -1021,14 +1019,12 @@ class TestDatabaseSchemaValidation:
     def test_agent_transformation_events_table_exists(self, db_connection):
         """Test that agent_transformation_events table exists with correct schema."""
         cursor = db_connection.cursor()
-        cursor.execute(
-            """
+        cursor.execute("""
             SELECT EXISTS (
                 SELECT FROM information_schema.tables
                 WHERE table_name = 'agent_transformation_events'
             )
-        """
-        )
+        """)
         exists = cursor.fetchone()[0]
         cursor.close()
 
@@ -1037,14 +1033,12 @@ class TestDatabaseSchemaValidation:
     def test_agent_manifest_injections_table_exists(self, db_connection):
         """Test that agent_manifest_injections table exists with correct schema."""
         cursor = db_connection.cursor()
-        cursor.execute(
-            """
+        cursor.execute("""
             SELECT EXISTS (
                 SELECT FROM information_schema.tables
                 WHERE table_name = 'agent_manifest_injections'
             )
-        """
-        )
+        """)
         exists = cursor.fetchone()[0]
         cursor.close()
 
@@ -1053,14 +1047,12 @@ class TestDatabaseSchemaValidation:
     def test_agent_routing_decisions_table_exists(self, db_connection):
         """Test that agent_routing_decisions table exists with correct schema."""
         cursor = db_connection.cursor()
-        cursor.execute(
-            """
+        cursor.execute("""
             SELECT EXISTS (
                 SELECT FROM information_schema.tables
                 WHERE table_name = 'agent_routing_decisions'
             )
-        """
-        )
+        """)
         exists = cursor.fetchone()[0]
         cursor.close()
 

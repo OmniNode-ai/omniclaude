@@ -1,0 +1,67 @@
+# OmniClaude Docker Compose - CI Validation
+# ==============================================================================
+# Minimal compose file for CI validation and local development testing.
+# For full deployment stack, see deployment/docker-compose.yml
+# ==============================================================================
+
+services:
+  # ============================================================================
+  # PostgreSQL Database Service
+  # ============================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: omniclaude_postgres
+    environment:
+      POSTGRES_USER: omniclaude
+      POSTGRES_PASSWORD: omniclaude
+      POSTGRES_DB: omniclaude
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U omniclaude"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # ============================================================================
+  # Redis Cache Service
+  # ============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: omniclaude_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - redis_data:/data
+
+  # ============================================================================
+  # App Service (optional - uncomment for local development)
+  # ============================================================================
+  # app:
+  #   build:
+  #     context: .
+  #     dockerfile: deployment/Dockerfile
+  #   container_name: omniclaude_app
+  #   ports:
+  #     - "8000:8000"
+  #   environment:
+  #     - DATABASE_URL=postgresql://omniclaude:omniclaude@postgres:5432/omniclaude
+  #     - REDIS_URL=redis://redis:6379/0
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local

@@ -89,8 +89,7 @@ async def test_routing():
         )
 
         # Query recent routing decisions
-        rows = await conn.fetch(
-            """
+        rows = await conn.fetch("""
             SELECT
                 correlation_id,
                 selected_agent,
@@ -101,8 +100,7 @@ async def test_routing():
             FROM agent_routing_decisions
             ORDER BY created_at DESC
             LIMIT 5
-            """
-        )
+            """)
 
         if rows:
             print(f"   ✅ Found {len(rows)} recent routing decisions in database:")

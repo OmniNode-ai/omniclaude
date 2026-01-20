@@ -101,15 +101,13 @@ async def test_unique_constraint_exists(db_pool):
     """Test that the unique constraint exists in the database."""
     async with db_pool.acquire() as conn:
         # Check if constraint exists
-        result = await conn.fetchrow(
-            """
+        result = await conn.fetchrow("""
             SELECT constraint_name
             FROM information_schema.table_constraints
             WHERE table_name = 'agent_actions'
               AND constraint_name = 'unique_action_per_correlation_timestamp'
               AND constraint_type = 'UNIQUE'
-            """
-        )
+            """)
 
         assert result is not None, (
             "Unique constraint 'unique_action_per_correlation_timestamp' not found"
