@@ -49,7 +49,6 @@ from omniclaude.hooks.contracts import (
 )
 from omniclaude.hooks.models import ModelEventPublishResult
 from omniclaude.hooks.schemas import (
-    EventType,
     HookEventType,
     ModelHookEventEnvelope,
     ModelHookPayload,
@@ -57,6 +56,7 @@ from omniclaude.hooks.schemas import (
     ModelHookSessionEndedPayload,
     ModelHookSessionStartedPayload,
     ModelHookToolExecutedPayload,
+    sanitize_text,
 )
 from omniclaude.hooks.topics import TopicBase, build_topic
 
@@ -73,7 +73,8 @@ __all__ = [
     # Envelope and types
     "ModelHookEventEnvelope",
     "ModelHookPayload",
-    "EventType",  # Deprecated, kept for backwards compatibility
+    # Sanitization utilities
+    "sanitize_text",
     # Topics
     "TopicBase",
     "build_topic",

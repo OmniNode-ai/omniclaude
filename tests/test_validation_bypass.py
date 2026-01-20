@@ -127,14 +127,14 @@ def test_collection_phase_skips_validation():
     Expected: Validation should be skipped
     """
     # Simulate collection phase
+    # Note: patch.dict with clear=True already clears os.environ,
+    # so no need for explicit os.environ.pop - the environment is already empty
     with (
         patch.dict(sys.modules, {"pytest": None}),
         patch.dict(os.environ, {}, clear=True),
     ):
-        # Remove PYTEST_CURRENT_TEST to simulate collection
-        os.environ.pop("PYTEST_CURRENT_TEST", None)
-
         # This should match the condition in get_settings()
+        # PYTEST_CURRENT_TEST is not set because clear=True cleared the environment
         in_pytest_collection = "pytest" in sys.modules and not os.getenv("PYTEST_CURRENT_TEST")
 
         assert in_pytest_collection is True, (

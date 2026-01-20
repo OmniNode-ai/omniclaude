@@ -13,8 +13,18 @@ import os
 import sys
 from pathlib import Path
 
-# CRITICAL: Insert src directory at the beginning of sys.path BEFORE any imports
-# This ensures that src/omniclaude takes precedence over the legacy omniclaude/ directory
+# CRITICAL: sys.path manipulation for proper package discovery
+#
+# Why this is necessary (not removable without breaking tests):
+# 1. The project has both src/omniclaude/ (new) and legacy omniclaude/ directory
+# 2. pytest's pythonpath setting in pyproject.toml doesn't guarantee import order
+# 3. Without this, tests may import from the legacy directory causing import errors
+# 4. This runs BEFORE any imports to ensure src/omniclaude takes precedence
+#
+# Alternative considered: Using pytest's pythonpath in pyproject.toml alone doesn't
+# work reliably because the legacy directory name conflicts with the package name.
+# This explicit path manipulation is the most reliable solution until the legacy
+# directory is fully archived/removed.
 _src_path = str(Path(__file__).parent.parent / "src")
 if _src_path not in sys.path:
     sys.path.insert(0, _src_path)

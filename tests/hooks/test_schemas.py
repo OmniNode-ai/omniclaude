@@ -32,6 +32,7 @@ from omniclaude.hooks.schemas import (
     ModelHookSessionEndedPayload,
     ModelHookSessionStartedPayload,
     ModelHookToolExecutedPayload,
+    sanitize_text,
 )
 from omniclaude.hooks.topics import TopicBase, build_topic
 
@@ -58,6 +59,58 @@ def make_correlation_id() -> UUID:
 def make_causation_id() -> UUID:
     """Create a valid causation ID."""
     return uuid4()
+
+
+# =============================================================================
+# Naive Datetime Warning Tests
+# =============================================================================
+
+
+class TestNaiveDatetimeWarning:
+    """Tests for naive datetime warning behavior."""
+
+    def test_naive_datetime_triggers_conversion(self) -> None:
+        """Naive datetimes are converted to UTC (graceful degradation)."""
+        import warnings
+
+        naive_dt = datetime(2025, 1, 19, 12, 0, 0)  # No tzinfo
+
+        with warnings.catch_warnings(record=True):
+            warnings.simplefilter("always")
+            event = ModelHookSessionStartedPayload(
+                entity_id=make_entity_id(),
+                session_id="test",
+                correlation_id=make_correlation_id(),
+                causation_id=make_causation_id(),
+                emitted_at=naive_dt,
+                working_directory="/tmp",
+                hook_source="startup",
+            )
+            # Verify the conversion happened correctly
+            assert event.emitted_at.tzinfo is not None
+
+    def test_timezone_aware_datetime_no_conversion(self) -> None:
+        """Timezone-aware datetimes pass through without conversion."""
+        import warnings
+
+        aware_dt = datetime(2025, 1, 19, 12, 0, 0, tzinfo=UTC)
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            event = ModelHookSessionStartedPayload(
+                entity_id=make_entity_id(),
+                session_id="test",
+                correlation_id=make_correlation_id(),
+                causation_id=make_causation_id(),
+                emitted_at=aware_dt,
+                working_directory="/tmp",
+                hook_source="startup",
+            )
+            assert event.emitted_at == aware_dt
+            # Filter for timezone-related warnings only
+            tz_warnings = [x for x in w if "timezone" in str(x.message).lower()]
+            # No timezone warnings should be issued for aware datetime
+            assert len(tz_warnings) == 0
 
 
 # =============================================================================
@@ -739,6 +792,196 @@ class TestPromptPreviewSanitization:
         )
         assert "-----BEGIN ENCRYPTED PRIVATE KEY-----" not in event.prompt_preview
         assert "-----BEGIN ***REDACTED*** PRIVATE KEY-----" in event.prompt_preview
+
+    def test_multiple_secrets_all_redacted_in_single_pass(self) -> None:
+        """Prompt with multiple different secret types has all redacted in one pass."""
+        # Note: OpenAI keys require 20+ chars after sk-, generic token requires 8+ chars
+        multi_secret_prompt = (
+            "API: sk-abc123xyzABCdef456GHIjk and token=mysecrettoken123 "
+            "with password=superpassword123 and Bearer eyJtokenABCdef123XYZ"
+        )
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview=multi_secret_prompt,
+            prompt_length=len(multi_secret_prompt),
+        )
+        # All secrets should be redacted
+        assert "sk-abc123xyzABCdef456GHIjk" not in event.prompt_preview
+        assert "mysecrettoken123" not in event.prompt_preview
+        assert "superpassword123" not in event.prompt_preview
+        assert "eyJtokenABCdef123XYZ" not in event.prompt_preview
+        # REDACTED markers should be present
+        assert "REDACTED" in event.prompt_preview
+
+    def test_multiple_same_type_secrets_all_redacted(self) -> None:
+        """Multiple instances of the same secret type are all redacted."""
+        # Multiple OpenAI-style keys (require 20+ chars after sk-)
+        multi_key_prompt = "Keys: sk-key12345678901234abcdef sk-key98765432109876zyxwvu"
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview=multi_key_prompt,
+            prompt_length=len(multi_key_prompt),
+        )
+        # Both keys should be redacted
+        assert "sk-key12345678901234abcdef" not in event.prompt_preview
+        assert "sk-key98765432109876zyxwvu" not in event.prompt_preview
+
+    def test_mixed_secrets_and_safe_content(self) -> None:
+        """Safe content around secrets is preserved while secrets are redacted."""
+        prompt = "Connect using password=secret123 to server.example.com"
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview=prompt,
+            prompt_length=len(prompt),
+        )
+        # Secret redacted
+        assert "secret123" not in event.prompt_preview
+        # Safe content preserved
+        assert "Connect using" in event.prompt_preview
+        assert "server.example.com" in event.prompt_preview
+
+    def test_pem_dsa_private_key_redacted(self) -> None:
+        """DSA PEM private key headers are redacted."""
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview="Key: -----BEGIN DSA PRIVATE KEY-----",
+            prompt_length=45,
+        )
+        assert "-----BEGIN DSA PRIVATE KEY-----" not in event.prompt_preview
+        assert "-----BEGIN ***REDACTED*** PRIVATE KEY-----" in event.prompt_preview
+
+    def test_pem_openssh_private_key_redacted(self) -> None:
+        """OPENSSH PEM private key headers are redacted."""
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview="-----BEGIN OPENSSH PRIVATE KEY-----",
+            prompt_length=50,
+        )
+        assert "-----BEGIN OPENSSH PRIVATE KEY-----" not in event.prompt_preview
+        assert "-----BEGIN ***REDACTED*** PRIVATE KEY-----" in event.prompt_preview
+
+    def test_jwt_token_redacted(self) -> None:
+        """JWT tokens (three-part base64url structure) are redacted."""
+        jwt_token = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.Rq8IjqbeP"
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            # Use "JWT:" instead of "Auth:" to avoid generic pattern conflict
+            prompt_preview=f"JWT: {jwt_token}",
+            prompt_length=60,
+        )
+        assert jwt_token not in event.prompt_preview
+        assert "jwt_***REDACTED***" in event.prompt_preview
+
+    def test_mysql_connection_string_redacted(self) -> None:
+        """MySQL connection string passwords are redacted."""
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview="mysql://admin:secretpass123@db.example.com",
+            prompt_length=45,
+        )
+        assert "secretpass123" not in event.prompt_preview
+        assert "***REDACTED***@" in event.prompt_preview
+
+    def test_mongodb_connection_string_redacted(self) -> None:
+        """MongoDB connection string passwords are redacted."""
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview="mongodb://user:p4ssw0rd@cluster.mongodb.net",
+            prompt_length=45,
+        )
+        assert "p4ssw0rd" not in event.prompt_preview
+        assert "***REDACTED***@" in event.prompt_preview
+
+    def test_false_positive_short_password_not_redacted(self) -> None:
+        """Short password values (< 8 chars) are not redacted."""
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview="Set password=short for testing",
+            prompt_length=30,
+        )
+        assert "password=short" in event.prompt_preview
+        assert "REDACTED" not in event.prompt_preview
+
+    def test_false_positive_boolean_param_not_redacted(self) -> None:
+        """Boolean password parameters like 'reset_password=true' are not redacted."""
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview="URL: /api/reset_password=true&user=john",
+            prompt_length=45,
+        )
+        assert "reset_password=true" in event.prompt_preview
+        assert "REDACTED" not in event.prompt_preview
+
+    def test_comprehensive_multi_secret_truncated(self) -> None:
+        """Multiple secret types are redacted in truncated preview."""
+        prompt = (
+            "OPENAI=sk-1234567890abcdefghij "
+            "AWS=AKIAIOSFODNN7EXAMPLE "
+            "DB=postgres://user:dbsecret@host"
+        )
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview=prompt,
+            prompt_length=len(prompt),
+        )
+        assert "sk-1234567890abcdefghij" not in event.prompt_preview
+        assert "AKIAIOSFODNN7EXAMPLE" not in event.prompt_preview
+        assert event.prompt_preview.count("REDACTED") >= 2
 
 
 # =============================================================================
@@ -1527,3 +1770,144 @@ class TestDurationBounds:
                 tool_name="Bash",
                 duration_ms=-1,
             )
+
+
+# =============================================================================
+# Timestamp Microsecond Boundary Tests
+# =============================================================================
+
+
+class TestTimestampMicrosecondBoundaries:
+    """Tests for timestamp handling at microsecond boundaries.
+
+    Datetime microseconds are valid in range [0, 999999].
+    These tests verify proper handling of boundary cases.
+    """
+
+    def test_timestamp_max_microseconds(self) -> None:
+        """Timestamp with maximum microseconds (999999) is valid."""
+        max_micro_dt = datetime(2025, 1, 19, 23, 59, 59, 999999, tzinfo=UTC)
+        event = ModelHookSessionStartedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=max_micro_dt,
+            working_directory="/tmp",
+            hook_source="startup",
+        )
+        assert event.emitted_at.microsecond == 999999
+
+    def test_timestamp_zero_microseconds(self) -> None:
+        """Timestamp with zero microseconds is valid."""
+        zero_micro_dt = datetime(2025, 1, 19, 12, 0, 0, 0, tzinfo=UTC)
+        event = ModelHookSessionStartedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=zero_micro_dt,
+            working_directory="/tmp",
+            hook_source="startup",
+        )
+        assert event.emitted_at.microsecond == 0
+
+    def test_timestamp_end_of_day_boundary(self) -> None:
+        """Timestamp at end of day boundary (23:59:59.999999) is valid."""
+        end_of_day = datetime(2025, 1, 19, 23, 59, 59, 999999, tzinfo=UTC)
+        event = ModelHookSessionStartedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=end_of_day,
+            working_directory="/tmp",
+            hook_source="startup",
+        )
+        assert event.emitted_at.hour == 23
+        assert event.emitted_at.minute == 59
+        assert event.emitted_at.second == 59
+        assert event.emitted_at.microsecond == 999999
+
+    def test_timedelta_microsecond_arithmetic_safe(self) -> None:
+        """Timedelta arithmetic properly handles microsecond overflow.
+
+        This test verifies that using timedelta for timestamp manipulation
+        (as used in test_agent_actions_unique_constraint.py) safely handles
+        cases where adding microseconds would overflow.
+        """
+        from datetime import timedelta
+
+        # Start with max microseconds
+        base = datetime(2025, 1, 19, 12, 0, 0, 999999, tzinfo=UTC)
+
+        # Add 1 microsecond - should roll over to next second
+        result = base + timedelta(microseconds=1)
+        assert result.second == 1
+        assert result.microsecond == 0
+
+        # Add 1 millisecond (1000 microseconds) - should handle overflow
+        result2 = base + timedelta(milliseconds=1)
+        assert result2.second == 1
+        assert result2.microsecond == 999
+
+    def test_timestamp_february_leap_year(self) -> None:
+        """Timestamp handles February 29 in leap year correctly."""
+        feb29_2024 = datetime(2024, 2, 29, 12, 0, 0, tzinfo=UTC)
+        event = ModelHookSessionStartedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=feb29_2024,
+            working_directory="/tmp",
+            hook_source="startup",
+        )
+        assert event.emitted_at.month == 2
+        assert event.emitted_at.day == 29
+
+
+# =============================================================================
+# sanitize_text Function Tests
+# =============================================================================
+
+
+class TestSanitizeText:
+    """Tests for the sanitize_text utility function."""
+
+    def test_sanitize_text_redacts_secrets(self) -> None:
+        """sanitize_text redacts common secret patterns."""
+        text = "API: sk-1234567890abcdefghij and token=mysecretvalue"
+        result = sanitize_text(text)
+        assert "sk-1234567890abcdefghij" not in result
+        assert "mysecretvalue" not in result
+        assert "REDACTED" in result
+
+    def test_sanitize_text_no_truncation(self) -> None:
+        """sanitize_text does NOT truncate long text."""
+        long_text = "x" * 500
+        result = sanitize_text(long_text)
+        assert len(result) == 500
+        assert "..." not in result
+
+    def test_sanitize_text_preserves_safe_content(self) -> None:
+        """sanitize_text preserves content without secrets."""
+        safe_text = "This is a perfectly safe message with no secrets"
+        result = sanitize_text(safe_text)
+        assert result == safe_text
+
+    def test_sanitize_text_connection_strings(self) -> None:
+        """sanitize_text handles database connection strings."""
+        text = "Connect to postgres://user:password123@host:5432/db"
+        result = sanitize_text(text)
+        assert "password123" not in result
+        assert "***REDACTED***@" in result
+
+    def test_sanitize_text_multiple_secrets(self) -> None:
+        """sanitize_text handles multiple secrets in one string."""
+        # sk- requires 20+ chars after prefix, AKIA requires 16 chars after prefix
+        text = "Keys: sk-openai1234567890abcdef AKIAIOSFODNN7EXAMPLE"
+        result = sanitize_text(text)
+        assert "sk-openai1234567890abcdef" not in result
+        assert "AKIAIOSFODNN7EXAMPLE" not in result
+        assert result.count("REDACTED") >= 2

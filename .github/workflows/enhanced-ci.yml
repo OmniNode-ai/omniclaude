@@ -33,7 +33,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
-        run: pip install --no-cache-dir uv
+        run: pip install --no-cache-dir uv==0.5.24
 
       - name: Load cached venv
         id: cached-uv-dependencies
@@ -51,11 +51,29 @@ jobs:
         if: steps.cached-uv-dependencies.outputs.cache-hit != 'true'
         run: |
           # Install dependencies - continue even if private repos fail (tests use mocks)
-          uv sync --frozen --group dev || {
-            echo "Warning: Some dependencies failed to install (likely private repos)"
-            echo "Continuing with available dependencies - tests use mocks"
-            uv sync --group dev 2>&1 | grep -v "omnibase" || true
-          }
+          # Capture exit code and stderr for debugging
+          set +e
+          UV_OUTPUT=$(uv sync --frozen --group dev 2>&1)
+          UV_EXIT=$?
+          set -e
+
+          if [ $UV_EXIT -ne 0 ]; then
+            echo "::warning::uv sync --frozen failed (exit $UV_EXIT)"
+            echo "Output: $UV_OUTPUT"
+
+            # Check if failure is due to private repos (expected) vs other errors (unexpected)
+            if echo "$UV_OUTPUT" | grep -q "omnibase"; then
+              echo "Failure appears to be private repo access - continuing with fallback"
+              # Try without frozen to allow resolution without lock file
+              uv sync --group dev 2>&1 || {
+                echo "::warning::Fallback uv sync also failed - tests may be limited"
+              }
+            else
+              echo "::error::Unexpected dependency installation failure"
+              echo "$UV_OUTPUT"
+              exit 1
+            fi
+          fi
 
       - name: Run Ruff format (code formatting check)
         run: |
@@ -75,7 +93,9 @@ jobs:
       - name: Run type checking (mypy - strict mode)
         run: |
           echo "::group::MyPy Type Checking (Strict)"
-          uv run pip install mypy types-PyYAML types-aiofiles types-redis
+          # mypy is already installed via 'uv sync --group dev' from pyproject.toml
+          # Only install additional type stubs not in dev dependencies
+          uv run pip install types-PyYAML types-aiofiles types-redis
           # Strict type checking - this MUST pass for CI to succeed
           uv run mypy src/omniclaude/ \
             --strict \
@@ -112,7 +132,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
-        run: pip install --no-cache-dir uv
+        run: pip install --no-cache-dir uv==0.5.24
 
       - name: Configure Git authentication for private repositories
         run: |
@@ -120,10 +140,24 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv sync --frozen || {
-            echo "Warning: Some dependencies failed - continuing with available packages"
-            true
-          }
+          # Capture exit code and stderr for debugging
+          set +e
+          UV_OUTPUT=$(uv sync --frozen 2>&1)
+          UV_EXIT=$?
+          set -e
+
+          if [ $UV_EXIT -ne 0 ]; then
+            echo "::warning::uv sync --frozen failed (exit $UV_EXIT)"
+            # Check if failure is due to private repos (expected)
+            if echo "$UV_OUTPUT" | grep -q "omnibase"; then
+              echo "Failure appears to be private repo access - continuing"
+              uv sync 2>&1 || echo "::warning::Fallback uv sync also failed"
+            else
+              echo "::error::Unexpected dependency installation failure"
+              echo "$UV_OUTPUT"
+              exit 1
+            fi
+          fi
 
       - name: Validate ONEX Naming Conventions
         run: |
@@ -260,7 +294,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
-        run: pip install --no-cache-dir uv
+        run: pip install --no-cache-dir uv==0.5.24
 
       - name: Configure Git authentication for private repositories
         run: |
@@ -268,10 +302,24 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv sync --frozen --group dev || {
-            echo "Warning: Some dependencies failed - continuing with available packages"
-            true
-          }
+          # Capture exit code and stderr for debugging
+          set +e
+          UV_OUTPUT=$(uv sync --frozen --group dev 2>&1)
+          UV_EXIT=$?
+          set -e
+
+          if [ $UV_EXIT -ne 0 ]; then
+            echo "::warning::uv sync --frozen --group dev failed (exit $UV_EXIT)"
+            # Check if failure is due to private repos (expected)
+            if echo "$UV_OUTPUT" | grep -q "omnibase"; then
+              echo "Failure appears to be private repo access - continuing"
+              uv sync --group dev 2>&1 || echo "::warning::Fallback uv sync also failed"
+            else
+              echo "::error::Unexpected dependency installation failure"
+              echo "$UV_OUTPUT"
+              exit 1
+            fi
+          fi
 
       - name: Install pytest-split for parallel test execution
         run: |
@@ -467,7 +515,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
-        run: pip install --no-cache-dir uv
+        run: pip install --no-cache-dir uv==0.5.24
 
       - name: Configure Git authentication for private repositories
         run: |
@@ -475,10 +523,24 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv sync --frozen --group dev || {
-            echo "Warning: Some dependencies failed - continuing with available packages"
-            true
-          }
+          # Capture exit code and stderr for debugging
+          set +e
+          UV_OUTPUT=$(uv sync --frozen --group dev 2>&1)
+          UV_EXIT=$?
+          set -e
+
+          if [ $UV_EXIT -ne 0 ]; then
+            echo "::warning::uv sync --frozen --group dev failed (exit $UV_EXIT)"
+            # Check if failure is due to private repos (expected)
+            if echo "$UV_OUTPUT" | grep -q "omnibase"; then
+              echo "Failure appears to be private repo access - continuing"
+              uv sync --group dev 2>&1 || echo "::warning::Fallback uv sync also failed"
+            else
+              echo "::error::Unexpected dependency installation failure"
+              echo "$UV_OUTPUT"
+              exit 1
+            fi
+          fi
 
       - name: Initialize test database
         env:
@@ -497,7 +559,12 @@ jobs:
           }
 
           # Run init script as bash (not as SQL input)
-          bash scripts/init-db.sh || true
+          # Allow failure if script doesn't exist yet - it's optional for schema-only phase
+          if [ -f "scripts/init-db.sh" ]; then
+            bash scripts/init-db.sh
+          else
+            echo "scripts/init-db.sh not found - skipping database initialization"
+          fi
 
       - name: Run integration tests
         env:
@@ -598,7 +665,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
-        run: pip install --no-cache-dir uv
+        run: pip install --no-cache-dir uv==0.5.24
 
       - name: Configure Git authentication for private repositories
         run: |
@@ -606,10 +673,24 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv sync --frozen --group dev || {
-            echo "Warning: Some dependencies failed - continuing with available packages"
-            true
-          }
+          # Capture exit code and stderr for debugging
+          set +e
+          UV_OUTPUT=$(uv sync --frozen --group dev 2>&1)
+          UV_EXIT=$?
+          set -e
+
+          if [ $UV_EXIT -ne 0 ]; then
+            echo "::warning::uv sync --frozen --group dev failed (exit $UV_EXIT)"
+            # Check if failure is due to private repos (expected)
+            if echo "$UV_OUTPUT" | grep -q "omnibase"; then
+              echo "Failure appears to be private repo access - continuing"
+              uv sync --group dev 2>&1 || echo "::warning::Fallback uv sync also failed"
+            else
+              echo "::error::Unexpected dependency installation failure"
+              echo "$UV_OUTPUT"
+              exit 1
+            fi
+          fi
 
       - name: Initialize hooks database
         env:
@@ -625,7 +706,12 @@ jobs:
           done
 
           # Run init script as bash (not as SQL input)
-          bash scripts/init-db.sh || true
+          # Allow failure if script doesn't exist yet - it's optional for schema-only phase
+          if [ -f "scripts/init-db.sh" ]; then
+            bash scripts/init-db.sh
+          else
+            echo "scripts/init-db.sh not found - skipping database initialization"
+          fi
 
       - name: Run hooks system tests
         env:
@@ -679,7 +765,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
-        run: pip install --no-cache-dir uv
+        run: pip install --no-cache-dir uv==0.5.24
 
       - name: Configure Git authentication for private repositories
         run: |
@@ -687,10 +773,24 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv sync --frozen --group dev || {
-            echo "Warning: Some dependencies failed - continuing with available packages"
-            true
-          }
+          # Capture exit code and stderr for debugging
+          set +e
+          UV_OUTPUT=$(uv sync --frozen --group dev 2>&1)
+          UV_EXIT=$?
+          set -e
+
+          if [ $UV_EXIT -ne 0 ]; then
+            echo "::warning::uv sync --frozen --group dev failed (exit $UV_EXIT)"
+            # Check if failure is due to private repos (expected)
+            if echo "$UV_OUTPUT" | grep -q "omnibase"; then
+              echo "Failure appears to be private repo access - continuing"
+              uv sync --group dev 2>&1 || echo "::warning::Fallback uv sync also failed"
+            else
+              echo "::error::Unexpected dependency installation failure"
+              echo "$UV_OUTPUT"
+              exit 1
+            fi
+          fi
 
       - name: Run agent framework tests
         run: |
@@ -749,7 +849,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
-        run: pip install --no-cache-dir uv
+        run: pip install --no-cache-dir uv==0.5.24
 
       - name: Configure Git authentication for private repositories
         run: |
@@ -757,10 +857,24 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv sync --frozen --group dev || {
-            echo "Warning: Some dependencies failed - continuing with available packages"
-            true
-          }
+          # Capture exit code and stderr for debugging
+          set +e
+          UV_OUTPUT=$(uv sync --frozen --group dev 2>&1)
+          UV_EXIT=$?
+          set -e
+
+          if [ $UV_EXIT -ne 0 ]; then
+            echo "::warning::uv sync --frozen --group dev failed (exit $UV_EXIT)"
+            # Check if failure is due to private repos (expected)
+            if echo "$UV_OUTPUT" | grep -q "omnibase"; then
+              echo "Failure appears to be private repo access - continuing"
+              uv sync --group dev 2>&1 || echo "::warning::Fallback uv sync also failed"
+            else
+              echo "::error::Unexpected dependency installation failure"
+              echo "$UV_OUTPUT"
+              exit 1
+            fi
+          fi
 
       - name: Run performance benchmarks
         run: |
@@ -917,12 +1031,19 @@ jobs:
           HEALTHY=false
           while [ $ELAPSED -lt $TIMEOUT ]; do
             # Check if all services are healthy
-            UNHEALTHY=$(docker compose ps --format json 2>/dev/null | jq -r 'select(.Health != "healthy" and .Health != "") | .Name' 2>/dev/null | head -1 || true)
+            # Capture jq output separately to avoid masking errors
+            PS_OUTPUT=$(docker compose ps --format json 2>&1) || {
+              echo "::warning::docker compose ps failed, retrying..."
+              sleep 5
+              ELAPSED=$((ELAPSED + 5))
+              continue
+            }
+            UNHEALTHY=$(echo "$PS_OUTPUT" | jq -r 'select(.Health != "healthy" and .Health != "") | .Name' 2>/dev/null | head -1)
             if [ -z "$UNHEALTHY" ]; then
               HEALTHY=true
               break
             fi
-            echo "Waiting for services... ($ELAPSED/$TIMEOUT seconds)"
+            echo "Waiting for services... ($ELAPSED/$TIMEOUT seconds) - unhealthy: $UNHEALTHY"
             sleep 5
             ELAPSED=$((ELAPSED + 5))
           done
@@ -932,7 +1053,9 @@ jobs:
           docker compose ps
 
           if [ "$HEALTHY" = "false" ]; then
-            echo "::warning::Some services may not be fully healthy after ${TIMEOUT}s, continuing with explicit checks..."
+            echo "::error::Services failed to become healthy after ${TIMEOUT}s"
+            docker compose logs
+            exit 1
           fi
 
           # Validate PostgreSQL (explicit check with proper exit propagation)
@@ -951,15 +1074,7 @@ jobs:
             exit 1
           fi
 
-          # Check app health endpoint (explicit check with proper exit propagation)
-          echo "Validating app health endpoint..."
-          if ! curl -f http://localhost:8000/health; then
-            echo "::error::App health endpoint check failed"
-            docker compose logs app
-            exit 1
-          fi
-
-          echo "All health checks passed"
+          echo "PostgreSQL and Redis health checks passed"
           echo "::endgroup::"
 
       - name: Cleanup

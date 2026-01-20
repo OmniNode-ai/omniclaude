@@ -750,25 +750,6 @@ class ModelHookToolExecutedPayload(BaseModel):
 # =============================================================================
 
 
-# DEPRECATED: Type alias for backwards compatibility.
-# Use HookEventType enum instead.
-# Scheduled for removal in v0.3.0 (target: Q2 2026).
-# Migration: Replace EventType with HookEventType enum values.
-#
-# Note: This type alias is kept for backwards compatibility with code that
-# imports EventType directly. New code should use HookEventType enum instead.
-# No runtime deprecation warning is emitted because:
-# 1. Type aliases can't intercept access to emit warnings
-# 2. Module-level warnings are too intrusive for normal usage
-# 3. The deprecation is clearly documented in code and __all__
-EventType = Literal[
-    "hook.session.started",
-    "hook.session.ended",
-    "hook.prompt.submitted",
-    "hook.tool.executed",
-]
-
-
 class ModelHookEventEnvelope(BaseModel):
     """Envelope wrapper for hook events with event type discriminator.
 
@@ -879,8 +860,4 @@ __all__ = [
     # Envelope and types
     "ModelHookEventEnvelope",
     "ModelHookPayload",
-    # EventType is deprecated (v0.2.0) and emits DeprecationWarning at runtime.
-    # Use HookEventType enum instead. Scheduled for removal in v0.3.0.
-    # Kept in __all__ for backwards compatibility and type checker visibility.
-    "EventType",
 ]

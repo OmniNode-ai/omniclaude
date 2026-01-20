@@ -57,18 +57,36 @@ ONEX-compatible event schemas for Claude Code hooks. These schemas define the ev
 
 ### Schema Evolution Strategy
 
-Event schemas use semantic versioning:
+Event schemas use semantic versioning with strict backwards compatibility rules:
 
-| Version Change | Impact | Example |
-|----------------|--------|---------|
-| Patch (1.0.x) | Bug fixes only | Field description updates |
-| Minor (1.x.0) | New optional fields | Adding `metadata` field with default |
-| Major (x.0.0) | Breaking changes | Renaming fields, removing fields |
+| Version Change | Impact | Example | Consumer Action |
+|----------------|--------|---------|-----------------|
+| **Patch** (1.0.x) | Bug fixes only | Field description updates | None required |
+| **Minor** (1.x.0) | New optional fields | Adding `metadata` field with default | None (backwards compatible) |
+| **Major** (x.0.0) | Breaking changes | Renaming/removing fields | Must update consumer |
 
 **Guidelines**:
 - Always add new fields as optional with sensible defaults
 - Never remove or rename fields in minor versions
-- Topic names include version (`.v1`) for parallel running
+- Topic names include version (`.v1`) for parallel running during migrations
+
+**Adding Fields (Minor Version)**:
+1. New fields MUST be optional with sensible defaults
+2. Use `Field(default=None)` or `Field(default_factory=...)` in Pydantic
+3. Producers upgrade first, then consumers
+4. No topic version change required
+
+**Breaking Changes (Major Version)**:
+1. Create new topic version (e.g., `omniclaude.session.started.v2`)
+2. Run old and new topics in parallel during migration
+3. Producers emit to both topics temporarily
+4. Consumers migrate to new topic at their pace
+5. Deprecate old topic after migration window (typically 30-90 days)
+
+**Consumer Guidelines**:
+- Use `extra="ignore"` in Pydantic models to ignore unknown fields
+- Always check `schema_version` in envelope before processing
+- Implement graceful degradation for missing optional fields
 
 ### Schema Design Principles
 
@@ -77,6 +95,32 @@ Event schemas use semantic versioning:
 3. **Discriminated union** - `event_name` as discriminator for polymorphic deserialization
 4. **UUID handling** - `default_factory=uuid4` for correlation IDs
 5. **Minimal payloads** - Only stable fields, avoid large blobs
+
+### Event Ordering Guarantees
+
+Events are designed to support strict ordering within a session:
+
+| Concept | Description |
+|---------|-------------|
+| **Partition Key** | `entity_id` (session UUID) is used as Kafka partition key |
+| **Ordering Scope** | Events with the same `entity_id` are published to the same partition |
+| **Within-Session Order** | Total ordering is guaranteed for all events in a single session |
+| **Cross-Session Order** | No ordering guarantee between different sessions |
+
+**Disambiguation for Concurrent Events**:
+- Events with identical `emitted_at` timestamps can be disambiguated using:
+  - `tool_execution_id` for tool events (unique per execution)
+  - `prompt_id` for prompt events (unique per prompt)
+  - `causation_id` chain for causal ordering
+
+**Example Partition Assignment**:
+```python
+# All events for session abc-123 go to the same partition
+session_id = UUID("abc12345-...")
+event1 = ModelSessionStarted(entity_id=session_id, ...)  # partition X
+event2 = ModelPromptSubmitted(entity_id=session_id, ...)  # partition X (same)
+event3 = ModelToolExecuted(entity_id=session_id, ...)     # partition X (same)
+```
 
 ### Example Usage
 
@@ -121,6 +165,83 @@ Topic base names (without environment prefix):
 | Learning Pattern | `omniclaude.learning.pattern.v1` (future) |
 
 Topic prefix (e.g., `dev`, `staging`, `prod`) comes from environment configuration.
+
+---
+
+## Privacy Guidelines
+
+The event schemas are designed with **data minimization** principles. Key privacy-sensitive fields:
+
+### Prompt Preview Field
+
+The `prompt_preview` field captures a truncated, sanitized preview of user prompts:
+
+| Attribute | Value | Rationale |
+|-----------|-------|-----------|
+| **Max Length** | 100 characters | Limits exposure while preserving intent detection |
+| **Truncation** | Hard cut with "..." suffix | No smart truncation to avoid unintended exposure |
+| **Full Content** | Never stored | Only preview + `prompt_length` metadata |
+| **Sanitization** | Automatic secret redaction | API keys, passwords, tokens pattern-matched |
+
+**Automatic Sanitization** (via `_sanitize_prompt_preview()`):
+- OpenAI API keys (`sk-...`)
+- AWS access keys (`AKIA...`)
+- GitHub tokens (`ghp_...`, `gho_...`)
+- Slack tokens (`xox...`)
+- Stripe keys (`sk_live_...`, `pk_test_...`)
+- Google Cloud keys (`AIza...`)
+- PEM private keys
+- Bearer tokens
+- Password/secret in URLs and key=value patterns
+
+**Known False Positives**:
+- Short strings matching patterns (e.g., "Skip-navigation" may match `sk-` prefix)
+- Test fixtures with dummy values resembling secrets
+- Documentation examples showing key formats
+
+**What is NOT Captured**:
+- Full prompt content beyond 100 chars
+- File contents read/written by tools
+- API keys beyond the first 100 chars of prompt (unless in preview window)
+
+### Other Privacy-Sensitive Fields
+
+| Field | Sensitivity | Mitigation |
+|-------|-------------|------------|
+| `working_directory` | May reveal usernames, project names | Anonymize in aggregated analytics |
+| `git_branch` | May contain ticket IDs, developer identifiers | Treat as potentially identifying |
+| `summary` (tool events) | May contain file paths, code snippets | Limited to 500 chars, not auto-sanitized |
+| `session_id` / `entity_id` | Tracking identifiers | Apply data retention policies |
+
+### Recommendations
+
+1. **Access Control**: Use Kafka topic-level ACLs to restrict access
+2. **Data Retention**: Configure appropriate retention (7-30 days for learning events)
+3. **Audit Logging**: Track access to event consumers
+4. **Encryption**: Enable TLS for Kafka connections
+5. **User Consent**: Inform users that session metadata is collected
+
+---
+
+## Duration Bounds
+
+Duration fields have explicit upper bounds to prevent data quality issues:
+
+| Field | Max Value | Constant | Rationale |
+|-------|-----------|----------|-----------|
+| `duration_seconds` (session) | 2,592,000 (30 days) | `86400 * 30` | Longest reasonable session with reconnects |
+| `duration_ms` (tool) | 3,600,000 (1 hour) | `3600000` | No single tool should run longer than 1 hour |
+
+**Why Upper Bounds?**:
+1. **Data Quality**: Prevents corrupted timestamps from causing extreme values
+2. **Storage Efficiency**: Enables efficient numeric encoding in analytics systems
+3. **Anomaly Detection**: Values exceeding bounds indicate bugs or data corruption
+4. **Business Logic**: Represents realistic operational constraints
+
+**Handling Exceeded Bounds**:
+- Pydantic validation will reject values exceeding `le` constraints
+- Producers should log warnings and cap values if system clocks are skewed
+- Monitoring should alert on values approaching 80% of bounds
 
 ---
 
