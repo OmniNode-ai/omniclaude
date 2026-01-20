@@ -163,7 +163,9 @@ class TestLoadJson:
     def test_load_json_with_unicode(self, tmp_path: Path):
         """Test loading JSON with unicode characters."""
         unicode_file = tmp_path / "unicode.json"
-        unicode_file.write_text('{"emoji": "👍", "japanese": "日本語", "arabic": "العربية"}')
+        unicode_file.write_text(
+            '{"emoji": "👍", "japanese": "日本語", "arabic": "العربية"}'
+        )
 
         result = load_json(unicode_file)
         assert result is not None
@@ -777,7 +779,9 @@ class TestMainEntryPoint:
 
     def test_main_with_valid_json_input(self, mock_stdin):
         """Test main with valid JSON tool input."""
-        input_data = json.dumps({"tool_name": "Bash", "tool_input": {"command": "ls -la"}})
+        input_data = json.dumps(
+            {"tool_name": "Bash", "tool_input": {"command": "ls -la"}}
+        )
         mock_stdin.set_input(input_data)
 
         with patch("sys.stdout", new_callable=StringIO) as mock_stdout:
@@ -908,7 +912,9 @@ class TestMainEntryPoint:
         """Test main handles unexpected exceptions gracefully."""
         mock_stdin.set_input('{"tool_name": "Bash"}')
 
-        with patch("pre_tool_use_permissions.make_permission_decision") as mock_decision:
+        with patch(
+            "pre_tool_use_permissions.make_permission_decision"
+        ) as mock_decision:
             mock_decision.side_effect = RuntimeError("Unexpected error")
 
             with (

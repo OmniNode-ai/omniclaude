@@ -104,7 +104,9 @@ class TestSingletonPattern:
                 pass  # Just measure overhead
             context_manager_times.append(time.time() - start)
 
-        avg_context_manager_time = sum(context_manager_times) / len(context_manager_times)
+        avg_context_manager_time = sum(context_manager_times) / len(
+            context_manager_times
+        )
 
         # Test singleton approach (new pattern)
         singleton_times = []
@@ -153,7 +155,9 @@ class TestSingletonPattern:
 
         print(f"\n=== High-Frequency Logging ({num_calls} calls) ===")
         print(f"Singleton total time: {singleton_total_time * 1000:.2f}ms")
-        print(f"Singleton avg per call: {singleton_total_time * 1000 / num_calls:.2f}ms")
+        print(
+            f"Singleton avg per call: {singleton_total_time * 1000 / num_calls:.2f}ms"
+        )
 
         # Singleton should be fast (avg <10ms per call including first call)
         assert singleton_total_time < 1.0  # Total should be <1s

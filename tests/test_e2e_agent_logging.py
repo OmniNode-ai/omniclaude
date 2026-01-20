@@ -42,7 +42,13 @@ from config import settings
 # Add paths (updated for claude/ consolidation)
 sys.path.insert(
     0,
-    str(Path(__file__).parent.parent / "claude" / "skills" / "agent-tracking" / "log-agent-action"),
+    str(
+        Path(__file__).parent.parent
+        / "claude"
+        / "skills"
+        / "agent-tracking"
+        / "log-agent-action"
+    ),
 )
 sys.path.insert(0, str(Path(__file__).parent.parent / "claude" / "skills" / "_shared"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "agents" / "lib"))
@@ -118,7 +124,9 @@ class TestEndToEndAgentLogging:
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("__clean_database")
-    async def test_complete_workflow_simulation(self, _running_consumer, db_pool, wait_for_records):
+    async def test_complete_workflow_simulation(
+        self, _running_consumer, db_pool, wait_for_records
+    ):
         """
         Simulate complete agent workflow:
         1. Agent executes action
@@ -219,9 +227,9 @@ class TestEndToEndAgentLogging:
                 correlation_id,
             )
 
-            assert len(results) == len(workflow_actions), (
-                f"Expected {len(workflow_actions)} records, got {len(results)}"
-            )
+            assert len(results) == len(
+                workflow_actions
+            ), f"Expected {len(workflow_actions)} records, got {len(results)}"
 
             for i, row in enumerate(results):
                 expected = workflow_actions[i]
@@ -234,7 +242,9 @@ class TestEndToEndAgentLogging:
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("__clean_database")
-    async def test_multi_agent_scenario(self, _running_consumer, db_pool, wait_for_records):
+    async def test_multi_agent_scenario(
+        self, _running_consumer, db_pool, wait_for_records
+    ):
         """
         Test multiple agents logging concurrently.
         """
@@ -304,11 +314,15 @@ class TestEndToEndAgentLogging:
             )
 
             logged_agents = {row["agent_name"] for row in results}
-            assert logged_agents == set(agents), f"Expected {set(agents)}, got {logged_agents}"
+            assert logged_agents == set(
+                agents
+            ), f"Expected {set(agents)}, got {logged_agents}"
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("__clean_database")
-    async def test_data_integrity_verification(self, _running_consumer, db_pool, wait_for_records):
+    async def test_data_integrity_verification(
+        self, _running_consumer, db_pool, wait_for_records
+    ):
         """
         Verify data integrity across the pipeline:
         - No data loss
@@ -379,9 +393,9 @@ class TestEndToEndAgentLogging:
                 correlation_id,
             )
 
-            assert len(results) == len(test_data), (
-                f"Expected {len(test_data)} records, got {len(results)}"
-            )
+            assert len(results) == len(
+                test_data
+            ), f"Expected {len(test_data)} records, got {len(results)}"
 
             for i, row in enumerate(results):
                 details = json.loads(row["action_details"])
@@ -446,9 +460,9 @@ class TestEndToEndAgentLogging:
         publish_latency = (time.time() - start_time) * 1000  # ms
 
         assert result.returncode == 0
-        assert publish_latency < 1000, (
-            f"Publish latency {publish_latency:.2f}ms exceeds 1000ms target"
-        )
+        assert (
+            publish_latency < 1000
+        ), f"Publish latency {publish_latency:.2f}ms exceeds 1000ms target"
 
         # Measure end-to-end latency
         e2e_start = time.time()
@@ -466,7 +480,9 @@ class TestEndToEndAgentLogging:
                     print(f"✅ E2E latency: {e2e_latency:.2f}ms")
                     print(f"✅ Publish latency: {publish_latency:.2f}ms")
 
-                    assert e2e_latency < 5000, f"E2E latency {e2e_latency:.2f}ms exceeds 5s target"
+                    assert (
+                        e2e_latency < 5000
+                    ), f"E2E latency {e2e_latency:.2f}ms exceeds 5s target"
                     return
 
             await asyncio.sleep(0.1)
@@ -475,7 +491,9 @@ class TestEndToEndAgentLogging:
 
     @pytest.mark.asyncio
     @pytest.mark.usefixtures("__clean_database")
-    async def test_error_recovery(self, kafka_brokers, postgres_dsn, db_pool, wait_for_records):
+    async def test_error_recovery(
+        self, kafka_brokers, postgres_dsn, db_pool, wait_for_records
+    ):
         """
         Test error recovery scenarios:
         - Consumer restarts after crash
@@ -543,7 +561,9 @@ class TestEndToEndAgentLogging:
                 "SELECT COUNT(*) FROM agent_actions WHERE correlation_id = $1",
                 correlation_id,
             )
-            assert count1 == 1, f"Expected 1 record after first processing, got {count1}"
+            assert (
+                count1 == 1
+            ), f"Expected 1 record after first processing, got {count1}"
 
         # Simulate crash - stop consumer
         await consumer.stop()

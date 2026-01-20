@@ -77,7 +77,9 @@ def _validate_topic_name(topic: str) -> None:
             # Empty segment (shouldn't happen after above checks, but be defensive)
             raise ValueError(f"Topic name contains empty segment: {topic!r}")
         if not _TOPIC_SEGMENT_PATTERN.match(segment):
-            raise ValueError(f"Topic segment contains invalid characters: {segment!r} in {topic!r}")
+            raise ValueError(
+                f"Topic segment contains invalid characters: {segment!r} in {topic!r}"
+            )
 
 
 def build_topic(prefix: str, base: str) -> str:

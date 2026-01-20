@@ -164,7 +164,9 @@ def _validate_timezone_aware(v: datetime) -> datetime:
     return result
 
 
-def _sanitize_prompt_preview(text: str, max_length: int = PROMPT_PREVIEW_MAX_LENGTH) -> str:
+def _sanitize_prompt_preview(
+    text: str, max_length: int = PROMPT_PREVIEW_MAX_LENGTH
+) -> str:
     """Sanitize and truncate prompt preview for privacy safety.
 
     This function performs two privacy-protecting operations:

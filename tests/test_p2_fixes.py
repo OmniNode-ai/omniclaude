@@ -287,7 +287,9 @@ async def test_all_enum_providers_valid():
     # Note: EnumProvider uses "google" not "gemini" for Google models
     expected_providers = ["anthropic", "openai", "google"]
     for provider in expected_providers:
-        assert provider in valid_providers, f"Expected provider '{provider}' not in EnumProvider"
+        assert (
+            provider in valid_providers
+        ), f"Expected provider '{provider}' not in EnumProvider"
         assert EnumProvider.is_valid(provider), f"Provider '{provider}' should be valid"
 
 

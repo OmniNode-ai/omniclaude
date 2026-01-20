@@ -29,9 +29,9 @@ def test_env_configuration_loaded():
     # Note: TRACEABILITY_DB_* env vars map to POSTGRES_* in settings
     # Environment may use "omninode-bridge-postgres" (Docker) or "192.168.86.200" (host)
     assert settings.postgres_host, "POSTGRES_HOST must be set"
-    assert settings.postgres_port == 5436 or settings.postgres_port == 5432, (
-        f"POSTGRES_PORT should be 5436 (external) or 5432 (internal), got {settings.postgres_port}"
-    )
+    assert (
+        settings.postgres_port == 5436 or settings.postgres_port == 5432
+    ), f"POSTGRES_PORT should be 5436 (external) or 5432 (internal), got {settings.postgres_port}"
 
     # Verify password exists (without checking specific value for security)
     password = settings.get_effective_postgres_password()
@@ -40,9 +40,9 @@ def test_env_configuration_loaded():
 
     # Database name may vary by environment (omninode_bridge for prod, test_db for CI)
     assert settings.postgres_database, "POSTGRES_DATABASE must be set"
-    assert settings.postgres_user == "postgres" or settings.postgres_user == "test", (
-        f"POSTGRES_USER should be 'postgres' or 'test', got {settings.postgres_user}"
-    )
+    assert (
+        settings.postgres_user == "postgres" or settings.postgres_user == "test"
+    ), f"POSTGRES_USER should be 'postgres' or 'test', got {settings.postgres_user}"
 
     # Verify DSN is constructed correctly using helper method
     pg_dsn = settings.get_postgres_dsn()
@@ -60,7 +60,9 @@ def test_postgres_dsn_construction():
 
     # Verify DSN is well-formed
     assert dsn.startswith("postgresql://"), "DSN should use postgresql:// scheme"
-    assert f":{settings.postgres_port}/" in dsn, f"DSN should contain port {settings.postgres_port}"
+    assert (
+        f":{settings.postgres_port}/" in dsn
+    ), f"DSN should contain port {settings.postgres_port}"
     assert settings.postgres_database in dsn, "DSN should contain database name"
     assert settings.postgres_user in dsn, "DSN should contain username"
 
@@ -90,9 +92,9 @@ def test_kafka_brokers_configuration():
         "localhost:29092",  # Local development
         "localhost:9092",  # Local development alternative
     ]
-    assert any(brokers.startswith(valid.split(":")[0]) for valid in valid_values), (
-        f"Kafka brokers should use known host, got: {brokers}"
-    )
+    assert any(
+        brokers.startswith(valid.split(":")[0]) for valid in valid_values
+    ), f"Kafka brokers should use known host, got: {brokers}"
 
     print(f"\n✅ Kafka Bootstrap Servers: {brokers}")
 

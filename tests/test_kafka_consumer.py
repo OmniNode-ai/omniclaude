@@ -101,7 +101,9 @@ class TestKafkaConsumerIntegration:
     """Integration tests for Kafka consumer with PostgreSQL."""
 
     @pytest.mark.asyncio
-    async def test_consumer_starts_and_stops(self, kafka_brokers, postgres_dsn, test_topic):
+    async def test_consumer_starts_and_stops(
+        self, kafka_brokers, postgres_dsn, test_topic
+    ):
         """Test consumer can start and stop gracefully."""
         consumer = KafkaAgentActionConsumer(
             kafka_brokers=kafka_brokers,
@@ -552,7 +554,9 @@ class TestKafkaConsumerIntegration:
                         action_type,
                     )
 
-                    assert result is not None, f"Missing record for action_type: {action_type}"
+                    assert (
+                        result is not None
+                    ), f"Missing record for action_type: {action_type}"
                     assert result["action_type"] == action_type
         finally:
             await consumer.stop()
@@ -638,7 +642,9 @@ class TestConsumerPerformance:
                 )
 
                 # Should have processed all 1000 events
-                assert final_count == num_events, f"Expected {num_events} events, got {final_count}"
+                assert (
+                    final_count == num_events
+                ), f"Expected {num_events} events, got {final_count}"
         finally:
             await consumer.stop()
             consumer_task.cancel()

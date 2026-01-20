@@ -125,7 +125,9 @@ async def verify_database_record():
             return
 
         # Connect to database
-        print(f"🔌 Connecting to PostgreSQL: {postgres_host}:{postgres_port}/{postgres_database}")
+        print(
+            f"🔌 Connecting to PostgreSQL: {postgres_host}:{postgres_port}/{postgres_database}"
+        )
         conn = await asyncpg.connect(
             host=postgres_host,
             port=postgres_port,
@@ -212,7 +214,9 @@ async def main():
         print("❌ End-to-end routing flow FAILED")
         print("\nNext steps:")
         print("  1. Check consumer is running: docker ps | grep router-consumer")
-        print("  2. Check consumer logs: docker logs omniclaude_archon_router_consumer --tail 50")
+        print(
+            "  2. Check consumer logs: docker logs omniclaude_archon_router_consumer --tail 50"
+        )
         # Import settings to get current Kafka config
         import sys
         from pathlib import Path
@@ -220,7 +224,9 @@ async def main():
         sys.path.insert(0, str(Path(__file__).parent.parent))
         from config import settings
 
-        print(f"  3. Verify Kafka topics: kcat -L -b {settings.kafka_bootstrap_servers}")
+        print(
+            f"  3. Verify Kafka topics: kcat -L -b {settings.kafka_bootstrap_servers}"
+        )
         print("  4. Check database connectivity (credentials auto-loaded from .env)")
         return 1
 

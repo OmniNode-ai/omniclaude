@@ -105,7 +105,9 @@ async def test_cleanup_async_timeout_error_during_task_wait(template_cache, capl
 
 
 @pytest.mark.asyncio
-async def test_cleanup_async_cancels_all_pending_tasks_on_timeout(template_cache, caplog):
+async def test_cleanup_async_cancels_all_pending_tasks_on_timeout(
+    template_cache, caplog
+):
     """
     Test cleanup_async cancels ALL pending tasks on timeout.
 
@@ -144,7 +146,9 @@ async def test_cleanup_async_cancels_all_pending_tasks_on_timeout(template_cache
 
 
 @pytest.mark.asyncio
-async def test_cleanup_async_successful_task_completion_no_timeout(template_cache, caplog):
+async def test_cleanup_async_successful_task_completion_no_timeout(
+    template_cache, caplog
+):
     """
     Test cleanup_async successful task completion (no timeout).
 
@@ -168,7 +172,9 @@ async def test_cleanup_async_successful_task_completion_no_timeout(template_cach
         await template_cache.cleanup_async(timeout=1.0)
 
     # Assert: No warning logs
-    warning_logs = [record for record in caplog.records if record.levelname == "WARNING"]
+    warning_logs = [
+        record for record in caplog.records if record.levelname == "WARNING"
+    ]
     assert len(warning_logs) == 0
 
     # Assert: Debug log confirms success
@@ -204,7 +210,9 @@ async def test_cleanup_async_persistence_close_error_is_logged(
     """
     # Arrange
     close_error = RuntimeError("Database connection close failed")
-    template_cache_with_persistence._persistence_instance.close.side_effect = close_error
+    template_cache_with_persistence._persistence_instance.close.side_effect = (
+        close_error
+    )
 
     # Capture logs
     with caplog.at_level(logging.DEBUG):
@@ -215,18 +223,21 @@ async def test_cleanup_async_persistence_close_error_is_logged(
     debug_logs = [
         record
         for record in caplog.records
-        if record.levelname == "DEBUG" and "closing persistence" in record.message.lower()
+        if record.levelname == "DEBUG"
+        and "closing persistence" in record.message.lower()
     ]
-    assert len(debug_logs) == 1, (
-        f"Expected exactly 1 persistence close error log, got {len(debug_logs)}"
-    )
+    assert (
+        len(debug_logs) == 1
+    ), f"Expected exactly 1 persistence close error log, got {len(debug_logs)}"
 
     # Assert: Persistence instance is cleared
     assert template_cache_with_persistence._persistence_instance is None
 
 
 @pytest.mark.asyncio
-async def test_cleanup_async_persistence_successful_close(template_cache_with_persistence, caplog):
+async def test_cleanup_async_persistence_successful_close(
+    template_cache_with_persistence, caplog
+):
     """
     Test cleanup_async successful persistence close.
 
@@ -316,7 +327,9 @@ async def test_cleanup_async_both_timeout_and_persistence_errors(
     template_cache_with_persistence._background_tasks.add(task)
 
     close_error = ValueError("Persistence close failed")
-    template_cache_with_persistence._persistence_instance.close.side_effect = close_error
+    template_cache_with_persistence._persistence_instance.close.side_effect = (
+        close_error
+    )
 
     # Capture logs
     with caplog.at_level(logging.DEBUG):
@@ -462,7 +475,9 @@ async def test_cleanup_async_with_empty_background_tasks(template_cache, caplog)
         await template_cache.cleanup_async(timeout=1.0)
 
     # Assert: No warning logs
-    warning_logs = [record for record in caplog.records if record.levelname == "WARNING"]
+    warning_logs = [
+        record for record in caplog.records if record.levelname == "WARNING"
+    ]
     assert len(warning_logs) == 0
 
 

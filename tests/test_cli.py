@@ -36,7 +36,9 @@ class _CLIHandlerNotAvailable:
     """Placeholder class when CLIHandler cannot be imported."""
 
     def __init__(self, **_kwargs: Any) -> None:
-        raise ImportError("CLIHandler not available - CI cache issue with cli.lib package")
+        raise ImportError(
+            "CLIHandler not available - CI cache issue with cli.lib package"
+        )
 
 
 # Type annotation that accommodates both real CLIHandler and placeholder

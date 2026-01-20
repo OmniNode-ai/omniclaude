@@ -127,7 +127,9 @@ class TestViolationsLogger:
             {
                 "logging": {
                     "violations_log": str(tmp_path / "logs" / "violations.log"),
-                    "violations_summary": str(tmp_path / "logs" / "violations_summary.json"),
+                    "violations_summary": str(
+                        tmp_path / "logs" / "violations_summary.json"
+                    ),
                     "max_violations_history": 100,
                 }
             },
@@ -139,14 +141,18 @@ class TestViolationsLogger:
             assert logger.violations_log.parent.exists()
             assert logger.violations_summary.parent.exists()
 
-    def test_log_violations_writes_to_file(self, tmp_path: Path, mock_violation, monkeypatch):
+    def test_log_violations_writes_to_file(
+        self, tmp_path: Path, mock_violation, monkeypatch
+    ):
         """Test that violations are written to log file."""
         with patch(
             "quality_enforcer.CONFIG",
             {
                 "logging": {
                     "violations_log": str(tmp_path / "logs" / "violations.log"),
-                    "violations_summary": str(tmp_path / "logs" / "violations_summary.json"),
+                    "violations_summary": str(
+                        tmp_path / "logs" / "violations_summary.json"
+                    ),
                     "max_violations_history": 100,
                 }
             },
@@ -167,14 +173,18 @@ class TestViolationsLogger:
             assert "2 violations" in content
             assert "calculateTotal" in content
 
-    def test_log_violations_updates_summary_json(self, tmp_path: Path, mock_violation, monkeypatch):
+    def test_log_violations_updates_summary_json(
+        self, tmp_path: Path, mock_violation, monkeypatch
+    ):
         """Test that summary JSON is updated."""
         with patch(
             "quality_enforcer.CONFIG",
             {
                 "logging": {
                     "violations_log": str(tmp_path / "logs" / "violations.log"),
-                    "violations_summary": str(tmp_path / "logs" / "violations_summary.json"),
+                    "violations_summary": str(
+                        tmp_path / "logs" / "violations_summary.json"
+                    ),
                     "max_violations_history": 100,
                 }
             },
@@ -201,7 +211,9 @@ class TestViolationsLogger:
             {
                 "logging": {
                     "violations_log": str(tmp_path / "logs" / "violations.log"),
-                    "violations_summary": str(tmp_path / "logs" / "violations_summary.json"),
+                    "violations_summary": str(
+                        tmp_path / "logs" / "violations_summary.json"
+                    ),
                     "max_violations_history": 100,
                 }
             },
@@ -216,14 +228,18 @@ class TestViolationsLogger:
             # Log file should not be created for empty violations
             assert not logger.violations_log.exists()
 
-    def test_log_violations_limits_display(self, tmp_path: Path, mock_violation, monkeypatch):
+    def test_log_violations_limits_display(
+        self, tmp_path: Path, mock_violation, monkeypatch
+    ):
         """Test that violations display is limited to 5 per log entry."""
         with patch(
             "quality_enforcer.CONFIG",
             {
                 "logging": {
                     "violations_log": str(tmp_path / "logs" / "violations.log"),
-                    "violations_summary": str(tmp_path / "logs" / "violations_summary.json"),
+                    "violations_summary": str(
+                        tmp_path / "logs" / "violations_summary.json"
+                    ),
                     "max_violations_history": 100,
                 }
             },
@@ -633,7 +649,9 @@ class TestEdgeCases:
             enforcer = QualityEnforcer()
 
         # Patch _detect_language to raise exception
-        with patch.object(enforcer, "_detect_language", side_effect=RuntimeError("Test error")):
+        with patch.object(
+            enforcer, "_detect_language", side_effect=RuntimeError("Test error")
+        ):
             tool_call = {
                 "tool_name": "Write",
                 "tool_input": {"file_path": "/test.py", "content": "test"},

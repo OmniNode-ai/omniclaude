@@ -178,7 +178,9 @@ class ActionLoggingE2ETest:
                 user=postgres_user,
                 password=postgres_password,
             )
-            logger.info(f"✓ Database connection established: {postgres_host}:{postgres_port}")
+            logger.info(
+                f"✓ Database connection established: {postgres_host}:{postgres_port}"
+            )
             return True
 
         except Exception as e:
@@ -313,7 +315,9 @@ class ActionLoggingE2ETest:
             logger.warning("No database connection, skipping verification")
             return False
 
-        logger.info(f"Waiting up to {max_wait_seconds}s for consumer to process events...")
+        logger.info(
+            f"Waiting up to {max_wait_seconds}s for consumer to process events..."
+        )
 
         # Wait for consumer to process events
         start_time = time.time()
@@ -449,7 +453,9 @@ class ActionLoggingE2ETest:
         try:
             await self.publish_test_actions()
         except Exception as e:
-            logger.error(f"❌ Failed to publish test actions: {e}", exc_info=self.verbose)
+            logger.error(
+                f"❌ Failed to publish test actions: {e}", exc_info=self.verbose
+            )
             return False
 
         # Verify actions in database
@@ -640,9 +646,9 @@ async def test_action_logging_e2e(_running_consumer, db_pool):
         )
 
     # Verify count
-    assert len(results) >= len(test_actions), (
-        f"Expected at least {len(test_actions)} actions, found {len(results)}"
-    )
+    assert len(results) >= len(
+        test_actions
+    ), f"Expected at least {len(test_actions)} actions, found {len(results)}"
     logger.info(f"✓ Found all {len(results)} actions in database")
 
     # Verify each action
@@ -660,13 +666,17 @@ async def test_action_logging_e2e(_running_consumer, db_pool):
                 f"got {result['action_name']}"
             )
 
-            assert str(result["correlation_id"]) == correlation_id, (
-                f"Action {i + 1}: Correlation ID mismatch"
+            assert (
+                str(result["correlation_id"]) == correlation_id
+            ), f"Action {i + 1}: Correlation ID mismatch"
+
+            assert (
+                result["agent_name"] == "test-agent-e2e"
+            ), f"Action {i + 1}: Agent name mismatch"
+
+            logger.info(
+                f"✓ Action {i + 1}: {result['action_type']} - {result['action_name']}"
             )
-
-            assert result["agent_name"] == "test-agent-e2e", f"Action {i + 1}: Agent name mismatch"
-
-            logger.info(f"✓ Action {i + 1}: {result['action_type']} - {result['action_name']}")
 
     logger.info("\n" + "=" * 60)
     logger.info("✅ Test PASSED - All actions logged and verified")
@@ -675,8 +685,12 @@ async def test_action_logging_e2e(_running_consumer, db_pool):
 
 async def main():
     """Main entry point."""
-    parser = argparse.ArgumentParser(description="End-to-end test for agent action logging")
-    parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose logging")
+    parser = argparse.ArgumentParser(
+        description="End-to-end test for agent action logging"
+    )
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Enable verbose logging"
+    )
 
     args = parser.parse_args()
 
