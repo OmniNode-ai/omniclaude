@@ -101,9 +101,7 @@ class TestImportValidation:
 
         import_checks = [c for c in result.checks if c.check_type == CheckType.IMPORT]
         # Should either fail or warn about unknown import
-        assert any(
-            c.status in [CheckStatus.FAIL, CheckStatus.WARNING] for c in import_checks
-        )
+        assert any(c.status in [CheckStatus.FAIL, CheckStatus.WARNING] for c in import_checks)
 
 
 class TestONEXNaming:
@@ -179,9 +177,7 @@ class TestBaseClassValidation:
 
         result = validator.validate_file(temp_file)
 
-        base_class_checks = [
-            c for c in result.checks if c.check_type == CheckType.BASE_CLASS
-        ]
+        base_class_checks = [c for c in result.checks if c.check_type == CheckType.BASE_CLASS]
         assert len(base_class_checks) > 0
         assert all(c.status == CheckStatus.PASS for c in base_class_checks)
 
@@ -195,9 +191,7 @@ class TestBaseClassValidation:
 
         result = validator.validate_file(temp_file)
 
-        base_class_checks = [
-            c for c in result.checks if c.check_type == CheckType.BASE_CLASS
-        ]
+        base_class_checks = [c for c in result.checks if c.check_type == CheckType.BASE_CLASS]
         assert any(c.status == CheckStatus.FAIL for c in base_class_checks)
 
     def test_wrong_base_class(self, validator, temp_file):
@@ -212,9 +206,7 @@ class TestBaseClassValidation:
 
         result = validator.validate_file(temp_file)
 
-        base_class_checks = [
-            c for c in result.checks if c.check_type == CheckType.BASE_CLASS
-        ]
+        base_class_checks = [c for c in result.checks if c.check_type == CheckType.BASE_CLASS]
         assert any(c.status == CheckStatus.FAIL for c in base_class_checks)
 
 
@@ -274,14 +266,10 @@ class TestPydanticV2:
 
         result = validator.validate_file(temp_file)
 
-        pydantic_checks = [
-            c for c in result.checks if c.check_type == CheckType.PYDANTIC
-        ]
+        pydantic_checks = [c for c in result.checks if c.check_type == CheckType.PYDANTIC]
         assert len(pydantic_checks) > 0
         assert any(c.status == CheckStatus.FAIL for c in pydantic_checks)
-        assert any(
-            ".model_dump(" in c.suggestion for c in pydantic_checks if c.suggestion
-        )
+        assert any(".model_dump(" in c.suggestion for c in pydantic_checks if c.suggestion)
 
     def test_pydantic_v1_json_method(self, validator, temp_file):
         """Test that Pydantic v1 .json() is detected"""
@@ -298,9 +286,7 @@ class TestPydanticV2:
 
         result = validator.validate_file(temp_file)
 
-        pydantic_checks = [
-            c for c in result.checks if c.check_type == CheckType.PYDANTIC
-        ]
+        pydantic_checks = [c for c in result.checks if c.check_type == CheckType.PYDANTIC]
         assert any(c.status == CheckStatus.FAIL for c in pydantic_checks)
 
     def test_pydantic_v2_compliant(self, validator, temp_file):
@@ -319,9 +305,7 @@ class TestPydanticV2:
 
         result = validator.validate_file(temp_file)
 
-        pydantic_checks = [
-            c for c in result.checks if c.check_type == CheckType.PYDANTIC
-        ]
+        pydantic_checks = [c for c in result.checks if c.check_type == CheckType.PYDANTIC]
         # Should have no failed checks
         assert not any(c.status == CheckStatus.FAIL for c in pydantic_checks)
 
@@ -341,9 +325,7 @@ class TestTypeHints:
 
         result = validator.validate_file(temp_file)
 
-        type_hint_checks = [
-            c for c in result.checks if c.check_type == CheckType.TYPE_HINT
-        ]
+        type_hint_checks = [c for c in result.checks if c.check_type == CheckType.TYPE_HINT]
         assert any(c.status == CheckStatus.WARNING for c in type_hint_checks)
         assert any("Any" in c.message for c in type_hint_checks)
 
@@ -357,9 +339,7 @@ class TestTypeHints:
 
         result = validator.validate_file(temp_file)
 
-        type_hint_checks = [
-            c for c in result.checks if c.check_type == CheckType.TYPE_HINT
-        ]
+        type_hint_checks = [c for c in result.checks if c.check_type == CheckType.TYPE_HINT]
         assert any(c.status == CheckStatus.WARNING for c in type_hint_checks)
 
 
@@ -379,9 +359,7 @@ class TestForbiddenPatterns:
 
         result = validator.validate_file(temp_file)
 
-        forbidden_checks = [
-            c for c in result.checks if c.check_type == CheckType.FORBIDDEN
-        ]
+        forbidden_checks = [c for c in result.checks if c.check_type == CheckType.FORBIDDEN]
         assert len(forbidden_checks) >= 2  # Should catch both wildcard imports
 
 
@@ -513,9 +491,7 @@ class TestDirectoryValidation:
         if not agents_dir.exists():
             pytest.skip("Agents directory not found")
 
-        results = validator.validate_directory(
-            agents_dir, recursive=True, pattern="*.py"
-        )
+        results = validator.validate_directory(agents_dir, recursive=True, pattern="*.py")
 
         assert len(results) > 0
 

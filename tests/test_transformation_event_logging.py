@@ -60,9 +60,7 @@ async def test_transformation_complete_event():
     )
 
     if success:
-        logger.info(
-            f"✓ Transformation complete event published (correlation_id={correlation_id})"
-        )
+        logger.info(f"✓ Transformation complete event published (correlation_id={correlation_id})")
         return True, correlation_id
     else:
         logger.error("✗ Failed to publish transformation complete event")
@@ -87,9 +85,7 @@ async def test_transformation_failed_event():
     )
 
     if success:
-        logger.info(
-            f"✓ Transformation failed event published (correlation_id={correlation_id})"
-        )
+        logger.info(f"✓ Transformation failed event published (correlation_id={correlation_id})")
         return True, correlation_id
     else:
         logger.error("✗ Failed to publish transformation failed event")
@@ -113,9 +109,7 @@ async def test_transformation_start_event():
     )
 
     if success:
-        logger.info(
-            f"✓ Transformation start event published (correlation_id={correlation_id})"
-        )
+        logger.info(f"✓ Transformation start event published (correlation_id={correlation_id})")
         return True, correlation_id
     else:
         logger.error("✗ Failed to publish transformation start event")
@@ -150,9 +144,7 @@ async def test_self_transformation_detection():
         return False, correlation_id
 
 
-async def verify_database_persistence(
-    correlation_ids: list[str], wait_seconds: int = 5
-):
+async def verify_database_persistence(correlation_ids: list[str], wait_seconds: int = 5):
     """
     Verify events were persisted to PostgreSQL.
 
@@ -221,9 +213,7 @@ async def verify_database_persistence(
             return False
 
     except ImportError:
-        logger.error(
-            "✗ psycopg2 not installed. Install with: pip install psycopg2-binary"
-        )
+        logger.error("✗ psycopg2 not installed. Install with: pip install psycopg2-binary")
         return False
     except Exception as e:
         logger.error(f"✗ Database verification failed: {e}")
@@ -250,9 +240,7 @@ async def run_tests():
         return False
 
     logger.info(f"Kafka: {kafka_servers}")
-    logger.info(
-        f"PostgreSQL: {os.getenv('POSTGRES_HOST')}:{os.getenv('POSTGRES_PORT')}"
-    )
+    logger.info(f"PostgreSQL: {os.getenv('POSTGRES_HOST')}:{os.getenv('POSTGRES_PORT')}")
     logger.info("")
 
     # Run tests
@@ -316,18 +304,12 @@ async def run_tests():
     logger.info("=" * 80)
 
     kafka_tests_passed = sum(1 for _, success in test_results if success)
-    logger.info(
-        f"Kafka Publishing: {kafka_tests_passed}/{len(test_results)} tests passed"
-    )
-    logger.info(
-        f"Database Persistence: {'✓ PASS' if db_success else '⚠ PARTIAL or ✗ FAIL'}"
-    )
+    logger.info(f"Kafka Publishing: {kafka_tests_passed}/{len(test_results)} tests passed")
+    logger.info(f"Database Persistence: {'✓ PASS' if db_success else '⚠ PARTIAL or ✗ FAIL'}")
 
     if kafka_tests_passed == len(test_results) and db_success:
         logger.info("")
-        logger.info(
-            "✓ ALL TESTS PASSED - Transformation event logging working end-to-end!"
-        )
+        logger.info("✓ ALL TESTS PASSED - Transformation event logging working end-to-end!")
         return True
     else:
         logger.info("")
@@ -335,9 +317,7 @@ async def run_tests():
         logger.info("")
         logger.info("Troubleshooting:")
         logger.info("  1. Ensure Kafka is running: docker ps | grep redpanda")
-        logger.info(
-            "  2. Ensure consumer is running: ps aux | grep agent_actions_consumer"
-        )
+        logger.info("  2. Ensure consumer is running: ps aux | grep agent_actions_consumer")
         logger.info("  3. Check consumer logs: docker logs -f <consumer-container>")
         logger.info("  4. Verify .env file loaded: echo $KAFKA_BOOTSTRAP_SERVERS")
         return False

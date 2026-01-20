@@ -503,9 +503,7 @@ async def wait_for_db_condition(
     # Timeout - get final result for error message
     async with db_pool.acquire() as conn:
         final_result = (
-            await conn.fetchval(query, *query_args)
-            if query_args
-            else await conn.fetchval(query)
+            await conn.fetchval(query, *query_args) if query_args else await conn.fetchval(query)
         )
 
     raise TimeoutError(
@@ -541,9 +539,7 @@ async def wait_for_records():
             query = "SELECT COUNT(*) FROM agent_actions WHERE correlation_id = $1"
             args = (correlation_id,)
         elif agent_name:
-            query = (
-                f"SELECT COUNT(*) FROM agent_actions WHERE agent_name = '{agent_name}'"
-            )
+            query = f"SELECT COUNT(*) FROM agent_actions WHERE agent_name = '{agent_name}'"
         else:
             raise ValueError("Must provide either correlation_id or agent_name")
 
@@ -611,9 +607,7 @@ def _cleanup_all_kafka_producers_sync():
     try:
         loop = asyncio.get_running_loop()
         # Loop is running, can't cleanup synchronously
-        print(
-            "Warning: Event loop is running during Kafka cleanup, skipping sync cleanup"
-        )
+        print("Warning: Event loop is running during Kafka cleanup, skipping sync cleanup")
         return
     except RuntimeError:
         pass
@@ -673,9 +667,7 @@ def _cleanup_all_kafka_producers_sync():
                 try:
                     loop.run_until_complete(publisher.stop())
                 except Exception as e:
-                    print(
-                        f"Warning: Async cleanup failed for logging_event_publisher: {e}"
-                    )
+                    print(f"Warning: Async cleanup failed for logging_event_publisher: {e}")
                     if publisher._producer is not None:
                         _force_close_producer(publisher._producer)
             else:
@@ -789,10 +781,7 @@ def _mock_kafka_producer_globally():
     # Hook has already installed the mock in pytest_configure()
     # Verify it's active by checking the global instance
     global _mock_kafka_producer_instance
-    assert (
-        _mock_kafka_producer_instance is not None
-        or _get_mock_kafka_producer() is not None
-    )
+    assert _mock_kafka_producer_instance is not None or _get_mock_kafka_producer() is not None
 
     # Yield to run all tests with the mock active
     yield

@@ -70,9 +70,7 @@ def verify_in_database(execution_id):
                 POSTGRES_PASSWORD,
             ]
         ):
-            print(
-                "⚠️  PostgreSQL environment variables not set, skipping database verification"
-            )
+            print("⚠️  PostgreSQL environment variables not set, skipping database verification")
             return None
 
         conn = psycopg2.connect(

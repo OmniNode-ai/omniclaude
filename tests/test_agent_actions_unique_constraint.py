@@ -109,9 +109,9 @@ async def test_unique_constraint_exists(db_pool):
               AND constraint_type = 'UNIQUE'
             """)
 
-        assert (
-            result is not None
-        ), "Unique constraint 'unique_action_per_correlation_timestamp' not found"
+        assert result is not None, (
+            "Unique constraint 'unique_action_per_correlation_timestamp' not found"
+        )
         print("✅ Unique constraint exists in database")
 
 
@@ -124,9 +124,7 @@ async def test_duplicate_prevention(db_pool):
 
     async with db_pool.acquire() as conn:
         # Clean up any existing test data
-        await conn.execute(
-            "DELETE FROM agent_actions WHERE correlation_id = $1", correlation_id
-        )
+        await conn.execute("DELETE FROM agent_actions WHERE correlation_id = $1", correlation_id)
 
         # Insert first record
         insert_sql = """
@@ -186,9 +184,7 @@ async def test_duplicate_prevention(db_pool):
         print("✅ Only one record exists in database (duplicates prevented)")
 
         # Clean up
-        await conn.execute(
-            "DELETE FROM agent_actions WHERE correlation_id = $1", correlation_id
-        )
+        await conn.execute("DELETE FROM agent_actions WHERE correlation_id = $1", correlation_id)
 
 
 @pytest.mark.asyncio
@@ -230,9 +226,7 @@ async def test_concurrent_insertions(db_pool):
 
     # Clean up any existing test data
     async with db_pool.acquire() as conn:
-        await conn.execute(
-            "DELETE FROM agent_actions WHERE correlation_id = $1", correlation_id
-        )
+        await conn.execute("DELETE FROM agent_actions WHERE correlation_id = $1", correlation_id)
 
     # Launch 10 concurrent insertions (same correlation_id, action_name, timestamp)
     tasks = [insert_record(db_pool, correlation_id, timestamp) for _ in range(10)]
@@ -243,9 +237,7 @@ async def test_concurrent_insertions(db_pool):
     successful = sum(1 for r in results if r is not None)
     duplicates = sum(1 for r in results if r is None)
 
-    print(
-        f"✅ Concurrent test: {successful} succeeded, {duplicates} duplicates prevented"
-    )
+    print(f"✅ Concurrent test: {successful} succeeded, {duplicates} duplicates prevented")
 
     # Verify only one record exists
     async with db_pool.acquire() as conn:
@@ -254,15 +246,11 @@ async def test_concurrent_insertions(db_pool):
             correlation_id,
         )
 
-        assert (
-            count == 1
-        ), f"Expected 1 record after concurrent insertions, found {count}"
+        assert count == 1, f"Expected 1 record after concurrent insertions, found {count}"
         print("✅ Concurrent insertions handled correctly (only 1 record in DB)")
 
         # Clean up
-        await conn.execute(
-            "DELETE FROM agent_actions WHERE correlation_id = $1", correlation_id
-        )
+        await conn.execute("DELETE FROM agent_actions WHERE correlation_id = $1", correlation_id)
 
 
 @pytest.mark.asyncio
@@ -275,9 +263,7 @@ async def test_different_timestamps_allowed(db_pool):
 
     async with db_pool.acquire() as conn:
         # Clean up any existing test data
-        await conn.execute(
-            "DELETE FROM agent_actions WHERE correlation_id = $1", correlation_id
-        )
+        await conn.execute("DELETE FROM agent_actions WHERE correlation_id = $1", correlation_id)
 
         insert_sql = """
             INSERT INTO agent_actions (
@@ -322,9 +308,7 @@ async def test_different_timestamps_allowed(db_pool):
         )
 
         assert result1 is not None, "First insert should succeed"
-        assert (
-            result2 is not None
-        ), "Second insert with different timestamp should succeed"
+        assert result2 is not None, "Second insert with different timestamp should succeed"
         print("✅ Same action with different timestamps allowed (both inserted)")
 
         # Verify two records exist
@@ -333,15 +317,11 @@ async def test_different_timestamps_allowed(db_pool):
             correlation_id,
         )
 
-        assert (
-            count == 2
-        ), f"Expected 2 records with different timestamps, found {count}"
+        assert count == 2, f"Expected 2 records with different timestamps, found {count}"
         print("✅ Two records exist (different timestamps)")
 
         # Clean up
-        await conn.execute(
-            "DELETE FROM agent_actions WHERE correlation_id = $1", correlation_id
-        )
+        await conn.execute("DELETE FROM agent_actions WHERE correlation_id = $1", correlation_id)
 
 
 async def run_all_tests():

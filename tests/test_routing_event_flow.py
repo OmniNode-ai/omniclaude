@@ -233,9 +233,7 @@ class RoutingEventTestClient:
         if self._response_event is None:
             raise ValueError("Response event not initialized")
         try:
-            await asyncio.wait_for(
-                self._response_event.wait(), timeout=self.timeout_ms / 1000.0
-            )
+            await asyncio.wait_for(self._response_event.wait(), timeout=self.timeout_ms / 1000.0)
         except TimeoutError:
             raise TimeoutError(
                 f"No response received within {self.timeout_ms}ms. Is agent-router-service running?"
@@ -253,9 +251,7 @@ class RoutingEventTestClient:
             # Parse error response
             error_payload = response_payload.get("payload", {})
             error = ModelRoutingError(**error_payload)
-            raise ValueError(
-                f"Routing failed: {error.error_code} - {error.error_message}"
-            )
+            raise ValueError(f"Routing failed: {error.error_code} - {error.error_message}")
 
         # Parse success response
         return cast(dict[str, Any], response_payload.get("payload", {}))
@@ -331,9 +327,7 @@ async def test_simple_routing():
         user_request = "optimize my database queries"
         print(f"\nRequesting routing: '{user_request}'")
 
-        response = await client.request_routing(
-            user_request=user_request, max_recommendations=1
-        )
+        response = await client.request_routing(user_request=user_request, max_recommendations=1)
 
         elapsed_ms = int((time.time() - start_time) * 1000)
 
@@ -343,9 +337,7 @@ async def test_simple_routing():
 
         # Validate response structure
         assert "recommendations" in response, "Expected 'recommendations' in response"
-        assert (
-            len(response["recommendations"]) > 0
-        ), "Expected at least one recommendation"
+        assert len(response["recommendations"]) > 0, "Expected at least one recommendation"
         assert "routing_metadata" in response, "Expected 'routing_metadata' in response"
 
         recommendation = response["recommendations"][0]
@@ -393,9 +385,7 @@ async def test_multiple_recommendations():
         print(f"\nRequesting routing: '{user_request}'")
         print("   Options: max_recommendations=3")
 
-        response = await client.request_routing(
-            user_request=user_request, max_recommendations=3
-        )
+        response = await client.request_routing(user_request=user_request, max_recommendations=3)
 
         elapsed_ms = int((time.time() - start_time) * 1000)
 
@@ -415,9 +405,9 @@ async def test_multiple_recommendations():
 
         # Verify confidence scores are sorted descending
         confidences = [rec["confidence"]["total"] for rec in recommendations]
-        assert confidences == sorted(
-            confidences, reverse=True
-        ), "Expected recommendations sorted by confidence descending"
+        assert confidences == sorted(confidences, reverse=True), (
+            "Expected recommendations sorted by confidence descending"
+        )
 
         print("\n✅ Validation passed (sorted by confidence)")
 
@@ -453,9 +443,7 @@ async def test_timeout_handling():
         # Try routing request
         print("\nRequesting routing with short timeout...")
 
-        _ = await client.request_routing(
-            user_request="test timeout", max_recommendations=1
-        )
+        _ = await client.request_routing(user_request="test timeout", max_recommendations=1)
 
         # If we get here, service is running
         print("⏭️  Test skipped: service is running (no timeout occurred)")

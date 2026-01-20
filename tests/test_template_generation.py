@@ -232,8 +232,7 @@ class TemplateGenerationTester:
                     "yaml_files": len(yaml_files),
                     "total_files": len(generated_files) + len(yaml_files),
                     "file_list": [
-                        str(f.relative_to(output_path))
-                        for f in generated_files + yaml_files
+                        str(f.relative_to(output_path)) for f in generated_files + yaml_files
                     ],
                 },
             )
@@ -423,9 +422,7 @@ class TemplateGenerationTester:
 
                 # Check for old imports
                 if "omnibase_core.core." in content:
-                    issues.append(
-                        f"{py_file.name}: Uses old import path 'omnibase_core.core.*'"
-                    )
+                    issues.append(f"{py_file.name}: Uses old import path 'omnibase_core.core.*'")
 
                 # Check for Pydantic v1 patterns
                 if ".dict(" in content and "model_dump" not in content:
@@ -435,9 +432,7 @@ class TemplateGenerationTester:
 
                 # Check for OnexError (should be ModelOnexError)
                 if "OnexError" in content and "ModelOnexError" not in content:
-                    issues.append(
-                        f"{py_file.name}: Uses 'OnexError' instead of 'ModelOnexError'"
-                    )
+                    issues.append(f"{py_file.name}: Uses 'OnexError' instead of 'ModelOnexError'")
 
             success = len(issues) == 0
 
