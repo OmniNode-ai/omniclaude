@@ -283,6 +283,7 @@ jobs:
           # that require full infrastructure (POSTGRES_HOST, etc.) which isn't available in CI
           # TODO: Migrate legacy tests or archive them with old directories
           if [ -d "tests/hooks" ] && [ -n "$(find tests/hooks/ -name 'test_*.py' -type f 2>/dev/null)" ]; then
+            # Run tests - exit code 5 means no tests collected (valid for some splits)
             timeout 600 uv run pytest -o addopts="" \
               tests/hooks/ \
               -v \
@@ -291,12 +292,17 @@ jobs:
               --group ${{ matrix.split }} \
               --cov=src/omniclaude \
               --cov-report=term-missing \
-              --junitxml=junit-unit-split-${{ matrix.split }}.xml || {
-                echo "::error::Unit tests exceeded 10 minute timeout or failed"
-                exit 1
-              }
+              --junitxml=junit-unit-split-${{ matrix.split }}.xml
+            EXIT_CODE=$?
 
-            # Rename coverage file to be unique for this split
+            # Exit code 5 = no tests collected (expected for some splits with pytest-split)
+            # Exit code 0 = tests passed
+            if [ $EXIT_CODE -ne 0 ] && [ $EXIT_CODE -ne 5 ]; then
+              echo "::error::Unit tests failed with exit code $EXIT_CODE"
+              exit 1
+            fi
+
+            # Create coverage file for this split (may be empty if no tests ran)
             mv .coverage .coverage.${{ matrix.split }} 2>/dev/null || touch .coverage.${{ matrix.split }}
           else
             echo "No test files found in tests/hooks/ - creating empty results"
