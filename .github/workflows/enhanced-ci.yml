@@ -57,13 +57,12 @@ jobs:
             uv sync --group dev 2>&1 | grep -v "omnibase" || true
           }
 
-      - name: Run Black (code formatting check)
+      - name: Run Ruff format (code formatting check)
         run: |
-          echo "::group::Black Formatting Check"
+          echo "::group::Ruff Format Check"
           # Explicitly scan only project source directories to avoid .venv
-          uv run black --check --diff \
-            --extend-exclude="/(\.venv|\.git|__pycache__|\.pytest_cache|\.mypy_cache|dist|build|_archive)/" \
-            src/ tests/
+          # Using ruff format for consistency with pre-commit config
+          uv run ruff format --check src/ tests/
           echo "::endgroup::"
 
       - name: Run Ruff (linting - strict)
