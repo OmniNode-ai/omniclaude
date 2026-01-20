@@ -24,25 +24,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
-
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: 1.8.3
-          virtualenvs-create: true
-          virtualenvs-in-project: true
 
       - name: Load cached venv
-        id: cached-poetry-dependencies
+        id: cached-uv-dependencies
         uses: actions/cache@v4
         with:
           path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
 
       - name: Configure Git authentication for private repositories
         run: |
@@ -50,29 +47,20 @@ jobs:
         continue-on-error: true
 
       - name: Install dependencies
-        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
         run: |
-          poetry install --no-interaction --no-root --with dev || {
-            echo "⚠️  Warning: Some dependencies failed - continuing with available packages"
+          uv sync --frozen --group dev || {
+            echo "Warning: Some dependencies failed - continuing with available packages"
             true
           }
 
-      - name: Install project packages
+      - name: Run Ruff format check
         run: |
-          echo "📦 Installing project packages (agents, cli, claude, config, services)..."
-          poetry install --no-interaction --with dev
-          echo "✅ Project packages installed"
-
-      - name: Run Black (code formatting check)
-        run: |
-          echo "::group::Black Formatting Check"
-          echo "🎨 Running Black formatter check..."
-          echo "📁 Scanning directories: agents/ claude/ cli/ scripts/ tests/"
-          poetry run black --check --diff \
-            --extend-exclude="/(\.venv|\.git|__pycache__|\.pytest_cache|\.mypy_cache|dist|build|agents\/templates|agents\/parallel_execution\/templates)/" \
-            agents/ claude/ cli/ scripts/ tests/ && echo "✅ Black check passed" || {
-              echo "❌ Black check failed - files need formatting"
-              echo "💡 Run: poetry run black agents/ claude/ cli/ scripts/ tests/"
+          echo "::group::Ruff Format Check"
+          echo "Running Ruff formatter check..."
+          echo "Scanning directories: src/ tests/"
+          uv run ruff format --check src/ tests/ && echo "Ruff format check passed" || {
+              echo "Ruff format check failed - files need formatting"
+              echo "Run: uv run ruff format src/ tests/"
               exit 1
             }
           echo "::endgroup::"
@@ -80,11 +68,11 @@ jobs:
       - name: Run Ruff (linting)
         run: |
           echo "::group::Ruff Linting"
-          echo "🔍 Running Ruff linter..."
-          echo "📁 Scanning directories: agents/ claude/ cli/ scripts/ tests/"
-          poetry run ruff check agents/ claude/ cli/ scripts/ tests/ && echo "✅ Ruff check passed" || {
-              echo "❌ Ruff check failed - linting errors found"
-              echo "💡 Run: poetry run ruff check --fix agents/ claude/ cli/ scripts/ tests/"
+          echo "Running Ruff linter..."
+          echo "Scanning directories: src/ tests/"
+          uv run ruff check src/ tests/ && echo "Ruff check passed" || {
+              echo "Ruff check failed - linting errors found"
+              echo "Run: uv run ruff check --fix src/ tests/"
               exit 1
             }
           echo "::endgroup::"
@@ -92,23 +80,20 @@ jobs:
       - name: Run type checking (mypy)
         run: |
           echo "::group::MyPy Type Checking"
-          echo "🔍 Running MyPy type checker..."
-          poetry run pip install mypy types-PyYAML types-aiofiles types-redis
+          echo "Running MyPy type checker..."
           # Use project's mypy.ini config which has proper exclusions
           # Phase 1: Non-blocking check (report errors but don't fail CI)
           # Phase 2: Fix errors and make blocking (TODO: remove || true)
-          poetry run mypy agents/ claude/ --config-file mypy.ini \
-            --exclude "agents/tests/" --exclude "claude/tests/" \
-            --exclude "agents/examples/" 2>&1 | tee mypy-output.txt || true
+          uv run mypy src/ --config-file mypy.ini 2>&1 | tee mypy-output.txt || true
 
           ERROR_COUNT=$(grep -c "error:" mypy-output.txt 2>/dev/null || echo "0")
           echo ""
-          echo "📊 MyPy Summary: $ERROR_COUNT type errors found"
+          echo "MyPy Summary: $ERROR_COUNT type errors found"
           if [ "$ERROR_COUNT" -eq "0" ]; then
-            echo "✅ MyPy check passed - no type errors!"
+            echo "MyPy check passed - no type errors!"
           else
-            echo "⚠️  MyPy found $ERROR_COUNT type errors (non-blocking for now)"
-            echo "💡 Run: poetry run mypy agents/ claude/ --config-file mypy.ini"
+            echo "MyPy found $ERROR_COUNT type errors (non-blocking for now)"
+            echo "Run: uv run mypy src/ --config-file mypy.ini"
             # TODO: Uncomment to make blocking once errors are fixed
             # exit 1
           fi
@@ -124,15 +109,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: 1.8.3
 
       - name: Configure Git authentication for private repositories
         run: |
@@ -140,11 +125,9 @@ jobs:
         continue-on-error: true
 
       - name: Export requirements
-        run: poetry export -f requirements.txt --output requirements.txt --without-hashes
+        run: uv pip compile pyproject.toml -o requirements.txt
 
-      # Temporarily disabled - 2 vulnerabilities blocked by dependency constraints
-      # - starlette CVE-2025-54121 (blocked by fastapi <0.116.0)
-      # - pypdf CVE-2025-55197 (blocked by llama-index via omnibase_core)
+      # Temporarily disabled - vulnerabilities blocked by dependency constraints
       # Will be fixed in separate PRs when dependencies allow
       # - name: Run Safety (dependency vulnerability check)
       #   run: |
@@ -155,36 +138,24 @@ jobs:
         run: |
           echo "::group::Bandit Security Scan"
           pip install bandit
-          echo "🔒 Running Bandit security scanner..."
-          echo "📁 Scanning: agents/ claude/"
-          echo "⏭️  Excluding: templates, tests, skills, .venv, __pycache__"
-          echo "📊 Severity/Confidence: MEDIUM+ only (filters out Low severity)"
-          echo "🎯 Configuration: .bandit file + pyproject.toml (13 skip codes)"
-          echo ""
-          echo "Skip codes (false positives):"
-          echo "  - B608: SQL injection (parameterized queries are safe)"
-          echo "  - B105/B106/B107: Hardcoded passwords (variable/param names only)"
-          echo "  - B110: Try-except-pass (acceptable in specific contexts)"
-          echo "  - B311: Random (not used for cryptographic purposes)"
-          echo "  - B404/B603/B607: Subprocess (validated inputs)"
+          echo "Running Bandit security scanner..."
+          echo "Scanning: src/"
+          echo "Severity/Confidence: MEDIUM+ only (filters out Low severity)"
           echo ""
 
           # Generate JSON report (don't fail on issues - just collect data)
-          bandit -r agents/ claude/ \
-            --exclude agents/templates/,agents/parallel_execution/templates/,agents/tests/,claude/tests/,.venv/,__pycache__/,skills/ \
-            --ini .bandit \
+          bandit -r src/ \
+            --exclude .venv/,__pycache__/ \
             --confidence-level medium --severity-level medium \
             -f json -o bandit-report.json || true
 
           # Run with text output for CI logs (this determines pass/fail)
-          bandit -r agents/ claude/ \
-            --exclude agents/templates/,agents/parallel_execution/templates/,agents/tests/,claude/tests/,.venv/,__pycache__/,skills/ \
-            --ini .bandit \
+          bandit -r src/ \
+            --exclude .venv/,__pycache__/ \
             --confidence-level medium --severity-level medium \
-            -f txt && echo "✅ Bandit scan passed" || {
-              echo "❌ Bandit found security issues (Medium+ severity, Medium+ confidence)"
-              echo "📋 Check bandit-report.json artifact for details"
-              echo "💡 If false positive, add skip code to .bandit and pyproject.toml [tool.bandit]"
+            -f txt && echo "Bandit scan passed" || {
+              echo "Bandit found security issues (Medium+ severity, Medium+ confidence)"
+              echo "Check bandit-report.json artifact for details"
               exit 1
             }
           echo "::endgroup::"
@@ -238,24 +209,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: 1.8.3
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-
       - name: Load cached venv
-        id: cached-poetry-dependencies
+        id: cached-uv-dependencies
         uses: actions/cache@v4
         with:
           path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
 
       - name: Configure Git authentication for private repositories
         run: |
@@ -263,22 +232,15 @@ jobs:
         continue-on-error: true
 
       - name: Install dependencies
-        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
         run: |
-          poetry install --no-interaction --no-root --with dev || {
-            echo "⚠️  Warning: Some dependencies failed - continuing with available packages"
+          uv sync --frozen --group dev || {
+            echo "Warning: Some dependencies failed - continuing with available packages"
             true
           }
 
-      - name: Install project packages
-        run: |
-          echo "📦 Installing project packages (agents, cli, claude, config, services)..."
-          poetry install --no-interaction --with dev
-          echo "✅ Project packages installed"
-
       - name: Install pytest-split for parallel test execution
         run: |
-          poetry run pip install pytest-split
+          uv pip install pytest-split pytest-cov
 
       - name: Run tests with coverage
         env:
@@ -292,35 +254,35 @@ jobs:
           TEST_PG_DSN: postgresql://test:test@localhost:5432/test_db
         run: |
           echo "::group::Running Test Group ${{ matrix.group }}/5"
-          echo "🧪 Test Configuration:"
+          echo "Test Configuration:"
           echo "   - Split: 5 groups"
           echo "   - Current group: ${{ matrix.group }}"
           echo "   - Markers: not integration"
-          echo "   - Coverage: agents/"
+          echo "   - Coverage: src/omniclaude/"
           echo ""
-          echo "🚀 Starting test execution..."
+          echo "Starting test execution..."
 
           # Generate unique coverage file per group to avoid overwrites
-          poetry run pytest -o addopts="" tests/ \
+          uv run pytest -o addopts="" tests/ \
             --splits 5 \
             --group ${{ matrix.group }} \
             -v -m "not integration" \
-            --cov=agents \
+            --cov=src/omniclaude \
             --cov-report=term-missing && TEST_EXIT=0 || TEST_EXIT=$?
 
           echo ""
           if [ $TEST_EXIT -eq 0 ]; then
-            echo "✅ Tests passed for group ${{ matrix.group }}"
+            echo "Tests passed for group ${{ matrix.group }}"
           else
-            echo "❌ Tests failed for group ${{ matrix.group }} (exit code: $TEST_EXIT)"
+            echo "Tests failed for group ${{ matrix.group }} (exit code: $TEST_EXIT)"
           fi
 
           # Rename coverage file to be unique for this group
           if [ -f .coverage ]; then
             mv .coverage .coverage.${{ matrix.group }}
-            echo "📊 Coverage file saved as .coverage.${{ matrix.group }}"
+            echo "Coverage file saved as .coverage.${{ matrix.group }}"
           else
-            echo "⚠️ No coverage file generated"
+            echo "No coverage file generated"
           fi
 
           echo "::endgroup::"
@@ -363,40 +325,40 @@ jobs:
       - name: Combine coverage files
         run: |
           echo "::group::Combining Coverage Files"
-          echo "📊 Looking for coverage files..."
+          echo "Looking for coverage files..."
 
           # Check if coverage files directory exists
           if [ ! -d "coverage-files" ]; then
-            echo "⚠️ No coverage-files directory found"
+            echo "No coverage-files directory found"
             echo "This likely means no test jobs completed successfully"
             exit 0
           fi
 
           # List what we found
-          echo "📁 Contents of coverage-files/:"
+          echo "Contents of coverage-files/:"
           ls -laR coverage-files/ || echo "Directory empty or not accessible"
 
           # Find and move coverage files
           COVERAGE_COUNT=$(find coverage-files/ -name '.coverage.*' 2>/dev/null | wc -l)
-          echo "📈 Found $COVERAGE_COUNT coverage files"
+          echo "Found $COVERAGE_COUNT coverage files"
 
           if [ "$COVERAGE_COUNT" -eq 0 ]; then
-            echo "⚠️ No coverage files to combine"
+            echo "No coverage files to combine"
             echo "::endgroup::"
             exit 0
           fi
 
           # Move all coverage files to current directory
           find coverage-files/ -name '.coverage.*' -exec mv {} . \;
-          echo "📋 Coverage files in current directory:"
+          echo "Coverage files in current directory:"
           ls -la .coverage.* 2>/dev/null || echo "No files moved"
 
           # Combine all coverage files
-          echo "🔄 Combining coverage files..."
+          echo "Combining coverage files..."
           coverage combine .coverage.*
 
           # Generate XML and term reports
-          echo "📄 Generating coverage reports..."
+          echo "Generating coverage reports..."
           coverage xml -o coverage.xml
           coverage report
 

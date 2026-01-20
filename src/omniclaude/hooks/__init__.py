@@ -49,6 +49,7 @@ from omniclaude.hooks.contracts import (
 )
 from omniclaude.hooks.schemas import (
     EventType,
+    HookEventType,
     ModelHookEventEnvelope,
     ModelHookPayload,
     ModelHookPromptSubmittedPayload,
@@ -59,6 +60,8 @@ from omniclaude.hooks.schemas import (
 from omniclaude.hooks.topics import TopicBase, build_topic
 
 __all__ = [
+    # Event type enum
+    "HookEventType",
     # Payload models (ONEX-compliant)
     "ModelHookSessionStartedPayload",
     "ModelHookSessionEndedPayload",
@@ -67,7 +70,7 @@ __all__ = [
     # Envelope and types
     "ModelHookEventEnvelope",
     "ModelHookPayload",
-    "EventType",
+    "EventType",  # Deprecated, kept for backwards compatibility
     # Topics
     "TopicBase",
     "build_topic",

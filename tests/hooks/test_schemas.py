@@ -24,6 +24,7 @@ import pytest
 from pydantic import ValidationError
 
 from omniclaude.hooks.schemas import (
+    HookEventType,
     ModelHookEventEnvelope,
     ModelHookPromptSubmittedPayload,
     ModelHookSessionEndedPayload,
@@ -770,10 +771,15 @@ class TestTopics:
         topic = build_topic("prod", TopicBase.TOOL_EXECUTED)
         assert topic == "prod.omniclaude.tool.executed.v1"
 
-    def test_build_topic_empty_prefix(self) -> None:
-        """Build topic with empty prefix."""
-        topic = build_topic("", TopicBase.SESSION_STARTED)
-        assert topic == ".omniclaude.session.started.v1"
+    def test_build_topic_empty_prefix_raises(self) -> None:
+        """Empty prefix raises ValueError."""
+        with pytest.raises(ValueError, match="prefix must be a non-empty string"):
+            build_topic("", TopicBase.SESSION_STARTED)
+
+    def test_build_topic_whitespace_prefix_raises(self) -> None:
+        """Whitespace-only prefix raises ValueError."""
+        with pytest.raises(ValueError, match="prefix must be a non-empty string"):
+            build_topic("   ", TopicBase.SESSION_STARTED)
 
 
 # =============================================================================
@@ -956,3 +962,230 @@ class TestEntityIdAsPartitionKey:
         assert event1.session_id == event2.session_id
         assert event1.correlation_id == event2.correlation_id
         assert event1.entity_id != event2.entity_id
+
+
+# =============================================================================
+# HookEventType Enum Tests
+# =============================================================================
+
+
+class TestHookEventType:
+    """Tests for HookEventType StrEnum."""
+
+    def test_hook_event_type_values(self) -> None:
+        """HookEventType has correct string values."""
+        assert HookEventType.SESSION_STARTED == "hook.session.started"
+        assert HookEventType.SESSION_ENDED == "hook.session.ended"
+        assert HookEventType.PROMPT_SUBMITTED == "hook.prompt.submitted"
+        assert HookEventType.TOOL_EXECUTED == "hook.tool.executed"
+
+    def test_hook_event_type_is_str(self) -> None:
+        """HookEventType values are strings (StrEnum)."""
+        assert isinstance(HookEventType.SESSION_STARTED, str)
+        assert isinstance(HookEventType.SESSION_ENDED, str)
+        assert isinstance(HookEventType.PROMPT_SUBMITTED, str)
+        assert isinstance(HookEventType.TOOL_EXECUTED, str)
+
+    def test_hook_event_type_string_comparison(self) -> None:
+        """HookEventType can be compared to strings."""
+        assert HookEventType.SESSION_STARTED == "hook.session.started"
+        assert HookEventType.SESSION_ENDED == "hook.session.ended"
+
+    def test_hook_event_type_in_envelope(self) -> None:
+        """HookEventType can be used in envelope event_type field."""
+        payload = ModelHookSessionStartedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            working_directory="/tmp",
+            hook_source="startup",
+        )
+        envelope = ModelHookEventEnvelope(
+            event_type=HookEventType.SESSION_STARTED,
+            payload=payload,
+        )
+        assert envelope.event_type == HookEventType.SESSION_STARTED
+        assert envelope.event_type == "hook.session.started"
+
+
+# =============================================================================
+# Event Type Payload Validation Tests
+# =============================================================================
+
+
+class TestEventTypePayloadValidation:
+    """Tests for model_validator that ensures event_type matches payload type."""
+
+    def test_mismatched_event_type_and_payload_raises(self) -> None:
+        """Mismatched event_type and payload raises ValidationError."""
+        # Create a session ended payload
+        ended_payload = ModelHookSessionEndedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            reason="clear",
+        )
+        # Try to create envelope with wrong event_type
+        with pytest.raises(ValidationError) as exc_info:
+            ModelHookEventEnvelope(
+                event_type=HookEventType.SESSION_STARTED,  # Wrong type!
+                payload=ended_payload,
+            )
+        assert "requires payload type ModelHookSessionStartedPayload" in str(exc_info.value)
+
+    def test_all_valid_combinations(self) -> None:
+        """All valid event_type + payload combinations work."""
+        valid_combinations = [
+            (
+                HookEventType.SESSION_STARTED,
+                ModelHookSessionStartedPayload(
+                    entity_id=make_entity_id(),
+                    session_id="test",
+                    correlation_id=make_correlation_id(),
+                    causation_id=make_causation_id(),
+                    emitted_at=make_timestamp(),
+                    working_directory="/tmp",
+                    hook_source="startup",
+                ),
+            ),
+            (
+                HookEventType.SESSION_ENDED,
+                ModelHookSessionEndedPayload(
+                    entity_id=make_entity_id(),
+                    session_id="test",
+                    correlation_id=make_correlation_id(),
+                    causation_id=make_causation_id(),
+                    emitted_at=make_timestamp(),
+                    reason="clear",
+                ),
+            ),
+            (
+                HookEventType.PROMPT_SUBMITTED,
+                ModelHookPromptSubmittedPayload(
+                    entity_id=make_entity_id(),
+                    session_id="test",
+                    correlation_id=make_correlation_id(),
+                    causation_id=make_causation_id(),
+                    emitted_at=make_timestamp(),
+                    prompt_id=uuid4(),
+                    prompt_preview="test",
+                    prompt_length=4,
+                ),
+            ),
+            (
+                HookEventType.TOOL_EXECUTED,
+                ModelHookToolExecutedPayload(
+                    entity_id=make_entity_id(),
+                    session_id="test",
+                    correlation_id=make_correlation_id(),
+                    causation_id=make_causation_id(),
+                    emitted_at=make_timestamp(),
+                    tool_execution_id=uuid4(),
+                    tool_name="Read",
+                ),
+            ),
+        ]
+        for event_type, payload in valid_combinations:
+            envelope = ModelHookEventEnvelope(
+                event_type=event_type,
+                payload=payload,
+            )
+            assert envelope.event_type == event_type
+
+
+# =============================================================================
+# Duration Bounds Tests
+# =============================================================================
+
+
+class TestDurationBounds:
+    """Tests for duration field upper bounds."""
+
+    def test_duration_seconds_max_30_days(self) -> None:
+        """duration_seconds has upper bound of 30 days (2,592,000 seconds)."""
+        # Valid: exactly 30 days
+        max_duration = 86400 * 30  # 2,592,000 seconds
+        event = ModelHookSessionEndedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            reason="clear",
+            duration_seconds=max_duration,
+        )
+        assert event.duration_seconds == max_duration
+
+        # Invalid: over 30 days
+        with pytest.raises(ValidationError) as exc_info:
+            ModelHookSessionEndedPayload(
+                entity_id=make_entity_id(),
+                session_id="test",
+                correlation_id=make_correlation_id(),
+                causation_id=make_causation_id(),
+                emitted_at=make_timestamp(),
+                reason="clear",
+                duration_seconds=max_duration + 1,
+            )
+        assert "duration_seconds" in str(exc_info.value)
+
+    def test_duration_ms_max_1_hour(self) -> None:
+        """duration_ms has upper bound of 1 hour (3,600,000 milliseconds)."""
+        # Valid: exactly 1 hour
+        max_duration = 3600000  # 1 hour in milliseconds
+        event = ModelHookToolExecutedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            tool_execution_id=uuid4(),
+            tool_name="Bash",
+            duration_ms=max_duration,
+        )
+        assert event.duration_ms == max_duration
+
+        # Invalid: over 1 hour
+        with pytest.raises(ValidationError) as exc_info:
+            ModelHookToolExecutedPayload(
+                entity_id=make_entity_id(),
+                session_id="test",
+                correlation_id=make_correlation_id(),
+                causation_id=make_causation_id(),
+                emitted_at=make_timestamp(),
+                tool_execution_id=uuid4(),
+                tool_name="Bash",
+                duration_ms=max_duration + 1,
+            )
+        assert "duration_ms" in str(exc_info.value)
+
+    def test_duration_seconds_non_negative(self) -> None:
+        """duration_seconds must be non-negative."""
+        with pytest.raises(ValidationError):
+            ModelHookSessionEndedPayload(
+                entity_id=make_entity_id(),
+                session_id="test",
+                correlation_id=make_correlation_id(),
+                causation_id=make_causation_id(),
+                emitted_at=make_timestamp(),
+                reason="clear",
+                duration_seconds=-1.0,
+            )
+
+    def test_duration_ms_non_negative(self) -> None:
+        """duration_ms must be non-negative."""
+        with pytest.raises(ValidationError):
+            ModelHookToolExecutedPayload(
+                entity_id=make_entity_id(),
+                session_id="test",
+                correlation_id=make_correlation_id(),
+                causation_id=make_causation_id(),
+                emitted_at=make_timestamp(),
+                tool_execution_id=uuid4(),
+                tool_name="Bash",
+                duration_ms=-1,
+            )

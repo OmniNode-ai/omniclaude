@@ -11,7 +11,7 @@ Usage:
 """
 
 from datetime import UTC, datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 from uuid import uuid4
 
 
@@ -26,27 +26,27 @@ class MockDatabaseProtocol:
     def __init__(self):
         """Initialize in-memory storage."""
         # STF storage
-        self.stfs: Dict[str, Dict[str, Any]] = {}  # stf_id -> stf_data
-        self.stf_by_hash: Dict[str, str] = {}  # stf_hash -> stf_id
+        self.stfs: dict[str, dict[str, Any]] = {}  # stf_id -> stf_data
+        self.stf_by_hash: dict[str, str] = {}  # stf_hash -> stf_id
 
         # Model pricing catalog
-        self.models: Dict[str, Dict[str, Any]] = {}  # catalog_id -> model_data
+        self.models: dict[str, dict[str, Any]] = {}  # catalog_id -> model_data
 
         # Debug execution attempts
-        self.attempts: Dict[str, Dict[str, Any]] = {}  # attempt_id -> attempt_data
+        self.attempts: dict[str, dict[str, Any]] = {}  # attempt_id -> attempt_data
 
         # Error-success mappings
-        self.mappings: Dict[str, Dict[str, Any]] = {}  # mapping_id -> mapping_data
+        self.mappings: dict[str, dict[str, Any]] = {}  # mapping_id -> mapping_data
 
         # Golden states
-        self.golden_states: Dict[str, Dict[str, Any]] = (
+        self.golden_states: dict[str, dict[str, Any]] = (
             {}
         )  # golden_state_id -> state_data
 
         # Query execution log (for debugging)
-        self.query_log: List[Dict[str, Any]] = []
+        self.query_log: list[dict[str, Any]] = []
 
-    async def execute_query(self, query: str, params: Optional[Dict] = None) -> Any:
+    async def execute_query(self, query: str, params: dict | None = None) -> Any:
         """
         Execute a query (INSERT, UPDATE, DELETE).
 
@@ -94,9 +94,7 @@ class MockDatabaseProtocol:
         # Default: return success
         return {"success": True}
 
-    async def fetch_one(
-        self, query: str, params: Optional[Dict] = None
-    ) -> Optional[Dict]:
+    async def fetch_one(self, query: str, params: dict | None = None) -> dict | None:
         """
         Fetch single row.
 
@@ -188,7 +186,7 @@ class MockDatabaseProtocol:
 
         return None
 
-    async def fetch_all(self, query: str, params: Optional[Dict] = None) -> List[Dict]:
+    async def fetch_all(self, query: str, params: dict | None = None) -> list[dict]:
         """
         Fetch all rows.
 
@@ -318,7 +316,7 @@ class MockDatabaseProtocol:
 
         return []
 
-    async def _insert_stf(self, params: Optional[Dict]) -> Dict[str, Any]:
+    async def _insert_stf(self, params: dict | None) -> dict[str, Any]:
         """Handle STF insertion."""
         if not params:
             return {"success": False}
@@ -357,7 +355,7 @@ class MockDatabaseProtocol:
 
         return {"success": True, "stf_id": stf_id}
 
-    async def _update_stf_usage(self, params: Optional[Dict]) -> Dict[str, Any]:
+    async def _update_stf_usage(self, params: dict | None) -> dict[str, Any]:
         """Handle STF usage update."""
         if not params:
             return {"success": False}
@@ -373,8 +371,8 @@ class MockDatabaseProtocol:
         return {"success": True, "stf_id": stf_id}
 
     async def _update_stf_quality(
-        self, query: str, params: Optional[Dict]
-    ) -> Dict[str, Any]:
+        self, query: str, params: dict | None
+    ) -> dict[str, Any]:
         """Handle STF quality update."""
         if not params:
             return {"success": False}
@@ -405,7 +403,7 @@ class MockDatabaseProtocol:
 
         return {"success": True, "stf_id": stf_id}
 
-    async def _insert_model(self, params: Optional[Dict]) -> Dict[str, Any]:
+    async def _insert_model(self, params: dict | None) -> dict[str, Any]:
         """Handle model pricing insertion."""
         if not params:
             return {"success": False}
@@ -447,8 +445,8 @@ class MockDatabaseProtocol:
         return {"success": True, "catalog_id": catalog_id}
 
     async def _update_model_pricing(
-        self, query: str, params: Optional[Dict]
-    ) -> Dict[str, Any]:
+        self, query: str, params: dict | None
+    ) -> dict[str, Any]:
         """Handle model pricing update."""
         if not params:
             return {"success": False}
@@ -511,7 +509,7 @@ class MockDatabaseProtocol:
 
         return {"success": True, "catalog_id": catalog_id}
 
-    async def _mark_model_deprecated(self, params: Optional[Dict]) -> Dict[str, Any]:
+    async def _mark_model_deprecated(self, params: dict | None) -> dict[str, Any]:
         """Handle marking model as deprecated."""
         if not params:
             return {"success": False}
@@ -535,7 +533,7 @@ class MockDatabaseProtocol:
 
         return {"success": True, "catalog_id": last_catalog_id}
 
-    def _log_query(self, query: str, params: Optional[Dict]):
+    def _log_query(self, query: str, params: dict | None):
         """Log query execution for debugging."""
         self.query_log.append(
             {
@@ -555,7 +553,7 @@ class MockDatabaseProtocol:
         self.golden_states.clear()
         self.query_log.clear()
 
-    def get_stats(self) -> Dict[str, int]:
+    def get_stats(self) -> dict[str, int]:
         """Get storage statistics."""
         return {
             "stfs_count": len(self.stfs),

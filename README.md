@@ -33,7 +33,7 @@ OmniClaude provides:
 
 ```bash
 # Clone repository
-git clone https://github.com/your-org/omniclaude.git
+git clone https://github.com/OmniNode-ai/omniclaude.git
 cd omniclaude
 
 # Install with uv (recommended)
@@ -113,6 +113,36 @@ event = ModelSessionStarted(
 topic = build_topic("dev", TopicBase.SESSION_STARTED)
 # → "dev.omniclaude.session.started.v1"
 ```
+
+## Privacy Considerations
+
+The event schemas are designed with privacy in mind:
+
+- **Prompt Preview**: The `prompt_preview` field (max 200 chars) may contain sensitive data.
+  Configure appropriate access controls and data retention policies.
+- **No Full Content**: Full prompt content is never stored in events - only metadata.
+- **Session Data**: Working directory paths may reveal project names. Consider this
+  when configuring event consumers.
+
+**Recommendations**:
+- Use Kafka topic-level ACLs to restrict access to event streams
+- Configure appropriate data retention (e.g., 7-30 days for learning events)
+- Audit access to event consumers
+
+## Schema Evolution
+
+Event schemas follow semantic versioning for backwards compatibility:
+
+- **Minor versions** (1.x.0): New optional fields only, fully backwards compatible
+- **Major versions** (2.0.0): Breaking changes, new topic versions created
+
+**Current Schema Version**: 1.0.0
+
+**Evolution Strategy**:
+1. New optional fields are added with default values
+2. Consumers should ignore unknown fields (`extra="ignore"` in Pydantic)
+3. Breaking changes trigger new topic versions (e.g., `.v2` suffix)
+4. Old and new topics run in parallel during migration
 
 ## Dependencies
 

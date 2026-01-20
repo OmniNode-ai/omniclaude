@@ -55,6 +55,21 @@ ONEX-compatible event schemas for Claude Code hooks. These schemas define the ev
 | `ModelPromptSubmitted` | `prompt.submitted` | User submits a prompt |
 | `ModelToolExecuted` | `tool.executed` | Tool completes execution |
 
+### Schema Evolution Strategy
+
+Event schemas use semantic versioning:
+
+| Version Change | Impact | Example |
+|----------------|--------|---------|
+| Patch (1.0.x) | Bug fixes only | Field description updates |
+| Minor (1.x.0) | New optional fields | Adding `metadata` field with default |
+| Major (x.0.0) | Breaking changes | Renaming fields, removing fields |
+
+**Guidelines**:
+- Always add new fields as optional with sensible defaults
+- Never remove or rename fields in minor versions
+- Topic names include version (`.v1`) for parallel running
+
 ### Schema Design Principles
 
 1. **Frozen models** - All events are immutable (`frozen=True`)

@@ -29,11 +29,54 @@ See Also:
 from __future__ import annotations
 
 from datetime import datetime
+from enum import StrEnum
 from typing import Annotated, Literal
 from uuid import UUID
 
 from omnibase_infra.utils import ensure_timezone_aware
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+# =============================================================================
+# Event Types
+# =============================================================================
+
+
+class HookEventType(StrEnum):
+    """Event types for Claude Code hooks.
+
+    Using StrEnum for type safety and IDE autocompletion.
+    Values are used as Kafka message type identifiers.
+    """
+
+    SESSION_STARTED = "hook.session.started"
+    SESSION_ENDED = "hook.session.ended"
+    PROMPT_SUBMITTED = "hook.prompt.submitted"
+    TOOL_EXECUTED = "hook.tool.executed"
+
+
+# =============================================================================
+# Reusable Validators
+# =============================================================================
+
+
+def _validate_timezone_aware(v: datetime) -> datetime:
+    """Validate and ensure datetime is timezone-aware.
+
+    This is extracted as a reusable function to avoid code duplication
+    across all payload models that have emitted_at fields.
+
+    Args:
+        v: The datetime value to validate.
+
+    Returns:
+        The timezone-aware datetime.
+
+    Raises:
+        ValueError: If the datetime cannot be made timezone-aware.
+    """
+    result: datetime = ensure_timezone_aware(v)
+    return result
+
 
 # =============================================================================
 # Session Events
@@ -117,7 +160,7 @@ class ModelHookSessionStartedPayload(BaseModel):
     @classmethod
     def validate_emitted_at_timezone_aware(cls, v: datetime) -> datetime:
         """Validate that emitted_at is timezone-aware."""
-        return ensure_timezone_aware(v)
+        return _validate_timezone_aware(v)
 
     # Session-specific fields
     working_directory: str = Field(
@@ -203,7 +246,7 @@ class ModelHookSessionEndedPayload(BaseModel):
     @classmethod
     def validate_emitted_at_timezone_aware(cls, v: datetime) -> datetime:
         """Validate that emitted_at is timezone-aware."""
-        return ensure_timezone_aware(v)
+        return _validate_timezone_aware(v)
 
     # Session end-specific fields
     reason: Literal["clear", "logout", "prompt_input_exit", "other"] = Field(
@@ -213,7 +256,8 @@ class ModelHookSessionEndedPayload(BaseModel):
     duration_seconds: float | None = Field(
         default=None,
         ge=0.0,
-        description="Total session duration in seconds if available",
+        le=86400 * 30,  # Max 30 days (2,592,000 seconds)
+        description="Total session duration in seconds if available (max 30 days)",
     )
     tools_used_count: int = Field(
         default=0,
@@ -299,7 +343,7 @@ class ModelHookPromptSubmittedPayload(BaseModel):
     @classmethod
     def validate_emitted_at_timezone_aware(cls, v: datetime) -> datetime:
         """Validate that emitted_at is timezone-aware."""
-        return ensure_timezone_aware(v)
+        return _validate_timezone_aware(v)
 
     # Prompt-specific fields
     prompt_id: UUID = Field(
@@ -309,7 +353,10 @@ class ModelHookPromptSubmittedPayload(BaseModel):
     prompt_preview: str = Field(
         ...,
         max_length=200,
-        description="First N characters of the prompt (privacy-safe preview)",
+        description=(
+            "First N characters of the prompt. WARNING: May contain sensitive data. "
+            "Ensure appropriate access controls and data retention policies."
+        ),
     )
     prompt_length: int = Field(
         ...,
@@ -400,7 +447,7 @@ class ModelHookToolExecutedPayload(BaseModel):
     @classmethod
     def validate_emitted_at_timezone_aware(cls, v: datetime) -> datetime:
         """Validate that emitted_at is timezone-aware."""
-        return ensure_timezone_aware(v)
+        return _validate_timezone_aware(v)
 
     # Tool execution-specific fields
     tool_execution_id: UUID = Field(
@@ -419,7 +466,8 @@ class ModelHookToolExecutedPayload(BaseModel):
     duration_ms: int | None = Field(
         default=None,
         ge=0,
-        description="Tool execution duration in milliseconds",
+        le=3600000,  # Max 1 hour (3,600,000 milliseconds)
+        description="Tool execution duration in milliseconds (max 1 hour)",
     )
     summary: str | None = Field(
         default=None,
@@ -433,7 +481,7 @@ class ModelHookToolExecutedPayload(BaseModel):
 # =============================================================================
 
 
-# Event type literals for discriminator
+# Type alias for backwards compatibility (deprecated, use HookEventType instead)
 EventType = Literal[
     "hook.session.started",
     "hook.session.ended",
@@ -449,7 +497,7 @@ class ModelHookEventEnvelope(BaseModel):
     It includes the event type discriminator for polymorphic deserialization.
 
     Attributes:
-        event_type: Discriminator for the event type.
+        event_type: Discriminator for the event type (HookEventType enum).
         schema_version: Version of the event schema.
         source: Source service identifier.
         payload: The event payload (one of the hook payload types).
@@ -458,6 +506,11 @@ class ModelHookEventEnvelope(BaseModel):
         For direct Kafka publishing, you may serialize just the payload
         and include event_type in Kafka headers. This envelope is provided
         for scenarios requiring self-describing messages.
+
+    Validation:
+        The model_validator ensures that the event_type matches the payload type.
+        For example, HookEventType.SESSION_STARTED requires a
+        ModelHookSessionStartedPayload.
     """
 
     model_config = ConfigDict(
@@ -466,9 +519,9 @@ class ModelHookEventEnvelope(BaseModel):
         from_attributes=True,
     )
 
-    event_type: EventType = Field(
+    event_type: HookEventType = Field(
         ...,
-        description="Event type discriminator",
+        description="Event type discriminator (HookEventType enum)",
     )
     schema_version: Literal["1.0.0"] = Field(
         default="1.0.0",
@@ -492,6 +545,33 @@ class ModelHookEventEnvelope(BaseModel):
         description="The event payload",
     )
 
+    @model_validator(mode="after")
+    def validate_event_type_matches_payload(self) -> ModelHookEventEnvelope:
+        """Validate that event_type matches the payload type.
+
+        This ensures type safety by verifying that the discriminator value
+        (event_type) corresponds to the correct payload model.
+
+        Returns:
+            Self if validation passes.
+
+        Raises:
+            ValueError: If event_type does not match the payload type.
+        """
+        expected_types: dict[HookEventType, type] = {
+            HookEventType.SESSION_STARTED: ModelHookSessionStartedPayload,
+            HookEventType.SESSION_ENDED: ModelHookSessionEndedPayload,
+            HookEventType.PROMPT_SUBMITTED: ModelHookPromptSubmittedPayload,
+            HookEventType.TOOL_EXECUTED: ModelHookToolExecutedPayload,
+        }
+        expected = expected_types.get(self.event_type)
+        if expected and not isinstance(self.payload, expected):
+            raise ValueError(
+                f"event_type {self.event_type} requires payload type {expected.__name__}, "
+                f"got {type(self.payload).__name__}"
+            )
+        return self
+
 
 # Type alias for discriminated union of all hook payloads
 ModelHookPayload = Annotated[
@@ -504,6 +584,8 @@ ModelHookPayload = Annotated[
 
 
 __all__ = [
+    # Event type enum
+    "HookEventType",
     # Payload models
     "ModelHookSessionStartedPayload",
     "ModelHookSessionEndedPayload",
@@ -512,5 +594,5 @@ __all__ = [
     # Envelope and types
     "ModelHookEventEnvelope",
     "ModelHookPayload",
-    "EventType",
+    "EventType",  # Deprecated, kept for backwards compatibility
 ]

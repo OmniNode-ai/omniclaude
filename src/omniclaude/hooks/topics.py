@@ -28,5 +28,10 @@ def build_topic(prefix: str, base: str) -> str:
 
     Returns:
         Full topic name (e.g., "dev.omniclaude.session.started.v1")
+
+    Raises:
+        ValueError: If prefix is empty or contains only whitespace
     """
-    return f"{prefix}.{base}"
+    if not prefix or not prefix.strip():
+        raise ValueError("prefix must be a non-empty string")
+    return f"{prefix.strip()}.{base}"
