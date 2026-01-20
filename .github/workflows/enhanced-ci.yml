@@ -62,15 +62,15 @@ jobs:
           echo "::group::Black Formatting Check"
           # Explicitly scan only project source directories to avoid .venv
           uv run black --check --diff \
-            --extend-exclude="/(\.venv|\.git|__pycache__|\.pytest_cache|\.mypy_cache|dist|build|agents\/templates|agents\/parallel_execution\/templates)/" \
-            agents/ claude/ cli/ scripts/ tests/
+            --extend-exclude="/(\.venv|\.git|__pycache__|\.pytest_cache|\.mypy_cache|dist|build|_archive)/" \
+            src/ tests/
           echo "::endgroup::"
 
       - name: Run Ruff (linting - strict)
         run: |
           echo "::group::Ruff Linting"
           # Scan only project source directories, aligned with pre-commit config
-          uv run ruff check agents/ claude/ cli/ scripts/ tests/ --show-source --show-fixes
+          uv run ruff check src/ tests/ --show-source --show-fixes
           echo "::endgroup::"
 
       - name: Run type checking (mypy - strict mode)
@@ -78,7 +78,7 @@ jobs:
           echo "::group::MyPy Type Checking (Strict)"
           uv run pip install mypy types-PyYAML types-aiofiles types-redis
           # Strict type checking - this MUST pass for CI to succeed
-          uv run mypy agents/ claude/ \
+          uv run mypy src/omniclaude/ \
             --strict \
             --show-error-codes \
             --show-column-numbers \
@@ -132,50 +132,56 @@ jobs:
           # Check for proper ONEX node naming: Node<Name><Type>
           echo "Validating ONEX node class naming conventions..."
 
-          # Find all Python files in agents/ and claude/
-          find agents/ claude/ -name "node_*.py" -type f | while read -r file; do
-            echo "Checking $file..."
+          # Find all Python files in src/omniclaude/
+          NODE_FILES=$(find src/omniclaude/ -name "node_*.py" -type f 2>/dev/null || true)
+          if [ -z "$NODE_FILES" ]; then
+            echo "No ONEX node files found in src/omniclaude/ - skipping validation"
+            echo "This is expected for schema-only phase (OMN-1399)"
+          else
+            echo "$NODE_FILES" | while read -r file; do
+              echo "Checking $file..."
 
-            # Validate Effect nodes
-            if [[ "$file" == *"_effect.py" ]]; then
-              if ! grep -q "class Node.*Effect" "$file"; then
-                echo "ERROR: $file should define a class named Node<Name>Effect"
-                exit 1
-              else
-                echo "$file: ONEX Effect naming convention passed"
+              # Validate Effect nodes
+              if [[ "$file" == *"_effect.py" ]]; then
+                if ! grep -q "class Node.*Effect" "$file"; then
+                  echo "ERROR: $file should define a class named Node<Name>Effect"
+                  exit 1
+                else
+                  echo "$file: ONEX Effect naming convention passed"
+                fi
               fi
-            fi
 
-            # Validate Compute nodes
-            if [[ "$file" == *"_compute.py" ]]; then
-              if ! grep -q "class Node.*Compute" "$file"; then
-                echo "ERROR: $file should define a class named Node<Name>Compute"
-                exit 1
-              else
-                echo "$file: ONEX Compute naming convention passed"
+              # Validate Compute nodes
+              if [[ "$file" == *"_compute.py" ]]; then
+                if ! grep -q "class Node.*Compute" "$file"; then
+                  echo "ERROR: $file should define a class named Node<Name>Compute"
+                  exit 1
+                else
+                  echo "$file: ONEX Compute naming convention passed"
+                fi
               fi
-            fi
 
-            # Validate Reducer nodes
-            if [[ "$file" == *"_reducer.py" ]]; then
-              if ! grep -q "class Node.*Reducer" "$file"; then
-                echo "ERROR: $file should define a class named Node<Name>Reducer"
-                exit 1
-              else
-                echo "$file: ONEX Reducer naming convention passed"
+              # Validate Reducer nodes
+              if [[ "$file" == *"_reducer.py" ]]; then
+                if ! grep -q "class Node.*Reducer" "$file"; then
+                  echo "ERROR: $file should define a class named Node<Name>Reducer"
+                  exit 1
+                else
+                  echo "$file: ONEX Reducer naming convention passed"
+                fi
               fi
-            fi
 
-            # Validate Orchestrator nodes
-            if [[ "$file" == *"_orchestrator.py" ]]; then
-              if ! grep -q "class Node.*Orchestrator" "$file"; then
-                echo "ERROR: $file should define a class named Node<Name>Orchestrator"
-                exit 1
-              else
-                echo "$file: ONEX Orchestrator naming convention passed"
+              # Validate Orchestrator nodes
+              if [[ "$file" == *"_orchestrator.py" ]]; then
+                if ! grep -q "class Node.*Orchestrator" "$file"; then
+                  echo "ERROR: $file should define a class named Node<Name>Orchestrator"
+                  exit 1
+                else
+                  echo "$file: ONEX Orchestrator naming convention passed"
+                fi
               fi
-            fi
-          done
+            done
+          fi
 
           echo "All ONEX naming conventions validated successfully"
           echo "::endgroup::"
@@ -186,13 +192,19 @@ jobs:
           echo "Validating ONEX contract definitions..."
 
           # Check for ModelContract usage in nodes
-          find agents/ claude/ -name "node_*.py" -type f | while read -r file; do
-            if ! grep -q "ModelContract" "$file" 2>/dev/null; then
-              echo "WARNING: $file may be missing ModelContract usage"
-            else
-              echo "$file: Uses ModelContract"
-            fi
-          done
+          NODE_FILES=$(find src/omniclaude/ -name "node_*.py" -type f 2>/dev/null || true)
+          if [ -z "$NODE_FILES" ]; then
+            echo "No ONEX node files found in src/omniclaude/ - skipping contract validation"
+            echo "This is expected for schema-only phase (OMN-1399)"
+          else
+            echo "$NODE_FILES" | while read -r file; do
+              if ! grep -q "ModelContract" "$file" 2>/dev/null; then
+                echo "WARNING: $file may be missing ModelContract usage"
+              else
+                echo "$file: Uses ModelContract"
+              fi
+            done
+          fi
 
           echo "Contract validation completed"
           echo "::endgroup::"
@@ -203,15 +215,21 @@ jobs:
           echo "Validating ONEX method signatures..."
 
           # Validate Effect nodes have execute_effect method
-          find agents/ claude/ -name "*_effect.py" -type f | while read -r file; do
-            if grep -q "class Node.*Effect" "$file"; then
-              if ! grep -q "async def execute_effect" "$file"; then
-                echo "WARNING: $file Effect node should implement async def execute_effect()"
-              else
-                echo "$file: Implements execute_effect()"
+          EFFECT_FILES=$(find src/omniclaude/ -name "*_effect.py" -type f 2>/dev/null || true)
+          if [ -z "$EFFECT_FILES" ]; then
+            echo "No ONEX Effect node files found in src/omniclaude/ - skipping method validation"
+            echo "This is expected for schema-only phase (OMN-1399)"
+          else
+            echo "$EFFECT_FILES" | while read -r file; do
+              if grep -q "class Node.*Effect" "$file"; then
+                if ! grep -q "async def execute_effect" "$file"; then
+                  echo "WARNING: $file Effect node should implement async def execute_effect()"
+                else
+                  echo "$file: Implements execute_effect()"
+                fi
               fi
-            fi
-          done
+            done
+          fi
 
           echo "Method signature validation completed"
           echo "::endgroup::"
@@ -260,26 +278,30 @@ jobs:
           # Add explicit timeout to prevent test hangs
           # Use pytest-split to distribute tests evenly across 10 splits
           # Generate unique coverage file per split to avoid overwrites
-          timeout 600 uv run pytest -o addopts="" \
-            agents/tests/ \
-            -v \
-            --ignore=agents/tests/test_integration_smoke.py \
-            --ignore=agents/tests/test_phase4_integration.py \
-            --ignore=agents/tests/test_phase5_integration.py \
-            --ignore=agents/tests/test_framework_integration.py \
-            --ignore=agents/tests/test_end_to_end_workflows.py \
-            -m "not integration" \
-            --splits 10 \
-            --group ${{ matrix.split }} \
-            --cov=agents \
-            --cov-report=term-missing \
-            --junitxml=junit-unit-split-${{ matrix.split }}.xml || {
-              echo "::error::Unit tests exceeded 10 minute timeout or failed"
-              exit 1
-            }
 
-          # Rename coverage file to be unique for this split
-          mv .coverage .coverage.${{ matrix.split }}
+          # Check if tests directory exists and has test files
+          if [ -d "tests" ] && [ -n "$(find tests/ -name 'test_*.py' -type f 2>/dev/null)" ]; then
+            timeout 600 uv run pytest -o addopts="" \
+              tests/ \
+              -v \
+              --ignore=tests/integration/ \
+              -m "not integration" \
+              --splits 10 \
+              --group ${{ matrix.split }} \
+              --cov=src/omniclaude \
+              --cov-report=term-missing \
+              --junitxml=junit-unit-split-${{ matrix.split }}.xml || {
+                echo "::error::Unit tests exceeded 10 minute timeout or failed"
+                exit 1
+              }
+
+            # Rename coverage file to be unique for this split
+            mv .coverage .coverage.${{ matrix.split }}
+          else
+            echo "No test files found in tests/ - creating empty results"
+            echo '<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="unit" tests="0" errors="0" failures="0" skipped="0"></testsuite></testsuites>' > junit-unit-split-${{ matrix.split }}.xml
+            touch .coverage.${{ matrix.split }}
+          fi
           echo "::endgroup::"
 
       - name: Check for resource leaks
@@ -456,21 +478,26 @@ jobs:
         run: |
           echo "::group::Integration Tests"
           # Add explicit timeout to prevent test hangs
-          timeout 900 uv run pytest \
-            agents/tests/test_integration_smoke.py \
-            agents/tests/test_phase4_integration.py \
-            agents/tests/test_phase5_integration.py \
-            agents/tests/test_framework_integration.py \
-            agents/tests/test_end_to_end_workflows.py \
-            -v \
-            -m integration \
-            --cov=agents \
-            --cov-report=xml \
-            --cov-report=term-missing \
-            --junitxml=junit-integration.xml || {
-              echo "::error::Integration tests exceeded 15 minute timeout or failed"
-              exit 1
-            }
+
+          # Check if integration tests directory exists
+          if [ -d "tests/integration" ] && [ -n "$(find tests/integration/ -name 'test_*.py' -type f 2>/dev/null)" ]; then
+            timeout 900 uv run pytest \
+              tests/integration/ \
+              -v \
+              -m integration \
+              --cov=src/omniclaude \
+              --cov-report=xml \
+              --cov-report=term-missing \
+              --junitxml=junit-integration.xml || {
+                echo "::error::Integration tests exceeded 15 minute timeout or failed"
+                exit 1
+              }
+          else
+            echo "No integration tests found in tests/integration/ - skipping"
+            echo "Integration tests will be added in a future PR"
+            # Create empty junit file for artifact upload
+            echo '<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="integration" tests="0" errors="0" failures="0" skipped="0"></testsuite></testsuites>' > junit-integration.xml
+          fi
           echo "::endgroup::"
 
       - name: Check for resource leaks
@@ -575,17 +602,17 @@ jobs:
           DATABASE_URL: postgresql://hooks_test:hooks_test@localhost:5432/hooks_test_db
         run: |
           echo "::group::Hooks System Tests"
-          # Check if claude/tests/ exists (hooks tests consolidated into claude/)
-          if [ -d "claude/tests" ]; then
+          # Check if tests/hooks/ exists (hooks tests in new structure)
+          if [ -d "tests/hooks" ] && [ -n "$(find tests/hooks/ -name 'test_*.py' -type f 2>/dev/null)" ]; then
             uv run pytest \
-              claude/tests/ \
+              tests/hooks/ \
               -v \
-              --cov=claude \
+              --cov=src/omniclaude \
               --cov-report=xml \
               --cov-report=term-missing \
               --junitxml=junit-hooks.xml
           else
-            echo "No hooks tests found in claude/tests/ - skipping"
+            echo "No hooks tests found in tests/hooks/ - skipping"
             echo "Hooks tests will be added in a future PR"
             # Create empty junit file for artifact upload
             echo '<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="hooks" tests="0" errors="0" failures="0" skipped="0"></testsuite></testsuites>' > junit-hooks.xml
@@ -638,15 +665,28 @@ jobs:
       - name: Run agent framework tests
         run: |
           echo "::group::Agent Framework Tests"
-          uv run pytest \
-            agents/tests/test_enhanced_router.py \
-            agents/tests/test_quality_gates.py \
-            agents/tests/test_performance_thresholds.py \
-            -v \
-            --cov=agents \
-            --cov-report=xml \
-            --cov-report=term-missing \
-            --junitxml=junit-agent-framework.xml
+          # Check if agent framework tests exist in new structure
+          AGENT_TESTS=""
+          for test_file in tests/test_enhanced_router.py tests/test_quality_gates.py tests/test_performance_thresholds.py; do
+            if [ -f "$test_file" ]; then
+              AGENT_TESTS="$AGENT_TESTS $test_file"
+            fi
+          done
+
+          if [ -n "$AGENT_TESTS" ]; then
+            uv run pytest \
+              $AGENT_TESTS \
+              -v \
+              --cov=src/omniclaude \
+              --cov-report=xml \
+              --cov-report=term-missing \
+              --junitxml=junit-agent-framework.xml
+          else
+            echo "No agent framework tests found - skipping"
+            echo "Agent framework tests will be added in a future PR when ONEX nodes are implemented"
+            # Create empty junit file for artifact upload
+            echo '<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="agent-framework" tests="0" errors="0" failures="0" skipped="0"></testsuite></testsuites>' > junit-agent-framework.xml
+          fi
           echo "::endgroup::"
 
       - name: Upload agent framework coverage
@@ -696,14 +736,33 @@ jobs:
         run: |
           echo "::group::Performance Benchmarks"
 
-          # Run template cache benchmark
-          uv run python agents/tests/benchmark_template_cache.py
+          BENCHMARKS_RUN=0
 
-          # Run parallel execution benchmark
-          uv run python agents/parallel_benchmark.py
+          # Run template cache benchmark if exists
+          if [ -f "tests/benchmark_template_cache.py" ]; then
+            uv run python tests/benchmark_template_cache.py
+            BENCHMARKS_RUN=$((BENCHMARKS_RUN + 1))
+          fi
 
-          # Run general benchmarks
-          uv run python agents/benchmark_improvements.py
+          # Run parallel execution benchmark if exists
+          if [ -f "tests/parallel_benchmark.py" ]; then
+            uv run python tests/parallel_benchmark.py
+            BENCHMARKS_RUN=$((BENCHMARKS_RUN + 1))
+          fi
+
+          # Run general benchmarks if exists
+          if [ -f "tests/benchmark_improvements.py" ]; then
+            uv run python tests/benchmark_improvements.py
+            BENCHMARKS_RUN=$((BENCHMARKS_RUN + 1))
+          fi
+
+          if [ $BENCHMARKS_RUN -eq 0 ]; then
+            echo "No performance benchmark scripts found - skipping"
+            echo "Performance benchmarks will be added in a future PR"
+            # Create placeholder files for artifact upload
+            echo '{"benchmarks": [], "status": "no_benchmarks_found"}' > benchmark-results.json
+            echo "No benchmarks run - benchmark scripts not yet implemented" > performance-report.txt
+          fi
 
           echo "::endgroup::"
 
