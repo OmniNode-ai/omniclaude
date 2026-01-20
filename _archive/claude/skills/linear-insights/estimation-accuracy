@@ -1,0 +1,492 @@
+#!/bin/bash
+set -euo pipefail
+
+# ============================================================================
+# Estimation Accuracy Tracker
+# ============================================================================
+# Tracks historical estimation accuracy to improve future estimates.
+# Compares predicted ETAs with actual completion dates.
+# ============================================================================
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TRACKING_FILE="${SCRIPT_DIR}/.estimation_history.json"
+
+usage() {
+    cat << EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Track and analyze estimation accuracy over time.
+
+Options:
+  --project PROJECT     Filter by project (MVP, Beta, Production)
+  --record              Record a new estimate (requires --remaining, --velocity, --eta)
+  --remaining COUNT     Number of remaining issues (for --record)
+  --velocity RATE       Velocity rate (for --record)
+  --eta DATE            Predicted ETA in YYYY-MM-DD format (for --record)
+  --show                Show estimation history
+  --analyze             Analyze accuracy trends
+  --json                Output as JSON
+  -h, --help            Show this help
+
+Examples:
+  # Show accuracy history for all projects
+  $(basename "$0") --show
+
+  # Show history as JSON
+  $(basename "$0") --show --json
+
+  # Record a new estimate
+  $(basename "$0") --record --project MVP --remaining 43 --velocity 10.0 --eta 2025-12-18
+
+  # Analyze MVP estimation accuracy
+  $(basename "$0") --project MVP --analyze
+
+Metrics Tracked:
+  - Predicted completion date
+  - Actual completion date (when reached)
+  - Variance in days (predicted - actual)
+  - Optimism bias (do you consistently underestimate?)
+  - Accuracy trend (are estimates improving?)
+
+How It Works:
+  1. Record estimates with --record when you create velocity estimates
+  2. When milestone completes, update with actual date
+  3. Compare predictions vs actuals to measure accuracy
+  4. Identify patterns (optimism bias, improving accuracy)
+EOF
+    exit 0
+}
+
+# Initialize tracking file if it doesn't exist
+init_tracking_file() {
+    if [[ ! -f "$TRACKING_FILE" ]]; then
+        echo '{"estimates":[]}' > "$TRACKING_FILE"
+    fi
+}
+
+# Get current date in ISO format
+get_today() {
+    date +%Y-%m-%d
+}
+
+# Default values
+PROJECT=""
+RECORD=false
+SHOW=false
+ANALYZE=false
+JSON_OUTPUT=false
+REMAINING=""
+VELOCITY=""
+ETA=""
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --project)
+            PROJECT="$2"
+            shift 2
+            ;;
+        --remaining)
+            REMAINING="$2"
+            shift 2
+            ;;
+        --velocity)
+            VELOCITY="$2"
+            shift 2
+            ;;
+        --eta)
+            ETA="$2"
+            shift 2
+            ;;
+        --record)
+            RECORD=true
+            shift
+            ;;
+        --show)
+            SHOW=true
+            shift
+            ;;
+        --analyze)
+            ANALYZE=true
+            shift
+            ;;
+        --json)
+            JSON_OUTPUT=true
+            shift
+            ;;
+        -h|--help)
+            usage
+            ;;
+        *)
+            echo "Error: Unknown argument: $1" >&2
+            usage
+            ;;
+    esac
+done
+
+# Handle --show command
+if [[ "$SHOW" == "true" ]]; then
+    if [[ ! -f "$TRACKING_FILE" ]]; then
+        if [[ "$JSON_OUTPUT" == "true" ]]; then
+            cat << EOF
+{
+  "tracking_file": "$TRACKING_FILE",
+  "estimates": [],
+  "summary": {
+    "total_estimates": 0,
+    "projects_tracked": []
+  },
+  "message": "No estimation history found. Use --record to start tracking."
+}
+EOF
+        else
+            echo "============================================================"
+            echo "Estimation Accuracy Tracker"
+            echo "============================================================"
+            echo ""
+            echo "Tracking file: $TRACKING_FILE"
+            echo ""
+            echo "No estimation history found."
+            echo "Use --record to start tracking estimates."
+            echo ""
+            echo "Example:"
+            echo "  $(basename "$0") --record --project MVP --remaining 43 --velocity 10.0 --eta 2025-12-18"
+        fi
+        exit 0
+    fi
+
+    # File exists, show contents
+    if [[ "$JSON_OUTPUT" == "true" ]]; then
+        # Build JSON output with summary
+        ESTIMATES=$(cat "$TRACKING_FILE")
+
+        # Count estimates and get unique projects using bash
+        TOTAL_COUNT=0
+        PROJECTS_JSON="[]"
+
+        # Check if jq is available for proper JSON processing
+        if command -v jq &> /dev/null; then
+            TOTAL_COUNT=$(echo "$ESTIMATES" | jq '.estimates | length')
+            PROJECTS_JSON=$(echo "$ESTIMATES" | jq '[.estimates[].project] | unique')
+            ESTIMATES_ARRAY=$(echo "$ESTIMATES" | jq '.estimates')
+
+            # Filter by project if specified
+            if [[ -n "$PROJECT" ]]; then
+                ESTIMATES_ARRAY=$(echo "$ESTIMATES" | jq --arg proj "$PROJECT" '[.estimates[] | select(.project == $proj)]')
+                TOTAL_COUNT=$(echo "$ESTIMATES_ARRAY" | jq 'length')
+            fi
+
+            cat << EOF
+{
+  "tracking_file": "$TRACKING_FILE",
+  "estimates": $ESTIMATES_ARRAY,
+  "summary": {
+    "total_estimates": $TOTAL_COUNT,
+    "projects_tracked": $PROJECTS_JSON
+  }
+}
+EOF
+        else
+            # Fallback without jq - use Python for reliable JSON handling
+            python3 << PYEOF
+import json
+import sys
+
+try:
+    with open("$TRACKING_FILE", "r") as f:
+        data = json.load(f)
+
+    estimates = data.get("estimates", [])
+    project_filter = "$PROJECT"
+
+    # Filter by project if specified
+    if project_filter:
+        estimates = [e for e in estimates if e.get("project") == project_filter]
+
+    # Get unique projects
+    projects_tracked = list(set(e.get("project", "") for e in data.get("estimates", []) if e.get("project")))
+
+    output = {
+        "tracking_file": "$TRACKING_FILE",
+        "estimates": estimates,
+        "summary": {
+            "total_estimates": len(estimates),
+            "projects_tracked": projects_tracked
+        }
+    }
+    print(json.dumps(output, indent=2))
+except Exception as e:
+    # If Python parsing fails, output error as valid JSON
+    error_output = {
+        "tracking_file": "$TRACKING_FILE",
+        "estimates": [],
+        "summary": {
+            "total_estimates": 0,
+            "projects_tracked": []
+        },
+        "error": str(e)
+    }
+    print(json.dumps(error_output, indent=2))
+    sys.exit(1)
+PYEOF
+        fi
+    else
+        echo "============================================================"
+        echo "Estimation Accuracy Tracker - History"
+        echo "============================================================"
+        echo ""
+        echo "Tracking file: $TRACKING_FILE"
+        echo ""
+
+        if command -v jq &> /dev/null; then
+            # Get estimates, optionally filtered by project
+            if [[ -n "$PROJECT" ]]; then
+                ESTIMATES=$(cat "$TRACKING_FILE" | jq -r --arg proj "$PROJECT" '.estimates[] | select(.project == $proj)')
+            else
+                ESTIMATES=$(cat "$TRACKING_FILE" | jq -r '.estimates[]')
+            fi
+
+            COUNT=$(cat "$TRACKING_FILE" | jq '.estimates | length')
+
+            if [[ "$COUNT" -eq 0 ]]; then
+                echo "No estimates recorded yet."
+                echo ""
+                echo "Use --record to start tracking:"
+                echo "  $(basename "$0") --record --project MVP --remaining 43 --velocity 10.0 --eta 2025-12-18"
+            else
+                # Print table header
+                printf "%-12s %-30s %10s %10s %-12s\n" "Date" "Project" "Remaining" "Velocity" "Predicted ETA"
+                printf "%-12s %-30s %10s %10s %-12s\n" "----" "-------" "---------" "--------" "-------------"
+
+                # Print each estimate
+                if [[ -n "$PROJECT" ]]; then
+                    cat "$TRACKING_FILE" | jq -r --arg proj "$PROJECT" \
+                        '.estimates[] | select(.project == $proj) | "\(.date)\t\(.project)\t\(.remaining_issues)\t\(.velocity)\t\(.predicted_eta)"' | \
+                    while IFS=$'\t' read -r date proj remaining vel eta; do
+                        # Truncate project name if too long
+                        proj_short="${proj:0:28}"
+                        if [[ ${#proj} -gt 28 ]]; then
+                            proj_short="${proj_short}.."
+                        fi
+                        printf "%-12s %-30s %10s %10s %-12s\n" "$date" "$proj_short" "$remaining" "$vel" "$eta"
+                    done
+                else
+                    cat "$TRACKING_FILE" | jq -r \
+                        '.estimates[] | "\(.date)\t\(.project)\t\(.remaining_issues)\t\(.velocity)\t\(.predicted_eta)"' | \
+                    while IFS=$'\t' read -r date proj remaining vel eta; do
+                        # Truncate project name if too long
+                        proj_short="${proj:0:28}"
+                        if [[ ${#proj} -gt 28 ]]; then
+                            proj_short="${proj_short}.."
+                        fi
+                        printf "%-12s %-30s %10s %10s %-12s\n" "$date" "$proj_short" "$remaining" "$vel" "$eta"
+                    done
+                fi
+
+                echo ""
+                echo "Total estimates: $COUNT"
+
+                # Show unique projects
+                UNIQUE_PROJECTS=$(cat "$TRACKING_FILE" | jq -r '[.estimates[].project] | unique | join(", ")')
+                echo "Projects tracked: $UNIQUE_PROJECTS"
+            fi
+        else
+            echo "Warning: jq not installed. Showing raw JSON:"
+            echo ""
+            cat "$TRACKING_FILE"
+        fi
+    fi
+    exit 0
+fi
+
+# Handle --record command
+if [[ "$RECORD" == "true" ]]; then
+    # Validate required parameters
+    if [[ -z "$PROJECT" ]]; then
+        echo "Error: --project is required for --record" >&2
+        echo "Example: $(basename "$0") --record --project MVP --remaining 43 --velocity 10.0 --eta 2025-12-18" >&2
+        exit 1
+    fi
+    if [[ -z "$REMAINING" ]]; then
+        echo "Error: --remaining is required for --record" >&2
+        exit 1
+    fi
+    if [[ -z "$VELOCITY" ]]; then
+        echo "Error: --velocity is required for --record" >&2
+        exit 1
+    fi
+    if [[ -z "$ETA" ]]; then
+        echo "Error: --eta is required for --record (format: YYYY-MM-DD)" >&2
+        exit 1
+    fi
+
+    # Validate ETA format
+    if ! echo "$ETA" | grep -qE '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'; then
+        echo "Error: --eta must be in YYYY-MM-DD format" >&2
+        exit 1
+    fi
+
+    # Initialize tracking file if needed
+    init_tracking_file
+
+    TODAY=$(get_today)
+
+    if command -v jq &> /dev/null; then
+        # Create new estimate object
+        NEW_ESTIMATE=$(cat << EOF
+{
+  "date": "$TODAY",
+  "project": "$PROJECT",
+  "remaining_issues": $REMAINING,
+  "velocity": $VELOCITY,
+  "predicted_eta": "$ETA",
+  "actual_completion": null
+}
+EOF
+)
+
+        # Append to estimates array
+        UPDATED=$(cat "$TRACKING_FILE" | jq --argjson new "$NEW_ESTIMATE" '.estimates += [$new]')
+        echo "$UPDATED" > "$TRACKING_FILE"
+
+        if [[ "$JSON_OUTPUT" == "true" ]]; then
+            cat << EOF
+{
+  "status": "success",
+  "message": "Estimate recorded successfully",
+  "estimate": $NEW_ESTIMATE,
+  "tracking_file": "$TRACKING_FILE"
+}
+EOF
+        else
+            echo "============================================================"
+            echo "Estimation Accuracy Tracker"
+            echo "============================================================"
+            echo ""
+            echo "Estimate recorded successfully!"
+            echo ""
+            echo "  Date:           $TODAY"
+            echo "  Project:        $PROJECT"
+            echo "  Remaining:      $REMAINING issues"
+            echo "  Velocity:       $VELOCITY issues/day"
+            echo "  Predicted ETA:  $ETA"
+            echo ""
+            echo "Tracking file: $TRACKING_FILE"
+            echo ""
+            echo "Use --show to view all estimates."
+        fi
+    else
+        echo "Error: jq is required for --record functionality" >&2
+        echo "Install jq: brew install jq (macOS) or apt-get install jq (Linux)" >&2
+        exit 1
+    fi
+    exit 0
+fi
+
+# Handle --analyze command
+if [[ "$ANALYZE" == "true" ]]; then
+    if [[ ! -f "$TRACKING_FILE" ]]; then
+        echo "No estimation history found. Record some estimates first." >&2
+        exit 1
+    fi
+
+    if ! command -v jq &> /dev/null; then
+        echo "Error: jq is required for --analyze functionality" >&2
+        exit 1
+    fi
+
+    echo "============================================================"
+    echo "Estimation Accuracy Analysis"
+    echo "============================================================"
+    echo ""
+
+    if [[ -n "$PROJECT" ]]; then
+        ESTIMATES=$(cat "$TRACKING_FILE" | jq --arg proj "$PROJECT" '[.estimates[] | select(.project == $proj)]')
+        echo "Project: $PROJECT"
+    else
+        ESTIMATES=$(cat "$TRACKING_FILE" | jq '.estimates')
+        echo "All Projects"
+    fi
+
+    COUNT=$(echo "$ESTIMATES" | jq 'length')
+
+    if [[ "$COUNT" -eq 0 ]]; then
+        echo ""
+        echo "No estimates found for analysis."
+        exit 0
+    fi
+
+    echo "Total estimates: $COUNT"
+    echo ""
+
+    # Calculate basic stats
+    echo "Velocity Statistics:"
+    echo "-------------------"
+
+    # Get min, max, avg velocity
+    MIN_VEL=$(echo "$ESTIMATES" | jq '[.[].velocity] | min')
+    MAX_VEL=$(echo "$ESTIMATES" | jq '[.[].velocity] | max')
+    AVG_VEL=$(echo "$ESTIMATES" | jq '[.[].velocity] | add / length')
+
+    echo "  Min velocity:  $MIN_VEL issues/day"
+    echo "  Max velocity:  $MAX_VEL issues/day"
+    echo "  Avg velocity:  $AVG_VEL issues/day"
+    echo ""
+
+    echo "Remaining Issues Trend:"
+    echo "----------------------"
+
+    # Show first and last remaining count
+    FIRST_REMAINING=$(echo "$ESTIMATES" | jq '.[0].remaining_issues')
+    LAST_REMAINING=$(echo "$ESTIMATES" | jq '.[-1].remaining_issues')
+    FIRST_DATE=$(echo "$ESTIMATES" | jq -r '.[0].date')
+    LAST_DATE=$(echo "$ESTIMATES" | jq -r '.[-1].date')
+
+    echo "  First ($FIRST_DATE): $FIRST_REMAINING issues"
+    echo "  Last  ($LAST_DATE): $LAST_REMAINING issues"
+
+    if [[ "$FIRST_REMAINING" != "null" && "$LAST_REMAINING" != "null" ]]; then
+        DIFF=$((FIRST_REMAINING - LAST_REMAINING))
+        echo "  Progress:       $DIFF issues completed"
+    fi
+
+    echo ""
+    echo "ETA Trend:"
+    echo "---------"
+
+    # Show first and last ETA
+    FIRST_ETA=$(echo "$ESTIMATES" | jq -r '.[0].predicted_eta')
+    LAST_ETA=$(echo "$ESTIMATES" | jq -r '.[-1].predicted_eta')
+
+    echo "  First prediction: $FIRST_ETA"
+    echo "  Latest prediction: $LAST_ETA"
+
+    echo ""
+    echo "============================================================"
+    echo ""
+    echo "For detailed analysis, use the polymorphic agent with:"
+    echo "  estimation-accuracy --show --json | pbcopy"
+    echo "Then ask Claude to analyze the estimation patterns."
+
+    exit 0
+fi
+
+# Default behavior - show help
+echo "============================================================"
+echo "Estimation Accuracy Tracker"
+echo "============================================================"
+echo ""
+echo "Tracking file: $TRACKING_FILE"
+echo ""
+echo "Commands:"
+echo "  --show              View estimation history"
+echo "  --show --json       View history as JSON"
+echo "  --record            Record a new estimate"
+echo "  --analyze           Analyze accuracy trends"
+echo ""
+echo "Examples:"
+echo "  $(basename "$0") --show"
+echo "  $(basename "$0") --record --project MVP --remaining 43 --velocity 10.0 --eta 2025-12-18"
+echo "  $(basename "$0") --project MVP --analyze"
+echo ""
+echo "Use -h or --help for full documentation."

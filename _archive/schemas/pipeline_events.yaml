@@ -1,0 +1,955 @@
+# Pipeline Event Schemas - Autonomous Node Generation
+# Phase 4 Integration (Event Bus)
+# Generated: 2025-10-21
+# Version: 1.0.0
+
+schema_version: "1.0.0"
+namespace: "omniclaude.generation.pipeline"
+description: "Event contracts for autonomous node generation pipeline"
+
+# ===================================================================
+# COMMON EVENT STRUCTURE
+# ===================================================================
+
+common_fields:
+  event_id:
+    type: "UUID"
+    description: "Unique event identifier"
+    required: true
+
+  correlation_id:
+    type: "UUID"
+    description: "Pipeline execution correlation ID (traces entire workflow)"
+    required: true
+
+  timestamp:
+    type: "datetime"
+    format: "ISO 8601"
+    description: "Event emission timestamp"
+    required: true
+
+  stage:
+    type: "string"
+    enum: ["parsing", "pre_validation", "generation", "post_validation", "writing", "compilation"]
+    description: "Pipeline stage that emitted this event"
+    required: true
+
+  status:
+    type: "string"
+    enum: ["started", "in_progress", "completed", "failed", "warning"]
+    description: "Event status"
+    required: true
+
+  metadata:
+    type: "object"
+    description: "Stage-specific metadata"
+    required: false
+
+# ===================================================================
+# PIPELINE EVENTS
+# ===================================================================
+
+events:
+
+  # -----------------------------------------------------------------
+  # PROMPT SUBMISSION
+  # -----------------------------------------------------------------
+  PromptSubmitted:
+    description: "User submitted a prompt for node generation"
+    topic: "generation.pipeline.prompt_submitted"
+    schema:
+      event_type:
+        type: "string"
+        const: "PromptSubmitted"
+      correlation_id:
+        type: "UUID"
+      timestamp:
+        type: "datetime"
+      payload:
+        type: "object"
+        properties:
+          prompt_text:
+            type: "string"
+            description: "Natural language prompt from user"
+          requested_node_type:
+            type: "string"
+            enum: ["EFFECT", "COMPUTE", "REDUCER", "ORCHESTRATOR"]
+            description: "User-requested node type (if specified)"
+          output_directory:
+            type: "string"
+            description: "Target output directory"
+          requested_by:
+            type: "string"
+            description: "User identifier"
+          request_metadata:
+            type: "object"
+            description: "Additional request metadata"
+        required: ["prompt_text", "output_directory"]
+
+    example:
+      event_type: "PromptSubmitted"
+      event_id: "550e8400-e29b-41d4-a716-446655440000"
+      correlation_id: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+      timestamp: "2025-10-21T10:00:00.000Z"
+      stage: "parsing"
+      status: "started"
+      payload:
+        prompt_text: "Create EFFECT node for PostgreSQL database write operations"
+        output_directory: "/path/to/output"
+        requested_by: "user@example.com"
+
+  # -----------------------------------------------------------------
+  # PARSING STAGE
+  # -----------------------------------------------------------------
+  ParsingStarted:
+    description: "Prompt parsing started"
+    topic: "generation.pipeline.parsing_started"
+    schema:
+      event_type:
+        type: "string"
+        const: "ParsingStarted"
+      correlation_id:
+        type: "UUID"
+      stage:
+        type: "string"
+        const: "parsing"
+      status:
+        type: "string"
+        const: "started"
+
+  ParsingCompleted:
+    description: "Prompt parsing completed successfully"
+    topic: "generation.pipeline.parsing_completed"
+    schema:
+      event_type:
+        type: "string"
+        const: "ParsingCompleted"
+      correlation_id:
+        type: "UUID"
+      stage:
+        type: "string"
+        const: "parsing"
+      status:
+        type: "string"
+        const: "completed"
+      payload:
+        type: "object"
+        properties:
+          parsed_data:
+            type: "object"
+            properties:
+              node_type:
+                type: "string"
+                enum: ["EFFECT", "COMPUTE", "REDUCER", "ORCHESTRATOR"]
+              service_name:
+                type: "string"
+              domain:
+                type: "string"
+              description:
+                type: "string"
+              operations:
+                type: "array"
+                items:
+                  type: "string"
+              confidence_score:
+                type: "number"
+                minimum: 0.0
+                maximum: 1.0
+            required: ["node_type", "service_name", "domain", "description"]
+          parsing_duration_ms:
+            type: "integer"
+        required: ["parsed_data", "parsing_duration_ms"]
+
+    example:
+      event_type: "ParsingCompleted"
+      event_id: "550e8400-e29b-41d4-a716-446655440001"
+      correlation_id: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+      timestamp: "2025-10-21T10:00:05.234Z"
+      stage: "parsing"
+      status: "completed"
+      payload:
+        parsed_data:
+          node_type: "EFFECT"
+          service_name: "postgres_writer"
+          domain: "infrastructure"
+          description: "PostgreSQL database write operations"
+          operations: ["create", "update", "delete"]
+          confidence_score: 0.85
+        parsing_duration_ms: 4523
+
+  ParsingFailed:
+    description: "Prompt parsing failed"
+    topic: "generation.pipeline.parsing_failed"
+    schema:
+      event_type:
+        type: "string"
+        const: "ParsingFailed"
+      correlation_id:
+        type: "UUID"
+      stage:
+        type: "string"
+        const: "parsing"
+      status:
+        type: "string"
+        const: "failed"
+      payload:
+        type: "object"
+        properties:
+          error_code:
+            type: "string"
+            enum: ["INVALID_PROMPT", "INSUFFICIENT_CONTEXT", "PARSING_ERROR"]
+          error_message:
+            type: "string"
+          error_context:
+            type: "object"
+          suggestions:
+            type: "array"
+            items:
+              type: "string"
+        required: ["error_code", "error_message"]
+
+  # -----------------------------------------------------------------
+  # PRE-VALIDATION STAGE
+  # -----------------------------------------------------------------
+  PreValidationStarted:
+    description: "Pre-generation validation started"
+    topic: "generation.pipeline.pre_validation_started"
+    schema:
+      event_type:
+        type: "string"
+        const: "PreValidationStarted"
+      correlation_id:
+        type: "UUID"
+      stage:
+        type: "string"
+        const: "pre_validation"
+      status:
+        type: "string"
+        const: "started"
+
+  PreValidationCompleted:
+    description: "Pre-generation validation completed"
+    topic: "generation.pipeline.pre_validation_completed"
+    schema:
+      event_type:
+        type: "string"
+        const: "PreValidationCompleted"
+      correlation_id:
+        type: "UUID"
+      stage:
+        type: "string"
+        const: "pre_validation"
+      status:
+        type: "string"
+        enum: ["completed", "warning"]
+      payload:
+        type: "object"
+        properties:
+          validation_passed:
+            type: "boolean"
+          gates_checked:
+            type: "array"
+            items:
+              type: "object"
+              properties:
+                gate_id:
+                  type: "string"
+                gate_name:
+                  type: "string"
+                passed:
+                  type: "boolean"
+                warnings:
+                  type: "array"
+                  items:
+                    type: "string"
+          validation_duration_ms:
+            type: "integer"
+        required: ["validation_passed", "gates_checked"]
+
+  ValidationFailed:
+    description: "Validation failed (pre or post)"
+    topic: "generation.pipeline.validation_failed"
+    schema:
+      event_type:
+        type: "string"
+        const: "ValidationFailed"
+      correlation_id:
+        type: "UUID"
+      stage:
+        type: "string"
+        enum: ["pre_validation", "post_validation"]
+      status:
+        type: "string"
+        const: "failed"
+      payload:
+        type: "object"
+        properties:
+          error_code:
+            type: "string"
+            enum:
+              - "MISSING_DEPENDENCY"
+              - "TEMPLATE_NOT_FOUND"
+              - "OUTPUT_NOT_WRITABLE"
+              - "IMPORT_VALIDATION_FAILED"
+              - "SYNTAX_ERROR"
+              - "NAMING_VIOLATION"
+          error_message:
+            type: "string"
+          failed_gate:
+            type: "string"
+          error_context:
+            type: "object"
+          suggestions:
+            type: "array"
+            items:
+              type: "string"
+        required: ["error_code", "error_message", "failed_gate"]
+
+    example:
+      event_type: "ValidationFailed"
+      event_id: "550e8400-e29b-41d4-a716-446655440002"
+      correlation_id: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+      timestamp: "2025-10-21T10:00:07.123Z"
+      stage: "pre_validation"
+      status: "failed"
+      payload:
+        error_code: "MISSING_DEPENDENCY"
+        error_message: "omnibase_core.nodes.node_effect.NodeEffect not found"
+        failed_gate: "G4"
+        error_context:
+          import_path: "omnibase_core.nodes.node_effect"
+          class_name: "NodeEffect"
+        suggestions:
+          - "Run: poetry install omnibase_core"
+          - "Check omnibase_core version >=2.0"
+
+  # -----------------------------------------------------------------
+  # GENERATION STAGE
+  # -----------------------------------------------------------------
+  GenerationStarted:
+    description: "Code generation started"
+    topic: "generation.pipeline.generation_started"
+    schema:
+      event_type:
+        type: "string"
+        const: "GenerationStarted"
+      correlation_id:
+        type: "UUID"
+      stage:
+        type: "string"
+        const: "generation"
+      status:
+        type: "string"
+        const: "started"
+      payload:
+        type: "object"
+        properties:
+          node_type:
+            type: "string"
+          service_name:
+            type: "string"
+          domain:
+            type: "string"
+        required: ["node_type", "service_name"]
+
+  GenerationProgress:
+    description: "Generation progress update"
+    topic: "generation.pipeline.generation_progress"
+    schema:
+      event_type:
+        type: "string"
+        const: "GenerationProgress"
+      correlation_id:
+        type: "UUID"
+      stage:
+        type: "string"
+        const: "generation"
+      status:
+        type: "string"
+        const: "in_progress"
+      payload:
+        type: "object"
+        properties:
+          current_file:
+            type: "string"
+          files_completed:
+            type: "integer"
+          total_files:
+            type: "integer"
+          progress_percent:
+            type: "integer"
+            minimum: 0
+            maximum: 100
+        required: ["current_file", "files_completed", "total_files"]
+
+  GenerationCompleted:
+    description: "Code generation completed successfully"
+    topic: "generation.pipeline.generation_completed"
+    schema:
+      event_type:
+        type: "string"
+        const: "GenerationCompleted"
+      correlation_id:
+        type: "UUID"
+      stage:
+        type: "string"
+        const: "generation"
+      status:
+        type: "string"
+        const: "completed"
+      payload:
+        type: "object"
+        properties:
+          generated_files:
+            type: "array"
+            items:
+              type: "string"
+          total_files:
+            type: "integer"
+          total_bytes:
+            type: "integer"
+          generation_duration_ms:
+            type: "integer"
+        required: ["generated_files", "generation_duration_ms"]
+
+    example:
+      event_type: "GenerationCompleted"
+      event_id: "550e8400-e29b-41d4-a716-446655440003"
+      correlation_id: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+      timestamp: "2025-10-21T10:00:20.456Z"
+      stage: "generation"
+      status: "completed"
+      payload:
+        generated_files:
+          - "v1_0_0/node.py"
+          - "v1_0_0/models/model_postgres_writer_input.py"
+          - "v1_0_0/models/model_postgres_writer_output.py"
+          - "v1_0_0/contract.yaml"
+          - "node.manifest.yaml"
+        total_files: 11
+        total_bytes: 45678
+        generation_duration_ms: 12450
+
+  GenerationFailed:
+    description: "Code generation failed"
+    topic: "generation.pipeline.generation_failed"
+    schema:
+      event_type:
+        type: "string"
+        const: "GenerationFailed"
+      correlation_id:
+        type: "UUID"
+      stage:
+        type: "string"
+        const: "generation"
+      status:
+        type: "string"
+        const: "failed"
+      payload:
+        type: "object"
+        properties:
+          error_code:
+            type: "string"
+            enum:
+              - "TEMPLATE_RENDER_ERROR"
+              - "CONTEXT_INVALID"
+              - "GENERATION_TIMEOUT"
+          error_message:
+            type: "string"
+          error_context:
+            type: "object"
+          partial_files:
+            type: "array"
+            items:
+              type: "string"
+            description: "Files generated before failure (for rollback)"
+        required: ["error_code", "error_message"]
+
+  # -----------------------------------------------------------------
+  # POST-VALIDATION STAGE
+  # -----------------------------------------------------------------
+  PostValidationStarted:
+    description: "Post-generation validation started"
+    topic: "generation.pipeline.post_validation_started"
+    schema:
+      event_type:
+        type: "string"
+        const: "PostValidationStarted"
+      correlation_id:
+        type: "UUID"
+      stage:
+        type: "string"
+        const: "post_validation"
+      status:
+        type: "string"
+        const: "started"
+
+  PostValidationCompleted:
+    description: "Post-generation validation completed"
+    topic: "generation.pipeline.post_validation_completed"
+    schema:
+      event_type:
+        type: "string"
+        const: "PostValidationCompleted"
+      correlation_id:
+        type: "UUID"
+      stage:
+        type: "string"
+        const: "post_validation"
+      status:
+        type: "string"
+        enum: ["completed", "warning"]
+      payload:
+        type: "object"
+        properties:
+          validation_passed:
+            type: "boolean"
+          gates_checked:
+            type: "array"
+            items:
+              type: "object"
+              properties:
+                gate_id:
+                  type: "string"
+                gate_name:
+                  type: "string"
+                passed:
+                  type: "boolean"
+                errors:
+                  type: "array"
+                  items:
+                    type: "string"
+                warnings:
+                  type: "array"
+                  items:
+                    type: "string"
+          validation_duration_ms:
+            type: "integer"
+        required: ["validation_passed", "gates_checked"]
+
+  # -----------------------------------------------------------------
+  # FILE WRITING STAGE
+  # -----------------------------------------------------------------
+  WritingStarted:
+    description: "File writing started"
+    topic: "generation.pipeline.writing_started"
+    schema:
+      event_type:
+        type: "string"
+        const: "WritingStarted"
+      correlation_id:
+        type: "UUID"
+      stage:
+        type: "string"
+        const: "writing"
+      status:
+        type: "string"
+        const: "started"
+      payload:
+        type: "object"
+        properties:
+          output_directory:
+            type: "string"
+          total_files:
+            type: "integer"
+        required: ["output_directory", "total_files"]
+
+  WritingProgress:
+    description: "File writing progress"
+    topic: "generation.pipeline.writing_progress"
+    schema:
+      event_type:
+        type: "string"
+        const: "WritingProgress"
+      correlation_id:
+        type: "UUID"
+      stage:
+        type: "string"
+        const: "writing"
+      status:
+        type: "string"
+        const: "in_progress"
+      payload:
+        type: "object"
+        properties:
+          current_file:
+            type: "string"
+          files_written:
+            type: "integer"
+          total_files:
+            type: "integer"
+        required: ["current_file", "files_written", "total_files"]
+
+  WritingCompleted:
+    description: "File writing completed successfully"
+    topic: "generation.pipeline.writing_completed"
+    schema:
+      event_type:
+        type: "string"
+        const: "WritingCompleted"
+      correlation_id:
+        type: "UUID"
+      stage:
+        type: "string"
+        const: "writing"
+      status:
+        type: "string"
+        const: "completed"
+      payload:
+        type: "object"
+        properties:
+          node_directory:
+            type: "string"
+          main_file:
+            type: "string"
+          all_files:
+            type: "array"
+            items:
+              type: "string"
+          total_bytes:
+            type: "integer"
+          writing_duration_ms:
+            type: "integer"
+        required: ["node_directory", "main_file", "all_files"]
+
+    example:
+      event_type: "WritingCompleted"
+      event_id: "550e8400-e29b-41d4-a716-446655440004"
+      correlation_id: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+      timestamp: "2025-10-21T10:00:25.789Z"
+      stage: "writing"
+      status: "completed"
+      payload:
+        node_directory: "/path/to/node_infrastructure_postgres_writer_effect"
+        main_file: "/path/to/.../v1_0_0/node.py"
+        all_files:
+          - "/path/to/.../v1_0_0/node.py"
+          - "/path/to/.../v1_0_0/models/model_postgres_writer_input.py"
+          - "/path/to/.../node.manifest.yaml"
+        total_bytes: 45678
+        writing_duration_ms: 2345
+
+  WritingFailed:
+    description: "File writing failed"
+    topic: "generation.pipeline.writing_failed"
+    schema:
+      event_type:
+        type: "string"
+        const: "WritingFailed"
+      correlation_id:
+        type: "UUID"
+      stage:
+        type: "string"
+        const: "writing"
+      status:
+        type: "string"
+        const: "failed"
+      payload:
+        type: "object"
+        properties:
+          error_code:
+            type: "string"
+            enum:
+              - "PERMISSION_DENIED"
+              - "DISK_FULL"
+              - "DIRECTORY_NOT_FOUND"
+              - "FILE_WRITE_ERROR"
+          error_message:
+            type: "string"
+          failed_file:
+            type: "string"
+          files_written:
+            type: "array"
+            items:
+              type: "string"
+            description: "Files written before failure (for rollback)"
+        required: ["error_code", "error_message"]
+
+  # -----------------------------------------------------------------
+  # COMPILATION STAGE (Optional)
+  # -----------------------------------------------------------------
+  CompilationStarted:
+    description: "Compilation testing started"
+    topic: "generation.pipeline.compilation_started"
+    schema:
+      event_type:
+        type: "string"
+        const: "CompilationStarted"
+      correlation_id:
+        type: "UUID"
+      stage:
+        type: "string"
+        const: "compilation"
+      status:
+        type: "string"
+        const: "started"
+
+  CompilationCompleted:
+    description: "Compilation testing completed"
+    topic: "generation.pipeline.compilation_completed"
+    schema:
+      event_type:
+        type: "string"
+        const: "CompilationCompleted"
+      correlation_id:
+        type: "UUID"
+      stage:
+        type: "string"
+        const: "compilation"
+      status:
+        type: "string"
+        enum: ["completed", "warning"]
+      payload:
+        type: "object"
+        properties:
+          mypy_passed:
+            type: "boolean"
+          import_passed:
+            type: "boolean"
+          mypy_output:
+            type: "string"
+          mypy_error_count:
+            type: "integer"
+          import_error:
+            type: "string"
+            nullable: true
+          compilation_duration_ms:
+            type: "integer"
+        required: ["mypy_passed", "import_passed", "compilation_duration_ms"]
+
+  # -----------------------------------------------------------------
+  # PIPELINE COMPLETION
+  # -----------------------------------------------------------------
+  PipelineCompleted:
+    description: "Entire pipeline completed successfully"
+    topic: "generation.pipeline.completed"
+    schema:
+      event_type:
+        type: "string"
+        const: "PipelineCompleted"
+      correlation_id:
+        type: "UUID"
+      stage:
+        type: "string"
+        const: "pipeline"
+      status:
+        type: "string"
+        const: "completed"
+      payload:
+        type: "object"
+        properties:
+          node_type:
+            type: "string"
+          service_name:
+            type: "string"
+          domain:
+            type: "string"
+          output_path:
+            type: "string"
+          files_written:
+            type: "array"
+            items:
+              type: "string"
+          validation_passed:
+            type: "boolean"
+          compilation_passed:
+            type: "boolean"
+          total_duration_seconds:
+            type: "number"
+          stage_durations:
+            type: "object"
+            properties:
+              parsing_ms:
+                type: "integer"
+              pre_validation_ms:
+                type: "integer"
+              generation_ms:
+                type: "integer"
+              post_validation_ms:
+                type: "integer"
+              writing_ms:
+                type: "integer"
+              compilation_ms:
+                type: "integer"
+        required:
+          - "node_type"
+          - "service_name"
+          - "output_path"
+          - "files_written"
+          - "total_duration_seconds"
+
+    example:
+      event_type: "PipelineCompleted"
+      event_id: "550e8400-e29b-41d4-a716-446655440005"
+      correlation_id: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+      timestamp: "2025-10-21T10:00:38.567Z"
+      stage: "pipeline"
+      status: "completed"
+      payload:
+        node_type: "EFFECT"
+        service_name: "postgres_writer"
+        domain: "infrastructure"
+        output_path: "/path/to/node_infrastructure_postgres_writer_effect"
+        files_written:
+          - "/path/to/.../v1_0_0/node.py"
+          - "/path/to/.../node.manifest.yaml"
+        validation_passed: true
+        compilation_passed: true
+        total_duration_seconds: 38.5
+        stage_durations:
+          parsing_ms: 4523
+          pre_validation_ms: 1234
+          generation_ms: 12450
+          post_validation_ms: 3456
+          writing_ms: 2345
+          compilation_ms: 10234
+
+  PipelineFailed:
+    description: "Pipeline failed at some stage"
+    topic: "generation.pipeline.failed"
+    schema:
+      event_type:
+        type: "string"
+        const: "PipelineFailed"
+      correlation_id:
+        type: "UUID"
+      stage:
+        type: "string"
+        const: "pipeline"
+      status:
+        type: "string"
+        const: "failed"
+      payload:
+        type: "object"
+        properties:
+          failed_stage:
+            type: "string"
+            enum: ["parsing", "pre_validation", "generation", "post_validation", "writing", "compilation"]
+          error_code:
+            type: "string"
+          error_message:
+            type: "string"
+          error_context:
+            type: "object"
+          rollback_performed:
+            type: "boolean"
+          partial_output:
+            type: "object"
+            nullable: true
+          recovery_suggestions:
+            type: "array"
+            items:
+              type: "string"
+        required: ["failed_stage", "error_code", "error_message"]
+
+    example:
+      event_type: "PipelineFailed"
+      event_id: "550e8400-e29b-41d4-a716-446655440006"
+      correlation_id: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+      timestamp: "2025-10-21T10:00:12.345Z"
+      stage: "pipeline"
+      status: "failed"
+      payload:
+        failed_stage: "pre_validation"
+        error_code: "MISSING_DEPENDENCY"
+        error_message: "omnibase_core.nodes.node_effect.NodeEffect not found"
+        error_context:
+          import_path: "omnibase_core.nodes.node_effect"
+        rollback_performed: false
+        partial_output: null
+        recovery_suggestions:
+          - "Run: poetry install omnibase_core"
+          - "Verify omnibase_core version >=2.0"
+
+# ===================================================================
+# KAFKA TOPIC CONFIGURATION (Phase 4)
+# ===================================================================
+
+kafka_topics:
+  generation_pipeline_events:
+    name: "generation.pipeline.events"
+    partitions: 3
+    replication_factor: 2
+    retention_ms: 604800000  # 7 days
+    description: "All pipeline events"
+
+  generation_pipeline_errors:
+    name: "generation.pipeline.errors"
+    partitions: 1
+    replication_factor: 3
+    retention_ms: 2592000000  # 30 days
+    description: "Pipeline error events only"
+
+  generation_pipeline_metrics:
+    name: "generation.pipeline.metrics"
+    partitions: 1
+    replication_factor: 2
+    retention_ms: 86400000  # 1 day
+    description: "Performance and progress metrics"
+
+# ===================================================================
+# EVENT BUS CONSUMER GROUPS (Phase 4)
+# ===================================================================
+
+consumer_groups:
+  pipeline_monitor:
+    group_id: "pipeline_monitor"
+    description: "Real-time pipeline monitoring dashboard"
+    topics:
+      - "generation.pipeline.events"
+    auto_offset_reset: "latest"
+
+  pipeline_analytics:
+    group_id: "pipeline_analytics"
+    description: "Analytics and metrics aggregation"
+    topics:
+      - "generation.pipeline.metrics"
+    auto_offset_reset: "earliest"
+
+  error_handler:
+    group_id: "error_handler"
+    description: "Error detection and alerting"
+    topics:
+      - "generation.pipeline.errors"
+    auto_offset_reset: "earliest"
+
+# ===================================================================
+# OBSERVABILITY & LOGGING
+# ===================================================================
+
+logging:
+  level: "INFO"
+  format: "json"
+  correlation_id_header: "X-Correlation-ID"
+  stage_field: "stage"
+  status_field: "status"
+
+metrics:
+  - name: "pipeline_duration_seconds"
+    type: "histogram"
+    description: "Total pipeline execution time"
+    labels: ["node_type", "success"]
+
+  - name: "stage_duration_seconds"
+    type: "histogram"
+    description: "Individual stage execution time"
+    labels: ["stage", "node_type"]
+
+  - name: "validation_gate_failures"
+    type: "counter"
+    description: "Count of validation gate failures"
+    labels: ["gate_id", "gate_name"]
+
+  - name: "files_generated_total"
+    type: "counter"
+    description: "Total files generated"
+    labels: ["node_type", "file_type"]
+
+# ===================================================================
+# VERSION COMPATIBILITY
+# ===================================================================
+
+version_compatibility:
+  minimum_pipeline_version: "1.0.0"
+  minimum_omnibase_core_version: "2.0.0"
+  event_schema_version: "1.0.0"

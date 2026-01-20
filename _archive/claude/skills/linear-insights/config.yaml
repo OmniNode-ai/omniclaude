@@ -1,0 +1,165 @@
+# Linear Insights v2 Configuration
+# Auto-generated from Linear API
+# Last updated: 2025-12-14
+
+version: "2.1"
+
+# =============================================================================
+# DEFAULTS
+# =============================================================================
+defaults:
+  project: "MVP"  # Default project shortcut
+  team: "Omninode"
+  user: "me"
+
+# =============================================================================
+# USER CONFIGURATION
+# =============================================================================
+user:
+  id: "7a850ce1-f95e-431f-b4e3-62f7449f04c0"
+  name: "Jonah Gray"
+  email: "jonah@omninode.ai"
+  displayName: "jonah"
+
+# =============================================================================
+# TEAM CONFIGURATION
+# =============================================================================
+teams:
+  Omninode:
+    id: "9bdff6a3-f4ef-4ff7-b29a-6c4cf44371e6"
+    key: "OMNI"
+    icon: "Cloud"
+
+# =============================================================================
+# PROJECT CONFIGURATION
+# =============================================================================
+# Maps shortcut names to Linear project IDs (eliminates runtime lookups)
+projects:
+  MVP:
+    id: "e44ddbf4-b4c7-40dc-84fa-f402ec27b38e"
+    name: "MVP - OmniNode Platform Foundation"
+    shortcuts: ["mvp", "foundation", "platform-foundation"]
+    status: "Planned"
+    lead: "Jonah Gray"
+
+  Beta:
+    id: "5db5e69e-a78d-4b6f-b78c-e59b929b9b4f"
+    name: "Beta - OmniNode Platform Hardening"
+    shortcuts: ["beta", "hardening", "platform-hardening"]
+    status: "Planned"
+
+  Production:
+    id: "0fb63ff3-66cc-48e4-9c69-d64af5e4cf84"
+    name: "Production - OmniNode Platform Scale"
+    shortcuts: ["production", "prod", "scale", "platform-scale"]
+    status: "Planned"
+
+  NodeReducer:
+    id: "c2538d8b-79ca-47cd-b5f7-f21f9b76bd9d"
+    name: "NodeReducer v1.0 - Contract-Driven FSM"
+    shortcuts: ["nodereducer", "fsm", "contract-driven"]
+    status: "Backlog"
+
+  EventBusAlignment:
+    id: "b927f193-1c30-4707-b962-a6d240f705df"
+    name: "Event Bus Alignment - OmniNode Platform"
+    shortcuts: ["event-bus", "events", "alignment"]
+    status: "In Progress"
+
+  PipelineOptimization:
+    id: "469d68a3-e5ce-48de-b9e9-80700290869e"
+    name: "Synchronous Pipeline Optimization - Archon Intelligence"
+    shortcuts: ["pipeline", "optimization", "archon", "intelligence"]
+    status: "In Progress"
+
+# =============================================================================
+# BACKLOG QUERY CONFIGURATION
+# =============================================================================
+backlog:
+  # State to query for backlog items
+  state: "Backlog"
+
+  # Labels that indicate blocked status (exclude from suggest-work)
+  blocked_labels:
+    - "blocked"
+    - "waiting"
+    - "on-hold"
+    - "needs-clarification"
+    - "dependent"
+
+  # Default number of suggestions
+  default_count: 5
+
+# =============================================================================
+# VELOCITY CONFIGURATION
+# =============================================================================
+velocity:
+  default_method: "weighted"
+
+  # Metric grades (hardcoded, not user-configurable)
+  eta_grade_methods:
+    - "points"
+    - "cycle_time"
+  signal_grade_methods:
+    - "priority"
+    - "labels"
+    - "simple"
+
+# =============================================================================
+# PRIORITY CONFIGURATION
+# =============================================================================
+priority:
+  # Linear priority values (1=Urgent, 2=High, 3=Normal, 4=Low)
+  levels:
+    urgent: 1
+    high: 2
+    normal: 3
+    low: 4
+
+  # Default priority if not specified
+  default: 3
+
+# =============================================================================
+# STATE CONFIGURATION
+# =============================================================================
+states:
+  active:
+    - "In Progress"
+    - "In Review"
+  backlog:
+    - "Backlog"
+    - "Todo"
+  done:
+    - "Done"
+    - "Canceled"
+
+# =============================================================================
+# CACHE CONFIGURATION
+# =============================================================================
+cache:
+  enabled: true
+  directory: ".cache"
+  ttl:
+    projects: 86400    # 24 hours
+    teams: 86400       # 24 hours
+    issues: 300        # 5 minutes
+    users: 3600        # 1 hour
+
+# =============================================================================
+# OUTPUT CONFIGURATION
+# =============================================================================
+output:
+  deep_dive_dir: "/Users/jonah/Code/omni_save"
+  snapshot_dir: ".cache/snapshots"
+  default_format: "markdown"
+
+# =============================================================================
+# SKILL ALIASES
+# =============================================================================
+# Maps command shortcuts to full skill commands
+aliases:
+  status: "project-status"
+  progress: "project-status"
+  backlog: "suggest-work"
+  next: "suggest-work"
+  todo: "suggest-work"

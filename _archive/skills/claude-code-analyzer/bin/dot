@@ -1,0 +1,450 @@
+#!/usr/bin/env bash
+
+set -Eeuo pipefail
+trap cleanup SIGINT SIGTERM ERR EXIT
+
+cleanup() {
+  trap - SIGINT SIGTERM ERR EXIT
+  tput cnorm # enable cursor
+  # script cleanup here
+}
+
+command_name=$(basename "${BASH_SOURCE[0]}")
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+
+if [[ -f "$DOTFILES/bin/lib/common.sh" ]]; then
+  source "$DOTFILES/bin/lib/common.sh"
+else
+  echo "Error: Unable to source common.sh"
+  exit 1
+fi
+
+find_commands() {
+  IFS=: read -ra path_dirs <<<"$PATH"
+  for dir in "${path_dirs[@]}"; do
+    # skip if the directory doesn't exist or isn't readable
+    [[ ! -d "$dir" ]] && continue
+    for cmd in "$dir"/dot-*; do
+      [[ -f "$cmd" && -x "$cmd" ]] || continue
+      basename "$cmd" | sed 's/^dot-//'
+    done
+  done | sort -u
+}
+
+usage() {
+  cat <<EOF
+  $(fmt_key "Usage:") $(fmt_cmd "$command_name") $(fmt_value "<command> [subcommand] [options]")
+
+Dotfiles management script.
+
+$(fmt_key "Available Commands:")
+    help                          Show this help message
+    clean                         Clean up broken symlinks
+    backup                        Backup dotfiles
+        -d, --directory <dir>   Backup directory (default: ~/dotfiles-backup)
+    link                          Link dotfiles packages to their respective locations
+        all                       Link all
+        <pkg>                     Link a specific package
+        clean                     Clean up broken symlinks
+            -n, --dry-run         Show what would be removed without actually removing
+            -v, --verbose         Show detailed output
+        -v, --verbose             Show detailed output
+    unlink                        Unlink dotfiles packages
+        all                       Unlink all
+        <pkg>                     Unlink a specific package
+        -v, --verbose             Show detailed output
+EOF
+
+  echo -e "\nExternal commands:"
+
+  find_commands | while read -r cmd; do
+    # Get the description from the script if available
+    description=$(grep "^# Description:" "$(which "dot-$cmd")" 2>/dev/null | cut -d: -f2- | sed 's/^[[:space:]]*//' || echo "No description available")
+    printf "    $(fmt_cmd "%-12s") %s\n" "$cmd" "$description"
+  done
+}
+
+cmd_clean() {
+  links=(
+    ".zshrc" ".zshenv" ".zprofile" ".zsh_aliases"
+    ".zsh_functions" ".zsh_prompt" ".config/aerospace"
+    ".config/git" ".config/karabiner" ".config/kitty"
+    ".config/lazygit" ".config/nvim" ".config/ripgrep"
+    ".config/tmux" ".config/wezterm" ".config/zsh"
+  )
+
+  fmt_title_underline "Cleaning up broken legacy symlinks..."
+
+  for link in "${links[@]}"; do
+    path_link="$HOME/$link"
+    if [ -L "$path_link" ] && [ ! -e "$path_link" ]; then
+      log_success "Removing Broken symbolic link: $path_link"
+      rm "$path_link"
+    else
+      log_info "Link to $path_link not found or is not broken. Skipping..."
+    fi
+  done
+
+  # Clean up broken symlinks from home directory
+  if [ -d "$DOTFILES/home" ]; then
+    while IFS= read -r -d '' file; do
+      relative_path="${file#"$DOTFILES"/home/}"
+      target_path="$HOME/$relative_path"
+      if [ -L "$target_path" ] && [ ! -e "$target_path" ]; then
+        log_success "Removing broken symbolic link: $target_path"
+        rm "$target_path"
+      fi
+    done < <(find "$DOTFILES/home" -type f -print0)
+  fi
+
+  echo -e
+  log_success "Done."
+}
+
+cmd_backup() {
+  local backup_dir="$HOME/dotfiles-backup"
+  local verbose=false
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    -d | --directory)
+      if [[ -n "${2:-}" ]]; then
+        backup_dir="$2"
+        shift 2
+      else
+        log_error "Missing backup directory"
+        exit 1
+      fi
+      ;;
+    -v | --verbose)
+      verbose=true
+      shift
+      ;;
+    *)
+      log_error "Unknown argument: $1"
+      exit 1
+      ;;
+    esac
+  done
+
+  # Expand ~ in backup_dir
+  backup_dir="${backup_dir/#\~/$HOME}"
+
+  local timestamp=$(date +%Y%m%d_%H%M%S)
+  local backup_path="${backup_dir}/dotfiles_backup_${timestamp}"
+
+  log_info "Creating backup in: $backup_path"
+
+  files_to_backup=(
+    ".zshrc"
+    ".zprofile"
+    ".zsh_aliases"
+    ".zsh_functions"
+    ".zsh_prompt"
+    ".config/aerospace"
+    ".config/git"
+    ".config/ghostty"
+    ".config/karabiner"
+    ".config/kitty"
+    ".config/lazygit"
+    ".config/nvim"
+    ".config/ripgrep"
+    ".config/tmux"
+    ".config/wezterm"
+    ".config/zsh"
+  )
+
+  # Add home directory files to backup
+  if [ -d "$DOTFILES/home" ]; then
+    while IFS= read -r -d '' file; do
+      relative_path="${file#"$DOTFILES"/home/}"
+      files_to_backup+=("$relative_path")
+    done < <(find "$DOTFILES/home" -type f -print0)
+  fi
+
+  tmpfile=$(mktemp)
+  trap 'rm -f "$tmpfile"' EXIT
+
+  for file in "${files_to_backup[@]}"; do
+    src_path="${HOME}/${file}"
+    if [[ -L "$src_path" ]]; then
+      [[ "$verbose" == true ]] && log_info "Skipping symlink: $file"
+      continue
+    elif [[ -e "$src_path" ]]; then
+      echo "$file" >>"$tmpfile"
+      [[ "$verbose" == true ]] && log_info "Found: $file"
+    else
+      log_warning "File not found: $src_path"
+    fi
+  done
+
+  if [[ -s "$tmpfile" ]]; then
+    tar -czf "${backup_path}.tar.gz" -C "$HOME" -T "$tmpfile" || {
+      log_error "Failed to create backup archive"
+      exit 1
+    }
+
+    if [[ "$verbose" == true ]]; then
+      log_info "Archive contents:"
+      tar -tvf "${backup_path}.tar.gz" | while read -r line; do
+        log_info "$line"
+      done
+    fi
+
+    log_success "Backup created successfully"
+  else
+    log_warning "No files to backup"
+  fi
+}
+
+link_home_files() {
+  local operation="$1"
+  local verbose="$2"
+
+  if [ ! -d "$DOTFILES/home" ]; then
+    return 0
+  fi
+
+  while IFS= read -r -d '' file; do
+    local relative_path="${file#"$DOTFILES"/home/}"
+    local target_path="$HOME/$relative_path"
+    local target_dir="$(dirname "$target_path")"
+
+    if [ "$operation" = "link" ]; then
+      # Create parent directories if needed
+      if [ ! -d "$target_dir" ]; then
+        [ "$verbose" = true ] && log_info "Creating directory: $target_dir"
+        mkdir -p "$target_dir"
+      fi
+
+      if [ -e "$target_path" ]; then
+        log_warning "~${target_path#"$HOME"} already exists... Skipping."
+      else
+        [ "$verbose" = true ] && log_info "Linking $relative_path"
+        ln -s "$file" "$target_path"
+      fi
+    else # unlink
+      if [ -L "$target_path" ]; then
+        [ "$verbose" = true ] && log_info "Unlinking $target_path"
+        rm "$target_path"
+      elif [ -e "$target_path" ]; then
+        log_warning "Skipping \"$target_path\" because it is not a symlink"
+      fi
+    fi
+  done < <(find "$DOTFILES/home" -type f -print0)
+}
+
+cmd_link_clean() {
+  local verbose=false
+  local dry_run=false
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    -v | --verbose)
+      verbose=true
+      shift
+      ;;
+    -n | --dry-run)
+      dry_run=true
+      shift
+      ;;
+    *)
+      log_error "Unknown argument: $1"
+      exit 1
+      ;;
+    esac
+  done
+
+  fmt_title_underline "Cleaning up broken symlinks"
+
+  local broken_count=0
+
+  # Check config directory symlinks
+  if [ -d "$CONFIG_HOME" ]; then
+    while IFS= read -r -d '' link; do
+      if [ -L "$link" ] && [ ! -e "$link" ]; then
+        broken_count=$((broken_count + 1))
+        if [ "$dry_run" = true ]; then
+          log_warning "[DRY RUN] Would remove broken symlink: ~${link#"$HOME"}"
+        else
+          [ "$verbose" = true ] && log_info "Removing broken symlink: ~${link#"$HOME"}"
+          rm "$link"
+        fi
+      fi
+    done < <(find "$CONFIG_HOME" -type l -print0 2>/dev/null || true)
+  fi
+
+  # Check home directory symlinks created from $DOTFILES/home
+  if [ -d "$DOTFILES/home" ]; then
+    # Get all directories that contain files in $DOTFILES/home
+    local home_dirs=()
+    while IFS= read -r -d '' file; do
+      local dir_path="$HOME/$(dirname "${file#"$DOTFILES"/home/}")"
+      # Add to array if not already present
+      if [[ ! " ${home_dirs[@]} " =~ " ${dir_path} " ]]; then
+        home_dirs+=("$dir_path")
+      fi
+    done < <(find "$DOTFILES/home" -type f -print0)
+
+    # Now check for broken symlinks only in those directories
+    for dir in "${home_dirs[@]}"; do
+      if [ -d "$dir" ]; then
+        while IFS= read -r -d '' link; do
+          if [ -L "$link" ] && [ ! -e "$link" ]; then
+            # Check if this broken symlink points to our dotfiles directory
+            local link_target=$(readlink "$link")
+            if [[ "$link_target" == "$DOTFILES"* ]]; then
+              broken_count=$((broken_count + 1))
+              if [ "$dry_run" = true ]; then
+                log_warning "[DRY RUN] Would remove broken symlink: ~${link#"$HOME"}"
+              else
+                [ "$verbose" = true ] && log_info "Removing broken symlink: ~${link#"$HOME"}"
+                rm "$link"
+              fi
+            fi
+          fi
+        done < <(find "$dir" -maxdepth 1 -type l -print0 2>/dev/null || true)
+      fi
+    done
+  fi
+
+  echo
+  if [ "$broken_count" -eq 0 ]; then
+    log_success "No broken symlinks found"
+  else
+    if [ "$dry_run" = true ]; then
+      log_info "Found $broken_count broken symlink(s). Run without --dry-run to remove them."
+    else
+      log_success "Removed $broken_count broken symlink(s)"
+    fi
+  fi
+}
+
+cmd_link() {
+  local operation="$1"
+  local pkg="$2"
+  shift 2 || true
+
+  # Handle 'dot link clean' syntax
+  if [ "$operation" = "link" ] && [ "$pkg" = "clean" ]; then
+    cmd_link_clean "$@"
+    return
+  fi
+
+  local verbose=false
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    -v | --verbose)
+      verbose=true
+      shift
+      ;;
+    *)
+      log_error "Unknown argument: $1"
+      exit 1
+      ;;
+    esac
+  done
+
+  if [ "$pkg" = "all" ]; then
+    local title_text="$operation"ing" all packages"
+  else
+    local title_text="$operation"ing" package: $pkg"
+  fi
+
+  fmt_title_underline "$title_text"
+
+  if [ "$pkg" = "all" ]; then
+    # Handle all packages in config directory
+    for config in "$DOTFILES/config"/*; do
+      if [ -d "$config" ]; then
+        local target="$CONFIG_HOME/$(basename "$config")"
+        if [ "$operation" = "link" ]; then
+          if [ -e "$target" ]; then
+            log_warning "~${target#"$HOME"} already exists... Skipping."
+          else
+            [ "$verbose" = true ] && log_info "Linking $(basename "$config")"
+            ln -s "$config" "$target"
+          fi
+        else # unlink
+          if [ -L "$target" ]; then
+            [ "$verbose" = true ] && log_info "Unlinking $target"
+            rm "$target"
+          elif [ -e "$target" ]; then
+            log_warning "Skipping \"$target\" because it is not a symlink"
+          fi
+        fi
+      fi
+    done
+
+    # Handle home directory files
+    link_home_files "$operation" "$verbose"
+  else
+    # Handle specific package
+    local target="$CONFIG_HOME/$pkg"
+    if [ -d "$DOTFILES/config/$pkg" ]; then
+      if [ "$operation" = "link" ]; then
+        if [ -e "$target" ]; then
+          log_warning "~${target#"$HOME"} already exists... Skipping."
+        else
+          [ "$verbose" = true ] && log_info "Linking $pkg"
+          ln -s "$DOTFILES/config/$pkg" "$target"
+        fi
+      else # unlink
+        if [ -L "$target" ]; then
+          [ "$verbose" = true ] && log_info "Unlinking $target"
+          rm "$target"
+        elif [ -e "$target" ]; then
+          log_warning "Skipping \"$target\" because it is not a symlink"
+        fi
+      fi
+    else
+      log_error "Package $pkg not found in config directory"
+      return 1
+    fi
+  fi
+
+  echo -e
+  log_success "Done"
+}
+
+main() {
+  if [ $# -lt 1 ]; then
+    usage
+    exit 0
+  fi
+
+  cmd="$1"
+  shift || true
+  subcmd="${1:-all}"
+
+  case "$cmd" in
+  help)
+    usage
+    ;;
+  clean)
+    cmd_clean "$@"
+    ;;
+  backup)
+    cmd_backup "$@"
+    ;;
+  link)
+    cmd_link "link" "$@"
+    ;;
+  unlink)
+    cmd_link "unlink" "$@"
+    ;;
+  *)
+    if command -v "dot-$cmd" >/dev/null 2>&1; then
+      "dot-$cmd" "$@"
+    else
+      log_error "Unknown command: $cmd"
+      usage
+      exit 1
+    fi
+    ;;
+  esac
+}
+
+main "$@"
