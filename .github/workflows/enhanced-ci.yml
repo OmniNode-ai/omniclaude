@@ -283,7 +283,8 @@ jobs:
           # that require full infrastructure (POSTGRES_HOST, etc.) which isn't available in CI
           # TODO: Migrate legacy tests or archive them with old directories
           if [ -d "tests/hooks" ] && [ -n "$(find tests/hooks/ -name 'test_*.py' -type f 2>/dev/null)" ]; then
-            # Run tests - exit code 5 means no tests collected (valid for some splits)
+            # Run tests - use set +e to capture exit code (5 means no tests collected)
+            set +e
             timeout 600 uv run pytest -o addopts="" \
               tests/hooks/ \
               -v \
@@ -294,6 +295,7 @@ jobs:
               --cov-report=term-missing \
               --junitxml=junit-unit-split-${{ matrix.split }}.xml
             EXIT_CODE=$?
+            set -e
 
             # Exit code 5 = no tests collected (expected for some splits with pytest-split)
             # Exit code 0 = tests passed
@@ -301,6 +303,8 @@ jobs:
               echo "::error::Unit tests failed with exit code $EXIT_CODE"
               exit 1
             fi
+
+            echo "Tests completed with exit code $EXIT_CODE (5 = no tests in this split, 0 = passed)"
 
             # Create coverage file for this split (may be empty if no tests ran)
             mv .coverage .coverage.${{ matrix.split }} 2>/dev/null || touch .coverage.${{ matrix.split }}
@@ -375,16 +379,28 @@ jobs:
       - name: Combine coverage files
         run: |
           echo "::group::Combining Coverage Files"
-          # Move all coverage files to current directory
-          find coverage-files/ -name '.coverage.*' -exec mv {} . \;
-          ls -la .coverage.*
+          # Check if coverage directory exists
+          if [ -d "coverage-files" ]; then
+            # Move all coverage files to current directory
+            find coverage-files/ -name '.coverage.*' -exec mv {} . \; 2>/dev/null || true
+          fi
 
-          # Combine all coverage files
-          coverage combine .coverage.*
+          # List any coverage files found
+          ls -la .coverage.* 2>/dev/null || echo "No coverage files found"
 
-          # Generate XML and term reports
-          coverage xml -o coverage-unit.xml
-          coverage report
+          # Count coverage files
+          COVERAGE_COUNT=$(ls -1 .coverage.* 2>/dev/null | wc -l || echo "0")
+          if [ "$COVERAGE_COUNT" -gt 0 ]; then
+            # Combine all coverage files
+            coverage combine .coverage.*
+
+            # Generate XML and term reports
+            coverage xml -o coverage-unit.xml
+            coverage report
+          else
+            echo "No coverage data to combine - creating empty report"
+            echo '<?xml version="1.0" ?><coverage version="7.0" timestamp="0" lines-valid="0" lines-covered="0" line-rate="0" branches-covered="0" branches-valid="0" branch-rate="0" complexity="0"><packages></packages></coverage>' > coverage-unit.xml
+          fi
 
           echo "::endgroup::"
 
