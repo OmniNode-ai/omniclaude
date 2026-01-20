@@ -47,6 +47,11 @@ ignore = [
     "E501",   # line too long (handled by formatter)
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# Tests often modify sys.path before imports
+"tests/**/test_*.py" = ["E402"]
+"tests/*.py" = ["E402"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["omniclaude"]
 

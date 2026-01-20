@@ -18,13 +18,19 @@ import json
 import os
 import sys
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
-import asyncpg
 import pytest
-from kafka import KafkaProducer
 
+# Skip entire module if kafka-python is not installed
+# This is an integration test that requires actual Kafka infrastructure
+kafka = pytest.importorskip(
+    "kafka", reason="kafka-python not installed - skipping integration tests"
+)
+KafkaProducer = kafka.KafkaProducer
+
+import asyncpg
 
 # Add agents lib to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "agents" / "lib"))
@@ -94,9 +100,7 @@ class TestKafkaConsumerIntegration:
     """Integration tests for Kafka consumer with PostgreSQL."""
 
     @pytest.mark.asyncio
-    async def test_consumer_starts_and_stops(
-        self, kafka_brokers, postgres_dsn, test_topic
-    ):
+    async def test_consumer_starts_and_stops(self, kafka_brokers, postgres_dsn, test_topic):
         """Test consumer can start and stop gracefully."""
         consumer = KafkaAgentActionConsumer(
             kafka_brokers=kafka_brokers,
@@ -138,7 +142,7 @@ class TestKafkaConsumerIntegration:
             "action_details": {"key": "value"},
             "debug_mode": True,
             "duration_ms": 100,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
         kafka_producer.send(test_topic, value=event)
@@ -217,7 +221,7 @@ class TestKafkaConsumerIntegration:
                 "action_details": {"index": i},
                 "debug_mode": True,
                 "duration_ms": i * 10,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
 
             kafka_producer.send(test_topic, value=event)
@@ -289,7 +293,7 @@ class TestKafkaConsumerIntegration:
     ):
         """Test consumer handles duplicate events correctly (idempotency)."""
         correlation_id = str(uuid.uuid4())
-        timestamp = datetime.now(timezone.utc).isoformat()
+        timestamp = datetime.now(UTC).isoformat()
 
         # Create duplicate event
         event = {
@@ -364,8 +368,6 @@ class TestKafkaConsumerIntegration:
     ):
         """Test consumer handles invalid JSON gracefully."""
         # Publish invalid JSON directly (bypass producer serializer)
-        from kafka import KafkaProducer
-
         raw_producer = KafkaProducer(
             bootstrap_servers=kafka_brokers.split(","),
             # No serializer - send raw bytes
@@ -389,7 +391,7 @@ class TestKafkaConsumerIntegration:
         try:
             # Should not crash
             await asyncio.wait_for(consumer.consume_loop(), timeout=2.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass  # Expected
         except Exception as e:
             pytest.fail(f"Consumer crashed on invalid JSON: {e}")
@@ -416,7 +418,7 @@ class TestKafkaConsumerIntegration:
             "action_name": "offset_test",
             "action_details": {},
             "debug_mode": True,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
         kafka_producer.send(test_topic, value=event)
@@ -435,7 +437,7 @@ class TestKafkaConsumerIntegration:
 
         try:
             await asyncio.wait_for(consumer1.consume_loop(), timeout=2.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
         finally:
             await consumer1.stop()
@@ -462,7 +464,7 @@ class TestKafkaConsumerIntegration:
 
         try:
             await asyncio.wait_for(consumer2.consume_loop(), timeout=2.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
         finally:
             await consumer2.stop()
@@ -500,7 +502,7 @@ class TestKafkaConsumerIntegration:
                 "action_name": f"test_{action_type}",
                 "action_details": {"type": action_type},
                 "debug_mode": True,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
 
             kafka_producer.send(test_topic, value=event)
@@ -555,9 +557,7 @@ class TestKafkaConsumerIntegration:
                         action_type,
                     )
 
-                    assert (
-                        result is not None
-                    ), f"Missing record for action_type: {action_type}"
+                    assert result is not None, f"Missing record for action_type: {action_type}"
                     assert result["action_type"] == action_type
         finally:
             await consumer.stop()
@@ -596,7 +596,7 @@ class TestConsumerPerformance:
                 "action_name": f"action_{i}",
                 "action_details": {"index": i, "test_run_id": test_run_id},
                 "debug_mode": True,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
 
             kafka_producer.send(test_topic, value=event)
@@ -645,9 +645,7 @@ class TestConsumerPerformance:
                 )
 
                 # Should have processed all 1000 events
-                assert (
-                    final_count == num_events
-                ), f"Expected {num_events} events, got {final_count}"
+                assert final_count == num_events, f"Expected {num_events} events, got {final_count}"
         finally:
             await consumer.stop()
             consumer_task.cancel()

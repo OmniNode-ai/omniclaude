@@ -27,9 +27,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
 from uuid import uuid4
-
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -40,7 +38,6 @@ from agents.lib.prd_analyzer import (
     ParsedPRD,
     PRDAnalysisResult,
 )
-
 
 # Configure logging
 logging.basicConfig(
@@ -57,8 +54,8 @@ class TestResult:
     test_name: str
     success: bool
     message: str
-    details: Optional[Dict] = None
-    errors: Optional[List[str]] = None
+    details: dict | None = None
+    errors: list[str] | None = None
 
 
 class TemplateGenerationTester:
@@ -74,7 +71,7 @@ class TemplateGenerationTester:
         """
         self.output_dir = output_dir or Path("/tmp/test_node_generation")
         self.cleanup = cleanup
-        self.results: List[TestResult] = []
+        self.results: list[TestResult] = []
 
         # Paths
         self.repo_root = Path(__file__).parent.parent
@@ -235,8 +232,7 @@ class TemplateGenerationTester:
                     "yaml_files": len(yaml_files),
                     "total_files": len(generated_files) + len(yaml_files),
                     "file_list": [
-                        str(f.relative_to(output_path))
-                        for f in generated_files + yaml_files
+                        str(f.relative_to(output_path)) for f in generated_files + yaml_files
                     ],
                 },
             )
@@ -426,9 +422,7 @@ class TemplateGenerationTester:
 
                 # Check for old imports
                 if "omnibase_core.core." in content:
-                    issues.append(
-                        f"{py_file.name}: Uses old import path 'omnibase_core.core.*'"
-                    )
+                    issues.append(f"{py_file.name}: Uses old import path 'omnibase_core.core.*'")
 
                 # Check for Pydantic v1 patterns
                 if ".dict(" in content and "model_dump" not in content:
@@ -438,9 +432,7 @@ class TemplateGenerationTester:
 
                 # Check for OnexError (should be ModelOnexError)
                 if "OnexError" in content and "ModelOnexError" not in content:
-                    issues.append(
-                        f"{py_file.name}: Uses 'OnexError' instead of 'ModelOnexError'"
-                    )
+                    issues.append(f"{py_file.name}: Uses 'OnexError' instead of 'ModelOnexError'")
 
             success = len(issues) == 0
 
@@ -463,7 +455,7 @@ class TemplateGenerationTester:
                 errors=[str(e)],
             )
 
-    async def run_all_tests(self, node_types: List[str] | None = None) -> Dict:
+    async def run_all_tests(self, node_types: list[str] | None = None) -> dict:
         """
         Run all tests
 
@@ -527,7 +519,7 @@ class TemplateGenerationTester:
             # Teardown
             self.teardown()
 
-    def print_summary(self, summary: Dict):
+    def print_summary(self, summary: dict):
         """Print test summary"""
         print("\n" + "=" * 80)
         print("TEMPLATE GENERATION TEST RESULTS")

@@ -16,12 +16,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from agents.lib.omninode_template_engine import OmniNodeTemplateEngine
-
 
 # -------------------------------------------------------------------------
 # Fixtures
@@ -104,8 +102,7 @@ async def test_cleanup_async_propagates_cache_exception(
     error_logs = [record for record in caplog.records if record.levelname == "ERROR"]
     # Since exception propagates, there might be 0 or 1 error logs
     assert len(error_logs) <= 1, (
-        f"Expected at most 1 error log, got {len(error_logs)}: "
-        f"{[r.message for r in error_logs]}"
+        f"Expected at most 1 error log, got {len(error_logs)}: {[r.message for r in error_logs]}"
     )
 
     # Assert: Template cache cleanup was called
@@ -168,9 +165,7 @@ async def test_cleanup_async_with_disabled_cache(tmp_path, caplog):
         and "pattern_storage" not in record.pathname  # Qdrant connection errors
         and "Connection refused" not in record.message  # General connection errors
     ]
-    assert (
-        len(error_logs) == 0
-    ), f"Expected no template engine error logs, got: {error_logs}"
+    assert len(error_logs) == 0, f"Expected no template engine error logs, got: {error_logs}"
 
 
 # -------------------------------------------------------------------------
@@ -266,9 +261,7 @@ async def test_aexit_successful_cleanup_no_errors(
 
 
 @pytest.mark.asyncio
-async def test_cleanup_async_state_after_exception(
-    template_engine_with_cache, mock_template_cache
-):
+async def test_cleanup_async_state_after_exception(template_engine_with_cache, mock_template_cache):
     """
     Test cleanup_async maintains state consistency after exception.
 
@@ -293,9 +286,7 @@ async def test_cleanup_async_state_after_exception(
 
 
 @pytest.mark.asyncio
-async def test_cleanup_async_idempotent(
-    template_engine_with_cache, mock_template_cache
-):
+async def test_cleanup_async_idempotent(template_engine_with_cache, mock_template_cache):
     """
     Test cleanup_async can be called multiple times.
 
@@ -350,15 +341,11 @@ async def test_cleanup_async_with_none_cache_reference(tmp_path, caplog):
         and "pattern_storage" not in record.pathname  # Qdrant connection errors
         and "Connection refused" not in record.message  # General connection errors
     ]
-    assert (
-        len(error_logs) == 0
-    ), f"Expected no template engine error logs, got: {error_logs}"
+    assert len(error_logs) == 0, f"Expected no template engine error logs, got: {error_logs}"
 
 
 @pytest.mark.asyncio
-async def test_cleanup_async_timeout_handling(
-    template_engine_with_cache, mock_template_cache
-):
+async def test_cleanup_async_timeout_handling(template_engine_with_cache, mock_template_cache):
     """
     Test cleanup_async timeout parameter is passed to cache.
 

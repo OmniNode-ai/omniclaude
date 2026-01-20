@@ -47,6 +47,7 @@ from omniclaude.hooks.contracts import (
     CONTRACT_TOOL_EXECUTED,
     CONTRACTS_DIR,
 )
+from omniclaude.hooks.models import ModelEventPublishResult
 from omniclaude.hooks.schemas import (
     EventType,
     HookEventType,
@@ -67,6 +68,8 @@ __all__ = [
     "ModelHookSessionEndedPayload",
     "ModelHookPromptSubmittedPayload",
     "ModelHookToolExecutedPayload",
+    # Output models
+    "ModelEventPublishResult",
     # Envelope and types
     "ModelHookEventEnvelope",
     "ModelHookPayload",

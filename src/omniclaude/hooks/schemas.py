@@ -28,6 +28,7 @@ See Also:
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Literal
@@ -55,6 +56,37 @@ class HookEventType(StrEnum):
 
 
 # =============================================================================
+# Constants
+# =============================================================================
+
+# Privacy: Maximum length for prompt preview to limit exposure of sensitive data
+PROMPT_PREVIEW_MAX_LENGTH: int = 100
+
+# Privacy: Patterns that may indicate secrets (compiled for performance)
+# These patterns are intentionally simple to avoid false negatives
+_SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    # API keys with common prefixes
+    (re.compile(r"\b(sk-[a-zA-Z0-9]{20,})", re.IGNORECASE), "sk-***REDACTED***"),
+    (re.compile(r"\b(AKIA[A-Z0-9]{16})", re.IGNORECASE), "AKIA***REDACTED***"),
+    (re.compile(r"\b(ghp_[a-zA-Z0-9]{36})", re.IGNORECASE), "ghp_***REDACTED***"),
+    (re.compile(r"\b(gho_[a-zA-Z0-9]{36})", re.IGNORECASE), "gho_***REDACTED***"),
+    (re.compile(r"\b(xox[baprs]-[a-zA-Z0-9-]{10,})", re.IGNORECASE), "xox*-***REDACTED***"),
+    # Bearer tokens
+    (re.compile(r"(Bearer\s+)[a-zA-Z0-9._-]{20,}", re.IGNORECASE), r"\1***REDACTED***"),
+    # Password in URLs (postgres://user:password@host)
+    (re.compile(r"(://[^:]+:)[^@]+(@)"), r"\1***REDACTED***\2"),
+    # Generic secret patterns in key=value format
+    (
+        re.compile(
+            r"((?:password|passwd|secret|token|api_key|apikey|auth)\s*[=:]\s*)['\"]?[^\s'\"]{8,}['\"]?",
+            re.IGNORECASE,
+        ),
+        r"\1***REDACTED***",
+    ),
+]
+
+
+# =============================================================================
 # Reusable Validators
 # =============================================================================
 
@@ -76,6 +108,43 @@ def _validate_timezone_aware(v: datetime) -> datetime:
     """
     result: datetime = ensure_timezone_aware(v)
     return result
+
+
+def _sanitize_prompt_preview(text: str, max_length: int = PROMPT_PREVIEW_MAX_LENGTH) -> str:
+    """Sanitize and truncate prompt preview for privacy safety.
+
+    This function performs two privacy-protecting operations:
+    1. Redacts common secret patterns (API keys, passwords, tokens)
+    2. Truncates to max_length with ellipsis indicator
+
+    Privacy Considerations:
+        - Prompt previews may inadvertently contain sensitive data
+        - This sanitizer uses pattern matching which may have false negatives
+        - For maximum security, producers should pre-sanitize prompts
+        - Downstream consumers should treat previews as potentially sensitive
+
+    Args:
+        text: The raw prompt text to sanitize.
+        max_length: Maximum length for the preview (default: PROMPT_PREVIEW_MAX_LENGTH).
+
+    Returns:
+        Sanitized and truncated preview string.
+
+    Example:
+        >>> _sanitize_prompt_preview("Set OPENAI_API_KEY=sk-1234567890abcdef...")
+        'Set OPENAI_API_KEY=sk-***REDACTED***...'
+    """
+    # Step 1: Redact known secret patterns
+    sanitized = text
+    for pattern, replacement in _SECRET_PATTERNS:
+        sanitized = pattern.sub(replacement, sanitized)
+
+    # Step 2: Truncate with ellipsis if needed
+    if len(sanitized) > max_length:
+        # Reserve 3 chars for "..." suffix
+        return sanitized[: max_length - 3] + "..."
+
+    return sanitized
 
 
 # =============================================================================
@@ -278,6 +347,17 @@ class ModelHookPromptSubmittedPayload(BaseModel):
     This event captures metadata about the prompt without storing the full
     prompt content (privacy-conscious design).
 
+    Privacy Guidelines:
+        - The prompt_preview field is automatically sanitized to redact common
+          secret patterns (API keys, passwords, tokens, bearer tokens).
+        - The preview is truncated to PROMPT_PREVIEW_MAX_LENGTH (100 chars) to
+          minimize exposure of sensitive data.
+        - Despite sanitization, treat prompt_preview as potentially containing
+          sensitive information - apply appropriate access controls.
+        - For maximum security, pre-sanitize prompts before event emission.
+        - Implement appropriate data retention policies for events containing
+          prompt_preview data.
+
     Attributes:
         entity_id: Session identifier as UUID (partition key for ordering).
         session_id: Session identifier string.
@@ -285,8 +365,9 @@ class ModelHookPromptSubmittedPayload(BaseModel):
         causation_id: ID of the previous event in the session chain.
         emitted_at: Timestamp when the hook emitted this event (UTC).
         prompt_id: Unique identifier for this specific prompt.
-        prompt_preview: First N characters of the prompt (privacy-safe preview).
-        prompt_length: Total character count of the prompt.
+        prompt_preview: Sanitized and truncated preview of the prompt (max 100 chars).
+            Automatically redacts common secret patterns. See _sanitize_prompt_preview.
+        prompt_length: Total character count of the original (unsanitized) prompt.
         detected_intent: Classified intent if available (workflow, question, etc.).
 
     Example:
@@ -352,21 +433,42 @@ class ModelHookPromptSubmittedPayload(BaseModel):
     )
     prompt_preview: str = Field(
         ...,
-        max_length=200,
+        max_length=PROMPT_PREVIEW_MAX_LENGTH,
         description=(
-            "First N characters of the prompt. WARNING: May contain sensitive data. "
-            "Ensure appropriate access controls and data retention policies."
+            "Sanitized and truncated preview of the prompt (max 100 chars). "
+            "Common secret patterns are automatically redacted. "
+            "PRIVACY WARNING: Despite sanitization, may still contain sensitive data. "
+            "Apply appropriate access controls and data retention policies."
         ),
     )
     prompt_length: int = Field(
         ...,
         ge=0,
-        description="Total character count of the prompt",
+        description="Total character count of the original (unsanitized) prompt",
     )
     detected_intent: str | None = Field(
         default=None,
         description="Classified intent if available (workflow, question, fix, etc.)",
     )
+
+    @field_validator("prompt_preview", mode="before")
+    @classmethod
+    def sanitize_prompt_preview(cls, v: object) -> str | object:
+        """Sanitize prompt preview for privacy safety.
+
+        This validator automatically:
+        1. Redacts common secret patterns (API keys, passwords, tokens)
+        2. Truncates to PROMPT_PREVIEW_MAX_LENGTH with "..." suffix
+
+        Args:
+            v: The raw prompt preview value (any type before validation).
+
+        Returns:
+            Sanitized and truncated preview string, or original value if not a string.
+        """
+        if not isinstance(v, str):
+            return v  # Let Pydantic handle type validation
+        return _sanitize_prompt_preview(v)
 
 
 # =============================================================================
@@ -584,6 +686,8 @@ ModelHookPayload = Annotated[
 
 
 __all__ = [
+    # Constants
+    "PROMPT_PREVIEW_MAX_LENGTH",
     # Event type enum
     "HookEventType",
     # Payload models

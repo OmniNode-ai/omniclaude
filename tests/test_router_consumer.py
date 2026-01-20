@@ -16,7 +16,6 @@ import asyncio
 import sys
 from pathlib import Path
 
-
 # Add lib to path
 sys.path.insert(0, str(Path(__file__).parent / "agents" / "lib"))
 
@@ -60,9 +59,7 @@ async def test_routing():
                 print(f"   ✅ Confidence: {primary['confidence']['total']:.2%}")
                 print(f"   ✅ Reason: {primary['reason']}")
                 if len(recommendations) > 1:
-                    print(
-                        f"   ℹ️  Alternatives: {[r['agent_name'] for r in recommendations[1:]]}"
-                    )
+                    print(f"   ℹ️  Alternatives: {[r['agent_name'] for r in recommendations[1:]]}")
             else:
                 print("   ❌ No recommendations returned")
 
@@ -114,9 +111,7 @@ async def test_routing():
                     f"      - {row['selected_agent']} ({row['confidence_score']:.2%}) at {row['created_at']}"
                 )
         else:
-            print(
-                "   ℹ️  No routing decisions found in database (this is OK for first test)"
-            )
+            print("   ℹ️  No routing decisions found in database (this is OK for first test)")
 
         await conn.close()
 

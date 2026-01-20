@@ -116,33 +116,95 @@ topic = build_topic("dev", TopicBase.SESSION_STARTED)
 
 ## Privacy Considerations
 
-The event schemas are designed with privacy in mind:
+The event schemas are designed with privacy in mind using a **data minimization** approach.
 
-- **Prompt Preview**: The `prompt_preview` field (max 200 chars) may contain sensitive data.
-  Configure appropriate access controls and data retention policies.
-- **No Full Content**: Full prompt content is never stored in events - only metadata.
-- **Session Data**: Working directory paths may reveal project names. Consider this
-  when configuring event consumers.
+### Prompt Preview Field
 
-**Recommendations**:
-- Use Kafka topic-level ACLs to restrict access to event streams
-- Configure appropriate data retention (e.g., 7-30 days for learning events)
-- Audit access to event consumers
+The `prompt_preview` field captures a **truncated preview** of user prompts:
+
+| Attribute | Value | Rationale |
+|-----------|-------|-----------|
+| Max Length | 200 characters | Limits exposure while preserving intent detection |
+| Truncation | Hard cut at 200 chars | No smart truncation to avoid unintended data exposure |
+| Full Content | **Never stored** | Only preview + length metadata |
+| PII Handling | **User responsibility** | Prompts may contain sensitive data |
+
+**What is captured**:
+- First 200 characters of the prompt text
+- Total character count (`prompt_length`)
+- Optional classified intent (`detected_intent`)
+
+**What is NOT captured**:
+- Full prompt content beyond 200 chars
+- File contents read/written by tools
+- API keys, credentials, or secrets (unless in first 200 chars of prompt)
+
+### Other Privacy Considerations
+
+- **Working Directory**: Paths may reveal project names. Consider this when configuring consumers.
+- **Tool Summaries**: The `summary` field (max 500 chars) on tool events may contain file paths.
+- **Session IDs**: UUIDs are pseudonymous but can be correlated within a session.
+
+### Recommendations
+
+1. **Access Control**: Use Kafka topic-level ACLs to restrict access to event streams
+2. **Data Retention**: Configure appropriate retention (e.g., 7-30 days for learning events)
+3. **Audit Logging**: Track access to event consumers
+4. **Encryption**: Enable TLS for Kafka connections
+5. **User Consent**: Inform users that session metadata is collected for learning
 
 ## Schema Evolution
 
-Event schemas follow semantic versioning for backwards compatibility:
+Event schemas follow **semantic versioning** for backwards compatibility.
 
-- **Minor versions** (1.x.0): New optional fields only, fully backwards compatible
-- **Major versions** (2.0.0): Breaking changes, new topic versions created
+### Version Change Rules
 
-**Current Schema Version**: 1.0.0
+| Change Type | Version Bump | Example | Consumer Impact |
+|-------------|--------------|---------|-----------------|
+| **Patch** (1.0.x) | Bug fixes, docs | Field description update | None |
+| **Minor** (1.x.0) | New optional fields | Adding `metadata` field with default | None (backwards compatible) |
+| **Major** (x.0.0) | Breaking changes | Renaming/removing fields | Requires consumer update |
 
-**Evolution Strategy**:
-1. New optional fields are added with default values
-2. Consumers should ignore unknown fields (`extra="ignore"` in Pydantic)
-3. Breaking changes trigger new topic versions (e.g., `.v2` suffix)
-4. Old and new topics run in parallel during migration
+### Current Schema Version
+
+**Version**: 1.0.0 (initial release)
+
+### Evolution Strategy
+
+**Adding Fields (Minor Version)**:
+1. New fields MUST be optional with sensible defaults
+2. Use `Field(default=None)` or `Field(default_factory=...)` in Pydantic
+3. Producers upgrade first, then consumers
+4. No topic version change required
+
+**Breaking Changes (Major Version)**:
+1. Create new topic version (e.g., `omniclaude.session.started.v2`)
+2. Run old and new topics in parallel during migration
+3. Producers emit to both topics temporarily
+4. Consumers migrate to new topic at their pace
+5. Deprecate old topic after migration window
+
+**Consumer Guidelines**:
+- Use `extra="ignore"` in Pydantic models to ignore unknown fields
+- Always check schema version in envelope before processing
+- Implement graceful degradation for missing optional fields
+
+### Example: Adding a New Field
+
+```python
+# Version 1.0.0
+class ModelHookSessionStartedPayload(BaseModel):
+    session_id: str
+    working_directory: str
+    # ... existing fields
+
+# Version 1.1.0 - Adding optional field (backwards compatible)
+class ModelHookSessionStartedPayload(BaseModel):
+    session_id: str
+    working_directory: str
+    # New optional field with default
+    user_agent: str | None = Field(default=None, description="Client user agent")
+```
 
 ## Dependencies
 

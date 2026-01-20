@@ -24,6 +24,7 @@ import pytest
 from pydantic import ValidationError
 
 from omniclaude.hooks.schemas import (
+    PROMPT_PREVIEW_MAX_LENGTH,
     HookEventType,
     ModelHookEventEnvelope,
     ModelHookPromptSubmittedPayload,
@@ -393,8 +394,9 @@ class TestModelHookPromptSubmittedPayload:
         assert event.detected_intent == "workflow"
 
     def test_prompt_preview_max_length(self) -> None:
-        """Prompt preview is limited to 200 characters."""
-        # Valid at exactly 200
+        """Prompt preview is limited to PROMPT_PREVIEW_MAX_LENGTH (100) characters."""
+        # Valid at exactly max length
+        max_len = PROMPT_PREVIEW_MAX_LENGTH
         event = ModelHookPromptSubmittedPayload(
             entity_id=make_entity_id(),
             session_id="test",
@@ -402,23 +404,28 @@ class TestModelHookPromptSubmittedPayload:
             causation_id=make_causation_id(),
             emitted_at=make_timestamp(),
             prompt_id=uuid4(),
-            prompt_preview="x" * 200,
+            prompt_preview="x" * max_len,
+            prompt_length=max_len,
+        )
+        assert len(event.prompt_preview) == max_len
+
+    def test_prompt_preview_auto_truncation(self) -> None:
+        """Prompt preview longer than max is auto-truncated with ellipsis."""
+        max_len = PROMPT_PREVIEW_MAX_LENGTH
+        long_preview = "x" * 200  # Much longer than max
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview=long_preview,
             prompt_length=200,
         )
-        assert len(event.prompt_preview) == 200
-
-        # Invalid at 201
-        with pytest.raises(ValidationError):
-            ModelHookPromptSubmittedPayload(
-                entity_id=make_entity_id(),
-                session_id="test",
-                correlation_id=make_correlation_id(),
-                causation_id=make_causation_id(),
-                emitted_at=make_timestamp(),
-                prompt_id=uuid4(),
-                prompt_preview="x" * 201,
-                prompt_length=201,
-            )
+        # Should be truncated to max_len with "..." suffix
+        assert len(event.prompt_preview) == max_len
+        assert event.prompt_preview.endswith("...")
 
     def test_prompt_length_non_negative(self) -> None:
         """Prompt length must be non-negative."""
@@ -460,6 +467,157 @@ class TestModelHookPromptSubmittedPayload:
                 prompt_length=4,
             )
         assert "prompt_id" in str(exc_info.value)
+
+
+# =============================================================================
+# Prompt Preview Sanitization Tests
+# =============================================================================
+
+
+class TestPromptPreviewSanitization:
+    """Tests for prompt preview privacy sanitization."""
+
+    def test_openai_api_key_redacted(self) -> None:
+        """OpenAI API keys (sk-...) are redacted."""
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview="Use OPENAI_API_KEY=sk-1234567890abcdefghij",
+            prompt_length=50,
+        )
+        # The actual secret value must be removed
+        assert "sk-1234567890abcdefghij" not in event.prompt_preview
+        # Some form of redaction marker should be present
+        assert "REDACTED" in event.prompt_preview
+
+    def test_aws_access_key_redacted(self) -> None:
+        """AWS access keys (AKIA...) are redacted."""
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview="AWS key: AKIAIOSFODNN7EXAMPLE",
+            prompt_length=35,
+        )
+        assert "AKIAIOSFODNN7EXAMPLE" not in event.prompt_preview
+        assert "AKIA***REDACTED***" in event.prompt_preview
+
+    def test_github_token_redacted(self) -> None:
+        """GitHub personal access tokens (ghp_...) are redacted."""
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview="Token: ghp_1234567890abcdefghijklmnopqrstuvwxyz",
+            prompt_length=50,
+        )
+        # The actual secret value must be removed
+        assert "ghp_1234567890abcdefghijklmnopqrstuvwxyz" not in event.prompt_preview
+        # Some form of redaction marker should be present
+        assert "REDACTED" in event.prompt_preview
+
+    def test_bearer_token_redacted(self) -> None:
+        """Bearer tokens in Authorization headers are redacted."""
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview="Header: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+            prompt_length=60,
+        )
+        assert "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" not in event.prompt_preview
+        assert "Bearer ***REDACTED***" in event.prompt_preview
+
+    def test_password_in_url_redacted(self) -> None:
+        """Passwords in connection URLs are redacted."""
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview="Connect to postgres://user:secretpass@localhost:5432",
+            prompt_length=55,
+        )
+        assert "secretpass" not in event.prompt_preview
+        assert "***REDACTED***@" in event.prompt_preview
+
+    def test_generic_password_field_redacted(self) -> None:
+        """Generic password=value patterns are redacted."""
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview="Set password=supersecretvalue123",
+            prompt_length=35,
+        )
+        assert "supersecretvalue123" not in event.prompt_preview
+        assert "password=***REDACTED***" in event.prompt_preview
+
+    def test_safe_content_unchanged(self) -> None:
+        """Content without secrets passes through unchanged (except truncation)."""
+        safe_preview = "Fix the bug in the authentication module"
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview=safe_preview,
+            prompt_length=len(safe_preview),
+        )
+        assert event.prompt_preview == safe_preview
+
+    def test_combined_sanitization_and_truncation(self) -> None:
+        """Sanitization and truncation work together correctly."""
+        # Long text with a secret near the end
+        long_preview = "a" * 80 + " secret=verysecretvalue"
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview=long_preview,
+            prompt_length=len(long_preview),
+        )
+        # Should be sanitized (secret redacted) and truncated
+        assert len(event.prompt_preview) == PROMPT_PREVIEW_MAX_LENGTH
+        assert "verysecretvalue" not in event.prompt_preview
+
+    def test_slack_token_redacted(self) -> None:
+        """Slack tokens (xoxb-...) are redacted."""
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview="Slack: xoxb-1234567890-abcdefghij",
+            prompt_length=40,
+        )
+        assert "xoxb-1234567890-abcdefghij" not in event.prompt_preview
+        assert "xox*-***REDACTED***" in event.prompt_preview
 
 
 # =============================================================================

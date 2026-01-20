@@ -40,14 +40,9 @@ Correlation ID: d7072fb8-a0c5-4465-838e-05f54c70ef45
 import asyncio
 import logging
 import os
-import time
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Dict, List, Optional
 from uuid import UUID, uuid4
 
 import pytest
-
 
 # Database imports
 try:
@@ -66,7 +61,6 @@ from agents.lib.transformation_event_publisher import (
     publish_transformation_failed,
     publish_transformation_start,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -107,9 +101,7 @@ def db_connection():
             user=str(db_config["user"]),
             password=str(db_config.get("password") or ""),
         )
-        logger.info(
-            f"✓ Database connection established: {db_config['host']}:{db_config['port']}"
-        )
+        logger.info(f"✓ Database connection established: {db_config['host']}:{db_config['port']}")
         yield conn
         conn.close()
         logger.info("✓ Database connection closed")
@@ -159,9 +151,7 @@ def consumer_wait_time() -> int:
 # =============================================================================
 
 
-def query_agent_actions(
-    db_conn, correlation_id: str, action_type: Optional[str] = None
-) -> List[Dict]:
+def query_agent_actions(db_conn, correlation_id: str, action_type: str | None = None) -> list[dict]:
     """
     Query agent_actions table by correlation_id.
 
@@ -195,7 +185,7 @@ def query_agent_actions(
     return [dict(row) for row in results]
 
 
-def query_transformation_events(db_conn, correlation_id: str) -> List[Dict]:
+def query_transformation_events(db_conn, correlation_id: str) -> list[dict]:
     """
     Query agent_transformation_events table by correlation_id.
 
@@ -218,7 +208,7 @@ def query_transformation_events(db_conn, correlation_id: str) -> List[Dict]:
     return [dict(row) for row in results]
 
 
-def query_manifest_injections(db_conn, correlation_id: str) -> List[Dict]:
+def query_manifest_injections(db_conn, correlation_id: str) -> list[dict]:
     """
     Query agent_manifest_injections table by correlation_id.
 
@@ -241,7 +231,7 @@ def query_manifest_injections(db_conn, correlation_id: str) -> List[Dict]:
     return [dict(row) for row in results]
 
 
-def query_routing_decisions(db_conn, correlation_id: str) -> List[Dict]:
+def query_routing_decisions(db_conn, correlation_id: str) -> list[dict]:
     """
     Query agent_routing_decisions table by correlation_id.
 
@@ -283,7 +273,7 @@ def verify_uuid_field(value, field_name: str):
     # Verify it's a valid UUID string format
     try:
         UUID(str(value))
-    except (ValueError, AttributeError) as e:
+    except (ValueError, AttributeError):
         pytest.fail(f"{field_name} is not a valid UUID: {value} ({type(value)})")
 
 
@@ -454,9 +444,9 @@ class TestAgentActionsLogging:
 
         # Assertions
         # THIS IS THE CRITICAL ASSERTION THAT WOULD FAIL IF ERROR LOGGING IS BROKEN
-        assert (
-            len(actions) >= 1
-        ), "FAILED: Expected at least 1 error action in database - ERROR LOGGING NOT WORKING!"
+        assert len(actions) >= 1, (
+            "FAILED: Expected at least 1 error action in database - ERROR LOGGING NOT WORKING!"
+        )
 
         action = actions[0]
         assert action["action_type"] == "error"
@@ -515,9 +505,9 @@ class TestAgentActionsLogging:
 
         # Assertions
         # THIS IS THE CRITICAL ASSERTION THAT WOULD FAIL IF SUCCESS LOGGING IS BROKEN
-        assert (
-            len(actions) >= 1
-        ), "FAILED: Expected at least 1 success action in database - SUCCESS LOGGING NOT WORKING!"
+        assert len(actions) >= 1, (
+            "FAILED: Expected at least 1 success action in database - SUCCESS LOGGING NOT WORKING!"
+        )
 
         action = actions[0]
         assert action["action_type"] == "success"
@@ -548,9 +538,7 @@ class TestAgentActionsLogging:
         - Chronological ordering
         - Complete trace reconstruction
         """
-        logger.info(
-            f"Testing all action types together (correlation_id: {correlation_id})"
-        )
+        logger.info(f"Testing all action types together (correlation_id: {correlation_id})")
 
         # Log all 4 action types in sequence
         await action_logger.log_tool_call(
@@ -573,9 +561,7 @@ class TestAgentActionsLogging:
             send_slack_notification=False,
         )
 
-        await action_logger.log_success(
-            success_name="validation_completed", duration_ms=50
-        )
+        await action_logger.log_success(success_name="validation_completed", duration_ms=50)
 
         logger.info("✓ All 4 action types published to Kafka")
 
@@ -586,9 +572,7 @@ class TestAgentActionsLogging:
         all_actions = query_agent_actions(db_connection, correlation_id)
 
         # Assertions
-        assert (
-            len(all_actions) >= 4
-        ), f"Expected at least 4 actions, found {len(all_actions)}"
+        assert len(all_actions) >= 4, f"Expected at least 4 actions, found {len(all_actions)}"
 
         action_types = {action["action_type"] for action in all_actions}
         assert "tool_call" in action_types, "Missing tool_call action"
@@ -600,7 +584,7 @@ class TestAgentActionsLogging:
         timestamps = [action["created_at"] for action in all_actions]
         assert timestamps == sorted(timestamps), "Actions not in chronological order"
 
-        logger.info(f"✓ All 4 action types verified in database with correct ordering")
+        logger.info("✓ All 4 action types verified in database with correct ordering")
 
 
 # =============================================================================
@@ -639,9 +623,7 @@ class TestTransformationEvents:
         consumer couldn't deserialize them properly, causing silent failures
         or incorrect data in the database.
         """
-        logger.info(
-            f"Testing transformation_complete event (correlation_id: {correlation_id})"
-        )
+        logger.info(f"Testing transformation_complete event (correlation_id: {correlation_id})")
 
         # Publish transformation complete event
         success = await publish_transformation_complete(
@@ -667,9 +649,9 @@ class TestTransformationEvents:
 
         # Assertions
         # THIS IS THE CRITICAL ASSERTION THAT WOULD CATCH THE UUID BUG
-        assert (
-            len(events) >= 1
-        ), "FAILED: Expected at least 1 transformation event - UUID SERIALIZATION MAY BE BROKEN!"
+        assert len(events) >= 1, (
+            "FAILED: Expected at least 1 transformation event - UUID SERIALIZATION MAY BE BROKEN!"
+        )
 
         event = events[0]
         assert event["event_type"] == "transformation_complete"
@@ -680,9 +662,7 @@ class TestTransformationEvents:
         assert event["transformation_duration_ms"] == 45
         assert event["success"] is True
 
-        logger.info(
-            f"✓ Transformation complete event verified in database: {event['id']}"
-        )
+        logger.info(f"✓ Transformation complete event verified in database: {event['id']}")
 
     @pytest.mark.asyncio
     async def test_transformation_failed_event(
@@ -695,9 +675,7 @@ class TestTransformationEvents:
         """
         Test failed transformation event flow.
         """
-        logger.info(
-            f"Testing transformation_failed event (correlation_id: {correlation_id})"
-        )
+        logger.info(f"Testing transformation_failed event (correlation_id: {correlation_id})")
 
         # Publish transformation failed event
         success = await publish_transformation_failed(
@@ -732,9 +710,7 @@ class TestTransformationEvents:
         assert event["error_type"] == "FileNotFoundError"
         assert "not found" in event["error_message"]
 
-        logger.info(
-            f"✓ Transformation failed event verified in database: {event['id']}"
-        )
+        logger.info(f"✓ Transformation failed event verified in database: {event['id']}")
 
     @pytest.mark.asyncio
     async def test_transformation_start_event(
@@ -747,9 +723,7 @@ class TestTransformationEvents:
         """
         Test transformation start event flow.
         """
-        logger.info(
-            f"Testing transformation_start event (correlation_id: {correlation_id})"
-        )
+        logger.info(f"Testing transformation_start event (correlation_id: {correlation_id})")
 
         # Publish transformation start event
         success = await publish_transformation_start(
@@ -799,9 +773,7 @@ class TestTransformationEvents:
         2. Complete transformation
         3. Verify both events are linked by correlation_id
         """
-        logger.info(
-            f"Testing polymorphic agent switching (correlation_id: {correlation_id})"
-        )
+        logger.info(f"Testing polymorphic agent switching (correlation_id: {correlation_id})")
 
         # Publish start event
         await publish_transformation_start(
@@ -839,15 +811,11 @@ class TestTransformationEvents:
         events = query_transformation_events(db_connection, correlation_id)
 
         # Assertions
-        assert (
-            len(events) >= 2
-        ), f"Expected at least 2 transformation events, found {len(events)}"
+        assert len(events) >= 2, f"Expected at least 2 transformation events, found {len(events)}"
 
         # Verify both events have same correlation_id
         correlation_ids = {str(event["correlation_id"]) for event in events}
-        assert (
-            len(correlation_ids) == 1
-        ), f"Multiple correlation IDs found: {correlation_ids}"
+        assert len(correlation_ids) == 1, f"Multiple correlation IDs found: {correlation_ids}"
         assert correlation_id in correlation_ids
 
         # Verify event types
@@ -856,12 +824,8 @@ class TestTransformationEvents:
         assert "transformation_complete" in event_types
 
         # Verify chronological ordering
-        start_event = next(
-            e for e in events if e["event_type"] == "transformation_start"
-        )
-        complete_event = next(
-            e for e in events if e["event_type"] == "transformation_complete"
-        )
+        start_event = next(e for e in events if e["event_type"] == "transformation_start")
+        complete_event = next(e for e in events if e["event_type"] == "transformation_complete")
         assert start_event["started_at"] < complete_event["started_at"]
 
         logger.info(f"✓ Polymorphic agent switching verified with {len(events)} events")
@@ -939,9 +903,7 @@ class TestManifestInjections:
         logger.info("✓ Manifest injection schema verified")
 
     @pytest.mark.asyncio
-    async def test_correlation_id_tracking_across_tables(
-        self, db_connection, correlation_id: str
-    ):
+    async def test_correlation_id_tracking_across_tables(self, db_connection, correlation_id: str):
         """
         Test that correlation_id properly links records across all tables.
 
@@ -1018,9 +980,7 @@ class TestManifestInjections:
         assert str(manifest_injections[0]["correlation_id"]) == correlation_id
 
         # Verify foreign key relationship
-        assert (
-            manifest_injections[0]["routing_decision_id"] == routing_decisions[0]["id"]
-        )
+        assert manifest_injections[0]["routing_decision_id"] == routing_decisions[0]["id"]
 
         logger.info("✓ Correlation ID tracking verified across all tables")
 

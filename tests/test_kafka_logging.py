@@ -21,17 +21,14 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+# Skip entire module if kafka-python is not installed
+# This test mocks kafka.KafkaProducer which requires the kafka module to exist
+pytest.importorskip("kafka", reason="kafka-python not installed - skipping kafka logging tests")
 
 # Add skills path (updated for claude/ consolidation)
 sys.path.insert(
     0,
-    str(
-        Path(__file__).parent.parent
-        / "claude"
-        / "skills"
-        / "agent-tracking"
-        / "log-agent-action"
-    ),
+    str(Path(__file__).parent.parent / "claude" / "skills" / "agent-tracking" / "log-agent-action"),
 )
 sys.path.insert(0, str(Path(__file__).parent.parent / "claude" / "skills" / "_shared"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "shared_lib"))
@@ -51,7 +48,6 @@ class TestKafkaLoggingUnit:
         # Import kafka_publisher to reset singleton
         sys.path.insert(0, str(Path(__file__).parent.parent / "shared_lib"))
         import kafka_publisher
-        from kafka_publisher import close_kafka_producer
 
         self.kafka_publisher = kafka_publisher
 
@@ -74,9 +70,7 @@ class TestKafkaLoggingUnit:
 
             # Mock successful send
             mock_future = MagicMock()
-            mock_future.get.return_value = MagicMock(
-                topic="agent-actions", partition=0, offset=42
-            )
+            mock_future.get.return_value = MagicMock(topic="agent-actions", partition=0, offset=42)
             mock_instance.send.return_value = mock_future
 
             yield mock_producer_class, mock_instance

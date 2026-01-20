@@ -17,12 +17,11 @@ from uuid import uuid4
 
 import pytest
 
-
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Handle CI cache issue where cli.lib may not be properly installed
-from typing import Any, Type, Union
+from typing import Any
 
 from agents.lib.models.pipeline_models import (
     GateType,
@@ -37,15 +36,11 @@ class _CLIHandlerNotAvailable:
     """Placeholder class when CLIHandler cannot be imported."""
 
     def __init__(self, **kwargs: Any) -> None:
-        raise ImportError(
-            "CLIHandler not available - CI cache issue with cli.lib package"
-        )
+        raise ImportError("CLIHandler not available - CI cache issue with cli.lib package")
 
 
 # Type annotation that accommodates both real CLIHandler and placeholder
-_CLIHandlerType: Union[Type[Any], Type[_CLIHandlerNotAvailable]] = (
-    _CLIHandlerNotAvailable
-)
+_CLIHandlerType: type[Any] | type[_CLIHandlerNotAvailable] = _CLIHandlerNotAvailable
 CLI_AVAILABLE: bool = False
 
 try:

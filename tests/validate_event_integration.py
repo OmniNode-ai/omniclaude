@@ -12,9 +12,8 @@ Tests:
 import asyncio
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
-
 
 try:
     from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
@@ -77,7 +76,7 @@ async def test_event_flow():
     request_payload = {
         "correlation_id": correlation_id,
         "event_type": "code_analysis_requested",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "payload": {
             "source_path": "validation_test.py",
             "language": "python",
@@ -121,7 +120,7 @@ async def test_event_flow():
             print("\n   📊 Response payload:")
             print(f"   {json.dumps(response, indent=2)[:500]}...")
 
-    except asyncio.TimeoutError:
+    except TimeoutError:
         print("   ⚠️  Timeout - No response received")
         print("   💡 This might mean:")
         print("      - Intelligence handler is not processing events")

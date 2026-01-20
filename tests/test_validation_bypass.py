@@ -24,7 +24,7 @@ from unittest.mock import patch
 
 import pytest
 
-from config.settings import get_settings, reload_settings
+from config.settings import reload_settings
 
 
 def test_validation_logic_across_phases():
@@ -40,60 +40,34 @@ def test_validation_logic_across_phases():
         - Setup/Call/Teardown (pytest in modules, PYTEST_CURRENT_TEST set): Validation RUNS
     """
     # Test normal run (no pytest)
-    with patch.dict(sys.modules, {}, clear=True):
-        with patch.dict(os.environ, {}, clear=True):
-            in_pytest_collection = "pytest" in sys.modules and not os.getenv(
-                "PYTEST_CURRENT_TEST"
-            )
-            assert (
-                in_pytest_collection is False
-            ), "Normal run should validate (skip=False)"
+    with patch.dict(sys.modules, {}, clear=True), patch.dict(os.environ, {}, clear=True):
+        in_pytest_collection = "pytest" in sys.modules and not os.getenv("PYTEST_CURRENT_TEST")
+        assert in_pytest_collection is False, "Normal run should validate (skip=False)"
 
     # Test collection phase (pytest imported, PYTEST_CURRENT_TEST not set)
-    with patch.dict(sys.modules, {"pytest": None}):
-        with patch.dict(os.environ, {}, clear=True):
-            in_pytest_collection = "pytest" in sys.modules and not os.getenv(
-                "PYTEST_CURRENT_TEST"
-            )
-            assert (
-                in_pytest_collection is True
-            ), "Collection phase should skip validation (skip=True)"
+    with patch.dict(sys.modules, {"pytest": None}), patch.dict(os.environ, {}, clear=True):
+        in_pytest_collection = "pytest" in sys.modules and not os.getenv("PYTEST_CURRENT_TEST")
+        assert in_pytest_collection is True, "Collection phase should skip validation (skip=True)"
 
     # Test setup phase (pytest imported, PYTEST_CURRENT_TEST set to "setup")
     with patch.dict(sys.modules, {"pytest": None}):
-        with patch.dict(
-            os.environ, {"PYTEST_CURRENT_TEST": "test.py::test (setup)"}, clear=True
-        ):
-            in_pytest_collection = "pytest" in sys.modules and not os.getenv(
-                "PYTEST_CURRENT_TEST"
-            )
-            assert (
-                in_pytest_collection is False
-            ), "Setup phase should validate (skip=False)"
+        with patch.dict(os.environ, {"PYTEST_CURRENT_TEST": "test.py::test (setup)"}, clear=True):
+            in_pytest_collection = "pytest" in sys.modules and not os.getenv("PYTEST_CURRENT_TEST")
+            assert in_pytest_collection is False, "Setup phase should validate (skip=False)"
 
     # Test call phase (pytest imported, PYTEST_CURRENT_TEST set to "call")
     with patch.dict(sys.modules, {"pytest": None}):
-        with patch.dict(
-            os.environ, {"PYTEST_CURRENT_TEST": "test.py::test (call)"}, clear=True
-        ):
-            in_pytest_collection = "pytest" in sys.modules and not os.getenv(
-                "PYTEST_CURRENT_TEST"
-            )
-            assert (
-                in_pytest_collection is False
-            ), "Call phase should validate (skip=False)"
+        with patch.dict(os.environ, {"PYTEST_CURRENT_TEST": "test.py::test (call)"}, clear=True):
+            in_pytest_collection = "pytest" in sys.modules and not os.getenv("PYTEST_CURRENT_TEST")
+            assert in_pytest_collection is False, "Call phase should validate (skip=False)"
 
     # Test teardown phase (pytest imported, PYTEST_CURRENT_TEST set to "teardown")
-    with patch.dict(sys.modules, {"pytest": None}):
-        with patch.dict(
-            os.environ, {"PYTEST_CURRENT_TEST": "test.py::test (teardown)"}, clear=True
-        ):
-            in_pytest_collection = "pytest" in sys.modules and not os.getenv(
-                "PYTEST_CURRENT_TEST"
-            )
-            assert (
-                in_pytest_collection is False
-            ), "Teardown phase should validate (skip=False)"
+    with (
+        patch.dict(sys.modules, {"pytest": None}),
+        patch.dict(os.environ, {"PYTEST_CURRENT_TEST": "test.py::test (teardown)"}, clear=True),
+    ):
+        in_pytest_collection = "pytest" in sys.modules and not os.getenv("PYTEST_CURRENT_TEST")
+        assert in_pytest_collection is False, "Teardown phase should validate (skip=False)"
 
 
 def test_validation_runs_during_test_execution():
@@ -109,8 +83,7 @@ def test_validation_runs_during_test_execution():
     """
     # Verify we're in test execution phase
     assert os.getenv("PYTEST_CURRENT_TEST") is not None, (
-        "This test should run during pytest execution "
-        "(PYTEST_CURRENT_TEST should be set)"
+        "This test should run during pytest execution (PYTEST_CURRENT_TEST should be set)"
     )
 
     # Reload settings to trigger validation
@@ -124,8 +97,7 @@ def test_validation_runs_during_test_execution():
     # Verify validation would catch issues by checking it runs
     # We do this by verifying the settings object has required fields
     assert hasattr(settings, "postgres_password"), (
-        "Settings should have postgres_password field "
-        "(indicates validation logic was executed)"
+        "Settings should have postgres_password field (indicates validation logic was executed)"
     )
 
     # Additional check: verify validation methods are callable
@@ -145,19 +117,16 @@ def test_collection_phase_skips_validation():
     Expected: Validation should be skipped
     """
     # Simulate collection phase
-    with patch.dict(sys.modules, {"pytest": None}):
-        with patch.dict(os.environ, {}, clear=True):
-            # Remove PYTEST_CURRENT_TEST to simulate collection
-            os.environ.pop("PYTEST_CURRENT_TEST", None)
+    with patch.dict(sys.modules, {"pytest": None}), patch.dict(os.environ, {}, clear=True):
+        # Remove PYTEST_CURRENT_TEST to simulate collection
+        os.environ.pop("PYTEST_CURRENT_TEST", None)
 
-            # This should match the condition in get_settings()
-            in_pytest_collection = "pytest" in sys.modules and not os.getenv(
-                "PYTEST_CURRENT_TEST"
-            )
+        # This should match the condition in get_settings()
+        in_pytest_collection = "pytest" in sys.modules and not os.getenv("PYTEST_CURRENT_TEST")
 
-            assert (
-                in_pytest_collection is True
-            ), "Collection phase detection failed - validation would not be skipped"
+        assert in_pytest_collection is True, (
+            "Collection phase detection failed - validation would not be skipped"
+        )
 
 
 if __name__ == "__main__":

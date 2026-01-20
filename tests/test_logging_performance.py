@@ -20,21 +20,26 @@ import os
 import sys
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from statistics import mean
-from typing import Dict, List
+
+import pytest
+
+# Skip entire module if dependencies not installed
+# This is a performance test that requires actual Kafka infrastructure
+kafka = pytest.importorskip(
+    "kafka", reason="kafka-python not installed - skipping performance tests"
+)
+psutil = pytest.importorskip("psutil", reason="psutil not installed - skipping performance tests")
+KafkaConsumer = kafka.KafkaConsumer
+KafkaProducer = kafka.KafkaProducer
 
 import asyncpg
-import psutil
-import pytest
-from kafka import KafkaConsumer, KafkaProducer
-
 
 # Add config for type-safe settings
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import settings
-
 
 # Add paths
 sys.path.insert(0, str(Path(__file__).parent.parent / "agents" / "lib"))
@@ -71,14 +76,10 @@ async def db_pool(postgres_dsn):
 async def __clean_database(db_pool):
     """Clean test data."""
     async with db_pool.acquire() as conn:
-        await conn.execute(
-            "DELETE FROM agent_actions WHERE agent_name LIKE 'perf-test-%'"
-        )
+        await conn.execute("DELETE FROM agent_actions WHERE agent_name LIKE 'perf-test-%'")
     yield
     async with db_pool.acquire() as conn:
-        await conn.execute(
-            "DELETE FROM agent_actions WHERE agent_name LIKE 'perf-test-%'"
-        )
+        await conn.execute("DELETE FROM agent_actions WHERE agent_name LIKE 'perf-test-%'")
 
 
 @pytest.fixture
@@ -100,10 +101,10 @@ class PerformanceMetrics:
     """Container for performance metrics."""
 
     def __init__(self):
-        self.latencies: List[float] = []
-        self.throughputs: List[float] = []
+        self.latencies: list[float] = []
+        self.throughputs: list[float] = []
         self.errors: int = 0
-        self.memory_usage: List[float] = []
+        self.memory_usage: list[float] = []
 
     def add_latency(self, latency_ms: float):
         """Add latency measurement."""
@@ -117,7 +118,7 @@ class PerformanceMetrics:
         """Add memory usage measurement."""
         self.memory_usage.append(memory_mb)
 
-    def calculate_percentile(self, data: List[float], percentile: int) -> float:
+    def calculate_percentile(self, data: list[float], percentile: int) -> float:
         """Calculate percentile."""
         if not data:
             return 0.0
@@ -125,7 +126,7 @@ class PerformanceMetrics:
         index = int(len(sorted_data) * (percentile / 100.0))
         return sorted_data[min(index, len(sorted_data) - 1)]
 
-    def summary(self) -> Dict:
+    def summary(self) -> dict:
         """Generate summary statistics."""
         return {
             "latency": {
@@ -170,7 +171,7 @@ class TestKafkaPublishPerformance:
                 "action_name": f"action_{i}",
                 "action_details": {},
                 "debug_mode": True,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
 
             start = time.time()
@@ -188,9 +189,9 @@ class TestKafkaPublishPerformance:
         print(f"  Avg: {summary['latency']['avg']:.2f}ms")
         print(f"  Max: {summary['latency']['max']:.2f}ms")
 
-        assert (
-            summary["latency"]["p95"] < 50.0
-        ), f"P95 latency {summary['latency']['p95']:.2f}ms exceeds 50ms target"
+        assert summary["latency"]["p95"] < 50.0, (
+            f"P95 latency {summary['latency']['p95']:.2f}ms exceeds 50ms target"
+        )
 
     @pytest.mark.asyncio
     @pytest.mark.performance
@@ -211,7 +212,7 @@ class TestKafkaPublishPerformance:
                 "action_name": f"action_{i}",
                 "action_details": {"index": i},
                 "debug_mode": True,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
             events.append(event)
 
@@ -231,9 +232,7 @@ class TestKafkaPublishPerformance:
         print(f"  Time: {elapsed:.2f}s")
         print(f"  Throughput: {throughput:.2f} events/sec")
 
-        assert (
-            throughput > 1000
-        ), f"Throughput {throughput:.2f} < 1000 events/sec target"
+        assert throughput > 1000, f"Throughput {throughput:.2f} < 1000 events/sec target"
 
 
 @pytest.mark.integration
@@ -243,9 +242,7 @@ class TestConsumerPerformance:
     @pytest.mark.asyncio
     @pytest.mark.performance
     @pytest.mark.usefixtures("__clean_database")
-    async def test_consumer_throughput(
-        self, kafka_producer, kafka_brokers, postgres_dsn, db_pool
-    ):
+    async def test_consumer_throughput(self, kafka_producer, kafka_brokers, postgres_dsn, db_pool):
         """
         Test consumer throughput.
         Target: >500 events/sec sustained
@@ -263,7 +260,7 @@ class TestConsumerPerformance:
                 "action_name": f"action_{i}",
                 "action_details": {"index": i},
                 "debug_mode": True,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
             kafka_producer.send("agent-actions", value=event)
 
@@ -328,18 +325,16 @@ class TestConsumerPerformance:
 
         # Allow for some variance due to potential old events in database
         # Use >= with tolerance to avoid flaky failures
-        assert (
-            final_count >= num_events
-        ), f"Only processed {final_count}/{num_events} events (expected at least {num_events})"
-        assert (
-            throughput > 10
-        ), f"Throughput {throughput:.2f} < 10 events/sec minimum (reduced threshold for reliability)"
+        assert final_count >= num_events, (
+            f"Only processed {final_count}/{num_events} events (expected at least {num_events})"
+        )
+        assert throughput > 10, (
+            f"Throughput {throughput:.2f} < 10 events/sec minimum (reduced threshold for reliability)"
+        )
 
     @pytest.mark.asyncio
     @pytest.mark.performance
-    async def test_consumer_lag_under_load(
-        self, kafka_producer, kafka_brokers, postgres_dsn
-    ):
+    async def test_consumer_lag_under_load(self, kafka_producer, kafka_brokers, postgres_dsn):
         """
         Test consumer lag under continuous load.
         Target: <100 messages lag under steady state
@@ -371,7 +366,7 @@ class TestConsumerPerformance:
                     "action_name": f"action_{event_count}",
                     "action_details": {},
                     "debug_mode": True,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 }
 
                 kafka_producer.send("agent-actions", value=event)
@@ -419,9 +414,7 @@ class TestConsumerPerformance:
 
     @pytest.mark.asyncio
     @pytest.mark.performance
-    async def test_consumer_memory_usage(
-        self, kafka_producer, kafka_brokers, postgres_dsn
-    ):
+    async def test_consumer_memory_usage(self, kafka_producer, kafka_brokers, postgres_dsn):
         """
         Test consumer memory usage under load.
         Target: <500MB
@@ -456,7 +449,7 @@ class TestConsumerPerformance:
                     "action_name": f"action_{i}",
                     "action_details": {"data": "x" * 100},  # 100 bytes payload
                     "debug_mode": True,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 }
 
                 kafka_producer.send("agent-actions", value=event)
@@ -482,9 +475,7 @@ class TestConsumerPerformance:
             print(f"  Increase: {memory_increase:.2f} MB")
             print(f"  Peak: {max(memory_samples):.2f} MB")
 
-            assert (
-                final_memory < 500
-            ), f"Memory usage {final_memory:.2f}MB exceeds 500MB target"
+            assert final_memory < 500, f"Memory usage {final_memory:.2f}MB exceeds 500MB target"
 
         finally:
             # Stop consumer gracefully
@@ -529,7 +520,7 @@ class TestBatchSizeOptimization:
                     "action_name": f"action_{i}",
                     "action_details": {},
                     "debug_mode": True,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 }
                 kafka_producer.send("agent-actions", value=event)
 

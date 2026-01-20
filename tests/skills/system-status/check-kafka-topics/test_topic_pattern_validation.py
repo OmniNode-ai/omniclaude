@@ -19,14 +19,12 @@ Created: 2025-11-22
 """
 
 import json
-import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
-
 
 # Constants (must match execute.py)
 MAX_TOPIC_PATTERN_LENGTH = 256
@@ -65,9 +63,7 @@ def run_check_kafka_topics(topics_arg=None):
     if topics_arg is not None:
         cmd.extend(["--topics", topics_arg])
 
-    result = subprocess.run(
-        cmd, capture_output=True, text=True, timeout=10, check=False
-    )
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=10, check=False)
 
     # Parse JSON output
     try:
@@ -95,9 +91,9 @@ def test_valid_short_pattern():
     # Note: May fail due to Kafka connectivity, but should NOT fail due to length
     if not result.get("success"):
         error = result.get("error", "")
-        assert (
-            "exceeds maximum length" not in error.lower()
-        ), f"Should not fail due to length: {error}"
+        assert "exceeds maximum length" not in error.lower(), (
+            f"Should not fail due to length: {error}"
+        )
         print(f"  ⚠️  Test passed (Kafka unavailable: {error[:60]}...)")
     else:
         print("  ✅ PASS - Pattern accepted\n")
@@ -118,9 +114,9 @@ def test_pattern_at_limit():
     # Should not fail due to length validation
     if not result.get("success"):
         error = result.get("error", "")
-        assert (
-            "exceeds maximum length" not in error.lower()
-        ), f"Should accept pattern at limit: {error}"
+        assert "exceeds maximum length" not in error.lower(), (
+            f"Should accept pattern at limit: {error}"
+        )
         print(f"  ⚠️  Test passed (Kafka unavailable: {error[:60]}...)")
     else:
         print("  ✅ PASS - Pattern at limit accepted\n")
@@ -153,18 +149,18 @@ def test_pattern_over_limit():
     error = result.get("error", "")
     # Only check error message content if status is 'error' (pattern validation failed)
     if result.get("status") == "error":
-        assert (
-            "exceeds maximum length" in error.lower()
-        ), f"Error should mention maximum length: {error}"
-        assert (
-            str(MAX_TOPIC_PATTERN_LENGTH) in error
-        ), f"Error should include limit value ({MAX_TOPIC_PATTERN_LENGTH}): {error}"
-        assert (
-            str(len(pattern)) in error
-        ), f"Error should include actual length ({len(pattern)}): {error}"
+        assert "exceeds maximum length" in error.lower(), (
+            f"Error should mention maximum length: {error}"
+        )
+        assert str(MAX_TOPIC_PATTERN_LENGTH) in error, (
+            f"Error should include limit value ({MAX_TOPIC_PATTERN_LENGTH}): {error}"
+        )
+        assert str(len(pattern)) in error, (
+            f"Error should include actual length ({len(pattern)}): {error}"
+        )
         print("  ✅ PASS - Pattern rejected with clear error\n")
     else:
-        print(f"  ⚠️  Test passed (Kafka unavailable, pattern validation skipped)\n")
+        print("  ⚠️  Test passed (Kafka unavailable, pattern validation skipped)\n")
 
 
 @REQUIRES_KCAT
@@ -197,12 +193,12 @@ def test_multiple_patterns_one_over_limit():
     error = result.get("error", "")
     # Only check error message content if status is 'error' (pattern validation failed)
     if result.get("status") == "error":
-        assert (
-            "exceeds maximum length" in error.lower()
-        ), f"Error should mention maximum length: {error}"
+        assert "exceeds maximum length" in error.lower(), (
+            f"Error should mention maximum length: {error}"
+        )
         print("  ✅ PASS - Correctly rejected due to one invalid pattern\n")
     else:
-        print(f"  ⚠️  Test passed (Kafka unavailable, pattern validation skipped)\n")
+        print("  ⚠️  Test passed (Kafka unavailable, pattern validation skipped)\n")
 
 
 @REQUIRES_KCAT
@@ -231,12 +227,12 @@ def test_wildcard_pattern_validation():
     error = result.get("error", "")
     # Only check error message content if status is 'error' (pattern validation failed)
     if result.get("status") == "error":
-        assert (
-            "exceeds maximum length" in error.lower()
-        ), f"Error should mention maximum length: {error}"
+        assert "exceeds maximum length" in error.lower(), (
+            f"Error should mention maximum length: {error}"
+        )
         print("  ✅ PASS - Wildcard pattern validated for length\n")
     else:
-        print(f"  ⚠️  Test passed (Kafka unavailable, pattern validation skipped)\n")
+        print("  ⚠️  Test passed (Kafka unavailable, pattern validation skipped)\n")
 
 
 def main():

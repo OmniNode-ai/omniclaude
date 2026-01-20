@@ -16,12 +16,9 @@ Test Categories:
 import json
 import os
 import subprocess
-import tempfile
 from pathlib import Path
-from typing import Optional
 
 import pytest
-
 
 # =============================================================================
 # TEST FIXTURES
@@ -61,7 +58,7 @@ def sample_tool_json() -> str:
 def run_script(
     script_path: Path,
     stdin_input: str = "",
-    env: Optional[dict] = None,
+    env: dict | None = None,
     timeout: int = 10,
 ) -> tuple[int, str, str]:
     """
@@ -109,9 +106,7 @@ class TestPreToolUseLog:
         """Verify the script has a bash shebang."""
         script_path = hooks_dir / "pre-tool-use-log.sh"
         content = script_path.read_text()
-        assert content.startswith("#!/usr/bin/env bash") or content.startswith(
-            "#!/bin/bash"
-        )
+        assert content.startswith("#!/usr/bin/env bash") or content.startswith("#!/bin/bash")
 
     def test_script_uses_pipefail(self, hooks_dir: Path):
         """Verify the script uses set -euo pipefail."""
@@ -250,9 +245,7 @@ class TestPreToolUseQuality:
         assert "CORRELATION_ID" in content
         assert "uuidgen" in content or "uuid" in content.lower()
 
-    def test_script_passes_through_non_write_tools(
-        self, hooks_dir: Path, tmp_path: Path
-    ):
+    def test_script_passes_through_non_write_tools(self, hooks_dir: Path, tmp_path: Path):
         """Test that non-Write/Edit tools are passed through."""
         script_path = hooks_dir / "pre-tool-use-quality.sh"
 
@@ -354,9 +347,7 @@ class TestScriptSecurity:
                 # Allow patterns that use environment variables
                 if pattern in content:
                     # Check it's not a hardcoded value
-                    lines_with_pattern = [
-                        line for line in content.split("\n") if pattern in line
-                    ]
+                    lines_with_pattern = [line for line in content.split("\n") if pattern in line]
                     for line in lines_with_pattern:
                         # Should be using env vars or placeholders
                         assert (
@@ -414,9 +405,9 @@ class TestScriptSecurity:
                     or "|| true" in content  # Explicit error suppression is OK
                 )
 
-                assert (
-                    has_error_handling
-                ), f"Core hook {script_path.name} should have error handling"
+                assert has_error_handling, (
+                    f"Core hook {script_path.name} should have error handling"
+                )
 
 
 # =============================================================================

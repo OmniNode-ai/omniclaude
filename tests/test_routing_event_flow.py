@@ -37,14 +37,12 @@ import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, Optional, cast
+from typing import Any, cast
 from uuid import UUID, uuid4
-
 
 # Add project root to path for config import
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import settings
-
 
 # Add services to path (parent of routing_adapter)
 # NOTE: services/ is at project root, not in tests/
@@ -59,7 +57,6 @@ from routing_adapter.schemas import (  # noqa: E402
     ModelRoutingEventEnvelope,
     ModelRoutingRequest,
 )
-
 
 # Kafka imports
 try:
@@ -116,12 +113,12 @@ class RoutingEventTestClient:
         """
         self.kafka_servers = kafka_servers
         self.timeout_ms = timeout_ms
-        self.producer: Optional[AIOKafkaProducer] = None
-        self.consumer: Optional[AIOKafkaConsumer] = None
-        self._correlation_id: Optional[UUID] = None
-        self._response_event: Optional[asyncio.Event] = None
-        self._response_payload: Optional[Dict[str, Any]] = None
-        self._consume_task: Optional[asyncio.Task] = None
+        self.producer: AIOKafkaProducer | None = None
+        self.consumer: AIOKafkaConsumer | None = None
+        self._correlation_id: UUID | None = None
+        self._response_event: asyncio.Event | None = None
+        self._response_payload: dict[str, Any] | None = None
+        self._consume_task: asyncio.Task | None = None
 
     async def start(self):
         """Start Kafka producer and consumer."""
@@ -187,9 +184,9 @@ class RoutingEventTestClient:
     async def request_routing(
         self,
         user_request: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
         max_recommendations: int = 5,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Request agent routing via Kafka events.
 
@@ -237,18 +234,15 @@ class RoutingEventTestClient:
         if self._response_event is None:
             raise ValueError("Response event not initialized")
         try:
-            await asyncio.wait_for(
-                self._response_event.wait(), timeout=self.timeout_ms / 1000.0
-            )
+            await asyncio.wait_for(self._response_event.wait(), timeout=self.timeout_ms / 1000.0)
         except TimeoutError:
             raise TimeoutError(
-                f"No response received within {self.timeout_ms}ms. "
-                "Is agent-router-service running?"
+                f"No response received within {self.timeout_ms}ms. Is agent-router-service running?"
             ) from None
 
         # Parse response - background task sets _response_payload, which mypy
         # doesn't track across async boundaries, so we use cast() here
-        response_payload: Dict[str, Any] = cast(Dict[str, Any], self._response_payload)
+        response_payload: dict[str, Any] = cast(dict[str, Any], self._response_payload)
         if not response_payload:
             raise ValueError("Response event set but no payload received")
 
@@ -258,16 +252,14 @@ class RoutingEventTestClient:
             # Parse error response
             error_payload = response_payload.get("payload", {})
             error = ModelRoutingError(**error_payload)
-            raise ValueError(
-                f"Routing failed: {error.error_code} - {error.error_message}"
-            )
+            raise ValueError(f"Routing failed: {error.error_code} - {error.error_message}")
 
         # Parse success response
-        return cast(Dict[str, Any], response_payload.get("payload", {}))
+        return cast(dict[str, Any], response_payload.get("payload", {}))
 
 
 # Helper function to check PostgreSQL logging
-def check_postgres_log(correlation_id: UUID) -> Optional[Dict[str, Any]]:
+def check_postgres_log(correlation_id: UUID) -> dict[str, Any] | None:
     """
     Check if routing decision was logged to PostgreSQL.
 
@@ -336,9 +328,7 @@ async def test_simple_routing():
         user_request = "optimize my database queries"
         print(f"\nRequesting routing: '{user_request}'")
 
-        response = await client.request_routing(
-            user_request=user_request, max_recommendations=1
-        )
+        response = await client.request_routing(user_request=user_request, max_recommendations=1)
 
         elapsed_ms = int((time.time() - start_time) * 1000)
 
@@ -348,9 +338,7 @@ async def test_simple_routing():
 
         # Validate response structure
         assert "recommendations" in response, "Expected 'recommendations' in response"
-        assert (
-            len(response["recommendations"]) > 0
-        ), "Expected at least one recommendation"
+        assert len(response["recommendations"]) > 0, "Expected at least one recommendation"
         assert "routing_metadata" in response, "Expected 'routing_metadata' in response"
 
         recommendation = response["recommendations"][0]
@@ -398,9 +386,7 @@ async def test_multiple_recommendations():
         print(f"\nRequesting routing: '{user_request}'")
         print("   Options: max_recommendations=3")
 
-        response = await client.request_routing(
-            user_request=user_request, max_recommendations=3
-        )
+        response = await client.request_routing(user_request=user_request, max_recommendations=3)
 
         elapsed_ms = int((time.time() - start_time) * 1000)
 
@@ -420,9 +406,9 @@ async def test_multiple_recommendations():
 
         # Verify confidence scores are sorted descending
         confidences = [rec["confidence"]["total"] for rec in recommendations]
-        assert confidences == sorted(
-            confidences, reverse=True
-        ), "Expected recommendations sorted by confidence descending"
+        assert confidences == sorted(confidences, reverse=True), (
+            "Expected recommendations sorted by confidence descending"
+        )
 
         print("\n✅ Validation passed (sorted by confidence)")
 
@@ -458,9 +444,7 @@ async def test_timeout_handling():
         # Try routing request
         print("\nRequesting routing with short timeout...")
 
-        _ = await client.request_routing(
-            user_request="test timeout", max_recommendations=1
-        )
+        _ = await client.request_routing(user_request="test timeout", max_recommendations=1)
 
         # If we get here, service is running
         print("⏭️  Test skipped: service is running (no timeout occurred)")
@@ -483,7 +467,7 @@ async def test_timeout_handling():
         print("✅ Client stopped\n")
 
 
-async def test_postgres_logging(correlation_id: Optional[UUID]):
+async def test_postgres_logging(correlation_id: UUID | None):
     """Test 4: PostgreSQL logging verification"""
     print("=" * 60)
     print("TEST 4: PostgreSQL Logging Verification")
