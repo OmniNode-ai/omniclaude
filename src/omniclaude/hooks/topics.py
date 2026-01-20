@@ -86,6 +86,9 @@ def _validate_topic_name(topic: str) -> None:
     Args:
         topic: The full topic name to validate.
 
+    Returns:
+        None. This function validates in-place and raises on error.
+
     Raises:
         ModelOnexError: If topic name is malformed (leading/trailing dots,
             consecutive dots, empty segments, or invalid characters).

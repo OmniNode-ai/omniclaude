@@ -77,7 +77,7 @@ async def db_pool(postgres_dsn):
 
 
 @pytest.fixture
-async def __clean_database(db_pool):
+async def clean_database(db_pool):
     """Clean test data before/after each test."""
     _ = db_pool  # Mark as intentionally unused - fixture ensures DB is available
     # Cleanup no longer needed - using unique UUIDs that do not conflict
@@ -118,7 +118,7 @@ class TestEndToEndAgentLogging:
     """End-to-end tests for agent logging system."""
 
     @pytest.mark.asyncio
-    @pytest.mark.usefixtures("__clean_database")
+    @pytest.mark.usefixtures("clean_database")
     async def test_complete_workflow_simulation(self, running_consumer, db_pool, wait_for_records):
         """
         Simulate complete agent workflow:
@@ -235,7 +235,7 @@ class TestEndToEndAgentLogging:
                     assert row["duration_ms"] == expected["duration_ms"]
 
     @pytest.mark.asyncio
-    @pytest.mark.usefixtures("__clean_database")
+    @pytest.mark.usefixtures("clean_database")
     async def test_multi_agent_scenario(self, running_consumer, db_pool, wait_for_records):
         """
         Test multiple agents logging concurrently.
@@ -310,7 +310,7 @@ class TestEndToEndAgentLogging:
             assert logged_agents == set(agents), f"Expected {set(agents)}, got {logged_agents}"
 
     @pytest.mark.asyncio
-    @pytest.mark.usefixtures("__clean_database")
+    @pytest.mark.usefixtures("clean_database")
     async def test_data_integrity_verification(self, running_consumer, db_pool, wait_for_records):
         """
         Verify data integrity across the pipeline:
@@ -397,7 +397,7 @@ class TestEndToEndAgentLogging:
                 assert row["action_name"] == f"action_{i}"
 
     @pytest.mark.asyncio
-    @pytest.mark.usefixtures("__clean_database")
+    @pytest.mark.usefixtures("clean_database")
     async def test_latency_measurement(self, running_consumer, db_pool):
         """
         Measure end-to-end latency from skill execution to database persistence.
@@ -479,7 +479,7 @@ class TestEndToEndAgentLogging:
         pytest.fail(f"Event not persisted within {max_wait}s")
 
     @pytest.mark.asyncio
-    @pytest.mark.usefixtures("__clean_database")
+    @pytest.mark.usefixtures("clean_database")
     async def test_error_recovery(self, kafka_brokers, postgres_dsn, db_pool, wait_for_records):
         """
         Test error recovery scenarios:

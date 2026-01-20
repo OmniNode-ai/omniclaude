@@ -259,7 +259,10 @@ async def test_different_timestamps_allowed(db_pool):
     correlation_id = uuid.uuid4()
     action_name = "timestamp_test_action"
     timestamp1 = datetime.now(UTC)
-    timestamp2 = timestamp1 + timedelta(microseconds=1000)
+    # Use timedelta for safe arithmetic - automatically handles overflow
+    # by rolling over into seconds when microseconds exceed 999999.
+    # Using 1 millisecond offset to ensure timestamps are clearly distinct.
+    timestamp2 = timestamp1 + timedelta(milliseconds=1)
 
     async with db_pool.acquire() as conn:
         # Clean up any existing test data

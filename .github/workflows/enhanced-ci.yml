@@ -127,6 +127,8 @@ jobs:
 
       - name: Validate ONEX Naming Conventions
         run: |
+          set -e
+          set -o pipefail
           echo "::group::ONEX Naming Convention Validation"
           # Check for proper ONEX node naming: Node<Name><Type>
           echo "Validating ONEX node class naming conventions..."
@@ -187,6 +189,8 @@ jobs:
 
       - name: Validate ONEX Contract Usage
         run: |
+          set -e
+          set -o pipefail
           echo "::group::ONEX Contract Validation"
           echo "Validating ONEX contract definitions..."
 
@@ -210,6 +214,8 @@ jobs:
 
       - name: Check ONEX Method Signatures
         run: |
+          set -e
+          set -o pipefail
           echo "::group::ONEX Method Signature Validation"
           echo "Validating ONEX method signatures..."
 
@@ -891,27 +897,69 @@ jobs:
 
       - name: Start stack and validate health
         run: |
+          set -e
+          set -o pipefail
           echo "::group::Stack Health Validation"
 
-          # Start services
+          # Start services (check exit code explicitly since -d returns immediately)
           docker compose up -d
+          UP_EXIT=$?
+          if [ $UP_EXIT -ne 0 ]; then
+            echo "::error::docker compose up failed with exit code $UP_EXIT"
+            docker compose logs
+            exit 1
+          fi
 
-          # Wait for services to be healthy
+          # Wait for services to be healthy with timeout
           echo "Waiting for services to be healthy..."
-          sleep 30
+          TIMEOUT=60
+          ELAPSED=0
+          HEALTHY=false
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            # Check if all services are healthy
+            UNHEALTHY=$(docker compose ps --format json 2>/dev/null | jq -r 'select(.Health != "healthy" and .Health != "") | .Name' 2>/dev/null | head -1 || true)
+            if [ -z "$UNHEALTHY" ]; then
+              HEALTHY=true
+              break
+            fi
+            echo "Waiting for services... ($ELAPSED/$TIMEOUT seconds)"
+            sleep 5
+            ELAPSED=$((ELAPSED + 5))
+          done
 
-          # Check service health
+          # Check service health status
+          echo "Service status:"
           docker compose ps
 
-          # Validate PostgreSQL
-          docker compose exec -T postgres pg_isready -U omniclaude || exit 1
+          if [ "$HEALTHY" = "false" ]; then
+            echo "::warning::Some services may not be fully healthy after ${TIMEOUT}s, continuing with explicit checks..."
+          fi
 
-          # Validate Redis
-          docker compose exec -T redis redis-cli ping || exit 1
+          # Validate PostgreSQL (explicit check with proper exit propagation)
+          echo "Validating PostgreSQL..."
+          if ! docker compose exec -T postgres pg_isready -U omniclaude; then
+            echo "::error::PostgreSQL health check failed"
+            docker compose logs postgres
+            exit 1
+          fi
 
-          # Check app health endpoint
-          curl -f http://localhost:8000/health || exit 1
+          # Validate Redis (explicit check with proper exit propagation)
+          echo "Validating Redis..."
+          if ! docker compose exec -T redis redis-cli ping; then
+            echo "::error::Redis health check failed"
+            docker compose logs redis
+            exit 1
+          fi
 
+          # Check app health endpoint (explicit check with proper exit propagation)
+          echo "Validating app health endpoint..."
+          if ! curl -f http://localhost:8000/health; then
+            echo "::error::App health endpoint check failed"
+            docker compose logs app
+            exit 1
+          fi
+
+          echo "All health checks passed"
           echo "::endgroup::"
 
       - name: Cleanup

@@ -147,26 +147,38 @@ _SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
 # =============================================================================
 
 
-def _validate_timezone_aware(v: datetime) -> datetime:
+def _validate_timezone_aware(v: datetime | str) -> datetime:
     """Validate and ensure datetime is timezone-aware.
 
     This is extracted as a reusable function to avoid code duplication
     across all payload models that have emitted_at fields.
 
+    Handles both datetime objects (from Python code) and ISO format strings
+    (from JSON deserialization). Pydantic's BeforeValidator receives the raw
+    value before type coercion, so this function must handle string input
+    when deserializing from JSON.
+
     Args:
-        v: The datetime value to validate.
+        v: The datetime value to validate (datetime object or ISO format string).
 
     Returns:
         The timezone-aware datetime.
 
     Raises:
-        ValueError: If the datetime cannot be made timezone-aware.
+        ValueError: If the datetime cannot be made timezone-aware or
+            if the string cannot be parsed as ISO format.
 
     Example:
         >>> from datetime import datetime, UTC
         >>> _validate_timezone_aware(datetime(2025, 1, 15, 12, 0, 0, tzinfo=UTC))
         datetime.datetime(2025, 1, 15, 12, 0, 0, tzinfo=datetime.timezone.utc)
+        >>> _validate_timezone_aware("2025-01-15T12:00:00+00:00")
+        datetime.datetime(2025, 1, 15, 12, 0, 0, tzinfo=datetime.timezone.utc)
     """
+    # Handle string input from JSON deserialization
+    if isinstance(v, str):
+        v = datetime.fromisoformat(v)
+
     result: datetime = ensure_timezone_aware(v)
     return result
 
