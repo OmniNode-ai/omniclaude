@@ -15,7 +15,6 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
   PYTHON_VERSION: '3.12'
-  POETRY_VERSION: '1.8.3'
 
 jobs:
   # ============================================================================
@@ -32,21 +31,16 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
 
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: ${{ env.POETRY_VERSION }}
-          virtualenvs-create: true
-          virtualenvs-in-project: true
+      - name: Install uv
+        run: pip install --no-cache-dir uv
 
       - name: Load cached venv
-        id: cached-poetry-dependencies
+        id: cached-uv-dependencies
         uses: actions/cache@v4
         with:
           path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+          key: venv-${{ runner.os }}-${{ hashFiles('**/uv.lock') }}
 
       - name: Configure Git authentication for private repositories
         run: |
@@ -54,27 +48,20 @@ jobs:
         continue-on-error: true
 
       - name: Install dependencies
-        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        if: steps.cached-uv-dependencies.outputs.cache-hit != 'true'
         run: |
           # Install dependencies - continue even if private repos fail (tests use mocks)
-          poetry install --no-interaction --no-root --with dev || {
-            echo "⚠️  Warning: Some dependencies failed to install (likely private repos)"
+          uv sync --frozen --group dev || {
+            echo "Warning: Some dependencies failed to install (likely private repos)"
             echo "Continuing with available dependencies - tests use mocks"
-            poetry install --no-interaction --no-root --with dev --no-ansi 2>&1 | grep -v "omnibase" || true
-          }
-
-      - name: Install project
-        run: |
-          poetry install --no-interaction || {
-            echo "⚠️  Warning: Project install failed - continuing with available packages"
-            true
+            uv sync --group dev 2>&1 | grep -v "omnibase" || true
           }
 
       - name: Run Black (code formatting check)
         run: |
           echo "::group::Black Formatting Check"
           # Explicitly scan only project source directories to avoid .venv
-          poetry run black --check --diff \
+          uv run black --check --diff \
             --extend-exclude="/(\.venv|\.git|__pycache__|\.pytest_cache|\.mypy_cache|dist|build|agents\/templates|agents\/parallel_execution\/templates)/" \
             agents/ claude/ cli/ scripts/ tests/
           echo "::endgroup::"
@@ -83,15 +70,15 @@ jobs:
         run: |
           echo "::group::Ruff Linting"
           # Scan only project source directories, aligned with pre-commit config
-          poetry run ruff check agents/ claude/ cli/ scripts/ tests/ --show-source --show-fixes
+          uv run ruff check agents/ claude/ cli/ scripts/ tests/ --show-source --show-fixes
           echo "::endgroup::"
 
       - name: Run type checking (mypy - strict mode)
         run: |
           echo "::group::MyPy Type Checking (Strict)"
-          poetry run pip install mypy types-PyYAML types-aiofiles types-redis
+          uv run pip install mypy types-PyYAML types-aiofiles types-redis
           # Strict type checking - this MUST pass for CI to succeed
-          poetry run mypy agents/ claude/ \
+          uv run mypy agents/ claude/ \
             --strict \
             --show-error-codes \
             --show-column-numbers \
@@ -125,10 +112,8 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: ${{ env.POETRY_VERSION }}
+      - name: Install uv
+        run: pip install --no-cache-dir uv
 
       - name: Configure Git authentication for private repositories
         run: |
@@ -136,8 +121,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          poetry install --no-interaction || {
-            echo "⚠️  Warning: Some dependencies failed - continuing with available packages"
+          uv sync --frozen || {
+            echo "Warning: Some dependencies failed - continuing with available packages"
             true
           }
 
@@ -154,45 +139,45 @@ jobs:
             # Validate Effect nodes
             if [[ "$file" == *"_effect.py" ]]; then
               if ! grep -q "class Node.*Effect" "$file"; then
-                echo "❌ ERROR: $file should define a class named Node<Name>Effect"
+                echo "ERROR: $file should define a class named Node<Name>Effect"
                 exit 1
               else
-                echo "✅ $file: ONEX Effect naming convention passed"
+                echo "$file: ONEX Effect naming convention passed"
               fi
             fi
 
             # Validate Compute nodes
             if [[ "$file" == *"_compute.py" ]]; then
               if ! grep -q "class Node.*Compute" "$file"; then
-                echo "❌ ERROR: $file should define a class named Node<Name>Compute"
+                echo "ERROR: $file should define a class named Node<Name>Compute"
                 exit 1
               else
-                echo "✅ $file: ONEX Compute naming convention passed"
+                echo "$file: ONEX Compute naming convention passed"
               fi
             fi
 
             # Validate Reducer nodes
             if [[ "$file" == *"_reducer.py" ]]; then
               if ! grep -q "class Node.*Reducer" "$file"; then
-                echo "❌ ERROR: $file should define a class named Node<Name>Reducer"
+                echo "ERROR: $file should define a class named Node<Name>Reducer"
                 exit 1
               else
-                echo "✅ $file: ONEX Reducer naming convention passed"
+                echo "$file: ONEX Reducer naming convention passed"
               fi
             fi
 
             # Validate Orchestrator nodes
             if [[ "$file" == *"_orchestrator.py" ]]; then
               if ! grep -q "class Node.*Orchestrator" "$file"; then
-                echo "❌ ERROR: $file should define a class named Node<Name>Orchestrator"
+                echo "ERROR: $file should define a class named Node<Name>Orchestrator"
                 exit 1
               else
-                echo "✅ $file: ONEX Orchestrator naming convention passed"
+                echo "$file: ONEX Orchestrator naming convention passed"
               fi
             fi
           done
 
-          echo "✅ All ONEX naming conventions validated successfully"
+          echo "All ONEX naming conventions validated successfully"
           echo "::endgroup::"
 
       - name: Validate ONEX Contract Usage
@@ -203,13 +188,13 @@ jobs:
           # Check for ModelContract usage in nodes
           find agents/ claude/ -name "node_*.py" -type f | while read -r file; do
             if ! grep -q "ModelContract" "$file" 2>/dev/null; then
-              echo "⚠️  WARNING: $file may be missing ModelContract usage"
+              echo "WARNING: $file may be missing ModelContract usage"
             else
-              echo "✅ $file: Uses ModelContract"
+              echo "$file: Uses ModelContract"
             fi
           done
 
-          echo "✅ Contract validation completed"
+          echo "Contract validation completed"
           echo "::endgroup::"
 
       - name: Check ONEX Method Signatures
@@ -221,14 +206,14 @@ jobs:
           find agents/ claude/ -name "*_effect.py" -type f | while read -r file; do
             if grep -q "class Node.*Effect" "$file"; then
               if ! grep -q "async def execute_effect" "$file"; then
-                echo "⚠️  WARNING: $file Effect node should implement async def execute_effect()"
+                echo "WARNING: $file Effect node should implement async def execute_effect()"
               else
-                echo "✅ $file: Implements execute_effect()"
+                echo "$file: Implements execute_effect()"
               fi
             fi
           done
 
-          echo "✅ Method signature validation completed"
+          echo "Method signature validation completed"
           echo "::endgroup::"
 
   # ============================================================================
@@ -251,10 +236,8 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: ${{ env.POETRY_VERSION }}
+      - name: Install uv
+        run: pip install --no-cache-dir uv
 
       - name: Configure Git authentication for private repositories
         run: |
@@ -262,14 +245,14 @@ jobs:
 
       - name: Install dependencies
         run: |
-          poetry install --no-interaction || {
-            echo "⚠️  Warning: Some dependencies failed - continuing with available packages"
+          uv sync --frozen --group dev || {
+            echo "Warning: Some dependencies failed - continuing with available packages"
             true
           }
 
       - name: Install pytest-split for parallel test execution
         run: |
-          poetry run pip install pytest-split
+          uv run pip install pytest-split
 
       - name: Run unit tests (Split ${{ matrix.split }}/10)
         run: |
@@ -277,7 +260,7 @@ jobs:
           # Add explicit timeout to prevent test hangs
           # Use pytest-split to distribute tests evenly across 10 splits
           # Generate unique coverage file per split to avoid overwrites
-          timeout 600 poetry run pytest -o addopts="" \
+          timeout 600 uv run pytest -o addopts="" \
             agents/tests/ \
             -v \
             --ignore=agents/tests/test_integration_smoke.py \
@@ -398,7 +381,7 @@ jobs:
   integration-tests:
     name: Integration Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 20  # Prevent infinite hangs in integration tests
+    timeout-minutes: 20  # Prevent infinite hangs
     services:
       postgres:
         image: postgres:16-alpine
@@ -433,10 +416,8 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: ${{ env.POETRY_VERSION }}
+      - name: Install uv
+        run: pip install --no-cache-dir uv
 
       - name: Configure Git authentication for private repositories
         run: |
@@ -444,8 +425,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          poetry install --no-interaction || {
-            echo "⚠️  Warning: Some dependencies failed - continuing with available packages"
+          uv sync --frozen --group dev || {
+            echo "Warning: Some dependencies failed - continuing with available packages"
             true
           }
 
@@ -475,7 +456,7 @@ jobs:
         run: |
           echo "::group::Integration Tests"
           # Add explicit timeout to prevent test hangs
-          timeout 900 poetry run pytest \
+          timeout 900 uv run pytest \
             agents/tests/test_integration_smoke.py \
             agents/tests/test_phase4_integration.py \
             agents/tests/test_phase5_integration.py \
@@ -559,10 +540,8 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: ${{ env.POETRY_VERSION }}
+      - name: Install uv
+        run: pip install --no-cache-dir uv
 
       - name: Configure Git authentication for private repositories
         run: |
@@ -570,8 +549,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          poetry install --no-interaction || {
-            echo "⚠️  Warning: Some dependencies failed - continuing with available packages"
+          uv sync --frozen --group dev || {
+            echo "Warning: Some dependencies failed - continuing with available packages"
             true
           }
 
@@ -598,7 +577,7 @@ jobs:
           echo "::group::Hooks System Tests"
           # Check if claude/tests/ exists (hooks tests consolidated into claude/)
           if [ -d "claude/tests" ]; then
-            poetry run pytest \
+            uv run pytest \
               claude/tests/ \
               -v \
               --cov=claude \
@@ -606,7 +585,7 @@ jobs:
               --cov-report=term-missing \
               --junitxml=junit-hooks.xml
           else
-            echo "⚠️  No hooks tests found in claude/tests/ - skipping"
+            echo "No hooks tests found in claude/tests/ - skipping"
             echo "Hooks tests will be added in a future PR"
             # Create empty junit file for artifact upload
             echo '<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="hooks" tests="0" errors="0" failures="0" skipped="0"></testsuite></testsuites>' > junit-hooks.xml
@@ -642,10 +621,8 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: ${{ env.POETRY_VERSION }}
+      - name: Install uv
+        run: pip install --no-cache-dir uv
 
       - name: Configure Git authentication for private repositories
         run: |
@@ -653,15 +630,15 @@ jobs:
 
       - name: Install dependencies
         run: |
-          poetry install --no-interaction || {
-            echo "⚠️  Warning: Some dependencies failed - continuing with available packages"
+          uv sync --frozen --group dev || {
+            echo "Warning: Some dependencies failed - continuing with available packages"
             true
           }
 
       - name: Run agent framework tests
         run: |
           echo "::group::Agent Framework Tests"
-          poetry run pytest \
+          uv run pytest \
             agents/tests/test_enhanced_router.py \
             agents/tests/test_quality_gates.py \
             agents/tests/test_performance_thresholds.py \
@@ -701,10 +678,8 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: ${{ env.POETRY_VERSION }}
+      - name: Install uv
+        run: pip install --no-cache-dir uv
 
       - name: Configure Git authentication for private repositories
         run: |
@@ -712,8 +687,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          poetry install --no-interaction || {
-            echo "⚠️  Warning: Some dependencies failed - continuing with available packages"
+          uv sync --frozen --group dev || {
+            echo "Warning: Some dependencies failed - continuing with available packages"
             true
           }
 
@@ -722,13 +697,13 @@ jobs:
           echo "::group::Performance Benchmarks"
 
           # Run template cache benchmark
-          poetry run python agents/tests/benchmark_template_cache.py
+          uv run python agents/tests/benchmark_template_cache.py
 
           # Run parallel execution benchmark
-          poetry run python agents/parallel_benchmark.py
+          uv run python agents/parallel_benchmark.py
 
           # Run general benchmarks
-          poetry run python agents/benchmark_improvements.py
+          uv run python agents/benchmark_improvements.py
 
           echo "::endgroup::"
 
@@ -797,7 +772,7 @@ jobs:
           echo "Validating indexes..."
           psql -h localhost -U schema_test -d schema_test_db -c '\di'
 
-          echo "✅ Database schema validation passed"
+          echo "Database schema validation passed"
           echo "::endgroup::"
 
   # ============================================================================
@@ -817,7 +792,7 @@ jobs:
           # Validate compose file syntax (use v2 syntax: docker compose)
           docker compose config --quiet
 
-          echo "✅ docker compose.yml syntax is valid"
+          echo "docker compose.yml syntax is valid"
 
           # Validate services are defined
           echo "Checking defined services..."
@@ -846,13 +821,13 @@ jobs:
           docker compose ps
 
           # Validate PostgreSQL
-          docker compose exec -T postgres pg_isready -U omniclaude || echo "⚠️  PostgreSQL not ready"
+          docker compose exec -T postgres pg_isready -U omniclaude || echo "PostgreSQL not ready"
 
           # Validate Redis
-          docker compose exec -T redis redis-cli ping || echo "⚠️  Redis not ready"
+          docker compose exec -T redis redis-cli ping || echo "Redis not ready"
 
           # Check app health endpoint
-          curl -f http://localhost:8000/health || echo "⚠️  App health check failed"
+          curl -f http://localhost:8000/health || echo "App health check failed"
 
           echo "::endgroup::"
 
@@ -875,7 +850,7 @@ jobs:
       - hooks-tests
       - agent-framework-tests
       - database-validation
-      - docker compose-validation
+      - docker-compose-validation
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -948,4 +923,4 @@ jobs:
           # List all artifacts
           ls -la test-results/
 
-          echo "✅ All tests completed" >> $GITHUB_STEP_SUMMARY
+          echo "All tests completed" >> $GITHUB_STEP_SUMMARY

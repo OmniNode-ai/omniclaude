@@ -104,6 +104,24 @@ _SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\b(ghp_[a-zA-Z0-9]{36})", re.IGNORECASE), "ghp_***REDACTED***"),
     (re.compile(r"\b(gho_[a-zA-Z0-9]{36})", re.IGNORECASE), "gho_***REDACTED***"),
     (re.compile(r"\b(xox[baprs]-[a-zA-Z0-9-]{10,})", re.IGNORECASE), "xox*-***REDACTED***"),
+    # Stripe API keys (publishable, secret, and restricted)
+    # Format: (sk|pk|rk)_(live|test)_[a-zA-Z0-9]{24,}
+    # Reference: https://stripe.com/docs/keys
+    (
+        re.compile(r"\b((?:sk|pk|rk)_(?:live|test)_[a-zA-Z0-9]{24,})", re.IGNORECASE),
+        "stripe_***REDACTED***",
+    ),
+    # Google Cloud Platform API keys
+    # Format: AIza[0-9A-Za-z-_]{35}
+    # Reference: https://cloud.google.com/docs/authentication/api-keys
+    (re.compile(r"\b(AIza[0-9A-Za-z\-_]{35})"), "AIza***REDACTED***"),
+    # Private keys (PEM format)
+    # Matches RSA, EC, generic, and encrypted private key headers
+    # Reference: RFC 7468 (Textual Encodings of PKIX, PKCS, and CMS Structures)
+    (
+        re.compile(r"-----BEGIN (?:RSA |EC |ENCRYPTED )?PRIVATE KEY-----"),
+        "-----BEGIN ***REDACTED*** PRIVATE KEY-----",
+    ),
     # Bearer tokens
     (re.compile(r"(Bearer\s+)[a-zA-Z0-9._-]{20,}", re.IGNORECASE), r"\1***REDACTED***"),
     # Password in URLs (postgres://user:password@host)

@@ -169,7 +169,7 @@ See [TODO_AUDIT.md](../TODO_AUDIT.md) for complete list.
 
 To create issues from these templates:
 
-1. Navigate to GitHub repository: `https://github.com/your-org/omniclaude`
+1. Navigate to GitHub repository: `https://github.com/OmniNode-ai/omniclaude`
 2. Go to **Issues** tab
 3. Click **New Issue**
 4. Copy content from template file

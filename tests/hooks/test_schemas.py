@@ -619,6 +619,126 @@ class TestPromptPreviewSanitization:
         assert "xoxb-1234567890-abcdefghij" not in event.prompt_preview
         assert "xox*-***REDACTED***" in event.prompt_preview
 
+    def test_stripe_secret_key_live_redacted(self) -> None:
+        """Stripe live secret keys (sk_live_...) are redacted."""
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview="Key: sk_live_51AbCdEfGhIjKlMnOpQrStUv",
+            prompt_length=45,
+        )
+        assert "sk_live_51AbCdEfGhIjKlMnOpQrStUv" not in event.prompt_preview
+        assert "stripe_***REDACTED***" in event.prompt_preview
+
+    def test_stripe_publishable_key_test_redacted(self) -> None:
+        """Stripe test publishable keys (pk_test_...) are redacted."""
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview="Key: pk_test_51AbCdEfGhIjKlMnOpQrStUv",
+            prompt_length=45,
+        )
+        assert "pk_test_51AbCdEfGhIjKlMnOpQrStUv" not in event.prompt_preview
+        assert "stripe_***REDACTED***" in event.prompt_preview
+
+    def test_stripe_restricted_key_live_redacted(self) -> None:
+        """Stripe live restricted keys (rk_live_...) are redacted."""
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview="Key: rk_live_51AbCdEfGhIjKlMnOpQrStUv",
+            prompt_length=45,
+        )
+        assert "rk_live_51AbCdEfGhIjKlMnOpQrStUv" not in event.prompt_preview
+        assert "stripe_***REDACTED***" in event.prompt_preview
+
+    def test_gcp_api_key_redacted(self) -> None:
+        """Google Cloud Platform API keys (AIza...) are redacted."""
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview="GCP: AIzaSyA0123456789abcdefghijklmnopqrstuvwxy",
+            prompt_length=55,
+        )
+        assert "AIzaSyA0123456789abcdefghijklmnopqrstuvwxy" not in event.prompt_preview
+        assert "AIza***REDACTED***" in event.prompt_preview
+
+    def test_pem_private_key_redacted(self) -> None:
+        """Generic PEM private key headers are redacted."""
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview="Key: -----BEGIN PRIVATE KEY-----",
+            prompt_length=40,
+        )
+        assert "-----BEGIN PRIVATE KEY-----" not in event.prompt_preview
+        assert "-----BEGIN ***REDACTED*** PRIVATE KEY-----" in event.prompt_preview
+
+    def test_pem_rsa_private_key_redacted(self) -> None:
+        """RSA PEM private key headers are redacted."""
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview="Key: -----BEGIN RSA PRIVATE KEY-----",
+            prompt_length=45,
+        )
+        assert "-----BEGIN RSA PRIVATE KEY-----" not in event.prompt_preview
+        assert "-----BEGIN ***REDACTED*** PRIVATE KEY-----" in event.prompt_preview
+
+    def test_pem_ec_private_key_redacted(self) -> None:
+        """EC PEM private key headers are redacted."""
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview="Key: -----BEGIN EC PRIVATE KEY-----",
+            prompt_length=45,
+        )
+        assert "-----BEGIN EC PRIVATE KEY-----" not in event.prompt_preview
+        assert "-----BEGIN ***REDACTED*** PRIVATE KEY-----" in event.prompt_preview
+
+    def test_pem_encrypted_private_key_redacted(self) -> None:
+        """Encrypted PEM private key headers are redacted."""
+        event = ModelHookPromptSubmittedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            prompt_id=uuid4(),
+            prompt_preview="-----BEGIN ENCRYPTED PRIVATE KEY-----",
+            prompt_length=40,
+        )
+        assert "-----BEGIN ENCRYPTED PRIVATE KEY-----" not in event.prompt_preview
+        assert "-----BEGIN ***REDACTED*** PRIVATE KEY-----" in event.prompt_preview
+
 
 # =============================================================================
 # Tool Executed Payload Tests
@@ -938,6 +1058,60 @@ class TestTopics:
         """Whitespace-only prefix raises ValueError."""
         with pytest.raises(ValueError, match="prefix must be a non-empty string"):
             build_topic("   ", TopicBase.SESSION_STARTED)
+
+    def test_build_topic_none_prefix_raises(self) -> None:
+        """None prefix raises ValueError with clear message."""
+        with pytest.raises(ValueError, match="prefix must not be None"):
+            build_topic(None, TopicBase.SESSION_STARTED)  # type: ignore[arg-type]
+
+    def test_build_topic_empty_base_raises(self) -> None:
+        """Empty base raises ValueError."""
+        with pytest.raises(ValueError, match="base must be a non-empty string"):
+            build_topic("dev", "")
+
+    def test_build_topic_none_base_raises(self) -> None:
+        """None base raises ValueError with clear message."""
+        with pytest.raises(ValueError, match="base must not be None"):
+            build_topic("dev", None)  # type: ignore[arg-type]
+
+    def test_build_topic_whitespace_base_raises(self) -> None:
+        """Whitespace-only base raises ValueError."""
+        with pytest.raises(ValueError, match="base must be a non-empty string"):
+            build_topic("dev", "   ")
+
+    def test_build_topic_strips_whitespace(self) -> None:
+        """Prefix and base whitespace is stripped."""
+        topic = build_topic("  dev  ", "  omniclaude.test.v1  ")
+        assert topic == "dev.omniclaude.test.v1"
+
+    def test_build_topic_rejects_leading_dot_in_base(self) -> None:
+        """Base with leading dot produces malformed topic (rejected)."""
+        with pytest.raises(ValueError, match="consecutive dots"):
+            build_topic("dev", ".omniclaude.test.v1")
+
+    def test_build_topic_rejects_trailing_dot_in_base(self) -> None:
+        """Base with trailing dot produces malformed topic (rejected)."""
+        with pytest.raises(ValueError, match="must not end with a dot"):
+            build_topic("dev", "omniclaude.test.v1.")
+
+    def test_build_topic_rejects_consecutive_dots(self) -> None:
+        """Topic with consecutive dots is rejected."""
+        with pytest.raises(ValueError, match="consecutive dots"):
+            build_topic("dev", "omniclaude..test.v1")
+
+    def test_build_topic_valid_characters(self) -> None:
+        """Valid topic names with allowed characters."""
+        # Alphanumeric, underscores, hyphens are allowed
+        topic = build_topic("dev-test_1", "omniclaude.session_started.v1")
+        assert topic == "dev-test_1.omniclaude.session_started.v1"
+
+    def test_build_topic_rejects_special_characters(self) -> None:
+        """Topic segments with special characters are rejected."""
+        with pytest.raises(ValueError, match="invalid characters"):
+            build_topic("dev@test", TopicBase.SESSION_STARTED)
+
+        with pytest.raises(ValueError, match="invalid characters"):
+            build_topic("dev", "omniclaude.test#v1")
 
 
 # =============================================================================
