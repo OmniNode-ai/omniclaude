@@ -33,10 +33,11 @@ if [[ -f "$PROJECT_ROOT/.env" ]]; then
 fi
 
 # Kafka configuration (no fallback - must be set in .env)
-if [[ -z "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
-    echo "ERROR: KAFKA_BOOTSTRAP_SERVERS not set. Kafka events will not be emitted." >&2
+KAFKA_ENABLED="false"
+if [[ -n "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
+    KAFKA_ENABLED="true"
+    export KAFKA_BROKERS="${KAFKA_BROKERS:-${KAFKA_BOOTSTRAP_SERVERS:-}}"
 fi
-export KAFKA_BROKERS="${KAFKA_BROKERS:-${KAFKA_BOOTSTRAP_SERVERS:-}}"
 
 # Generate or reuse correlation ID
 if [ -z "${CORRELATION_ID:-}" ]; then

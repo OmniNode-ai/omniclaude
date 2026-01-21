@@ -33,10 +33,11 @@ if [[ -f "$PROJECT_ROOT/.env" ]]; then
 fi
 
 # Kafka configuration (no fallback - must be set in .env)
-if [[ -z "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
-    echo "ERROR: KAFKA_BOOTSTRAP_SERVERS not set. Kafka events will not be emitted." >&2
+KAFKA_ENABLED="false"
+if [[ -n "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
+    KAFKA_ENABLED="true"
+    export KAFKA_BROKERS="${KAFKA_BROKERS:-${KAFKA_BOOTSTRAP_SERVERS:-}}"
 fi
-export KAFKA_BROKERS="${KAFKA_BROKERS:-${KAFKA_BOOTSTRAP_SERVERS:-}}"
 
 # Get tool info from stdin
 TOOL_INFO=$(cat)
@@ -155,19 +156,21 @@ fi
 # Extract duration if available
 DURATION_MS=$(echo "$TOOL_INFO" | jq -r '.duration_ms // .durationMs // ""' 2>/dev/null || echo "")
 
-(
-    TOOL_SUMMARY="${TOOL_NAME} on ${FILE_PATH:-unknown}"
-    TOOL_SUMMARY="${TOOL_SUMMARY:0:500}"
+if [[ "$KAFKA_ENABLED" == "true" ]]; then
+    (
+        TOOL_SUMMARY="${TOOL_NAME} on ${FILE_PATH:-unknown}"
+        TOOL_SUMMARY="${TOOL_SUMMARY:0:500}"
 
-    python3 -m omniclaude.hooks.cli_emit tool-executed \
-        --session-id "$SESSION_ID" \
-        --tool-name "$TOOL_NAME" \
-        $([ "$TOOL_SUCCESS" = "true" ] && echo "--success" || echo "--failure") \
-        ${DURATION_MS:+--duration-ms "$DURATION_MS"} \
-        --summary "$TOOL_SUMMARY" \
-        >> "$LOG_FILE" 2>&1 || true
-) &
-echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Tool event emission started" >> "$LOG_FILE"
+        python3 -m omniclaude.hooks.cli_emit tool-executed \
+            --session-id "$SESSION_ID" \
+            --tool-name "$TOOL_NAME" \
+            $([ "$TOOL_SUCCESS" = "true" ] && echo "--success" || echo "--failure") \
+            ${DURATION_MS:+--duration-ms "$DURATION_MS"} \
+            --summary "$TOOL_SUMMARY" \
+            >> "$LOG_FILE" 2>&1 || true
+    ) &
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Tool event emission started" >> "$LOG_FILE"
+fi
 
 # Always pass through original output
 printf '%s\n' "$TOOL_INFO"

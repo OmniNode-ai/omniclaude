@@ -59,10 +59,10 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] Duration: ${SESSION_DURATION}ms" >> "$LOG_F
 # Emit session.ended event to Kafka (async, non-blocking)
 # Uses omniclaude-emit CLI with 250ms hard timeout
 (
-    # Convert duration from ms to seconds
+    # Convert duration from ms to seconds (using Python instead of bc for reliability)
     DURATION_SECONDS=""
-    if [[ "$SESSION_DURATION" != "0" && -n "$SESSION_DURATION" ]]; then
-        DURATION_SECONDS=$(echo "scale=3; $SESSION_DURATION / 1000" | bc 2>/dev/null || echo "")
+    if [[ -n "$SESSION_DURATION" && "$SESSION_DURATION" != "0" ]]; then
+        DURATION_SECONDS=$(python3 -c "import sys; print(f'{int(sys.argv[1])/1000:.3f}')" "$SESSION_DURATION" 2>/dev/null || echo "")
     fi
 
     python3 -m omniclaude.hooks.cli_emit session-ended \

@@ -69,10 +69,11 @@ if [[ -f "$PROJECT_ROOT/.env" ]]; then
 fi
 
 # Kafka configuration (no fallback - must be set in .env)
-if [[ -z "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
-    echo "ERROR: KAFKA_BOOTSTRAP_SERVERS not set. Kafka events will not be emitted." >&2
+KAFKA_ENABLED="false"
+if [[ -n "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
+    KAFKA_ENABLED="true"
+    export KAFKA_BROKERS="${KAFKA_BROKERS:-${KAFKA_BOOTSTRAP_SERVERS:-}}"
 fi
-export KAFKA_BROKERS="${KAFKA_BROKERS:-${KAFKA_BOOTSTRAP_SERVERS:-}}"
 
 export ARCHON_INTELLIGENCE_URL="${ARCHON_INTELLIGENCE_URL:-http://localhost:8053}"
 
@@ -129,14 +130,16 @@ fi
 PROMPT_LENGTH="${#PROMPT}"
 PROMPT_PREVIEW="${PROMPT:0:100}"
 
-(
-    $PYTHON_CMD -m omniclaude.hooks.cli_emit prompt-submitted \
-        --session-id "$SESSION_ID" \
-        --preview "$PROMPT_PREVIEW" \
-        --length "$PROMPT_LENGTH" \
-        >> "$LOG_FILE" 2>&1 || true
-) &
-log "Prompt event emission started"
+if [[ "$KAFKA_ENABLED" == "true" ]]; then
+    (
+        $PYTHON_CMD -m omniclaude.hooks.cli_emit prompt-submitted \
+            --session-id "$SESSION_ID" \
+            --preview "$PROMPT_PREVIEW" \
+            --length "$PROMPT_LENGTH" \
+            >> "$LOG_FILE" 2>&1 || true
+    ) &
+    log "Prompt event emission started"
+fi
 
 # -----------------------------
 # Workflow Detection
