@@ -33,8 +33,11 @@ if [[ -f "$PROJECT_ROOT/.env" ]]; then
     set +a
 fi
 
+# Source shared functions (provides PYTHON_CMD, KAFKA_ENABLED, get_time_ms)
+source "${HOOKS_DIR}/scripts/common.sh"
+
 # Performance tracking
-START_TIME=$(python3 -c "import time; print(int(time.time() * 1000))")
+START_TIME=$(get_time_ms)
 
 # Read Stop event JSON
 STOP_INFO=$(cat)
@@ -53,7 +56,7 @@ echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Session ID: $SESSION_ID" >> "$LOG_FILE"
 # If tools not in JSON, query database
 if [[ -z "$TOOLS_EXECUTED" ]] || [[ "$TOOLS_EXECUTED" == "null" ]]; then
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Querying database for tools..." >> "$LOG_FILE"
-    TOOLS_EXECUTED=$(python3 -c "
+    TOOLS_EXECUTED=$($PYTHON_CMD -c "
 import sys
 sys.path.insert(0, '${HOOKS_LIB}')
 from correlation_manager import get_correlation_context
@@ -94,7 +97,7 @@ echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Tools executed: $TOOLS_EXECUTED" >> "$L
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Logging response completion..." >> "$LOG_FILE"
 
 set +e
-python3 -c "
+$PYTHON_CMD -c "
 import sys
 sys.path.insert(0, '${HOOKS_LIB}')
 from response_intelligence import log_response_completion
@@ -130,7 +133,7 @@ set -e
 # Display agent summary banner
 if [[ -f "${HOOKS_LIB}/agent_summary_banner.py" ]]; then
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Displaying summary banner..." >> "$LOG_FILE"
-    python3 -c "
+    $PYTHON_CMD -c "
 import sys
 sys.path.insert(0, '${HOOKS_LIB}')
 from agent_summary_banner import display_summary_banner
@@ -152,7 +155,7 @@ fi
 
 # Clear correlation state
 if [[ -f "${HOOKS_LIB}/correlation_manager.py" ]]; then
-    python3 -c "
+    $PYTHON_CMD -c "
 import sys
 sys.path.insert(0, '${HOOKS_LIB}')
 from correlation_manager import get_manager
@@ -162,7 +165,7 @@ get_manager().clear()
 fi
 
 # Performance tracking
-END_TIME=$(python3 -c "import time; print(int(time.time() * 1000))")
+END_TIME=$(get_time_ms)
 EXECUTION_TIME_MS=$((END_TIME - START_TIME))
 
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Stop hook completed in ${EXECUTION_TIME_MS}ms" >> "$LOG_FILE"

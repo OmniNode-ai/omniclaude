@@ -90,6 +90,44 @@ class HookEventType(StrEnum):
     TOOL_EXECUTED = "hook.tool.executed"
 
 
+class HookSource(StrEnum):
+    """Sources that can trigger a session start.
+
+    Using StrEnum for type safety, IDE autocompletion, and consistent
+    serialization in Kafka events.
+
+    Values:
+        STARTUP: Initial Claude Code session launch.
+        RESUME: Session resumed after being suspended.
+        CLEAR: Session restarted via /clear command.
+        COMPACT: Session compacted (context window management).
+    """
+
+    STARTUP = "startup"
+    RESUME = "resume"
+    CLEAR = "clear"
+    COMPACT = "compact"
+
+
+class SessionEndReason(StrEnum):
+    """Reasons for session termination.
+
+    Using StrEnum for type safety, IDE autocompletion, and consistent
+    serialization in Kafka events.
+
+    Values:
+        CLEAR: User issued /clear command.
+        LOGOUT: User logged out or closed session explicitly.
+        PROMPT_INPUT_EXIT: User exited via prompt input (Ctrl+C, etc.).
+        OTHER: Any other termination reason.
+    """
+
+    CLEAR = "clear"
+    LOGOUT = "logout"
+    PROMPT_INPUT_EXIT = "prompt_input_exit"
+    OTHER = "other"
+
+
 # =============================================================================
 # Constants
 # =============================================================================
@@ -415,7 +453,7 @@ class ModelHookSessionStartedPayload(BaseModel):
             "PRIVACY: May contain ticket IDs or developer identifiers."
         ),
     )
-    hook_source: Literal["startup", "resume", "clear", "compact"] = Field(
+    hook_source: HookSource = Field(
         ...,
         description="What triggered the session start",
     )
@@ -488,7 +526,7 @@ class ModelHookSessionEndedPayload(BaseModel):
     )
 
     # Session end-specific fields
-    reason: Literal["clear", "logout", "prompt_input_exit", "other"] = Field(
+    reason: SessionEndReason = Field(
         ...,
         description="What caused the session to end",
     )
@@ -846,8 +884,10 @@ ModelHookPayload = Annotated[
 __all__ = [
     # Constants
     "PROMPT_PREVIEW_MAX_LENGTH",
-    # Event type enum
+    # Enums
     "HookEventType",
+    "HookSource",
+    "SessionEndReason",
     # Annotated types (reusable validators)
     "TimezoneAwareDatetime",
     # Sanitization utilities

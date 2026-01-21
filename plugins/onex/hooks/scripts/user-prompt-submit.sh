@@ -27,37 +27,6 @@ fi
 # Ensure log directory exists
 mkdir -p "$(dirname "$LOG_FILE")"
 
-# Python environment detection
-# Priority: Poetry venv > Plugin venv > Project venv > System Python
-find_python() {
-    # Check for Poetry venv via pyproject.toml
-    if command -v poetry >/dev/null 2>&1 && [[ -f "${PROJECT_ROOT}/pyproject.toml" ]]; then
-        POETRY_VENV="$(poetry env info --path 2>/dev/null || true)"
-        if [[ -n "$POETRY_VENV" && -f "$POETRY_VENV/bin/python3" ]]; then
-            echo "$POETRY_VENV/bin/python3"
-            return
-        fi
-    fi
-
-    # Check for plugin-local venv
-    if [[ -f "${PLUGIN_ROOT}/lib/.venv/bin/python3" ]]; then
-        echo "${PLUGIN_ROOT}/lib/.venv/bin/python3"
-        return
-    fi
-
-    # Check for project venv
-    if [[ -f "${PROJECT_ROOT}/.venv/bin/python3" ]]; then
-        echo "${PROJECT_ROOT}/.venv/bin/python3"
-        return
-    fi
-
-    # Fallback to system Python
-    echo "python3"
-}
-
-PYTHON_CMD="$(find_python)"
-export PYTHON_CMD
-
 # Set PYTHONPATH to include lib directories
 export PYTHONPATH="${PROJECT_ROOT}:${PLUGIN_ROOT}/lib:${HOOKS_LIB}:${PYTHONPATH:-}"
 
@@ -68,12 +37,8 @@ if [[ -f "$PROJECT_ROOT/.env" ]]; then
     set +a
 fi
 
-# Kafka configuration with fallback
-if [[ -z "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
-    export KAFKA_BOOTSTRAP_SERVERS="192.168.86.200:29092"
-    echo "WARNING: KAFKA_BOOTSTRAP_SERVERS not set, using fallback" >&2
-fi
-export KAFKA_BROKERS="${KAFKA_BROKERS:-$KAFKA_BOOTSTRAP_SERVERS}"
+# Source shared functions (provides PYTHON_CMD, KAFKA_ENABLED, get_time_ms)
+source "${HOOKS_DIR}/scripts/common.sh"
 
 export ARCHON_INTELLIGENCE_URL="${ARCHON_INTELLIGENCE_URL:-http://localhost:8053}"
 
@@ -120,6 +85,26 @@ fi
         --correlation-id "$CORRELATION_ID" \
         2>>"$LOG_FILE" || true
 ) &
+
+# Emit prompt.submitted event to Kafka (async, non-blocking)
+# Uses omniclaude-emit CLI with 250ms hard timeout
+SESSION_ID="$(printf %s "$INPUT" | jq -r '.sessionId // .session_id // ""' 2>/dev/null || echo "")"
+if [[ -z "$SESSION_ID" ]]; then
+    SESSION_ID="$CORRELATION_ID"
+fi
+PROMPT_LENGTH="${#PROMPT}"
+PROMPT_PREVIEW="${PROMPT:0:100}"
+
+if [[ "$KAFKA_ENABLED" == "true" ]]; then
+    (
+        $PYTHON_CMD -m omniclaude.hooks.cli_emit prompt-submitted \
+            --session-id "$SESSION_ID" \
+            --preview "$PROMPT_PREVIEW" \
+            --length "$PROMPT_LENGTH" \
+            >> "$LOG_FILE" 2>&1 || { rc=$?; log "Kafka emit failed (exit=$rc, non-fatal)"; }
+    ) &
+    log "Prompt event emission started"
+fi
 
 # -----------------------------
 # Workflow Detection
@@ -247,7 +232,7 @@ if [[ -n "${DOMAIN_QUERY:-}" ]]; then
             --output-file "$PROJECT_ROOT/tmp/agent_intelligence_domain_${CORRELATION_ID}.json" \
             --match-count 5 \
             --timeout-ms 500 \
-            2>>"$LOG_FILE" || log "WARNING: Domain intelligence request failed"
+            2>>"$LOG_FILE" || { rc=$?; log "WARNING: Domain intelligence request failed (exit=$rc)"; }
     ) &
 fi
 
@@ -263,7 +248,7 @@ if [[ -n "${IMPL_QUERY:-}" ]]; then
             --output-file "$PROJECT_ROOT/tmp/agent_intelligence_impl_${CORRELATION_ID}.json" \
             --match-count 3 \
             --timeout-ms 500 \
-            2>>"$LOG_FILE" || log "WARNING: Implementation intelligence request failed"
+            2>>"$LOG_FILE" || { rc=$?; log "WARNING: Implementation intelligence request failed (exit=$rc)"; }
     ) &
 fi
 
