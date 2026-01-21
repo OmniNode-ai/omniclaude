@@ -33,8 +33,25 @@ if [[ -f "$PROJECT_ROOT/.env" ]]; then
     set +a
 fi
 
+# Detect if native millisecond timing is available (GNU date supports %N)
+# macOS date doesn't support %N, so we fall back to Python there
+if date +%s%3N 2>/dev/null | grep -qE '^[0-9]+$'; then
+    _USE_NATIVE_TIME=true
+else
+    _USE_NATIVE_TIME=false
+fi
+
+# Get current time in milliseconds (prefer native bash, fallback to Python)
+get_time_ms() {
+    if [[ "$_USE_NATIVE_TIME" == "true" ]]; then
+        date +%s%3N
+    else
+        python3 -c "import time; print(int(time.time() * 1000))"
+    fi
+}
+
 # Performance tracking
-START_TIME=$(python3 -c "import time; print(int(time.time() * 1000))")
+START_TIME=$(get_time_ms)
 
 # Read Stop event JSON
 STOP_INFO=$(cat)
@@ -162,7 +179,7 @@ get_manager().clear()
 fi
 
 # Performance tracking
-END_TIME=$(python3 -c "import time; print(int(time.time() * 1000))")
+END_TIME=$(get_time_ms)
 EXECUTION_TIME_MS=$((END_TIME - START_TIME))
 
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Stop hook completed in ${EXECUTION_TIME_MS}ms" >> "$LOG_FILE"

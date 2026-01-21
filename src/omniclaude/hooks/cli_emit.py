@@ -39,6 +39,18 @@ from uuid import UUID, uuid4
 
 import click
 
+# =============================================================================
+# Version Detection
+# =============================================================================
+
+try:
+    from importlib.metadata import version as get_version
+
+    __version__ = get_version("omniclaude")
+except Exception:
+    # Fallback for editable installs or when package metadata unavailable
+    __version__ = "0.1.0-dev"
+
 from omniclaude.hooks.handler_event_emitter import (
     emit_prompt_submitted,
     emit_session_ended,
@@ -191,7 +203,7 @@ def cli(ctx: click.Context, version: bool) -> None:
 
     """
     if version:
-        click.echo("omniclaude-emit 0.1.0")
+        click.echo(f"omniclaude-emit {__version__}")
         ctx.exit(0)
 
     if ctx.invoked_subcommand is None:
