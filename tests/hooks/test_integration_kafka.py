@@ -223,30 +223,58 @@ async def wait_for_message_with_entity_id(
 
 @pytest.fixture
 def unique_session_id():
-    """Generate a unique session ID for test isolation."""
+    """Generate a unique session ID for test isolation.
+
+    Each test receives a distinct UUID to prevent event collision when
+    multiple tests run in parallel or in sequence.
+
+    Returns:
+        UUID: A randomly generated UUID4 for the test session.
+    """
     return uuid4()
 
 
 @pytest.fixture
 def unique_consumer_group():
-    """Generate a unique consumer group for test isolation."""
+    """Generate a unique consumer group for test isolation.
+
+    Each test receives a unique consumer group to prevent offset conflicts
+    and ensure clean message consumption from Kafka topics.
+
+    Returns:
+        str: A unique consumer group name in format 'test-integration-{hex}'.
+    """
     return make_unique_consumer_group()
 
 
 @pytest.fixture
 def test_environment():
-    """Get the test environment prefix with unique suffix for isolation."""
+    """Get the test environment prefix with unique suffix for isolation.
+
+    Creates a unique Kafka topic prefix to prevent test pollution.
+    Format: '{base_env}-test-{hex}' where base_env comes from KAFKA_ENVIRONMENT.
+
+    Returns:
+        str: A unique environment prefix for Kafka topic names.
+    """
     base_env = get_kafka_environment()
     # Add timestamp suffix for test isolation
     return f"{base_env}-test-{uuid4().hex[:6]}"
 
 
 @pytest.fixture
-async def kafka_health_check():
+async def _kafka_health_check():
     """Verify Kafka is reachable before running tests.
 
-    This fixture attempts to connect to Kafka and skips the test
-    if the connection fails.
+    This fixture is prefixed with underscore to indicate it's used only for
+    its side effect (skipping tests when Kafka is unavailable) and the return
+    value is not used by dependent tests.
+
+    Yields:
+        None: No value is yielded; this fixture is used for its skip behavior.
+
+    Raises:
+        pytest.skip: If aiokafka is not installed or Kafka is unreachable.
     """
     try:
         from aiokafka import AIOKafkaConsumer

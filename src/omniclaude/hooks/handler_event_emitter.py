@@ -38,6 +38,8 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
+from omnibase_core.enums import EnumCoreErrorCode
+from omnibase_core.models.errors import ModelOnexError
 from omnibase_infra.event_bus.event_bus_kafka import EventBusKafka
 from omnibase_infra.event_bus.models.config import ModelKafkaEventBusConfig
 
@@ -104,12 +106,15 @@ def _get_event_type(payload: ModelHookPayload) -> HookEventType:
         The corresponding HookEventType.
 
     Raises:
-        ValueError: If payload type is not recognized.
+        ModelOnexError: If payload type is not recognized.
     """
     payload_type = type(payload)
     event_type = _PAYLOAD_TYPE_TO_EVENT_TYPE.get(payload_type)
     if event_type is None:
-        raise ValueError(f"Unknown payload type: {payload_type.__name__}")
+        raise ModelOnexError(
+            error_code=EnumCoreErrorCode.INVALID_INPUT,
+            message=f"Unknown payload type: {payload_type.__name__}",
+        )
     return event_type
 
 
@@ -123,11 +128,14 @@ def _get_topic_base(event_type: HookEventType) -> TopicBase:
         The corresponding TopicBase.
 
     Raises:
-        ValueError: If event type has no mapped topic.
+        ModelOnexError: If event type has no mapped topic.
     """
     topic_base = _EVENT_TYPE_TO_TOPIC.get(event_type)
     if topic_base is None:
-        raise ValueError(f"No topic mapping for event type: {event_type}")
+        raise ModelOnexError(
+            error_code=EnumCoreErrorCode.INVALID_INPUT,
+            message=f"No topic mapping for event type: {event_type}",
+        )
     return topic_base
 
 
@@ -145,13 +153,16 @@ def _create_kafka_config() -> ModelKafkaEventBusConfig:
         Kafka configuration model.
 
     Raises:
-        ValueError: If KAFKA_BOOTSTRAP_SERVERS is not set.
+        ModelOnexError: If KAFKA_BOOTSTRAP_SERVERS is not set.
     """
     # Get environment from env var, default to "dev"
     environment = os.environ.get("KAFKA_ENVIRONMENT", "dev")
     bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS")
     if not bootstrap_servers:
-        raise ValueError("KAFKA_BOOTSTRAP_SERVERS environment variable is required")
+        raise ModelOnexError(
+            error_code=EnumCoreErrorCode.INVALID_INPUT,
+            message="KAFKA_BOOTSTRAP_SERVERS environment variable is required",
+        )
 
     return ModelKafkaEventBusConfig(
         bootstrap_servers=bootstrap_servers,

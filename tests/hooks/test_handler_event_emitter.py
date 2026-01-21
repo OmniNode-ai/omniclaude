@@ -25,6 +25,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
+from omnibase_core.models.errors import ModelOnexError
 
 from omniclaude.hooks.handler_event_emitter import (
     _create_kafka_config,
@@ -168,12 +169,12 @@ class TestEventTypeMapping:
         assert event_type == HookEventType.TOOL_EXECUTED
 
     def test_unknown_payload_type_raises(self) -> None:
-        """Unknown payload type raises ValueError."""
+        """Unknown payload type raises ModelOnexError."""
         # Create a mock object that is not a valid payload type
         mock_payload = MagicMock()
         mock_payload.__class__.__name__ = "UnknownPayload"
 
-        with pytest.raises(ValueError, match="Unknown payload type"):
+        with pytest.raises(ModelOnexError, match="Unknown payload type"):
             _get_event_type(mock_payload)  # type: ignore[arg-type]
 
 
@@ -210,10 +211,10 @@ class TestKafkaConfig:
     """Tests for Kafka configuration creation."""
 
     def test_missing_bootstrap_servers_raises(self) -> None:
-        """Missing KAFKA_BOOTSTRAP_SERVERS raises ValueError."""
+        """Missing KAFKA_BOOTSTRAP_SERVERS raises ModelOnexError."""
         with (
             patch.dict("os.environ", {}, clear=True),
-            pytest.raises(ValueError, match="KAFKA_BOOTSTRAP_SERVERS.*required"),
+            pytest.raises(ModelOnexError, match="KAFKA_BOOTSTRAP_SERVERS.*required"),
         ):
             _create_kafka_config()
 

@@ -34,7 +34,7 @@ import json
 import logging
 import sys
 import uuid
-from typing import Any
+from collections.abc import Awaitable
 from uuid import UUID, uuid4
 
 import click
@@ -51,13 +51,13 @@ except Exception:
     # Fallback for editable installs or when package metadata unavailable
     __version__ = "0.1.0-dev"
 
-from omniclaude.hooks.handler_event_emitter import (
+from omniclaude.hooks.handler_event_emitter import (  # noqa: E402
     emit_prompt_submitted,
     emit_session_ended,
     emit_session_started,
     emit_tool_executed,
 )
-from omniclaude.hooks.schemas import HookSource, SessionEndReason
+from omniclaude.hooks.schemas import HookSource, SessionEndReason  # noqa: E402
 
 # Configure logging for hook context
 logging.basicConfig(
@@ -134,7 +134,7 @@ def _string_to_uuid(value: str) -> UUID:
 # =============================================================================
 
 
-def run_with_timeout(coro: Any, timeout: float = EMIT_TIMEOUT_SECONDS) -> Any:
+def run_with_timeout[T](coro: Awaitable[T], timeout: float = EMIT_TIMEOUT_SECONDS) -> T | None:
     """Run an async coroutine with a cooperative timeout.
 
     This function wraps asyncio.run() with asyncio.wait_for() for timeout handling.
@@ -154,7 +154,7 @@ def run_with_timeout(coro: Any, timeout: float = EMIT_TIMEOUT_SECONDS) -> Any:
         The result of the coroutine, or None if timeout occurred.
     """
 
-    async def with_timeout() -> Any:
+    async def with_timeout() -> T | None:
         try:
             return await asyncio.wait_for(coro, timeout=timeout)
         except TimeoutError:

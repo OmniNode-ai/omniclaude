@@ -24,17 +24,17 @@ fi
 # Ensure log directory exists
 mkdir -p "$(dirname "$LOG_FILE")"
 
-# Source shared functions (provides PYTHON_CMD, KAFKA_ENABLED, get_time_ms)
-source "${HOOKS_DIR}/scripts/common.sh"
-
 export PYTHONPATH="${PROJECT_ROOT}:${PLUGIN_ROOT}/lib:${HOOKS_LIB}:${PYTHONPATH:-}"
 
-# Load environment variables
+# Load environment variables (before common.sh so KAFKA_BOOTSTRAP_SERVERS is available)
 if [[ -f "$PROJECT_ROOT/.env" ]]; then
     set -a
     source "$PROJECT_ROOT/.env" 2>/dev/null || true
     set +a
 fi
+
+# Source shared functions (provides PYTHON_CMD, KAFKA_ENABLED, get_time_ms)
+source "${HOOKS_DIR}/scripts/common.sh"
 
 # Read stdin
 INPUT=$(cat)
