@@ -252,7 +252,12 @@ async def emit_hook_event(
         await bus.start()
 
         # Publish the envelope
-        # Use entity_id as partition key for ordering within session
+        # Use entity_id as partition key for ordering within session.
+        # UUID.bytes returns 16 bytes which Kafka hashes to determine partition.
+        # This ensures all events for the same session go to the same partition,
+        # guaranteeing ordering within a session. Note: distribution across
+        # partitions may be uneven if the topic has many partitions, as UUID
+        # entropy doesn't guarantee uniform distribution after hashing.
         partition_key = payload.entity_id.bytes
         message_bytes = envelope.model_dump_json().encode("utf-8")
 

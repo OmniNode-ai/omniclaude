@@ -157,10 +157,14 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
         TOOL_SUMMARY="${TOOL_NAME} on ${FILE_PATH:-unknown}"
         TOOL_SUMMARY="${TOOL_SUMMARY:0:500}"
 
+        # Determine success/failure flag using variable for clarity and robustness
+        SUCCESS_FLAG="--success"
+        [[ "$TOOL_SUCCESS" != "true" ]] && SUCCESS_FLAG="--failure"
+
         "$PYTHON_CMD" -m omniclaude.hooks.cli_emit tool-executed \
             --session-id "$SESSION_ID" \
             --tool-name "$TOOL_NAME" \
-            $([ "$TOOL_SUCCESS" = "true" ] && echo "--success" || echo "--failure") \
+            $SUCCESS_FLAG \
             ${DURATION_MS:+--duration-ms "$DURATION_MS"} \
             --summary "$TOOL_SUMMARY" \
             >> "$LOG_FILE" 2>&1 || echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Kafka emit failed (non-fatal)" >> "$LOG_FILE"
