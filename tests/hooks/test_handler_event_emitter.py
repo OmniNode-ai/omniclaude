@@ -197,20 +197,31 @@ class TestTopicBaseMapping:
 class TestKafkaConfig:
     """Tests for Kafka configuration creation."""
 
+    def test_missing_bootstrap_servers_raises(self) -> None:
+        """Missing KAFKA_BOOTSTRAP_SERVERS raises ValueError."""
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            pytest.raises(ValueError, match="KAFKA_BOOTSTRAP_SERVERS.*required"),
+        ):
+            _create_kafka_config()
+
     def test_default_config_values(self) -> None:
         """Default config has expected values for hook latency."""
-        config = _create_kafka_config()
+        with patch.dict("os.environ", {"KAFKA_BOOTSTRAP_SERVERS": "test:9092"}):
+            config = _create_kafka_config()
 
-        # Verify hook-optimized settings
-        assert config.timeout_seconds == 2  # Short timeout
-        assert config.max_retry_attempts == 0  # No retries
-        assert config.acks == "1"  # Leader ack only
-        assert config.group == "omniclaude-hooks"
-        assert config.enable_idempotence is False
+            # Verify hook-optimized settings
+            assert config.timeout_seconds == 2  # Short timeout
+            assert config.max_retry_attempts == 0  # No retries
+            assert config.acks == "1"  # Leader ack only
+            assert config.group == "omniclaude-hooks"
+            assert config.enable_idempotence is False
 
     def test_config_respects_env_vars(self) -> None:
         """Config respects KAFKA_ENVIRONMENT env var."""
-        with patch.dict("os.environ", {"KAFKA_ENVIRONMENT": "prod"}):
+        with patch.dict(
+            "os.environ", {"KAFKA_BOOTSTRAP_SERVERS": "test:9092", "KAFKA_ENVIRONMENT": "prod"}
+        ):
             config = _create_kafka_config()
             assert config.environment == "prod"
 

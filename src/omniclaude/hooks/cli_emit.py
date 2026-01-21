@@ -33,7 +33,8 @@ import asyncio
 import json
 import logging
 import sys
-from typing import Any
+import uuid
+from typing import Any, Literal, cast
 from uuid import UUID, uuid4
 
 import click
@@ -44,6 +45,10 @@ from omniclaude.hooks.handler_event_emitter import (
     emit_session_started,
     emit_tool_executed,
 )
+
+# Type aliases matching handler_event_emitter.py Literal types
+HookSourceType = Literal["startup", "resume", "clear", "compact"]
+SessionEndReasonType = Literal["clear", "logout", "prompt_input_exit", "other"]
 
 # Configure logging for hook context
 logging.basicConfig(
@@ -60,6 +65,59 @@ logger = logging.getLogger(__name__)
 # Hard wall-clock timeout for entire emit path (in seconds)
 # This is the absolute maximum time we allow before abandoning the operation
 EMIT_TIMEOUT_SECONDS: float = 0.250  # 250ms
+
+
+# =============================================================================
+# UUID Helpers
+# =============================================================================
+
+
+def _string_to_uuid(value: str) -> UUID:
+    """Convert a string to a UUID deterministically.
+
+    This function enables consistent UUID generation from arbitrary string
+    identifiers, which is critical for event correlation across hook events.
+
+    Deterministic UUID Strategy:
+        - If the input is already a valid UUID string (e.g., from Claude Code),
+          it is parsed directly to preserve the original identity.
+        - If the input is an arbitrary string (e.g., a session name or custom ID),
+          uuid5 with NAMESPACE_DNS is used to generate a deterministic UUID.
+          This ensures the same string always produces the same UUID, enabling
+          reliable event correlation across session.started, prompt.submitted,
+          tool.executed, and session.ended events.
+
+    Why uuid5 with NAMESPACE_DNS?
+        - uuid5 uses SHA-1 hashing, providing deterministic output for a given
+          namespace + name combination.
+        - NAMESPACE_DNS is a well-known namespace that ensures uniqueness when
+          combined with the input string.
+        - The same (namespace, name) pair will always generate the same UUID,
+          even across different machines or process restarts.
+
+    Args:
+        value: A string to convert. Can be either:
+            - A valid UUID string (e.g., "550e8400-e29b-41d4-a716-446655440000")
+            - An arbitrary identifier (e.g., "my-session-123", "abc123")
+
+    Returns:
+        A UUID object. Either the parsed UUID if valid, or a deterministic
+        uuid5-generated UUID from the input string.
+
+    Examples:
+        >>> _string_to_uuid("550e8400-e29b-41d4-a716-446655440000")
+        UUID('550e8400-e29b-41d4-a716-446655440000')
+
+        >>> _string_to_uuid("my-session-123")  # Same input = same output
+        UUID('...')  # Deterministic, reproducible UUID
+
+        >>> _string_to_uuid("my-session-123") == _string_to_uuid("my-session-123")
+        True
+    """
+    try:
+        return UUID(value)
+    except ValueError:
+        return uuid.uuid5(uuid.NAMESPACE_DNS, value)
 
 
 # =============================================================================
@@ -159,12 +217,8 @@ def cmd_session_started(
 ) -> None:
     """Emit a session.started event."""
     try:
-        # Parse session_id as UUID or generate from string
-        try:
-            sid = UUID(session_id)
-        except ValueError:
-            # Generate deterministic UUID from string
-            sid = uuid4()
+        # Parse session_id as UUID or generate deterministic UUID from string
+        sid = _string_to_uuid(session_id)
 
         if from_json:
             # Read additional data from stdin
@@ -181,7 +235,7 @@ def cmd_session_started(
             emit_session_started(
                 session_id=sid,
                 working_directory=cwd,
-                hook_source=source,
+                hook_source=cast(HookSourceType, source),
                 git_branch=git_branch,
             )
         )
@@ -220,10 +274,8 @@ def cmd_session_ended(
 ) -> None:
     """Emit a session.ended event."""
     try:
-        try:
-            sid = UUID(session_id)
-        except ValueError:
-            sid = uuid4()
+        # Parse session_id as UUID or generate deterministic UUID from string
+        sid = _string_to_uuid(session_id)
 
         if from_json:
             data = json.loads(sys.stdin.read())
@@ -238,7 +290,7 @@ def cmd_session_ended(
         result = run_with_timeout(
             emit_session_ended(
                 session_id=sid,
-                reason=reason,
+                reason=cast(SessionEndReasonType, reason),
                 duration_seconds=duration,
                 tools_used_count=tools_count,
             )
@@ -274,18 +326,11 @@ def cmd_prompt_submitted(
 ) -> None:
     """Emit a prompt.submitted event."""
     try:
-        try:
-            sid = UUID(session_id)
-        except ValueError:
-            sid = uuid4()
+        # Parse session_id as UUID or generate deterministic UUID from string
+        sid = _string_to_uuid(session_id)
 
-        if prompt_id:
-            try:
-                pid = UUID(prompt_id)
-            except ValueError:
-                pid = uuid4()
-        else:
-            pid = uuid4()
+        # Parse prompt_id as UUID, generate deterministic UUID from string, or random if not provided
+        pid = _string_to_uuid(prompt_id) if prompt_id else uuid4()
 
         if from_json:
             data = json.loads(sys.stdin.read())
@@ -341,18 +386,11 @@ def cmd_tool_executed(
 ) -> None:
     """Emit a tool.executed event."""
     try:
-        try:
-            sid = UUID(session_id)
-        except ValueError:
-            sid = uuid4()
+        # Parse session_id as UUID or generate deterministic UUID from string
+        sid = _string_to_uuid(session_id)
 
-        if execution_id:
-            try:
-                eid = UUID(execution_id)
-            except ValueError:
-                eid = uuid4()
-        else:
-            eid = uuid4()
+        # Parse execution_id as UUID, generate deterministic UUID from string, or random if not provided
+        eid = _string_to_uuid(execution_id) if execution_id else uuid4()
 
         if from_json:
             data = json.loads(sys.stdin.read())

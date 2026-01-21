@@ -32,8 +32,11 @@ if [[ -f "$PROJECT_ROOT/.env" ]]; then
     set +a
 fi
 
-# Kafka configuration
-export KAFKA_BROKERS="${KAFKA_BROKERS:-${KAFKA_BOOTSTRAP_SERVERS:-192.168.86.200:29092}}"
+# Kafka configuration (no fallback - must be set in .env)
+if [[ -z "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
+    echo "ERROR: KAFKA_BOOTSTRAP_SERVERS not set. Kafka events will not be emitted." >&2
+fi
+export KAFKA_BROKERS="${KAFKA_BROKERS:-${KAFKA_BOOTSTRAP_SERVERS:-}}"
 
 # Get tool info from stdin
 TOOL_INFO=$(cat)
@@ -140,6 +143,10 @@ fi
 # Emit tool.executed event to Kafka (async, non-blocking)
 # Uses omniclaude-emit CLI with 250ms hard timeout
 SESSION_ID=$(echo "$TOOL_INFO" | jq -r '.sessionId // .session_id // ""' 2>/dev/null || echo "")
+# Pre-generate UUID fallback if SESSION_ID not provided (avoid inline Python in async subshell)
+if [[ -z "$SESSION_ID" ]]; then
+    SESSION_ID=$(uuidgen 2>/dev/null | tr '[:upper:]' '[:lower:]' || python3 -c 'import uuid; print(uuid.uuid4())')
+fi
 TOOL_SUCCESS="true"
 if [[ -n "$TOOL_ERROR" ]]; then
     TOOL_SUCCESS="false"
@@ -153,7 +160,7 @@ DURATION_MS=$(echo "$TOOL_INFO" | jq -r '.duration_ms // .durationMs // ""' 2>/d
     TOOL_SUMMARY="${TOOL_SUMMARY:0:500}"
 
     python3 -m omniclaude.hooks.cli_emit tool-executed \
-        --session-id "${SESSION_ID:-$(python3 -c 'import uuid; print(uuid.uuid4())')}" \
+        --session-id "$SESSION_ID" \
         --tool-name "$TOOL_NAME" \
         $([ "$TOOL_SUCCESS" = "true" ] && echo "--success" || echo "--failure") \
         ${DURATION_MS:+--duration-ms "$DURATION_MS"} \

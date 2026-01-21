@@ -68,12 +68,11 @@ if [[ -f "$PROJECT_ROOT/.env" ]]; then
     set +a
 fi
 
-# Kafka configuration with fallback
+# Kafka configuration (no fallback - must be set in .env)
 if [[ -z "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
-    export KAFKA_BOOTSTRAP_SERVERS="192.168.86.200:29092"
-    echo "WARNING: KAFKA_BOOTSTRAP_SERVERS not set, using fallback" >&2
+    echo "ERROR: KAFKA_BOOTSTRAP_SERVERS not set. Kafka events will not be emitted." >&2
 fi
-export KAFKA_BROKERS="${KAFKA_BROKERS:-$KAFKA_BOOTSTRAP_SERVERS}"
+export KAFKA_BROKERS="${KAFKA_BROKERS:-${KAFKA_BOOTSTRAP_SERVERS:-}}"
 
 export ARCHON_INTELLIGENCE_URL="${ARCHON_INTELLIGENCE_URL:-http://localhost:8053}"
 

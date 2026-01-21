@@ -35,7 +35,7 @@ from __future__ import annotations
 import logging
 import os
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 from uuid import UUID
 
 from omnibase_infra.event_bus.event_bus_kafka import EventBusKafka
@@ -136,15 +136,20 @@ def _create_kafka_config() -> ModelKafkaEventBusConfig:
     defaults that prioritize latency over reliability.
 
     Environment Variables:
-        KAFKA_BOOTSTRAP_SERVERS: Kafka broker addresses (default: localhost:9092)
+        KAFKA_BOOTSTRAP_SERVERS: Kafka broker addresses (required)
         KAFKA_ENVIRONMENT: Environment prefix for topics (default: dev)
 
     Returns:
         Kafka configuration model.
+
+    Raises:
+        ValueError: If KAFKA_BOOTSTRAP_SERVERS is not set.
     """
     # Get environment from env var, default to "dev"
     environment = os.environ.get("KAFKA_ENVIRONMENT", "dev")
-    bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:29092")
+    bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS")
+    if not bootstrap_servers:
+        raise ValueError("KAFKA_BOOTSTRAP_SERVERS environment variable is required")
 
     return ModelKafkaEventBusConfig(
         bootstrap_servers=bootstrap_servers,
@@ -293,7 +298,7 @@ async def emit_hook_event(
 async def emit_session_started(
     session_id: UUID,
     working_directory: str,
-    hook_source: str,
+    hook_source: Literal["startup", "resume", "clear", "compact"],
     *,
     git_branch: str | None = None,
     correlation_id: UUID | None = None,
@@ -329,7 +334,7 @@ async def emit_session_started(
         emitted_at=emitted_at or datetime.now(UTC),
         working_directory=working_directory,
         git_branch=git_branch,
-        hook_source=hook_source,  # type: ignore[arg-type]
+        hook_source=hook_source,
     )
 
     return await emit_hook_event(payload, environment=environment)
@@ -337,7 +342,7 @@ async def emit_session_started(
 
 async def emit_session_ended(
     session_id: UUID,
-    reason: str,
+    reason: Literal["clear", "logout", "prompt_input_exit", "other"],
     *,
     duration_seconds: float | None = None,
     tools_used_count: int = 0,
@@ -371,7 +376,7 @@ async def emit_session_ended(
         correlation_id=correlation_id or session_id,
         causation_id=causation_id or uuid4(),
         emitted_at=emitted_at or datetime.now(UTC),
-        reason=reason,  # type: ignore[arg-type]
+        reason=reason,
         duration_seconds=duration_seconds,
         tools_used_count=tools_used_count,
     )
