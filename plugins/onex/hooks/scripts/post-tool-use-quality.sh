@@ -23,51 +23,17 @@ fi
 # Ensure log directory exists
 mkdir -p "$(dirname "$LOG_FILE")"
 
-# Python environment detection
-# Priority: Poetry venv > Plugin venv > Project venv > System Python
-find_python() {
-    # Check for Poetry venv via pyproject.toml
-    if command -v poetry >/dev/null 2>&1 && [[ -f "${PROJECT_ROOT}/pyproject.toml" ]]; then
-        POETRY_VENV="$(poetry env info --path 2>/dev/null || true)"
-        if [[ -n "$POETRY_VENV" && -f "$POETRY_VENV/bin/python3" ]]; then
-            echo "$POETRY_VENV/bin/python3"
-            return
-        fi
-    fi
-
-    # Check for plugin-local venv
-    if [[ -f "${PLUGIN_ROOT}/lib/.venv/bin/python3" ]]; then
-        echo "${PLUGIN_ROOT}/lib/.venv/bin/python3"
-        return
-    fi
-
-    # Check for project venv
-    if [[ -f "${PROJECT_ROOT}/.venv/bin/python3" ]]; then
-        echo "${PROJECT_ROOT}/.venv/bin/python3"
-        return
-    fi
-
-    # Fallback to system Python
-    echo "python3"
-}
-
-PYTHON_CMD="$(find_python)"
-
-export PYTHONPATH="${PROJECT_ROOT}:${PLUGIN_ROOT}/lib:${HOOKS_LIB}:${PYTHONPATH:-}"
-
-# Load environment variables
+# Load environment variables (before common.sh so KAFKA_BOOTSTRAP_SERVERS is available)
 if [[ -f "$PROJECT_ROOT/.env" ]]; then
     set -a
     source "$PROJECT_ROOT/.env" 2>/dev/null || true
     set +a
 fi
 
-# Kafka configuration (no fallback - must be set in .env)
-KAFKA_ENABLED="false"
-if [[ -n "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
-    KAFKA_ENABLED="true"
-    export KAFKA_BROKERS="${KAFKA_BROKERS:-${KAFKA_BOOTSTRAP_SERVERS:-}}"
-fi
+# Source shared functions (provides PYTHON_CMD, KAFKA_ENABLED, get_time_ms)
+source "${HOOKS_DIR}/scripts/common.sh"
+
+export PYTHONPATH="${PROJECT_ROOT}:${PLUGIN_ROOT}/lib:${HOOKS_LIB}:${PYTHONPATH:-}"
 
 # Get tool info from stdin
 TOOL_INFO=$(cat)

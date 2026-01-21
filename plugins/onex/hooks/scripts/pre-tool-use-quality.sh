@@ -32,16 +32,12 @@ if [[ -f "$PROJECT_ROOT/.env" ]]; then
     set +a
 fi
 
-# Kafka configuration (no fallback - must be set in .env)
-KAFKA_ENABLED="false"
-if [[ -n "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
-    KAFKA_ENABLED="true"
-    export KAFKA_BROKERS="${KAFKA_BROKERS:-${KAFKA_BOOTSTRAP_SERVERS:-}}"
-fi
+# Source shared functions (provides PYTHON_CMD, KAFKA_ENABLED, get_time_ms)
+source "${HOOKS_DIR}/scripts/common.sh"
 
 # Generate or reuse correlation ID
 if [ -z "${CORRELATION_ID:-}" ]; then
-    CORRELATION_ID=$(uuidgen 2>/dev/null | tr '[:upper:]' '[:lower:]' || python3 -c 'import uuid; print(str(uuid.uuid4()))')
+    CORRELATION_ID=$(uuidgen 2>/dev/null | tr '[:upper:]' '[:lower:]' || $PYTHON_CMD -c 'import uuid; print(str(uuid.uuid4()))')
 fi
 export CORRELATION_ID
 
@@ -51,7 +47,7 @@ fi
 export ROOT_ID
 
 if [ -z "${SESSION_ID:-}" ]; then
-    SESSION_ID=$(uuidgen 2>/dev/null | tr '[:upper:]' '[:lower:]' || python3 -c 'import uuid; print(str(uuid.uuid4()))')
+    SESSION_ID=$(uuidgen 2>/dev/null | tr '[:upper:]' '[:lower:]' || $PYTHON_CMD -c 'import uuid; print(str(uuid.uuid4()))')
 fi
 export SESSION_ID
 
@@ -83,14 +79,14 @@ RESULT=$(echo "$TOOL_INFO" | \
     CORRELATION_ID="$CORRELATION_ID" \
     ROOT_ID="$ROOT_ID" \
     SESSION_ID="$SESSION_ID" \
-    python3 "$QUALITY_SCRIPT")
+    $PYTHON_CMD "$QUALITY_SCRIPT")
 EXIT_CODE=$?
 set -e
 
 # Database event logging (async, non-blocking)
 if [[ -f "${HOOKS_LIB}/hook_event_logger.py" ]]; then
     (
-        python3 -c "
+        $PYTHON_CMD -c "
 import sys
 sys.path.insert(0, '${HOOKS_LIB}')
 from hook_event_logger import log_pretooluse
