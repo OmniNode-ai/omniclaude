@@ -1,0 +1,118 @@
+{
+  "repository": "owner/repo",
+  "pr_number": 33,
+  "summary": {
+    "total": 5,
+    "critical": 1,
+    "major": 3,
+    "minor": 1,
+    "researched": 2
+  },
+  "failures": [
+    {
+      "workflow": "CI/CD Pipeline",
+      "workflow_id": "12345678",
+      "workflow_url": "https://github.com/owner/repo/actions/runs/12345678",
+      "job": "Unknown Build Error",
+      "job_id": "87654321",
+      "job_url": "https://github.com/owner/repo/actions/runs/12345678/job/87654321",
+      "step": "Compile",
+      "step_number": 5,
+      "conclusion": "failure",
+      "severity": "critical",
+      "research": {
+        "job": "Unknown Build Error",
+        "step": "Compile",
+        "workflow": "CI/CD Pipeline",
+        "context": "",
+        "research_needed": true,
+        "search_queries": [
+          " Compile CI failure solution",
+          "GitHub issues Unknown Build Error Compile failure",
+          "Stack Overflow  Compile error",
+          "breaking changes 2025 CI",
+          "GitHub Actions Compile failure troubleshooting"
+        ],
+        "suggestions": [
+          "Search GitHub Issues for similar 'Compile' failures",
+          "Check Stack Overflow for ' Compile' solutions",
+          "Review recent dependency updates that might cause 'Compile' issues",
+          "Examine full error logs at: https://github.com/owner/repo/actions/runs/12345678/job/87654321",
+          "Look for breaking changes in  ecosystem (2025)"
+        ],
+        "auto_research_hint": "Claude Code can automatically execute these searches using WebSearch tool"
+      }
+    },
+    {
+      "workflow": "Enhanced CI",
+      "workflow_id": "12345679",
+      "workflow_url": "https://github.com/owner/repo/actions/runs/12345679",
+      "job": "Python Tests",
+      "job_id": "87654322",
+      "job_url": "https://github.com/owner/repo/actions/runs/12345679/job/87654322",
+      "step": "Run pytest",
+      "step_number": 3,
+      "conclusion": "failure",
+      "severity": "major"
+    },
+    {
+      "workflow": "Enhanced CI",
+      "workflow_id": "12345679",
+      "workflow_url": "https://github.com/owner/repo/actions/runs/12345679",
+      "job": "Code Quality",
+      "job_id": "87654323",
+      "job_url": "https://github.com/owner/repo/actions/runs/12345679/job/87654323",
+      "step": "Run mypy",
+      "step_number": 2,
+      "conclusion": "failure",
+      "severity": "major"
+    },
+    {
+      "workflow": "Enhanced CI",
+      "workflow_id": "12345679",
+      "workflow_url": "https://github.com/owner/repo/actions/runs/12345679",
+      "job": "Code Quality",
+      "job_id": "87654323",
+      "job_url": "https://github.com/owner/repo/actions/runs/12345679/job/87654323",
+      "step": "Run ruff",
+      "step_number": 3,
+      "conclusion": "failure",
+      "severity": "major"
+    },
+    {
+      "workflow": "CI/CD Pipeline",
+      "workflow_id": "12345680",
+      "workflow_url": "https://github.com/owner/repo/actions/runs/12345680",
+      "job": "Custom Validation",
+      "job_id": "87654324",
+      "job_url": "https://github.com/owner/repo/actions/runs/12345680/job/87654324",
+      "step": "Validate schema",
+      "step_number": 4,
+      "conclusion": "failure",
+      "severity": "minor",
+      "research": {
+        "job": "Custom Validation",
+        "step": "Validate schema",
+        "workflow": "CI/CD Pipeline",
+        "context": "",
+        "research_needed": true,
+        "search_queries": [
+          " Validate schema CI failure solution",
+          "GitHub issues Custom Validation Validate schema failure",
+          "Stack Overflow  Validate schema error",
+          "breaking changes 2025 CI",
+          "GitHub Actions Validate schema failure troubleshooting"
+        ],
+        "suggestions": [
+          "Search GitHub Issues for similar 'Validate schema' failures",
+          "Check Stack Overflow for ' Validate schema' solutions",
+          "Review recent dependency updates that might cause 'Validate schema' issues",
+          "Examine full error logs at: https://github.com/owner/repo/actions/runs/12345680/job/87654324",
+          "Look for breaking changes in  ecosystem (2025)"
+        ],
+        "auto_research_hint": "Claude Code can automatically execute these searches using WebSearch tool"
+      }
+    }
+  ],
+  "fetched_at": "2025-11-23T10:30:00Z"
+}

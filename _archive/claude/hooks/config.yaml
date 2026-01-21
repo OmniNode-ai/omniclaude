@@ -1,0 +1,20 @@
+# PostToolUse Hook Configuration
+# Controls quality enforcement and pattern tracking
+
+# Auto-fix configuration
+autofix:
+  enabled: false  # Disable auto-fix for now - just pass through
+  max_corrections_per_file: 10
+
+# Pattern tracking configuration
+pattern_tracking:
+  enabled: false  # Disable pattern tracking for now
+  fail_gracefully: true
+
+# Naming validation configuration
+naming_validation:
+  enabled: false  # Disable naming validation for now
+
+# Quorum scoring configuration
+quorum:
+  enabled: false  # Disable AI quorum scoring

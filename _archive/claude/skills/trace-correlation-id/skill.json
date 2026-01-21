@@ -1,0 +1,21 @@
+{
+  "name": "trace-correlation-id",
+  "description": "Complete observability trace for agent executions by correlation ID",
+  "version": "1.0.0",
+  "author": "OmniClaude",
+  "usage": "trace-correlation-id <correlation-id> [--kafka] [--verbose]",
+  "examples": [
+    "trace-correlation-id a1563cf8-dc01-4f17-ad72-391a75aa0c8d",
+    "trace-correlation-id <correlation-id> --kafka --verbose"
+  ],
+  "tags": ["observability", "tracing", "debugging", "correlation-id"],
+  "capabilities": [
+    "Routing decisions",
+    "Agent actions",
+    "Agent transformations",
+    "Performance metrics",
+    "Execution logs",
+    "Manifest injections",
+    "Kafka events (optional)"
+  ]
+}

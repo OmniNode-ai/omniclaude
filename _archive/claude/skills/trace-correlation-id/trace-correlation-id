@@ -1,0 +1,15 @@
+#!/bin/bash
+# Claude Code Skill: Trace Correlation ID
+# Provides complete observability trace for agent executions
+
+# Get the project root (omniclaude)
+PROJECT_ROOT="/Volumes/PRO-G40/Code/omniclaude"
+
+# Check if trace script exists
+if [[ ! -f "$PROJECT_ROOT/scripts/trace-correlation-id.sh" ]]; then
+    echo "❌ ERROR: trace-correlation-id.sh not found at $PROJECT_ROOT/scripts/"
+    exit 1
+fi
+
+# Pass all arguments to the trace script
+exec "$PROJECT_ROOT/scripts/trace-correlation-id.sh" "$@"

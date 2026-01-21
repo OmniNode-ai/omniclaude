@@ -1,0 +1,15 @@
+.netrwhist
+npm-debug.log
+config/nvim/spell
+config/nvim/shada
+vim/vim.symlink/spell/
+vim/vim.symlink/plugged/
+Brewfile.lock.json
+lazy-lock.json
+config/kitty/kitty-overrides.conf
+config/zsh/.zsh_history
+config/zsh/.zcompdump
+config/zsh/.zsh_sessions
+config/ghostty/overrides
+node_modules/
+build/
