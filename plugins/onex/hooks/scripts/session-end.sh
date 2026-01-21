@@ -66,7 +66,7 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
         # Convert duration from ms to seconds (using Python instead of bc for reliability)
         DURATION_SECONDS=""
         if [[ -n "$SESSION_DURATION" && "$SESSION_DURATION" != "0" ]]; then
-            DURATION_SECONDS=$($PYTHON_CMD -c "import sys; print(f'{int(sys.argv[1])/1000:.3f}')" "$SESSION_DURATION" 2>/dev/null || echo "")
+            DURATION_SECONDS=$($PYTHON_CMD -c "import sys; print(f'{float(sys.argv[1])/1000:.3f}')" "$SESSION_DURATION" 2>/dev/null || echo "")
         fi
 
         $PYTHON_CMD -m omniclaude.hooks.cli_emit session-ended \
