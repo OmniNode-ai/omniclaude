@@ -85,6 +85,9 @@ get_time_ms() {
 KAFKA_ENABLED="false"
 if [[ -n "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
     KAFKA_ENABLED="true"
+    # Export KAFKA_BROKERS for legacy compatibility with Python scripts
+    # that use shared_lib/kafka_config.py's get_kafka_bootstrap_servers()
+    # fallback chain: KAFKA_BOOTSTRAP_SERVERS -> KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS -> KAFKA_BROKERS
     export KAFKA_BROKERS="${KAFKA_BROKERS:-${KAFKA_BOOTSTRAP_SERVERS:-}}"
 fi
 export KAFKA_ENABLED

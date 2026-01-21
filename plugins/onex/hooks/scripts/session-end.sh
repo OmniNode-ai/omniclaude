@@ -44,11 +44,19 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] SessionEnd hook triggered (plugin mode)" >>
 # Extract session metadata
 SESSION_ID=$(echo "$INPUT" | jq -r '.sessionId // ""' 2>/dev/null || echo "")
 SESSION_DURATION=$(echo "$INPUT" | jq -r '.durationMs // 0' 2>/dev/null || echo "0")
+SESSION_REASON=$(echo "$INPUT" | jq -r '.reason // "other"' 2>/dev/null || echo "other")
+
+# Validate reason is one of the allowed values
+case "$SESSION_REASON" in
+    clear|logout|prompt_input_exit|other) ;;
+    *) SESSION_REASON="other" ;;
+esac
 
 if [[ -n "$SESSION_ID" ]]; then
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Session ID: $SESSION_ID" >> "$LOG_FILE"
 fi
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Duration: ${SESSION_DURATION}ms" >> "$LOG_FILE"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Reason: $SESSION_REASON" >> "$LOG_FILE"
 
 # Call session intelligence module (async, non-blocking)
 (
@@ -71,9 +79,9 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
 
         $PYTHON_CMD -m omniclaude.hooks.cli_emit session-ended \
             --session-id "$SESSION_ID" \
-            --reason "other" \
+            --reason "$SESSION_REASON" \
             ${DURATION_SECONDS:+--duration "$DURATION_SECONDS"} \
-            >> "$LOG_FILE" 2>&1 || true
+            >> "$LOG_FILE" 2>&1 || echo "[$(date '+%Y-%m-%d %H:%M:%S')] Kafka emit failed (non-fatal)" >> "$LOG_FILE"
     ) &
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Session event emission started" >> "$LOG_FILE"
 else

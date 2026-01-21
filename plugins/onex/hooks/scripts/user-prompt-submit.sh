@@ -101,7 +101,7 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
             --session-id "$SESSION_ID" \
             --preview "$PROMPT_PREVIEW" \
             --length "$PROMPT_LENGTH" \
-            >> "$LOG_FILE" 2>&1 || true
+            >> "$LOG_FILE" 2>&1 || log "Kafka emit failed (non-fatal)"
     ) &
     log "Prompt event emission started"
 fi

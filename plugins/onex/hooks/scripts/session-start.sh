@@ -85,7 +85,7 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
             --cwd "$CWD" \
             --source "startup" \
             ${GIT_BRANCH:+--git-branch "$GIT_BRANCH"} \
-            >> "$LOG_FILE" 2>&1 || true
+            >> "$LOG_FILE" 2>&1 || echo "[$(date '+%Y-%m-%d %H:%M:%S')] Kafka emit failed (non-fatal)" >> "$LOG_FILE"
     ) &
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Session event emission started" >> "$LOG_FILE"
 else
