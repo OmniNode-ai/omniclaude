@@ -171,8 +171,11 @@ def _create_kafka_config() -> ModelKafkaEventBusConfig:
         timeout_seconds=DEFAULT_KAFKA_TIMEOUT_SECONDS,
         max_retry_attempts=DEFAULT_KAFKA_MAX_RETRY_ATTEMPTS,
         acks=DEFAULT_KAFKA_ACKS,
-        # Circuit breaker settings - allow a few failures before opening
-        circuit_breaker_threshold=3,
+        # Circuit breaker settings: Allow 5 failures before opening circuit to
+        # handle transient broker issues during high-volume Claude Code sessions.
+        # With 10s reset timeout, this prevents excessive reconnection attempts
+        # while still recovering quickly from temporary network issues.
+        circuit_breaker_threshold=5,
         circuit_breaker_reset_timeout=10.0,
         # No idempotence needed for observability events
         enable_idempotence=False,
@@ -290,10 +293,11 @@ async def emit_hook_event(
             },
         )
 
+        error_msg = f"{type(e).__name__}: {e!s}"
         return ModelEventPublishResult(
             success=False,
             topic=topic,
-            error_message=f"{type(e).__name__}: {e!s}"[:1000],
+            error_message=(error_msg[:997] + "..." if len(error_msg) > 1000 else error_msg),
         )
 
     finally:

@@ -88,6 +88,8 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
             >> "$LOG_FILE" 2>&1 || true
     ) &
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Session event emission started" >> "$LOG_FILE"
+else
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Kafka emission skipped (KAFKA_ENABLED=$KAFKA_ENABLED)" >> "$LOG_FILE"
 fi
 
 # Performance tracking
