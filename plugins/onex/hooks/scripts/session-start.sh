@@ -89,6 +89,23 @@ if [[ -f "${HOOKS_LIB}/session_intelligence.py" ]]; then
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Session intelligence logging started" >> "$LOG_FILE"
 fi
 
+# Emit session.started event to Kafka (async, non-blocking)
+# Uses omniclaude-emit CLI with 250ms hard timeout
+(
+    GIT_BRANCH=""
+    if command -v git >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1; then
+        GIT_BRANCH=$(git branch --show-current 2>/dev/null || echo "")
+    fi
+
+    "$PYTHON_CMD" -m omniclaude.hooks.cli_emit session-started \
+        --session-id "$SESSION_ID" \
+        --cwd "$CWD" \
+        --source "startup" \
+        ${GIT_BRANCH:+--git-branch "$GIT_BRANCH"} \
+        >> "$LOG_FILE" 2>&1 || true
+) &
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Session event emission started" >> "$LOG_FILE"
+
 # Performance tracking
 END_TIME=$($PYTHON_CMD -c "import time; print(int(time.time() * 1000))")
 ELAPSED_MS=$((END_TIME - START_TIME))

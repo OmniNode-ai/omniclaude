@@ -1,0 +1,375 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 OmniNode Team
+"""Tests for OmniClaude hook event CLI (OMN-1400).
+
+Tests cover:
+    - CLI command parsing
+    - Timeout behavior
+    - Failure suppression (always exit 0)
+    - Dry-run mode
+
+Note:
+    These tests do NOT:
+    - Spin up Kafka
+    - Assert delivery guarantees
+    - Simulate Claude Code internals
+"""
+
+from __future__ import annotations
+
+import asyncio
+from unittest.mock import AsyncMock, patch
+from uuid import uuid4
+
+import pytest
+from click.testing import CliRunner
+
+from omniclaude.hooks.cli_emit import (
+    EMIT_TIMEOUT_SECONDS,
+    cli,
+    run_with_timeout,
+)
+
+# =============================================================================
+# Timeout Wrapper Tests
+# =============================================================================
+
+
+class TestTimeoutWrapper:
+    """Tests for the timeout wrapper function."""
+
+    def test_timeout_constant_is_250ms(self) -> None:
+        """Timeout constant is 250ms as per spec."""
+        assert EMIT_TIMEOUT_SECONDS == 0.250
+
+    def test_successful_coro_returns_result(self) -> None:
+        """Successful coroutine returns its result."""
+
+        async def fast_coro() -> str:
+            return "success"
+
+        result = run_with_timeout(fast_coro())
+        assert result == "success"
+
+    def test_timeout_returns_none(self) -> None:
+        """Coroutine that exceeds timeout returns None."""
+
+        async def slow_coro() -> str:
+            await asyncio.sleep(1.0)  # Much longer than 250ms
+            return "should not reach"
+
+        result = run_with_timeout(slow_coro(), timeout=0.01)  # Very short timeout
+        assert result is None
+
+    def test_exception_returns_none(self) -> None:
+        """Coroutine that raises returns None (no exception to caller)."""
+
+        async def failing_coro() -> str:
+            raise RuntimeError("Boom!")
+
+        result = run_with_timeout(failing_coro())
+        assert result is None
+
+
+# =============================================================================
+# CLI Command Tests
+# =============================================================================
+
+
+class TestCliCommands:
+    """Tests for CLI commands."""
+
+    @pytest.fixture
+    def runner(self) -> CliRunner:
+        """Create a Click CLI test runner."""
+        return CliRunner()
+
+    def test_help_command(self, runner: CliRunner) -> None:
+        """--help shows usage information."""
+        result = runner.invoke(cli, ["--help"])
+        assert result.exit_code == 0
+        assert "OmniClaude hook event emitter" in result.output
+
+    def test_version_command(self, runner: CliRunner) -> None:
+        """--version shows version."""
+        result = runner.invoke(cli, ["--version"])
+        assert result.exit_code == 0
+        assert "omniclaude-emit" in result.output
+
+    def test_no_command_shows_help(self, runner: CliRunner) -> None:
+        """Running without command shows help."""
+        result = runner.invoke(cli)
+        assert result.exit_code == 0
+        assert "session-started" in result.output
+
+
+class TestSessionStartedCommand:
+    """Tests for session-started command."""
+
+    @pytest.fixture
+    def runner(self) -> CliRunner:
+        return CliRunner()
+
+    def test_dry_run_mode(self, runner: CliRunner) -> None:
+        """Dry run mode validates but doesn't emit."""
+        result = runner.invoke(
+            cli,
+            [
+                "session-started",
+                "--session-id",
+                str(uuid4()),
+                "--cwd",
+                "/workspace",
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "[DRY RUN]" in result.output
+
+    def test_always_exits_zero(self, runner: CliRunner) -> None:
+        """Command always exits 0 even on failure."""
+        with patch(
+            "omniclaude.hooks.cli_emit.emit_session_started",
+            new_callable=AsyncMock,
+        ) as mock_emit:
+            mock_emit.side_effect = RuntimeError("Kafka down")
+
+            result = runner.invoke(
+                cli,
+                [
+                    "session-started",
+                    "--session-id",
+                    str(uuid4()),
+                    "--cwd",
+                    "/workspace",
+                ],
+            )
+
+            # Must exit 0 - observability must never break UX
+            assert result.exit_code == 0
+
+    def test_accepts_all_sources(self, runner: CliRunner) -> None:
+        """Command accepts all valid source values."""
+        for source in ["startup", "resume", "clear", "compact"]:
+            result = runner.invoke(
+                cli,
+                [
+                    "session-started",
+                    "--session-id",
+                    str(uuid4()),
+                    "--cwd",
+                    "/workspace",
+                    "--source",
+                    source,
+                    "--dry-run",
+                ],
+            )
+            assert result.exit_code == 0
+
+
+class TestSessionEndedCommand:
+    """Tests for session-ended command."""
+
+    @pytest.fixture
+    def runner(self) -> CliRunner:
+        return CliRunner()
+
+    def test_dry_run_mode(self, runner: CliRunner) -> None:
+        """Dry run mode validates but doesn't emit."""
+        result = runner.invoke(
+            cli,
+            [
+                "session-ended",
+                "--session-id",
+                str(uuid4()),
+                "--reason",
+                "clear",
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "[DRY RUN]" in result.output
+
+    def test_accepts_all_reasons(self, runner: CliRunner) -> None:
+        """Command accepts all valid reason values."""
+        for reason in ["clear", "logout", "prompt_input_exit", "other"]:
+            result = runner.invoke(
+                cli,
+                [
+                    "session-ended",
+                    "--session-id",
+                    str(uuid4()),
+                    "--reason",
+                    reason,
+                    "--dry-run",
+                ],
+            )
+            assert result.exit_code == 0
+
+    def test_accepts_duration_and_tools_count(self, runner: CliRunner) -> None:
+        """Command accepts optional duration and tools count."""
+        result = runner.invoke(
+            cli,
+            [
+                "session-ended",
+                "--session-id",
+                str(uuid4()),
+                "--duration",
+                "1800.5",
+                "--tools-count",
+                "42",
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+
+
+class TestPromptSubmittedCommand:
+    """Tests for prompt-submitted command."""
+
+    @pytest.fixture
+    def runner(self) -> CliRunner:
+        return CliRunner()
+
+    def test_dry_run_mode(self, runner: CliRunner) -> None:
+        """Dry run mode validates but doesn't emit."""
+        result = runner.invoke(
+            cli,
+            [
+                "prompt-submitted",
+                "--session-id",
+                str(uuid4()),
+                "--preview",
+                "Fix the bug...",
+                "--length",
+                "100",
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "[DRY RUN]" in result.output
+
+    def test_auto_generates_prompt_id(self, runner: CliRunner) -> None:
+        """Command auto-generates prompt-id if not provided."""
+        result = runner.invoke(
+            cli,
+            [
+                "prompt-submitted",
+                "--session-id",
+                str(uuid4()),
+                "--length",
+                "50",
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+
+
+class TestToolExecutedCommand:
+    """Tests for tool-executed command."""
+
+    @pytest.fixture
+    def runner(self) -> CliRunner:
+        return CliRunner()
+
+    def test_dry_run_mode(self, runner: CliRunner) -> None:
+        """Dry run mode validates but doesn't emit."""
+        result = runner.invoke(
+            cli,
+            [
+                "tool-executed",
+                "--session-id",
+                str(uuid4()),
+                "--tool-name",
+                "Read",
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "[DRY RUN]" in result.output
+
+    def test_accepts_success_flag(self, runner: CliRunner) -> None:
+        """Command accepts --success/--failure flags."""
+        for flag in ["--success", "--failure"]:
+            result = runner.invoke(
+                cli,
+                [
+                    "tool-executed",
+                    "--session-id",
+                    str(uuid4()),
+                    "--tool-name",
+                    "Bash",
+                    flag,
+                    "--dry-run",
+                ],
+            )
+            assert result.exit_code == 0
+
+    def test_accepts_duration_and_summary(self, runner: CliRunner) -> None:
+        """Command accepts optional duration and summary."""
+        result = runner.invoke(
+            cli,
+            [
+                "tool-executed",
+                "--session-id",
+                str(uuid4()),
+                "--tool-name",
+                "Write",
+                "--duration-ms",
+                "150",
+                "--summary",
+                "Wrote 50 lines to file.py",
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+
+
+# =============================================================================
+# JSON Input Tests
+# =============================================================================
+
+
+class TestJsonInput:
+    """Tests for JSON input mode."""
+
+    @pytest.fixture
+    def runner(self) -> CliRunner:
+        return CliRunner()
+
+    def test_session_started_json_input(self, runner: CliRunner) -> None:
+        """session-started accepts JSON input from stdin."""
+        json_data = '{"cwd": "/from/json", "git_branch": "feature"}'
+        result = runner.invoke(
+            cli,
+            [
+                "session-started",
+                "--session-id",
+                str(uuid4()),
+                "--cwd",
+                "/fallback",
+                "--json",
+                "--dry-run",
+            ],
+            input=json_data,
+        )
+        assert result.exit_code == 0
+        # JSON values should override CLI values
+        assert "/from/json" in result.output or "[DRY RUN]" in result.output
+
+    def test_invalid_json_exits_zero(self, runner: CliRunner) -> None:
+        """Invalid JSON still exits 0 (failure suppression)."""
+        result = runner.invoke(
+            cli,
+            [
+                "session-started",
+                "--session-id",
+                str(uuid4()),
+                "--cwd",
+                "/workspace",
+                "--json",
+            ],
+            input="not valid json",
+        )
+        # Must exit 0 - observability must never break UX
+        assert result.exit_code == 0

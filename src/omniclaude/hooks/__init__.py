@@ -47,6 +47,13 @@ from omniclaude.hooks.contracts import (
     CONTRACT_TOOL_EXECUTED,
     CONTRACTS_DIR,
 )
+from omniclaude.hooks.handler_event_emitter import (
+    emit_hook_event,
+    emit_prompt_submitted,
+    emit_session_ended,
+    emit_session_started,
+    emit_tool_executed,
+)
 from omniclaude.hooks.models import ModelEventPublishResult
 from omniclaude.hooks.schemas import (
     HookEventType,
@@ -78,6 +85,12 @@ __all__ = [
     # Topics
     "TopicBase",
     "build_topic",
+    # Event emission functions (OMN-1400)
+    "emit_hook_event",
+    "emit_session_started",
+    "emit_session_ended",
+    "emit_prompt_submitted",
+    "emit_tool_executed",
     # Contracts
     "CONTRACTS_DIR",
     "CONTRACT_SESSION_STARTED",

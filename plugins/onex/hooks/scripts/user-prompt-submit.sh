@@ -121,6 +121,24 @@ fi
         2>>"$LOG_FILE" || true
 ) &
 
+# Emit prompt.submitted event to Kafka (async, non-blocking)
+# Uses omniclaude-emit CLI with 250ms hard timeout
+SESSION_ID="$(printf %s "$INPUT" | jq -r '.sessionId // .session_id // ""' 2>/dev/null || echo "")"
+if [[ -z "$SESSION_ID" ]]; then
+    SESSION_ID="$CORRELATION_ID"
+fi
+PROMPT_LENGTH="${#PROMPT}"
+PROMPT_PREVIEW="${PROMPT:0:100}"
+
+(
+    $PYTHON_CMD -m omniclaude.hooks.cli_emit prompt-submitted \
+        --session-id "$SESSION_ID" \
+        --preview "$PROMPT_PREVIEW" \
+        --length "$PROMPT_LENGTH" \
+        >> "$LOG_FILE" 2>&1 || true
+) &
+log "Prompt event emission started"
+
 # -----------------------------
 # Workflow Detection
 # -----------------------------

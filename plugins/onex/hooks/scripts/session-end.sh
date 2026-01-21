@@ -56,6 +56,23 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] Duration: ${SESSION_DURATION}ms" >> "$LOG_F
         >> "$LOG_FILE" 2>&1 || echo "[$(date '+%Y-%m-%d %H:%M:%S')] Session end logging failed" >> "$LOG_FILE"
 ) &
 
+# Emit session.ended event to Kafka (async, non-blocking)
+# Uses omniclaude-emit CLI with 250ms hard timeout
+(
+    # Convert duration from ms to seconds
+    DURATION_SECONDS=""
+    if [[ "$SESSION_DURATION" != "0" && -n "$SESSION_DURATION" ]]; then
+        DURATION_SECONDS=$(echo "scale=3; $SESSION_DURATION / 1000" | bc 2>/dev/null || echo "")
+    fi
+
+    python3 -m omniclaude.hooks.cli_emit session-ended \
+        --session-id "$SESSION_ID" \
+        --reason "other" \
+        ${DURATION_SECONDS:+--duration "$DURATION_SECONDS"} \
+        >> "$LOG_FILE" 2>&1 || true
+) &
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Session event emission started" >> "$LOG_FILE"
+
 # Clean up correlation state
 if [[ -f "${HOOKS_LIB}/correlation_manager.py" ]]; then
     python3 -c "
