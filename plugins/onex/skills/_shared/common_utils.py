@@ -16,17 +16,11 @@ Created: 2025-11-28
 """
 
 import os
-import sys
-from typing import Optional
+
+from omniclaude.config import settings
 
 
-# Add path for config module (type-safe Pydantic Settings)
-# Path: claude/skills/_shared/ -> claude/skills/ -> claude/ -> project root (where config/ lives)
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-from config import settings
-
-
-def get_timeout_seconds(override_seconds: Optional[int] = None) -> float:
+def get_timeout_seconds(override_seconds: int | None = None) -> float:
     """
     Get timeout value in seconds from type-safe configuration.
 

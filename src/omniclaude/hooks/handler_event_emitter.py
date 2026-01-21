@@ -69,7 +69,7 @@ logger = logging.getLogger(__name__)
 # These values prioritize fast failure over reliability
 DEFAULT_KAFKA_TIMEOUT_SECONDS: int = 2  # Short timeout for hooks
 DEFAULT_KAFKA_MAX_RETRY_ATTEMPTS: int = 0  # No retries (latency budget)
-DEFAULT_KAFKA_ACKS: str = "1"  # Leader ack only (faster than "all")
+DEFAULT_KAFKA_ACKS: str = "all"  # Using "all" due to aiokafka bug with string "1"
 
 
 # =============================================================================
