@@ -252,12 +252,37 @@ async def emit_hook_event(
         await bus.start()
 
         # Publish the envelope
-        # Use entity_id as partition key for ordering within session.
-        # UUID.bytes returns 16 bytes which Kafka hashes to determine partition.
-        # This ensures all events for the same session go to the same partition,
-        # guaranteeing ordering within a session. Note: distribution across
-        # partitions may be uneven if the topic has many partitions, as UUID
-        # entropy doesn't guarantee uniform distribution after hashing.
+        #
+        # Partition Key Strategy: Session-based ordering
+        # -----------------------------------------------
+        # We use entity_id (session UUID) as the partition key to guarantee
+        # strict ordering of events within a session. UUID.bytes returns 16
+        # bytes which Kafka hashes to determine the target partition.
+        #
+        # Trade-off: Ordering vs Distribution
+        # ------------------------------------
+        # This approach prioritizes event ordering over uniform partition
+        # distribution. UUID hashing does not guarantee even distribution
+        # across partitions, which could theoretically cause "hot partitions"
+        # where some partitions receive more traffic than others.
+        #
+        # Why this is acceptable for Claude Code hooks:
+        # - Low event volume: ~4-10 events per session (start, prompts, tools, end)
+        # - Short session duration: Most sessions are minutes, not hours
+        # - Observability-only: These events are for analytics/learning, not
+        #   critical path processing. Slight consumer lag is acceptable.
+        # - Ordering requirement: Session events MUST be processed in order
+        #   for accurate session reconstruction and duration calculation.
+        #
+        # Alternative considered: Random partitioning (key=None)
+        # - Would provide better distribution across partitions
+        # - BUT would lose event ordering guarantees within a session
+        # - Consumers would need complex reordering logic
+        # - Not worth the complexity for our low-volume observability use case
+        #
+        # If volume increases significantly (e.g., 1000+ concurrent sessions),
+        # consider: (1) increasing partition count, or (2) using a hash of
+        # session_id modulo a smaller key space for better distribution.
         partition_key = payload.entity_id.bytes
         message_bytes = envelope.model_dump_json().encode("utf-8")
 

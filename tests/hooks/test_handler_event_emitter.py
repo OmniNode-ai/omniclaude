@@ -479,3 +479,269 @@ class TestConvenienceFunctions:
             )
 
             assert result.success is True
+
+
+# =============================================================================
+# Edge Case Tests
+# =============================================================================
+
+
+@pytest.mark.usefixtures("kafka_env")
+class TestEdgeCases:
+    """Tests for edge cases in hook event handling.
+
+    These tests cover boundary conditions, unicode handling, and special
+    input values that may be encountered in production.
+    """
+
+    @pytest.mark.asyncio
+    async def test_prompt_preview_with_unicode(self) -> None:
+        """Prompt preview handles unicode characters correctly.
+
+        Covers: emojis, CJK characters, RTL text, and other Unicode.
+        These should serialize correctly in JSON and not raise.
+        """
+        session_id = uuid4()
+        unicode_previews = [
+            "Fix the bug \U0001f41b in the auth system",  # emoji
+            "Fix the bug in \u8ba4\u8bc1\u7cfb\u7edf",  # Chinese (authentication system)
+            "\u05ea\u05d9\u05e7\u05d5\u05df \u05d1\u05d0\u05d2",  # Hebrew RTL (bug fix)
+            "Caf\xe9 debugging \u2615",  # accents and symbols
+        ]
+
+        with patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus_class.return_value = mock_bus
+
+            for preview in unicode_previews:
+                result = await emit_prompt_submitted(
+                    session_id=session_id,
+                    prompt_id=uuid4(),
+                    prompt_preview=preview,
+                    prompt_length=len(preview),
+                )
+                assert result.success is True, f"Failed for preview: {preview!r}"
+
+    @pytest.mark.asyncio
+    async def test_empty_prompt_preview(self) -> None:
+        """Empty prompt preview is handled correctly.
+
+        Edge case: User submits an empty prompt or prompt_preview is
+        explicitly empty after sanitization.
+        """
+        session_id = uuid4()
+
+        with patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus_class.return_value = mock_bus
+
+            result = await emit_prompt_submitted(
+                session_id=session_id,
+                prompt_id=uuid4(),
+                prompt_preview="",
+                prompt_length=0,
+            )
+            assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_session_duration_near_max_bound(self) -> None:
+        """Session duration near 30-day maximum is accepted.
+
+        Tests 29 days in seconds (2,505,600), which should be within bounds.
+        """
+        session_id = uuid4()
+        duration_29_days = 29 * 24 * 60 * 60  # 2,505,600 seconds
+
+        with patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus_class.return_value = mock_bus
+
+            result = await emit_session_ended(
+                session_id=session_id,
+                reason=SessionEndReason.OTHER,
+                duration_seconds=float(duration_29_days),
+            )
+            assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_session_duration_at_exact_max_bound(self) -> None:
+        """Session duration at exactly 30 days (2,592,000 seconds) is accepted.
+
+        This is the maximum allowed value per the schema constraint.
+        """
+        session_id = uuid4()
+        duration_30_days = 30 * 24 * 60 * 60  # 2,592,000 seconds
+
+        with patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus_class.return_value = mock_bus
+
+            result = await emit_session_ended(
+                session_id=session_id,
+                reason=SessionEndReason.LOGOUT,
+                duration_seconds=float(duration_30_days),
+            )
+            assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_session_duration_exceeds_max_bound(self) -> None:
+        """Session duration exceeding 30 days is rejected by Pydantic.
+
+        Values above the max bound (2,592,000 seconds) should fail validation.
+        The validation happens at payload creation time, before emit_hook_event
+        is called, so this raises a ValidationError.
+        """
+        from pydantic import ValidationError
+
+        session_id = uuid4()
+        duration_31_days = 31 * 24 * 60 * 60  # Over the 30-day limit
+
+        with (
+            patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class,
+            pytest.raises(ValidationError, match="duration_seconds"),
+        ):
+            mock_bus = AsyncMock()
+            mock_bus_class.return_value = mock_bus
+
+            await emit_session_ended(
+                session_id=session_id,
+                reason=SessionEndReason.OTHER,
+                duration_seconds=float(duration_31_days),
+            )
+
+    @pytest.mark.asyncio
+    async def test_tool_duration_at_max_bound(self) -> None:
+        """Tool duration at exactly 1 hour (3,600,000 ms) is accepted.
+
+        This is the maximum allowed value per the schema constraint.
+        """
+        session_id = uuid4()
+        duration_1_hour_ms = 3600000
+
+        with patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus_class.return_value = mock_bus
+
+            result = await emit_tool_executed(
+                session_id=session_id,
+                tool_execution_id=uuid4(),
+                tool_name="Bash",
+                success=True,
+                duration_ms=duration_1_hour_ms,
+            )
+            assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_tool_duration_exceeds_max_bound(self) -> None:
+        """Tool duration exceeding 1 hour is rejected by Pydantic.
+
+        Values above the max bound (3,600,000 ms) should fail validation.
+        The validation happens at payload creation time, before emit_hook_event
+        is called, so this raises a ValidationError.
+        """
+        from pydantic import ValidationError
+
+        session_id = uuid4()
+        duration_over_1_hour_ms = 3700000  # Over the 1-hour limit
+
+        with (
+            patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class,
+            pytest.raises(ValidationError, match="duration_ms"),
+        ):
+            mock_bus = AsyncMock()
+            mock_bus_class.return_value = mock_bus
+
+            await emit_tool_executed(
+                session_id=session_id,
+                tool_execution_id=uuid4(),
+                tool_name="Bash",
+                success=True,
+                duration_ms=duration_over_1_hour_ms,
+            )
+
+    @pytest.mark.asyncio
+    async def test_tool_summary_at_max_length(self) -> None:
+        """Tool summary at exactly 500 chars (max_length) is accepted."""
+        session_id = uuid4()
+        summary_500_chars = "x" * 500
+
+        with patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus_class.return_value = mock_bus
+
+            result = await emit_tool_executed(
+                session_id=session_id,
+                tool_execution_id=uuid4(),
+                tool_name="Write",
+                success=True,
+                summary=summary_500_chars,
+            )
+            assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_tool_summary_exceeds_max_length(self) -> None:
+        """Tool summary over 500 chars is rejected by Pydantic.
+
+        The schema enforces max_length=500 for the summary field.
+        The validation happens at payload creation time, before emit_hook_event
+        is called, so this raises a ValidationError.
+        """
+        from pydantic import ValidationError
+
+        session_id = uuid4()
+        summary_600_chars = "x" * 600  # Over 500 char limit
+
+        with (
+            patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class,
+            pytest.raises(ValidationError, match="summary"),
+        ):
+            mock_bus = AsyncMock()
+            mock_bus_class.return_value = mock_bus
+
+            await emit_tool_executed(
+                session_id=session_id,
+                tool_execution_id=uuid4(),
+                tool_name="Write",
+                success=True,
+                summary=summary_600_chars,
+            )
+
+    @pytest.mark.asyncio
+    async def test_prompt_preview_at_max_length(self) -> None:
+        """Prompt preview at exactly 100 chars (max_length) is accepted."""
+        session_id = uuid4()
+        preview_100_chars = "x" * 100
+
+        with patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus_class.return_value = mock_bus
+
+            result = await emit_prompt_submitted(
+                session_id=session_id,
+                prompt_id=uuid4(),
+                prompt_preview=preview_100_chars,
+                prompt_length=100,
+            )
+            assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_prompt_preview_truncation(self) -> None:
+        """Prompt preview over 100 chars is automatically truncated.
+
+        The sanitize_prompt_preview validator truncates with '...' suffix.
+        """
+        session_id = uuid4()
+        preview_150_chars = "x" * 150  # Over 100 char limit
+
+        with patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus_class.return_value = mock_bus
+
+            # Should succeed because validator auto-truncates
+            result = await emit_prompt_submitted(
+                session_id=session_id,
+                prompt_id=uuid4(),
+                prompt_preview=preview_150_chars,
+                prompt_length=150,
+            )
+            assert result.success is True

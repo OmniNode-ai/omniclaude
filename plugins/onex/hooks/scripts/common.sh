@@ -60,7 +60,12 @@ export PYTHON_CMD
 # Uses native bash date if available (GNU date supports %N), falls back to Python.
 # macOS date doesn't support %N, so we detect and fall back appropriately.
 
-# Detect if native millisecond timing is available (GNU date supports %N)
+# Detect if native millisecond timing is available (GNU date supports %N).
+# IMPORTANT: This check runs ONCE at script load time and caches the result.
+# We intentionally cache rather than checking per-call because:
+#   1. Performance: Avoid subprocess overhead on every timing call
+#   2. Consistency: All timestamps in a session use the same method
+#   3. Reliability: No race conditions from method changing mid-execution
 if date +%s%3N 2>/dev/null | grep -qE '^[0-9]+$'; then
     _USE_NATIVE_TIME=true
 else

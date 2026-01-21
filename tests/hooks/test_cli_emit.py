@@ -377,3 +377,175 @@ class TestJsonInput:
         )
         # Must exit 0 - observability must never break UX
         assert result.exit_code == 0
+
+
+# =============================================================================
+# Edge Case Tests
+# =============================================================================
+
+
+class TestEdgeCases:
+    """Tests for edge cases in hook event handling.
+
+    These tests cover boundary conditions, unicode handling, and special
+    input values that may be encountered in production.
+    """
+
+    @pytest.fixture
+    def runner(self) -> CliRunner:
+        return CliRunner()
+
+    def test_prompt_preview_with_unicode(self, runner: CliRunner) -> None:
+        """Prompt preview handles unicode characters correctly.
+
+        Covers: emojis, CJK characters, RTL text, and other Unicode.
+        These should serialize correctly in JSON and not raise.
+        """
+        unicode_previews = [
+            "Fix the bug \U0001f41b in the auth system",  # emoji
+            "Fix the bug in \u8ba4\u8bc1\u7cfb\u7edf",  # Chinese (authentication system)
+            "\u05ea\u05d9\u05e7\u05d5\u05df \u05d1\u05d0\u05d2",  # Hebrew RTL (bug fix)
+            "Caf\xe9 debugging \u2615",  # accents and symbols
+        ]
+        for preview in unicode_previews:
+            result = runner.invoke(
+                cli,
+                [
+                    "prompt-submitted",
+                    "--session-id",
+                    str(uuid4()),
+                    "--preview",
+                    preview,
+                    "--length",
+                    str(len(preview)),
+                    "--dry-run",
+                ],
+            )
+            assert result.exit_code == 0, f"Failed for preview: {preview!r}"
+            assert "[DRY RUN]" in result.output
+
+    def test_empty_prompt_preview(self, runner: CliRunner) -> None:
+        """Empty prompt preview is handled correctly.
+
+        Edge case: User submits an empty prompt or prompt_preview is
+        explicitly empty after sanitization.
+        """
+        result = runner.invoke(
+            cli,
+            [
+                "prompt-submitted",
+                "--session-id",
+                str(uuid4()),
+                "--preview",
+                "",
+                "--length",
+                "0",
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "[DRY RUN]" in result.output
+
+    def test_session_duration_near_max_bound(self, runner: CliRunner) -> None:
+        """Session duration near 30-day maximum is accepted.
+
+        Tests 29 days in seconds (2,505,600), which should be within bounds.
+        """
+        duration_29_days = 29 * 24 * 60 * 60  # 2,505,600 seconds
+        result = runner.invoke(
+            cli,
+            [
+                "session-ended",
+                "--session-id",
+                str(uuid4()),
+                "--reason",
+                "other",
+                "--duration",
+                str(float(duration_29_days)),
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "[DRY RUN]" in result.output
+
+    def test_session_duration_at_exact_max_bound(self, runner: CliRunner) -> None:
+        """Session duration at exactly 30 days (2,592,000 seconds) is accepted.
+
+        This is the maximum allowed value per the schema constraint.
+        """
+        duration_30_days = 30 * 24 * 60 * 60  # 2,592,000 seconds
+        result = runner.invoke(
+            cli,
+            [
+                "session-ended",
+                "--session-id",
+                str(uuid4()),
+                "--reason",
+                "logout",
+                "--duration",
+                str(float(duration_30_days)),
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "[DRY RUN]" in result.output
+
+    def test_tool_duration_at_max_bound(self, runner: CliRunner) -> None:
+        """Tool duration at exactly 1 hour (3,600,000 ms) is accepted.
+
+        This is the maximum allowed value per the schema constraint.
+        """
+        duration_1_hour_ms = 3600000
+        result = runner.invoke(
+            cli,
+            [
+                "tool-executed",
+                "--session-id",
+                str(uuid4()),
+                "--tool-name",
+                "Bash",
+                "--duration-ms",
+                str(duration_1_hour_ms),
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "[DRY RUN]" in result.output
+
+    def test_tool_summary_at_max_length(self, runner: CliRunner) -> None:
+        """Tool summary at exactly 500 chars (max_length) is accepted."""
+        summary_500_chars = "x" * 500
+        result = runner.invoke(
+            cli,
+            [
+                "tool-executed",
+                "--session-id",
+                str(uuid4()),
+                "--tool-name",
+                "Write",
+                "--summary",
+                summary_500_chars,
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "[DRY RUN]" in result.output
+
+    def test_prompt_preview_at_max_length(self, runner: CliRunner) -> None:
+        """Prompt preview at exactly 100 chars (max_length) is accepted."""
+        preview_100_chars = "x" * 100
+        result = runner.invoke(
+            cli,
+            [
+                "prompt-submitted",
+                "--session-id",
+                str(uuid4()),
+                "--preview",
+                preview_100_chars,
+                "--length",
+                "100",
+                "--dry-run",
+            ],
+        )
+        assert result.exit_code == 0
+        assert "[DRY RUN]" in result.output

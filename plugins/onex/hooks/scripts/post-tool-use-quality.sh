@@ -167,7 +167,7 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
             $SUCCESS_FLAG \
             ${DURATION_MS:+--duration-ms "$DURATION_MS"} \
             --summary "$TOOL_SUMMARY" \
-            >> "$LOG_FILE" 2>&1 || echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Kafka emit failed (non-fatal)" >> "$LOG_FILE"
+            >> "$LOG_FILE" 2>&1 || { rc=$?; echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Kafka emit failed (exit=$rc, non-fatal)" >> "$LOG_FILE"; }
     ) &
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Tool event emission started" >> "$LOG_FILE"
 fi

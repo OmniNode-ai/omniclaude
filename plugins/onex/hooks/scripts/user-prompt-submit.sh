@@ -101,7 +101,7 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
             --session-id "$SESSION_ID" \
             --preview "$PROMPT_PREVIEW" \
             --length "$PROMPT_LENGTH" \
-            >> "$LOG_FILE" 2>&1 || log "Kafka emit failed (non-fatal)"
+            >> "$LOG_FILE" 2>&1 || { rc=$?; log "Kafka emit failed (exit=$rc, non-fatal)"; }
     ) &
     log "Prompt event emission started"
 fi
@@ -232,7 +232,7 @@ if [[ -n "${DOMAIN_QUERY:-}" ]]; then
             --output-file "$PROJECT_ROOT/tmp/agent_intelligence_domain_${CORRELATION_ID}.json" \
             --match-count 5 \
             --timeout-ms 500 \
-            2>>"$LOG_FILE" || log "WARNING: Domain intelligence request failed"
+            2>>"$LOG_FILE" || { rc=$?; log "WARNING: Domain intelligence request failed (exit=$rc)"; }
     ) &
 fi
 
@@ -248,7 +248,7 @@ if [[ -n "${IMPL_QUERY:-}" ]]; then
             --output-file "$PROJECT_ROOT/tmp/agent_intelligence_impl_${CORRELATION_ID}.json" \
             --match-count 3 \
             --timeout-ms 500 \
-            2>>"$LOG_FILE" || log "WARNING: Implementation intelligence request failed"
+            2>>"$LOG_FILE" || { rc=$?; log "WARNING: Implementation intelligence request failed (exit=$rc)"; }
     ) &
 fi
 

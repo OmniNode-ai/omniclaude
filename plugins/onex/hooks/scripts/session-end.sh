@@ -64,7 +64,7 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] Reason: $SESSION_REASON" >> "$LOG_FILE"
         --mode end \
         --session-id "${SESSION_ID}" \
         --metadata "{\"hook_duration_ms\": ${SESSION_DURATION}}" \
-        >> "$LOG_FILE" 2>&1 || echo "[$(date '+%Y-%m-%d %H:%M:%S')] Session end logging failed" >> "$LOG_FILE"
+        >> "$LOG_FILE" 2>&1 || { rc=$?; echo "[$(date '+%Y-%m-%d %H:%M:%S')] Session end logging failed (exit=$rc)" >> "$LOG_FILE"; }
 ) &
 
 # Emit session.ended event to Kafka (async, non-blocking)
@@ -81,7 +81,7 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
             --session-id "$SESSION_ID" \
             --reason "$SESSION_REASON" \
             ${DURATION_SECONDS:+--duration "$DURATION_SECONDS"} \
-            >> "$LOG_FILE" 2>&1 || echo "[$(date '+%Y-%m-%d %H:%M:%S')] Kafka emit failed (non-fatal)" >> "$LOG_FILE"
+            >> "$LOG_FILE" 2>&1 || { rc=$?; echo "[$(date '+%Y-%m-%d %H:%M:%S')] Kafka emit failed (exit=$rc, non-fatal)" >> "$LOG_FILE"; }
     ) &
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Session event emission started" >> "$LOG_FILE"
 else
