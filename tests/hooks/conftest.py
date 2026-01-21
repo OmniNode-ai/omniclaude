@@ -34,28 +34,6 @@ def _patch_event_bus_acks_conversion():
     This is a workaround for a bug in omnibase_infra.EventBusKafka.
     """
     try:
-        from omnibase_infra.event_bus import event_bus_kafka
-
-        # Store original start method
-        original_start = event_bus_kafka.EventBusKafka.start
-
-        async def patched_start(self, *args, **kwargs):
-            """Patched start method that converts acks to proper type."""
-            # Convert acks string to int if needed
-            if hasattr(self, "_config") and hasattr(self._config, "acks"):
-                acks_value = self._config.acks
-                if acks_value in ("0", "1"):
-                    # Create a modified config with integer acks
-                    # We can't modify frozen config, so we patch the producer creation instead
-                    pass
-
-            return await original_start(self, *args, **kwargs)
-
-        # Actually, a cleaner approach is to patch the producer creation
-        # Let's patch _create_producer or the actual producer instantiation
-        # For now, let's just patch the config model's acks getter
-
-        # Alternative: Patch the AIOKafkaProducer to accept string acks
         from aiokafka import AIOKafkaProducer
 
         original_init = AIOKafkaProducer.__init__

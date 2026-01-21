@@ -32,7 +32,11 @@ if [[ -f "$PROJECT_ROOT/.env" ]]; then
     set +a
 fi
 
-# Source shared functions (provides PYTHON_CMD, KAFKA_ENABLED, get_time_ms)
+# Source shared functions (provides PYTHON_CMD)
+# Note: common.sh also exports KAFKA_ENABLED, but PreToolUse hooks do not emit
+# Kafka events - there is no tool.pre_executed schema defined. This is intentional:
+# pre-execution validation is synchronous and blocking, while Kafka events are
+# designed for async observability of completed actions.
 source "${HOOKS_DIR}/scripts/common.sh"
 
 # Generate or reuse correlation ID
