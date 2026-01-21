@@ -34,7 +34,7 @@ import json
 import logging
 import sys
 import uuid
-from typing import Any, Literal, cast
+from typing import Any
 from uuid import UUID, uuid4
 
 import click
@@ -45,10 +45,7 @@ from omniclaude.hooks.handler_event_emitter import (
     emit_session_started,
     emit_tool_executed,
 )
-
-# Type aliases matching handler_event_emitter.py Literal types
-HookSourceType = Literal["startup", "resume", "clear", "compact"]
-SessionEndReasonType = Literal["clear", "logout", "prompt_input_exit", "other"]
+from omniclaude.hooks.schemas import HookSource, SessionEndReason
 
 # Configure logging for hook context
 logging.basicConfig(
@@ -126,14 +123,20 @@ def _string_to_uuid(value: str) -> UUID:
 
 
 def run_with_timeout(coro: Any, timeout: float = EMIT_TIMEOUT_SECONDS) -> Any:
-    """Run an async coroutine with a hard wall-clock timeout.
+    """Run an async coroutine with a cooperative timeout.
 
-    This function wraps asyncio.run() with a signal-based timeout that
-    cannot be exceeded regardless of what the coroutine does internally.
+    This function wraps asyncio.run() with asyncio.wait_for() for timeout handling.
+    Note that asyncio.wait_for uses cooperative cancellation - the timeout only
+    triggers at await points. If the coroutine performs blocking I/O or CPU-bound
+    work without yielding, the timeout cannot interrupt it.
+
+    For hook event emission, this is acceptable because:
+    - Kafka operations are async and yield frequently
+    - The timeout is a best-effort safeguard, not a hard guarantee
 
     Args:
         coro: The coroutine to run.
-        timeout: Maximum wall-clock time in seconds.
+        timeout: Maximum time in seconds before cooperative cancellation.
 
     Returns:
         The result of the coroutine, or None if timeout occurred.
@@ -235,7 +238,7 @@ def cmd_session_started(
             emit_session_started(
                 session_id=sid,
                 working_directory=cwd,
-                hook_source=cast(HookSourceType, source),
+                hook_source=HookSource(source),
                 git_branch=git_branch,
             )
         )
@@ -290,7 +293,7 @@ def cmd_session_ended(
         result = run_with_timeout(
             emit_session_ended(
                 session_id=sid,
-                reason=cast(SessionEndReasonType, reason),
+                reason=SessionEndReason(reason),
                 duration_seconds=duration,
                 tools_used_count=tools_count,
             )

@@ -23,6 +23,36 @@ fi
 # Ensure log directory exists
 mkdir -p "$(dirname "$LOG_FILE")"
 
+# Python environment detection
+# Priority: Poetry venv > Plugin venv > Project venv > System Python
+find_python() {
+    # Check for Poetry venv via pyproject.toml
+    if command -v poetry >/dev/null 2>&1 && [[ -f "${PROJECT_ROOT}/pyproject.toml" ]]; then
+        POETRY_VENV="$(poetry env info --path 2>/dev/null || true)"
+        if [[ -n "$POETRY_VENV" && -f "$POETRY_VENV/bin/python3" ]]; then
+            echo "$POETRY_VENV/bin/python3"
+            return
+        fi
+    fi
+
+    # Check for plugin-local venv
+    if [[ -f "${PLUGIN_ROOT}/lib/.venv/bin/python3" ]]; then
+        echo "${PLUGIN_ROOT}/lib/.venv/bin/python3"
+        return
+    fi
+
+    # Check for project venv
+    if [[ -f "${PROJECT_ROOT}/.venv/bin/python3" ]]; then
+        echo "${PROJECT_ROOT}/.venv/bin/python3"
+        return
+    fi
+
+    # Fallback to system Python
+    echo "python3"
+}
+
+PYTHON_CMD="$(find_python)"
+
 export PYTHONPATH="${PROJECT_ROOT}:${PLUGIN_ROOT}/lib:${HOOKS_LIB}:${PYTHONPATH:-}"
 
 # Load environment variables
@@ -61,7 +91,7 @@ if [ "$TOOL_NAME" = "Write" ] || [ "$TOOL_NAME" = "Edit" ]; then
         ENFORCER_SCRIPT="${HOOKS_DIR}/scripts/post_tool_use_enforcer.py"
         if [[ -f "$ENFORCER_SCRIPT" ]]; then
             set +e
-            python3 "$ENFORCER_SCRIPT" "$FILE_PATH" 2>> "$LOG_FILE"
+            $PYTHON_CMD "$ENFORCER_SCRIPT" "$FILE_PATH" 2>> "$LOG_FILE"
             EXIT_CODE=$?
             set -e
 
@@ -84,7 +114,7 @@ if [[ -f "${HOOKS_LIB}/hook_event_logger.py" && -f "${HOOKS_LIB}/post_tool_metri
         echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Database logging enabled" >> "$LOG_FILE"
         (
             export TOOL_INFO HOOKS_LIB LOG_FILE
-            python3 << 'EOF' 2>>"${LOG_FILE}"
+            $PYTHON_CMD << 'EOF' 2>>"${LOG_FILE}"
 import sys
 import os
 import json
@@ -146,7 +176,7 @@ fi
 SESSION_ID=$(echo "$TOOL_INFO" | jq -r '.sessionId // .session_id // ""' 2>/dev/null || echo "")
 # Pre-generate UUID fallback if SESSION_ID not provided (avoid inline Python in async subshell)
 if [[ -z "$SESSION_ID" ]]; then
-    SESSION_ID=$(uuidgen 2>/dev/null | tr '[:upper:]' '[:lower:]' || python3 -c 'import uuid; print(uuid.uuid4())')
+    SESSION_ID=$(uuidgen 2>/dev/null | tr '[:upper:]' '[:lower:]' || $PYTHON_CMD -c 'import uuid; print(uuid.uuid4())')
 fi
 TOOL_SUCCESS="true"
 if [[ -n "$TOOL_ERROR" ]]; then
@@ -161,7 +191,7 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
         TOOL_SUMMARY="${TOOL_NAME} on ${FILE_PATH:-unknown}"
         TOOL_SUMMARY="${TOOL_SUMMARY:0:500}"
 
-        python3 -m omniclaude.hooks.cli_emit tool-executed \
+        $PYTHON_CMD -m omniclaude.hooks.cli_emit tool-executed \
             --session-id "$SESSION_ID" \
             --tool-name "$TOOL_NAME" \
             $([ "$TOOL_SUCCESS" = "true" ] && echo "--success" || echo "--failure") \

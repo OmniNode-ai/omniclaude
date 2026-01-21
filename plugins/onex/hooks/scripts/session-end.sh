@@ -24,6 +24,36 @@ fi
 # Ensure log directory exists
 mkdir -p "$(dirname "$LOG_FILE")"
 
+# Python environment detection
+# Priority: Poetry venv > Plugin venv > Project venv > System Python
+find_python() {
+    # Check for Poetry venv via pyproject.toml
+    if command -v poetry >/dev/null 2>&1 && [[ -f "${PROJECT_ROOT}/pyproject.toml" ]]; then
+        POETRY_VENV="$(poetry env info --path 2>/dev/null || true)"
+        if [[ -n "$POETRY_VENV" && -f "$POETRY_VENV/bin/python3" ]]; then
+            echo "$POETRY_VENV/bin/python3"
+            return
+        fi
+    fi
+
+    # Check for plugin-local venv
+    if [[ -f "${PLUGIN_ROOT}/lib/.venv/bin/python3" ]]; then
+        echo "${PLUGIN_ROOT}/lib/.venv/bin/python3"
+        return
+    fi
+
+    # Check for project venv
+    if [[ -f "${PROJECT_ROOT}/.venv/bin/python3" ]]; then
+        echo "${PROJECT_ROOT}/.venv/bin/python3"
+        return
+    fi
+
+    # Fallback to system Python
+    echo "python3"
+}
+
+PYTHON_CMD="$(find_python)"
+
 export PYTHONPATH="${PROJECT_ROOT}:${PLUGIN_ROOT}/lib:${HOOKS_LIB}:${PYTHONPATH:-}"
 
 # Load environment variables
@@ -49,7 +79,7 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] Duration: ${SESSION_DURATION}ms" >> "$LOG_F
 
 # Call session intelligence module (async, non-blocking)
 (
-    python3 "${HOOKS_LIB}/session_intelligence.py" \
+    $PYTHON_CMD "${HOOKS_LIB}/session_intelligence.py" \
         --mode end \
         --session-id "${SESSION_ID}" \
         --metadata "{\"hook_duration_ms\": ${SESSION_DURATION}}" \
@@ -62,10 +92,10 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] Duration: ${SESSION_DURATION}ms" >> "$LOG_F
     # Convert duration from ms to seconds (using Python instead of bc for reliability)
     DURATION_SECONDS=""
     if [[ -n "$SESSION_DURATION" && "$SESSION_DURATION" != "0" ]]; then
-        DURATION_SECONDS=$(python3 -c "import sys; print(f'{int(sys.argv[1])/1000:.3f}')" "$SESSION_DURATION" 2>/dev/null || echo "")
+        DURATION_SECONDS=$($PYTHON_CMD -c "import sys; print(f'{int(sys.argv[1])/1000:.3f}')" "$SESSION_DURATION" 2>/dev/null || echo "")
     fi
 
-    python3 -m omniclaude.hooks.cli_emit session-ended \
+    $PYTHON_CMD -m omniclaude.hooks.cli_emit session-ended \
         --session-id "$SESSION_ID" \
         --reason "other" \
         ${DURATION_SECONDS:+--duration "$DURATION_SECONDS"} \
@@ -75,7 +105,7 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] Session event emission started" >> "$LOG_FI
 
 # Clean up correlation state
 if [[ -f "${HOOKS_LIB}/correlation_manager.py" ]]; then
-    python3 -c "
+    $PYTHON_CMD -c "
 import sys
 sys.path.insert(0, '${HOOKS_LIB}')
 from correlation_manager import get_manager

@@ -354,8 +354,12 @@ class TestJsonInput:
             input=json_data,
         )
         assert result.exit_code == 0
-        # JSON values should override CLI values
-        assert "/from/json" in result.output or "[DRY RUN]" in result.output
+        # Verify dry run executed
+        assert "[DRY RUN]" in result.output
+        # Verify JSON value overrode CLI fallback value
+        assert "/from/json" in result.output, (
+            f"Expected '/from/json' in output but got: {result.output}"
+        )
 
     def test_invalid_json_exits_zero(self, runner: CliRunner) -> None:
         """Invalid JSON still exits 0 (failure suppression)."""

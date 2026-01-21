@@ -35,8 +35,8 @@ from __future__ import annotations
 import logging
 import os
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Literal
-from uuid import UUID
+from typing import TYPE_CHECKING
+from uuid import UUID, uuid4
 
 from omnibase_infra.event_bus.event_bus_kafka import EventBusKafka
 from omnibase_infra.event_bus.models.config import ModelKafkaEventBusConfig
@@ -44,11 +44,13 @@ from omnibase_infra.event_bus.models.config import ModelKafkaEventBusConfig
 from omniclaude.hooks.models import ModelEventPublishResult
 from omniclaude.hooks.schemas import (
     HookEventType,
+    HookSource,
     ModelHookEventEnvelope,
     ModelHookPromptSubmittedPayload,
     ModelHookSessionEndedPayload,
     ModelHookSessionStartedPayload,
     ModelHookToolExecutedPayload,
+    SessionEndReason,
 )
 from omniclaude.hooks.topics import TopicBase, build_topic
 
@@ -298,7 +300,7 @@ async def emit_hook_event(
 async def emit_session_started(
     session_id: UUID,
     working_directory: str,
-    hook_source: Literal["startup", "resume", "clear", "compact"],
+    hook_source: HookSource,
     *,
     git_branch: str | None = None,
     correlation_id: UUID | None = None,
@@ -314,7 +316,7 @@ async def emit_session_started(
     Args:
         session_id: Unique session identifier (also used as entity_id).
         working_directory: Current working directory of the session.
-        hook_source: What triggered the session ("startup", "resume", "clear", "compact").
+        hook_source: What triggered the session (HookSource enum).
         git_branch: Current git branch if in a git repository.
         correlation_id: Correlation ID for tracing (defaults to session_id).
         causation_id: Causation ID for event chain (generated if not provided).
@@ -324,8 +326,6 @@ async def emit_session_started(
     Returns:
         ModelEventPublishResult indicating success or failure.
     """
-    from uuid import uuid4
-
     payload = ModelHookSessionStartedPayload(
         entity_id=session_id,
         session_id=str(session_id),
@@ -342,7 +342,7 @@ async def emit_session_started(
 
 async def emit_session_ended(
     session_id: UUID,
-    reason: Literal["clear", "logout", "prompt_input_exit", "other"],
+    reason: SessionEndReason,
     *,
     duration_seconds: float | None = None,
     tools_used_count: int = 0,
@@ -357,7 +357,7 @@ async def emit_session_ended(
 
     Args:
         session_id: Unique session identifier (also used as entity_id).
-        reason: What caused the session to end ("clear", "logout", "prompt_input_exit", "other").
+        reason: What caused the session to end (SessionEndReason enum).
         duration_seconds: Total session duration in seconds.
         tools_used_count: Number of tool invocations during the session.
         correlation_id: Correlation ID for tracing (defaults to session_id).
@@ -368,8 +368,6 @@ async def emit_session_ended(
     Returns:
         ModelEventPublishResult indicating success or failure.
     """
-    from uuid import uuid4
-
     payload = ModelHookSessionEndedPayload(
         entity_id=session_id,
         session_id=str(session_id),
@@ -414,8 +412,6 @@ async def emit_prompt_submitted(
     Returns:
         ModelEventPublishResult indicating success or failure.
     """
-    from uuid import uuid4
-
     payload = ModelHookPromptSubmittedPayload(
         entity_id=session_id,
         session_id=str(session_id),
@@ -463,8 +459,6 @@ async def emit_tool_executed(
     Returns:
         ModelEventPublishResult indicating success or failure.
     """
-    from uuid import uuid4
-
     payload = ModelHookToolExecutedPayload(
         entity_id=session_id,
         session_id=str(session_id),

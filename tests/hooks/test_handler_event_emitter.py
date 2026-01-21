@@ -21,7 +21,6 @@ Note:
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -39,15 +38,28 @@ from omniclaude.hooks.handler_event_emitter import (
 )
 from omniclaude.hooks.schemas import (
     HookEventType,
+    HookSource,
     ModelHookPromptSubmittedPayload,
     ModelHookSessionEndedPayload,
     ModelHookSessionStartedPayload,
     ModelHookToolExecutedPayload,
+    SessionEndReason,
 )
 from omniclaude.hooks.topics import TopicBase
 
-if TYPE_CHECKING:
-    pass
+# =============================================================================
+# Fixtures
+# =============================================================================
+
+
+@pytest.fixture
+def kafka_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Set required Kafka environment variables for tests.
+
+    This fixture sets KAFKA_BOOTSTRAP_SERVERS which is required by
+    _create_kafka_config() before EventBusKafka is instantiated.
+    """
+    monkeypatch.setenv("KAFKA_BOOTSTRAP_SERVERS", "test:9092")
 
 
 # =============================================================================
@@ -71,7 +83,7 @@ def make_session_started_payload() -> ModelHookSessionStartedPayload:
         emitted_at=make_timestamp(),
         working_directory="/workspace/test",
         git_branch="main",
-        hook_source="startup",
+        hook_source=HookSource.STARTUP,
     )
 
 
@@ -84,7 +96,7 @@ def make_session_ended_payload() -> ModelHookSessionEndedPayload:
         correlation_id=entity_id,
         causation_id=uuid4(),
         emitted_at=make_timestamp(),
-        reason="clear",
+        reason=SessionEndReason.CLEAR,
         duration_seconds=1800.0,
         tools_used_count=42,
     )
@@ -237,6 +249,7 @@ class TestKafkaConfig:
 # =============================================================================
 
 
+@pytest.mark.usefixtures("kafka_env")
 class TestFailureSuppression:
     """Tests for graceful failure handling.
 
@@ -304,6 +317,7 @@ class TestFailureSuppression:
 # =============================================================================
 
 
+@pytest.mark.usefixtures("kafka_env")
 class TestSuccessfulEmission:
     """Tests for successful event emission with mocked Kafka."""
 
@@ -346,6 +360,7 @@ class TestSuccessfulEmission:
 # =============================================================================
 
 
+@pytest.mark.usefixtures("kafka_env")
 class TestConvenienceFunctions:
     """Tests for convenience emission functions."""
 
@@ -361,7 +376,7 @@ class TestConvenienceFunctions:
             result = await emit_session_started(
                 session_id=session_id,
                 working_directory="/workspace",
-                hook_source="startup",
+                hook_source=HookSource.STARTUP,
                 git_branch="main",
             )
 
@@ -379,7 +394,7 @@ class TestConvenienceFunctions:
 
             result = await emit_session_ended(
                 session_id=session_id,
-                reason="clear",
+                reason=SessionEndReason.CLEAR,
                 duration_seconds=1800.0,
                 tools_used_count=10,
             )
@@ -441,7 +456,7 @@ class TestConvenienceFunctions:
             result = await emit_session_started(
                 session_id=session_id,
                 working_directory="/workspace",
-                hook_source="startup",
+                hook_source=HookSource.STARTUP,
             )
 
             assert result.success is True
@@ -459,7 +474,7 @@ class TestConvenienceFunctions:
             result = await emit_session_started(
                 session_id=session_id,
                 working_directory="/workspace",
-                hook_source="startup",
+                hook_source=HookSource.STARTUP,
             )
 
             assert result.success is True
