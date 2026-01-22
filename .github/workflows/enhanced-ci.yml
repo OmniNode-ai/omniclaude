@@ -49,31 +49,7 @@ jobs:
 
       - name: Install dependencies
         if: steps.cached-uv-dependencies.outputs.cache-hit != 'true'
-        run: |
-          # Install dependencies - continue even if private repos fail (tests use mocks)
-          # Capture exit code and stderr for debugging
-          set +e
-          UV_OUTPUT=$(uv sync --frozen --group dev 2>&1)
-          UV_EXIT=$?
-          set -e
-
-          if [ $UV_EXIT -ne 0 ]; then
-            echo "::warning::uv sync --frozen failed (exit $UV_EXIT)"
-            echo "Output: $UV_OUTPUT"
-
-            # Check if failure is due to private repos (expected) vs other errors (unexpected)
-            if echo "$UV_OUTPUT" | grep -q "omnibase"; then
-              echo "Failure appears to be private repo access - continuing with fallback"
-              # Try without frozen to allow resolution without lock file
-              uv sync --group dev 2>&1 || {
-                echo "::warning::Fallback uv sync also failed - tests may be limited"
-              }
-            else
-              echo "::error::Unexpected dependency installation failure"
-              echo "$UV_OUTPUT"
-              exit 1
-            fi
-          fi
+        run: uv sync --frozen --group dev
 
       - name: Run Ruff format (code formatting check)
         run: |
@@ -139,25 +115,7 @@ jobs:
           git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
 
       - name: Install dependencies
-        run: |
-          # Capture exit code and stderr for debugging
-          set +e
-          UV_OUTPUT=$(uv sync --frozen 2>&1)
-          UV_EXIT=$?
-          set -e
-
-          if [ $UV_EXIT -ne 0 ]; then
-            echo "::warning::uv sync --frozen failed (exit $UV_EXIT)"
-            # Check if failure is due to private repos (expected)
-            if echo "$UV_OUTPUT" | grep -q "omnibase"; then
-              echo "Failure appears to be private repo access - continuing"
-              uv sync 2>&1 || echo "::warning::Fallback uv sync also failed"
-            else
-              echo "::error::Unexpected dependency installation failure"
-              echo "$UV_OUTPUT"
-              exit 1
-            fi
-          fi
+        run: uv sync --frozen
 
       - name: Validate ONEX Naming Conventions
         run: |
@@ -301,25 +259,7 @@ jobs:
           git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
 
       - name: Install dependencies
-        run: |
-          # Capture exit code and stderr for debugging
-          set +e
-          UV_OUTPUT=$(uv sync --frozen --group dev 2>&1)
-          UV_EXIT=$?
-          set -e
-
-          if [ $UV_EXIT -ne 0 ]; then
-            echo "::warning::uv sync --frozen --group dev failed (exit $UV_EXIT)"
-            # Check if failure is due to private repos (expected)
-            if echo "$UV_OUTPUT" | grep -q "omnibase"; then
-              echo "Failure appears to be private repo access - continuing"
-              uv sync --group dev 2>&1 || echo "::warning::Fallback uv sync also failed"
-            else
-              echo "::error::Unexpected dependency installation failure"
-              echo "$UV_OUTPUT"
-              exit 1
-            fi
-          fi
+        run: uv sync --frozen --group dev
 
       - name: Install pytest-split for parallel test execution
         run: |
@@ -522,25 +462,7 @@ jobs:
           git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
 
       - name: Install dependencies
-        run: |
-          # Capture exit code and stderr for debugging
-          set +e
-          UV_OUTPUT=$(uv sync --frozen --group dev 2>&1)
-          UV_EXIT=$?
-          set -e
-
-          if [ $UV_EXIT -ne 0 ]; then
-            echo "::warning::uv sync --frozen --group dev failed (exit $UV_EXIT)"
-            # Check if failure is due to private repos (expected)
-            if echo "$UV_OUTPUT" | grep -q "omnibase"; then
-              echo "Failure appears to be private repo access - continuing"
-              uv sync --group dev 2>&1 || echo "::warning::Fallback uv sync also failed"
-            else
-              echo "::error::Unexpected dependency installation failure"
-              echo "$UV_OUTPUT"
-              exit 1
-            fi
-          fi
+        run: uv sync --frozen --group dev
 
       - name: Initialize test database
         env:
@@ -672,25 +594,7 @@ jobs:
           git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
 
       - name: Install dependencies
-        run: |
-          # Capture exit code and stderr for debugging
-          set +e
-          UV_OUTPUT=$(uv sync --frozen --group dev 2>&1)
-          UV_EXIT=$?
-          set -e
-
-          if [ $UV_EXIT -ne 0 ]; then
-            echo "::warning::uv sync --frozen --group dev failed (exit $UV_EXIT)"
-            # Check if failure is due to private repos (expected)
-            if echo "$UV_OUTPUT" | grep -q "omnibase"; then
-              echo "Failure appears to be private repo access - continuing"
-              uv sync --group dev 2>&1 || echo "::warning::Fallback uv sync also failed"
-            else
-              echo "::error::Unexpected dependency installation failure"
-              echo "$UV_OUTPUT"
-              exit 1
-            fi
-          fi
+        run: uv sync --frozen --group dev
 
       - name: Initialize hooks database
         env:
@@ -772,25 +676,7 @@ jobs:
           git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
 
       - name: Install dependencies
-        run: |
-          # Capture exit code and stderr for debugging
-          set +e
-          UV_OUTPUT=$(uv sync --frozen --group dev 2>&1)
-          UV_EXIT=$?
-          set -e
-
-          if [ $UV_EXIT -ne 0 ]; then
-            echo "::warning::uv sync --frozen --group dev failed (exit $UV_EXIT)"
-            # Check if failure is due to private repos (expected)
-            if echo "$UV_OUTPUT" | grep -q "omnibase"; then
-              echo "Failure appears to be private repo access - continuing"
-              uv sync --group dev 2>&1 || echo "::warning::Fallback uv sync also failed"
-            else
-              echo "::error::Unexpected dependency installation failure"
-              echo "$UV_OUTPUT"
-              exit 1
-            fi
-          fi
+        run: uv sync --frozen --group dev
 
       - name: Run agent framework tests
         run: |
@@ -856,25 +742,7 @@ jobs:
           git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
 
       - name: Install dependencies
-        run: |
-          # Capture exit code and stderr for debugging
-          set +e
-          UV_OUTPUT=$(uv sync --frozen --group dev 2>&1)
-          UV_EXIT=$?
-          set -e
-
-          if [ $UV_EXIT -ne 0 ]; then
-            echo "::warning::uv sync --frozen --group dev failed (exit $UV_EXIT)"
-            # Check if failure is due to private repos (expected)
-            if echo "$UV_OUTPUT" | grep -q "omnibase"; then
-              echo "Failure appears to be private repo access - continuing"
-              uv sync --group dev 2>&1 || echo "::warning::Fallback uv sync also failed"
-            else
-              echo "::error::Unexpected dependency installation failure"
-              echo "$UV_OUTPUT"
-              exit 1
-            fi
-          fi
+        run: uv sync --frozen --group dev
 
       - name: Run performance benchmarks
         run: |
