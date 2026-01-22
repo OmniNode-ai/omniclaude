@@ -49,10 +49,10 @@ class IntelligenceGatherer:
 
     def __init__(
         self,
-        archon_client=None,
+        archon_client: Any = None,
         config: IntelligenceConfig | None = None,
         event_client: IntelligenceEventClient | None = None,
-    ):
+    ) -> None:
         """
         Initialize intelligence gatherer.
 
@@ -141,7 +141,7 @@ class IntelligenceGatherer:
         domain: str,
         service_name: str,
         operations: list[str],
-    ):
+    ) -> None:
         """Gather patterns from built-in pattern library"""
         self.logger.debug(f"Loading built-in patterns for {node_type}/{domain}")
 
@@ -195,7 +195,7 @@ class IntelligenceGatherer:
         domain: str,
         service_name: str,
         prompt: str,
-    ):
+    ) -> None:
         """Gather intelligence from Archon RAG (if available)"""
         try:
             self.logger.debug(f"Querying Archon RAG for {node_type} examples")

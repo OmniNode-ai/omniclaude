@@ -701,11 +701,11 @@ class AgentRouter:
 
         return stats
 
-    def invalidate_cache(self):
+    def invalidate_cache(self) -> None:
         """Invalidate entire routing cache."""
         self.cache.clear()
 
-    def reload_registry(self, registry_path: str | None = None):
+    def reload_registry(self, registry_path: str | None = None) -> None:
         """
         Reload agent registry.
 

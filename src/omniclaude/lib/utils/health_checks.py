@@ -68,7 +68,7 @@ class HealthCheckResult:
     details: dict[str, Any] | None = None
     suggestion: str | None = None
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API serialization."""
         return asdict(self)
 
@@ -102,7 +102,7 @@ class Phase4HealthChecker:
         self.log_file = Path.home() / ".claude" / "hooks" / "logs" / "health-checks.log"
         self.log_file.parent.mkdir(parents=True, exist_ok=True)
 
-    def _log(self, level: str, message: str, **kwargs):
+    def _log(self, level: str, message: str, **kwargs: Any) -> None:
         """Internal logging method for health check events."""
         timestamp = datetime.now(UTC).isoformat()
         log_entry = {
@@ -134,7 +134,7 @@ class Phase4HealthChecker:
             return self._health_cache[cache_key][0]
         return None
 
-    def _cache_result(self, cache_key: str, result: dict[str, Any]):
+    def _cache_result(self, cache_key: str, result: dict[str, Any]) -> None:
         """Cache health results."""
         self._health_cache[cache_key] = (result, time.time())
 
@@ -490,7 +490,7 @@ class Phase4HealthChecker:
         return results
 
 
-def main():
+def main() -> None:
     """Run health check when script is executed directly"""
     checker = Phase4HealthChecker()
     results = checker.run_comprehensive_health_check()

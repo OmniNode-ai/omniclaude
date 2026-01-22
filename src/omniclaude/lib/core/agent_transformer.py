@@ -51,10 +51,10 @@ class AgentIdentity:
     purpose: str
     domain: str
     description: str
-    capabilities: list
-    triggers: list
+    capabilities: list[str]
+    triggers: list[str]
     intelligence_integration: str | None = None
-    success_criteria: list | None = None
+    success_criteria: list[str] | None = None
 
     def format_assumption_prompt(self) -> str:
         """Format identity for assumption by coordinator."""
@@ -354,7 +354,7 @@ class AgentTransformer:
         )
 
 
-def main():
+def main() -> None:
     """CLI interface for testing transformations."""
     import argparse
     import sys

@@ -310,7 +310,7 @@ class CorrectionGenerator:
         """Convert name to UPPER_SNAKE_CASE."""
         return CorrectionGenerator._to_snake_case(name).upper()
 
-    async def close(self):
+    async def close(self) -> None:
         """
         Cleanup resources.
 
@@ -323,7 +323,7 @@ class CorrectionGenerator:
 
 
 # Example usage and testing
-async def main():
+async def main() -> None:
     """Example usage of the CorrectionGenerator."""
 
     # Example violations

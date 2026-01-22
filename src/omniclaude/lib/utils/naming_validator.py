@@ -65,7 +65,7 @@ class Violation:
     message: str
     suggestion: str | None = None  # Suggested correction
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Set default suggestion from expected_format if not provided."""
         if self.suggestion is None:
             self.suggestion = self.expected_format

@@ -89,7 +89,7 @@ _producer_lock: asyncio.Lock | None = None
 _lock_creation_lock = threading.Lock()
 
 
-async def get_producer_lock():
+async def get_producer_lock() -> asyncio.Lock:
     """
     Get or create the producer lock lazily under a running event loop.
 
@@ -335,7 +335,7 @@ async def publish_tool_call(
     duration_ms: int | None = None,
     success: bool = True,
     error_message: str | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> bool:
     """
     Publish tool call action event.
@@ -383,7 +383,7 @@ async def publish_decision(
     decision_result: dict[str, Any] | None = None,
     correlation_id: str | UUID | None = None,
     duration_ms: int | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> bool:
     """
     Publish decision action event.
@@ -424,7 +424,7 @@ async def publish_error(
     error_message: str,
     error_context: dict[str, Any] | None = None,
     correlation_id: str | UUID | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> bool:
     """
     Publish error action event.
@@ -464,7 +464,7 @@ async def publish_success(
     success_details: dict[str, Any] | None = None,
     correlation_id: str | UUID | None = None,
     duration_ms: int | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> bool:
     """
     Publish success action event.
@@ -495,7 +495,7 @@ async def publish_success(
     )
 
 
-async def close_producer():
+async def close_producer() -> None:
     """Close Kafka producer on shutdown."""
     global _kafka_producer
     if _kafka_producer is not None:
@@ -508,7 +508,7 @@ async def close_producer():
             _kafka_producer = None
 
 
-def _cleanup_producer_sync():
+def _cleanup_producer_sync() -> None:
     """
     Synchronous wrapper for close_producer() to be called by atexit.
 
@@ -581,7 +581,7 @@ atexit.register(_cleanup_producer_sync)
 
 # Synchronous wrapper for backward compatibility
 def publish_action_event_sync(
-    agent_name: str, action_type: str, action_name: str, **kwargs
+    agent_name: str, action_type: str, action_name: str, **kwargs: Any
 ) -> bool:
     """
     Synchronous wrapper for publish_action_event.
@@ -606,7 +606,7 @@ def publish_action_event_sync(
 
 if __name__ == "__main__":
     # Test action event publishing
-    async def test():
+    async def test() -> None:
         logging.basicConfig(level=logging.DEBUG)
 
         # Test tool call

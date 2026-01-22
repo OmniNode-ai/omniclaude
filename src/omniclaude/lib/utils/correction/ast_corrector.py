@@ -73,7 +73,7 @@ class ContextAwareRenameTransformer(cst.CSTTransformer if LIBCST_AVAIL else obje
         corrections: dict[tuple[Any, Any, Any], Any],
         framework_detector: FrameworkMethodDetector,
         original_tree: ast.Module,
-    ):
+    ) -> None:
         """
         Initialize transformer.
 
@@ -92,12 +92,12 @@ class ContextAwareRenameTransformer(cst.CSTTransformer if LIBCST_AVAIL else obje
         self.current_function: Any = None
         self.current_class: Any = None
 
-    def visit_ClassDef(self, node) -> bool:  # noqa: N802
+    def visit_ClassDef(self, node: Any) -> bool:  # noqa: N802
         """Track current class for framework context."""
         self.current_class = node
         return True
 
-    def leave_ClassDef(self, original_node, updated_node):  # noqa: N802
+    def leave_ClassDef(self, original_node: Any, updated_node: Any) -> Any:  # noqa: N802
         """Handle class name renaming and exit class context."""
         if not LIBCST_AVAILABLE:
             return updated_node
@@ -119,12 +119,12 @@ class ContextAwareRenameTransformer(cst.CSTTransformer if LIBCST_AVAIL else obje
         self.current_class = None
         return updated_node
 
-    def visit_FunctionDef(self, node) -> bool:  # noqa: N802
+    def visit_FunctionDef(self, node: Any) -> bool:  # noqa: N802
         """Track current function for framework context."""
         self.current_function = node
         return True
 
-    def leave_FunctionDef(self, original_node, updated_node):  # noqa: N802
+    def leave_FunctionDef(self, original_node: Any, updated_node: Any) -> Any:  # noqa: N802
         """Handle function name renaming and exit function context."""
         if not LIBCST_AVAILABLE:
             return updated_node
@@ -164,7 +164,7 @@ class ContextAwareRenameTransformer(cst.CSTTransformer if LIBCST_AVAIL else obje
         self.current_function = None
         return updated_node
 
-    def leave_Name(self, original_node, updated_node):  # noqa: N802
+    def leave_Name(self, original_node: Any, updated_node: Any) -> Any:  # noqa: N802
         """Rename variable/identifier names at specific line/column positions."""
         if not LIBCST_AVAILABLE:
             return updated_node
@@ -240,7 +240,7 @@ class ContextAwareRenameTransformer(cst.CSTTransformer if LIBCST_AVAIL else obje
 
 def apply_corrections_with_ast(
     content: str,
-    corrections: list[dict],
+    corrections: list[dict[str, Any]],
     framework_detector: FrameworkMethodDetector | None = None,
 ) -> CorrectionResult:
     """
@@ -385,7 +385,7 @@ def apply_corrections_with_ast(
         )
 
 
-def _fallback_regex_correction(content: str, corrections: list[dict]) -> CorrectionResult:
+def _fallback_regex_correction(content: str, corrections: list[dict[str, Any]]) -> CorrectionResult:
     """
     Fallback to regex-based correction when libcst is not available.
 
@@ -435,7 +435,7 @@ def _fallback_regex_correction(content: str, corrections: list[dict]) -> Correct
 
 def apply_single_correction(
     content: str,
-    correction: dict,
+    correction: dict[str, Any],
     framework_detector: FrameworkMethodDetector | None = None,
 ) -> str | None:
     """

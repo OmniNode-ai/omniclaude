@@ -225,9 +225,9 @@ class RoutingEventClient:
         self._producer: AIOKafkaProducer | None = None
         self._consumer: AIOKafkaConsumer | None = None
         self._started = False
-        self._pending_requests: dict[str, asyncio.Future] = {}
+        self._pending_requests: dict[str, asyncio.Future[Any]] = {}
         self._consumer_ready = asyncio.Event()  # Signal when consumer is polling
-        self._consumer_task: asyncio.Task | None = None  # Store task to prevent GC
+        self._consumer_task: asyncio.Task[None] | None = None  # Store task to prevent GC
 
         self.logger = logging.getLogger(__name__)
 
@@ -809,7 +809,7 @@ class RoutingEventClient:
             OnexError: With OPERATION_FAILED if producer not initialized
         """
         # Create future for this request
-        future: asyncio.Future = asyncio.Future()
+        future: asyncio.Future[Any] = asyncio.Future()
         self._pending_requests[correlation_id] = future
 
         try:
@@ -1003,12 +1003,17 @@ class RoutingEventClientContext:
         await self.client.start()
         return self.client
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any,
+    ) -> bool:
         await self.client.stop()
         return False
 
 
-def _format_recommendations(recommendations: list) -> list[dict[str, Any]]:
+def _format_recommendations(recommendations: list[Any]) -> list[dict[str, Any]]:
     """
     Convert AgentRecommendation objects to dict format.
 
@@ -1144,6 +1149,10 @@ async def route_via_events(
         else:
             # No fallback, re-raise original error
             raise
+
+    # Unreachable: all paths in try-except either return or raise
+    # This explicit raise satisfies mypy's return analysis
+    raise AssertionError("Unreachable code - all paths should return or raise")
 
 
 __all__ = [

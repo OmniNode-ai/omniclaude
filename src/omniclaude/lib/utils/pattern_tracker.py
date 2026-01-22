@@ -65,13 +65,13 @@ class PerformanceMetrics:
     memory_usage_mb: float = 0.0
     last_updated: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
-    def update_processing_time(self, duration_ms: float):
+    def update_processing_time(self, duration_ms: float) -> None:
         """Update processing time metrics."""
         self.total_processing_time_ms += duration_ms
         self.total_operations += 1
         self.avg_processing_time_ms = self.total_processing_time_ms / self.total_operations
 
-    def update_api_time(self, response_time_ms: float):
+    def update_api_time(self, response_time_ms: float) -> None:
         """Update API response time metrics."""
         self.total_api_calls += 1
         # Weighted average for more responsive metrics
@@ -135,7 +135,7 @@ class PatternTrackerConfig:
         self.config_path = config_path or Path.home() / ".claude" / "hooks" / "config.yaml"
         self._config = self._load_config()
 
-    def _load_config(self) -> dict:
+    def _load_config(self) -> dict[str, Any]:
         """Load configuration from YAML file."""
         if not self.config_path.exists():
             return {}
@@ -244,7 +244,7 @@ class PerformanceMonitor:
         success: bool,
         duration_ms: float,
         api_response_time_ms: float | None = None,
-    ):
+    ) -> None:
         """Record a completed operation."""
         with self._lock:
             self.metrics.total_operations += 1
@@ -269,12 +269,12 @@ class PerformanceMonitor:
             except Exception:
                 pass
 
-    def record_cache_hit(self):
+    def record_cache_hit(self) -> None:
         """Record a cache hit."""
         with self._lock:
             self.metrics.cache_hits += 1
 
-    def record_cache_miss(self):
+    def record_cache_miss(self) -> None:
         """Record a cache miss."""
         with self._lock:
             self.metrics.cache_misses += 1
@@ -327,7 +327,7 @@ class BatchProcessor:
         self._current_batch: list[tuple[str, dict[str, Any]]] = []
         self._batch_timer: asyncio.Task[None] | None = None
 
-    async def start(self):
+    async def start(self) -> None:
         """Start batch processing workers."""
         if self._running:
             return
@@ -341,7 +341,7 @@ class BatchProcessor:
         # Start batch timer
         self._batch_timer = asyncio.create_task(self._batch_timer_handler())
 
-    async def stop(self):
+    async def stop(self) -> None:
         """Stop batch processing workers."""
         self._running = False
 
@@ -357,14 +357,14 @@ class BatchProcessor:
         await asyncio.gather(*self._workers, return_exceptions=True)
         self._workers.clear()
 
-    async def add_task(self, task_type: str, **kwargs):
+    async def add_task(self, task_type: str, **kwargs: Any) -> None:
         """Add a task to the processing queue."""
         try:
             await self._queue.put((task_type, kwargs, time.time()))
         except asyncio.QueueFull:
             print("Warning: Batch processor queue full, dropping task")
 
-    async def _worker(self, worker_name: str):
+    async def _worker(self, worker_name: str) -> None:
         """Worker coroutine for processing batches."""
         while self._running:
             try:
@@ -387,7 +387,7 @@ class BatchProcessor:
             except Exception as e:
                 print(f"Error in worker {worker_name}: {e}")
 
-    async def _batch_timer_handler(self):
+    async def _batch_timer_handler(self) -> None:
         """Handle batch timing - process batch if items pending for too long."""
         while self._running:
             await asyncio.sleep(self.config.max_batch_wait_time)
@@ -395,7 +395,7 @@ class BatchProcessor:
             if self._current_batch:
                 await self._process_batch()
 
-    async def _process_batch(self):
+    async def _process_batch(self) -> None:
         """Process current batch of tasks."""
         if not self._current_batch:
             return
@@ -421,7 +421,7 @@ class BatchProcessor:
         except Exception as e:
             print(f"Error processing batch: {e}")
 
-    async def _batch_track_creation(self, tasks: list[dict]):
+    async def _batch_track_creation(self, tasks: list[dict[str, Any]]) -> None:
         """Batch process pattern creation tasks."""
         if not tasks:
             return
@@ -495,7 +495,7 @@ class PatternTracker:
             http2=True,  # Enable HTTP/2 for better performance
         )
 
-    def _setup_logging(self):
+    def _setup_logging(self) -> None:
         """Setup logging infrastructure."""
         log_file = (
             self.config.log_file
@@ -509,7 +509,7 @@ class PatternTracker:
         """Generate unique session identifier."""
         return str(uuid.uuid4())
 
-    def _generate_pattern_id_cached(self, code: str, context: dict | None = None) -> str:
+    def _generate_pattern_id_cached(self, code: str, context: dict[str, Any] | None = None) -> str:
         """Generate pattern ID with caching."""
         if not self.config.cache_config.enable_pattern_caching:
             return self._generate_pattern_id_uncached(code, context)
@@ -529,7 +529,9 @@ class PatternTracker:
 
         return pattern_id
 
-    def _generate_pattern_id_uncached(self, code: str, context: dict | None = None) -> str:
+    def _generate_pattern_id_uncached(
+        self, code: str, context: dict[str, Any] | None = None
+    ) -> str:
         """Generate pattern ID without caching."""
         normalized_code = code.strip()
         code_hash = hashlib.sha256(normalized_code.encode("utf-8")).hexdigest()
@@ -748,7 +750,7 @@ class PatternTracker:
 
     async def _send_to_api_optimized(
         self, endpoint_key: str, data: dict[str, Any], retry_count: int = 0
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         """Send data to Phase 4 API with optimized HTTP client."""
         if retry_count >= self.config.max_retries:
             return None
@@ -813,7 +815,7 @@ class PatternTracker:
             },
         }
 
-    async def close(self):
+    async def close(self) -> None:
         """Clean up resources."""
         # Stop batch processor
         if self.batch_processor and self.batch_processor._running:
@@ -822,7 +824,7 @@ class PatternTracker:
         # Close HTTP client
         await self.http_client.aclose()
 
-    def __del__(self):
+    def __del__(self) -> None:
         """Cleanup on destruction."""
         try:
             loop = asyncio.get_event_loop()

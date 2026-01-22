@@ -32,7 +32,7 @@ class ResultCache:
     for repeated queries.
     """
 
-    def __init__(self, default_ttl_seconds: int = 3600):
+    def __init__(self, default_ttl_seconds: int = 3600) -> None:
         """
         Initialize cache.
 
@@ -42,7 +42,7 @@ class ResultCache:
         self.cache: dict[str, dict[str, Any]] = {}
         self.default_ttl = default_ttl_seconds
 
-    def _generate_key(self, query: str, context: dict | None = None) -> str:
+    def _generate_key(self, query: str, context: dict[str, Any] | None = None) -> str:
         """
         Generate cache key from query and context.
 
@@ -73,7 +73,7 @@ class ResultCache:
 
         return hashlib.sha256(key_data.encode()).hexdigest()
 
-    def get(self, query: str, context: dict | None = None) -> Any | None:
+    def get(self, query: str, context: dict[str, Any] | None = None) -> Any | None:
         """
         Get cached result if valid.
 
@@ -109,9 +109,9 @@ class ResultCache:
         self,
         query: str,
         value: Any,
-        context: dict | None = None,
+        context: dict[str, Any] | None = None,
         ttl_seconds: int | None = None,
-    ):
+    ) -> None:
         """
         Cache result with TTL.
 
@@ -133,7 +133,7 @@ class ResultCache:
             "hits": 0,  # Number of times accessed after creation
         }
 
-    def invalidate(self, query: str, context: dict | None = None):
+    def invalidate(self, query: str, context: dict[str, Any] | None = None) -> None:
         """
         Invalidate specific cache entry.
 
@@ -147,7 +147,7 @@ class ResultCache:
         if key in self.cache:
             del self.cache[key]
 
-    def clear(self):
+    def clear(self) -> None:
         """Clear entire cache."""
         self.cache.clear()
 
