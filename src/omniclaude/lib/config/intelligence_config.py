@@ -23,9 +23,15 @@ Configuration precedence:
 3. Default values in Settings class (lowest)
 
 Environment Variables:
-    KAFKA_BOOTSTRAP_SERVERS: Kafka broker addresses (default: 192.168.86.200:29092)
+    KAFKA_BOOTSTRAP_SERVERS: Kafka broker addresses (REQUIRED - no default)
     USE_EVENT_ROUTING: Enable event-based intelligence (default: true)
     REQUEST_TIMEOUT_MS: Request timeout in milliseconds (default: 5000)
+
+Note:
+    The from_env() method follows fail-fast principles. If KAFKA_BOOTSTRAP_SERVERS
+    is not configured in the environment, it will raise a ValueError rather than
+    silently using a hardcoded default. This ensures .env is the single source
+    of truth for infrastructure configuration.
 """
 
 from typing import Any
@@ -63,8 +69,8 @@ class IntelligenceConfig(BaseModel):
     # =========================================================================
 
     kafka_bootstrap_servers: str = Field(
-        default="192.168.86.200:29092",
-        description="Kafka bootstrap servers",
+        default="localhost:9092",
+        description="Kafka bootstrap servers (defaults to localhost for development)",
     )
 
     kafka_enable_intelligence: bool = Field(
@@ -185,18 +191,31 @@ class IntelligenceConfig(BaseModel):
         the centralized Pydantic Settings framework where available, with
         sensible defaults for intelligence-specific options.
 
+        The .env file is the single source of truth for infrastructure configuration.
+        This method follows fail-fast principles: if KAFKA_BOOTSTRAP_SERVERS is not
+        configured, it raises a clear error rather than silently using defaults.
+
         Returns:
             IntelligenceConfig with values from centralized settings
 
+        Raises:
+            ValueError: If KAFKA_BOOTSTRAP_SERVERS is not configured in environment
+
         Example:
+            >>> # Ensure KAFKA_BOOTSTRAP_SERVERS is set in .env
             >>> config = IntelligenceConfig.from_env()
             >>> print(config.kafka_bootstrap_servers)
             192.168.86.200:29092
         """
-        # Get bootstrap servers from settings (with fallback)
+        # Get bootstrap servers from settings (fail-fast if not configured)
         bootstrap_servers = settings.get_effective_kafka_bootstrap_servers()
         if not bootstrap_servers:
-            bootstrap_servers = "192.168.86.200:29092"
+            raise ValueError(
+                "KAFKA_BOOTSTRAP_SERVERS is not configured. "
+                "Please set this value in your .env file. "
+                "The .env file is the single source of truth for infrastructure configuration. "
+                "Example: KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092"
+            )
 
         return cls(
             kafka_bootstrap_servers=bootstrap_servers,

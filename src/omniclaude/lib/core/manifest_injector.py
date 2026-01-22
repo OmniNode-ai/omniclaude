@@ -120,27 +120,27 @@ def _load_action_logger() -> bool:
 _load_action_logger()
 
 
-# Import data sanitizer for secure logging
+# Import data sanitizer for secure logging (optional integration)
 def _load_sanitizers() -> tuple[Callable[[Any], Any], Callable[[Any], Any]]:
-    """Try to load sanitizer functions from various locations."""
+    """
+    Try to load sanitizer functions.
+
+    Returns no-op functions if data_sanitizer module is not available.
+    This is expected in minimal deployments without sanitization requirements.
+    """
     try:
         from omniclaude.lib.data_sanitizer import sanitize_dict, sanitize_string
 
         return sanitize_dict, sanitize_string
-    except ImportError:
-        try:
-            from agents.lib.data_sanitizer import sanitize_dict, sanitize_string
+    except ImportError:  # nosec B110 - Optional dependency, graceful degradation
+        # Fallback: no-op sanitization functions
+        def fallback_dict(d: Any, **kwargs: Any) -> Any:
+            return d
 
-            return sanitize_dict, sanitize_string
-        except ImportError:
-            # Fallback: no-op sanitization functions
-            def fallback_dict(d: Any, **kwargs: Any) -> Any:
-                return d
+        def fallback_string(s: Any, **kwargs: Any) -> Any:
+            return s
 
-            def fallback_string(s: Any, **kwargs: Any) -> Any:
-                return s
-
-            return fallback_dict, fallback_string
+        return fallback_dict, fallback_string
 
 
 sanitize_dict, sanitize_string = _load_sanitizers()
@@ -3942,7 +3942,7 @@ class ManifestInjector:
         # No Kafka query needed - correlation_id and agent_name come from self
         manifest["action_logging"] = {
             "status": "available",
-            "framework": "ActionLogger (agents.lib.action_logger)",
+            "framework": "ActionLogger (omniclaude.lib.core.action_logger)",
             "kafka_integration": {
                 "enabled": True,
                 "topic": "agent-actions",
@@ -4901,7 +4901,7 @@ class ManifestInjector:
         # Initialization code
         output.append("  Initialize ActionLogger:")
         output.append("  ```python")
-        output.append("  from agents.lib.action_logger import ActionLogger")
+        output.append("  from omniclaude.lib.core.action_logger import ActionLogger")
         output.append("")
         output.append("  logger = ActionLogger(")
         output.append(f'      agent_name="{agent_name}",')

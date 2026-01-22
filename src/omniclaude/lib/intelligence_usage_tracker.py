@@ -555,7 +555,11 @@ class IntelligenceUsageTracker:
 
             async with pool.acquire() as conn:
                 # Query usage statistics
-                # Note: where_clause uses parameterized $N placeholders, not user input directly
+                # nosec B608 - SQL injection safe: where_clause contains only:
+                # (1) hardcoded column names ("intelligence_name", "intelligence_type")
+                # (2) parameterized $N placeholders (e.g., "$1", "$2") - NOT user values
+                # Actual user values are passed via the params tuple to conn.fetchrow(),
+                # which handles proper escaping. User input never enters where_clause directly.
                 query = f"""
                     SELECT
                         COUNT(*) as total_retrievals,
@@ -575,7 +579,7 @@ class IntelligenceUsageTracker:
                         MAX(created_at) as last_used
                     FROM agent_intelligence_usage
                     {where_clause}
-                    """  # nosec B608 - Safe: where_clause uses parameterized $N placeholders
+                    """  # nosec B608
                 result = await conn.fetchrow(query, *params)
 
                 return dict(result) if result else {}

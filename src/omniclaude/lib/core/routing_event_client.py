@@ -83,36 +83,26 @@ logger = logging.getLogger(__name__)
 # ONEX-compliant error handling from shared module
 from omniclaude.lib.errors import EnumCoreErrorCode, OnexError
 
-# Import agent execution logger for observability
+# Import agent execution logger for observability (optional integration)
 try:
     from omniclaude.lib.agent_execution_logger import log_agent_execution
 
     AGENT_LOGGER_AVAILABLE = True
-except ImportError:
-    try:
-        from agents.lib.agent_execution_logger import log_agent_execution
-
-        AGENT_LOGGER_AVAILABLE = True
-    except ImportError:
-        AGENT_LOGGER_AVAILABLE = False
-        logging.debug("Agent execution logger not available - execution logging disabled")
+except ImportError:  # nosec B110 - Optional dependency, graceful degradation
+    AGENT_LOGGER_AVAILABLE = False
+    logging.debug("Agent execution logger not available - execution logging disabled")
 
 # FAIL FAST: Required configuration
 from omniclaude.config import settings
 
-# Import Slack notifier for error notifications
+# Import Slack notifier for error notifications (optional integration)
 try:
     from omniclaude.lib.slack_notifier import get_slack_notifier
 
     SLACK_NOTIFIER_AVAILABLE = True
-except ImportError:
-    try:
-        from agents.lib.slack_notifier import get_slack_notifier
-
-        SLACK_NOTIFIER_AVAILABLE = True
-    except ImportError:
-        SLACK_NOTIFIER_AVAILABLE = False
-        logging.warning("SlackNotifier not available - error notifications disabled")
+except ImportError:  # nosec B110 - Optional dependency, graceful degradation
+    SLACK_NOTIFIER_AVAILABLE = False
+    logging.warning("SlackNotifier not available - error notifications disabled")
 
 
 class RoutingEventClient:

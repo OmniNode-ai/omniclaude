@@ -44,7 +44,7 @@ from uuid import UUID, uuid4
 # FAIL FAST: Required configuration
 from omniclaude.config import settings
 
-# Import Prometheus metrics
+# Import Prometheus metrics (optional integration)
 try:
     from omniclaude.lib.prometheus_metrics import (
         event_publish_bytes,
@@ -55,20 +55,9 @@ try:
     )
 
     PROMETHEUS_AVAILABLE = True
-except ImportError:
-    try:
-        from agents.lib.prometheus_metrics import (
-            event_publish_bytes,
-            event_publish_counter,
-            event_publish_duration,
-            event_publish_errors_counter,
-            record_event_publish,
-        )
-
-        PROMETHEUS_AVAILABLE = True
-    except ImportError:
-        PROMETHEUS_AVAILABLE = False
-        logging.debug("Prometheus metrics not available - metrics disabled")
+except ImportError:  # nosec B110 - Optional dependency, graceful degradation
+    PROMETHEUS_AVAILABLE = False
+    logging.debug("Prometheus metrics not available - metrics disabled")
 
 logger = logging.getLogger(__name__)
 
