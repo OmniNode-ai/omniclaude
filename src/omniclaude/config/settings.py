@@ -146,7 +146,7 @@ class Settings(BaseSettings):
     # SERVICE URLS CONFIGURATION
     # =========================================================================
     archon_intelligence_url: HttpUrl = Field(
-        default="http://localhost:8053",  # type: ignore[assignment]
+        default="http://localhost:8053",  # type: ignore[assignment]  # Pydantic coerces str to HttpUrl at runtime
         description="Archon Intelligence service URL",
     )
     intelligence_service_url: HttpUrl | None = Field(
@@ -154,7 +154,7 @@ class Settings(BaseSettings):
         description="Legacy alias for archon_intelligence_url",
     )
     main_server_url: HttpUrl = Field(
-        default="http://localhost:8181",  # type: ignore[assignment]
+        default="http://localhost:8181",  # type: ignore[assignment]  # Pydantic coerces str to HttpUrl at runtime
         description="Main server URL",
     )
 

@@ -255,7 +255,7 @@ class TaskClassifier:
         keywords: list[str] = []
 
         # 1. Extract intent keywords (action verbs)
-        for intent, kws in self.INTENT_KEYWORDS.items():
+        for _intent, kws in self.INTENT_KEYWORDS.items():
             keywords.extend([kw for kw in kws if kw in prompt_lower])
 
         # 2. Extract node type keywords

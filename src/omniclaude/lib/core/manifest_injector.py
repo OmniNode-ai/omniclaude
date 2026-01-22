@@ -4024,7 +4024,7 @@ class ManifestInjector:
 
         # Build deduplicated list with enhanced metadata
         deduplicated = []
-        for name, group in pattern_groups.items():
+        for _name, group in pattern_groups.items():
             pattern = group["pattern"].copy()
 
             # Add aggregated metadata to pattern
