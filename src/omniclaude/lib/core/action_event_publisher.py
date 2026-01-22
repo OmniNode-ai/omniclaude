@@ -41,13 +41,8 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-# Import Pydantic Settings for type-safe configuration
-try:
-    from omniclaude.config import settings as _settings_instance
-
-    settings: Any = _settings_instance
-except ImportError:
-    settings = None
+# FAIL FAST: Required configuration
+from omniclaude.config import settings
 
 # Import Prometheus metrics
 try:
@@ -117,14 +112,13 @@ async def get_producer_lock() -> asyncio.Lock:
 
 
 def _get_kafka_bootstrap_servers() -> str:
-    """Get Kafka bootstrap servers from environment or settings."""
-    # Try Pydantic settings first (if available)
-    if settings is not None:
-        try:
-            servers: str = settings.get_effective_kafka_bootstrap_servers()
-            return servers
-        except Exception as e:
-            logger.debug(f"Failed to get Kafka servers from settings: {e}")
+    """Get Kafka bootstrap servers from settings."""
+    # Use Pydantic settings (fail fast if not configured properly)
+    try:
+        servers: str = settings.get_effective_kafka_bootstrap_servers()
+        return servers
+    except Exception as e:
+        logger.debug(f"Failed to get Kafka servers from settings: {e}")
 
     # Fall back to environment variable
     env_servers: str | None = os.getenv("KAFKA_BOOTSTRAP_SERVERS")

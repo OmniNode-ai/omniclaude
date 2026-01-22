@@ -4,15 +4,63 @@ Correction Generator for AI Quality Enforcement System
 Generates correction suggestions using RAG intelligence from Archon MCP.
 """
 
-import re
-import sys
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any
+from __future__ import annotations
 
-# Import from sibling modules
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from archon_intelligence import ArchonIntelligence
+import logging
+import re
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
+
+logger = logging.getLogger(__name__)
+
+
+# Protocol for ArchonIntelligence (external optional dependency)
+@runtime_checkable
+class ArchonIntelligenceProtocol(Protocol):
+    """Protocol for Archon Intelligence client interface."""
+
+    def __init__(self, archon_url: str | None = None, timeout: float = 5.0) -> None:
+        """Initialize the client."""
+        ...
+
+    async def gather_domain_standards(
+        self, agent_type: str, task_context: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Gather domain standards from RAG."""
+        ...
+
+
+# Lazy import helper for optional ArchonIntelligence
+def _get_archon_intelligence_class() -> type[ArchonIntelligenceProtocol] | None:
+    """
+    Lazy import of ArchonIntelligence class.
+
+    Returns:
+        ArchonIntelligence class if available, None otherwise.
+    """
+    try:
+        from archon_intelligence import ArchonIntelligence
+
+        return cast(type[ArchonIntelligenceProtocol], ArchonIntelligence)
+    except ImportError:
+        logger.debug("archon_intelligence not available - using fallback mode")
+        return None
+
+
+# Stub implementation for when ArchonIntelligence is not available
+class ArchonIntelligenceStub:
+    """Stub implementation when real ArchonIntelligence is unavailable."""
+
+    def __init__(self, archon_url: str | None = None, timeout: float = 5.0) -> None:
+        self.archon_url = archon_url
+        self.timeout = timeout
+        logger.debug("Using ArchonIntelligenceStub - RAG intelligence unavailable")
+
+    async def gather_domain_standards(
+        self, agent_type: str, task_context: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Return fallback response when RAG is unavailable."""
+        return {"fallback": True, "results": [], "error": "archon_intelligence not available"}
 
 
 @dataclass
@@ -39,7 +87,16 @@ class CorrectionGenerator:
             archon_url: Archon MCP server URL (defaults to env or localhost:8051)
             timeout: Request timeout in seconds
         """
-        self.intelligence_client = ArchonIntelligence(archon_url=archon_url, timeout=timeout)
+        # Try to use real ArchonIntelligence, fall back to stub if unavailable
+        archon_class = _get_archon_intelligence_class()
+        if archon_class is not None:
+            self.intelligence_client: ArchonIntelligenceProtocol = archon_class(
+                archon_url=archon_url, timeout=timeout
+            )
+        else:
+            self.intelligence_client = ArchonIntelligenceStub(
+                archon_url=archon_url, timeout=timeout
+            )
         self._cache: dict[str, dict[str, Any]] = {}  # Cache RAG results during session
 
     async def generate_corrections(

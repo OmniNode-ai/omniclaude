@@ -27,10 +27,6 @@ Core Modules:
 # Import errors from shared errors module (canonical location)
 # Re-export for unified access via omniclaude.lib.core
 from omniclaude.lib.errors import (
-    OMNIBASE_ERRORS_AVAILABLE as _errors_available,
-)
-from omniclaude.lib.errors import (
-    CoreErrorCode,
     EnumCoreErrorCode,
     ModelOnexError,
     OnexError,
@@ -75,11 +71,9 @@ from .trigger_matcher import TriggerMatcher
 
 __all__ = [
     # Error Handling
-    "CoreErrorCode",
     "EnumCoreErrorCode",
     "ModelOnexError",
     "OnexError",
-    "_errors_available",
     # Manifest Injection
     "ManifestInjector",
     "inject_manifest",

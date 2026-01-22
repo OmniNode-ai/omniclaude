@@ -62,14 +62,21 @@ if _routing_adapter_path not in sys.path:
     sys.path.append(_routing_adapter_path)
 
 # Import routing event schemas
+# Note: Schemas are optional - if not available, RoutingEventClient cannot be used
+# but route_via_events() will fall back to local AgentRouter
 try:
     from schemas.model_routing_event_envelope import ModelRoutingEventEnvelope
     from schemas.model_routing_request import ModelRoutingOptions
 
     SCHEMAS_AVAILABLE = True
-except ImportError as e:
+except ImportError:
     SCHEMAS_AVAILABLE = False
-    logging.error(f"Failed to import routing schemas: {e}")
+    # DEBUG level: This is expected when routing_adapter schemas are not deployed
+    # The fallback to local AgentRouter in route_via_events() handles this gracefully
+    logging.debug(
+        "Routing schemas not available (services/routing_adapter/schemas/). "
+        "Event-based routing disabled; will fall back to local AgentRouter."
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -90,13 +97,8 @@ except ImportError:
         AGENT_LOGGER_AVAILABLE = False
         logging.debug("Agent execution logger not available - execution logging disabled")
 
-try:
-    from omniclaude.config import settings
-
-    SETTINGS_AVAILABLE = True
-except ImportError:
-    SETTINGS_AVAILABLE = False
-    logging.warning("config.settings not available, falling back to environment variables")
+# FAIL FAST: Required configuration
+from omniclaude.config import settings
 
 # Import Slack notifier for error notifications
 try:
@@ -193,20 +195,8 @@ class RoutingEventClient:
         # Bootstrap servers - use type-safe configuration if not provided
         if bootstrap_servers:
             self.bootstrap_servers = bootstrap_servers
-        elif SETTINGS_AVAILABLE:
-            self.bootstrap_servers = settings.get_effective_kafka_bootstrap_servers()
         else:
-            # This should not happen - settings should always be available
-            raise OnexError(
-                code=EnumCoreErrorCode.CONFIGURATION_ERROR,
-                message="config.settings not available. Cannot initialize RoutingEventClient.",
-                details={
-                    "component": "RoutingEventClient",
-                    "required_module": "config/settings.py",
-                    "required_env_var": "KAFKA_BOOTSTRAP_SERVERS",
-                    "suggestion": "Ensure config/settings.py is accessible and KAFKA_BOOTSTRAP_SERVERS is set in .env",
-                },
-            )
+            self.bootstrap_servers = settings.get_effective_kafka_bootstrap_servers()
 
         if not self.bootstrap_servers:
             raise OnexError(
@@ -248,14 +238,13 @@ class RoutingEventClient:
 
         # Validate required services before attempting connection
         # This follows coding guidelines for service validation at startup
-        if SETTINGS_AVAILABLE:
-            validation_errors = settings.validate_required_services()
-            # Filter to only Kafka-related errors for this client
-            kafka_errors = [e for e in validation_errors if "kafka" in e.lower()]
-            if kafka_errors:
-                self.logger.warning(f"Service validation warnings: {kafka_errors}")
-                # Log but don't fail - allow connection attempt to provide
-                # more specific error messages
+        validation_errors = settings.validate_required_services()
+        # Filter to only Kafka-related errors for this client
+        kafka_errors = [e for e in validation_errors if "kafka" in e.lower()]
+        if kafka_errors:
+            self.logger.warning(f"Service validation warnings: {kafka_errors}")
+            # Log but don't fail - allow connection attempt to provide
+            # more specific error messages
 
         # Validate bootstrap servers format
         if not self.bootstrap_servers or not isinstance(self.bootstrap_servers, str):
@@ -1084,19 +1073,15 @@ async def route_via_events(
         )
     """
     # Feature flag: USE_EVENT_ROUTING (default: True)
-    if SETTINGS_AVAILABLE:
-        use_events = settings.use_event_routing
-    else:
-        # Fallback for when settings not available
-        use_events = os.getenv("USE_EVENT_ROUTING", "true").lower() in (
-            "true",
-            "1",
-            "yes",
-        )
+    use_events = settings.use_event_routing
 
-    if not use_events and fallback_to_local:
+    # Skip event routing if schemas aren't available or feature is disabled
+    if (not use_events or not SCHEMAS_AVAILABLE) and fallback_to_local:
         # Skip events, go straight to local routing
-        logger.info("USE_EVENT_ROUTING=false, using local AgentRouter")
+        if not SCHEMAS_AVAILABLE:
+            logger.debug("Routing schemas not available, using local AgentRouter")
+        else:
+            logger.info("USE_EVENT_ROUTING=false, using local AgentRouter")
         from .agent_router import AgentRouter
 
         router = AgentRouter()

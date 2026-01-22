@@ -84,31 +84,12 @@ try:
 except ImportError:
     nest_asyncio = None
 
-# Import IntelligenceEventClient for event bus communication
-# Import IntelligenceCache for Valkey-backed caching
-# Import IntelligenceUsageTracker for intelligence effectiveness tracking
-try:
-    from omniclaude.lib.intelligence_usage_tracker import IntelligenceUsageTracker
-except ImportError:
-    from agents.lib.intelligence_usage_tracker import IntelligenceUsageTracker
-
-# Import PatternQualityScorer for quality filtering
-try:
-    from omniclaude.lib.pattern_quality_scorer import PatternQualityScorer
-except ImportError:
-    from agents.lib.pattern_quality_scorer import PatternQualityScorer
-
-# Import TaskClassifier for task-aware section selection
-try:
-    from omniclaude.lib.task_classifier import TaskClassifier, TaskContext, TaskIntent
-except ImportError:
-    from agents.lib.task_classifier import TaskClassifier, TaskContext
-
-# Import ONEX error classes for compliant error handling
-try:
-    from omniclaude.lib.core import EnumCoreErrorCode, OnexError
-except ImportError:
-    from agents.lib.errors import EnumCoreErrorCode, OnexError  # type: ignore[no-redef]
+# FAIL FAST: Required dependencies
+# FAIL FAST: Required ONEX error classes
+from omniclaude.lib.errors import EnumCoreErrorCode, OnexError
+from omniclaude.lib.intelligence_usage_tracker import IntelligenceUsageTracker
+from omniclaude.lib.pattern_quality_scorer import PatternQualityScorer
+from omniclaude.lib.task_classifier import TaskClassifier, TaskContext, TaskIntent
 
 from .intelligence_cache import IntelligenceCache
 from .intelligence_event_client import IntelligenceEventClient

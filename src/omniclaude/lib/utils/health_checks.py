@@ -23,7 +23,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 # Use httpx for async requests (fallback to requests for sync)
 try:
@@ -36,12 +36,18 @@ except ImportError:
     HAS_HTTPX = False
 
 # Import pattern tracker for configuration
+HAS_PATTERN_TRACKER = False
+get_tracker: Any = None
 try:
     from .pattern_tracker import PatternTrackerConfig, get_tracker
 
     HAS_PATTERN_TRACKER = True
 except ImportError:
-    HAS_PATTERN_TRACKER = False
+    pass
+
+# Import for type checking only
+if TYPE_CHECKING:
+    from .pattern_tracker import PatternTrackerConfig
 
 # Import settings for configuration
 from omniclaude.config import settings
@@ -84,7 +90,7 @@ class Phase4HealthChecker:
     def __init__(
         self,
         base_url: str | None = None,
-        config: PatternTrackerConfig | None = None,
+        config: "PatternTrackerConfig | None" = None,
     ):
         """
         Initialize Phase 4 health checker.

@@ -30,8 +30,10 @@ sys.path.insert(0, str(project_root))
 
 from omniclaude.config import settings
 
-# Add lib directory to path
-sys.path.insert(0, str(Path(__file__).parent / "lib"))
+# Import internal modules (fail fast - no fallbacks for required internal dependencies)
+from .consensus.quorum import AIQuorum
+from .correction.generator import CorrectionGenerator
+from .naming_validator import NamingValidator
 
 
 def load_config() -> dict[str, Any]:
@@ -369,8 +371,6 @@ class QualityEnforcer:
             List of Violation objects
         """
         try:
-            from .lib.validators.naming_validator import NamingValidator
-
             # Use auto-detection mode to apply appropriate conventions
             validator = NamingValidator(language=language, validation_mode="auto")
             violations = validator.validate_content(content, file_path)
@@ -382,9 +382,6 @@ class QualityEnforcer:
 
             return cast("list[Any]", violations)
 
-        except ImportError as e:
-            self._log(f"[Phase 1] Validator not available: {e}")
-            return []
         except Exception as e:
             self._log(f"[Phase 1] Validation failed: {e}")
             return []
@@ -413,8 +410,6 @@ class QualityEnforcer:
             self._log("[Phase 2] Querying RAG intelligence...")
 
             try:
-                from .lib.correction.generator import CorrectionGenerator
-
                 # Get RAG config from CONFIG
                 rag_config = CONFIG.get("rag", {})
                 archon_url = rag_config.get("base_url", "http://localhost:8181")
@@ -432,10 +427,6 @@ class QualityEnforcer:
                     f"[Phase 2] Generated {len(corrections)} corrections - {self._elapsed():.3f}s"
                 )
 
-            except ImportError as e:
-                self._log(f"[Phase 2] RAG client not available: {e}")
-                # Fallback to simple corrections
-                corrections = self._generate_simple_corrections(violations)
             except Exception as e:
                 self._log(f"[Phase 2] RAG query failed: {e}")
                 corrections = self._generate_simple_corrections(violations)
@@ -455,8 +446,6 @@ class QualityEnforcer:
             self._log("[Phase 4] Running AI quorum...")
 
             try:
-                from .lib.consensus.quorum import AIQuorum
-
                 quorum = AIQuorum()
 
                 for correction in corrections:
@@ -467,10 +456,19 @@ class QualityEnforcer:
                         )
                         break
 
+                    # Extract string values for quorum scoring
+                    old_name = str(correction.get("old_name", ""))
+                    new_name = str(correction.get("new_name", ""))
+                    violation = correction.get("violation")
+                    correction_type = (
+                        getattr(violation, "type", "unknown") if violation else "unknown"
+                    )
+
                     score = await quorum.score_correction(
-                        correction,
-                        content,
-                        file_path,
+                        original_prompt=old_name,
+                        corrected_prompt=new_name,
+                        correction_type=correction_type,
+                        correction_metadata=correction,
                     )
                     scored_corrections.append({"correction": correction, "score": score})
 
@@ -479,10 +477,6 @@ class QualityEnforcer:
                     f"[Phase 4] Scored {len(scored_corrections)} corrections - {self._elapsed():.3f}s"
                 )
 
-            except ImportError as e:
-                self._log(f"[Phase 4] AI Quorum not available: {e}")
-                # Fallback to accepting all corrections with medium confidence
-                scored_corrections = self._create_fallback_scores(corrections)
             except Exception as e:
                 self._log(f"[Phase 4] AI Quorum failed: {e}")
                 scored_corrections = self._create_fallback_scores(corrections)
