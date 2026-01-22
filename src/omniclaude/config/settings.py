@@ -144,6 +144,12 @@ class Settings(BaseSettings):
 
     # =========================================================================
     # SERVICE URLS CONFIGURATION
+    # -------------------------------------------------------------------------
+    # HttpUrl fields use `type: ignore[assignment]` because Pydantic validates
+    # and coerces string defaults to HttpUrl at runtime. Mypy sees a type
+    # mismatch (str assigned to HttpUrl) but Pydantic handles this correctly
+    # via its Field() mechanism. This is a known pattern in pydantic-settings.
+    # See: https://docs.pydantic.dev/latest/concepts/types/#urls
     # =========================================================================
     archon_intelligence_url: HttpUrl = Field(
         default="http://localhost:8053",  # type: ignore[assignment]  # Pydantic coerces str to HttpUrl at runtime

@@ -69,8 +69,8 @@ class IntelligenceConfig(BaseModel):
     # =========================================================================
 
     kafka_bootstrap_servers: str = Field(
-        default="localhost:9092",
-        description="Kafka bootstrap servers (defaults to localhost for development)",
+        default="",
+        description="Kafka bootstrap servers (required - configure via KAFKA_BOOTSTRAP_SERVERS env var)",
     )
 
     kafka_enable_intelligence: bool = Field(

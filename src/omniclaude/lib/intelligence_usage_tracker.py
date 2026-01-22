@@ -554,12 +554,7 @@ class IntelligenceUsageTracker:
             where_clause = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
 
             async with pool.acquire() as conn:
-                # Query usage statistics
-                # nosec B608 - SQL injection safe: where_clause contains only:
-                # (1) hardcoded column names ("intelligence_name", "intelligence_type")
-                # (2) parameterized $N placeholders (e.g., "$1", "$2") - NOT user values
-                # Actual user values are passed via the params tuple to conn.fetchrow(),
-                # which handles proper escaping. User input never enters where_clause directly.
+                # nosec B608 - where_clause only contains hardcoded columns and $N placeholders, user values passed via params
                 query = f"""
                     SELECT
                         COUNT(*) as total_retrievals,

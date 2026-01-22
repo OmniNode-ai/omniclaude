@@ -22,12 +22,16 @@ lib/
 !src/omniclaude/lib/**
 !plugins/onex/hooks/lib/
 !plugins/onex/hooks/lib/**
+!tests/lib/
+!tests/lib/**
 # Re-exclude __pycache__ within excepted lib directories
 agents/lib/__pycache__/
 agents/lib/**/__pycache__/
 src/omniclaude/lib/__pycache__/
 src/omniclaude/lib/**/__pycache__/
 plugins/onex/hooks/lib/__pycache__/
+tests/lib/__pycache__/
+tests/lib/**/__pycache__/
 plugins/onex/hooks/lib/**/__pycache__/
 lib64/
 parts/
