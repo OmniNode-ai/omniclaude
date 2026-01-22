@@ -100,7 +100,7 @@ except ImportError:
 CoreErrorCode = EnumCoreErrorCode
 
 
-class ModelOnexError(OnexError):
+class ModelOnexError(OnexError):  # type: ignore[misc]
     """Model-specific ONEX error (alias for OnexError).
 
     Provides compatibility with omnibase_core.errors.ModelOnexError
