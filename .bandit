@@ -28,9 +28,8 @@ exclude_dirs:
   - build
   - dist
   - _archive
-  # Reclaimed lib modules have intentional try/except/pass patterns
-  # for graceful degradation. Exclude from B110 scanning.
-  - src/omniclaude/lib
+  # Note: src/omniclaude/lib is NOT excluded - B110 (try_except_pass) issues
+  # are handled with inline `# nosec B110` comments for explicit justification
 
 # Skip specific test IDs
 # See comments below for rationale

@@ -555,8 +555,8 @@ class IntelligenceUsageTracker:
 
             async with pool.acquire() as conn:
                 # Query usage statistics
-                result = await conn.fetchrow(  # nosec B608
-                    f"""
+                # Note: where_clause uses parameterized $N placeholders, not user input directly
+                query = f"""
                     SELECT
                         COUNT(*) as total_retrievals,
                         COUNT(*) FILTER (WHERE was_applied) as times_applied,
@@ -575,9 +575,8 @@ class IntelligenceUsageTracker:
                         MAX(created_at) as last_used
                     FROM agent_intelligence_usage
                     {where_clause}
-                    """,
-                    *params,
-                )
+                    """  # nosec B608 - Safe: where_clause uses parameterized $N placeholders
+                result = await conn.fetchrow(query, *params)
 
                 return dict(result) if result else {}
 

@@ -267,7 +267,7 @@ class PerformanceMonitor:
                 process = psutil.Process()
                 self.metrics.memory_usage_mb = process.memory_info().rss / 1024 / 1024
             except Exception:
-                pass
+                pass  # nosec B110 - Memory metric is non-critical, psutil may fail
 
     def record_cache_hit(self) -> None:
         """Record a cache hit."""
@@ -831,7 +831,7 @@ class PatternTracker:
             if loop.is_running():
                 loop.create_task(self.close())
         except Exception:
-            pass
+            pass  # nosec B110 - Best-effort cleanup in destructor, event loop may be closed
 
 
 # Global instance with lazy initialization

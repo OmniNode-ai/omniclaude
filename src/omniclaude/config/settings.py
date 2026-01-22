@@ -13,6 +13,7 @@ Provides comprehensive configuration for all OmniClaude services including:
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
+from urllib.parse import quote_plus
 
 from pydantic import Field, HttpUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -255,8 +256,8 @@ class Settings(BaseSettings):
 
         # URL-encode special characters in password if present
         if password:
-            # Simple encoding for common special characters
-            encoded_password = password.replace("@", "%40").replace(":", "%3A")
+            # Properly encode all URL-unsafe characters
+            encoded_password = quote_plus(password)
             return (
                 f"{driver}://{self.postgres_user}:{encoded_password}"
                 f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_database}"

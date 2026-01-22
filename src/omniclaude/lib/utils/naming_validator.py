@@ -275,7 +275,7 @@ class NamingValidator:
                 self._validate_typescript_javascript(file_path, content)
         except Exception:
             # Gracefully handle syntax errors and other issues
-            pass
+            pass  # nosec B110 - Intentional graceful degradation for malformed input
 
         return self.violations
 
@@ -308,7 +308,7 @@ class NamingValidator:
         except Exception:
             # Gracefully handle syntax errors and other issues
             # Invalid code should pass through without failing the validator
-            pass
+            pass  # nosec B110 - Intentional graceful degradation for malformed input
 
         return self.violations
 

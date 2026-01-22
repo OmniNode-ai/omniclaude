@@ -75,7 +75,10 @@ ignore = [
     "B904",   # raise without from (legacy exception handling)
     "ARG001", # Unused function argument (interface compatibility)
     "ARG002", # Unused method argument (interface compatibility)
-    "SIM",    # All simplify rules (SIM102, SIM103, SIM105, SIM117) - legacy patterns
+    "SIM102", # Use single if instead of nested if (legacy readability patterns)
+    "SIM103", # Return bool expression directly (legacy explicit return style)
+    "SIM105", # Use contextlib.suppress (legacy try/except/pass pattern)
+    "SIM117", # Use single with statement (async context manager patterns)
 ]
 
 [tool.ruff.lint.isort]

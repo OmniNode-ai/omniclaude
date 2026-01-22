@@ -123,7 +123,7 @@ class Phase4HealthChecker:
                 f.write(json.dumps(log_entry) + "\n")
         except Exception:
             # Fail silently - don't disrupt health checks
-            pass
+            pass  # nosec B110 - Intentional silent failure for non-critical logging
 
     def _is_cache_valid(self, cache_key: str) -> bool:
         """Check if cached health results are still valid."""
