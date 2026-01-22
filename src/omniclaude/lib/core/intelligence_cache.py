@@ -54,7 +54,7 @@ from typing import Any
 # Import Pydantic Settings for type-safe configuration
 settings: Any | None = None
 try:
-    from config import settings as _settings
+    from omniclaude.config import settings as _settings
 
     settings = _settings
 except ImportError:

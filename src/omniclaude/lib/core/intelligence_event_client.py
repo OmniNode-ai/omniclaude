@@ -58,7 +58,7 @@ from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from aiokafka.errors import KafkaError
 from omnibase_core.errors import EnumCoreErrorCode, ModelOnexError
 
-from config import settings
+from omniclaude.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -307,7 +307,7 @@ class IntelligenceEventClient:
                 self._consumer = None
 
             # Cancel pending requests
-            for correlation_id, future in self._pending_requests.items():
+            for _correlation_id, future in self._pending_requests.items():
                 if not future.done():
                     future.set_exception(
                         ModelOnexError(

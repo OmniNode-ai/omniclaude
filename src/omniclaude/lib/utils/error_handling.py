@@ -102,7 +102,7 @@ class PatternTrackingErrorHandler:
         error_type = type(error).__name__
 
         # Determine if error is retryable
-        is_retryable = any(isinstance(error, error_class) for error_class in self.retryable_errors)
+        any(isinstance(error, error_class) for error_class in self.retryable_errors)
 
         # Initialize retry_delay_seconds to avoid unbound variable
         retry_delay_seconds: int = 5
@@ -260,10 +260,7 @@ def safe_execute_operation(
     """
     for attempt in range(max_retries + 1):
         try:
-            if circuit_breaker:
-                result = circuit_breaker.call(operation_func)
-            else:
-                result = operation_func()
+            result = circuit_breaker.call(operation_func) if circuit_breaker else operation_func()
 
             if attempt > 0:
                 logger.log_success(

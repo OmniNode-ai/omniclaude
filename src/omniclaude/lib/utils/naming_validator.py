@@ -226,10 +226,7 @@ class NamingValidator:
 
         # Check for /omni followed by lowercase letter (omniauth, omnitools, etc.)
         # This pattern avoids false positives like "omni" in the middle of words
-        if re.search(r"/omni[a-z]", file_path):
-            return True
-
-        return False
+        return bool(re.search(r"/omni[a-z]", file_path))
 
     def validate_content(self, content: str, file_path: str) -> list[Violation]:
         """
@@ -922,9 +919,8 @@ class NamingValidator:
             if body_node == node:
                 # Check if any target is all uppercase
                 for target in node.targets:
-                    if isinstance(target, ast.Name):
-                        if target.id.isupper():
-                            return True
+                    if isinstance(target, ast.Name) and target.id.isupper():
+                        return True
                 return False
         return False
 

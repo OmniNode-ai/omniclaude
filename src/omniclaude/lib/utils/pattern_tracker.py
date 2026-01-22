@@ -36,7 +36,7 @@ import httpx
 import psutil
 import yaml
 
-from config import settings
+from omniclaude.config import settings
 
 
 class ProcessingMode(Enum):

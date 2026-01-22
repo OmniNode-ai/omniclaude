@@ -276,7 +276,7 @@ if __name__ == "__main__":
 
     # Test hit tracking
     print("\n4. Hit Tracking:")
-    for i in range(5):
+    for _i in range(5):
         cache.get("test query")
     stats = cache.stats()
     print(f"   Total hits: {stats['total_hits']}")

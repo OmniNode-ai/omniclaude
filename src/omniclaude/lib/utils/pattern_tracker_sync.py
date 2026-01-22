@@ -14,7 +14,7 @@ from typing import Any
 
 import requests
 
-from config import settings
+from omniclaude.config import settings
 
 
 class PatternTrackerSync:

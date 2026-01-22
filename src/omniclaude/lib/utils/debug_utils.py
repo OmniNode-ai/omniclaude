@@ -32,7 +32,7 @@ from typing import Any
 
 import requests
 
-from config import settings
+from omniclaude.config import settings
 
 # Service URL configuration from environment
 INTELLIGENCE_SERVICE_URL = os.environ.get(

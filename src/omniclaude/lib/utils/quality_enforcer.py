@@ -20,7 +20,7 @@ import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 
@@ -28,7 +28,7 @@ import yaml
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
-from config import settings
+from omniclaude.config import settings
 
 # Add lib directory to path
 sys.path.insert(0, str(Path(__file__).parent / "lib"))
@@ -359,7 +359,9 @@ class QualityEnforcer:
             self._log(f"[Fatal Error] Enforcement failed: {e}")
             return tool_call  # Always return original on error
 
-    async def _run_phase_1_validation(self, content: str, file_path: str, language: str) -> list:
+    async def _run_phase_1_validation(
+        self, content: str, file_path: str, language: str
+    ) -> list[Any]:
         """
         Run Phase 1: Fast local validation.
 
@@ -378,7 +380,7 @@ class QualityEnforcer:
             repo_type = "Omninode" if is_omninode else "Standard PEP 8"
             self._log(f"[Phase 1] Detected repository type: {repo_type}")
 
-            return violations
+            return cast("list[Any]", violations)
 
         except ImportError as e:
             self._log(f"[Phase 1] Validator not available: {e}")
@@ -468,7 +470,7 @@ class QualityEnforcer:
                     score = await quorum.score_correction(
                         correction,
                         content,
-                        file_path,  # type: ignore[arg-type]
+                        file_path,
                     )
                     scored_corrections.append({"correction": correction, "score": score})
 
@@ -916,7 +918,7 @@ async def main():
         # Check if we have violations
         if enforcer.system_message:
             # Choose permission decision based on enforcement mode
-            if ENFORCEMENT_MODE == "block":
+            if ENFORCEMENT_MODE == "blocking":
                 # Block mode: prevent write execution
                 permission_decision = "deny"
                 exit_code = 1  # Bash wrapper converts to exit 2

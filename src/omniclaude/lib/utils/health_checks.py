@@ -44,7 +44,7 @@ except ImportError:
     HAS_PATTERN_TRACKER = False
 
 # Import settings for configuration
-from config import settings
+from omniclaude.config import settings
 
 
 class HealthStatus(Enum):

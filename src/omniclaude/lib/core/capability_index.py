@@ -20,28 +20,8 @@ from pathlib import Path
 
 import yaml
 
-# Import ONEX error handling
-try:
-    from agents.lib.errors import EnumCoreErrorCode, OnexError
-except ImportError:
-    from enum import Enum
-
-    class EnumCoreErrorCode(str, Enum):
-        """Fallback error codes for ONEX compliance."""
-
-        VALIDATION_ERROR = "VALIDATION_ERROR"
-        CONFIGURATION_ERROR = "CONFIGURATION_ERROR"
-        OPERATION_FAILED = "OPERATION_FAILED"
-
-    class OnexError(Exception):
-        """Fallback OnexError for ONEX compliance."""
-
-        def __init__(self, code, message, details=None):
-            self.code = code
-            self.message = message
-            self.details = details or {}
-            super().__init__(message)
-
+# Import ONEX error handling from shared module
+from omniclaude.lib.errors import EnumCoreErrorCode, OnexError
 
 logger = logging.getLogger(__name__)
 

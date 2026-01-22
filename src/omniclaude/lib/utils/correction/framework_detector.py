@@ -259,9 +259,8 @@ class FrameworkMethodDetector:
     ) -> ast.ClassDef | None:
         """Find the parent class of a function definition."""
         for node in ast.walk(tree):
-            if isinstance(node, ast.ClassDef):
-                if func_node in node.body:
-                    return node
+            if isinstance(node, ast.ClassDef) and func_node in node.body:
+                return node
         return None
 
     def _get_base_class_names(self, class_node: ast.ClassDef) -> list[str]:

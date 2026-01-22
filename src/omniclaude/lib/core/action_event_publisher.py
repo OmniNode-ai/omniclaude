@@ -43,7 +43,7 @@ from uuid import UUID, uuid4
 
 # Import Pydantic Settings for type-safe configuration
 try:
-    from config import settings as _settings_instance
+    from omniclaude.config import settings as _settings_instance
 
     settings: Any = _settings_instance
 except ImportError:
@@ -225,10 +225,7 @@ async def publish_action_event(
     """
     try:
         # Generate correlation ID if not provided
-        if correlation_id is None:
-            correlation_id = str(uuid4())
-        else:
-            correlation_id = str(correlation_id)
+        correlation_id = str(uuid4()) if correlation_id is None else str(correlation_id)
 
         # Validate action_type
         valid_types = ["tool_call", "decision", "error", "success"]

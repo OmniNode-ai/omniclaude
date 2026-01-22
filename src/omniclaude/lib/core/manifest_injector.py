@@ -74,7 +74,7 @@ from uuid import UUID
 _project_root = _Path(__file__).parent.parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
-from config import settings
+from omniclaude.config import settings
 
 # Import nest_asyncio for nested event loop support
 try:
@@ -282,7 +282,7 @@ class ManifestCache:
         }
         self.metrics: dict[str, CacheMetrics] = {}
         if enable_metrics:
-            for query_type in self._ttls.keys():
+            for query_type in self._ttls:
                 self.metrics[query_type] = CacheMetrics()
         self.logger = logging.getLogger(__name__)
 
@@ -1049,10 +1049,13 @@ class ManifestInjector:
 
         # Create new instance
         try:
-            logger = ActionLogger(
-                agent_name=self.agent_name or "manifest-injector",
-                correlation_id=correlation_id,
-                project_path=os.getcwd(),
+            logger = cast(
+                "_ActionLoggerType",
+                ActionLogger(
+                    agent_name=self.agent_name or "manifest-injector",
+                    correlation_id=correlation_id,
+                    project_path=os.getcwd(),
+                ),
             )
             self._action_logger_cache[correlation_id] = logger
             return logger
@@ -1263,7 +1266,7 @@ class ManifestInjector:
             )
 
             # Build manifest from results (including filesystem queried earlier)
-            all_results = dict(zip(query_tasks.keys(), results))
+            all_results = dict(zip(query_tasks.keys(), results, strict=False))
             all_results["filesystem"] = filesystem_result  # Add filesystem result
             manifest = self._build_manifest_from_results(all_results)
 
@@ -2342,13 +2345,15 @@ class ManifestInjector:
             services = []
             for container in containers:
                 name = container.name
-                if name.startswith("archon-") or name.startswith("omninode-"):
+                if name and (name.startswith("archon-") or name.startswith("omninode-")):
                     services.append(
                         {
                             "name": name,
                             "status": container.status,
                             "image": (
-                                container.image.tags[0] if container.image.tags else "unknown"
+                                container.image.tags[0]
+                                if container.image and container.image.tags
+                                else "unknown"
                             ),
                             "ports": (
                                 [
@@ -3527,9 +3532,7 @@ class ManifestInjector:
                 if path.name in ignored_dirs:
                     return True
                 # Check file extension
-                if path.suffix in ignored_extensions:
-                    return True
-                return False
+                return path.suffix in ignored_extensions
 
             def get_onex_node_type(file_path: Path) -> str | None:
                 """Detect ONEX node type from filename."""
@@ -5048,10 +5051,7 @@ class ManifestInjector:
             filesystem_directories_count = filesystem_data.get("total_directories", 0)
 
             # Get formatted text (generate if not cached)
-            if self._cached_formatted:
-                formatted_text = self._cached_formatted
-            else:
-                formatted_text = self.format_for_prompt()
+            formatted_text = self._cached_formatted or self.format_for_prompt()
 
             # Determine sections included
             sections_included = list(manifest.keys())
