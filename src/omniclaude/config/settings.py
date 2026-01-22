@@ -284,6 +284,8 @@ class Settings(BaseSettings):
             errors.append("POSTGRES_DATABASE is not configured")
         if not self.postgres_user:
             errors.append("POSTGRES_USER is not configured")
+        if not self.postgres_password:
+            errors.append("POSTGRES_PASSWORD is not configured")
 
         # Check Kafka configuration (only if event routing is enabled)
         if self.use_event_routing and not self.get_effective_kafka_bootstrap_servers():

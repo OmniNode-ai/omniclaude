@@ -183,7 +183,7 @@ class CapabilityIndex:
                     "error_type": type(e).__name__,
                     "error_message": str(e),
                 },
-            )
+            ) from e
 
     def find_by_capability(self, capability: str) -> list[str]:
         """

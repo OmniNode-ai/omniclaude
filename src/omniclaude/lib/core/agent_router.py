@@ -531,8 +531,7 @@ class AgentRouter:
                 # Fallback to synchronous local routing
                 logger.info("Falling back to local synchronous routing")
                 # Run sync route in executor to avoid blocking event loop
-                loop = asyncio.get_event_loop()
-                return await loop.run_in_executor(
+                return await asyncio.get_running_loop().run_in_executor(
                     None,
                     lambda: self.route(
                         user_request=user_request,

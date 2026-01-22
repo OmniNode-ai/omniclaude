@@ -360,7 +360,7 @@ class BatchProcessor:
     async def add_task(self, task_type: str, **kwargs: Any) -> None:
         """Add a task to the processing queue."""
         try:
-            await self._queue.put((task_type, kwargs, time.time()))
+            self._queue.put_nowait((task_type, kwargs, time.time()))
         except asyncio.QueueFull:
             print("Warning: Batch processor queue full, dropping task")
 

@@ -681,7 +681,7 @@ class QualityEnforcer:
         Args:
             violations: List of violations found
             file_path: Path to the file being checked
-            mode: "warn" for warnings only, "block" for blocking mode
+            mode: "warn" for warnings only, "blocking" for blocking mode
 
         Returns a formatted string that will be displayed to the user via
         the systemMessage field in the hook's JSON output.
@@ -689,7 +689,7 @@ class QualityEnforcer:
         lines = []
         lines.append("=" * 70)
 
-        if mode == "block":
+        if mode in {"block", "blocking"}:
             lines.append("🚫 NAMING CONVENTION VIOLATIONS - WRITE BLOCKED")
         else:
             lines.append("⚠️  NAMING CONVENTION WARNINGS")
@@ -721,7 +721,7 @@ class QualityEnforcer:
 
         # Footer with guidance based on mode
         lines.append("─" * 70)
-        if mode == "block":
+        if mode in {"block", "blocking"}:
             lines.append("🚫 WRITE BLOCKED: Please fix violations before saving")
             lines.append("   Fix the violations above and try again.")
         else:

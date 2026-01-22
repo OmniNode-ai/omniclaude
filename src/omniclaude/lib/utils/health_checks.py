@@ -25,14 +25,15 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-# Use httpx for async requests (fallback to requests for sync)
+# Always import requests for sync methods
+import requests
+
+# Use httpx for async requests if available
 try:
     import httpx
 
     HAS_HTTPX = True
 except ImportError:
-    import requests
-
     HAS_HTTPX = False
 
 # Import pattern tracker for configuration
