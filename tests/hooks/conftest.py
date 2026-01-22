@@ -125,13 +125,27 @@ def restore_kafka_for_integration():
     This fixture runs before each test module in the hooks/tests directory.
     If KAFKA_INTEGRATION_TESTS=1, it restores the real AIOKafkaProducer
     that was mocked by the global conftest.
+
+    Also sets KAFKA_HOOK_TIMEOUT_SECONDS to a higher value (30s) for
+    integration tests, as the default 2s timeout is too aggressive for
+    remote Kafka brokers that may take longer to connect.
     """
+    original_timeout = os.environ.get("KAFKA_HOOK_TIMEOUT_SECONDS")
+
     if os.getenv("KAFKA_INTEGRATION_TESTS") == "1":
         _restore_real_kafka_producer()
+        # Set a longer timeout for integration tests (30 seconds)
+        # The default 2 seconds is too short for remote brokers
+        if original_timeout is None:
+            os.environ["KAFKA_HOOK_TIMEOUT_SECONDS"] = "30"
 
     yield
 
-    # No cleanup needed - the global conftest handles restoration
+    # Restore original timeout setting
+    if original_timeout is None:
+        os.environ.pop("KAFKA_HOOK_TIMEOUT_SECONDS", None)
+    else:
+        os.environ["KAFKA_HOOK_TIMEOUT_SECONDS"] = original_timeout
 
 
 @pytest.fixture(scope="session")

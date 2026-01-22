@@ -8,11 +8,11 @@
 # 3. Calling the generate skill with the extracted prompt
 #
 # Usage:
-#   ~/.claude/skills/generate-node/regenerate <NODE_DIR> [OPTIONS]
+#   ${CLAUDE_PLUGIN_ROOT}/skills/generate-node/regenerate <NODE_DIR> [OPTIONS]
 #
 # Examples:
-#   ~/.claude/skills/generate-node/regenerate src/omninode_bridge/nodes/llm_effect/v1_0_0/llm_effect_llm
-#   ~/.claude/skills/generate-node/regenerate nodes/my_custom_node --output-dir ./regenerated
+#   ${CLAUDE_PLUGIN_ROOT}/skills/generate-node/regenerate src/omninode_bridge/nodes/llm_effect/v1_0_0/llm_effect_llm
+#   ${CLAUDE_PLUGIN_ROOT}/skills/generate-node/regenerate nodes/my_custom_node --output-dir ./regenerated
 #
 
 set -euo pipefail

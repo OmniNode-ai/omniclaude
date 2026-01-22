@@ -360,7 +360,7 @@ Use this during daily standups to track progress:
 ### Run Security Tests
 
 ```bash
-cd ~/.claude/skills/system-status/tests
+cd ${CLAUDE_PLUGIN_ROOT}/skills/system-status/tests
 
 # All security tests
 pytest test_sql_injection_prevention.py test_sql_security.py test_ssrf_protection.py test_input_validation.py test_validators.py -v
@@ -439,10 +439,10 @@ grep -A1 "sys.path.insert" test_check_infrastructure.py
 
 ### File Locations
 
-- Test files: `~/.claude/skills/system-status/tests/`
-- Skill files: `~/.claude/skills/system-status/*/`
-- Helper modules: `~/.claude/skills/system-status/helpers/`
-- Reports: `~/.claude/skills/system-status/tests/*.md`
+- Test files: `${CLAUDE_PLUGIN_ROOT}/skills/system-status/tests/`
+- Skill files: `${CLAUDE_PLUGIN_ROOT}/skills/system-status/*/`
+- Helper modules: `${CLAUDE_PLUGIN_ROOT}/skills/system-status/helpers/`
+- Reports: `${CLAUDE_PLUGIN_ROOT}/skills/system-status/tests/*.md`
 
 ### Test Result Files
 

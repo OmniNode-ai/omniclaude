@@ -226,7 +226,7 @@ class TestKafkaConfig:
             # Verify hook-optimized settings
             assert config.timeout_seconds == 2  # Short timeout
             assert config.max_retry_attempts == 0  # No retries
-            assert config.acks == "1"  # Leader ack only
+            assert config.acks == "all"  # All replicas (workaround for aiokafka bug)
             assert config.group == "omniclaude-hooks"
             assert config.enable_idempotence is False
 
@@ -243,6 +243,24 @@ class TestKafkaConfig:
         with patch.dict("os.environ", {"KAFKA_BOOTSTRAP_SERVERS": "kafka:9092"}):
             config = _create_kafka_config()
             assert config.bootstrap_servers == "kafka:9092"
+
+    def test_config_respects_timeout_override(self) -> None:
+        """Config respects KAFKA_HOOK_TIMEOUT_SECONDS env var for integration tests."""
+        with patch.dict(
+            "os.environ",
+            {"KAFKA_BOOTSTRAP_SERVERS": "test:9092", "KAFKA_HOOK_TIMEOUT_SECONDS": "30"},
+        ):
+            config = _create_kafka_config()
+            assert config.timeout_seconds == 30
+
+    def test_config_timeout_override_invalid_uses_default(self) -> None:
+        """Invalid KAFKA_HOOK_TIMEOUT_SECONDS falls back to default."""
+        with patch.dict(
+            "os.environ",
+            {"KAFKA_BOOTSTRAP_SERVERS": "test:9092", "KAFKA_HOOK_TIMEOUT_SECONDS": "invalid"},
+        ):
+            config = _create_kafka_config()
+            assert config.timeout_seconds == 2  # Falls back to default
 
 
 # =============================================================================

@@ -31,13 +31,9 @@ Updated: 2025-11-23 - Added standardized type hints and API contract
 """
 
 import json
-import os
 import platform
 import re
 import subprocess
-import sys
-from typing import Any, Dict, List, Optional
-
 
 # Import standardized Kafka result types (same package)
 try:
@@ -57,10 +53,6 @@ except ImportError:
         KafkaTopicStatsResult,
     )
 
-# Add project root for config module (type-safe Pydantic Settings) and ONEX errors
-# Path: claude/skills/_shared/ -> claude/skills/ -> claude/ -> project root
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-
 # Import shared timeout utility using relative import (same package)
 # Fallback to absolute import for direct script execution
 try:
@@ -68,13 +60,12 @@ try:
 except ImportError:
     from common_utils import get_timeout_seconds
 
-from config import settings
-
+from omniclaude.config import settings
 
 # ONEX-compliant error handling
-# Try to import from claude.lib.core (preferred), fallback to agents.lib.errors, then local definitions
+# Try to import from omniclaude.lib.core (preferred), fallback to agents.lib.errors, then local definitions
 try:
-    from claude.lib.core import EnumCoreErrorCode, OnexError
+    from omniclaude.lib.core import EnumCoreErrorCode, OnexError
 except ImportError:
     try:
         from agents.lib.errors import EnumCoreErrorCode, OnexError
@@ -388,9 +379,7 @@ def get_topic_stats(topic_name: str) -> KafkaTopicStatsResult:
         partitions = 0
         for line in result.stdout.split("\n"):
             # Match: topic "topic-name" with X partitions:
-            match = re.search(
-                rf'topic "{re.escape(topic_name)}" with (\d+) partitions?:', line
-            )
+            match = re.search(rf'topic "{re.escape(topic_name)}" with (\d+) partitions?:', line)
             if match:
                 partitions = int(match.group(1))
                 break
@@ -535,9 +524,7 @@ def check_topic_exists(topic_name: str) -> bool:
     return topic_name in topics_result["topics"]
 
 
-def get_recent_message_count(
-    topic_name: str, timeout_seconds: int = 2
-) -> KafkaMessageCountResult:
+def get_recent_message_count(topic_name: str, timeout_seconds: int = 2) -> KafkaMessageCountResult:
     """
     Get count of recent messages in a topic (sample).
 
@@ -624,9 +611,7 @@ def get_recent_message_count(
                 }
 
         # Count lines (each line is a message)
-        message_count = len(
-            [line for line in result.stdout.split("\n") if line.strip()]
-        )
+        message_count = len([line for line in result.stdout.split("\n") if line.strip()])
 
         return {
             "success": True,

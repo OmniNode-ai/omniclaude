@@ -36,8 +36,8 @@ Real-time monitoring and diagnostics for the OmniClaude agent execution system. 
 
 ### ❌ WRONG - Running scripts directly:
 ```
-Bash(~/.claude/skills/agent-observability/check-health)
-Bash(~/.claude/skills/agent-observability/diagnose-errors --time-range 24h)
+Bash(${CLAUDE_PLUGIN_ROOT}/skills/agent-observability/check-health)
+Bash(${CLAUDE_PLUGIN_ROOT}/skills/agent-observability/diagnose-errors --time-range 24h)
 ```
 
 ### ✅ CORRECT - Dispatch to polymorphic-agent:
@@ -47,8 +47,8 @@ Task(
   description="Agent system health check",
   prompt="Check the health of the agent observability system.
     Use the agent-observability skill tools:
-    1. Run: ~/.claude/skills/agent-observability/check-health
-    2. If issues detected, run: ~/.claude/skills/agent-observability/diagnose-errors --time-range 24h
+    1. Run: ${CLAUDE_PLUGIN_ROOT}/skills/agent-observability/check-health
+    2. If issues detected, run: ${CLAUDE_PLUGIN_ROOT}/skills/agent-observability/diagnose-errors --time-range 24h
 
     Available tools:
     - check-health - Quick 5-second health check

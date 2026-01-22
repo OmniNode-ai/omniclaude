@@ -392,8 +392,8 @@ action_logging_integration:
   initialization:
     description: "Initialize ActionLogger at agent startup with correlation ID"
     code_example: |
-      # Import from claude.lib.core (preferred) or agents.lib (backward compat)
-      from claude.lib.core import ActionLogger
+      # Import from omniclaude.lib.core (preferred) or agents.lib (backward compat)
+      from omniclaude.lib.core import ActionLogger
 
       # Initialize logger with agent context
       action_logger = ActionLogger(
@@ -462,7 +462,7 @@ action_logging_integration:
 
   integration_checklist:
     required_steps:
-      - "Import ActionLogger from claude.lib.core (or agents.lib for backward compat)"
+      - "Import ActionLogger from omniclaude.lib.core (or agents.lib for backward compat)"
       - "Initialize logger in agent_lifecycle_initialization() with correlation_id"
       - "Wrap all tool calls with async with logger.tool_call() context manager"
       - "Log all coordination decisions with log_decision()"

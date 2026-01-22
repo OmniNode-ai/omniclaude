@@ -149,7 +149,7 @@ cache:
 # OUTPUT CONFIGURATION
 # =============================================================================
 output:
-  deep_dive_dir: "/Users/jonah/Code/omni_save"
+  deep_dive_dir: "${HOME}/Code/omni_save"
   snapshot_dir: ".cache/snapshots"
   default_format: "markdown"
 

@@ -25,8 +25,8 @@ Production-ready CI/CD debugging system that fetches GitHub Actions workflow run
 
 ### ❌ WRONG - Running bash directly:
 ```
-Bash(~/.claude/skills/ci-failures/ci-quick-review 33)
-Bash(~/.claude/skills/ci-failures/fetch-ci-data 33)
+Bash(${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review 33)
+Bash(${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/fetch-ci-data 33)
 ```
 
 ### ✅ CORRECT - Dispatch to polymorphic-agent:
@@ -35,11 +35,11 @@ Task(
   subagent_type="polymorphic-agent",
   description="CI failure analysis for PR #33",
   prompt="Analyze CI failures for PR #33. Use the ci-failures skill tools:
-    1. Run: ~/.claude/skills/ci-failures/ci-quick-review 33
-    2. For deep investigation, use: ~/.claude/skills/ci-failures/get-ci-job-details <job_id>
+    1. Run: ${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review 33
+    2. For deep investigation, use: ${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/get-ci-job-details <job_id>
     3. Analyze the failures and categorize by severity
 
-    Available tools in ~/.claude/skills/ci-failures/:
+    Available tools in ${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/:
     - ci-quick-review <PR#> - Quick summary of all failures (Tier 1)
     - get-ci-job-details <job_id> - Deep dive into specific job (Tier 2)
     - fetch-ci-data <PR#> - Raw CI data in JSON format
@@ -109,19 +109,19 @@ The CI Failures skill provides comprehensive analysis of GitHub Actions workflow
 
 ```bash
 # Quick review of current branch
-~/.claude/skills/ci-failures/ci-quick-review
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review
 
 # Review specific PR
-~/.claude/skills/ci-failures/ci-quick-review 33
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review 33
 
 # Review specific branch
-~/.claude/skills/ci-failures/ci-quick-review my-feature-branch
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review my-feature-branch
 
 # Filter to specific workflow
-~/.claude/skills/ci-failures/ci-quick-review --workflow ci-cd 33
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review --workflow ci-cd 33
 
 # JSON output for scripting
-~/.claude/skills/ci-failures/ci-quick-review --json 33 > ./tmp/ci-failures.json
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review --json 33 > ./tmp/ci-failures.json
 ```
 
 **Benefits**:
@@ -136,17 +136,17 @@ The CI Failures skill provides comprehensive analysis of GitHub Actions workflow
 
 ```bash
 # By job ID
-~/.claude/skills/ci-failures/get-ci-job-details 56174634733
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/get-ci-job-details 56174634733
 
 # By job URL (automatically extracts job ID)
-~/.claude/skills/ci-failures/get-ci-job-details https://github.com/user/repo/actions/runs/123/job/456
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/get-ci-job-details https://github.com/user/repo/actions/runs/123/job/456
 
 # With PR number for additional context
-~/.claude/skills/ci-failures/get-ci-job-details 56174634733 33
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/get-ci-job-details 56174634733 33
 
 # Get job ID from ci-quick-review output, then investigate
-~/.claude/skills/ci-failures/ci-quick-review 33
-~/.claude/skills/ci-failures/get-ci-job-details <job_id_from_output>
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review 33
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/get-ci-job-details <job_id_from_output>
 ```
 
 **When to Use**:
@@ -175,19 +175,19 @@ The CI Failures skill provides comprehensive analysis of GitHub Actions workflow
 
 ```bash
 # Fetch CI failures for PR #33
-~/.claude/skills/ci-failures/fetch-ci-data 33
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/fetch-ci-data 33
 
 # Fetch for specific branch
-~/.claude/skills/ci-failures/fetch-ci-data my-feature-branch
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/fetch-ci-data my-feature-branch
 
 # Fetch for current branch
-~/.claude/skills/ci-failures/fetch-ci-data
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/fetch-ci-data
 
 # Filter to specific workflow
-~/.claude/skills/ci-failures/fetch-ci-data --workflow enhanced-ci 33
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/fetch-ci-data --workflow enhanced-ci 33
 
 # Bypass cache (force fresh fetch)
-~/.claude/skills/ci-failures/fetch-ci-data --no-cache 33
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/fetch-ci-data --no-cache 33
 ```
 
 **Output**: JSON with workflow runs, failed jobs, failure severity, and fetched timestamp
@@ -212,15 +212,15 @@ The CI Failures skill provides comprehensive analysis of GitHub Actions workflow
 
 ```bash
 # Extract only CRITICAL failures
-~/.claude/skills/ci-failures/ci-quick-review --json 33 | jq '.failures[] | select(.severity == "critical")'
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review --json 33 | jq '.failures[] | select(.severity == "critical")'
 
 # Get failure summary for specific workflow
-~/.claude/skills/ci-failures/fetch-ci-data --workflow ci-cd 33 | jq '.summary'
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/fetch-ci-data --workflow ci-cd 33 | jq '.summary'
 
 # Compare failures across multiple PRs
 for pr in 32 33 34; do
   echo "PR $pr:"
-  ~/.claude/skills/ci-failures/fetch-ci-data $pr | jq -r '.summary | "\(.total) failures (\(.critical) critical, \(.major) major)"'
+  ${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/fetch-ci-data $pr | jq -r '.summary | "\(.total) failures (\(.critical) critical, \(.major) major)"'
 done
 ```
 
@@ -663,11 +663,11 @@ jobs:
       - name: Analyze CI Failures
         run: |
           # Quick review of CI failures
-          ~/.claude/skills/ci-failures/ci-quick-review ${{ github.event.pull_request.number }}
+          ${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review ${{ github.event.pull_request.number }}
 
           # Or post JSON summary to PR
           if [ "${{ github.event_name }}" == "pull_request" ]; then
-            SUMMARY=$(~/.claude/skills/ci-failures/ci-quick-review ${{ github.event.pull_request.number }})
+            SUMMARY=$(${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review ${{ github.event.pull_request.number }})
             gh pr comment ${{ github.event.pull_request.number }} \
               --body "$SUMMARY"
           fi
@@ -686,7 +686,7 @@ jobs:
 # .git/hooks/pre-push
 
 # Check CI status for current branch before pushing
-if ! ~/.claude/skills/ci-failures/ci-quick-review; then
+if ! ${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review; then
   echo ""
   echo "⚠️  Warning: CI failures detected on current branch"
   echo "Review failures above before pushing."
@@ -820,12 +820,12 @@ brew install jq
 
 ## Skills Location
 
-**Claude Code Access**: `~/.claude/skills/ci-failures/`
+**Claude Code Access**: `${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/`
 
 **Executables**:
-- `~/.claude/skills/ci-failures/ci-quick-review` - One-command quick review with concise summary (RECOMMENDED - Tier 1)
-- `~/.claude/skills/ci-failures/get-ci-job-details` - Deep-dive investigation into specific job failures (Tier 2)
-- `~/.claude/skills/ci-failures/fetch-ci-data` - Fetch CI failure data with severity classification (Advanced)
+- `${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review` - One-command quick review with concise summary (RECOMMENDED - Tier 1)
+- `${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/get-ci-job-details` - Deep-dive investigation into specific job failures (Tier 2)
+- `${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/fetch-ci-data` - Fetch CI failure data with severity classification (Advanced)
 
 ## Architecture Notes
 
@@ -872,16 +872,16 @@ CI failures analysis uses direct GitHub API calls (via `gh` CLI) rather than eve
 ## Related Skills
 
 **Debugging & Analysis**:
-- `~/.claude/skills/pr-review/` - PR review and feedback analysis
-- `~/.claude/skills/system-status/` - System health monitoring
-- `~/.claude/skills/agent-tracking/` - Agent execution tracking
+- `${CLAUDE_PLUGIN_ROOT}/skills/pr-review/` - PR review and feedback analysis
+- `${CLAUDE_PLUGIN_ROOT}/skills/system-status/` - System health monitoring
+- `${CLAUDE_PLUGIN_ROOT}/skills/agent-tracking/` - Agent execution tracking
 
 **CI/CD Integration**:
 - GitHub Actions workflows in `.github/workflows/`
 - Event alignment plan: `/docs/events/EVENT_ALIGNMENT_PLAN.md`
 
 **Linear Integration** (for ticket creation from failures):
-- `~/.claude/skills/linear/create-ticket` - Create Linear tickets
+- `${CLAUDE_PLUGIN_ROOT}/skills/linear/create-ticket` - Create Linear tickets
 - MCP Linear server: `mcp__linear-server__create_issue`
 
 ## Examples
@@ -890,7 +890,7 @@ CI failures analysis uses direct GitHub API calls (via `gh` CLI) rather than eve
 
 ```bash
 # Quick review of current branch
-~/.claude/skills/ci-failures/ci-quick-review
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review
 
 # Terminal displays colorized summary with actionable suggestions
 ```
@@ -899,10 +899,10 @@ CI failures analysis uses direct GitHub API calls (via `gh` CLI) rather than eve
 
 ```bash
 # Review CI failures for PR #33
-~/.claude/skills/ci-failures/ci-quick-review 33
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review 33
 
 # View CRITICAL failures only (JSON output)
-~/.claude/skills/ci-failures/ci-quick-review --json 33 | \
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review --json 33 | \
   jq '.failures[] | select(.severity == "critical")'
 ```
 
@@ -910,17 +910,17 @@ CI failures analysis uses direct GitHub API calls (via `gh` CLI) rather than eve
 
 ```bash
 # Check only CI/CD workflow failures
-~/.claude/skills/ci-failures/ci-quick-review --workflow ci-cd 33
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review --workflow ci-cd 33
 
 # Check enhanced-ci workflow
-~/.claude/skills/ci-failures/ci-quick-review --workflow enhanced-ci 33
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review --workflow enhanced-ci 33
 ```
 
 ### Example 4: Programmatic Analysis
 
 ```bash
 # Fetch raw data for custom processing
-~/.claude/skills/ci-failures/fetch-ci-data 33 > ./tmp/ci-data.json
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/fetch-ci-data 33 > ./tmp/ci-data.json
 
 # Extract failure summary
 jq '.summary' ./tmp/ci-data.json
@@ -933,7 +933,7 @@ jq -r '.failures[] | "\(.workflow): \(.job)"' ./tmp/ci-data.json | sort -u
 
 ```bash
 # Step 1: Get overview of all failures (Tier 1)
-~/.claude/skills/ci-failures/ci-quick-review 33
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review 33
 
 # Output shows:
 # CI FAILURES SUMMARY
@@ -945,12 +945,12 @@ jq -r '.failures[] | "\(.workflow): \(.job)"' ./tmp/ci-data.json | sort -u
 # ...
 
 # Step 2: Deep-dive into specific failures (Tier 2)
-~/.claude/skills/ci-failures/get-ci-job-details 56174634733
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/get-ci-job-details 56174634733
 
 # See complete logs, stack traces, and contextual suggestions
 
 # Step 3: Investigate second failure
-~/.claude/skills/ci-failures/get-ci-job-details 56174634821
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/get-ci-job-details 56174634821
 
 # Compare patterns across multiple failed jobs
 ```
@@ -962,17 +962,17 @@ jq -r '.failures[] | "\(.workflow): \(.job)"' ./tmp/ci-data.json | sort -u
 # URL: https://github.com/owner/repo/actions/runs/12345678/job/56174634733
 
 # Investigate using full URL (job ID automatically extracted)
-~/.claude/skills/ci-failures/get-ci-job-details \
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/get-ci-job-details \
   https://github.com/owner/repo/actions/runs/12345678/job/56174634733
 
 # Or just use the job ID
-~/.claude/skills/ci-failures/get-ci-job-details 56174634733
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/get-ci-job-details 56174634733
 ```
 
 ## See Also
 
 - GitHub Actions API: https://docs.github.com/en/rest/actions
 - GitHub CLI Manual: https://cli.github.com/manual/
-- PR Review Skills: `~/.claude/skills/pr-review/SKILL.md`
-- System Status Skills: `~/.claude/skills/system-status/SKILL.md`
+- PR Review Skills: `${CLAUDE_PLUGIN_ROOT}/skills/pr-review/SKILL.md`
+- System Status Skills: `${CLAUDE_PLUGIN_ROOT}/skills/system-status/SKILL.md`
 - Event Alignment Plan: `/docs/events/EVENT_ALIGNMENT_PLAN.md`

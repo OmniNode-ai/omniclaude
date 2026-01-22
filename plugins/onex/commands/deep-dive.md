@@ -156,7 +156,7 @@ Compile the collected data into the deep dive format with sections:
 | `--days N` | Analyze last N days (for weekly summary) | 1 |
 | `--save` | Save to output directory | false |
 | `--output FILE` | Save to specific file (overrides --save) | - |
-| `--output-dir DIR` | Set output directory | `$LINEAR_INSIGHTS_OUTPUT_DIR` or `/Users/jonah/Code/omni_save` |
+| `--output-dir DIR` | Set output directory | `$LINEAR_INSIGHTS_OUTPUT_DIR` or `${HOME}/Code/omni_save` |
 | `--json` | Output as JSON (for programmatic processing) | false |
 | `--generate` | Output MCP tool call instructions for direct execution | false |
 | `--repos REPOS` | Comma-separated list of repos | `omnibase_core,omnibase_spi,omnibase_infra,omniclaude` |
@@ -168,7 +168,7 @@ Compile the collected data into the deep dive format with sections:
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `LINEAR_INSIGHTS_OUTPUT_DIR` | Default output directory for saved reports | `/Users/jonah/Code/omni_save` |
+| `LINEAR_INSIGHTS_OUTPUT_DIR` | Default output directory for saved reports | `${HOME}/Code/omni_save` |
 
 ## Expected Output Format
 
@@ -199,8 +199,8 @@ Outputs specific MCP tool call instructions:
   "day_name": "Monday",
   "analysis_days": 1,
   "repositories": ["omnibase_core", "omnibase_spi", "omnibase_infra", "omniclaude"],
-  "output_file": "/Users/jonah/Code/omni_save/DECEMBER_9_2025_DEEP_DIVE.md",
-  "output_directory": "/Users/jonah/Code/omni_save",
+  "output_file": "${HOME}/Code/omni_save/DECEMBER_9_2025_DEEP_DIVE.md",
+  "output_directory": "${HOME}/Code/omni_save",
   "save_mode": false,
   "snapshot": {...},
   "data_sources": {
@@ -220,7 +220,7 @@ Outputs specific MCP tool call instructions:
   "day_name": "Monday",
   "analysis_days": 1,
   "repositories": ["omnibase_core", "omnibase_spi", "omnibase_infra", "omniclaude"],
-  "output_file": "/Users/jonah/Code/omni_save/DECEMBER_9_2025_DEEP_DIVE.md",
+  "output_file": "${HOME}/Code/omni_save/DECEMBER_9_2025_DEEP_DIVE.md",
   "snapshot": {...},
   "mcp_calls": [
     {

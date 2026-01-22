@@ -30,18 +30,18 @@ This skill checks whether specific Kafka topics exist and retrieves their partit
 
 ```bash
 # List all topics (count only)
-python3 ~/.claude/skills/system-status/check-kafka-topics/execute.py
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-kafka-topics/execute.py
 
 # Check specific topics
-python3 ~/.claude/skills/system-status/check-kafka-topics/execute.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-kafka-topics/execute.py \
   --topics agent-actions,agent.routing.requested.v1
 
 # Check topics with wildcard patterns
-python3 ~/.claude/skills/system-status/check-kafka-topics/execute.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-kafka-topics/execute.py \
   --topics "agent.*,test-*"
 
 # Include partition details
-python3 ~/.claude/skills/system-status/check-kafka-topics/execute.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-kafka-topics/execute.py \
   --topics agent-actions --include-partitions
 ```
 
@@ -161,26 +161,26 @@ python3 ~/.claude/skills/system-status/check-kafka-topics/execute.py \
 
 **Check if agent routing topics exist**:
 ```bash
-python3 ~/.claude/skills/system-status/check-kafka-topics/execute.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-kafka-topics/execute.py \
   --topics "agent.routing.requested.v1,agent.routing.completed.v1"
 ```
 
 **Find all agent-related topics with partition counts**:
 ```bash
-python3 ~/.claude/skills/system-status/check-kafka-topics/execute.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-kafka-topics/execute.py \
   --topics "agent*" --include-partitions
 ```
 
 **Verify topic creation in CI/CD pipeline**:
 ```bash
-python3 ~/.claude/skills/system-status/check-kafka-topics/execute.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-kafka-topics/execute.py \
   --topics "my-new-topic" | jq -e '.topics["my-new-topic"].exists'
 # Exit code 0 if exists, 1 if not
 ```
 
 **Get all topics count**:
 ```bash
-python3 ~/.claude/skills/system-status/check-kafka-topics/execute.py | jq '.total_topics'
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-kafka-topics/execute.py | jq '.total_topics'
 ```
 
 ## Future Enhancements
