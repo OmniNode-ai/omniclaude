@@ -212,7 +212,7 @@ class AgentRouter:
                 },
             )
             raise OnexError(
-                code=EnumCoreErrorCode.INITIALIZATION_ERROR,
+                code=EnumCoreErrorCode.INITIALIZATION_FAILED,
                 message=f"Router initialization failed: {e}",
                 details={
                     "component": "AgentRouter",

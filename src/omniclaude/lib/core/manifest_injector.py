@@ -108,7 +108,7 @@ except ImportError:
 try:
     from omniclaude.lib.core import EnumCoreErrorCode, OnexError
 except ImportError:
-    from agents.lib.errors import EnumCoreErrorCode, OnexError
+    from agents.lib.errors import EnumCoreErrorCode, OnexError  # type: ignore[no-redef]
 
 from .intelligence_cache import IntelligenceCache
 from .intelligence_event_client import IntelligenceEventClient

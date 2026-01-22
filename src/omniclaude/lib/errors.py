@@ -21,7 +21,11 @@ try:
 except ImportError:
     # Fallback: Try agents.lib.errors (legacy location)
     try:
-        from agents.lib.errors import EnumCoreErrorCode, ModelOnexError, OnexError
+        from agents.lib.errors import (  # type: ignore[no-redef]
+            EnumCoreErrorCode,
+            ModelOnexError,
+            OnexError,
+        )
 
         OMNIBASE_ERRORS_AVAILABLE = True
     except ImportError:
