@@ -16,14 +16,12 @@ Created: 2025-11-12
 
 import json
 import os
-import socket
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 from enum import Enum
-from typing import Any, Dict, List, Optional
-
+from typing import Any
 
 # Add project root for config module (type-safe Pydantic Settings) and ONEX errors
 # Path: claude/skills/_shared/ -> claude/skills/ -> claude/ -> project root
@@ -38,11 +36,10 @@ except ImportError:
 
 from config import settings
 
-
 # ONEX-compliant error handling
-# Try to import from claude.lib.core (preferred), fallback to agents.lib.errors, then local definitions
+# Try to import from omniclaude.lib.core (preferred), fallback to agents.lib.errors, then local definitions
 try:
-    from claude.lib.core import EnumCoreErrorCode, OnexError
+    from omniclaude.lib.core import EnumCoreErrorCode, OnexError
 except ImportError:
     try:
         from agents.lib.errors import EnumCoreErrorCode, OnexError
@@ -67,7 +64,7 @@ except ImportError:
                 self,
                 code: EnumCoreErrorCode,
                 message: str,
-                details: Optional[Dict[Any, Any]] = None,
+                details: dict[Any, Any] | None = None,
             ):
                 self.code = code
                 self.error_code = code
@@ -79,7 +76,9 @@ except ImportError:
                 return f"{self.code}: {self.message}"
 
             def __repr__(self):
-                return f"OnexError(code={self.code}, message={self.message}, details={self.details})"
+                return (
+                    f"OnexError(code={self.code}, message={self.message}, details={self.details})"
+                )
 
 
 def validate_qdrant_url(url: str) -> str:
@@ -288,7 +287,7 @@ def get_qdrant_url() -> str:
     return validate_qdrant_url(url)
 
 
-def check_qdrant_connection() -> Dict[str, Any]:
+def check_qdrant_connection() -> dict[str, Any]:
     """
     Check if Qdrant is reachable and responsive.
 
@@ -322,14 +321,14 @@ def check_qdrant_connection() -> Dict[str, Any]:
             "reachable": False,
             "error": str(e.reason),
         }
-    except socket.timeout:
+    except TimeoutError:
         return {
             "status": "timeout",
             "url": qdrant_url,
             "reachable": False,
             "error": f"Connection timed out after {get_timeout_seconds()}s",
         }
-    except (OSError, IOError) as e:
+    except OSError as e:
         # OSError/IOError: network-level errors (connection reset, etc.)
         return {
             "status": "error",
@@ -348,7 +347,7 @@ def check_qdrant_connection() -> Dict[str, Any]:
         }
 
 
-def list_collections() -> Dict[str, Any]:
+def list_collections() -> dict[str, Any]:
     """
     List all Qdrant collections.
 
@@ -389,7 +388,7 @@ def list_collections() -> Dict[str, Any]:
             "count": 0,
             "error": f"Connection error: {str(e.reason)}",
         }
-    except socket.timeout:
+    except TimeoutError:
         return {
             "success": False,
             "collections": [],
@@ -404,7 +403,7 @@ def list_collections() -> Dict[str, Any]:
             "count": 0,
             "error": f"Invalid JSON response: {str(e)}",
         }
-    except (OSError, IOError) as e:
+    except OSError as e:
         # OSError/IOError: network-level errors
         return {
             "success": False,
@@ -422,7 +421,7 @@ def list_collections() -> Dict[str, Any]:
         }
 
 
-def get_collection_stats(collection_name: str) -> Dict[str, Any]:
+def get_collection_stats(collection_name: str) -> dict[str, Any]:
     """
     Get statistics for a specific collection.
 
@@ -467,7 +466,7 @@ def get_collection_stats(collection_name: str) -> Dict[str, Any]:
             "collection": collection_name,
             "error": f"Connection error: {str(e.reason)}",
         }
-    except socket.timeout:
+    except TimeoutError:
         return {
             "success": False,
             "collection": collection_name,
@@ -480,7 +479,7 @@ def get_collection_stats(collection_name: str) -> Dict[str, Any]:
             "collection": collection_name,
             "error": f"Invalid JSON response: {str(e)}",
         }
-    except (OSError, IOError) as e:
+    except OSError as e:
         # OSError/IOError: network-level errors
         return {
             "success": False,
@@ -496,7 +495,7 @@ def get_collection_stats(collection_name: str) -> Dict[str, Any]:
         }
 
 
-def get_all_collections_stats() -> Dict[str, Any]:
+def get_all_collections_stats() -> dict[str, Any]:
     """
     Get statistics for all collections.
 
@@ -580,7 +579,7 @@ def check_collection_exists(collection_name: str) -> bool:
     return collection_name in collections_result["collections"]
 
 
-def get_collection_health(collection_name: str) -> Dict[str, Any]:
+def get_collection_health(collection_name: str) -> dict[str, Any]:
     """
     Check health of a collection.
 

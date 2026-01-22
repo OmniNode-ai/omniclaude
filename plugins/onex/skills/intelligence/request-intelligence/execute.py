@@ -32,8 +32,7 @@ import json
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional
-
+from typing import Any
 
 # Determine project root dynamically (skills are in ~/.claude/skills, not in project)
 # First check environment variable, then try to find via repository structure
@@ -66,9 +65,8 @@ else:
 sys.path.insert(0, str(OMNICLAUDE_PATH))
 from config import settings
 
-
 try:
-    from claude.lib.core import IntelligenceEventClient
+    from omniclaude.lib.core import IntelligenceEventClient
 except ImportError:
     # Fallback to direct import if claude.lib not available
     try:
@@ -92,7 +90,6 @@ except ImportError:
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 from db_helper import get_correlation_id  # noqa: E402
 
-
 OPERATION_TYPES = {
     "pattern-discovery": "PATTERN_EXTRACTION",
     "code-analysis": "CODE_ANALYSIS",
@@ -106,7 +103,7 @@ async def request_pattern_discovery(
     language: str,
     timeout_ms: int,
     correlation_id: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Request pattern discovery from intelligence adapter."""
     try:
         patterns = await client.request_pattern_discovery(
@@ -146,13 +143,13 @@ async def request_pattern_discovery(
 
 async def request_code_analysis(
     client: IntelligenceEventClient,
-    content: Optional[str],
+    content: str | None,
     source_path: str,
     language: str,
     include_metrics: bool,
     timeout_ms: int,
     correlation_id: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Request code analysis from intelligence adapter."""
     try:
         # Read file content if not provided
@@ -208,13 +205,13 @@ async def request_code_analysis(
 
 async def request_quality_assessment(
     client: IntelligenceEventClient,
-    content: Optional[str],
+    content: str | None,
     source_path: str,
     language: str,
     include_metrics: bool,
     timeout_ms: int,
     correlation_id: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Request quality assessment from intelligence adapter."""
     try:
         # Read file content if not provided
@@ -288,9 +285,7 @@ async def main():
     # Operation-specific arguments
     parser.add_argument("--source-path", help="File pattern or path to analyze")
     parser.add_argument("--file", help="Specific file to analyze")
-    parser.add_argument(
-        "--content", help="Code content to analyze (alternative to --file)"
-    )
+    parser.add_argument("--content", help="Code content to analyze (alternative to --file)")
     parser.add_argument(
         "--language", default="python", help="Programming language (default: python)"
     )
@@ -319,9 +314,7 @@ async def main():
     args = parser.parse_args()
 
     # Get or generate correlation ID
-    correlation_id = (
-        args.correlation_id if args.correlation_id else get_correlation_id()
-    )
+    correlation_id = args.correlation_id if args.correlation_id else get_correlation_id()
 
     # Validate operation-specific arguments
     if args.operation == "pattern-discovery":

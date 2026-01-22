@@ -244,6 +244,24 @@ class TestKafkaConfig:
             config = _create_kafka_config()
             assert config.bootstrap_servers == "kafka:9092"
 
+    def test_config_respects_timeout_override(self) -> None:
+        """Config respects KAFKA_HOOK_TIMEOUT_SECONDS env var for integration tests."""
+        with patch.dict(
+            "os.environ",
+            {"KAFKA_BOOTSTRAP_SERVERS": "test:9092", "KAFKA_HOOK_TIMEOUT_SECONDS": "30"},
+        ):
+            config = _create_kafka_config()
+            assert config.timeout_seconds == 30
+
+    def test_config_timeout_override_invalid_uses_default(self) -> None:
+        """Invalid KAFKA_HOOK_TIMEOUT_SECONDS falls back to default."""
+        with patch.dict(
+            "os.environ",
+            {"KAFKA_BOOTSTRAP_SERVERS": "test:9092", "KAFKA_HOOK_TIMEOUT_SECONDS": "invalid"},
+        ):
+            config = _create_kafka_config()
+            assert config.timeout_seconds == 2  # Falls back to default
+
 
 # =============================================================================
 # Failure Suppression Tests

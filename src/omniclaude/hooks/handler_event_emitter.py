@@ -67,6 +67,11 @@ logger = logging.getLogger(__name__)
 
 # Kafka configuration optimized for hook latency
 # These values prioritize fast failure over reliability
+#
+# DEFAULT_KAFKA_TIMEOUT_SECONDS: Short timeout for production hooks where
+# latency is critical. Can be overridden via KAFKA_HOOK_TIMEOUT_SECONDS
+# environment variable for integration tests that need more time to connect
+# to remote Kafka brokers.
 DEFAULT_KAFKA_TIMEOUT_SECONDS: int = 2  # Short timeout for hooks
 DEFAULT_KAFKA_MAX_RETRY_ATTEMPTS: int = 0  # No retries (latency budget)
 DEFAULT_KAFKA_ACKS: str = "all"  # Using "all" due to aiokafka bug with string "1"
@@ -148,6 +153,8 @@ def _create_kafka_config() -> ModelKafkaEventBusConfig:
     Environment Variables:
         KAFKA_BOOTSTRAP_SERVERS: Kafka broker addresses (required)
         KAFKA_ENVIRONMENT: Environment prefix for topics (default: dev)
+        KAFKA_HOOK_TIMEOUT_SECONDS: Connection timeout in seconds (default: 2)
+            Set to higher value (e.g., 30) for integration tests with remote brokers.
 
     Returns:
         Kafka configuration model.
@@ -164,11 +171,23 @@ def _create_kafka_config() -> ModelKafkaEventBusConfig:
             message="KAFKA_BOOTSTRAP_SERVERS environment variable is required",
         )
 
+    # Allow timeout override for integration tests
+    # Production hooks use short timeout (2s) for fast failure
+    # Integration tests may need longer timeout (30s) for remote brokers
+    timeout_str = os.environ.get("KAFKA_HOOK_TIMEOUT_SECONDS")
+    if timeout_str is not None:
+        try:
+            timeout_seconds = int(timeout_str)
+        except ValueError:
+            timeout_seconds = DEFAULT_KAFKA_TIMEOUT_SECONDS
+    else:
+        timeout_seconds = DEFAULT_KAFKA_TIMEOUT_SECONDS
+
     return ModelKafkaEventBusConfig(
         bootstrap_servers=bootstrap_servers,
         environment=environment,
         group="omniclaude-hooks",
-        timeout_seconds=DEFAULT_KAFKA_TIMEOUT_SECONDS,
+        timeout_seconds=timeout_seconds,
         max_retry_attempts=DEFAULT_KAFKA_MAX_RETRY_ATTEMPTS,
         acks=DEFAULT_KAFKA_ACKS,
         # Circuit breaker settings: Allow 5 failures before opening circuit to

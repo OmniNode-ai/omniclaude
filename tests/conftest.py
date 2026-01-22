@@ -669,7 +669,7 @@ def _cleanup_all_kafka_producers_sync():
 
     # Cleanup logging_event_publisher._global_publisher
     try:
-        from claude.lib import logging_event_publisher
+        from omniclaude.lib import logging_event_publisher
 
         publisher = logging_event_publisher._global_publisher
         if publisher is not None:

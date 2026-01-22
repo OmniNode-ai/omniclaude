@@ -18,21 +18,17 @@ eggs/
 lib/
 !agents/lib/
 !agents/lib/**
-!claude_hooks/lib/
-!claude_hooks/lib/**
-!claude/lib/
-!claude/lib/**
-!claude/hooks/lib/
-!claude/hooks/lib/**
+!src/omniclaude/lib/
+!src/omniclaude/lib/**
+!plugins/onex/hooks/lib/
+!plugins/onex/hooks/lib/**
 # Re-exclude __pycache__ within excepted lib directories
 agents/lib/__pycache__/
 agents/lib/**/__pycache__/
-claude_hooks/lib/__pycache__/
-claude_hooks/lib/**/__pycache__/
-claude/lib/__pycache__/
-claude/lib/**/__pycache__/
-claude/hooks/lib/__pycache__/
-claude/hooks/lib/**/__pycache__/
+src/omniclaude/lib/__pycache__/
+src/omniclaude/lib/**/__pycache__/
+plugins/onex/hooks/lib/__pycache__/
+plugins/onex/hooks/lib/**/__pycache__/
 lib64/
 parts/
 sdist/
@@ -348,5 +344,4 @@ skills/brainstorming/
 skills/remembering-conversations/
 skills/senior-architect/
 skills/systematic-debugging/
-claude/lib/.venv/
 .fastembed_cache/

@@ -17,13 +17,29 @@ Run with:
     source .env && KAFKA_INTEGRATION_TESTS=1 \
         pytest tests/hooks/test_integration_kafka.py -v
 
+    # Run with custom timeout for slow connections
+    KAFKA_INTEGRATION_TESTS=1 KAFKA_HOOK_TIMEOUT_SECONDS=60 \
+        pytest tests/hooks/test_integration_kafka.py -v
+
 Requirements:
     - KAFKA_BOOTSTRAP_SERVERS must be set in .env or environment (no default)
     - Topics must be auto-created or pre-created
 
+Environment Variables:
+    KAFKA_INTEGRATION_TESTS: Set to "1" to enable integration tests
+    KAFKA_BOOTSTRAP_SERVERS: Kafka broker address(es)
+    KAFKA_ENVIRONMENT: Topic prefix (default: "dev")
+    KAFKA_HOOK_TIMEOUT_SECONDS: Connection timeout in seconds (default: 30 for
+        integration tests, 2 for production hooks). Set higher if connecting
+        to remote brokers with high latency.
+
 Note:
     These tests are automatically skipped when KAFKA_INTEGRATION_TESTS != "1"
     because the conftest.py mocks AIOKafkaProducer globally for unit tests.
+
+    When KAFKA_INTEGRATION_TESTS=1, the conftest automatically sets
+    KAFKA_HOOK_TIMEOUT_SECONDS=30 to allow more time for remote broker
+    connections (the default production timeout of 2s is too aggressive).
 """
 
 from __future__ import annotations

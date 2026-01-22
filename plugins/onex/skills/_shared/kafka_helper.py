@@ -63,9 +63,9 @@ except ImportError:
 from omniclaude.config import settings
 
 # ONEX-compliant error handling
-# Try to import from claude.lib.core (preferred), fallback to agents.lib.errors, then local definitions
+# Try to import from omniclaude.lib.core (preferred), fallback to agents.lib.errors, then local definitions
 try:
-    from claude.lib.core import EnumCoreErrorCode, OnexError
+    from omniclaude.lib.core import EnumCoreErrorCode, OnexError
 except ImportError:
     try:
         from agents.lib.errors import EnumCoreErrorCode, OnexError
