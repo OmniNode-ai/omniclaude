@@ -524,7 +524,7 @@ def _cleanup_producer_sync() -> None:
                 return
             except RuntimeError:
                 # No running loop, try to get the main event loop
-                pass
+                pass  # nosec B110 - Expected when no event loop running
 
             # Try to use existing event loop if available and not closed
             try:
@@ -533,7 +533,7 @@ def _cleanup_producer_sync() -> None:
                     loop.run_until_complete(close_producer())
                     return
             except RuntimeError:
-                pass
+                pass  # nosec B110 - Expected when event loop unavailable
 
             # Event loop is closed. The producer was created on a closed loop.
             # We can't use async cleanup properly.

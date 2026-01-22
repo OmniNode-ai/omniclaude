@@ -425,7 +425,7 @@ class RoutingEventClient:
                     try:
                         await self._consumer_task
                     except asyncio.CancelledError:
-                        pass  # Expected when cancelling
+                        pass  # nosec B110 - Expected when cancelling task
                 self.logger.debug("Consumer task cancelled successfully")
             except Exception as e:
                 self.logger.error(f"Error cancelling consumer task: {e}")
@@ -1092,7 +1092,10 @@ async def route_via_events(
         )
         return _format_recommendations(recommendations)
 
-    # Try event-based routing first
+    # Try event-based routing
+    # Capture error for fallback path (only used if fallback_to_local=True)
+    event_error: Exception | None = None
+
     try:
         async with RoutingEventClientContext(request_timeout_ms=timeout_ms) as client:
             return await client.request_routing(
@@ -1102,42 +1105,39 @@ async def route_via_events(
                 min_confidence=min_confidence,
                 timeout_ms=timeout_ms,
             )
-
     except (OnexError, AIOKafkaError) as e:
+        # If no fallback requested, re-raise immediately
+        if not fallback_to_local:
+            raise
+        # Capture error and continue to fallback
+        event_error = e
         logger.warning(f"Event-based routing failed: {e}")
 
-        if fallback_to_local:
-            # Fallback to local AgentRouter
-            logger.info("Falling back to local AgentRouter")
-            try:
-                from .agent_router import AgentRouter
+    # Fallback to local AgentRouter
+    # Note: Only reached when event routing failed AND fallback_to_local=True
+    logger.info("Falling back to local AgentRouter")
+    try:
+        from .agent_router import AgentRouter
 
-                router = AgentRouter()
-                recommendations = router.route(
-                    user_request=user_request,
-                    context=context or {},
-                    max_recommendations=max_recommendations,
-                )
-                return _format_recommendations(recommendations)
-            except Exception as fallback_error:
-                logger.error(f"Local routing fallback also failed: {fallback_error}")
-                raise OnexError(
-                    code=EnumCoreErrorCode.OPERATION_FAILED,
-                    message="Both event-based and local routing failed",
-                    details={
-                        "component": "route_via_events",
-                        "event_routing_error": str(e),
-                        "local_routing_error": str(fallback_error),
-                        "user_request_preview": (user_request[:100] if user_request else None),
-                    },
-                ) from e
-        else:
-            # No fallback, re-raise original error
-            raise
-
-    # Unreachable: all paths in try-except either return or raise
-    # This explicit raise satisfies mypy's return analysis
-    raise AssertionError("Unreachable code - all paths should return or raise")
+        router = AgentRouter()
+        recommendations = router.route(
+            user_request=user_request,
+            context=context or {},
+            max_recommendations=max_recommendations,
+        )
+        return _format_recommendations(recommendations)
+    except Exception as fallback_error:
+        logger.error(f"Local routing fallback also failed: {fallback_error}")
+        raise OnexError(
+            code=EnumCoreErrorCode.OPERATION_FAILED,
+            message="Both event-based and local routing failed",
+            details={
+                "component": "route_via_events",
+                "event_routing_error": str(event_error),
+                "local_routing_error": str(fallback_error),
+                "user_request_preview": (user_request[:100] if user_request else None),
+            },
+        ) from event_error
 
 
 __all__ = [

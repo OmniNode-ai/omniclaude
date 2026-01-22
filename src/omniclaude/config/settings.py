@@ -69,9 +69,10 @@ class Settings(BaseSettings):
 
     # =========================================================================
     # POSTGRESQL DATABASE CONFIGURATION
+    # Note: Production values should be configured via .env file, not hardcoded.
     # =========================================================================
     postgres_host: str = Field(
-        default="192.168.86.200",
+        default="localhost",
         description="PostgreSQL host address",
     )
     postgres_port: int = Field(
@@ -95,9 +96,10 @@ class Settings(BaseSettings):
 
     # =========================================================================
     # QDRANT VECTOR DATABASE CONFIGURATION
+    # Note: Production values should be configured via .env file, not hardcoded.
     # =========================================================================
     qdrant_host: str = Field(
-        default="192.168.86.101",
+        default="localhost",
         description="Qdrant host address",
     )
     qdrant_port: int = Field(
@@ -107,7 +109,7 @@ class Settings(BaseSettings):
         description="Qdrant port",
     )
     qdrant_url: str = Field(
-        default="http://192.168.86.101:6333",
+        default="http://localhost:6333",
         description="Full Qdrant URL",
     )
 

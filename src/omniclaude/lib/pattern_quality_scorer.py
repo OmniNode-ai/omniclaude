@@ -27,7 +27,7 @@ try:
     psycopg2 = _psycopg2
     Json = _Json
 except ImportError:
-    pass
+    pass  # nosec B110 - Optional psycopg2 dependency, graceful degradation
 
 
 @dataclass
@@ -468,11 +468,8 @@ class PatternQualityScorer:
         if psycopg2 is None:
             raise ImportError("psycopg2 is required for database operations")
 
-        # Get database connection string from settings
-        if db_connection_string:
-            connection_string = db_connection_string
-        else:
-            connection_string = self._build_connection_string_from_settings()
+        # Get database connection string from settings (use provided or build from settings)
+        connection_string = db_connection_string or self._build_connection_string_from_settings()
 
         # Run synchronous database operations in thread pool to avoid blocking event loop
         await asyncio.to_thread(self._store_quality_metrics_sync, score, connection_string)

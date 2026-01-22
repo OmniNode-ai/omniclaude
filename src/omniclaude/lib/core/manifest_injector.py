@@ -1247,6 +1247,8 @@ class ManifestInjector:
             )
 
             # Build manifest from results (including filesystem queried earlier)
+            # strict=False: Defensive - keys/results should match (same dict source),
+            # but prefer partial results over ValueError if counts ever diverge
             all_results = dict(zip(query_tasks.keys(), results, strict=False))
             all_results["filesystem"] = filesystem_result  # Add filesystem result
             manifest = self._build_manifest_from_results(all_results)

@@ -43,7 +43,7 @@ try:
 
     HAS_PATTERN_TRACKER = True
 except ImportError:
-    pass
+    pass  # nosec B110 - Optional dependency, graceful degradation
 
 # Import for type checking only
 if TYPE_CHECKING:
