@@ -457,7 +457,7 @@ do_init() {
     md_echo "Then test with:"
     md_echo ""
     md_echo '```bash'
-    md_echo "~/.claude/skills/omniclaude/linear-insights/suggest-work"
+    md_echo "${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/linear-insights/suggest-work"
     md_echo '```'
     md_echo ""
     md_echo "---"

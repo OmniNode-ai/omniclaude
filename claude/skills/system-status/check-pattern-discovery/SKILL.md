@@ -18,7 +18,7 @@ Monitor Qdrant pattern collections and discovery performance.
 ## How to Use
 
 ```bash
-python3 ~/.claude/skills/system-status/check-pattern-discovery/execute.py
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-pattern-discovery/execute.py
 ```
 
 ### Arguments
@@ -32,7 +32,7 @@ python3 ~/.claude/skills/system-status/check-pattern-discovery/execute.py
 Returns basic collection statistics with full field names. Suitable for programmatic parsing and data processing.
 
 ```bash
-python3 ~/.claude/skills/system-status/check-pattern-discovery/execute.py
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-pattern-discovery/execute.py
 ```
 
 **JSON Structure**:
@@ -84,7 +84,7 @@ python3 ~/.claude/skills/system-status/check-pattern-discovery/execute.py
 Returns collection statistics with simplified field names for better readability. Suitable for human consumption and dashboards.
 
 ```bash
-python3 ~/.claude/skills/system-status/check-pattern-discovery/execute.py --detailed
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-pattern-discovery/execute.py --detailed
 ```
 
 **JSON Structure**:

@@ -132,7 +132,7 @@ Total Lines of Code:  2,500+
 
 ```bash
 # Navigate to tests
-cd ~/.claude/skills/system-status/tests
+cd ${CLAUDE_PLUGIN_ROOT}/skills/system-status/tests
 
 # View test summary
 python3 test_summary.py
@@ -150,7 +150,7 @@ pytest -k "security" -v
 ## Sample Test Run
 
 ```bash
-$ cd ~/.claude/skills/system-status/tests
+$ cd ${CLAUDE_PLUGIN_ROOT}/skills/system-status/tests
 $ pytest test_timeframe_parser.py -v
 
 ============================== test session starts ==============================

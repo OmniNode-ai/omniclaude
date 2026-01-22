@@ -15,10 +15,10 @@ Available Commands:
   this codebase with linting, type checking, unit tests, and E2E tests
 
 Path References (may need updating if commands are moved):
-- ci-failures.md references: ~/.claude/skills/onex/ci-failures/ci-quick-review
+- ci-failures.md references: ${CLAUDE_PLUGIN_ROOT}/skills/onex/ci-failures/ci-quick-review
 - pr-review-dev.md references:
-  - ~/.claude/skills/onex/pr-review/collate-issues
-  - ~/.claude/skills/onex/pr-review/collate-issues-with-ci
-  - ~/.claude/skills/onex/ci-failures/ci-quick-review
-- pr-release-ready.md references: ~/.claude/skills/onex/pr-review/collate-issues
+  - ${CLAUDE_PLUGIN_ROOT}/skills/onex/pr-review/collate-issues
+  - ${CLAUDE_PLUGIN_ROOT}/skills/onex/pr-review/collate-issues-with-ci
+  - ${CLAUDE_PLUGIN_ROOT}/skills/onex/ci-failures/ci-quick-review
+- pr-release-ready.md references: ${CLAUDE_PLUGIN_ROOT}/skills/onex/pr-review/collate-issues
 """

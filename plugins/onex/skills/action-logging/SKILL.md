@@ -506,7 +506,7 @@ agents/lib/action_logging_example.py (in repository root)
 
 **Skill Location**:
 ```
-~/.claude/skills/action-logging/skill.md
+${CLAUDE_PLUGIN_ROOT}/skills/action-logging/skill.md
 ```
 
 ## Troubleshooting
@@ -787,7 +787,7 @@ for attempt in range(max_retries):
 
 ## Skills Location
 
-**Claude Code Access**: `~/.claude/skills/action-logging/`
+**Claude Code Access**: `${CLAUDE_PLUGIN_ROOT}/skills/action-logging/`
 **Repository Source**: `agents/lib/` (in repository root)
 
 ---

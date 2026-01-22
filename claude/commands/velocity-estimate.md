@@ -24,22 +24,22 @@ Use the `velocity-estimate` skill to calculate velocity and ETA:
 
 ```bash
 # Basic project velocity
-~/.claude/skills/linear-insights/velocity-estimate --project "${1:-MVP}"
+${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/velocity-estimate --project "${1:-MVP}"
 
 # All milestones overview
-~/.claude/skills/linear-insights/velocity-estimate --all
+${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/velocity-estimate --all
 
 # With confidence intervals
-~/.claude/skills/linear-insights/velocity-estimate --project "${1:-MVP}" --confidence
+${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/velocity-estimate --project "${1:-MVP}" --confidence
 
 # With weighted rolling average (recent data weighted higher)
-~/.claude/skills/linear-insights/velocity-estimate --project "${1:-MVP}" --weighted
+${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/velocity-estimate --project "${1:-MVP}" --weighted
 
 # Use specific calculation method
-~/.claude/skills/linear-insights/velocity-estimate --project "${1:-MVP}" --method points
+${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/velocity-estimate --project "${1:-MVP}" --method points
 
 # Show velocity history (last 30 days)
-~/.claude/skills/linear-insights/velocity-estimate --project "${1:-MVP}" --history
+${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/velocity-estimate --project "${1:-MVP}" --history
 ```
 
 ### 3. Analyze Output

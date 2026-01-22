@@ -26,14 +26,14 @@ Get detailed status information for specific Docker containers including health 
 ## How to Use
 
 ```bash
-python3 ~/.claude/skills/system-status/check-service-status/execute.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-service-status/execute.py \
   --service archon-intelligence
 ```
 
 ### Optional Arguments
 
 ```bash
-python3 ~/.claude/skills/system-status/check-service-status/execute.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-service-status/execute.py \
   --service archon-intelligence \
   --include-logs \
   --include-stats \

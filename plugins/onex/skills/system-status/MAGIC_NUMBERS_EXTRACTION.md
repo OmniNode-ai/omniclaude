@@ -5,9 +5,9 @@
 
 ## Overview
 
-All magic numbers have been extracted from the system-status skills to a centralized constants module at `~/.claude/skills/_shared/constants.py`. This improves code maintainability by allowing threshold adjustments in a single location.
+All magic numbers have been extracted from the system-status skills to a centralized constants module at `${CLAUDE_PLUGIN_ROOT}/skills/_shared/constants.py`. This improves code maintainability by allowing threshold adjustments in a single location.
 
-**Note**: The constants module is located in the shared `_shared/` directory at the skills level (`~/.claude/skills/_shared/`), not within the `system-status/` directory. This allows the constants to be shared across all Claude skills.
+**Note**: The constants module is located in the shared `_shared/` directory at the skills level (`${CLAUDE_PLUGIN_ROOT}/skills/_shared/`), not within the `system-status/` directory. This allows the constants to be shared across all Claude skills.
 
 ## Constants Created
 
@@ -39,7 +39,7 @@ All magic numbers have been extracted from the system-status skills to a central
 
 ## Files Modified
 
-### 1. `~/.claude/skills/_shared/constants.py` (NEW)
+### 1. `${CLAUDE_PLUGIN_ROOT}/skills/_shared/constants.py` (NEW)
 - Created centralized constants module with comprehensive documentation
 - All constants use SCREAMING_SNAKE_CASE naming convention
 - Includes comments explaining purpose and adjustment guidelines
@@ -158,7 +158,7 @@ All changes have been verified:
 
 ## Quick Reference
 
-To adjust a threshold, edit `~/.claude/skills/_shared/constants.py`:
+To adjust a threshold, edit `${CLAUDE_PLUGIN_ROOT}/skills/_shared/constants.py`:
 
 ```python
 # Example: Increase routing timeout threshold

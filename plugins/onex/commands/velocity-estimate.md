@@ -144,7 +144,7 @@ Summarize findings with:
 # Velocity Report
 
 **Generated**: 2025-12-14 10:30:00
-**Deep Dive Source**: /Users/jonah/Code/omni_save
+**Deep Dive Source**: ${HOME}/Code/omni_save
 
 ---
 
@@ -192,7 +192,7 @@ When using `--json`:
 ```json
 {
   "generated_at": "2025-12-14T10:30:00Z",
-  "deep_dive_source": "/Users/jonah/Code/omni_save",
+  "deep_dive_source": "${HOME}/Code/omni_save",
   "project": "MVP - OmniNode Platform Foundation",
   "days_analyzed": 5,
   "total_tickets_closed": 50,

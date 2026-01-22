@@ -73,7 +73,7 @@ After deployment, verify the symlinks:
 
 ```bash
 ls -la ~/.claude/hooks/
-ls -la ~/.claude/skills/
+ls -la ${CLAUDE_PLUGIN_ROOT}/skills/
 ls -la ~/.claude/commands/
 ls -la ~/.claude/agent-definitions/
 ```
@@ -173,7 +173,7 @@ Common Python modules used across hooks and skills.
 
 ### Skills not found
 
-1. Verify symlinks: `ls -la ~/.claude/skills/`
+1. Verify symlinks: `ls -la ${CLAUDE_PLUGIN_ROOT}/skills/`
 2. Check Python path includes the skill directory
 3. Ensure Poetry venv is linked: `ls -la ~/.claude/lib/onex/.venv`
 

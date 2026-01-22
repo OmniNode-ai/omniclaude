@@ -32,22 +32,22 @@ Format matches the established deep dive pattern (see `/Users/jonah/Code/omni_sa
 
 ```bash
 # Today's deep dive (display only)
-~/.claude/skills/omniclaude/linear-insights/deep-dive
+${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/linear-insights/deep-dive
 
 # Specific date
-~/.claude/skills/omniclaude/linear-insights/deep-dive --date 2025-12-09
+${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/linear-insights/deep-dive --date 2025-12-09
 
 # Last N days (for weekly summary)
-~/.claude/skills/omniclaude/linear-insights/deep-dive --days 7
+${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/linear-insights/deep-dive --days 7
 
 # Save to default directory (omni_save)
-~/.claude/skills/omniclaude/linear-insights/deep-dive --save
+${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/linear-insights/deep-dive --save
 
 # Save to custom directory
-~/.claude/skills/omniclaude/linear-insights/deep-dive --save --output-dir ~/reports
+${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/linear-insights/deep-dive --save --output-dir ~/reports
 
 # JSON output for processing
-~/.claude/skills/omniclaude/linear-insights/deep-dive --json
+${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/linear-insights/deep-dive --json
 ```
 
 ### Configuration
@@ -181,16 +181,16 @@ Calculates project velocity and estimates time to completion for milestones.
 
 ```bash
 # Estimate for MVP project
-~/.claude/skills/omniclaude/linear-insights/velocity-estimate --project "MVP"
+${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/linear-insights/velocity-estimate --project "MVP"
 
 # All milestones overview
-~/.claude/skills/omniclaude/linear-insights/velocity-estimate --all
+${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/linear-insights/velocity-estimate --all
 
 # Include confidence intervals
-~/.claude/skills/omniclaude/linear-insights/velocity-estimate --project "MVP" --confidence
+${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/linear-insights/velocity-estimate --project "MVP" --confidence
 
 # JSON output
-~/.claude/skills/omniclaude/linear-insights/velocity-estimate --project "Beta" --json
+${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/linear-insights/velocity-estimate --project "Beta" --json
 ```
 
 ### Metrics Calculated
@@ -257,10 +257,10 @@ Tracks historical estimation accuracy to improve future estimates.
 
 ```bash
 # Show accuracy for completed milestones
-~/.claude/skills/omniclaude/linear-insights/estimation-accuracy
+${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/linear-insights/estimation-accuracy
 
 # Track specific project
-~/.claude/skills/omniclaude/linear-insights/estimation-accuracy --project "MVP"
+${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/linear-insights/estimation-accuracy --project "MVP"
 ```
 
 ### Metrics
@@ -357,18 +357,18 @@ def calculate_velocity(issues_completed, period_days):
 
 ## Skills Location
 
-**Claude Code Access**: `~/.claude/skills/omniclaude/linear-insights/`
+**Claude Code Access**: `${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/linear-insights/`
 
 **Executables**:
-- `~/.claude/skills/omniclaude/linear-insights/deep-dive` - Daily deep dive generator
-- `~/.claude/skills/omniclaude/linear-insights/velocity-estimate` - Velocity and ETA calculator
-- `~/.claude/skills/omniclaude/linear-insights/estimation-accuracy` - Estimation tracking
+- `${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/linear-insights/deep-dive` - Daily deep dive generator
+- `${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/linear-insights/velocity-estimate` - Velocity and ETA calculator
+- `${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/linear-insights/estimation-accuracy` - Estimation tracking
 
 ---
 
 ## See Also
 
 - Linear MCP tools: `mcp__linear-server__*`
-- Linear ticket skills: `~/.claude/skills/omniclaude/linear/`
-- PR review skills: `~/.claude/skills/omniclaude/pr-review/`
+- Linear ticket skills: `${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/linear/`
+- PR review skills: `${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/pr-review/`
 - Deep dive reference: `/Users/jonah/Code/omni_save/DECEMBER_9_2025_DEEP_DIVE.md`

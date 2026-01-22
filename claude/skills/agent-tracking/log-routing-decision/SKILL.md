@@ -31,7 +31,7 @@ This skill logs agent routing decisions for tracking, observability, and machine
 **How to Use (Kafka)**:
 
 ```bash
-python3 ~/.claude/skills/agent-tracking/log-routing-decision/execute_kafka.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/agent-tracking/log-routing-decision/execute_kafka.py \
   --agent "${SELECTED_AGENT}" \
   --confidence ${CONFIDENCE_SCORE} \
   --strategy "${ROUTING_STRATEGY}" \
@@ -52,7 +52,7 @@ python3 ~/.claude/skills/agent-tracking/log-routing-decision/execute_kafka.py \
 
 **Example (Kafka)**:
 ```bash
-python3 ~/.claude/skills/agent-tracking/log-routing-decision/execute_kafka.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/agent-tracking/log-routing-decision/execute_kafka.py \
   --agent "agent-performance" \
   --confidence 0.92 \
   --strategy "enhanced_fuzzy_matching" \
@@ -77,7 +77,7 @@ python3 ~/.claude/skills/agent-tracking/log-routing-decision/execute_kafka.py \
 **How to Use (Direct DB)**:
 
 ```bash
-python3 ~/.claude/skills/agent-tracking/log-routing-decision/execute.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/agent-tracking/log-routing-decision/execute.py \
   --agent "${SELECTED_AGENT}" \
   --confidence ${CONFIDENCE_SCORE} \
   --strategy "${ROUTING_STRATEGY}" \
@@ -89,7 +89,7 @@ python3 ~/.claude/skills/agent-tracking/log-routing-decision/execute.py \
 
 **Example (Direct DB)**:
 ```bash
-python3 ~/.claude/skills/agent-tracking/log-routing-decision/execute.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/agent-tracking/log-routing-decision/execute.py \
   --agent "agent-performance" \
   --confidence 0.92 \
   --strategy "enhanced_fuzzy_matching" \
@@ -117,10 +117,10 @@ Optional fields:
 
 ## Skills Location
 
-**Claude Code Access**: `~/.claude/skills/` (symlinked to repository)
+**Claude Code Access**: `${CLAUDE_PLUGIN_ROOT}/skills/` (symlinked to repository)
 **Repository Source**: `skills/`
 
-Skills are version-controlled in the repository and symlinked to `~/.claude/skills/` so Claude Code can access them.
+Skills are version-controlled in the repository and symlinked to `${CLAUDE_PLUGIN_ROOT}/skills/` so Claude Code can access them.
 
 ## Required Environment
 
@@ -129,7 +129,7 @@ Skills are version-controlled in the repository and symlinked to `~/.claude/skil
 - kafka-python package: `pip install kafka-python`
 
 **For Direct DB Version**:
-- PostgreSQL connection via `~/.claude/skills/_shared/db_helper.py`
+- PostgreSQL connection via `${CLAUDE_PLUGIN_ROOT}/skills/_shared/db_helper.py`
 - Database: `omninode_bridge` on localhost:5436
 - Credentials: Set in db_helper.py
 

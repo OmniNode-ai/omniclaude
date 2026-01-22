@@ -14,19 +14,19 @@ Execute the deep-dive skill with appropriate options:
 
 ```bash
 # Today's analysis (display instructions)
-~/.claude/skills/linear-insights/deep-dive
+${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/deep-dive
 
 # Specific date
-~/.claude/skills/linear-insights/deep-dive --date 2025-12-09
+${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/deep-dive --date 2025-12-09
 
 # Weekly summary (last 7 days)
-~/.claude/skills/linear-insights/deep-dive --days 7
+${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/deep-dive --days 7
 
 # Generate mode - outputs step-by-step MCP tool call instructions
-~/.claude/skills/linear-insights/deep-dive --generate
+${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/deep-dive --generate
 
 # JSON output for programmatic processing
-~/.claude/skills/linear-insights/deep-dive --generate --json
+${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/deep-dive --generate --json
 ```
 
 ### 2. Execute MCP Tool Calls

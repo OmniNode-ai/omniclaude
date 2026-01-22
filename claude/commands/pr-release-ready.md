@@ -12,7 +12,7 @@
 
 1. **Fetch collated issues** (including nitpicks):
    ```bash
-   ~/.claude/skills/omniclaude/pr-review/collate-issues "${1:-}" --parallel-solve-format --include-nitpicks 2>&1
+   ${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/pr-review/collate-issues "${1:-}" --parallel-solve-format --include-nitpicks 2>&1
    ```
 
 2. **Extract all actionable issues**:

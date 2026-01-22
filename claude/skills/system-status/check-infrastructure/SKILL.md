@@ -30,14 +30,14 @@ This skill verifies connectivity and collects basic health metrics from the thre
 
 ```bash
 # Check all components (basic stats)
-python3 ~/.claude/skills/system-status/check-infrastructure/execute.py
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-infrastructure/execute.py
 
 # Check specific components
-python3 ~/.claude/skills/system-status/check-infrastructure/execute.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-infrastructure/execute.py \
   --components kafka,postgres
 
 # Include detailed statistics
-python3 ~/.claude/skills/system-status/check-infrastructure/execute.py --detailed
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-infrastructure/execute.py --detailed
 ```
 
 ## Arguments
@@ -118,19 +118,19 @@ python3 ~/.claude/skills/system-status/check-infrastructure/execute.py --detaile
 
 **Check only Kafka and PostgreSQL**:
 ```bash
-python3 ~/.claude/skills/system-status/check-infrastructure/execute.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-infrastructure/execute.py \
   --components kafka,postgres
 ```
 
 **Get detailed Qdrant vector counts**:
 ```bash
-python3 ~/.claude/skills/system-status/check-infrastructure/execute.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-infrastructure/execute.py \
   --components qdrant --detailed
 ```
 
 **Quick connectivity test for all services**:
 ```bash
-python3 ~/.claude/skills/system-status/check-infrastructure/execute.py | jq -r 'to_entries[] | "\(.key): \(.value.status)"'
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-infrastructure/execute.py | jq -r 'to_entries[] | "\(.key): \(.value.status)"'
 # Output:
 # kafka: connected
 # postgres: connected

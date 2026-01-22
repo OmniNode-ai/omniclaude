@@ -117,26 +117,26 @@ Use when task benefits from:
 
 ### Linear Ticket Management (via MCP)
 
-**Location**: `~/.claude/skills/linear/`
+**Location**: `${CLAUDE_PLUGIN_ROOT}/skills/linear/`
 
 **Available Operations**:
 1. **Create Ticket** - Create tickets with requirements and definition of done
    - Use `mcp__linear-server__create_issue` directly
-   - Or reference: `~/.claude/skills/linear/create-ticket` for examples
+   - Or reference: `${CLAUDE_PLUGIN_ROOT}/skills/linear/create-ticket` for examples
    - Required: Title, team
    - Optional: Requirements, DoD, priority, assignee, labels, project
 
 2. **Update Ticket** - Update status, assignee, or description
    - Use `mcp__linear-server__update_issue` directly
-   - Or reference: `~/.claude/skills/linear/update-ticket` for examples
+   - Or reference: `${CLAUDE_PLUGIN_ROOT}/skills/linear/update-ticket` for examples
 
 3. **List Tickets** - Filter tickets by team, assignee, status, labels
    - Use `mcp__linear-server__list_issues` directly
-   - Or reference: `~/.claude/skills/linear/list-tickets` for examples
+   - Or reference: `${CLAUDE_PLUGIN_ROOT}/skills/linear/list-tickets` for examples
 
 4. **Get Ticket** - Fetch complete ticket details
    - Use `mcp__linear-server__get_issue` directly
-   - Or reference: `~/.claude/skills/linear/get-ticket` for examples
+   - Or reference: `${CLAUDE_PLUGIN_ROOT}/skills/linear/get-ticket` for examples
 
 ### Automatic Task Status Tracking
 
@@ -242,23 +242,23 @@ mcp__linear-server__create_issue(
 
 ### PR Review System
 
-**Location**: `~/.claude/skills/omniclaude/pr-review/`
+**Location**: `${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/pr-review/`
 
 **Available Scripts**:
 
 1. **fetch-pr-data** - Fetch all feedback from 4 GitHub endpoints
-   - Script: `~/.claude/skills/omniclaude/pr-review/fetch-pr-data <PR>`
+   - Script: `${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/pr-review/fetch-pr-data <PR>`
    - Returns JSON with reviews, inline comments, PR comments, issue comments
    - **Critical**: Includes Claude Code bot reviews from issue comments endpoint
 
 2. **review-pr** - Comprehensive review with priority organization
-   - Script: `~/.claude/skills/omniclaude/pr-review/review-pr <PR> [--strict] [--json]`
+   - Script: `${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/pr-review/review-pr <PR> [--strict] [--json]`
    - Categorizes issues: Critical, Major, Minor, Nit
    - Generates markdown report with merge requirements
    - Strict mode available for CI/CD (`--strict`)
 
 3. **pr-review-production** (NEW) - Production-grade review wrapper
-   - Script: `~/.claude/skills/omniclaude/pr-review/pr-review-production <PR> [OPTIONS]`
+   - Script: `${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/pr-review/pr-review-production <PR> [OPTIONS]`
    - **Enforces strict production standards** (all Critical/Major/Minor MUST be resolved)
    - Optional Linear ticket creation for each issue
    - Production-ready output formatting
@@ -285,18 +285,18 @@ mcp__linear-server__create_issue(
 
 ```bash
 # Standard review
-~/.claude/skills/omniclaude/pr-review/review-pr 22
+${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/pr-review/review-pr 22
 
 # Production review (stricter)
-~/.claude/skills/omniclaude/pr-review/pr-review-production 22
+${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/pr-review/pr-review-production 22
 
 # Production review with Linear ticket creation
-~/.claude/skills/omniclaude/pr-review/pr-review-production 22 \
+${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/pr-review/pr-review-production 22 \
   --create-linear-tickets \
   --team 9bdff6a3-f4ef-4ff7-b29a-6c4cf44371e6
 
 # CI/CD integration (exits 2 if issues found)
-~/.claude/skills/omniclaude/pr-review/pr-review-production 22 --json
+${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/pr-review/pr-review-production 22 --json
 ```
 
 **Workflow - PR Review to Linear Tickets**:
@@ -310,7 +310,7 @@ mcp__linear-server__create_issue(
 
 ### When to Use Skills vs Direct MCP
 
-**Use Skills** (scripts at `~/.claude/skills/`):
+**Use Skills** (scripts at `${CLAUDE_PLUGIN_ROOT}/skills/`):
 - When you need examples or documentation
 - When wrapping multiple MCP calls (e.g., PR review orchestration)
 - When adding business logic (e.g., priority classification)

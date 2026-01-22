@@ -28,13 +28,13 @@ Comprehensive system diagnostics to identify and diagnose problems across all co
 ## How to Use
 
 ```bash
-python3 ~/.claude/skills/system-status/diagnose-issues/execute.py
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/diagnose-issues/execute.py
 ```
 
 ### Optional Arguments
 
 ```bash
-python3 ~/.claude/skills/system-status/diagnose-issues/execute.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/diagnose-issues/execute.py \
   --severity critical,warning \
   --format text
 ```

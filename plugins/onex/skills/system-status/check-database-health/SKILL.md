@@ -18,7 +18,7 @@ Monitor PostgreSQL database health, activity, and performance.
 ## How to Use
 
 ```bash
-python3 ~/.claude/skills/system-status/check-database-health/execute.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-database-health/execute.py \
   --tables agent_manifest_injections,agent_routing_decisions
 ```
 

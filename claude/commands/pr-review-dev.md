@@ -8,7 +8,7 @@
 
 1. **Fetch and collate all issues** (PR review + CI failures):
    ```bash
-   ~/.claude/skills/omniclaude/pr-review/collate-issues-with-ci "${1:-}" 2>&1
+   ${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/pr-review/collate-issues-with-ci "${1:-}" 2>&1
    ```
 
 2. **Automatically fire /parallel-solve** with the collated output (excluding ⚪ NITPICK sections)
@@ -26,7 +26,7 @@
 **Steps**:
 
 1. **Fetch collated issues**:
-   - Run the unified helper script: `~/.claude/skills/omniclaude/pr-review/collate-issues-with-ci "${1:-}" 2>&1`
+   - Run the unified helper script: `${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/pr-review/collate-issues-with-ci "${1:-}" 2>&1`
    - Save the output
 
 2. **Extract non-nitpick issues**:
@@ -57,7 +57,7 @@ For more control over each step, follow the detailed workflow below:
 Execute the collate-issues helper to get PR review issues in /parallel-solve-ready format:
 
 ```bash
-~/.claude/skills/omniclaude/pr-review/collate-issues "${1:-}" --parallel-solve-format 2>&1
+${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/pr-review/collate-issues "${1:-}" --parallel-solve-format 2>&1
 ```
 
 **Save this output** - we'll need it for Step 3.
@@ -79,13 +79,13 @@ The collate-issues command supports filtering issues by their resolution status:
 **Examples with resolution filtering**:
 ```bash
 # Default: show all issues
-~/.claude/skills/omniclaude/pr-review/collate-issues "${1:-}" --parallel-solve-format
+${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/pr-review/collate-issues "${1:-}" --parallel-solve-format
 
 # Only show open issues (recommended for fixing)
-~/.claude/skills/omniclaude/pr-review/collate-issues "${1:-}" --parallel-solve-format --hide-resolved
+${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/pr-review/collate-issues "${1:-}" --parallel-solve-format --hide-resolved
 
 # Only show resolved issues (for verification)
-~/.claude/skills/omniclaude/pr-review/collate-issues "${1:-}" --show-resolved-only
+${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/pr-review/collate-issues "${1:-}" --show-resolved-only
 ```
 
 **When to use each**:
@@ -100,7 +100,7 @@ The collate-issues command supports filtering issues by their resolution status:
 Execute the ci-quick-review helper to get CI failure data in JSON format:
 
 ```bash
-~/.claude/skills/omniclaude/ci-failures/ci-quick-review --json "${1:-}" 2>&1
+${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/ci-failures/ci-quick-review --json "${1:-}" 2>&1
 ```
 
 **What this returns**:
@@ -204,7 +204,7 @@ Use the unified helper script that combines both PR review issues and CI failure
 
 ```bash
 # Combines PR review + CI failures in one command
-~/.claude/skills/omniclaude/pr-review/collate-issues-with-ci "${1:-}" 2>&1
+${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/pr-review/collate-issues-with-ci "${1:-}" 2>&1
 ```
 
 This script:
@@ -219,19 +219,19 @@ This script:
 
 ```bash
 # Step 1: PR review issues (all issues)
-~/.claude/skills/omniclaude/pr-review/collate-issues "${1:-}" --parallel-solve-format
+${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/pr-review/collate-issues "${1:-}" --parallel-solve-format
 
 # Step 1 (alt): PR review issues (only open issues - recommended)
-~/.claude/skills/omniclaude/pr-review/collate-issues "${1:-}" --parallel-solve-format --hide-resolved
+${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/pr-review/collate-issues "${1:-}" --parallel-solve-format --hide-resolved
 
 # Step 1 (alt): PR review issues (only resolved - for verification)
-~/.claude/skills/omniclaude/pr-review/collate-issues "${1:-}" --show-resolved-only
+${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/pr-review/collate-issues "${1:-}" --show-resolved-only
 
 # Step 2: CI failures (JSON)
-~/.claude/skills/omniclaude/ci-failures/ci-quick-review --json "${1:-}"
+${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/ci-failures/ci-quick-review --json "${1:-}"
 
 # Step 2 (alternative): CI failures (human-readable)
-~/.claude/skills/omniclaude/ci-failures/ci-quick-review "${1:-}"
+${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/ci-failures/ci-quick-review "${1:-}"
 ```
 
 **Resolution Filtering** (collate-issues):

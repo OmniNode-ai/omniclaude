@@ -13,7 +13,7 @@ Comprehensive ticket management for Linear with automatic requirements and defin
 
 ### ❌ WRONG - Running tools directly:
 ```
-Bash(~/.claude/skills/linear/create-ticket "Fix bug")
+Bash(${CLAUDE_PLUGIN_ROOT}/skills/linear/create-ticket "Fix bug")
 mcp__linear-server__create_issue(...)
 ```
 
@@ -28,7 +28,7 @@ Task(
     Team: Engineering
 
     Use Linear MCP tools or skill scripts:
-    - ~/.claude/skills/linear/create-ticket
+    - ${CLAUDE_PLUGIN_ROOT}/skills/linear/create-ticket
     - mcp__linear-server__create_issue
 
     Include:
@@ -61,20 +61,20 @@ This skill package provides 5 sub-skills:
 
 ```bash
 # Create a ticket
-~/.claude/skills/linear/create-ticket "Implement DLQ for agent events" \
+${CLAUDE_PLUGIN_ROOT}/skills/linear/create-ticket "Implement DLQ for agent events" \
   --team "Engineering" \
   --priority "high" \
   --requirements "Must handle retry logic|Must sanitize secrets|Must log to PostgreSQL" \
   --dod "Unit tests passing|Integration tests passing|Documentation updated"
 
 # List tickets
-~/.claude/skills/linear/list-tickets --team "Engineering" --state "In Progress"
+${CLAUDE_PLUGIN_ROOT}/skills/linear/list-tickets --team "Engineering" --state "In Progress"
 
 # Update ticket status
-~/.claude/skills/linear/update-ticket TEAM-123 --state "In Progress"
+${CLAUDE_PLUGIN_ROOT}/skills/linear/update-ticket TEAM-123 --state "In Progress"
 
 # Get ticket details
-~/.claude/skills/linear/get-ticket TEAM-123
+${CLAUDE_PLUGIN_ROOT}/skills/linear/get-ticket TEAM-123
 ```
 
 ## Ticket Requirements
@@ -133,19 +133,19 @@ Claude Code bot posts reviews to the **issue_comments** endpoint, which is often
 
 ```bash
 # Get all critical/major issues for Linear tickets
-~/.claude/skills/linear/pr_integration.py 123
+${CLAUDE_PLUGIN_ROOT}/skills/linear/pr_integration.py 123
 
 # Only Claude bot comments (prioritized)
-~/.claude/skills/linear/pr_integration.py 123 --claude-only
+${CLAUDE_PLUGIN_ROOT}/skills/linear/pr_integration.py 123 --claude-only
 
 # Critical issues + Claude comments
-~/.claude/skills/linear/pr_integration.py 123 --critical-only
+${CLAUDE_PLUGIN_ROOT}/skills/linear/pr_integration.py 123 --critical-only
 
 # Check merge status
-~/.claude/skills/linear/pr_integration.py 123 --status-only
+${CLAUDE_PLUGIN_ROOT}/skills/linear/pr_integration.py 123 --status-only
 
 # Human-readable summary
-~/.claude/skills/linear/pr_integration.py 123 --format summary
+${CLAUDE_PLUGIN_ROOT}/skills/linear/pr_integration.py 123 --format summary
 ```
 
 ### Python API
@@ -229,16 +229,16 @@ Ensure Linear MCP is connected:
 
 ## Skills Location
 
-**Claude Code Access**: `~/.claude/skills/linear/`
+**Claude Code Access**: `${CLAUDE_PLUGIN_ROOT}/skills/linear/`
 **Executables**:
-- `~/.claude/skills/linear/create-ticket`
-- `~/.claude/skills/linear/update-ticket`
-- `~/.claude/skills/linear/list-tickets`
-- `~/.claude/skills/linear/get-ticket`
-- `~/.claude/skills/linear/pr_integration.py` (Pydantic-backed PR integration)
+- `${CLAUDE_PLUGIN_ROOT}/skills/linear/create-ticket`
+- `${CLAUDE_PLUGIN_ROOT}/skills/linear/update-ticket`
+- `${CLAUDE_PLUGIN_ROOT}/skills/linear/list-tickets`
+- `${CLAUDE_PLUGIN_ROOT}/skills/linear/get-ticket`
+- `${CLAUDE_PLUGIN_ROOT}/skills/linear/pr_integration.py` (Pydantic-backed PR integration)
 
 ## See Also
 
 - Linear MCP tools (mcp__linear-server__*)
 - Event alignment plan: `/docs/events/EVENT_ALIGNMENT_PLAN.md`
-- PR review skills: `~/.claude/skills/pr-review/`
+- PR review skills: `${CLAUDE_PLUGIN_ROOT}/skills/pr-review/`

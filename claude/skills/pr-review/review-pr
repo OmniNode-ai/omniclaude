@@ -91,8 +91,9 @@ check_dependencies() {
     fi
 
     # Check if fetch-pr-data exists
-    if [[ ! -x "$HOME/.claude/skills/pr-review/fetch-pr-data" ]]; then
-        missing_deps+=("fetch-pr-data (run: chmod +x ~/.claude/skills/pr-review/fetch-pr-data)")
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [[ ! -x "$script_dir/fetch-pr-data" ]]; then
+        missing_deps+=("fetch-pr-data (not found at $script_dir/fetch-pr-data)")
     fi
 
     if [ ${#missing_deps[@]} -ne 0 ]; then
@@ -356,8 +357,9 @@ main() {
     echo -e "${BLUE}[PR-REVIEW]${NC} Fetching PR #${pr_number} data..."
 
     # Fetch all PR data using fetch-pr-data skill
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     local pr_data
-    pr_data=$("$HOME/.claude/skills/pr-review/fetch-pr-data" "$pr_number" 2>/dev/null) || {
+    pr_data=$("$script_dir/fetch-pr-data" "$pr_number" 2>/dev/null) || {
         echo -e "${RED}✗${NC} Failed to fetch PR data"
         exit 3
     }

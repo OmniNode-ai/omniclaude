@@ -49,7 +49,7 @@ Hook/Agent receives recommendations
 **How to Use (Kafka)**:
 
 ```bash
-python3 ~/.claude/skills/routing/request-agent-routing/execute_kafka.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/routing/request-agent-routing/execute_kafka.py \
   --user-request "${USER_REQUEST}" \
   --max-recommendations 3 \
   --timeout-ms 5000 \
@@ -67,7 +67,7 @@ python3 ~/.claude/skills/routing/request-agent-routing/execute_kafka.py \
 
 **Example (Kafka)**:
 ```bash
-python3 ~/.claude/skills/routing/request-agent-routing/execute_kafka.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/routing/request-agent-routing/execute_kafka.py \
   --user-request "optimize my database queries" \
   --max-recommendations 3 \
   --timeout-ms 5000 \
@@ -76,7 +76,7 @@ python3 ~/.claude/skills/routing/request-agent-routing/execute_kafka.py \
 
 **With Context**:
 ```bash
-python3 ~/.claude/skills/routing/request-agent-routing/execute_kafka.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/routing/request-agent-routing/execute_kafka.py \
   --user-request "optimize my database queries" \
   --context '{"domain": "database_optimization", "current_file": "api/database.py"}' \
   --max-recommendations 3
@@ -102,7 +102,7 @@ python3 ~/.claude/skills/routing/request-agent-routing/execute_kafka.py \
 **How to Use (Direct)**:
 
 ```bash
-python3 ~/.claude/skills/routing/request-agent-routing/execute_direct.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/routing/request-agent-routing/execute_direct.py \
   --user-request "${USER_REQUEST}" \
   --max-recommendations 3 \
   --correlation-id "${CORRELATION_ID}"
@@ -110,7 +110,7 @@ python3 ~/.claude/skills/routing/request-agent-routing/execute_direct.py \
 
 **Example (Direct)**:
 ```bash
-python3 ~/.claude/skills/routing/request-agent-routing/execute_direct.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/routing/request-agent-routing/execute_direct.py \
   --user-request "optimize my database queries" \
   --max-recommendations 3 \
   --correlation-id "ad12146a-b7d0-4a47-86bf-7ec298ce2c81"
@@ -211,10 +211,10 @@ python3 ~/.claude/skills/routing/request-agent-routing/execute_direct.py \
 
 ## Skills Location
 
-**Claude Code Access**: `~/.claude/skills/` (symlinked to repository)
+**Claude Code Access**: `${CLAUDE_PLUGIN_ROOT}/skills/` (symlinked to repository)
 **Repository Source**: `skills/routing/request-agent-routing/`
 
-Skills are version-controlled in the repository and symlinked to `~/.claude/skills/` so Claude Code can access them.
+Skills are version-controlled in the repository and symlinked to `${CLAUDE_PLUGIN_ROOT}/skills/` so Claude Code can access them.
 
 ## Required Environment
 
@@ -251,7 +251,7 @@ CORRELATION_ID=$(uuidgen)
 USER_REQUEST="optimize my database queries"
 
 # Request routing via Kafka (primary)
-ROUTING_RESULT=$(python3 ~/.claude/skills/routing/request-agent-routing/execute_kafka.py \
+ROUTING_RESULT=$(python3 ${CLAUDE_PLUGIN_ROOT}/skills/routing/request-agent-routing/execute_kafka.py \
   --user-request "$USER_REQUEST" \
   --max-recommendations 3 \
   --correlation-id "$CORRELATION_ID")
@@ -266,7 +266,7 @@ echo "   Confidence: $CONFIDENCE"
 echo "   Reason: $REASON"
 
 # Log routing decision
-python3 ~/.claude/skills/agent-tracking/log-routing-decision/execute_kafka.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/agent-tracking/log-routing-decision/execute_kafka.py \
   --agent "$SELECTED_AGENT" \
   --confidence "$CONFIDENCE" \
   --strategy "enhanced_fuzzy_matching" \

@@ -14,25 +14,25 @@ Execute the skill with desired options:
 
 ```bash
 # Default: 5 suggestions for current repo context
-~/.claude/skills/linear-insights/suggest-work
+${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/suggest-work
 
 # Custom count
-~/.claude/skills/linear-insights/suggest-work --count 10
+${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/suggest-work --count 10
 
 # Specific project
-~/.claude/skills/linear-insights/suggest-work --project Beta
+${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/suggest-work --project Beta
 
 # Override repo context
-~/.claude/skills/linear-insights/suggest-work --repo omnibase_core
+${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/suggest-work --repo omnibase_core
 
 # Filter by label
-~/.claude/skills/linear-insights/suggest-work --label bug
+${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/suggest-work --label bug
 
 # JSON output
-~/.claude/skills/linear-insights/suggest-work --json
+${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/suggest-work --json
 
 # Get execution prompt only (pipeable)
-~/.claude/skills/linear-insights/suggest-work --execute
+${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/suggest-work --execute
 ```
 
 ### 2. Review the Generated Query

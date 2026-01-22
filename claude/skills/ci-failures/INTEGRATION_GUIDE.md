@@ -19,7 +19,7 @@ User Command: /ci-failures 33
          ↓
 ┌────────────────────────────────────────────────────────┐
 │ STEP 1: Fetch CI Data                                  │
-│ ~/.claude/skills/ci-failures/fetch-ci-data 33         │
+│ ${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/fetch-ci-data 33         │
 │                                                         │
 │ • Fetches all workflow runs and failed jobs           │
 │ • Classifies each error (recognized vs unrecognized)   │
@@ -89,7 +89,7 @@ User Command: /ci-failures 33
 
 ```bash
 # Fetch CI data (prepares research queries)
-~/.claude/skills/ci-failures/fetch-ci-data 33 --no-cache
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/fetch-ci-data 33 --no-cache
 
 # Output includes research.search_queries for unrecognized errors
 ```
@@ -104,7 +104,7 @@ User Command: /ci-failures 33
 
 ```bash
 # Quick summary without web research
-~/.claude/skills/ci-failures/ci-quick-review 33
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review 33
 ```
 
 **Use when**:
@@ -378,7 +378,7 @@ These errors are cryptic and benefit from web research:
 **Fix**:
 ```bash
 # Check which errors were found
-~/.claude/skills/ci-failures/fetch-ci-data 33 2>&1 | grep "Unrecognized"
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/fetch-ci-data 33 2>&1 | grep "Unrecognized"
 
 # Should see messages like:
 # [*] 🔍 Unrecognized error detected, preparing research queries...
@@ -418,7 +418,7 @@ These errors are cryptic and benefit from web research:
 echo "test_example.py::test_function FAILED" > /tmp/test_output.txt
 
 # Run fetch-ci-data on a PR with pytest failures
-~/.claude/skills/ci-failures/fetch-ci-data 33 | jq '.summary.researched'
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/fetch-ci-data 33 | jq '.summary.researched'
 # Expected: 0 (pytest is recognized)
 ```
 
@@ -426,11 +426,11 @@ echo "test_example.py::test_function FAILED" > /tmp/test_output.txt
 
 ```bash
 # Run fetch-ci-data on a PR with custom validation step
-~/.claude/skills/ci-failures/fetch-ci-data 33 | jq '.summary.researched'
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/fetch-ci-data 33 | jq '.summary.researched'
 # Expected: >0 (custom steps trigger research)
 
 # View research queries
-~/.claude/skills/ci-failures/fetch-ci-data 33 | \
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/fetch-ci-data 33 | \
   jq '.failures[] | select(.research != null) | .research.search_queries'
 ```
 
@@ -478,7 +478,7 @@ To reduce unnecessary research, add common patterns to `is_error_recognized()`:
 
 ```bash
 # Edit fetch-ci-data script
-nano ~/.claude/skills/ci-failures/fetch-ci-data
+nano ${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/fetch-ci-data
 
 # Add pattern to is_error_recognized() function:
 is_error_recognized() {
@@ -500,7 +500,7 @@ To improve research query quality, add technology detection:
 
 ```bash
 # Edit fetch-ci-data script
-nano ~/.claude/skills/ci-failures/fetch-ci-data
+nano ${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/fetch-ci-data
 
 # Add to extract_error_context() function:
 extract_error_context() {

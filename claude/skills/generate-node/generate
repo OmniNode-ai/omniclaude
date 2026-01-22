@@ -9,11 +9,11 @@
 # - Error handling
 #
 # Usage:
-#   ~/.claude/skills/generate-node/generate "PROMPT" [OPTIONS]
+#   ${CLAUDE_PLUGIN_ROOT}/skills/generate-node/generate "PROMPT" [OPTIONS]
 #
 # Examples:
-#   ~/.claude/skills/generate-node/generate "Create PostgreSQL CRUD Effect"
-#   ~/.claude/skills/generate-node/generate "Create ML Orchestrator" --interactive
+#   ${CLAUDE_PLUGIN_ROOT}/skills/generate-node/generate "Create PostgreSQL CRUD Effect"
+#   ${CLAUDE_PLUGIN_ROOT}/skills/generate-node/generate "Create ML Orchestrator" --interactive
 #
 
 set -euo pipefail

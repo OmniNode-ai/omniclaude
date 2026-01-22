@@ -439,7 +439,7 @@ do_init() {
     md_echo "# OUTPUT CONFIGURATION"
     md_echo "# ============================================================================="
     md_echo "output:"
-    md_echo '  deep_dive_dir: "/Users/jonah/Code/omni_save"'
+    md_echo '  deep_dive_dir: "${HOME}/Code/omni_save"'
     md_echo '  snapshot_dir: ".cache/snapshots"'
     md_echo '  default_format: "markdown"'
     md_echo '```'

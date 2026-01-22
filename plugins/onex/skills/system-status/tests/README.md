@@ -40,7 +40,7 @@ tests/
 
 ```bash
 # Navigate to tests directory
-cd ~/.claude/skills/system-status/tests
+cd ${CLAUDE_PLUGIN_ROOT}/skills/system-status/tests
 
 # Run all tests
 ./run_tests.sh

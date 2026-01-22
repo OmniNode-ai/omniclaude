@@ -65,12 +65,13 @@ EOF
 check_dependencies() {
     local missing_deps=()
 
-    if [[ ! -x "$HOME/.claude/skills/pr-review/fetch-pr-data" ]]; then
-        missing_deps+=("fetch-pr-data (run: chmod +x ~/.claude/skills/pr-review/fetch-pr-data)")
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [[ ! -x "$script_dir/fetch-pr-data" ]]; then
+        missing_deps+=("fetch-pr-data (not found at $script_dir/fetch-pr-data)")
     fi
 
-    if [[ ! -x "$HOME/.claude/skills/pr-review/analyze-pr-comments" ]]; then
-        missing_deps+=("analyze-pr-comments (run: chmod +x ~/.claude/skills/pr-review/analyze-pr-comments)")
+    if [[ ! -x "$script_dir/analyze-pr-comments" ]]; then
+        missing_deps+=("analyze-pr-comments (not found at $script_dir/analyze-pr-comments)")
     fi
 
     if ! command -v jq &> /dev/null; then
@@ -256,7 +257,8 @@ main() {
     [[ "$use_cache" == false ]] && fetch_args+=("--no-cache")
 
     local pr_data
-    pr_data=$("$HOME/.claude/skills/pr-review/fetch-pr-data" "${fetch_args[@]}") || {
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    pr_data=$("$script_dir/fetch-pr-data" "${fetch_args[@]}") || {
         echo -e "${RED}✗${NC} Failed to fetch PR data" >&2
         exit 3
     }
@@ -268,7 +270,7 @@ main() {
     if [[ $total_comments -gt 1000 ]] && [[ -z "$limit" ]]; then
         echo -e "${YELLOW}⚠${NC} Large PR detected ($total_comments comments)" >&2
         echo -e "${YELLOW}⚠${NC} Re-fetching with auto-limit of 50 recent + all bot comments..." >&2
-        pr_data=$("$HOME/.claude/skills/pr-review/fetch-pr-data" "$pr_number" --limit 50 --no-cache) || {
+        pr_data=$("$script_dir/fetch-pr-data" "$pr_number" --limit 50 --no-cache) || {
             echo -e "${RED}✗${NC} Failed to re-fetch with limit" >&2
             exit 3
         }
@@ -279,7 +281,7 @@ main() {
     # Analyze comments (categorization) - uses pr_data from stdin
     echo -e "${BLUE}[PRODUCTION]${NC} Analyzing comments..." >&2
     local categorized
-    categorized=$(echo "$pr_data" | "$HOME/.claude/skills/pr-review/analyze-pr-comments") || {
+    categorized=$(echo "$pr_data" | "$script_dir/analyze-pr-comments") || {
         echo -e "${RED}✗${NC} Failed to analyze comments" >&2
         exit 3
     }

@@ -15,16 +15,16 @@ Copy-paste ready examples for integrating action logging into agents.
 
 ```bash
 # Basic usage (run from repository root)
-python3 ~/.claude/skills/action-logging/examples/basic_usage.py
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/action-logging/examples/basic_usage.py
 
 # Tool call patterns
-python3 ~/.claude/skills/action-logging/examples/tool_call_patterns.py
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/action-logging/examples/tool_call_patterns.py
 
 # Decision logging
-python3 ~/.claude/skills/action-logging/examples/decision_logging.py
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/action-logging/examples/decision_logging.py
 
 # Error handling
-python3 ~/.claude/skills/action-logging/examples/error_handling.py
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/action-logging/examples/error_handling.py
 ```
 
 ## Example Outputs

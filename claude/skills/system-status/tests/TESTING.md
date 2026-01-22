@@ -4,7 +4,7 @@
 
 ```bash
 # Navigate to tests directory
-cd ~/.claude/skills/system-status/tests
+cd ${CLAUDE_PLUGIN_ROOT}/skills/system-status/tests
 
 # Run all tests
 ./run_tests.sh
@@ -160,7 +160,7 @@ python3 test_summary.py
 
 ### All Tests
 ```bash
-cd ~/.claude/skills/system-status/tests
+cd ${CLAUDE_PLUGIN_ROOT}/skills/system-status/tests
 pytest -v
 ```
 
@@ -231,7 +231,7 @@ pytest --cov=.. --cov-report=xml --junit-xml=test-results.xml
 #!/bin/bash
 # .git/hooks/pre-commit
 
-cd ~/.claude/skills/system-status/tests
+cd ${CLAUDE_PLUGIN_ROOT}/skills/system-status/tests
 pytest --tb=short -q
 
 if [ $? -ne 0 ]; then

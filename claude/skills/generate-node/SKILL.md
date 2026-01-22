@@ -13,8 +13,8 @@ Fully automated ONEX node generation using the omninode_bridge codegen system. G
 
 ### ❌ WRONG - Running scripts directly:
 ```
-Bash(~/.claude/skills/generate-node/generate "Create PostgreSQL CRUD Effect")
-Bash(~/.claude/skills/generate-node/regenerate src/nodes/my_node)
+Bash(${CLAUDE_PLUGIN_ROOT}/skills/generate-node/generate "Create PostgreSQL CRUD Effect")
+Bash(${CLAUDE_PLUGIN_ROOT}/skills/generate-node/regenerate src/nodes/my_node)
 ```
 
 ### ✅ CORRECT - Dispatch to polymorphic-agent:
@@ -27,7 +27,7 @@ Task(
     Node Type: Effect
 
     Use the generate-node skill:
-    ~/.claude/skills/generate-node/generate 'Create PostgreSQL CRUD Effect node for user management with async operations'
+    ${CLAUDE_PLUGIN_ROOT}/skills/generate-node/generate 'Create PostgreSQL CRUD Effect node for user management with async operations'
 
     Options available:
     - --output-dir ./generated_nodes (default)
@@ -71,7 +71,7 @@ The codegen system provides **100% automated node generation** through an event-
 Use the Bash tool to execute:
 
 ```bash
-~/.claude/skills/generate-node/generate "<PROMPT>" [OPTIONS]
+${CLAUDE_PLUGIN_ROOT}/skills/generate-node/generate "<PROMPT>" [OPTIONS]
 ```
 
 ### Regenerate Existing Node (From Code)
@@ -79,7 +79,7 @@ Use the Bash tool to execute:
 To regenerate an existing node (useful for applying updated patterns or refactoring):
 
 ```bash
-~/.claude/skills/generate-node/regenerate <NODE_DIR> [OPTIONS]
+${CLAUDE_PLUGIN_ROOT}/skills/generate-node/regenerate <NODE_DIR> [OPTIONS]
 ```
 
 The regenerate script intelligently extracts a generation prompt by:
@@ -104,38 +104,38 @@ The regenerate script intelligently extracts a generation prompt by:
 
 ```bash
 # Basic usage - generate PostgreSQL CRUD Effect
-~/.claude/skills/generate-node/generate "Create PostgreSQL CRUD Effect node"
+${CLAUDE_PLUGIN_ROOT}/skills/generate-node/generate "Create PostgreSQL CRUD Effect node"
 
 # With custom output directory
-~/.claude/skills/generate-node/generate "Create ML inference Orchestrator" --output-dir ./my_nodes
+${CLAUDE_PLUGIN_ROOT}/skills/generate-node/generate "Create ML inference Orchestrator" --output-dir ./my_nodes
 
 # With node type hint and interactive mode
-~/.claude/skills/generate-node/generate "Create metrics aggregation Reducer" --node-type reducer --interactive
+${CLAUDE_PLUGIN_ROOT}/skills/generate-node/generate "Create metrics aggregation Reducer" --node-type reducer --interactive
 
 # With intelligence disabled (faster, less context)
-~/.claude/skills/generate-node/generate "Create simple logger Effect" --disable-intelligence
+${CLAUDE_PLUGIN_ROOT}/skills/generate-node/generate "Create simple logger Effect" --disable-intelligence
 
 # With AI quorum validation (multi-model consensus)
-~/.claude/skills/generate-node/generate "Create payment processing Orchestrator" --enable-quorum
+${CLAUDE_PLUGIN_ROOT}/skills/generate-node/generate "Create payment processing Orchestrator" --enable-quorum
 ```
 
 **Regenerate Existing Nodes:**
 
 ```bash
 # Regenerate node from existing code (extracts prompt automatically)
-~/.claude/skills/generate-node/regenerate src/omninode_bridge/nodes/llm_effect/v1_0_0/llm_effect_llm
+${CLAUDE_PLUGIN_ROOT}/skills/generate-node/regenerate src/omninode_bridge/nodes/llm_effect/v1_0_0/llm_effect_llm
 
 # Regenerate with custom output directory
-~/.claude/skills/generate-node/regenerate nodes/my_node --output-dir ./regenerated
+${CLAUDE_PLUGIN_ROOT}/skills/generate-node/regenerate nodes/my_node --output-dir ./regenerated
 
 # Regenerate with interactive mode
-~/.claude/skills/generate-node/regenerate ../other_repo/nodes/custom_node --interactive
+${CLAUDE_PLUGIN_ROOT}/skills/generate-node/regenerate ../other_repo/nodes/custom_node --interactive
 
 # Regenerate from node with README.md (fast - no Z.ai call)
-~/.claude/skills/generate-node/regenerate nodes/well_documented_node
+${CLAUDE_PLUGIN_ROOT}/skills/generate-node/regenerate nodes/well_documented_node
 
 # Regenerate from node without README (uses Z.ai code analysis)
-~/.claude/skills/generate-node/regenerate nodes/legacy_node --enable-intelligence
+${CLAUDE_PLUGIN_ROOT}/skills/generate-node/regenerate nodes/legacy_node --enable-intelligence
 ```
 
 ## Output
@@ -304,8 +304,8 @@ The skill provides comprehensive error handling:
 
 ## Skills Location
 
-**Claude Code Access**: `~/.claude/skills/generate-node/`
-**Executable**: `~/.claude/skills/generate-node/generate`
+**Claude Code Access**: `${CLAUDE_PLUGIN_ROOT}/skills/generate-node/`
+**Executable**: `${CLAUDE_PLUGIN_ROOT}/skills/generate-node/generate`
 **Repository**: `omninode_bridge` (see sibling directory)
 
 ## Integration with Other Tools
@@ -366,7 +366,7 @@ kcat -C -b 192.168.86.200:29092 -t node.generation.requested
 grep "<correlation_id>" /path/to/logs
 
 # Run with shorter timeout for debugging
-~/.claude/skills/generate-node/generate "Test node" --timeout 60
+${CLAUDE_PLUGIN_ROOT}/skills/generate-node/generate "Test node" --timeout 60
 ```
 
 ## Advanced Usage
@@ -378,7 +378,7 @@ Generate multiple nodes programmatically:
 ```bash
 # Generate multiple related nodes
 for node_desc in "User CRUD Effect" "Auth Middleware Effect" "Session Reducer"; do
-    ~/.claude/skills/generate-node/generate "$node_desc" --output-dir ./my_service_nodes
+    ${CLAUDE_PLUGIN_ROOT}/skills/generate-node/generate "$node_desc" --output-dir ./my_service_nodes
 done
 ```
 
@@ -391,7 +391,7 @@ import json
 
 def generate_node(prompt: str, output_dir: str = "./generated_nodes"):
     result = subprocess.run(
-        ["~/.claude/skills/generate-node/generate", prompt, "--output-dir", output_dir],
+        ["${CLAUDE_PLUGIN_ROOT}/skills/generate-node/generate", prompt, "--output-dir", output_dir],
         capture_output=True,
         text=True
     )

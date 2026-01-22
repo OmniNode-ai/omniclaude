@@ -13,8 +13,8 @@ Production-ready PR review system that fetches all feedback from GitHub, organiz
 
 ### ❌ WRONG - Running bash directly:
 ```
-Bash(~/.claude/skills/omniclaude/pr-review/collate-issues 30)
-Bash(~/.claude/skills/omniclaude/pr-review/pr-quick-review 22)
+Bash(${CLAUDE_PLUGIN_ROOT}/skills/pr-review/collate-issues 30)
+Bash(${CLAUDE_PLUGIN_ROOT}/skills/pr-review/pr-quick-review 22)
 ```
 
 ### ✅ CORRECT - Dispatch to polymorphic-agent:
@@ -23,11 +23,11 @@ Task(
   subagent_type="polymorphic-agent",
   description="PR review for #30",
   prompt="Review PR #30. Use the pr-review skill tools:
-    1. Run: ~/.claude/skills/omniclaude/pr-review/collate-issues 30
+    1. Run: ${CLAUDE_PLUGIN_ROOT}/skills/pr-review/collate-issues 30
     2. Analyze the output and categorize issues
     3. Report findings organized by priority (CRITICAL/MAJOR/MINOR/NIT)
 
-    Available tools in ~/.claude/skills/omniclaude/pr-review/:
+    Available tools in ${CLAUDE_PLUGIN_ROOT}/skills/pr-review/:
     - collate-issues <PR#> - Get all issues from PR
     - collate-issues-with-ci <PR#> - Get PR issues + CI failures
     - pr-quick-review <PR#> - Quick summary review
@@ -116,16 +116,16 @@ Task(
 
 ```bash
 # Quick review with smart defaults (saves to {REPO}/tmp/pr-review-22.md)
-~/.claude/skills/omniclaude/pr-review/pr-quick-review 22
+${CLAUDE_PLUGIN_ROOT}/skills/pr-review/pr-quick-review 22
 
 # Save to specific file
-~/.claude/skills/omniclaude/pr-review/pr-quick-review 22 --save ./my-review.md
+${CLAUDE_PLUGIN_ROOT}/skills/pr-review/pr-quick-review 22 --save ./my-review.md
 
 # JSON output for scripting
-~/.claude/skills/omniclaude/pr-review/pr-quick-review 22 --json > pr22.json
+${CLAUDE_PLUGIN_ROOT}/skills/pr-review/pr-quick-review 22 --json > pr22.json
 
 # CI/CD mode (fails if issues found)
-~/.claude/skills/omniclaude/pr-review/pr-quick-review 22 --strict
+${CLAUDE_PLUGIN_ROOT}/skills/pr-review/pr-quick-review 22 --strict
 ```
 
 **Benefits**:
@@ -209,7 +209,7 @@ fetch-pr-data 36 | analyze-pr-comments | jq '.summary'
 
 ```bash
 # Review PR with priority organization
-~/.claude/skills/omniclaude/pr-review/review-pr 22
+${CLAUDE_PLUGIN_ROOT}/skills/pr-review/review-pr 22
 
 # Output:
 # - Priority breakdown (Critical/Major/Minor/Nit)
@@ -222,7 +222,7 @@ fetch-pr-data 36 | analyze-pr-comments | jq '.summary'
 
 ```bash
 # Fail if any Critical/Major/Minor issues found
-~/.claude/skills/omniclaude/pr-review/review-pr 22 --strict
+${CLAUDE_PLUGIN_ROOT}/skills/pr-review/review-pr 22 --strict
 
 # Exit codes:
 #   0 - Ready to merge (only nits or no issues)
@@ -233,10 +233,10 @@ fetch-pr-data 36 | analyze-pr-comments | jq '.summary'
 
 ```bash
 # Save to specific file
-~/.claude/skills/omniclaude/pr-review/review-pr 22 --output-file ./tmp/pr22-review.md
+${CLAUDE_PLUGIN_ROOT}/skills/pr-review/review-pr 22 --output-file ./tmp/pr22-review.md
 
 # JSON output for programmatic processing
-~/.claude/skills/omniclaude/pr-review/review-pr 22 --json > pr22.json
+${CLAUDE_PLUGIN_ROOT}/skills/pr-review/review-pr 22 --json > pr22.json
 ```
 
 ### Production Review (NEW)
@@ -245,15 +245,15 @@ fetch-pr-data 36 | analyze-pr-comments | jq '.summary'
 
 ```bash
 # Production review (all Critical/Major/Minor MUST be resolved)
-~/.claude/skills/omniclaude/pr-review/pr-review-production 22
+${CLAUDE_PLUGIN_ROOT}/skills/pr-review/pr-review-production 22
 
 # Create Linear tickets for Critical and Major issues
-~/.claude/skills/omniclaude/pr-review/pr-review-production 22 \
+${CLAUDE_PLUGIN_ROOT}/skills/pr-review/pr-review-production 22 \
   --create-linear-tickets \
   --team 9bdff6a3-f4ef-4ff7-b29a-6c4cf44371e6
 
 # JSON output for CI/CD pipelines
-~/.claude/skills/omniclaude/pr-review/pr-review-production 22 --json
+${CLAUDE_PLUGIN_ROOT}/skills/pr-review/pr-review-production 22 --json
 
 # Exit codes:
 #   0 - Ready for production (all Critical/Major/Minor resolved)
@@ -275,7 +275,7 @@ fetch-pr-data 36 | analyze-pr-comments | jq '.summary'
 ```yaml
 - name: PR Review
   run: |
-    ~/.claude/skills/omniclaude/pr-review/review-pr ${{ github.event.pull_request.number }} --strict
+    ${CLAUDE_PLUGIN_ROOT}/skills/pr-review/review-pr ${{ github.event.pull_request.number }} --strict
 
     # Upload review artifact
     if [ -f ./tmp/pr-review-*.md ]; then
@@ -429,13 +429,13 @@ Issues are automatically classified based on keywords:
 
 ## Skills Location
 
-**Claude Code Access**: `~/.claude/skills/omniclaude/pr-review/`
+**Claude Code Access**: `${CLAUDE_PLUGIN_ROOT}/skills/pr-review/`
 **Executables**:
-- `~/.claude/skills/omniclaude/pr-review/pr-quick-review` - One-command quick review (RECOMMENDED)
-- `~/.claude/skills/omniclaude/pr-review/fetch-pr-data` - Fetch all PR data from 4 GitHub endpoints
-- `~/.claude/skills/omniclaude/pr-review/analyze-pr-comments` - Pre-process raw data into categorized analysis (NEW)
-- `~/.claude/skills/omniclaude/pr-review/review-pr` - Comprehensive review with priority organization
-- `~/.claude/skills/omniclaude/pr-review/pr-review-production` - Production-grade wrapper (NEW)
+- `${CLAUDE_PLUGIN_ROOT}/skills/pr-review/pr-quick-review` - One-command quick review (RECOMMENDED)
+- `${CLAUDE_PLUGIN_ROOT}/skills/pr-review/fetch-pr-data` - Fetch all PR data from 4 GitHub endpoints
+- `${CLAUDE_PLUGIN_ROOT}/skills/pr-review/analyze-pr-comments` - Pre-process raw data into categorized analysis (NEW)
+- `${CLAUDE_PLUGIN_ROOT}/skills/pr-review/review-pr` - Comprehensive review with priority organization
+- `${CLAUDE_PLUGIN_ROOT}/skills/pr-review/pr-review-production` - Production-grade wrapper (NEW)
 
 ## Dependencies
 
@@ -511,7 +511,7 @@ Use the wrapper script for backward compatibility with existing workflows:
 
 ```bash
 # Same as pr_review.py but via bash wrapper
-~/.claude/skills/omniclaude/pr-review/pr-review-v2 38 --full
+${CLAUDE_PLUGIN_ROOT}/skills/pr-review/pr-review-v2 38 --full
 ```
 
 ### Python API
@@ -544,5 +544,5 @@ report = generate_markdown_report(analysis)
 ## See Also
 
 - GitHub API Docs: https://docs.github.com/en/rest/pulls
-- Linear skills: `~/.claude/skills/linear/`
+- Linear skills: `${CLAUDE_PLUGIN_ROOT}/skills/linear/`
 - Event alignment plan: `/docs/events/EVENT_ALIGNMENT_PLAN.md`

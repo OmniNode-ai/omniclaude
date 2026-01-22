@@ -31,7 +31,7 @@ The CI Failures skill has been successfully enhanced with **intelligent web rese
 
 ### 2. Core Script Enhancement: `fetch-ci-data`
 
-**Location**: `~/.claude/skills/ci-failures/fetch-ci-data`
+**Location**: `${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/fetch-ci-data`
 
 **New Features**:
 ✅ **Error Recognition** (`is_error_recognized()`)
@@ -202,7 +202,7 @@ TOTAL: 2-5 seconds (4-5x faster!)
 
 ```bash
 # Run comprehensive tests
-~/.claude/skills/ci-failures/test_research_feature.sh
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/test_research_feature.sh
 ```
 
 **Test Coverage** (10 tests):
@@ -223,7 +223,7 @@ TOTAL: 2-5 seconds (4-5x faster!)
 
 ```bash
 # Test with actual PR
-~/.claude/skills/ci-failures/fetch-ci-data 33 --no-cache
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/fetch-ci-data 33 --no-cache
 
 # Check researched count
 cat output.json | jq '.summary.researched'
@@ -282,7 +282,7 @@ Status: ❌ Cannot merge - Critical failures must be resolved
 
 ```bash
 # Fetch raw data
-~/.claude/skills/ci-failures/fetch-ci-data 33 --no-cache > ci-data.json
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/fetch-ci-data 33 --no-cache > ci-data.json
 
 # Extract research queries
 jq '.failures[] | select(.research != null) | .research.search_queries' ci-data.json
@@ -295,7 +295,7 @@ jq '.summary.researched' ci-data.json
 
 ```bash
 # Get only critical failures with research
-~/.claude/skills/ci-failures/fetch-ci-data 33 | \
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/fetch-ci-data 33 | \
   jq '.failures[] | select(.severity == "critical" and .research != null)'
 ```
 
@@ -434,11 +434,11 @@ for query in search_queries:
 
 ## Related Skills
 
-- **PR Review** (`~/.claude/skills/pr-review/`)
+- **PR Review** (`${CLAUDE_PLUGIN_ROOT}/skills/pr-review/`)
   - Comprehensive PR review with feedback analysis
   - Integrates with CI failures for merge readiness
 
-- **System Status** (`~/.claude/skills/system-status/`)
+- **System Status** (`${CLAUDE_PLUGIN_ROOT}/skills/system-status/`)
   - System health monitoring
   - Infrastructure diagnostics
 
@@ -466,10 +466,10 @@ The CI Failures skill with web research is **production-ready** and provides:
 /ci-failures 33
 
 # Or use the script directly
-~/.claude/skills/ci-failures/fetch-ci-data 33 --no-cache
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/fetch-ci-data 33 --no-cache
 
 # Run tests
-~/.claude/skills/ci-failures/test_research_feature.sh
+${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/test_research_feature.sh
 ```
 
 **Expected result**: Comprehensive CI analysis with automatic web research for unrecognized errors, complete in <10 seconds!

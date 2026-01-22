@@ -178,7 +178,7 @@ validate_qdrant_url("http://custom-qdrant.example.com:6333")
 
 ### Run Security Tests
 ```bash
-python3 ~/.claude/skills/_shared/test_qdrant_ssrf_protection.py
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/_shared/test_qdrant_ssrf_protection.py
 ```
 
 ### Test Coverage

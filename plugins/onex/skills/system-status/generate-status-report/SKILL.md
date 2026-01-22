@@ -31,15 +31,15 @@ Generate comprehensive system status report with complete metrics and analysis.
 
 ```bash
 # Generate JSON report
-python3 ~/.claude/skills/system-status/generate-status-report/execute.py
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/generate-status-report/execute.py
 
 # Generate Markdown report
-python3 ~/.claude/skills/system-status/generate-status-report/execute.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/generate-status-report/execute.py \
   --format markdown \
   --output /tmp/system-status-report.md
 
 # Include detailed trends
-python3 ~/.claude/skills/system-status/generate-status-report/execute.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/generate-status-report/execute.py \
   --include-trends \
   --timeframe 7d
 ```

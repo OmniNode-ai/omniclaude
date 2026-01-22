@@ -26,7 +26,7 @@ Use the `ci-quick-review` script which provides a concise summary of CI failures
 
 ```bash
 # Fetch concise CI failure summary (~20-50 lines instead of 624)
-~/.claude/skills/omniclaude/ci-failures/ci-quick-review "${1:-$PR_NUMBER}" 2>&1
+${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/ci-failures/ci-quick-review "${1:-$PR_NUMBER}" 2>&1
 ```
 
 **What ci-quick-review provides**:
@@ -163,7 +163,7 @@ Status: ❌ Cannot merge - Critical and Major issues must be resolved
 - Use when quick review is insufficient
 
 ### Core Workflow
-- Use `~/.claude/skills/omniclaude/ci-failures/ci-quick-review` script (not `fetch-ci-data`)
+- Use `${CLAUDE_PLUGIN_ROOT}/skills/omniclaude/ci-failures/ci-quick-review` script (not `fetch-ci-data`)
 - Script automatically classifies errors as recognized vs unrecognized
 - Provides quick actionable guidance for common patterns
 - Includes technology context (Python, FastAPI, etc.)

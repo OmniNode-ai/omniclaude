@@ -18,7 +18,7 @@ Analyze agent routing and execution performance metrics over specified timeframe
 ## How to Use
 
 ```bash
-python3 ~/.claude/skills/system-status/check-agent-performance/execute.py \
+python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-agent-performance/execute.py \
   --timeframe 1h
 ```
 

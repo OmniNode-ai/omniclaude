@@ -120,7 +120,7 @@ See `skill.md` for:
 
 ## File Locations
 
-- **Skill**: `~/.claude/skills/action-logging/skill.md`
+- **Skill**: `${CLAUDE_PLUGIN_ROOT}/skills/action-logging/skill.md`
 - **Implementation**: `agents/lib/action_logger.py` (in repository root)
 - **Example**: `agents/lib/action_logging_example.py` (in repository root)
 
