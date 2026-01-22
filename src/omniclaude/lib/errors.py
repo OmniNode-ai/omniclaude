@@ -15,13 +15,13 @@ from typing import Any
 # Try to import from omnibase_core (preferred source)
 try:
     from omnibase_core.enums.enum_core_error_code import EnumCoreErrorCode
-    from omnibase_core.errors import OnexError
+    from omnibase_core.errors import ModelOnexError, OnexError
 
     OMNIBASE_ERRORS_AVAILABLE = True
 except ImportError:
     # Fallback: Try agents.lib.errors (legacy location)
     try:
-        from agents.lib.errors import EnumCoreErrorCode, OnexError
+        from agents.lib.errors import EnumCoreErrorCode, ModelOnexError, OnexError
 
         OMNIBASE_ERRORS_AVAILABLE = True
     except ImportError:
@@ -95,32 +95,31 @@ except ImportError:
                     f"OnexError(code={self.code}, message={self.message}, details={self.details})"
                 )
 
+        class ModelOnexError(OnexError):  # type: ignore[no-redef,misc]
+            """Model-specific ONEX error (alias for OnexError).
+
+            Provides compatibility with omnibase_core.errors.ModelOnexError
+            while maintaining the same error handling semantics.
+            """
+
+            def __init__(
+                self,
+                error_code: EnumCoreErrorCode,
+                message: str,
+                context: dict[str, Any] | None = None,
+            ) -> None:
+                """Initialize model-specific ONEX error.
+
+                Args:
+                    error_code: Error code enum
+                    message: Error message
+                    context: Optional error context dictionary
+                """
+                super().__init__(code=error_code, message=message, details=context)
+
 
 # Alias for compatibility with older code
 CoreErrorCode = EnumCoreErrorCode
-
-
-class ModelOnexError(OnexError):  # type: ignore[misc]
-    """Model-specific ONEX error (alias for OnexError).
-
-    Provides compatibility with omnibase_core.errors.ModelOnexError
-    while maintaining the same error handling semantics.
-    """
-
-    def __init__(
-        self,
-        error_code: EnumCoreErrorCode,
-        message: str,
-        context: dict[str, Any] | None = None,
-    ) -> None:
-        """Initialize model-specific ONEX error.
-
-        Args:
-            error_code: Error code enum
-            message: Error message
-            context: Optional error context dictionary
-        """
-        super().__init__(code=error_code, message=message, details=context)
 
 
 __all__ = [
