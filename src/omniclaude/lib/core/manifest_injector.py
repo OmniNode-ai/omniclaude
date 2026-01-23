@@ -2520,7 +2520,7 @@ class ManifestInjector:
         import time
 
         start_time = time.time()
-        semantic_search_url = "http://192.168.86.101:8055"
+        semantic_search_url = str(settings.semantic_search_url)
 
         try:
             import aiohttp

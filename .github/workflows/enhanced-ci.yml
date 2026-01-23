@@ -54,16 +54,17 @@ jobs:
       - name: Run Ruff format (code formatting check)
         run: |
           echo "::group::Ruff Format Check"
-          # Explicitly scan only project source directories to avoid .venv
-          # Using ruff format for consistency with pre-commit config
-          uv run ruff format --check src/ tests/
+          # Scan only non-legacy source directories
+          # Legacy lib/ excluded - will be deleted post-Beta
+          uv run ruff format --check src/omniclaude/hooks/ src/omniclaude/config/ tests/
           echo "::endgroup::"
 
       - name: Run Ruff (linting - strict)
         run: |
           echo "::group::Ruff Linting"
-          # Scan only project source directories, aligned with pre-commit config
-          uv run ruff check src/ tests/ --output-format=full
+          # Scan only non-legacy source directories
+          # Legacy lib/ excluded - will be deleted post-Beta
+          uv run ruff check src/omniclaude/hooks/ src/omniclaude/config/ tests/ --output-format=full
           echo "::endgroup::"
 
       - name: Run type checking (mypy - strict mode)
@@ -73,7 +74,8 @@ jobs:
           # Only install additional type stubs not in dev dependencies
           uv run pip install types-PyYAML types-aiofiles types-redis
           # Strict type checking - this MUST pass for CI to succeed
-          uv run mypy src/omniclaude/ \
+          # Exclude legacy lib/ folder (will be deleted post-Beta)
+          uv run mypy src/omniclaude/hooks/ src/omniclaude/config/ \
             --strict \
             --show-error-codes \
             --show-column-numbers \

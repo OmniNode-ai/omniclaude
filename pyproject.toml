@@ -47,7 +47,7 @@ packages = ["src/omniclaude"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-exclude = ["_archive"]
+exclude = ["_archive", "src/omniclaude/lib"]
 
 [tool.ruff.lint]
 select = [
@@ -69,20 +69,7 @@ ignore = [
 # Tests often modify sys.path before imports
 "tests/**/test_*.py" = ["E402"]
 "tests/*.py" = ["E402"]
-# Reclaimed lib modules have legacy patterns (sys.path modification, try/except imports)
-# These are not being rewritten, just made functional for CI
-"src/omniclaude/lib/**/*.py" = [
-    "E402",   # Module level import not at top of file (sys.path modification pattern)
-    "F401",   # Imported but unused (try/except import pattern for optional deps)
-    "B007",   # Loop variable not used (legacy code patterns)
-    "B904",   # raise without from (legacy exception handling)
-    "ARG001", # Unused function argument (interface compatibility)
-    "ARG002", # Unused method argument (interface compatibility)
-    "SIM102", # Use single if instead of nested if (legacy readability patterns)
-    "SIM103", # Return bool expression directly (legacy explicit return style)
-    "SIM105", # Use contextlib.suppress (legacy try/except/pass pattern)
-    "SIM117", # Use single with statement (async context manager patterns)
-]
+# Note: src/omniclaude/lib/ is fully excluded in [tool.ruff] exclude - legacy code, will be deleted post-Beta
 
 [tool.ruff.lint.isort]
 known-first-party = ["omniclaude"]
@@ -93,6 +80,7 @@ strict = true
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
+exclude = ["src/omniclaude/lib/"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

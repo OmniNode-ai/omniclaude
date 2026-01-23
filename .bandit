@@ -28,8 +28,7 @@ exclude_dirs:
   - build
   - dist
   - _archive
-  # Note: src/omniclaude/lib is NOT excluded - B110 (try_except_pass) issues
-  # are handled with inline `# nosec B110` comments for explicit justification
+  - src/omniclaude/lib  # Legacy code - excluded from security scans, will be deleted post-Beta
 
 # Skip specific test IDs
 # See comments below for rationale

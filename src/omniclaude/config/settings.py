@@ -171,6 +171,10 @@ class Settings(BaseSettings):
         default="http://localhost:8181",  # type: ignore[assignment]  # Pydantic coerces str to HttpUrl at runtime
         description="Main server URL",
     )
+    semantic_search_url: HttpUrl = Field(
+        ...,  # REQUIRED - no default, system fails fast if not in .env
+        description="Semantic search service URL for hybrid text/vector search queries. REQUIRED - set SEMANTIC_SEARCH_URL in .env",
+    )
 
     # =========================================================================
     # FEATURE FLAGS
@@ -344,7 +348,9 @@ class Settings(BaseSettings):
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """Get singleton settings instance."""
-    instance = Settings()
+    # Note: Required fields with no defaults (semantic_search_url) are populated
+    # from environment variables by Pydantic Settings at runtime - mypy doesn't see this
+    instance = Settings()  # type: ignore[call-arg]
     instance.log_default_warnings()
     return instance
 
