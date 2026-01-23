@@ -63,6 +63,14 @@ repos:
         stages: [pre-commit]
         pass_filenames: false
 
+      - id: onex-validate
+        name: ONEX validation (any-type, patterns, naming)
+        entry: uv run python scripts/validate_onex.py src/
+        language: system
+        types: [python]
+        stages: [pre-commit]
+        pass_filenames: false
+
 # Configuration
 ci:
   autofix_commit_msg: |
