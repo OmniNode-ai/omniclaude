@@ -371,7 +371,7 @@ def check_python_environment() -> dict[str, Any]:
     return env_info
 
 
-def print_debug_status():
+def print_debug_status() -> None:
     """Print comprehensive debug status"""
     print("🔍 PATTERN TRACKING DEBUG STATUS", file=sys.stderr)
     print("=" * 60, file=sys.stderr)
@@ -569,7 +569,7 @@ def test_pattern_tracking_flow() -> dict[str, Any]:
     return test_results
 
 
-def main():
+def main() -> None:
     """Run all debug checks when script is executed directly"""
     print_debug_status()
     print("\n")

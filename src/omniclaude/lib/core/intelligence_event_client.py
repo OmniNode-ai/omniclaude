@@ -151,11 +151,11 @@ class IntelligenceEventClient:
 
         self._producer: AIOKafkaProducer | None = None
         self._consumer: AIOKafkaConsumer | None = None
-        self._consumer_task: asyncio.Task | None = (
+        self._consumer_task: asyncio.Task[None] | None = (
             None  # Track background consumer task
         )
         self._started = False
-        self._pending_requests: dict[str, asyncio.Future] = {}
+        self._pending_requests: dict[str, asyncio.Future[dict[str, Any]]] = {}
         self._consumer_ready = asyncio.Event()  # Signal when consumer is polling
 
         self.logger = logging.getLogger(__name__)
@@ -627,7 +627,7 @@ class IntelligenceEventClient:
             KafkaError: If Kafka operation fails
         """
         # Create future for this request
-        future: asyncio.Future = asyncio.Future()
+        future: asyncio.Future[dict[str, Any]] = asyncio.Future()
         self._pending_requests[correlation_id] = future
 
         try:
@@ -675,7 +675,7 @@ class IntelligenceEventClient:
                 timeout=timeout_ms / 1000.0,  # Convert to seconds
             )
 
-            return cast(dict[str, Any], result)
+            return result
 
         finally:
             # Clean up pending request
@@ -817,7 +817,7 @@ class IntelligenceEventClientContext:
         await self.client.start()
         return self.client
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: Any) -> bool:
         await self.client.stop()
         return False
 

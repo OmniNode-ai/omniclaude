@@ -50,7 +50,9 @@ import asyncio
 import logging
 import os
 import time
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from types import TracebackType
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -116,12 +118,17 @@ class ToolCallContext:
         self.success = True
         self.error_message: str | None = None
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "ToolCallContext":
         """Start timing when entering context."""
         self.start_time = time.time()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool:
         """Log action when exiting context."""
         duration_ms = int((time.time() - (self.start_time or time.time())) * 1000)
 
@@ -143,7 +150,7 @@ class ToolCallContext:
         # Don't suppress exception
         return False
 
-    def set_result(self, result: dict[str, Any]):
+    def set_result(self, result: dict[str, Any]) -> None:
         """Set tool result (call this from within the context)."""
         self.tool_result = result
 
@@ -240,7 +247,7 @@ class ActionLogger:
         self,
         tool_name: str,
         tool_parameters: dict[str, Any] | None = None,
-    ):
+    ) -> AsyncGenerator[ToolCallContext, None]:
         """
         Context manager for logging tool call with automatic timing.
 
@@ -465,7 +472,7 @@ async def log_action(
     action_details: dict[str, Any] | None = None,
     correlation_id: str | UUID | None = None,
     duration_ms: int | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> bool:
     """
     Convenience function for logging a single action without creating a logger instance.
@@ -495,7 +502,7 @@ async def log_action(
 
 if __name__ == "__main__":
     # Test action logger
-    async def test():
+    async def test() -> None:
         logging.basicConfig(level=logging.DEBUG)
 
         # Test with logger instance

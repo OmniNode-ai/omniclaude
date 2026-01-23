@@ -12,6 +12,7 @@ Uses multiple matching strategies:
 
 import re
 from difflib import SequenceMatcher
+from typing import Any
 
 
 class TriggerMatcher:
@@ -22,7 +23,7 @@ class TriggerMatcher:
     multiple matching strategies with confidence scoring.
     """
 
-    def __init__(self, agent_registry: dict):
+    def __init__(self, agent_registry: dict[str, Any]):
         """
         Initialize matcher with agent registry.
 
@@ -37,7 +38,7 @@ class TriggerMatcher:
         self.registry = agent_registry
         self.trigger_index = self._build_trigger_index()
 
-    def _validate_registry(self, registry: dict) -> None:
+    def _validate_registry(self, registry: dict[str, Any]) -> None:
         """
         Validate registry structure before use.
 

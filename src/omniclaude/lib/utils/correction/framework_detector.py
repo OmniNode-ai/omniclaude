@@ -140,7 +140,7 @@ class FrameworkMethodDetector:
         },
     }
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the framework detector."""
         self.detected_patterns: list[FrameworkPattern] = []
 
@@ -331,7 +331,7 @@ class FrameworkMethodDetector:
         """Get all detected framework patterns."""
         return self.detected_patterns
 
-    def clear_patterns(self):
+    def clear_patterns(self) -> None:
         """Clear detected patterns (for reuse)."""
         self.detected_patterns = []
 

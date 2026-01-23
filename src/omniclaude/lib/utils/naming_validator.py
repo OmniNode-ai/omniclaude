@@ -65,7 +65,7 @@ class Violation:
     message: str
     suggestion: str | None = None  # Suggested correction
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Set default suggestion from expected_format if not provided."""
         if self.suggestion is None:
             self.suggestion = self.expected_format
@@ -176,7 +176,7 @@ class NamingValidator:
         r"^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_][A-Za-z0-9_]*)\s*[=:]"
     )
 
-    def __init__(self, language: str | None = None, validation_mode: str = "auto"):
+    def __init__(self, language: str | None = None, validation_mode: str = "auto") -> None:
         """
         Initialize the naming validator.
 

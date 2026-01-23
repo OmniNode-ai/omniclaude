@@ -13,6 +13,7 @@ import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 import yaml
@@ -51,10 +52,10 @@ class AgentIdentity:
     purpose: str
     domain: str
     description: str
-    capabilities: list
-    triggers: list
+    capabilities: list[Any]
+    triggers: list[Any]
     intelligence_integration: str | None = None
-    success_criteria: list | None = None
+    success_criteria: list[Any] | None = None
 
     def format_assumption_prompt(self) -> str:
         """Format identity for assumption by coordinator."""
@@ -356,7 +357,7 @@ class AgentTransformer:
         )
 
 
-def main():
+def main() -> None:
     """CLI interface for testing transformations."""
     import argparse
     import sys

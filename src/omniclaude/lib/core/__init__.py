@@ -38,8 +38,9 @@ try:
 except ImportError:
     # Fallback: Define minimal error classes if agents.lib.errors not available
     from enum import Enum
+    from typing import Any
 
-    class EnumCoreErrorCode(str, Enum):
+    class _FallbackEnumCoreErrorCode(str, Enum):
         """Core error codes for ONEX operations."""
 
         VALIDATION_ERROR = "VALIDATION_ERROR"
@@ -49,19 +50,26 @@ except ImportError:
         FILE_NOT_FOUND = "FILE_NOT_FOUND"
         IO_ERROR = "IO_ERROR"
 
-    CoreErrorCode = EnumCoreErrorCode
+    EnumCoreErrorCode = _FallbackEnumCoreErrorCode
+    CoreErrorCode = _FallbackEnumCoreErrorCode
 
-    class OnexError(Exception):
+    class _FallbackOnexError(Exception):
         """Base exception class for ONEX operations."""
 
-        def __init__(self, code, message, details=None):
+        def __init__(
+            self,
+            code: _FallbackEnumCoreErrorCode,
+            message: str,
+            details: dict[str, Any] | None = None,
+        ) -> None:
             self.code = code
             self.error_code = code
             self.message = message
             self.details = details or {}
             super().__init__(message)
 
-    ModelOnexError = OnexError
+    OnexError = _FallbackOnexError
+    ModelOnexError = _FallbackOnexError
     _errors_available = False
 
 # Event Publishing (Kafka integration for agent actions)

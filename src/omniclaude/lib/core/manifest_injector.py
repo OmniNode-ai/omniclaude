@@ -490,7 +490,7 @@ class ManifestInjectionStorage:
         formatted_text: str,
         query_times: dict[str, int],
         sections_included: list[str],
-        **kwargs,
+        **kwargs: Any,
     ) -> bool:
         """
         Store manifest injection record in database.
@@ -936,7 +936,7 @@ class ManifestInjector:
         # Return False to propagate any exceptions
         return False
 
-    async def _filter_by_quality(self, patterns: list[dict]) -> list[dict]:
+    async def _filter_by_quality(self, patterns: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """
         Filter patterns by quality score.
 
@@ -1103,7 +1103,7 @@ class ManifestInjector:
                 project_path=os.getcwd(),
             )
             self._action_logger_cache[correlation_id] = logger
-            return logger
+            return cast("_ActionLoggerType", logger)
         except Exception as e:
             self.logger.warning(f"Failed to create ActionLogger: {e}")
             self._action_logger_cache[correlation_id] = None
@@ -2299,7 +2299,7 @@ class ManifestInjector:
             Dictionary with PostgreSQL connection info, status, and table count
         """
 
-        def _blocking_query():
+        def _blocking_query() -> dict[str, Any]:
             """Blocking PostgreSQL operations."""
             import psycopg2
 
@@ -2371,7 +2371,7 @@ class ManifestInjector:
             Dictionary with Kafka connection info, status, and topic count
         """
 
-        def _blocking_query():
+        def _blocking_query() -> dict[str, Any]:
             """Blocking Kafka operations."""
             from kafka import KafkaAdminClient
 
@@ -2465,7 +2465,7 @@ class ManifestInjector:
             List of Docker service info dictionaries
         """
 
-        def _blocking_query():
+        def _blocking_query() -> list[dict[str, Any]]:
             """Blocking Docker operations."""
             import docker
 
@@ -2518,7 +2518,7 @@ class ManifestInjector:
             Dictionary with Memgraph connection info, statistics, and insights
         """
 
-        def _blocking_memgraph_query():
+        def _blocking_memgraph_query() -> dict[str, Any]:
             """Blocking Memgraph operations using neo4j driver."""
             try:
                 from neo4j import GraphDatabase

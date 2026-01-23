@@ -147,7 +147,7 @@ class IntelligenceCache:
             f"Intelligence cache initialized: enabled={self.enabled}, url={safe_url}"
         )
 
-    async def connect(self):
+    async def connect(self) -> None:
         """Establish connection to Valkey"""
         if not self.enabled:
             return
@@ -176,7 +176,7 @@ class IntelligenceCache:
             logger.warning(f"Failed to connect to Valkey cache - caching disabled: {e}")
             self.enabled = False
 
-    async def close(self):
+    async def close(self) -> None:
         """Close connection"""
         if self._client:
             try:
@@ -225,7 +225,7 @@ class IntelligenceCache:
         params: dict[str, Any],
         result: dict[str, Any],
         ttl_seconds: int | None = None,
-    ):
+    ) -> None:
         """Cache query result with TTL"""
         if not self.enabled or not self._client:
             return
@@ -246,7 +246,7 @@ class IntelligenceCache:
             # Log but don't fail on cache errors
             logger.warning(f"Cache set failed for {operation_type}: {e}")
 
-    async def invalidate_pattern(self, pattern: str):
+    async def invalidate_pattern(self, pattern: str) -> None:
         """Invalidate cache entries matching pattern"""
         if not self.enabled or not self._client:
             return
@@ -259,7 +259,7 @@ class IntelligenceCache:
         except Exception as e:
             logger.warning(f"Cache invalidation failed: {e}")
 
-    async def invalidate_all(self):
+    async def invalidate_all(self) -> None:
         """Invalidate all intelligence cache entries"""
         if not self.enabled or not self._client:
             return

@@ -260,7 +260,7 @@ class PatternTrackerSync:
             "base_url": self.base_url,
         }
 
-    def print_performance_summary(self):
+    def print_performance_summary(self) -> None:
         """Print performance summary to stderr."""
         metrics = self.get_performance_metrics()
         print("\n📊 [PatternTrackerSync] Performance Summary:", file=sys.stderr)
@@ -272,7 +272,7 @@ class PatternTrackerSync:
         )
         print(f"   Cache Size: {len(self._pattern_id_cache)} entries", file=sys.stderr)
 
-    def clear_cache(self):
+    def clear_cache(self) -> None:
         """Clear the pattern ID cache."""
         self._pattern_id_cache.clear()
         print("🧹 [PatternTrackerSync] Cache cleared", file=sys.stderr)
@@ -293,7 +293,7 @@ class PatternTrackerSync:
         return score
 
 
-def main():
+def main() -> None:
     """Test the synchronous pattern tracker with performance metrics."""
     print("🧪 Testing PatternTrackerSync...\n", file=sys.stderr)
 

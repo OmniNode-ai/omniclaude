@@ -42,7 +42,7 @@ try:
 except ImportError:
     from enum import Enum
 
-    class EnumCoreErrorCode(str, Enum):
+    class _FallbackEnumCoreErrorCode(str, Enum):
         """Fallback error codes for ONEX compliance."""
 
         VALIDATION_ERROR = "VALIDATION_ERROR"
@@ -50,17 +50,24 @@ except ImportError:
         INITIALIZATION_ERROR = "INITIALIZATION_ERROR"
         OPERATION_FAILED = "OPERATION_FAILED"
 
-    class OnexError(Exception):
+    EnumCoreErrorCode = _FallbackEnumCoreErrorCode
+
+    class _FallbackOnexError(Exception):
         """Fallback OnexError for ONEX compliance."""
 
         def __init__(
-            self, code: EnumCoreErrorCode, message: str, details: dict | None = None
+            self,
+            code: _FallbackEnumCoreErrorCode,
+            message: str,
+            details: dict[str, Any] | None = None,
         ):
             self.code = code
             self.error_code = code
             self.message = message
             self.details = details or {}
             super().__init__(message)
+
+    OnexError = _FallbackOnexError
 
 
 logger = logging.getLogger(__name__)
@@ -739,11 +746,11 @@ class AgentRouter:
 
         return stats
 
-    def invalidate_cache(self):
+    def invalidate_cache(self) -> None:
         """Invalidate entire routing cache."""
         self.cache.clear()
 
-    def reload_registry(self, registry_path: str | None = None):
+    def reload_registry(self, registry_path: str | None = None) -> None:
         """
         Reload agent registry.
 

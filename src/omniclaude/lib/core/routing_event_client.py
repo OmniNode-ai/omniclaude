@@ -82,24 +82,31 @@ except ImportError:
     except ImportError:
         from enum import Enum
 
-        class EnumCoreErrorCode(str, Enum):
+        class _FallbackEnumCoreErrorCode(str, Enum):
             """Fallback error codes for ONEX compliance."""
 
             VALIDATION_ERROR = "VALIDATION_ERROR"
             CONFIGURATION_ERROR = "CONFIGURATION_ERROR"
             OPERATION_FAILED = "OPERATION_FAILED"
 
-        class OnexError(Exception):
+        class _FallbackOnexError(Exception):
             """Fallback OnexError for ONEX compliance."""
 
             def __init__(
-                self, code: EnumCoreErrorCode, message: str, details: dict | None = None
+                self,
+                code: _FallbackEnumCoreErrorCode,
+                message: str,
+                details: dict[str, Any] | None = None,
             ):
                 self.code = code
                 self.error_code = code
                 self.message = message
                 self.details = details or {}
                 super().__init__(message)
+
+        # Assign to expected names for use throughout module
+        EnumCoreErrorCode = _FallbackEnumCoreErrorCode
+        OnexError = _FallbackOnexError
 
 
 # Import agent execution logger for observability
@@ -257,9 +264,9 @@ class RoutingEventClient:
         self._producer: AIOKafkaProducer | None = None
         self._consumer: AIOKafkaConsumer | None = None
         self._started = False
-        self._pending_requests: dict[str, asyncio.Future] = {}
+        self._pending_requests: dict[str, asyncio.Future[dict[str, Any]]] = {}
         self._consumer_ready = asyncio.Event()  # Signal when consumer is polling
-        self._consumer_task: asyncio.Task | None = None  # Store task to prevent GC
+        self._consumer_task: asyncio.Task[None] | None = None  # Store task to prevent GC
 
         self.logger = logging.getLogger(__name__)
 
@@ -864,7 +871,7 @@ class RoutingEventClient:
             OnexError: With OPERATION_FAILED if producer not initialized
         """
         # Create future for this request
-        future: asyncio.Future = asyncio.Future()
+        future: asyncio.Future[dict[str, Any]] = asyncio.Future()
         self._pending_requests[correlation_id] = future
 
         try:
@@ -888,7 +895,7 @@ class RoutingEventClient:
                 timeout=timeout_ms / 1000.0,  # Convert to seconds
             )
 
-            return cast(dict[str, Any], result)
+            return result
 
         finally:
             # Clean up pending request
@@ -1060,12 +1067,17 @@ class RoutingEventClientContext:
         await self.client.start()
         return self.client
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any,
+    ) -> bool:
         await self.client.stop()
         return False
 
 
-def _format_recommendations(recommendations: list) -> list[dict[str, Any]]:
+def _format_recommendations(recommendations: list[Any]) -> list[dict[str, Any]]:
     """
     Convert AgentRecommendation objects to dict format.
 
@@ -1203,6 +1215,10 @@ async def route_via_events(
         else:
             # No fallback, re-raise original error
             raise
+
+    # Unreachable: all code paths above either return or raise.
+    # This explicit return satisfies mypy's control flow analysis.
+    return []
 
 
 __all__ = [
