@@ -9,6 +9,7 @@ dependencies = [
     "omnibase-infra>=0.2.2,<0.3.0",
     "pydantic>=2.9.0",
     "pydantic-settings>=2.6.0",
+    "cachetools>=5.0.0",
     "click>=8.1.0",
 ]
 
