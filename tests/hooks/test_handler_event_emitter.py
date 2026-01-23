@@ -233,7 +233,8 @@ class TestKafkaConfig:
     def test_config_respects_env_vars(self) -> None:
         """Config respects KAFKA_ENVIRONMENT env var."""
         with patch.dict(
-            "os.environ", {"KAFKA_BOOTSTRAP_SERVERS": "test:9092", "KAFKA_ENVIRONMENT": "prod"}
+            "os.environ",
+            {"KAFKA_BOOTSTRAP_SERVERS": "test:9092", "KAFKA_ENVIRONMENT": "prod"},
         ):
             config = _create_kafka_config()
             assert config.environment == "prod"
@@ -248,7 +249,10 @@ class TestKafkaConfig:
         """Config respects KAFKA_HOOK_TIMEOUT_SECONDS env var for integration tests."""
         with patch.dict(
             "os.environ",
-            {"KAFKA_BOOTSTRAP_SERVERS": "test:9092", "KAFKA_HOOK_TIMEOUT_SECONDS": "30"},
+            {
+                "KAFKA_BOOTSTRAP_SERVERS": "test:9092",
+                "KAFKA_HOOK_TIMEOUT_SECONDS": "30",
+            },
         ):
             config = _create_kafka_config()
             assert config.timeout_seconds == 30
@@ -257,7 +261,10 @@ class TestKafkaConfig:
         """Invalid KAFKA_HOOK_TIMEOUT_SECONDS falls back to default."""
         with patch.dict(
             "os.environ",
-            {"KAFKA_BOOTSTRAP_SERVERS": "test:9092", "KAFKA_HOOK_TIMEOUT_SECONDS": "invalid"},
+            {
+                "KAFKA_BOOTSTRAP_SERVERS": "test:9092",
+                "KAFKA_HOOK_TIMEOUT_SECONDS": "invalid",
+            },
         ):
             config = _create_kafka_config()
             assert config.timeout_seconds == 2  # Falls back to default
@@ -282,7 +289,9 @@ class TestFailureSuppression:
         payload = make_session_started_payload()
 
         # Mock EventBusKafka to raise on start
-        with patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class:
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
             mock_bus = AsyncMock()
             mock_bus.start.side_effect = ConnectionError("Kafka unavailable")
             mock_bus_class.return_value = mock_bus
@@ -300,7 +309,9 @@ class TestFailureSuppression:
         """Kafka publish failure returns failed result, not exception."""
         payload = make_session_started_payload()
 
-        with patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class:
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
             mock_bus = AsyncMock()
             mock_bus.start.return_value = None
             mock_bus.publish.side_effect = RuntimeError("Publish failed")
@@ -317,7 +328,9 @@ class TestFailureSuppression:
         """Bus close failure is logged but doesn't affect result."""
         payload = make_session_started_payload()
 
-        with patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class:
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
             mock_bus = AsyncMock()
             mock_bus.start.return_value = None
             mock_bus.publish.return_value = None
@@ -345,7 +358,9 @@ class TestSuccessfulEmission:
         """Successful emission returns success result."""
         payload = make_session_started_payload()
 
-        with patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class:
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
             mock_bus = AsyncMock()
             mock_bus.start.return_value = None
             mock_bus.publish.return_value = None
@@ -362,7 +377,9 @@ class TestSuccessfulEmission:
         """Emission uses entity_id bytes as partition key."""
         payload = make_session_started_payload()
 
-        with patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class:
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
@@ -388,7 +405,9 @@ class TestConvenienceFunctions:
         """emit_session_started creates correct payload."""
         session_id = uuid4()
 
-        with patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class:
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
@@ -407,7 +426,9 @@ class TestConvenienceFunctions:
         """emit_session_ended creates correct payload."""
         session_id = uuid4()
 
-        with patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class:
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
@@ -427,7 +448,9 @@ class TestConvenienceFunctions:
         session_id = uuid4()
         prompt_id = uuid4()
 
-        with patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class:
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
@@ -447,7 +470,9 @@ class TestConvenienceFunctions:
         session_id = uuid4()
         execution_id = uuid4()
 
-        with patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class:
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
@@ -467,7 +492,9 @@ class TestConvenienceFunctions:
         """Convenience functions auto-generate causation_id if not provided."""
         session_id = uuid4()
 
-        with patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class:
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
@@ -485,7 +512,9 @@ class TestConvenienceFunctions:
         """Convenience functions auto-generate emitted_at if not provided."""
         session_id = uuid4()
 
-        with patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class:
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
@@ -527,7 +556,9 @@ class TestEdgeCases:
             "Caf\xe9 debugging \u2615",  # accents and symbols
         ]
 
-        with patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class:
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
@@ -549,7 +580,9 @@ class TestEdgeCases:
         """
         session_id = uuid4()
 
-        with patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class:
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
@@ -570,7 +603,9 @@ class TestEdgeCases:
         session_id = uuid4()
         duration_29_days = 29 * 24 * 60 * 60  # 2,505,600 seconds
 
-        with patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class:
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
@@ -590,7 +625,9 @@ class TestEdgeCases:
         session_id = uuid4()
         duration_30_days = 30 * 24 * 60 * 60  # 2,592,000 seconds
 
-        with patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class:
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
@@ -615,7 +652,9 @@ class TestEdgeCases:
         duration_31_days = 31 * 24 * 60 * 60  # Over the 30-day limit
 
         with (
-            patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class,
+            patch(
+                "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+            ) as mock_bus_class,
             pytest.raises(ValidationError, match="duration_seconds"),
         ):
             mock_bus = AsyncMock()
@@ -636,7 +675,9 @@ class TestEdgeCases:
         session_id = uuid4()
         duration_1_hour_ms = 3600000
 
-        with patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class:
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
@@ -663,7 +704,9 @@ class TestEdgeCases:
         duration_over_1_hour_ms = 3700000  # Over the 1-hour limit
 
         with (
-            patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class,
+            patch(
+                "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+            ) as mock_bus_class,
             pytest.raises(ValidationError, match="duration_ms"),
         ):
             mock_bus = AsyncMock()
@@ -683,7 +726,9 @@ class TestEdgeCases:
         session_id = uuid4()
         summary_500_chars = "x" * 500
 
-        with patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class:
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
@@ -710,7 +755,9 @@ class TestEdgeCases:
         summary_600_chars = "x" * 600  # Over 500 char limit
 
         with (
-            patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class,
+            patch(
+                "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+            ) as mock_bus_class,
             pytest.raises(ValidationError, match="summary"),
         ):
             mock_bus = AsyncMock()
@@ -730,7 +777,9 @@ class TestEdgeCases:
         session_id = uuid4()
         preview_100_chars = "x" * 100
 
-        with patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class:
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
@@ -751,7 +800,9 @@ class TestEdgeCases:
         session_id = uuid4()
         preview_150_chars = "x" * 150  # Over 100 char limit
 
-        with patch("omniclaude.hooks.handler_event_emitter.EventBusKafka") as mock_bus_class:
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 

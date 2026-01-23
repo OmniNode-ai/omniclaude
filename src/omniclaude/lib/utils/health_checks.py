@@ -256,7 +256,9 @@ class Phase4HealthChecker:
 
             # Parse response if JSON
             try:
-                if response.headers.get("content-type", "").startswith("application/json"):
+                if response.headers.get("content-type", "").startswith(
+                    "application/json"
+                ):
                     result["details"] = response.json()
                 else:
                     result["details"] = response.text[:500]  # Limit text length
@@ -288,7 +290,9 @@ class Phase4HealthChecker:
         """Check if we can reach the database through Phase 4 API"""
         start_time = time.time()
         try:
-            response = requests.get(f"{self.base_url}/api/pattern-traceability/health", timeout=5)
+            response = requests.get(
+                f"{self.base_url}/api/pattern-traceability/health", timeout=5
+            )
             response_time_ms = (time.time() - start_time) * 1000
 
             if response.status_code == 200:
@@ -473,7 +477,9 @@ class Phase4HealthChecker:
 
         # Print summary
         status_emoji = (
-            "✅" if overall_status == "healthy" else ("⚠️" if overall_status == "degraded" else "❌")
+            "✅"
+            if overall_status == "healthy"
+            else ("⚠️" if overall_status == "degraded" else "❌")
         )
         print(
             f"{status_emoji} Overall Phase 4 Status: {overall_status.upper()}",

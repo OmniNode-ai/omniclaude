@@ -92,7 +92,9 @@ except ImportError:
         class OnexError(Exception):
             """Fallback OnexError for ONEX compliance."""
 
-            def __init__(self, code: EnumCoreErrorCode, message: str, details: dict | None = None):
+            def __init__(
+                self, code: EnumCoreErrorCode, message: str, details: dict | None = None
+            ):
                 self.code = code
                 self.error_code = code
                 self.message = message
@@ -112,7 +114,9 @@ except ImportError:
         AGENT_LOGGER_AVAILABLE = True
     except ImportError:
         AGENT_LOGGER_AVAILABLE = False
-        logging.debug("Agent execution logger not available - execution logging disabled")
+        logging.debug(
+            "Agent execution logger not available - execution logging disabled"
+        )
 
 try:
     from config import settings
@@ -120,7 +124,9 @@ try:
     SETTINGS_AVAILABLE = True
 except ImportError:
     SETTINGS_AVAILABLE = False
-    logging.warning("config.settings not available, falling back to environment variables")
+    logging.warning(
+        "config.settings not available, falling back to environment variables"
+    )
 
 # Import Slack notifier for error notifications
 try:
@@ -244,7 +250,9 @@ class RoutingEventClient:
                 },
             )
         self.request_timeout_ms = request_timeout_ms
-        self.consumer_group_id = consumer_group_id or f"omniclaude-routing-{uuid4().hex[:8]}"
+        self.consumer_group_id = (
+            consumer_group_id or f"omniclaude-routing-{uuid4().hex[:8]}"
+        )
 
         self._producer: AIOKafkaProducer | None = None
         self._consumer: AIOKafkaConsumer | None = None
@@ -295,7 +303,9 @@ class RoutingEventClient:
             )
 
         try:
-            self.logger.info(f"Starting routing event client (broker: {self.bootstrap_servers})")
+            self.logger.info(
+                f"Starting routing event client (broker: {self.bootstrap_servers})"
+            )
 
             # Initialize producer
             self._producer = AIOKafkaProducer(
@@ -341,9 +351,7 @@ class RoutingEventClient:
                     )
 
                 if elapsed > max_wait_seconds:
-                    error_msg = (
-                        f"Consumer failed to get partition assignment after {max_wait_seconds}s"
-                    )
+                    error_msg = f"Consumer failed to get partition assignment after {max_wait_seconds}s"
                     self.logger.error(error_msg)
                     raise OnexError(
                         code=EnumCoreErrorCode.OPERATION_FAILED,
@@ -379,12 +387,12 @@ class RoutingEventClient:
             self.logger.info("Waiting for consumer task to start polling...")
             consumer_ready_timeout = 5.0
             try:
-                await asyncio.wait_for(self._consumer_ready.wait(), timeout=consumer_ready_timeout)
+                await asyncio.wait_for(
+                    self._consumer_ready.wait(), timeout=consumer_ready_timeout
+                )
                 self.logger.info("Consumer task confirmed polling - ready for requests")
             except TimeoutError:
-                error_msg = (
-                    f"Consumer task failed to start polling within {consumer_ready_timeout}s"
-                )
+                error_msg = f"Consumer task failed to start polling within {consumer_ready_timeout}s"
                 self.logger.error(error_msg)
                 raise OnexError(
                     code=EnumCoreErrorCode.OPERATION_FAILED,
@@ -418,7 +426,9 @@ class RoutingEventClient:
                         },
                     )
                 except Exception as notify_error:
-                    self.logger.debug(f"Failed to send Slack notification: {notify_error}")
+                    self.logger.debug(
+                        f"Failed to send Slack notification: {notify_error}"
+                    )
 
             await self.stop()
             raise OnexError(
@@ -445,7 +455,9 @@ class RoutingEventClient:
         """
         # Always run cleanup, even after partial startup failures
         if not self._started:
-            self.logger.info("Stopping routing event client after partial startup failure")
+            self.logger.info(
+                "Stopping routing event client after partial startup failure"
+            )
         else:
             self.logger.info("Stopping routing event client")
 
@@ -633,7 +645,9 @@ class RoutingEventClient:
                 "Routing request started",
                 extra={
                     **log_extra,
-                    "user_request_preview": (user_request[:100] if user_request else None),
+                    "user_request_preview": (
+                        user_request[:100] if user_request else None
+                    ),
                     "max_recommendations": max_recommendations,
                     "min_confidence": min_confidence,
                     "routing_strategy": routing_strategy,
@@ -690,7 +704,9 @@ class RoutingEventClient:
             if AGENT_LOGGER_AVAILABLE and recommendations:
                 try:
                     top_agent = recommendations[0].get("agent_name", "unknown")
-                    top_confidence = recommendations[0].get("confidence", {}).get("total", 0.0)
+                    top_confidence = (
+                        recommendations[0].get("confidence", {}).get("total", 0.0)
+                    )
                     execution_logger = await log_agent_execution(
                         agent_name=f"routing-decision:{top_agent}",
                         user_prompt=user_request[:500] if user_request else None,
@@ -707,7 +723,9 @@ class RoutingEventClient:
                             "all_recommendations": [
                                 {
                                     "agent": r.get("agent_name"),
-                                    "confidence": r.get("confidence", {}).get("total", 0.0),
+                                    "confidence": r.get("confidence", {}).get(
+                                        "total", 0.0
+                                    ),
                                 }
                                 for r in recommendations[:5]
                             ],
@@ -739,7 +757,9 @@ class RoutingEventClient:
                 try:
                     notifier = get_slack_notifier()
                     await notifier.send_error_notification(
-                        error=TimeoutError(f"Routing request timeout after {timeout}ms"),
+                        error=TimeoutError(
+                            f"Routing request timeout after {timeout}ms"
+                        ),
                         context={
                             "service": "routing_event_client",
                             "operation": "routing_request",
@@ -749,7 +769,9 @@ class RoutingEventClient:
                         },
                     )
                 except Exception as notify_error:
-                    self.logger.debug(f"Failed to send Slack notification: {notify_error}")
+                    self.logger.debug(
+                        f"Failed to send Slack notification: {notify_error}"
+                    )
 
             raise OnexError(
                 code=EnumCoreErrorCode.OPERATION_FAILED,
@@ -760,7 +782,9 @@ class RoutingEventClient:
                     "operation": "routing_request",
                     "correlation_id": correlation_id,
                     "timeout_ms": timeout,
-                    "user_request_preview": (user_request[:100] if user_request else None),
+                    "user_request_preview": (
+                        user_request[:100] if user_request else None
+                    ),
                 },
             )
 
@@ -790,7 +814,9 @@ class RoutingEventClient:
                         },
                     )
                 except Exception as notify_error:
-                    self.logger.debug(f"Failed to send Slack notification: {notify_error}")
+                    self.logger.debug(
+                        f"Failed to send Slack notification: {notify_error}"
+                    )
 
             # Wrap non-OnexError exceptions for ONEX compliance
             if isinstance(e, OnexError):
@@ -802,7 +828,9 @@ class RoutingEventClient:
                     "component": "RoutingEventClient",
                     "operation": "request_routing",
                     "correlation_id": correlation_id,
-                    "user_request_preview": (user_request[:100] if user_request else None),
+                    "user_request_preview": (
+                        user_request[:100] if user_request else None
+                    ),
                     "original_error_type": type(e).__name__,
                     "original_error": str(e),
                 },
@@ -943,7 +971,9 @@ class RoutingEventClient:
                                 else:
                                     # Convert Pydantic model to dict
                                     formatted_recommendations.append(
-                                        rec.model_dump() if hasattr(rec, "model_dump") else rec
+                                        rec.model_dump()
+                                        if hasattr(rec, "model_dump")
+                                        else rec
                                     )
 
                             result = {
@@ -1165,7 +1195,9 @@ async def route_via_events(
                         "component": "route_via_events",
                         "event_routing_error": str(e),
                         "local_routing_error": str(fallback_error),
-                        "user_request_preview": (user_request[:100] if user_request else None),
+                        "user_request_preview": (
+                            user_request[:100] if user_request else None
+                        ),
                     },
                 ) from e
         else:

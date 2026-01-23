@@ -98,7 +98,12 @@ class ConfidenceScorer:
         weighted_historical = historical_score * self.WEIGHT_HISTORICAL
 
         # Total score
-        total = weighted_trigger + weighted_context + weighted_capability + weighted_historical
+        total = (
+            weighted_trigger
+            + weighted_context
+            + weighted_capability
+            + weighted_historical
+        )
 
         # Generate explanation
         explanation = self._generate_explanation(

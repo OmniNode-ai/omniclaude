@@ -110,7 +110,13 @@ class TestDependencyVersionCompatibility:
 
     def test_pydantic_v2_features_available(self) -> None:
         """Pydantic v2 features used by omniclaude are available."""
-        from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+        from pydantic import (
+            BaseModel,
+            ConfigDict,
+            Field,
+            field_validator,
+            model_validator,
+        )
         from pydantic.functional_validators import BeforeValidator
 
         # All imports succeed - v2 features are available
@@ -145,7 +151,9 @@ class TestImportReload:
         # Class should still be usable after reload
         assert schemas.ModelHookSessionStartedPayload is not None
         # Note: class identity changes after reload, but functionality preserved
-        assert schemas.ModelHookSessionStartedPayload.__name__ == original_class.__name__
+        assert (
+            schemas.ModelHookSessionStartedPayload.__name__ == original_class.__name__
+        )
 
     def test_topics_reload_safe(self) -> None:
         """omniclaude.hooks.topics can be safely reloaded."""

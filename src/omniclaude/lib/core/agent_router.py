@@ -53,7 +53,9 @@ except ImportError:
     class OnexError(Exception):
         """Fallback OnexError for ONEX compliance."""
 
-        def __init__(self, code: EnumCoreErrorCode, message: str, details: dict | None = None):
+        def __init__(
+            self, code: EnumCoreErrorCode, message: str, details: dict | None = None
+        ):
             self.code = code
             self.error_code = code
             self.message = message
@@ -351,7 +353,9 @@ class AgentRouter:
             trigger_matching_start_us = time.perf_counter_ns() // 1000
             trigger_matches = self.trigger_matcher.match(user_request)
             trigger_matching_end_us = time.perf_counter_ns() // 1000
-            trigger_matching_time_us = trigger_matching_end_us - trigger_matching_start_us
+            trigger_matching_time_us = (
+                trigger_matching_end_us - trigger_matching_start_us
+            )
 
             logger.debug(
                 f"Found {len(trigger_matches)} trigger matches",
@@ -405,7 +409,9 @@ class AgentRouter:
             recommendations = recommendations[:max_recommendations]
 
             confidence_scoring_end_us = time.perf_counter_ns() // 1000
-            confidence_scoring_time_us = confidence_scoring_end_us - confidence_scoring_start_us
+            confidence_scoring_time_us = (
+                confidence_scoring_end_us - confidence_scoring_start_us
+            )
 
             # 7. Cache results (even empty results to avoid recomputation)
             self.cache.set(user_request, recommendations, context)
@@ -427,8 +433,12 @@ class AgentRouter:
                 f"Routed request to {len(recommendations)} agents",
                 extra={
                     "user_request": user_request[:100],
-                    "top_agent": (recommendations[0].agent_name if recommendations else "none"),
-                    "confidence": (recommendations[0].confidence.total if recommendations else 0.0),
+                    "top_agent": (
+                        recommendations[0].agent_name if recommendations else "none"
+                    ),
+                    "confidence": (
+                        recommendations[0].confidence.total if recommendations else 0.0
+                    ),
                     "total_candidates": len(trigger_matches),
                     "routing_time_us": self.last_routing_timing.total_routing_time_us,
                 },
@@ -532,8 +542,12 @@ class AgentRouter:
                 f"Async routed request to {len(recommendations)} agents",
                 extra={
                     "user_request": user_request[:100],
-                    "top_agent": (recommendations[0].agent_name if recommendations else "none"),
-                    "confidence": (recommendations[0].confidence.total if recommendations else 0.0),
+                    "top_agent": (
+                        recommendations[0].agent_name if recommendations else "none"
+                    ),
+                    "confidence": (
+                        recommendations[0].confidence.total if recommendations else 0.0
+                    ),
                     "routing_method": "event_driven",
                 },
             )
@@ -661,7 +675,9 @@ class AgentRouter:
             )
             return None
 
-    def _create_explicit_recommendation(self, agent_name: str) -> AgentRecommendation | None:
+    def _create_explicit_recommendation(
+        self, agent_name: str
+    ) -> AgentRecommendation | None:
         """
         Create recommendation for explicitly requested agent.
 

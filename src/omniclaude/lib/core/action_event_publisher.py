@@ -37,7 +37,7 @@ import logging
 import os
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
@@ -53,9 +53,7 @@ except ImportError:
 # Import Prometheus metrics
 try:
     from omniclaude.lib.prometheus_metrics import (
-        event_publish_bytes,
         event_publish_counter,
-        event_publish_duration,
         event_publish_errors_counter,
         record_event_publish,
     )
@@ -64,9 +62,7 @@ try:
 except ImportError:
     try:
         from agents.lib.prometheus_metrics import (
-            event_publish_bytes,
             event_publish_counter,
-            event_publish_duration,
             event_publish_errors_counter,
             record_event_publish,
         )
@@ -364,7 +360,9 @@ async def publish_action_event(
         if producer is None:
             logger.warning("Kafka producer unavailable, action event not published")
             if PROMETHEUS_AVAILABLE:
-                event_publish_counter.labels(topic="agent-actions", status="unavailable").inc()
+                event_publish_counter.labels(
+                    topic="agent-actions", status="unavailable"
+                ).inc()
             return False
 
         # Publish to Kafka

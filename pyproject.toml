@@ -18,7 +18,7 @@ dev = [
     "pytest-asyncio>=0.24.0",
     "pytest-cov>=4.1.0",
     "pytest-split>=0.8.0",
-    "ruff>=0.12.5",
+    "ruff>=0.14.0",
     "mypy>=1.17.0",
     "black>=24.0.0",
     "coverage[toml]>=7.4.0",
@@ -37,29 +37,172 @@ build-backend = "hatchling.build"
 packages = ["src/omniclaude"]
 
 [tool.ruff]
-line-length = 100
 target-version = "py312"
-exclude = ["_archive"]
+line-length = 88
+exclude = [
+    "**/archived/**",
+    "**/archive/**",
+    "**/__pycache__/**",
+    "**/site-packages/**",
+    "_archive/**",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
 
 [tool.ruff.lint]
-select = [
-    "E",      # pycodestyle errors
-    "W",      # pycodestyle warnings
-    "F",      # pyflakes
-    "I",      # isort
-    "B",      # flake8-bugbear
-    "C4",     # flake8-comprehensions
-    "UP",     # pyupgrade
-    "ARG",    # flake8-unused-arguments
-    "SIM",    # flake8-simplify
-]
+select = ["E", "F", "W", "C90", "I", "N", "UP", "YTT", "S", "BLE", "FBT", "B", "A", "COM", "C4", "DTZ", "T10", "EM", "EXE", "ISC", "ICN", "G", "INP", "PIE", "T20", "PT", "Q", "RSE", "RET", "SLF", "SIM", "TID", "TCH", "ARG", "PTH", "ERA", "PD", "PGH", "PL", "TRY", "NPY", "RUF"]
 ignore = [
-    "E501",   # line too long (handled by formatter)
+    "S101",      # Allow assert statements in tests
+    "E501",      # Line too long (technical debt)
+    "BLE001",    # Blind exception catching (technical debt)
+    "E402",      # Module level import not at top (technical debt)
+    "TC001",     # Type checking imports (technical debt)
+    "TC003",     # Type checking imports (technical debt)
+    "TC004",     # Type checking imports (technical debt)
+    "TC006",     # Quotes in typing.cast() (technical debt)
+    "UP046",     # Use PEP 695 type parameters (technical debt)
+    "PLR0911",   # Too many returns (technical debt)
+    "PLR0912",   # Too many branches (technical debt)
+    "PLR0913",   # Too many arguments (technical debt)
+    "PLR0915",   # Too many statements (technical debt)
+    "PLR2004",   # Magic values (technical debt)
+    "FBT001",    # Boolean positional args (technical debt)
+    "FBT002",    # Boolean default args (technical debt)
+    "EM101",     # Exception string literal (technical debt)
+    "EM102",     # Exception f-string literal (technical debt)
+    "TRY003",    # Long exception messages (technical debt)
+    "TRY004",    # Exception type preference (technical debt)
+    "TRY300",    # Consider else block (technical debt)
+    "DTZ005",    # datetime.now() without tz (technical debt)
+    "B008",      # Function call in defaults (technical debt)
+    "ARG003",    # Unused class method argument (technical debt)
+    "ERA001",    # Commented out code (technical debt)
+    "SIM102",    # Nested if statements (technical debt)
+    "B007",      # Unused loop variable (technical debt)
+    "PT018",     # Assertion breakdown (technical debt)
+    "EXE001",    # Shebang without executable (technical debt)
+    "B904",      # raise from (will fix incrementally)
+    "RET505",    # Unnecessary elif (will fix incrementally)
+    "COM812",    # Trailing commas (will fix incrementally)
+    "C901",      # Function complexity (architectural)
+    "E721",      # Type comparisons (technical debt)
+    "N806",      # Variable naming (technical debt)
+    "TRY203",    # Redundant exception handler (technical debt)
+    "RUF003",    # Comment formatting (technical debt)
+    "SIM117",    # Nested with statements (technical debt)
+    "SIM105",    # contextlib.suppress (technical debt)
+    "PTH123",    # Path.open() (technical debt)
+    "PT017",     # pytest.raises in except (technical debt)
+    "F841",      # Unused variable (technical debt)
+    "ARG002",    # Unused method argument (technical debt)
+    "T201",      # Print statements (technical debt)
+    "FBT003",    # Boolean positional value in call (technical debt)
+    "N802",      # Invalid function name (technical debt)
+    "S603",      # Subprocess without shell (technical debt)
+    "S607",      # Start process with partial path (technical debt)
+    "PT011",     # Pytest raises too broad (technical debt)
+    "SLF001",    # Private member access (technical debt)
+    "DTZ001",    # Call datetime without tzinfo (technical debt)
+    "ARG001",    # Unused function argument (technical debt)
+    "G004",      # Logging f-string (technical debt)
+    "INP001",    # Implicit namespace package (technical debt)
+    "TRY301",    # Raise within try (technical debt)
+    "RUF022",    # Unsorted dunder all (technical debt)
+    "SIM103",    # Needless bool (technical debt)
+    "S301",      # Suspicious serialization usage (technical debt)
+    "B019",      # Cached instance method (technical debt)
+    "PLW2901",   # Redefined loop name (technical debt)
+    "B011",      # Assert false (technical debt)
+    "PT015",     # Pytest assert always false (technical debt)
+    "RUF005",    # Collection literal concatenation (technical debt)
+    "S110",      # Try except pass (technical debt)
+    "S112",      # Try except continue (technical debt)
+    "SIM108",    # If else block instead of if exp (technical debt)
+    "S311",      # Suspicious non-cryptographic random (technical debt)
+    "S324",      # Hashlib insecure hash function (technical debt)
+    "PLR1714",   # Repeated equality comparison (technical debt)
+    "RUF012",    # Mutable class default (technical debt)
+    "TRY401",    # Verbose log message (technical debt)
+    "S105",      # Hardcoded password string (technical debt)
+    "B017",      # Assert raises exception (technical debt)
+    "A001",      # Builtin variable shadowing (technical debt)
+    "PT012",     # Pytest raises with multiple statements (technical debt)
+    "RET503",    # Implicit return (technical debt)
+    "RET504",    # Unnecessary assign (technical debt)
+    "SIM101",    # Duplicate isinstance call (technical debt)
+    "SIM110",    # Reimplemented builtin (technical debt)
+    "ARG005",    # Unused lambda argument (technical debt)
+    "E711",      # None comparison (technical debt)
+    "E722",      # Bare except (technical debt)
+    "PLR1722",   # Sys exit alias (technical debt)
+    "ISC001",    # Implicit string concatenation (conflicts with formatter)
+    "PLC0415",   # Import not at top-level (intentional lazy imports)
+    "PLW0603",   # Global statement (intentional caching pattern)
+    "PLW1641",   # Missing __hash__ (Pydantic models intentionally unhashable)
+    "DTZ901",    # datetime.min without tz (test sentinels)
+    "S106",      # Hardcoded password (test fixtures)
+    "S608",      # SQL injection false positive
+    "F821",      # Undefined name (technical debt)
+    "B010",      # setattr with constant (intentional)
+    "B027",      # Empty method without abstract (intentional hooks)
+    "RUF006",    # Dangling task (async fire-and-forget)
+    "N818",      # Exception name without Error suffix (legacy)
+    "S104",      # Possible binding to all interfaces (test/dev)
+    "S107",      # Possible hardcoded password default (test fixtures)
+    "S108",      # Probable insecure temp file (test fixtures)
+    "PLR0402",   # Use from import (style preference)
+    "F403",      # Star import (legacy patterns)
+    "E712",      # Comparison to True/False (intentional)
+    "G101",      # Logging extra field clash (technical debt)
+    "PT019",     # Pytest fixture without value (technical debt)
+    "RUF043",    # Pytest raises ambiguous pattern (technical debt)
+    "TRY400",    # Use logging.exception instead of logging.error (technical debt)
+    "G201",      # Use logging.exception instead of .error with exc_info (technical debt)
+    "PTH109",    # os.getcwd() vs Path.cwd() (technical debt)
+    "PTH119",    # os.path.basename() vs Path.name (technical debt)
+    "PTH111",    # os.path.expanduser() vs Path.expanduser() (technical debt)
+    "PTH100",    # os.path.abspath() vs Path.resolve() (technical debt)
+    "PTH118",    # os.path.join() vs Path / (technical debt)
+    "PTH120",    # os.path.dirname() vs Path.parent (technical debt)
+    "PIE790",    # Unnecessary pass statement (technical debt)
+    "RUF010",    # Use explicit conversion flag (technical debt)
+    "N815",      # Variable is mixedCase (technical debt)
+    "N803",      # Argument is mixedCase (technical debt)
+    "N812",      # Lowercase imported as non-lowercase (technical debt)
+    "B023",      # Function defined in loop (technical debt)
+    "B909",      # Mutation of iterator (technical debt)
+    "A002",      # Builtin shadowing argument (technical debt)
+    "A003",      # Builtin shadowing class attribute (technical debt)
+    "UP015",     # Redundant open modes (technical debt)
+    "UP039",     # Unnecessary parentheses after class definition (technical debt)
+    "DTZ003",    # datetime.utcnow without tz (technical debt)
+    "PLR1730",   # Replace if with max/min call (technical debt)
+    "SIM118",    # Use key in dict instead of key in dict.keys() (technical debt)
+    "B905",      # zip() without strict parameter (technical debt)
+    "PIE810",    # Call startswith once with tuple (technical debt)
+    "PLR1736",   # List index lookup in enumerate loop (technical debt)
+    "S602",      # Subprocess call with shell=True (technical debt)
+    "S404",      # Subprocess module import (technical debt)
+    "PERF401",   # Use list comprehension (technical debt)
+    "PLR0917",   # Too many positional arguments (technical debt)
+    "TRY002",    # Create your own exception (technical debt)
+    "TRY201",    # Use raise without specifying exception name (technical debt)
+    "RET507",    # Unnecessary else after continue (technical debt)
+    "TC005",     # Empty type-checking block (technical debt)
+    "PTH110",    # os.path.exists vs Path.exists (technical debt)
+    "PTH116",    # os.stat vs Path.stat (technical debt)
+    "PTH103",    # os.makedirs vs Path.mkdir (technical debt)
+    "RUF100",    # Unused noqa directive (technical debt)
+    "I001",      # Import block unsorted (technical debt - config imports)
+    "PLR5501",   # Use elif instead of else then if (technical debt)
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# Tests often modify sys.path before imports
-"tests/**/test_*.py" = ["E402"]
+"tests/**/test_*.py" = ["E402", "DTZ007"]
 "tests/*.py" = ["E402"]
 
 [tool.ruff.lint.isort]

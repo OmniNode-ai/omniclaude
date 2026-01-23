@@ -186,7 +186,9 @@ _SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # Reference: RFC 7468 (Textual Encodings of PKIX, PKCS, and CMS Structures)
     # Reference: OpenSSH PROTOCOL.key format for OPENSSH keys
     (
-        re.compile(r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----"),
+        re.compile(
+            r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----"
+        ),
         "-----BEGIN ***REDACTED*** PRIVATE KEY-----",
     ),
     # Bearer tokens

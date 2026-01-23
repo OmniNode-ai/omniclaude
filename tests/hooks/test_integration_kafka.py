@@ -149,7 +149,9 @@ async def consume_messages(
 
             try:
                 # Use getmany with short timeout for responsive loop
-                result = await consumer.getmany(timeout_ms=500, max_records=max_messages)
+                result = await consumer.getmany(
+                    timeout_ms=500, max_records=max_messages
+                )
                 for _tp, records in result.items():
                     for record in records:
                         try:

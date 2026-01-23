@@ -149,7 +149,9 @@ def check_running_services() -> dict[str, Any]:
         )
         if result.returncode == 0 and result.stdout.strip():
             docker_containers = [
-                json.loads(line) for line in result.stdout.strip().split("\n") if line.strip()
+                json.loads(line)
+                for line in result.stdout.strip().split("\n")
+                if line.strip()
             ]
             postgres_containers = [
                 c for c in docker_containers if "postgres" in c.get("Names", "").lower()
@@ -186,7 +188,9 @@ def check_running_services() -> dict[str, Any]:
         )
         if result.returncode == 0 and result.stdout.strip():
             docker_containers = [
-                json.loads(line) for line in result.stdout.strip().split("\n") if line.strip()
+                json.loads(line)
+                for line in result.stdout.strip().split("\n")
+                if line.strip()
             ]
             memgraph_containers = [
                 c for c in docker_containers if "memgraph" in c.get("Names", "").lower()
@@ -223,7 +227,9 @@ def check_running_services() -> dict[str, Any]:
         )
         if result.returncode == 0 and result.stdout.strip():
             docker_containers = [
-                json.loads(line) for line in result.stdout.strip().split("\n") if line.strip()
+                json.loads(line)
+                for line in result.stdout.strip().split("\n")
+                if line.strip()
             ]
             qdrant_containers = [
                 c for c in docker_containers if "qdrant" in c.get("Names", "").lower()
@@ -480,7 +486,9 @@ def test_pattern_tracking_flow() -> dict[str, Any]:
             health_results = checker.run_comprehensive_health_check()
             test_results["tests"]["health_check"] = {
                 "status": (
-                    "success" if health_results["overall_status"] == "healthy" else "partial"
+                    "success"
+                    if health_results["overall_status"] == "healthy"
+                    else "partial"
                 ),
                 "overall_status": health_results["overall_status"],
                 "summary": health_results["summary"],
@@ -528,8 +536,12 @@ def test_pattern_tracking_flow() -> dict[str, Any]:
 
     # Summary
     total_tests = len(test_results["tests"])
-    successful_tests = len([t for t in test_results["tests"].values() if t["status"] == "success"])
-    failed_tests = len([t for t in test_results["tests"].values() if t["status"] == "error"])
+    successful_tests = len(
+        [t for t in test_results["tests"].values() if t["status"] == "success"]
+    )
+    failed_tests = len(
+        [t for t in test_results["tests"].values() if t["status"] == "error"]
+    )
 
     test_results["summary"] = {
         "total_tests": total_tests,

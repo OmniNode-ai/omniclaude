@@ -466,7 +466,9 @@ async def emit_hook_event(
         return ModelEventPublishResult(
             success=False,
             topic=topic,
-            error_message=(error_msg[:997] + "..." if len(error_msg) > 1000 else error_msg),
+            error_message=(
+                error_msg[:997] + "..." if len(error_msg) > 1000 else error_msg
+            ),
         )
 
     finally:

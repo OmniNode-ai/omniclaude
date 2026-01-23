@@ -145,11 +145,15 @@ class IntelligenceEventClient:
             )
         self.enable_intelligence = enable_intelligence
         self.request_timeout_ms = request_timeout_ms
-        self.consumer_group_id = consumer_group_id or f"omniclaude-intelligence-{uuid4().hex[:8]}"
+        self.consumer_group_id = (
+            consumer_group_id or f"omniclaude-intelligence-{uuid4().hex[:8]}"
+        )
 
         self._producer: AIOKafkaProducer | None = None
         self._consumer: AIOKafkaConsumer | None = None
-        self._consumer_task: asyncio.Task | None = None  # Track background consumer task
+        self._consumer_task: asyncio.Task | None = (
+            None  # Track background consumer task
+        )
         self._started = False
         self._pending_requests: dict[str, asyncio.Future] = {}
         self._consumer_ready = asyncio.Event()  # Signal when consumer is polling
@@ -255,7 +259,9 @@ class IntelligenceEventClient:
             self.logger.info("Waiting for consumer task to start polling...")
             consumer_ready_timeout = 5.0  # 5 seconds
             try:
-                await asyncio.wait_for(self._consumer_ready.wait(), timeout=consumer_ready_timeout)
+                await asyncio.wait_for(
+                    self._consumer_ready.wait(), timeout=consumer_ready_timeout
+                )
                 self.logger.info("Consumer task confirmed polling - ready for requests")
             except TimeoutError:
                 error_msg = (
@@ -406,7 +412,9 @@ class IntelligenceEventClient:
         if file_path.exists() and file_path.is_file():
             try:
                 content = file_path.read_text(encoding="utf-8")
-                self.logger.debug(f"Read file content from {source_path} ({len(content)} bytes)")
+                self.logger.debug(
+                    f"Read file content from {source_path} ({len(content)} bytes)"
+                )
             except Exception as e:
                 self.logger.warning(
                     f"Failed to read file {source_path}: {e}. Proceeding with empty content."
@@ -505,7 +513,9 @@ class IntelligenceEventClient:
                 timeout_ms=timeout,
             )
 
-            self.logger.debug(f"Code analysis completed (correlation_id: {correlation_id})")
+            self.logger.debug(
+                f"Code analysis completed (correlation_id: {correlation_id})"
+            )
 
             return result
 
@@ -728,7 +738,8 @@ class IntelligenceEventClient:
                     # Check for completion event (full dotted notation)
                     if (
                         event_type == "omninode.intelligence.code-analysis.completed.v1"
-                        or event_type == "CODE_ANALYSIS_COMPLETED"  # Backward compatibility
+                        or event_type
+                        == "CODE_ANALYSIS_COMPLETED"  # Backward compatibility
                         or msg.topic == self.TOPIC_COMPLETED
                     ):
                         # Success response
@@ -742,7 +753,8 @@ class IntelligenceEventClient:
                     # Check for failure event (full dotted notation)
                     elif (
                         event_type == "omninode.intelligence.code-analysis.failed.v1"
-                        or event_type == "CODE_ANALYSIS_FAILED"  # Backward compatibility
+                        or event_type
+                        == "CODE_ANALYSIS_FAILED"  # Backward compatibility
                         or msg.topic == self.TOPIC_FAILED
                     ):
                         # Error response
@@ -751,7 +763,9 @@ class IntelligenceEventClient:
                         error_message = payload.get("error_message", "Analysis failed")
 
                         if not future.done():
-                            future.set_exception(KafkaError(f"{error_code}: {error_message}"))
+                            future.set_exception(
+                                KafkaError(f"{error_code}: {error_message}")
+                            )
                             self.logger.warning(
                                 f"Failed request (correlation_id: {correlation_id}, error: {error_code})"
                             )

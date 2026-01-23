@@ -69,7 +69,9 @@ class PerformanceMetrics:
         """Update processing time metrics."""
         self.total_processing_time_ms += duration_ms
         self.total_operations += 1
-        self.avg_processing_time_ms = self.total_processing_time_ms / self.total_operations
+        self.avg_processing_time_ms = (
+            self.total_processing_time_ms / self.total_operations
+        )
 
     def update_api_time(self, response_time_ms: float):
         """Update API response time metrics."""
@@ -132,7 +134,9 @@ class PatternTrackerConfig:
     """Configuration with performance optimizations."""
 
     def __init__(self, config_path: Path | None = None):
-        self.config_path = config_path or Path.home() / ".claude" / "hooks" / "config.yaml"
+        self.config_path = (
+            config_path or Path.home() / ".claude" / "hooks" / "config.yaml"
+        )
         self._config = self._load_config()
 
     def _load_config(self) -> dict:
@@ -171,7 +175,9 @@ class PatternTrackerConfig:
 
     @property
     def enabled(self) -> bool:
-        result = self.get("PATTERN_TRACKING_ENABLED", ["pattern_tracking", "enabled"], True)
+        result = self.get(
+            "PATTERN_TRACKING_ENABLED", ["pattern_tracking", "enabled"], True
+        )
         return bool(result)
 
     @property
@@ -186,12 +192,16 @@ class PatternTrackerConfig:
 
     @property
     def timeout_seconds(self) -> float:
-        result = self.get("PATTERN_TRACKING_TIMEOUT", ["pattern_tracking", "timeout_seconds"], 5.0)
+        result = self.get(
+            "PATTERN_TRACKING_TIMEOUT", ["pattern_tracking", "timeout_seconds"], 5.0
+        )
         return float(result)
 
     @property
     def max_retries(self) -> int:
-        result = self.get("PATTERN_TRACKING_MAX_RETRIES", ["pattern_tracking", "max_retries"], 3)
+        result = self.get(
+            "PATTERN_TRACKING_MAX_RETRIES", ["pattern_tracking", "max_retries"], 3
+        )
         return int(result)
 
     @property
@@ -235,7 +245,9 @@ class PerformanceMonitor:
         self.metrics = PerformanceMetrics()
         self._lock = threading.Lock()
         self._start_time = time.time()
-        self._response_times: deque[float] = deque(maxlen=1000)  # Rolling window of response times
+        self._response_times: deque[float] = deque(
+            maxlen=1000
+        )  # Rolling window of response times
         self._operation_counts: dict[str, int] = defaultdict(int)
 
     def record_operation(
@@ -299,7 +311,9 @@ class PerformanceMonitor:
     def get_recent_performance(self, window_seconds: int = 60) -> dict[str, float]:
         """Get performance metrics for recent time window."""
         cutoff_time = time.time() - window_seconds
-        recent_times = [t for t in self._response_times if (time.time() - t / 1000) > cutoff_time]
+        recent_times = [
+            t for t in self._response_times if (time.time() - t / 1000) > cutoff_time
+        ]
 
         if not recent_times:
             return {"avg_time_ms": 0, "operations_per_second": 0, "p95_time_ms": 0}
@@ -308,7 +322,9 @@ class PerformanceMonitor:
             "avg_time_ms": sum(recent_times) / len(recent_times),
             "operations_per_second": len(recent_times) / window_seconds,
             "p95_time_ms": (
-                sorted(recent_times)[int(len(recent_times) * 0.95)] if recent_times else 0
+                sorted(recent_times)[int(len(recent_times) * 0.95)]
+                if recent_times
+                else 0
             ),
         }
 
@@ -319,8 +335,8 @@ class BatchAggregator:
     def __init__(self, tracker: "PatternTracker", config: BatchProcessingConfig):
         self.tracker = tracker
         self.config = config
-        self._queue: asyncio.Queue[tuple[str, dict[str, Any], float] | None] = asyncio.Queue(
-            maxsize=config.max_queue_size
+        self._queue: asyncio.Queue[tuple[str, dict[str, Any], float] | None] = (
+            asyncio.Queue(maxsize=config.max_queue_size)
         )
         self._workers: list[asyncio.Task[None]] = []
         self._running = False
@@ -480,7 +496,10 @@ class PatternTracker:
         self._setup_logging()
 
         # Start batch processor if enabled
-        if self.config.batch_config.enabled and self.config.processing_mode == ProcessingMode.BATCH:
+        if (
+            self.config.batch_config.enabled
+            and self.config.processing_mode == ProcessingMode.BATCH
+        ):
             asyncio.create_task(self.batch_processor.start())
 
     def _create_http_client(self) -> httpx.AsyncClient:
@@ -500,7 +519,11 @@ class PatternTracker:
         log_file = (
             self.config.log_file
             if hasattr(self.config, "log_file")
-            else Path.home() / ".claude" / "hooks" / "logs" / "enhanced-pattern-tracker.log"
+            else Path.home()
+            / ".claude"
+            / "hooks"
+            / "logs"
+            / "enhanced-pattern-tracker.log"
         )
         log_file.parent.mkdir(parents=True, exist_ok=True)
         self.log_file = log_file
@@ -509,7 +532,9 @@ class PatternTracker:
         """Generate unique session identifier."""
         return str(uuid.uuid4())
 
-    def _generate_pattern_id_cached(self, code: str, context: dict | None = None) -> str:
+    def _generate_pattern_id_cached(
+        self, code: str, context: dict | None = None
+    ) -> str:
         """Generate pattern ID with caching."""
         if not self.config.cache_config.enable_pattern_caching:
             return self._generate_pattern_id_uncached(code, context)
@@ -529,7 +554,9 @@ class PatternTracker:
 
         return pattern_id
 
-    def _generate_pattern_id_uncached(self, code: str, context: dict | None = None) -> str:
+    def _generate_pattern_id_uncached(
+        self, code: str, context: dict | None = None
+    ) -> str:
         """Generate pattern ID without caching."""
         normalized_code = code.strip()
         code_hash = hashlib.sha256(normalized_code.encode("utf-8")).hexdigest()
@@ -636,7 +663,8 @@ class PatternTracker:
 
         if not self.config.enabled:
             return [
-                self._generate_pattern_id_cached(code, context) for code, context, _ in patterns
+                self._generate_pattern_id_cached(code, context)
+                for code, context, _ in patterns
             ]
 
         start_time = time.time()
@@ -769,15 +797,21 @@ class PatternTracker:
         except httpx.TimeoutException:
             if retry_count < self.config.max_retries:
                 await asyncio.sleep(2**retry_count)
-                return await self._send_to_api_optimized(endpoint_key, data, retry_count + 1)
+                return await self._send_to_api_optimized(
+                    endpoint_key, data, retry_count + 1
+                )
         except httpx.NetworkError:
             if retry_count < self.config.max_retries:
                 await asyncio.sleep(2**retry_count)
-                return await self._send_to_api_optimized(endpoint_key, data, retry_count + 1)
+                return await self._send_to_api_optimized(
+                    endpoint_key, data, retry_count + 1
+                )
         except httpx.HTTPStatusError:
             if retry_count < self.config.max_retries:
                 await asyncio.sleep(2**retry_count)
-                return await self._send_to_api_optimized(endpoint_key, data, retry_count + 1)
+                return await self._send_to_api_optimized(
+                    endpoint_key, data, retry_count + 1
+                )
 
         return None
 
@@ -802,13 +836,15 @@ class PatternTracker:
             },
             "connection_pool": {
                 "max_connections": self.config.connection_pool_config.max_connections,
-                "current_connections": getattr(self.http_client, "_connection_pool", {}).get(
-                    "_num_connections", 0
-                ),
+                "current_connections": getattr(
+                    self.http_client, "_connection_pool", {}
+                ).get("_num_connections", 0),
             },
             "batch_processing": {
                 "enabled": self.config.batch_config.enabled,
-                "queue_size": (self.batch_processor._queue.qsize() if self.batch_processor else 0),
+                "queue_size": (
+                    self.batch_processor._queue.qsize() if self.batch_processor else 0
+                ),
                 "worker_count": self.config.batch_config.worker_count,
             },
         }

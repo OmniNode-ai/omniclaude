@@ -49,7 +49,9 @@ class PatternTrackingLogger:
         # Also add console handler for immediate feedback
         console_handler = logging.StreamHandler(sys.stderr)
         console_handler.setLevel(logging.INFO)
-        console_formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+        console_formatter = logging.Formatter(
+            "%(asctime)s - %(levelname)s - %(message)s"
+        )
         console_handler.setFormatter(console_formatter)
         self.logger.addHandler(console_handler)
 
@@ -63,7 +65,9 @@ class PatternTrackingLogger:
         message = f"⚠️ {operation}: {json.dumps(details, indent=2)}"
         self.logger.warning(message)
 
-    def log_error(self, operation: str, error: Exception, context: dict[str, Any] | None = None):
+    def log_error(
+        self, operation: str, error: Exception, context: dict[str, Any] | None = None
+    ):
         """Log errors with full context"""
         error_details = {
             "operation": operation,
@@ -104,7 +108,9 @@ class PatternTrackingErrorPolicy:
         error_type = type(error).__name__
 
         # Determine if error is retryable
-        is_retryable = any(isinstance(error, error_class) for error_class in self.retryable_errors)
+        is_retryable = any(
+            isinstance(error, error_class) for error_class in self.retryable_errors
+        )
 
         # Initialize retry_delay_seconds to avoid unbound variable
         retry_delay_seconds: int = 5
@@ -112,7 +118,9 @@ class PatternTrackingErrorPolicy:
         # Specific handling for different error types
         if isinstance(error, requests.exceptions.Timeout):
             error_category = "timeout"
-            suggestion = "The request timed out. The service might be overloaded or slow."
+            suggestion = (
+                "The request timed out. The service might be overloaded or slow."
+            )
             retry_suggested = True
             retry_delay_seconds = 10
 
@@ -138,13 +146,17 @@ class PatternTrackingErrorPolicy:
                 retry_suggested = False
         elif isinstance(error, requests.exceptions.ConnectionError):
             error_category = "connection_error"
-            suggestion = "Network connection error. Check your network and the service status."
+            suggestion = (
+                "Network connection error. Check your network and the service status."
+            )
             retry_suggested = True
             retry_delay_seconds = 10
 
         elif isinstance(error, json.JSONDecodeError):
             error_category = "json_decode"
-            suggestion = "Failed to parse JSON response. The service returned invalid data."
+            suggestion = (
+                "Failed to parse JSON response. The service returned invalid data."
+            )
             retry_suggested = False
 
         else:
@@ -277,7 +289,9 @@ def safe_execute_operation(
                     },
                 )
             else:
-                logger.log_success(operation_name, {"attempt": attempt + 1, "result": "success"})
+                logger.log_success(
+                    operation_name, {"attempt": attempt + 1, "result": "success"}
+                )
 
             return {"success": True, "result": result, "attempts": attempt + 1}
 

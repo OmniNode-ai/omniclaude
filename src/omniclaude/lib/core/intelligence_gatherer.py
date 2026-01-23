@@ -88,7 +88,9 @@ class IntelligenceGatherer:
         Returns:
             IntelligenceContext with gathered patterns and best practices
         """
-        self.logger.info(f"Gathering intelligence for {node_type} node in {domain} domain")
+        self.logger.info(
+            f"Gathering intelligence for {node_type} node in {domain} domain"
+        )
 
         intelligence = IntelligenceContext()
 
@@ -108,12 +110,16 @@ class IntelligenceGatherer:
                         "Event-based discovery successful, continuing with additional sources"
                     )
             except Exception as e:
-                self.logger.warning(f"Event-based discovery failed: {e}, using fallback sources")
+                self.logger.warning(
+                    f"Event-based discovery failed: {e}, using fallback sources"
+                )
 
         # Source 2: Built-in pattern library (always available as fallback)
         # Only skip if event discovery was successful and fallback is disabled
         if not event_success or self.config.enable_filesystem_fallback:
-            self._gather_builtin_patterns(intelligence, node_type, domain, service_name, operations)
+            self._gather_builtin_patterns(
+                intelligence, node_type, domain, service_name, operations
+            )
 
         # Source 3: Archon RAG (if available)
         if self.archon:
@@ -159,9 +165,13 @@ class IntelligenceGatherer:
 
         # Get common operations
         if node_type == "EFFECT":
-            intelligence.common_operations.extend(["create", "read", "update", "delete", "execute"])
+            intelligence.common_operations.extend(
+                ["create", "read", "update", "delete", "execute"]
+            )
         elif node_type == "COMPUTE":
-            intelligence.common_operations.extend(["calculate", "transform", "validate", "process"])
+            intelligence.common_operations.extend(
+                ["calculate", "transform", "validate", "process"]
+            )
         elif node_type == "REDUCER":
             intelligence.common_operations.extend(
                 ["aggregate", "reduce", "summarize", "consolidate"]
@@ -172,10 +182,14 @@ class IntelligenceGatherer:
             )
 
         # Get performance targets
-        intelligence.performance_targets.update(self._get_performance_targets(node_type))
+        intelligence.performance_targets.update(
+            self._get_performance_targets(node_type)
+        )
 
         # Get error scenarios
-        intelligence.error_scenarios.extend(self._get_error_scenarios(node_type, domain))
+        intelligence.error_scenarios.extend(
+            self._get_error_scenarios(node_type, domain)
+        )
 
         # Get recommended mixins
         intelligence.required_mixins.extend(self._recommend_mixins(node_type, domain))
@@ -251,7 +265,9 @@ class IntelligenceGatherer:
             are logged but not propagated.
         """
         if not self.event_client:
-            self.logger.debug("Event client not available, skipping event-based discovery")
+            self.logger.debug(
+                "Event client not available, skipping event-based discovery"
+            )
             return False
 
         try:

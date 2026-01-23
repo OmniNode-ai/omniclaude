@@ -63,7 +63,9 @@ class AgentIdentity:
         caps_formatted = "\n".join(f"  - {cap}" for cap in self.capabilities)
 
         # Format triggers
-        triggers_formatted = "\n".join(f"  - {trig}" for trig in self.triggers[:5])  # Top 5
+        triggers_formatted = "\n".join(
+            f"  - {trig}" for trig in self.triggers[:5]
+        )  # Top 5
 
         # Format success criteria if available
         success_formatted = ""
@@ -75,9 +77,7 @@ class AgentIdentity:
         # Format intelligence integration if available
         intelligence_formatted = ""
         if self.intelligence_integration:
-            intelligence_formatted = (
-                f"\n\n**INTELLIGENCE WORKFLOWS**:\n{self.intelligence_integration[:1000]}..."
-            )
+            intelligence_formatted = f"\n\n**INTELLIGENCE WORKFLOWS**:\n{self.intelligence_integration[:1000]}..."
 
         prompt = f"""
 ========================================================================
@@ -201,7 +201,9 @@ class AgentTransformer:
             name=agent_name,
             purpose=config.get("agent_purpose", "No purpose defined"),
             domain=config.get("agent_domain", "general"),
-            description=config.get("agent_description", config.get("agent_purpose", "")),
+            description=config.get(
+                "agent_description", config.get("agent_purpose", "")
+            ),
             capabilities=capabilities,
             triggers=config.get("triggers", []),
             intelligence_integration=intelligence,

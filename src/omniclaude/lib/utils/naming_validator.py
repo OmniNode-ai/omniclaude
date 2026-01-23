@@ -165,7 +165,9 @@ class NamingValidator:
     TS_CLASS_PATTERN = re.compile(
         r"^\s*(?:export\s+)?(?:abstract\s+)?class\s+([A-Za-z_][A-Za-z0-9_]*)"
     )
-    TS_INTERFACE_PATTERN = re.compile(r"^\s*(?:export\s+)?interface\s+([A-Za-z_][A-Za-z0-9_]*)")
+    TS_INTERFACE_PATTERN = re.compile(
+        r"^\s*(?:export\s+)?interface\s+([A-Za-z_][A-Za-z0-9_]*)"
+    )
     TS_FUNCTION_PATTERN = re.compile(
         r"^\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)"
     )
@@ -388,7 +390,9 @@ class NamingValidator:
                                 )
                         else:
                             # Regular variable - must be snake_case (100% in Omninode)
-                            if not self._is_snake_case(name) and not name.startswith("_"):
+                            if not self._is_snake_case(name) and not name.startswith(
+                                "_"
+                            ):
                                 self.violations.append(
                                     Violation(
                                         file=file_path,
@@ -481,7 +485,9 @@ class NamingValidator:
                                 )
                         else:
                             # Regular variable - must be snake_case
-                            if not self._is_snake_case(name) and not name.startswith("_"):
+                            if not self._is_snake_case(name) and not name.startswith(
+                                "_"
+                            ):
                                 self.violations.append(
                                     Violation(
                                         file=file_path,
@@ -746,7 +752,9 @@ class NamingValidator:
         if "BaseModel" in base_names:
             if not self.MODEL_PREFIX_PATTERN.match(class_name):
                 suggestion = (
-                    f"Model{class_name}" if not class_name.startswith("Model") else class_name
+                    f"Model{class_name}"
+                    if not class_name.startswith("Model")
+                    else class_name
                 )
                 self.violations.append(
                     Violation(
@@ -765,7 +773,9 @@ class NamingValidator:
         if "Enum" in base_names or "str, Enum" in str(base_names):
             if not self.ENUM_PREFIX_PATTERN.match(class_name):
                 suggestion = (
-                    f"Enum{class_name}" if not class_name.startswith("Enum") else class_name
+                    f"Enum{class_name}"
+                    if not class_name.startswith("Enum")
+                    else class_name
                 )
                 self.violations.append(
                     Violation(
@@ -874,10 +884,14 @@ class NamingValidator:
             )
 
         # Exception classes should end with "Error"
-        if any(base in ["Exception", "BaseException", "OnexError"] for base in base_names):
+        if any(
+            base in ["Exception", "BaseException", "OnexError"] for base in base_names
+        ):
             if not self.ERROR_SUFFIX_PATTERN.match(class_name):
                 suggestion = (
-                    f"{class_name}Error" if not class_name.endswith("Error") else class_name
+                    f"{class_name}Error"
+                    if not class_name.endswith("Error")
+                    else class_name
                 )
                 self.violations.append(
                     Violation(

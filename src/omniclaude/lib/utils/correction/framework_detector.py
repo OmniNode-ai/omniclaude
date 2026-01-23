@@ -193,14 +193,18 @@ class FrameworkMethodDetector:
         # 4. Check for framework method via inheritance
         parent_class = self._get_parent_class(func_node, tree)
         if parent_class:
-            inheritance_pattern = self._check_framework_inheritance(func_node, parent_class, tree)
+            inheritance_pattern = self._check_framework_inheritance(
+                func_node, parent_class, tree
+            )
             if inheritance_pattern:
                 self.detected_patterns.append(inheritance_pattern)
                 return inheritance_pattern
 
         return None
 
-    def _check_framework_decorators(self, func_node: ast.FunctionDef) -> FrameworkPattern | None:
+    def _check_framework_decorators(
+        self, func_node: ast.FunctionDef
+    ) -> FrameworkPattern | None:
         """Check if function has framework decorators."""
         for decorator in func_node.decorator_list:
             decorator_name = self._get_decorator_name(decorator)
@@ -335,7 +339,9 @@ class FrameworkMethodDetector:
 # Convenience functions
 
 
-def is_framework_method(func_node: ast.FunctionDef, tree: ast.Module, file_path: str = "") -> bool:
+def is_framework_method(
+    func_node: ast.FunctionDef, tree: ast.Module, file_path: str = ""
+) -> bool:
     """
     Convenience function to check if a method is a framework method.
 
