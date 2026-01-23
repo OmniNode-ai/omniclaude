@@ -46,7 +46,7 @@ try:
         CommentSeverity,
         CommentStatus,
         ModelPRComment,
-        ModelPRCommentSource,
+        EnumPRCommentSource,
         ModelPRIssue,
         detect_bot_type,
     )
@@ -60,7 +60,7 @@ except ImportError:
         CommentSeverity,
         CommentStatus,
         ModelPRComment,
-        ModelPRCommentSource,
+        EnumPRCommentSource,
         ModelPRIssue,
         detect_bot_type,
     )

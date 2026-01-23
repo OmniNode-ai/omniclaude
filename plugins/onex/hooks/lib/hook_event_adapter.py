@@ -101,7 +101,8 @@ class ModelRoutingDecisionConfig:
     latency_ms: int
     correlation_id: str
     user_request: str | None = None
-    alternatives: list[Any] | None = None
+    # Each alternative contains agent_name (str) and confidence (float)
+    alternatives: list[dict[str, str | float]] | None = None
     reasoning: str | None = None
     context: dict[str, Any] | None = None
     project_path: str | None = None
@@ -140,7 +141,8 @@ class ModelDetectionFailureConfig:
 
     user_request: str
     failure_reason: str
-    attempted_methods: list[Any] | None = None
+    # Detection method names tried (e.g., "fuzzy_matching", "exact_match")
+    attempted_methods: list[str] | None = None
     error_details: dict[str, Any] | None = None
     correlation_id: str | None = None
     project_path: str | None = None
@@ -350,7 +352,7 @@ class HookEventAdapter:
         latency_ms: int,
         correlation_id: str,
         user_request: str | None = None,
-        alternatives: list | None = None,
+        alternatives: list[dict[str, str | float]] | None = None,
         reasoning: str | None = None,
         context: dict[str, Any] | None = None,
         project_path: str | None = None,
@@ -608,7 +610,7 @@ class HookEventAdapter:
         self,
         user_request: str,
         failure_reason: str,
-        attempted_methods: list | None = None,
+        attempted_methods: list[str] | None = None,
         error_details: dict[str, Any] | None = None,
         correlation_id: str | None = None,
         project_path: str | None = None,

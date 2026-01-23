@@ -7,10 +7,10 @@ manipulating PR review data from GitHub. It ensures that no comments are
 ever lost, with special attention to bot comments (especially Claude Code).
 
 Usage:
-    from models import ModelPRData, ModelPRComment, ModelPRCommentSource, BotType
+    from models import ModelPRData, ModelPRComment, EnumPRCommentSource, BotType
 
     # Parse GitHub API response
-    comment = ModelPRComment.from_github_response(github_data, ModelPRCommentSource.ISSUE_COMMENT)
+    comment = ModelPRComment.from_github_response(github_data, EnumPRCommentSource.ISSUE_COMMENT)
 
     # Check if it's a Claude bot comment
     if comment.is_claude_bot():
@@ -109,7 +109,7 @@ def detect_bot_type(author: str) -> BotType:
 # =============================================================================
 
 
-class ModelPRCommentSource(str, Enum):
+class EnumPRCommentSource(str, Enum):
     """
     Source of a PR comment in GitHub.
 
@@ -395,7 +395,7 @@ class ModelPRComment(BaseModel):
     model_config = ConfigDict(extra="allow", frozen=False)
 
     id: str = Field(..., description="GitHub comment ID")
-    source: ModelPRCommentSource = Field(..., description="Where this comment came from")
+    source: EnumPRCommentSource = Field(..., description="Where this comment came from")
     author: str = Field(..., description="GitHub username of comment author")
     author_type: BotType = Field(default=BotType.HUMAN, description="Type of author")
     body: str = Field(..., description="Comment body text")
@@ -583,7 +583,7 @@ class ModelPRComment(BaseModel):
         # Create a temporary instance to use the instance method
         temp = cls(
             id="temp",
-            source=ModelPRCommentSource.PR_COMMENT,
+            source=EnumPRCommentSource.PR_COMMENT,
             author="temp",
             body=body,
             created_at=datetime.now(),
@@ -607,7 +607,7 @@ class ModelPRComment(BaseModel):
     def from_github_response(
         cls,
         data: dict[str, Any],
-        source: ModelPRCommentSource,
+        source: EnumPRCommentSource,
         *,
         default_severity: CommentSeverity = CommentSeverity.UNCLASSIFIED,
         default_status: CommentStatus = CommentStatus.UNADDRESSED,
@@ -626,7 +626,7 @@ class ModelPRComment(BaseModel):
 
         Example:
             >>> data = {"id": 123, "user": {"login": "claude[bot]"}, ...}
-            >>> comment = ModelPRComment.from_github_response(data, ModelPRCommentSource.ISSUE_COMMENT)
+            >>> comment = ModelPRComment.from_github_response(data, EnumPRCommentSource.ISSUE_COMMENT)
             >>> comment.is_claude_bot()
             True
         """
@@ -898,7 +898,7 @@ class ModelPRData(BaseModel):
         # Sort by severity (critical first)
         return sorted(actionable, key=lambda c: c.severity.priority_order)
 
-    def get_comments_by_source(self, source: ModelPRCommentSource) -> list[ModelPRComment]:
+    def get_comments_by_source(self, source: EnumPRCommentSource) -> list[ModelPRComment]:
         """
         Get comments from a specific source.
 
@@ -978,7 +978,7 @@ class ModelPRData(BaseModel):
             # Find inline comments that belong to this review
             review_id = str(review_data.get("id", ""))
             review_comments = [
-                ModelPRComment.from_github_response(c, ModelPRCommentSource.INLINE)
+                ModelPRComment.from_github_response(c, EnumPRCommentSource.INLINE)
                 for c in inline_comments
                 if str(c.get("pull_request_review_id", "")) == review_id
             ]
@@ -988,20 +988,20 @@ class ModelPRData(BaseModel):
         # Parse standalone inline comments (not part of a review)
         review_ids = {str(r.id) for r in parsed_reviews}
         standalone_inline = [
-            ModelPRComment.from_github_response(c, ModelPRCommentSource.INLINE)
+            ModelPRComment.from_github_response(c, EnumPRCommentSource.INLINE)
             for c in inline_comments
             if str(c.get("pull_request_review_id", "")) not in review_ids
         ]
 
         # Parse PR comments
         parsed_pr_comments = [
-            ModelPRComment.from_github_response(c, ModelPRCommentSource.PR_COMMENT)
+            ModelPRComment.from_github_response(c, EnumPRCommentSource.PR_COMMENT)
             for c in pr_comments
         ]
 
         # Parse issue comments (CRITICAL: This is where Claude posts!)
         parsed_issue_comments = [
-            ModelPRComment.from_github_response(c, ModelPRCommentSource.ISSUE_COMMENT)
+            ModelPRComment.from_github_response(c, EnumPRCommentSource.ISSUE_COMMENT)
             for c in issue_comments
         ]
 
@@ -1630,7 +1630,7 @@ __all__ = [
     "ModelPRAnalysis",
     "ModelPRComment",
     # Enums
-    "ModelPRCommentSource",
+    "EnumPRCommentSource",
     "ModelPRData",
     "ModelPRIssue",
     "ModelPRReview",

@@ -22,7 +22,7 @@ from models import (
     CommentStatus,
     ModelFileReference,
     ModelPRComment,
-    ModelPRCommentSource,
+    EnumPRCommentSource,
     ModelPRIssue,
     detect_bot_type,
 )
@@ -402,7 +402,7 @@ class TestModelPRIssue:
         """Test from_pr_comment with numeric comment ID."""
         comment = ModelPRComment(
             id="12345",  # Numeric ID (REST API style)
-            source=ModelPRCommentSource.INLINE,
+            source=EnumPRCommentSource.INLINE,
             author="reviewer",
             body="This needs fixing",
             created_at=datetime.now(),
@@ -420,7 +420,7 @@ class TestModelPRIssue:
         """Test from_pr_comment with non-numeric ID (GraphQL style)."""
         comment = ModelPRComment(
             id="IC_kwDOABC123",  # GraphQL node ID
-            source=ModelPRCommentSource.ISSUE_COMMENT,
+            source=EnumPRCommentSource.ISSUE_COMMENT,
             author="claude[bot]",
             body="Security vulnerability detected",
             created_at=datetime.now(),
@@ -436,7 +436,7 @@ class TestModelPRIssue:
         resolved_time = datetime.now()
         comment = ModelPRComment(
             id="999",
-            source=ModelPRCommentSource.INLINE,
+            source=EnumPRCommentSource.INLINE,
             author="reviewer",
             body="Minor issue",
             created_at=datetime.now(),
@@ -454,7 +454,7 @@ class TestModelPRIssue:
         """Test from_pr_comment handles outdated flag."""
         comment = ModelPRComment(
             id="888",
-            source=ModelPRCommentSource.INLINE,
+            source=EnumPRCommentSource.INLINE,
             author="reviewer",
             body="Old comment",
             created_at=datetime.now(),
@@ -470,7 +470,7 @@ class TestModelPRIssue:
         """Test from_pr_comment extracts meaningful description."""
         comment = ModelPRComment(
             id="777",
-            source=ModelPRCommentSource.PR_COMMENT,
+            source=EnumPRCommentSource.PR_COMMENT,
             author="reviewer",
             body="# Header\n\nThis is the actual issue content\n\nMore details",
             created_at=datetime.now(),
@@ -485,7 +485,7 @@ class TestModelPRIssue:
         """Test from_pr_comment with severity override."""
         comment = ModelPRComment(
             id="666",
-            source=ModelPRCommentSource.REVIEW,
+            source=EnumPRCommentSource.REVIEW,
             author="reviewer",
             body="Minor style issue",
             created_at=datetime.now(),
@@ -500,7 +500,7 @@ class TestModelPRIssue:
         """Test from_pr_comment with empty string ID (edge case from PR #40)."""
         comment = ModelPRComment(
             id="",  # Empty string ID
-            source=ModelPRCommentSource.INLINE,
+            source=EnumPRCommentSource.INLINE,
             author="reviewer",
             body="Some issue to fix",
             created_at=datetime.now(),
@@ -517,7 +517,7 @@ class TestModelPRIssue:
         # Test with whitespace-only ID
         comment = ModelPRComment(
             id="   ",  # Whitespace - isdigit() returns False
-            source=ModelPRCommentSource.PR_COMMENT,
+            source=EnumPRCommentSource.PR_COMMENT,
             author="reviewer",
             body="Issue description",
             created_at=datetime.now(),
@@ -1184,13 +1184,13 @@ class TestModelPRComment:
         """Test creating a basic PR comment."""
         comment = ModelPRComment(
             id="123",
-            source=ModelPRCommentSource.INLINE,
+            source=EnumPRCommentSource.INLINE,
             author="reviewer",
             body="This needs attention",
             created_at=datetime.now(),
         )
         assert comment.id == "123"
-        assert comment.source == ModelPRCommentSource.INLINE
+        assert comment.source == EnumPRCommentSource.INLINE
         assert comment.author == "reviewer"
         assert comment.author_type == BotType.HUMAN
 
@@ -1198,7 +1198,7 @@ class TestModelPRComment:
         """Test auto-detection of Claude bot author."""
         comment = ModelPRComment(
             id="456",
-            source=ModelPRCommentSource.ISSUE_COMMENT,
+            source=EnumPRCommentSource.ISSUE_COMMENT,
             author="claude[bot]",
             body="Code review",
             created_at=datetime.now(),
@@ -1210,7 +1210,7 @@ class TestModelPRComment:
         """Test is_bot method."""
         bot_comment = ModelPRComment(
             id="1",
-            source=ModelPRCommentSource.PR_COMMENT,
+            source=EnumPRCommentSource.PR_COMMENT,
             author="some-bot",
             body="Auto message",
             created_at=datetime.now(),
@@ -1219,7 +1219,7 @@ class TestModelPRComment:
 
         human_comment = ModelPRComment(
             id="2",
-            source=ModelPRCommentSource.PR_COMMENT,
+            source=EnumPRCommentSource.PR_COMMENT,
             author="johndoe",
             body="My review",
             created_at=datetime.now(),
@@ -1230,7 +1230,7 @@ class TestModelPRComment:
         """Test is_blocking method."""
         blocking_comment = ModelPRComment(
             id="1",
-            source=ModelPRCommentSource.INLINE,
+            source=EnumPRCommentSource.INLINE,
             author="reviewer",
             body="Critical security issue",
             created_at=datetime.now(),
@@ -1241,7 +1241,7 @@ class TestModelPRComment:
 
         resolved_critical = ModelPRComment(
             id="2",
-            source=ModelPRCommentSource.INLINE,
+            source=EnumPRCommentSource.INLINE,
             author="reviewer",
             body="Critical security issue",
             created_at=datetime.now(),
@@ -1254,7 +1254,7 @@ class TestModelPRComment:
         """Test auto-classification of severity from content."""
         comment = ModelPRComment(
             id="1",
-            source=ModelPRCommentSource.REVIEW,
+            source=EnumPRCommentSource.REVIEW,
             author="reviewer",
             body="This is a security vulnerability that could cause data loss",
             created_at=datetime.now(),

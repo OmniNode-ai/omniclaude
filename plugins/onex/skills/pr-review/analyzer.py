@@ -28,7 +28,7 @@ from models import (
     CommentStatus,
     ModelPRAnalysis,
     ModelPRComment,
-    ModelPRCommentSource,
+    EnumPRCommentSource,
     ModelPRData,
     classify_severity,
 )

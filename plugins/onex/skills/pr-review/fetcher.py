@@ -31,7 +31,7 @@ from models import (
     CommentStatus,
     ModelFileReference,
     ModelPRComment,
-    ModelPRCommentSource,
+    EnumPRCommentSource,
     ModelPRData,
     ModelPRReview,
     ModelStructuredSection,
@@ -122,19 +122,19 @@ class PRFetcher:
 
         # Inline comments (code review comments with file/line info)
         for c in inline_data or []:
-            comment = self._parse_comment(c, ModelPRCommentSource.INLINE)
+            comment = self._parse_comment(c, EnumPRCommentSource.INLINE)
             if comment:
                 all_comments.append(comment)
 
         # PR conversation comments
         for c in pr_comments_data or []:
-            comment = self._parse_comment(c, ModelPRCommentSource.PR_COMMENT)
+            comment = self._parse_comment(c, EnumPRCommentSource.PR_COMMENT)
             if comment:
                 all_comments.append(comment)
 
         # Issue comments (WHERE CLAUDE BOT POSTS!)
         for c in issue_comments_data or []:
-            comment = self._parse_comment(c, ModelPRCommentSource.ISSUE_COMMENT)
+            comment = self._parse_comment(c, EnumPRCommentSource.ISSUE_COMMENT)
             if comment:
                 all_comments.append(comment)
 
@@ -202,7 +202,7 @@ class PRFetcher:
             return None
 
     def _parse_comment(
-        self, data: dict, source: ModelPRCommentSource
+        self, data: dict, source: EnumPRCommentSource
     ) -> Optional[ModelPRComment]:
         """Parse a GitHub comment into a ModelPRComment model."""
         try:
@@ -667,7 +667,7 @@ def main():
 
             # By source
             print("By Source:")
-            for source in ModelPRCommentSource:
+            for source in EnumPRCommentSource:
                 count = len(pr_data.get_comments_by_source(source))
                 if count > 0:
                     print(f"  {source.value}: {count}")
