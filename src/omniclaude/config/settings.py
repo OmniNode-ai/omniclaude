@@ -10,6 +10,7 @@ Provides comprehensive configuration for all OmniClaude services including:
 - Quality enforcement phases
 """
 
+import logging
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -37,9 +38,14 @@ def _find_and_load_env() -> None:
 
 _find_and_load_env()
 
+logger = logging.getLogger(__name__)
+
 
 class Settings(BaseSettings):
     """Comprehensive settings for OmniClaude plugins and services."""
+
+    # Class-level flag to ensure default warnings are only logged once
+    _defaults_warned: bool = False
 
     # =========================================================================
     # KAFKA / REDPANDA CONFIGURATION
@@ -305,11 +311,40 @@ class Settings(BaseSettings):
 
         return errors
 
+    def log_default_warnings(self) -> None:
+        """Log warnings when using default localhost values.
+
+        This method logs a warning for each service configured with default
+        localhost values, which may indicate missing production configuration.
+        Warnings are only logged once per session to avoid log spam.
+        """
+        if Settings._defaults_warned:
+            return
+        Settings._defaults_warned = True
+
+        if self.postgres_host == "localhost":
+            logger.warning(
+                "Using default postgres_host='localhost'. Set POSTGRES_HOST in .env for production."
+            )
+
+        if not self.kafka_bootstrap_servers:
+            logger.warning(
+                "Using empty kafka_bootstrap_servers (disabled). "
+                "Set KAFKA_BOOTSTRAP_SERVERS in .env for event routing."
+            )
+
+        if self.qdrant_host == "localhost":
+            logger.warning(
+                "Using default qdrant_host='localhost'. Set QDRANT_HOST in .env for production."
+            )
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     """Get singleton settings instance."""
-    return Settings()
+    instance = Settings()
+    instance.log_default_warnings()
+    return instance
 
 
 settings = get_settings()

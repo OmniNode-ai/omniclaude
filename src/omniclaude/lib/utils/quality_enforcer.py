@@ -156,7 +156,7 @@ class ViolationsLogger:
                             summary = loaded
                 except (json.JSONDecodeError, ValueError):
                     # Start fresh if corrupted
-                    pass  # nosec B110 - Reset to clean state if config corrupted
+                    pass  # nosec B110 - Expected when config corrupted, reset to clean state
 
             # Check if this is today's data (reset counter at midnight UTC)
             today = datetime.now(UTC).strftime("%Y-%m-%d")
