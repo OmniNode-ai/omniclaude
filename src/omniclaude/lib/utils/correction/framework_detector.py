@@ -10,7 +10,7 @@ Supported Frameworks:
 - Testing Frameworks (pytest, unittest)
 - Python Magic Methods (__init__, __str__, etc.)
 
-Author: Claude Code + Archon AI Quality Enforcer
+Author: Claude Code + ONEX AI Quality Enforcer
 Date: 2025-09-30
 """
 

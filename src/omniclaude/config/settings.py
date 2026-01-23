@@ -157,13 +157,15 @@ class Settings(BaseSettings):
     # via its Field() mechanism. This is a known pattern in pydantic-settings.
     # See: https://docs.pydantic.dev/latest/concepts/types/#urls
     # =========================================================================
-    archon_intelligence_url: HttpUrl = Field(
+    intelligence_service_url: HttpUrl = Field(
         default="http://localhost:8053",  # type: ignore[assignment]  # Pydantic coerces str to HttpUrl at runtime
-        description="Archon Intelligence service URL",
+        description="Intelligence service URL for ONEX pattern discovery and code analysis",
     )
-    intelligence_service_url: HttpUrl | None = Field(
+    # DEPRECATED: Use intelligence_service_url instead. This alias is retained
+    # for backward compatibility during migration from archon to ONEX naming.
+    archon_intelligence_url: HttpUrl | None = Field(
         default=None,
-        description="Legacy alias for archon_intelligence_url",
+        description="[DEPRECATED] Legacy alias for intelligence_service_url. Use intelligence_service_url instead.",
     )
     main_server_url: HttpUrl = Field(
         default="http://localhost:8181",  # type: ignore[assignment]  # Pydantic coerces str to HttpUrl at runtime

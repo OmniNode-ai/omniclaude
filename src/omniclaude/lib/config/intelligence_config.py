@@ -128,17 +128,17 @@ class IntelligenceConfig(BaseModel):
     # =========================================================================
 
     topic_code_analysis_requested: str = Field(
-        default="dev.archon-intelligence.intelligence.code-analysis-requested.v1",
+        default="dev.onex-intelligence.intelligence.code-analysis-requested.v1",
         description="Topic for code analysis requests",
     )
 
     topic_code_analysis_completed: str = Field(
-        default="dev.archon-intelligence.intelligence.code-analysis-completed.v1",
+        default="dev.onex-intelligence.intelligence.code-analysis-completed.v1",
         description="Topic for successful analysis responses",
     )
 
     topic_code_analysis_failed: str = Field(
-        default="dev.archon-intelligence.intelligence.code-analysis-failed.v1",
+        default="dev.onex-intelligence.intelligence.code-analysis-failed.v1",
         description="Topic for failed analysis responses",
     )
 
@@ -254,15 +254,15 @@ class IntelligenceConfig(BaseModel):
             enable_filesystem_fallback=True,
             prefer_event_patterns=True,
             topic_code_analysis_requested=(
-                f"{settings.kafka_environment}.archon-intelligence."
+                f"{settings.kafka_environment}.onex-intelligence."
                 "intelligence.code-analysis-requested.v1"
             ),
             topic_code_analysis_completed=(
-                f"{settings.kafka_environment}.archon-intelligence."
+                f"{settings.kafka_environment}.onex-intelligence."
                 "intelligence.code-analysis-completed.v1"
             ),
             topic_code_analysis_failed=(
-                f"{settings.kafka_environment}.archon-intelligence."
+                f"{settings.kafka_environment}.onex-intelligence."
                 "intelligence.code-analysis-failed.v1"
             ),
         )

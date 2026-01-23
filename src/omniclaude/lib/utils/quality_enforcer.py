@@ -412,10 +412,10 @@ class QualityEnforcer:
             try:
                 # Get RAG config from CONFIG
                 rag_config = CONFIG.get("rag", {})
-                archon_url = rag_config.get("base_url", "http://localhost:8181")
+                intelligence_url = rag_config.get("base_url", "http://localhost:8181")
                 timeout = rag_config.get("timeout_seconds", 0.5)
 
-                generator = CorrectionGenerator(archon_url=archon_url, timeout=timeout)
+                generator = CorrectionGenerator(intelligence_url=intelligence_url, timeout=timeout)
                 corrections = await generator.generate_corrections(
                     violations, content, file_path, language
                 )

@@ -36,12 +36,14 @@ from omniclaude.config import settings
 
 # Service URL configuration from environment
 INTELLIGENCE_SERVICE_URL = os.environ.get(
-    "INTELLIGENCE_SERVICE_URL", str(settings.archon_intelligence_url)
+    "INTELLIGENCE_SERVICE_URL", str(settings.intelligence_service_url)
 )
 MAIN_SERVER_URL = os.environ.get("MAIN_SERVER_URL", "http://localhost:8181")
-# Support both MCP_SERVER_URL and ARCHON_MCP_URL for backward compatibility
-MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL") or os.environ.get(
-    "ARCHON_MCP_URL", "http://localhost:8051"
+# Support both MCP_SERVER_URL and legacy ONEX_MCP_URL/ARCHON_MCP_URL for backward compatibility
+MCP_SERVER_URL = (
+    os.environ.get("MCP_SERVER_URL")
+    or os.environ.get("ONEX_MCP_URL")
+    or os.environ.get("ARCHON_MCP_URL", "http://localhost:8051")
 )
 
 

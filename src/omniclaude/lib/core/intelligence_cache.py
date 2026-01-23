@@ -10,7 +10,7 @@ Caches:
 Performance targets:
 - Cache hit rate: >60%
 - Cache lookup: <10ms p95
-- Reduces Archon load by 60%+
+- Reduces intelligence service load by 60%+
 
 Architecture:
 - Uses Valkey (Redis-compatible) for distributed caching
@@ -80,13 +80,13 @@ class IntelligenceCache:
             logger.info("Intelligence cache disabled via configuration")
             return
 
-        # Default uses Docker hostname (archon-valkey:6379); override with VALKEY_URL in .env for localhost development
+        # Default uses Docker hostname (onex-valkey:6379); override with VALKEY_URL in .env for localhost development
         # Password must be set via VALKEY_PASSWORD environment variable (no hardcoded defaults)
         valkey_password = os.getenv("VALKEY_PASSWORD", "")
         if valkey_password:
-            default_url = f"redis://:{valkey_password}@archon-valkey:6379/0"
+            default_url = f"redis://:{valkey_password}@onex-valkey:6379/0"
         else:
-            default_url = "redis://archon-valkey:6379/0"
+            default_url = "redis://onex-valkey:6379/0"
         self.redis_url = redis_url or settings.valkey_url or default_url
         self._client: Any | None = None
 

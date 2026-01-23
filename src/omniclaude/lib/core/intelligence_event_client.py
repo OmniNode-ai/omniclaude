@@ -3,7 +3,7 @@
 Intelligence Event Client - Kafka-based Intelligence Discovery
 
 This module provides a Kafka client for event-based intelligence discovery,
-replacing hard-coded omniarchon repository paths with event-driven pattern discovery.
+replacing hard-coded repository paths with event-driven pattern discovery.
 
 Key Features:
 - Request-response pattern with correlation tracking
@@ -15,7 +15,7 @@ Key Features:
 
 Event Flow:
 1. Client publishes omninode.intelligence.code-analysis.requested.v1 event
-2. omniarchon Intelligence Adapter handler processes request
+2. ONEX Intelligence Adapter handler processes request
 3. Client waits for completed or failed response
 4. On timeout/error: graceful degradation with caller handling fallback
 
@@ -28,7 +28,7 @@ EVENT_BUS_INTEGRATION_GUIDE Compliance:
 
 Integration:
 - Uses EVENT_BUS_INTEGRATION_GUIDE event contracts (frozen envelope)
-- Compatible with omniarchon's confluent-kafka handler (wire protocol)
+- Compatible with the ONEX intelligence service's confluent-kafka handler (wire protocol)
 - Designed for request-response client usage (not 24/7 consumer service)
 
 Performance Targets:
@@ -71,8 +71,8 @@ class IntelligenceEventClient:
     timeout handling, and graceful fallback for intelligence operations.
 
     This client uses aiokafka for native async/await integration, perfect
-    for request-response patterns. It is wire-compatible with omniarchon's
-    confluent-kafka service-side handler.
+    for request-response patterns. It is wire-compatible with the ONEX
+    intelligence service's confluent-kafka handler.
 
     Usage:
         client = IntelligenceEventClient(
@@ -365,7 +365,7 @@ class IntelligenceEventClient:
         """
         Request pattern discovery via events.
 
-        This is the main method for discovering patterns from omniarchon
+        This is the main method for discovering patterns from the
         codebase using event-based communication.
 
         Args:

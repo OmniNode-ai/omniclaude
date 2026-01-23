@@ -10,7 +10,7 @@ This replaces the broken regex-based correction approach that caused false posit
 
 Performance Target: <100ms for typical files (95th percentile)
 
-Author: Claude Code + Archon AI Quality Enforcer
+Author: Claude Code + ONEX AI Quality Enforcer
 Date: 2025-09-30
 """
 

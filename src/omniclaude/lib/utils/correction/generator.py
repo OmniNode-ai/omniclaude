@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Correction Generator for AI Quality Enforcement System
-Generates correction suggestions using RAG intelligence from Archon MCP.
+Generates correction suggestions using RAG intelligence from ONEX Intelligence.
 """
 
 from __future__ import annotations
@@ -14,10 +14,12 @@ from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
 logger = logging.getLogger(__name__)
 
 
-# Protocol for ArchonIntelligence (external optional dependency)
+# Protocol for Intelligence client (external optional dependency)
+# Note: The external archon_intelligence package uses `archon_url` parameter name.
+# We keep this in the Protocol for compatibility with the external package.
 @runtime_checkable
-class ArchonIntelligenceProtocol(Protocol):
-    """Protocol for Archon Intelligence client interface."""
+class IntelligenceClientProtocol(Protocol):
+    """Protocol for Intelligence service client interface."""
 
     def __init__(self, archon_url: str | None = None, timeout: float = 5.0) -> None:
         """Initialize the client."""
@@ -30,37 +32,37 @@ class ArchonIntelligenceProtocol(Protocol):
         ...
 
 
-# Lazy import helper for optional ArchonIntelligence
-def _get_archon_intelligence_class() -> type[ArchonIntelligenceProtocol] | None:
+# Lazy import helper for optional Intelligence client
+def _get_intelligence_client_class() -> type[IntelligenceClientProtocol] | None:
     """
-    Lazy import of ArchonIntelligence class.
+    Lazy import of Intelligence client class.
 
     Returns:
-        ArchonIntelligence class if available, None otherwise.
+        Intelligence client class if available, None otherwise.
     """
     try:
         from archon_intelligence import ArchonIntelligence
 
-        return cast(type[ArchonIntelligenceProtocol], ArchonIntelligence)
+        return cast(type[IntelligenceClientProtocol], ArchonIntelligence)
     except ImportError:
         logger.debug("archon_intelligence not available - using fallback mode")
         return None
 
 
-# Stub implementation for when ArchonIntelligence is not available
-class ArchonIntelligenceStub:
-    """Stub implementation when real ArchonIntelligence is unavailable."""
+# Stub implementation for when Intelligence client is not available
+class IntelligenceClientStub:
+    """Stub implementation when real Intelligence client is unavailable."""
 
-    def __init__(self, archon_url: str | None = None, timeout: float = 5.0) -> None:
-        self.archon_url = archon_url
+    def __init__(self, intelligence_url: str | None = None, timeout: float = 5.0) -> None:
+        self.intelligence_url = intelligence_url
         self.timeout = timeout
-        logger.debug("Using ArchonIntelligenceStub - RAG intelligence unavailable")
+        logger.debug("Using IntelligenceClientStub - RAG intelligence unavailable")
 
     async def gather_domain_standards(
         self, agent_type: str, task_context: dict[str, Any]
     ) -> dict[str, Any]:
         """Return fallback response when RAG is unavailable."""
-        return {"fallback": True, "results": [], "error": "archon_intelligence not available"}
+        return {"fallback": True, "results": [], "error": "intelligence client not available"}
 
 
 @dataclass
@@ -79,23 +81,23 @@ class Violation:
 class CorrectionGenerator:
     """Generate intelligent corrections for naming violations using RAG intelligence."""
 
-    def __init__(self, archon_url: str | None = None, timeout: float = 5.0):
+    def __init__(self, intelligence_url: str | None = None, timeout: float = 5.0):
         """
         Initialize the correction generator.
 
         Args:
-            archon_url: Archon MCP server URL (defaults to env or localhost:8051)
+            intelligence_url: ONEX Intelligence server URL (defaults to env or localhost:8051)
             timeout: Request timeout in seconds
         """
-        # Try to use real ArchonIntelligence, fall back to stub if unavailable
-        archon_class = _get_archon_intelligence_class()
-        if archon_class is not None:
-            self.intelligence_client: ArchonIntelligenceProtocol = archon_class(
-                archon_url=archon_url, timeout=timeout
+        # Try to use real Intelligence client, fall back to stub if unavailable
+        intelligence_class = _get_intelligence_client_class()
+        if intelligence_class is not None:
+            self.intelligence_client: IntelligenceClientProtocol = intelligence_class(
+                archon_url=intelligence_url, timeout=timeout
             )
         else:
-            self.intelligence_client = ArchonIntelligenceStub(
-                archon_url=archon_url, timeout=timeout
+            self.intelligence_client = IntelligenceClientStub(
+                intelligence_url=intelligence_url, timeout=timeout
             )
         self._cache: dict[str, dict[str, Any]] = {}  # Cache RAG results during session
 
@@ -371,10 +373,10 @@ class CorrectionGenerator:
         """
         Cleanup resources.
 
-        Note: ArchonIntelligence uses httpx.AsyncClient internally.
+        Note: Intelligence client uses httpx.AsyncClient internally.
         In Phase 2, we'll add proper cleanup for the RAG client.
         """
-        # Currently, ArchonIntelligence creates clients per-request
+        # Currently, Intelligence client creates clients per-request
         # No cleanup needed in Phase 1
         pass
 

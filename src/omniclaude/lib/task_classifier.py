@@ -145,7 +145,7 @@ class TaskClassifier:
         "docker",
         "consul",
         "vault",
-        "archon",
+        "onex",
     ]
 
     # ONEX node type patterns

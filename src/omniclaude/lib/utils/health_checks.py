@@ -97,10 +97,10 @@ class Phase4HealthChecker:
         Initialize Phase 4 health checker.
 
         Args:
-            base_url: Base URL for Phase 4 intelligence service (defaults to settings.archon_intelligence_url)
+            base_url: Base URL for Phase 4 intelligence service (defaults to settings.intelligence_service_url)
             config: Optional pattern tracker configuration
         """
-        self.base_url = base_url or str(settings.archon_intelligence_url)
+        self.base_url = base_url or str(settings.intelligence_service_url)
         self.config = config or (get_tracker().config if HAS_PATTERN_TRACKER else None)
         self._health_cache: dict[str, tuple[dict[str, Any], float]] = {}
         self.cache_duration = 30.0  # Cache results for 30 seconds

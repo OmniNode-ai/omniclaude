@@ -42,7 +42,7 @@ class PatternQualityScore:
     onex_compliance_score: float
     metadata_richness_score: float
     complexity_score: float
-    confidence: float  # from Archon Intelligence
+    confidence: float  # from Intelligence service
     measurement_timestamp: datetime
     version: str = "1.0.0"
 

@@ -165,7 +165,7 @@ class PatternTrackerConfig:
         result = self.get(
             "INTELLIGENCE_SERVICE_URL",
             ["pattern_tracking", "intelligence_url"],
-            str(settings.archon_intelligence_url),
+            str(settings.intelligence_service_url),
         )
         return str(result)
 

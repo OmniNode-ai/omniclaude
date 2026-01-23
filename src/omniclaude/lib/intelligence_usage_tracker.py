@@ -52,7 +52,7 @@ class IntelligenceUsageRecord:
 
     # Intelligence source
     intelligence_type: str = "pattern"  # pattern, schema, debug_intelligence, model, infrastructure
-    intelligence_source: str = "qdrant"  # qdrant, memgraph, postgres, archon-intelligence
+    intelligence_source: str = "qdrant"  # qdrant, memgraph, postgres, onex-intelligence
 
     # Intelligence identification
     intelligence_id: UUID | None = None
@@ -248,7 +248,7 @@ class IntelligenceUsageTracker:
             correlation_id: Correlation ID linking to execution
             agent_name: Agent name
             intelligence_type: Type (pattern, schema, debug_intelligence, model, infrastructure)
-            intelligence_source: Source (qdrant, memgraph, postgres, archon-intelligence)
+            intelligence_source: Source (qdrant, memgraph, postgres, onex-intelligence)
             intelligence_name: Name of intelligence
             collection_name: Qdrant collection name
             intelligence_id: UUID of intelligence item
