@@ -126,20 +126,23 @@ class IntelligenceConfig(BaseModel):
     # =========================================================================
     # Topic Configuration
     # =========================================================================
+    # NOTE: Default topics use 'dev' prefix for local development.
+    # For production, use IntelligenceConfig.from_env() which constructs
+    # topics dynamically based on settings.kafka_environment.
 
     topic_code_analysis_requested: str = Field(
         default="dev.onex-intelligence.intelligence.code-analysis-requested.v1",
-        description="Topic for code analysis requests",
+        description="Topic for code analysis requests (dev default; use from_env() for dynamic prefix)",
     )
 
     topic_code_analysis_completed: str = Field(
         default="dev.onex-intelligence.intelligence.code-analysis-completed.v1",
-        description="Topic for successful analysis responses",
+        description="Topic for successful analysis responses (dev default; use from_env() for dynamic prefix)",
     )
 
     topic_code_analysis_failed: str = Field(
         default="dev.onex-intelligence.intelligence.code-analysis-failed.v1",
-        description="Topic for failed analysis responses",
+        description="Topic for failed analysis responses (dev default; use from_env() for dynamic prefix)",
     )
 
     # =========================================================================

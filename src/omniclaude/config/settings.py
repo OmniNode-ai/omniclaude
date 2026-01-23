@@ -274,16 +274,17 @@ class Settings(BaseSettings):
         driver = "postgresql+asyncpg" if async_driver else "postgresql"
         password = self.get_effective_postgres_password()
 
-        # URL-encode special characters in password if present
+        # URL-encode special characters in username and password
+        # Both may contain URL-unsafe characters like @, :, /, ?, #, etc.
+        encoded_user = quote_plus(self.postgres_user)
         if password:
-            # Properly encode all URL-unsafe characters
             encoded_password = quote_plus(password)
             return (
-                f"{driver}://{self.postgres_user}:{encoded_password}"
+                f"{driver}://{encoded_user}:{encoded_password}"
                 f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_database}"
             )
         return (
-            f"{driver}://{self.postgres_user}"
+            f"{driver}://{encoded_user}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_database}"
         )
 
@@ -311,9 +312,9 @@ class Settings(BaseSettings):
                 "KAFKA_BOOTSTRAP_SERVERS is not configured but USE_EVENT_ROUTING is enabled"
             )
 
-        # Check Qdrant configuration
-        if not self.qdrant_url and not self.qdrant_host:
-            errors.append("Neither QDRANT_URL nor QDRANT_HOST is configured")
+        # Note: Qdrant configuration is not validated here because both qdrant_url
+        # and qdrant_host have defaults. Use log_default_warnings() to detect
+        # localhost usage that may need production configuration.
 
         return errors
 
@@ -323,6 +324,13 @@ class Settings(BaseSettings):
         This method logs a warning for each service configured with default
         localhost values, which may indicate missing production configuration.
         Warnings are only logged once per instance to avoid log spam.
+
+        Note:
+            The warning state is cached per instance via `_defaults_warned`.
+            When using the singleton `get_settings()`, warnings will only be
+            logged once for the lifetime of the process. For tests that need
+            to verify warning behavior, call `reset_warnings()` before each
+            test or create a fresh Settings instance.
         """
         if self._defaults_warned:
             return
@@ -343,6 +351,23 @@ class Settings(BaseSettings):
             logger.warning(
                 "Using default qdrant_host='localhost'. Set QDRANT_HOST in .env for production."
             )
+
+    def reset_warnings(self) -> None:
+        """Reset the warning state for test isolation.
+
+        This method clears the `_defaults_warned` flag, allowing
+        `log_default_warnings()` to emit warnings again. Intended for use
+        in test fixtures to ensure warning behavior can be verified across
+        multiple tests.
+
+        Example:
+            @pytest.fixture
+            def settings_with_warnings():
+                settings = Settings(...)
+                settings.reset_warnings()
+                yield settings
+        """
+        self._defaults_warned = False
 
 
 @lru_cache(maxsize=1)

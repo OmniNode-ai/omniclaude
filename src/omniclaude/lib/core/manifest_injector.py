@@ -5039,7 +5039,10 @@ class ManifestInjector:
             filesystem_files_count = filesystem_data.get("total_files", 0)
             filesystem_directories_count = filesystem_data.get("total_directories", 0)
 
-            # Get formatted text (generate if not cached)
+            # Get formatted text
+            # For fresh manifests, invalidate cache to ensure formatted text matches new data
+            if not from_cache:
+                self._cached_formatted = None
             formatted_text = self._cached_formatted or self.format_for_prompt()
 
             # Determine sections included

@@ -73,8 +73,8 @@ class IntelligenceCache:
             enabled: Enable/disable caching (default: True)
         """
         # Use Pydantic Settings for configuration
-        cache_enabled_str = str(settings.enable_intelligence_cache).lower()
-        self.enabled = enabled and cache_enabled_str == "true"
+        # enable_intelligence_cache is already a bool from Pydantic settings
+        self.enabled = enabled and settings.enable_intelligence_cache
 
         if not self.enabled:
             logger.info("Intelligence cache disabled via configuration")

@@ -368,13 +368,18 @@ class IntelligenceUsageTracker:
             pool = await self._get_pool()
 
             # Prepare JSON data (asyncpg accepts json strings directly)
+            # Use default=str to handle UUIDs, datetimes, and other non-serializable types
             intelligence_snapshot_json = (
-                json.dumps(record.intelligence_snapshot) if record.intelligence_snapshot else None
+                json.dumps(record.intelligence_snapshot, default=str)
+                if record.intelligence_snapshot
+                else None
             )
             application_details_json = (
-                json.dumps(record.application_details) if record.application_details else None
+                json.dumps(record.application_details, default=str)
+                if record.application_details
+                else None
             )
-            metadata_json = json.dumps(record.metadata) if record.metadata else None
+            metadata_json = json.dumps(record.metadata, default=str) if record.metadata else None
 
             async with pool.acquire() as conn:
                 result = await conn.execute(
@@ -475,8 +480,9 @@ class IntelligenceUsageTracker:
             pool = await self._get_pool()
 
             # Prepare JSON data (asyncpg accepts json strings directly)
+            # Use default=str to handle UUIDs, datetimes, and other non-serializable types
             application_details_json = (
-                json.dumps(application_details) if application_details else None
+                json.dumps(application_details, default=str) if application_details else None
             )
 
             async with pool.acquire() as conn:

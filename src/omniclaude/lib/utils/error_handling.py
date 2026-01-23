@@ -104,9 +104,6 @@ class PatternTrackingErrorHandler:
         """Handle API-related errors, return handling information"""
         error_type = type(error).__name__
 
-        # Determine if error is retryable
-        is_retryable = any(isinstance(error, error_class) for error_class in self.retryable_errors)
-
         # Initialize retry_delay_seconds to avoid unbound variable
         retry_delay_seconds: int = 5
 
@@ -151,7 +148,10 @@ class PatternTrackingErrorHandler:
         else:
             error_category = "unknown"
             suggestion = f"Unknown error type: {error_type}. Check the error details."
-            retry_suggested = is_retryable
+            # Only compute retryable check for unknown error types where it's needed
+            retry_suggested = any(
+                isinstance(error, error_class) for error_class in self.retryable_errors
+            )
 
         # Log the error with enhanced context
         enhanced_context = {

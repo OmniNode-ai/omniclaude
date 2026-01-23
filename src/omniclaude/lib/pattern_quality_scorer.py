@@ -83,16 +83,17 @@ class PatternQualityScorer:
         Returns:
             PatternQualityScore object with dimension scores and composite
         """
-        # Extract pattern fields
-        pattern_id = pattern.get("pattern_id", "")
-        pattern_name = pattern.get("pattern_name", "")
-        code = pattern.get("code", "")
-        text = pattern.get("text", "")
-        metadata = pattern.get("metadata", {})
+        # Extract pattern fields with None guards
+        # Use `or` pattern to handle explicit None values (e.g., {"use_cases": None})
+        pattern_id = pattern.get("pattern_id") or ""
+        pattern_name = pattern.get("pattern_name") or ""
+        code = pattern.get("code") or ""
+        text = pattern.get("text") or ""
+        metadata = pattern.get("metadata") or {}
         node_type = pattern.get("node_type")
-        use_cases = pattern.get("use_cases", [])
-        examples = pattern.get("examples", [])
-        confidence = pattern.get("confidence", 0.0)
+        use_cases = pattern.get("use_cases") or []
+        examples = pattern.get("examples") or []
+        confidence = pattern.get("confidence") or 0.0
 
         # Score all dimensions
         completeness_score = self._score_completeness(code, text)

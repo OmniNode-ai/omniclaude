@@ -21,6 +21,7 @@ Performance Optimizations:
 import asyncio
 import hashlib
 import json
+import logging
 import threading
 import time
 import uuid
@@ -37,6 +38,9 @@ import psutil
 import yaml
 
 from omniclaude.config import settings
+
+# Module-level logger for structured logging
+logger = logging.getLogger(__name__)
 
 
 class ProcessingMode(Enum):
@@ -66,10 +70,15 @@ class PerformanceMetrics:
     last_updated: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
     def update_processing_time(self, duration_ms: float) -> None:
-        """Update processing time metrics."""
+        """Update processing time metrics.
+
+        Note: This method does NOT increment total_operations to avoid double-counting.
+        The caller (record_operation) is responsible for incrementing total_operations.
+        """
         self.total_processing_time_ms += duration_ms
-        self.total_operations += 1
-        self.avg_processing_time_ms = self.total_processing_time_ms / self.total_operations
+        # Avoid division by zero; total_operations is incremented by record_operation
+        if self.total_operations > 0:
+            self.avg_processing_time_ms = self.total_processing_time_ms / self.total_operations
 
     def update_api_time(self, response_time_ms: float) -> None:
         """Update API response time metrics."""
@@ -144,7 +153,7 @@ class PatternTrackerConfig:
             with open(self.config_path) as f:
                 return yaml.safe_load(f) or {}
         except Exception as e:
-            print(f"Warning: Could not load {self.config_path}: {e}")
+            logger.warning("Could not load config file %s: %s", self.config_path, e)
             return {}
 
     def get(self, key: str, yaml_path: list[str], default: Any) -> Any:
@@ -362,7 +371,7 @@ class BatchProcessor:
         try:
             self._queue.put_nowait((task_type, kwargs, time.time()))
         except asyncio.QueueFull:
-            print("Warning: Batch processor queue full, dropping task")
+            logger.warning("Batch processor queue full, dropping task")
 
     async def _worker(self, worker_name: str) -> None:
         """Worker coroutine for processing batches."""
@@ -385,7 +394,7 @@ class BatchProcessor:
                 if self._current_batch:
                     await self._process_batch()
             except Exception as e:
-                print(f"Error in worker {worker_name}: {e}")
+                logger.error("Error in worker %s: %s", worker_name, e)
 
     async def _batch_timer_handler(self) -> None:
         """Handle batch timing - process batch if items pending for too long."""
@@ -419,7 +428,7 @@ class BatchProcessor:
                 pass
 
         except Exception as e:
-            print(f"Error processing batch: {e}")
+            logger.error("Error processing batch: %s", e)
 
     async def _batch_track_creation(self, tasks: list[dict[str, Any]]) -> None:
         """Batch process pattern creation tasks."""
@@ -436,7 +445,7 @@ class BatchProcessor:
         # Log any errors
         for i, result in enumerate(results):
             if isinstance(result, Exception):
-                print(f"Error in batch creation task {i}: {result}")
+                logger.error("Error in batch creation task %d: %s", i, result)
 
 
 class PatternTracker:
@@ -619,7 +628,7 @@ class PatternTracker:
                 self.response_cache[cache_key] = response
 
         except Exception as e:
-            print(f"Error tracking pattern creation: {e}")
+            logger.error("Error tracking pattern creation: %s", e)
 
         # Record metrics
         duration_ms = (time.time() - start_time) * 1000
@@ -690,7 +699,7 @@ class PatternTracker:
             success = response is not None
 
         except Exception as e:
-            print(f"Error tracking batch pattern creation: {e}")
+            logger.error("Error tracking batch pattern creation: %s", e)
 
         # Record metrics
         duration_ms = (time.time() - start_time) * 1000
@@ -740,7 +749,7 @@ class PatternTracker:
             api_success = response is not None
 
         except Exception as e:
-            print(f"Error tracking pattern execution: {e}")
+            logger.error("Error tracking pattern execution: %s", e)
 
         # Record metrics
         duration_ms = (time.time() - start_time) * 1000

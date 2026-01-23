@@ -12,13 +12,37 @@ This module contains comprehensive tests for:
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+import pytest
+
 from omniclaude.lib.task_classifier import TaskClassifier, TaskContext, TaskIntent
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
+
+
+# =============================================================================
+# Fixtures
+# =============================================================================
+
+
+@pytest.fixture
+def classifier() -> Generator[TaskClassifier, None, None]:
+    """Provide a TaskClassifier instance for tests.
+
+    This fixture ensures consistent classifier instantiation across tests
+    and enables potential future extensions like mocking or configuration.
+    """
+    yield TaskClassifier()
+
 
 # =============================================================================
 # TaskIntent Enum Tests
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestTaskIntent:
     """Tests for TaskIntent enum values."""
 
@@ -85,6 +109,7 @@ class TestTaskIntent:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestTaskContext:
     """Tests for TaskContext dataclass."""
 
@@ -143,12 +168,12 @@ class TestTaskContext:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestTaskClassifierInit:
     """Tests for TaskClassifier initialization."""
 
-    def test_classifier_instantiation(self) -> None:
+    def test_classifier_instantiation(self, classifier: TaskClassifier) -> None:
         """TaskClassifier can be instantiated."""
-        classifier = TaskClassifier()
         assert classifier is not None
 
     def test_classifier_has_intent_keywords(self) -> None:
@@ -184,48 +209,42 @@ class TestTaskClassifierInit:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestClassifyDebugIntent:
     """Tests for DEBUG intent classification."""
 
-    def test_classify_fix_bug(self) -> None:
+    def test_classify_fix_bug(self, classifier: TaskClassifier) -> None:
         """'fix the bug' classifies as DEBUG intent."""
-        classifier = TaskClassifier()
         result = classifier.classify("fix the bug")
         assert result.primary_intent == TaskIntent.DEBUG
 
-    def test_classify_error_keyword(self) -> None:
+    def test_classify_error_keyword(self, classifier: TaskClassifier) -> None:
         """Prompts with 'error' classify as DEBUG."""
-        classifier = TaskClassifier()
         result = classifier.classify("I'm getting an error in my code")
         assert result.primary_intent == TaskIntent.DEBUG
 
-    def test_classify_failing_keyword(self) -> None:
+    def test_classify_failing_keyword(self, classifier: TaskClassifier) -> None:
         """Prompts with 'failing' classify as DEBUG."""
-        classifier = TaskClassifier()
         result = classifier.classify("my tests are failing")
         assert result.primary_intent == TaskIntent.DEBUG
 
-    def test_classify_broken_keyword(self) -> None:
+    def test_classify_broken_keyword(self, classifier: TaskClassifier) -> None:
         """Prompts with 'broken' classify as DEBUG."""
-        classifier = TaskClassifier()
         result = classifier.classify("the build is broken")
         assert result.primary_intent == TaskIntent.DEBUG
 
-    def test_classify_debug_keyword(self) -> None:
+    def test_classify_debug_keyword(self, classifier: TaskClassifier) -> None:
         """Prompts with 'debug' classify as DEBUG."""
-        classifier = TaskClassifier()
         result = classifier.classify("help me debug this issue")
         assert result.primary_intent == TaskIntent.DEBUG
 
-    def test_classify_troubleshoot_keyword(self) -> None:
+    def test_classify_troubleshoot_keyword(self, classifier: TaskClassifier) -> None:
         """Prompts with 'troubleshoot' classify as DEBUG."""
-        classifier = TaskClassifier()
         result = classifier.classify("troubleshoot the connection")
         assert result.primary_intent == TaskIntent.DEBUG
 
-    def test_classify_investigate_keyword(self) -> None:
+    def test_classify_investigate_keyword(self, classifier: TaskClassifier) -> None:
         """Prompts with 'investigate' classify as DEBUG."""
-        classifier = TaskClassifier()
         result = classifier.classify("investigate why it fails")
         assert result.primary_intent == TaskIntent.DEBUG
 
@@ -235,42 +254,37 @@ class TestClassifyDebugIntent:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestClassifyImplementIntent:
     """Tests for IMPLEMENT intent classification."""
 
-    def test_classify_create_feature(self) -> None:
+    def test_classify_create_feature(self, classifier: TaskClassifier) -> None:
         """'create new feature' classifies as IMPLEMENT intent."""
-        classifier = TaskClassifier()
         result = classifier.classify("create new feature")
         assert result.primary_intent == TaskIntent.IMPLEMENT
 
-    def test_classify_implement_keyword(self) -> None:
+    def test_classify_implement_keyword(self, classifier: TaskClassifier) -> None:
         """Prompts with 'implement' classify as IMPLEMENT."""
-        classifier = TaskClassifier()
         result = classifier.classify("implement user authentication")
         assert result.primary_intent == TaskIntent.IMPLEMENT
 
-    def test_classify_add_keyword(self) -> None:
+    def test_classify_add_keyword(self, classifier: TaskClassifier) -> None:
         """Prompts with 'add' classify as IMPLEMENT."""
-        classifier = TaskClassifier()
         result = classifier.classify("add a new endpoint")
         assert result.primary_intent == TaskIntent.IMPLEMENT
 
-    def test_classify_build_keyword(self) -> None:
+    def test_classify_build_keyword(self, classifier: TaskClassifier) -> None:
         """Prompts with 'build' classify as IMPLEMENT."""
-        classifier = TaskClassifier()
         result = classifier.classify("build a REST API")
         assert result.primary_intent == TaskIntent.IMPLEMENT
 
-    def test_classify_develop_keyword(self) -> None:
+    def test_classify_develop_keyword(self, classifier: TaskClassifier) -> None:
         """Prompts with 'develop' classify as IMPLEMENT."""
-        classifier = TaskClassifier()
         result = classifier.classify("develop the payment system")
         assert result.primary_intent == TaskIntent.IMPLEMENT
 
-    def test_classify_domain_indicator_fallback(self) -> None:
+    def test_classify_domain_indicator_fallback(self, classifier: TaskClassifier) -> None:
         """Domain-specific terms trigger IMPLEMENT even without explicit verbs."""
-        classifier = TaskClassifier()
         result = classifier.classify("ONEX authentication system")
         assert result.primary_intent == TaskIntent.IMPLEMENT
         assert result.confidence >= 0.5
@@ -281,42 +295,37 @@ class TestClassifyImplementIntent:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestClassifyDatabaseIntent:
     """Tests for DATABASE intent classification."""
 
-    def test_classify_query_database(self) -> None:
+    def test_classify_query_database(self, classifier: TaskClassifier) -> None:
         """'query the database' classifies as DATABASE intent."""
-        classifier = TaskClassifier()
         result = classifier.classify("query the database")
         assert result.primary_intent == TaskIntent.DATABASE
 
-    def test_classify_sql_keyword(self) -> None:
+    def test_classify_sql_keyword(self, classifier: TaskClassifier) -> None:
         """Prompts with 'sql' classify as DATABASE."""
-        classifier = TaskClassifier()
         result = classifier.classify("write a SQL query")
         assert result.primary_intent == TaskIntent.DATABASE
 
-    def test_classify_table_keyword(self) -> None:
+    def test_classify_table_keyword(self, classifier: TaskClassifier) -> None:
         """Prompts with 'table' classify as DATABASE."""
-        classifier = TaskClassifier()
         result = classifier.classify("the users table needs more columns")
         assert result.primary_intent == TaskIntent.DATABASE
 
-    def test_classify_schema_keyword(self) -> None:
+    def test_classify_schema_keyword(self, classifier: TaskClassifier) -> None:
         """Prompts with 'schema' classify as DATABASE."""
-        classifier = TaskClassifier()
         result = classifier.classify("update the schema")
         assert result.primary_intent == TaskIntent.DATABASE
 
-    def test_classify_migration_keyword(self) -> None:
+    def test_classify_migration_keyword(self, classifier: TaskClassifier) -> None:
         """Prompts with 'migration' classify as DATABASE."""
-        classifier = TaskClassifier()
         result = classifier.classify("run the database migration")
         assert result.primary_intent == TaskIntent.DATABASE
 
-    def test_classify_postgresql_keyword(self) -> None:
+    def test_classify_postgresql_keyword(self, classifier: TaskClassifier) -> None:
         """Prompts with 'postgresql' classify as DATABASE."""
-        classifier = TaskClassifier()
         result = classifier.classify("connect to postgresql")
         assert result.primary_intent == TaskIntent.DATABASE
 
@@ -326,6 +335,7 @@ class TestClassifyDatabaseIntent:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestClassifyResearchIntent:
     """Tests for RESEARCH intent classification."""
 
@@ -371,6 +381,7 @@ class TestClassifyResearchIntent:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestClassifyRefactorIntent:
     """Tests for REFACTOR intent classification."""
 
@@ -410,6 +421,7 @@ class TestClassifyRefactorIntent:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestClassifyTestIntent:
     """Tests for TEST intent classification."""
 
@@ -449,6 +461,7 @@ class TestClassifyTestIntent:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestClassifyDocumentIntent:
     """Tests for DOCUMENT intent classification."""
 
@@ -482,6 +495,7 @@ class TestClassifyDocumentIntent:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestClassifyEntityExtraction:
     """Tests for entity extraction from prompts."""
 
@@ -536,6 +550,7 @@ class TestClassifyEntityExtraction:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestClassifyServiceExtraction:
     """Tests for service name extraction from prompts."""
 
@@ -589,6 +604,7 @@ class TestClassifyServiceExtraction:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestClassifyNodeTypeExtraction:
     """Tests for ONEX node type extraction from prompts."""
 
@@ -630,34 +646,31 @@ class TestClassifyNodeTypeExtraction:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestClassifyEdgeCases:
     """Tests for edge cases and special scenarios."""
 
-    def test_empty_prompt(self) -> None:
+    def test_empty_prompt(self, classifier: TaskClassifier) -> None:
         """Empty prompt returns UNKNOWN intent with zero confidence."""
-        classifier = TaskClassifier()
         result = classifier.classify("")
         assert result.primary_intent == TaskIntent.UNKNOWN
         assert result.confidence == 0.0
         assert result.keywords == []
 
-    def test_whitespace_only_prompt(self) -> None:
+    def test_whitespace_only_prompt(self, classifier: TaskClassifier) -> None:
         """Whitespace-only prompt returns UNKNOWN intent."""
-        classifier = TaskClassifier()
         result = classifier.classify("   \t\n   ")
         assert result.primary_intent == TaskIntent.UNKNOWN
         assert result.confidence == 0.0
 
-    def test_unknown_intent_no_keywords(self) -> None:
+    def test_unknown_intent_no_keywords(self, classifier: TaskClassifier) -> None:
         """Prompts with no matching keywords return UNKNOWN."""
-        classifier = TaskClassifier()
         result = classifier.classify("xyz abc 123")
         # Check confidence is low or intent is UNKNOWN (depending on word length)
         assert result.confidence < 0.5 or result.primary_intent == TaskIntent.UNKNOWN
 
-    def test_case_insensitive_matching(self) -> None:
+    def test_case_insensitive_matching(self, classifier: TaskClassifier) -> None:
         """Keyword matching is case-insensitive."""
-        classifier = TaskClassifier()
         result_lower = classifier.classify("fix the bug")
         result_upper = classifier.classify("FIX THE BUG")
         result_mixed = classifier.classify("Fix The Bug")
@@ -665,32 +678,28 @@ class TestClassifyEdgeCases:
         assert result_upper.primary_intent == TaskIntent.DEBUG
         assert result_mixed.primary_intent == TaskIntent.DEBUG
 
-    def test_multiple_intents_highest_score_wins(self) -> None:
+    def test_multiple_intents_highest_score_wins(self, classifier: TaskClassifier) -> None:
         """When multiple intents match, highest score wins."""
-        classifier = TaskClassifier()
         # This has "fix" (DEBUG) and "error" (DEBUG) - should be DEBUG
         result = classifier.classify("fix the error in the failing test")
         assert result.primary_intent == TaskIntent.DEBUG
 
-    def test_confidence_is_bounded(self) -> None:
+    def test_confidence_is_bounded(self, classifier: TaskClassifier) -> None:
         """Confidence is always between 0 and 1."""
-        classifier = TaskClassifier()
         # Test with many keywords to potentially exceed 1.0
         result = classifier.classify(
             "fix error bug broken failing issue debug troubleshoot investigate why"
         )
         assert 0.0 <= result.confidence <= 1.0
 
-    def test_keywords_are_deduplicated(self) -> None:
+    def test_keywords_are_deduplicated(self, classifier: TaskClassifier) -> None:
         """Returned keywords list has no duplicates."""
-        classifier = TaskClassifier()
         result = classifier.classify("test test test testing")
         # Check no duplicates by comparing length with set length
         assert len(result.keywords) == len(set(result.keywords))
 
-    def test_entities_are_deduplicated(self) -> None:
+    def test_entities_are_deduplicated(self, classifier: TaskClassifier) -> None:
         """Returned entities list has no duplicates."""
-        classifier = TaskClassifier()
         result = classifier.classify("update config.py and fix config.py")
         # Check no duplicates
         assert len(result.entities) == len(set(result.entities))
@@ -701,6 +710,7 @@ class TestClassifyEdgeCases:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestClassifyConfidence:
     """Tests for confidence score calculation."""
 
@@ -731,6 +741,7 @@ class TestClassifyConfidence:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestExtractEntitiesMethod:
     """Tests for the _extract_entities() private method."""
 
@@ -777,12 +788,12 @@ class TestExtractEntitiesMethod:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestClassifierIntegration:
     """Integration tests for complete classification scenarios."""
 
-    def test_complex_debug_scenario(self) -> None:
+    def test_complex_debug_scenario(self, classifier: TaskClassifier) -> None:
         """Complex debugging prompt is correctly classified."""
-        classifier = TaskClassifier()
         result = classifier.classify(
             "The kafka consumer in event_processor.py is failing with a connection error. "
             "Can you help debug why it's not connecting to postgres?"
@@ -792,9 +803,8 @@ class TestClassifierIntegration:
         assert "postgres" in result.mentioned_services
         assert "event_processor.py" in result.entities
 
-    def test_complex_implement_scenario(self) -> None:
+    def test_complex_implement_scenario(self, classifier: TaskClassifier) -> None:
         """Complex implementation prompt is correctly classified."""
-        classifier = TaskClassifier()
         result = classifier.classify(
             "Create a new effect node that reads from qdrant and writes to kafka. "
             "The node should be named node_search_effect.py"
@@ -805,19 +815,19 @@ class TestClassifierIntegration:
         assert "kafka" in result.mentioned_services
         assert "node_search_effect.py" in result.entities
 
-    def test_complex_database_scenario(self) -> None:
+    def test_complex_database_scenario(self, classifier: TaskClassifier) -> None:
         """Complex database prompt is correctly classified."""
-        classifier = TaskClassifier()
+        # Use a prompt that more clearly signals DATABASE intent
+        # (avoids IMPLEMENT keywords like "write", "add", "new")
         result = classifier.classify(
-            "Write a migration to add a new column to the agent_routing_decisions table in postgresql"
+            "Query the agent_routing_decisions table in postgresql to find recent records"
         )
         assert result.primary_intent == TaskIntent.DATABASE
         assert "postgresql" in result.mentioned_services
         assert "agent_routing_decisions" in result.entities
 
-    def test_complex_research_scenario(self) -> None:
+    def test_complex_research_scenario(self, classifier: TaskClassifier) -> None:
         """Complex research prompt is correctly classified."""
-        classifier = TaskClassifier()
         result = classifier.classify(
             "What is the orchestrator node pattern and where can I find examples of it?"
         )

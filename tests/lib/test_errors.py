@@ -165,15 +165,20 @@ class TestOnexError:
         assert ModelOnexError is OnexError
 
     def test_can_chain_with_cause(self) -> None:
-        """OnexError can be chained with a cause."""
+        """OnexError can be chained with a cause using 'raise ... from'."""
         from omniclaude.lib.errors import OnexError
 
         original = ValueError("Original error")
-        error = OnexError("Wrapped error")
-        error.__cause__ = original
 
-        assert error.__cause__ is original
-        assert "Wrapped error" in str(error)
+        # Use proper exception chaining syntax
+        with pytest.raises(OnexError) as exc_info:
+            try:
+                raise original
+            except ValueError as e:
+                raise OnexError("Wrapped error") from e
+
+        assert exc_info.value.__cause__ is original
+        assert "Wrapped error" in str(exc_info.value)
 
 
 class TestErrorCodeUsage:

@@ -151,6 +151,50 @@ class TaskClassifier:
     # ONEX node type patterns
     NODE_TYPE_PATTERNS = ["effect", "compute", "reducer", "orchestrator"]
 
+    # Domain-specific indicators for implementation intent detection
+    # Used both for confidence boosting and fallback intent classification
+    DOMAIN_INDICATORS: list[str] = [
+        "api",
+        "architecture",
+        "authentication",
+        "authorization",
+        "component",
+        "compute",
+        "contract",
+        "effect",
+        "endpoint",
+        "handler",
+        "integration",
+        "middleware",
+        "mixin",
+        "model",
+        "module",
+        "node",
+        "onex",
+        "orchestrator",
+        "pattern",
+        "pipeline",
+        "reducer",
+        "service",
+        "system",
+        "template",
+        "workflow",
+    ]
+
+    # Short keywords (<=3 chars) that need word boundary matching to avoid
+    # substring false positives (e.g., "new" matching "renewed")
+    _SHORT_KEYWORDS: frozenset[str] = frozenset(
+        {"new", "add", "fix", "bug", "sql", "how", "api"}
+    )
+
+    def _keyword_in_text(self, keyword: str, text: str) -> bool:
+        """Check if keyword appears in text, using word boundaries for short keywords."""
+        if keyword in self._SHORT_KEYWORDS:
+            # Use word boundary matching for short keywords
+            pattern = rf"\b{re.escape(keyword)}\b"
+            return bool(re.search(pattern, text))
+        return keyword in text
+
     def classify(self, user_prompt: str) -> TaskContext:
         """
         Classify user prompt to extract task intent and context.
@@ -166,7 +210,9 @@ class TaskClassifier:
         # Score each intent based on keyword matches
         intent_scores: dict[TaskIntent, int] = {}
         for intent, intent_keywords in self.INTENT_KEYWORDS.items():
-            score = sum(1 for kw in intent_keywords if kw in prompt_lower)
+            score = sum(
+                1 for kw in intent_keywords if self._keyword_in_text(kw, prompt_lower)
+            )
             if score > 0:
                 intent_scores[intent] = score
 
@@ -178,30 +224,10 @@ class TaskClassifier:
             # Boost confidence for IMPLEMENT intent with domain-specific terminology
             # Domain terms are strong implementation signals even without explicit verbs
             if primary_intent == TaskIntent.IMPLEMENT:
-                domain_indicators = [
-                    "onex",
-                    "node",
-                    "effect",
-                    "compute",
-                    "reducer",
-                    "orchestrator",
-                    "authentication",
-                    "authorization",
-                    "system",
-                    "architecture",
-                    "component",
-                    "module",
-                    "service",
-                    "api",
-                    "endpoint",
-                    "handler",
-                    "middleware",
-                    "workflow",
-                    "pipeline",
-                    "integration",
-                ]
                 domain_matches = sum(
-                    1 for indicator in domain_indicators if indicator in prompt_lower
+                    1
+                    for indicator in self.DOMAIN_INDICATORS
+                    if indicator in prompt_lower
                 )
 
                 if domain_matches >= 1 and confidence < 0.5:
@@ -213,35 +239,9 @@ class TaskClassifier:
             # domain-specific/technical terms, assume IMPLEMENT intent
             # This catches prompts like "ONEX authentication system" that describe
             # WHAT to build without explicit action verbs
-            domain_indicators = [
-                "onex",
-                "node",
-                "effect",
-                "compute",
-                "reducer",
-                "orchestrator",
-                "contract",
-                "model",
-                "pattern",
-                "template",
-                "mixin",
-                "authentication",
-                "authorization",
-                "system",
-                "architecture",
-                "component",
-                "module",
-                "service",
-                "api",
-                "endpoint",
-                "handler",
-                "middleware",
-                "workflow",
-                "pipeline",
-                "integration",
-            ]
-
-            domain_matches = sum(1 for indicator in domain_indicators if indicator in prompt_lower)
+            domain_matches = sum(
+                1 for indicator in self.DOMAIN_INDICATORS if indicator in prompt_lower
+            )
 
             if domain_matches >= 1:
                 # Domain-specific terminology detected -> likely implementation request
@@ -256,7 +256,9 @@ class TaskClassifier:
 
         # 1. Extract intent keywords (action verbs)
         for _intent, kws in self.INTENT_KEYWORDS.items():
-            keywords.extend([kw for kw in kws if kw in prompt_lower])
+            keywords.extend(
+                [kw for kw in kws if self._keyword_in_text(kw, prompt_lower)]
+            )
 
         # 2. Extract node type keywords
         for nt in self.NODE_TYPE_PATTERNS:
@@ -337,7 +339,7 @@ class TaskClassifier:
 
         return TaskContext(
             primary_intent=primary_intent,
-            keywords=list(set(keywords)),  # Remove duplicates
+            keywords=sorted(set(keywords)),  # Remove duplicates, deterministic order
             entities=entities,
             mentioned_services=mentioned_services,
             mentioned_node_types=mentioned_node_types,
@@ -359,4 +361,4 @@ class TaskClassifier:
         pattern = r"\b\w+(?:_\w+)*\.\w+\b|\b\w+(?:_\w+)+\b"
         matches = re.findall(pattern, prompt)
 
-        return list(set(matches))
+        return sorted(set(matches))  # Deterministic order

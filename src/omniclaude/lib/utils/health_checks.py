@@ -33,8 +33,14 @@ try:
     import httpx
 
     HAS_HTTPX = True
+    # Export exception types for use in except handlers
+    HttpxTimeoutException: type[Exception] = httpx.TimeoutException
+    HttpxConnectError: type[Exception] = httpx.ConnectError
 except ImportError:
     HAS_HTTPX = False
+    # Create placeholder exception types that will never match when httpx unavailable
+    HttpxTimeoutException = type("HttpxTimeoutException", (Exception,), {})
+    HttpxConnectError = type("HttpxConnectError", (Exception,), {})
 
 # Import pattern tracker for configuration
 HAS_PATTERN_TRACKER = False
@@ -209,7 +215,7 @@ class Phase4HealthChecker:
                 self._cache_result(cache_key, result.to_dict())
                 return result
 
-        except httpx.TimeoutException:
+        except HttpxTimeoutException:
             response_time_ms = (time.time() - start_time) * 1000
             result = HealthCheckResult(
                 component="intelligence_service",
@@ -222,7 +228,7 @@ class Phase4HealthChecker:
             self._cache_result(cache_key, result.to_dict())
             return result
 
-        except httpx.ConnectError:
+        except HttpxConnectError:
             response_time_ms = (time.time() - start_time) * 1000
             result = HealthCheckResult(
                 component="intelligence_service",

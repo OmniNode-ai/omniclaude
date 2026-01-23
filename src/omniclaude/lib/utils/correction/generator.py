@@ -53,8 +53,8 @@ def _get_intelligence_client_class() -> type[IntelligenceClientProtocol] | None:
 class IntelligenceClientStub:
     """Stub implementation when real Intelligence client is unavailable."""
 
-    def __init__(self, intelligence_url: str | None = None, timeout: float = 5.0) -> None:
-        self.intelligence_url = intelligence_url
+    def __init__(self, archon_url: str | None = None, timeout: float = 5.0) -> None:
+        self.archon_url = archon_url
         self.timeout = timeout
         logger.debug("Using IntelligenceClientStub - RAG intelligence unavailable")
 
@@ -81,7 +81,7 @@ class Violation:
 class CorrectionGenerator:
     """Generate intelligent corrections for naming violations using RAG intelligence."""
 
-    def __init__(self, intelligence_url: str | None = None, timeout: float = 5.0):
+    def __init__(self, intelligence_url: str | None = None, timeout: float = 5.0) -> None:
         """
         Initialize the correction generator.
 
@@ -97,7 +97,7 @@ class CorrectionGenerator:
             )
         else:
             self.intelligence_client = IntelligenceClientStub(
-                intelligence_url=intelligence_url, timeout=timeout
+                archon_url=intelligence_url, timeout=timeout
             )
         self._cache: dict[str, dict[str, Any]] = {}  # Cache RAG results during session
 
