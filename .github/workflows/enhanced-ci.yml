@@ -494,6 +494,7 @@ jobs:
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/test_db
           REDIS_URL: redis://localhost:6379/0
+          SEMANTIC_SEARCH_URL: http://localhost:8055
         run: |
           echo "::group::Integration Tests"
           # Add explicit timeout to prevent test hangs
@@ -622,6 +623,7 @@ jobs:
       - name: Run hooks system tests
         env:
           DATABASE_URL: postgresql://hooks_test:hooks_test@localhost:5432/hooks_test_db
+          SEMANTIC_SEARCH_URL: http://localhost:8055
         run: |
           echo "::group::Hooks System Tests"
           # Check if tests/hooks/ exists (hooks tests in new structure)
