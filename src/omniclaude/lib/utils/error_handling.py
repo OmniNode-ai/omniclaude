@@ -21,7 +21,8 @@ import sys
 import time
 import traceback
 from datetime import datetime
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import requests
 
