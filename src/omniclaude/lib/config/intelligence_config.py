@@ -36,7 +36,7 @@ Note:
 
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from omniclaude.config import settings
 
@@ -149,9 +149,15 @@ class IntelligenceConfig(BaseModel):
     @field_validator("kafka_bootstrap_servers")
     @classmethod
     def validate_bootstrap_servers(cls, v: str) -> str:
-        """Validate Kafka bootstrap servers format."""
+        """Validate Kafka bootstrap servers format.
+
+        Note: Empty strings are allowed through this validator to enable
+        the model_validator to provide a more helpful error message about
+        configuration options. Format validation only applies to non-empty values.
+        """
+        # Allow empty strings through - model_validator will handle with better UX
         if not v or not v.strip():
-            raise ValueError("kafka_bootstrap_servers cannot be empty")
+            return v
 
         # Check for basic host:port format
         servers = [s.strip() for s in v.split(",")]
@@ -177,6 +183,26 @@ class IntelligenceConfig(BaseModel):
         if not v or not v.strip():
             raise ValueError("kafka_consumer_group_prefix cannot be empty")
         return v.strip()
+
+    @model_validator(mode="after")
+    def validate_configuration_complete(self) -> "IntelligenceConfig":
+        """Validate configuration is complete with helpful guidance.
+
+        This validator runs after field validation to provide user-friendly
+        error messages that guide users toward the correct usage pattern.
+
+        Raises:
+            ValueError: If kafka_bootstrap_servers is empty, with guidance
+                on how to properly configure the instance.
+        """
+        if not self.kafka_bootstrap_servers or not self.kafka_bootstrap_servers.strip():
+            raise ValueError(
+                "kafka_bootstrap_servers cannot be empty. "
+                "Use IntelligenceConfig.from_env() to load from environment settings, "
+                "or provide kafka_bootstrap_servers explicitly when instantiating. "
+                "Example: IntelligenceConfig(kafka_bootstrap_servers='192.168.86.200:29092')"
+            )
+        return self
 
     # =========================================================================
     # Factory Methods

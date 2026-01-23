@@ -40,12 +40,12 @@ _find_and_load_env()
 
 logger = logging.getLogger(__name__)
 
+# Module-level state for warning tracking (ensures warnings are only logged once per process)
+_defaults_warned: bool = False
+
 
 class Settings(BaseSettings):
     """Comprehensive settings for OmniClaude plugins and services."""
-
-    # Class-level flag to ensure default warnings are only logged once
-    _defaults_warned: bool = False
 
     # =========================================================================
     # KAFKA / REDPANDA CONFIGURATION
@@ -318,9 +318,10 @@ class Settings(BaseSettings):
         localhost values, which may indicate missing production configuration.
         Warnings are only logged once per session to avoid log spam.
         """
-        if Settings._defaults_warned:
+        global _defaults_warned
+        if _defaults_warned:
             return
-        Settings._defaults_warned = True
+        _defaults_warned = True
 
         if self.postgres_host == "localhost":
             logger.warning(

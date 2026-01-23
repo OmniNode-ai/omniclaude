@@ -129,6 +129,24 @@ class TestIntelligenceConfigValidation:
 
         assert "cannot be empty" in str(exc_info.value)
 
+    def test_direct_instantiation_error_includes_guidance(self) -> None:
+        """Test that direct instantiation without args provides helpful guidance.
+
+        When users call IntelligenceConfig() without arguments, the error message
+        should guide them to use from_env() or provide explicit parameters.
+        """
+        from omniclaude.lib.config.intelligence_config import IntelligenceConfig
+
+        with pytest.raises(ValueError) as exc_info:
+            IntelligenceConfig()
+
+        error_message = str(exc_info.value)
+        # Error should mention from_env() as an alternative
+        assert "from_env()" in error_message
+        # Error should provide an example with explicit parameter
+        assert "kafka_bootstrap_servers" in error_message
+        assert "Example" in error_message
+
     def test_bootstrap_servers_requires_host_port_format(self) -> None:
         """Test that kafka_bootstrap_servers validates host:port format."""
         from omniclaude.lib.config.intelligence_config import IntelligenceConfig
