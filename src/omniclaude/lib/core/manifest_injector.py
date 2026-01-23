@@ -153,10 +153,10 @@ def _load_sanitizers() -> tuple[Callable[[Any], Any], Callable[[Any], Any]]:
             return sanitize_dict, sanitize_string
         except ImportError:
             # Fallback: no-op sanitization functions
-            def fallback_dict(d: Any, **kwargs: Any) -> Any:
+            def fallback_dict(d: Any, **_kwargs: Any) -> Any:
                 return d
 
-            def fallback_string(s: Any, **kwargs: Any) -> Any:
+            def fallback_string(s: Any, **_kwargs: Any) -> Any:
                 return s
 
             return fallback_dict, fallback_string

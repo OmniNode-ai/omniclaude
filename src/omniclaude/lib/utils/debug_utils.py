@@ -58,6 +58,7 @@ def check_running_services() -> dict[str, Any]:
             capture_output=True,
             text=True,
             timeout=5,
+            check=False,
         )
         if result.returncode == 0:
             try:
@@ -99,6 +100,7 @@ def check_running_services() -> dict[str, Any]:
             capture_output=True,
             text=True,
             timeout=5,
+            check=False,
         )
         if result.returncode == 0:
             services["main_server"] = {
@@ -122,6 +124,7 @@ def check_running_services() -> dict[str, Any]:
             capture_output=True,
             text=True,
             timeout=5,
+            check=False,
         )
         if result.returncode == 0:
             services["mcp_server"] = {
@@ -146,6 +149,7 @@ def check_running_services() -> dict[str, Any]:
             capture_output=True,
             text=True,
             timeout=10,
+            check=False,
         )
         if result.returncode == 0 and result.stdout.strip():
             docker_containers = [
@@ -185,6 +189,7 @@ def check_running_services() -> dict[str, Any]:
             capture_output=True,
             text=True,
             timeout=10,
+            check=False,
         )
         if result.returncode == 0 and result.stdout.strip():
             docker_containers = [
@@ -224,6 +229,7 @@ def check_running_services() -> dict[str, Any]:
             capture_output=True,
             text=True,
             timeout=10,
+            check=False,
         )
         if result.returncode == 0 and result.stdout.strip():
             docker_containers = [
