@@ -605,9 +605,10 @@ class TestIntelligenceUsageTrackerWithMockedDatabase:
 
     @pytest.mark.asyncio
     async def test_get_usage_stats_returns_statistics(
-        self, tracker_with_mock_pool: Any, _mock_conn: AsyncMock
+        self, tracker_with_mock_pool: Any, mock_conn: AsyncMock
     ) -> None:
         """Test that get_usage_stats returns statistics from database."""
+        _ = mock_conn  # Used by fixture to configure pool behavior
         result = await tracker_with_mock_pool.get_usage_stats()
 
         assert result["total_retrievals"] == 10

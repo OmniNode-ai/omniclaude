@@ -11,6 +11,7 @@ dependencies = [
     "pydantic-settings>=2.6.0",
     "cachetools>=5.0.0",
     "click>=8.1.0",
+    "asyncpg>=0.29.0",
 ]
 
 [dependency-groups]
@@ -30,6 +31,7 @@ dev = [
     "types-psutil>=7.2.1.20260116",
     "types-psycopg2>=2.9.21.20251012",
     "types-docker>=7.1.0.20260109",
+    "bandit>=1.9.3",
 ]
 
 [project.scripts]

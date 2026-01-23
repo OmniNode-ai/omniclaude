@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import quote_plus
 
-from pydantic import Field, HttpUrl
+from pydantic import Field, HttpUrl, PrivateAttr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -40,12 +40,12 @@ _find_and_load_env()
 
 logger = logging.getLogger(__name__)
 
-# Module-level state for warning tracking (ensures warnings are only logged once per process)
-_defaults_warned: bool = False
-
 
 class Settings(BaseSettings):
     """Comprehensive settings for OmniClaude plugins and services."""
+
+    # Private attribute for warning tracking (not serialized, instance-level state)
+    _defaults_warned: bool = PrivateAttr(default=False)
 
     # =========================================================================
     # KAFKA / REDPANDA CONFIGURATION
@@ -318,12 +318,11 @@ class Settings(BaseSettings):
 
         This method logs a warning for each service configured with default
         localhost values, which may indicate missing production configuration.
-        Warnings are only logged once per session to avoid log spam.
+        Warnings are only logged once per instance to avoid log spam.
         """
-        global _defaults_warned
-        if _defaults_warned:
+        if self._defaults_warned:
             return
-        _defaults_warned = True
+        self._defaults_warned = True
 
         if self.postgres_host == "localhost":
             logger.warning(
