@@ -56,9 +56,6 @@ import asyncio
 import logging
 import os
 
-# Import Pydantic Settings for type-safe configuration
-# Use absolute import to avoid conflict with agents/lib/config directory
-import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -71,9 +68,8 @@ from typing import (
 )
 from uuid import UUID
 
-_project_root = _Path(__file__).parent.parent.parent
-if str(_project_root) not in sys.path:
-    sys.path.insert(0, str(_project_root))
+# NOTE: Package must be installed (pip install -e .) for this import to work.
+# No sys.path manipulation needed when package is properly installed.
 from omniclaude.config import settings
 
 # Import nest_asyncio for nested event loop support
@@ -1185,6 +1181,7 @@ class ManifestInjector:
                 }
 
             self._manifest_data = manifest
+            self._cached_formatted = None  # Invalidate formatted cache for fresh manifest
             self._last_update = datetime.now(UTC)
             return manifest
 
@@ -1255,6 +1252,7 @@ class ManifestInjector:
 
             # Cache manifest
             self._manifest_data = manifest
+            self._cached_formatted = None  # Invalidate formatted cache for fresh manifest
             self._last_update = datetime.now(UTC)
 
             # Calculate total generation time

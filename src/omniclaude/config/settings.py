@@ -14,7 +14,7 @@ import logging
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
-from urllib.parse import quote_plus
+from urllib.parse import quote
 
 from pydantic import Field, HttpUrl, PrivateAttr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -99,6 +99,10 @@ class Settings(BaseSettings):
         default="",
         description="PostgreSQL password (loaded from environment)",
     )
+    enable_postgres: bool = Field(
+        default=True,
+        description="Enable PostgreSQL database connection (validates password when True)",
+    )
 
     # =========================================================================
     # QDRANT VECTOR DATABASE CONFIGURATION
@@ -117,6 +121,10 @@ class Settings(BaseSettings):
     qdrant_url: str = Field(
         default="http://localhost:6333",
         description="Full Qdrant URL",
+    )
+    enable_qdrant: bool = Field(
+        default=True,
+        description="Enable Qdrant vector database (validates connection settings when True)",
     )
 
     # =========================================================================
@@ -274,11 +282,13 @@ class Settings(BaseSettings):
         driver = "postgresql+asyncpg" if async_driver else "postgresql"
         password = self.get_effective_postgres_password()
 
-        # URL-encode special characters in username and password
-        # Both may contain URL-unsafe characters like @, :, /, ?, #, etc.
-        encoded_user = quote_plus(self.postgres_user)
+        # URL-encode special characters in username and password.
+        # Both may contain URL-unsafe characters like @, :, /, ?, #, %, etc.
+        # Using quote() with safe='' ensures ALL special characters are encoded,
+        # including spaces as %20 (more compatible than quote_plus's + encoding).
+        encoded_user = quote(self.postgres_user, safe="")
         if password:
-            encoded_password = quote_plus(password)
+            encoded_password = quote(password, safe="")
             return (
                 f"{driver}://{encoded_user}:{encoded_password}"
                 f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_database}"
@@ -296,15 +306,19 @@ class Settings(BaseSettings):
         """
         errors: list[str] = []
 
-        # Check PostgreSQL configuration
-        if not self.postgres_host:
-            errors.append("POSTGRES_HOST is not configured")
-        if not self.postgres_database:
-            errors.append("POSTGRES_DATABASE is not configured")
-        if not self.postgres_user:
-            errors.append("POSTGRES_USER is not configured")
-        if not self.postgres_password:
-            errors.append("POSTGRES_PASSWORD is not configured")
+        # Check PostgreSQL configuration (only when enabled)
+        if self.enable_postgres:
+            if not self.postgres_host:
+                errors.append("POSTGRES_HOST is not configured")
+            if not self.postgres_database:
+                errors.append("POSTGRES_DATABASE is not configured")
+            if not self.postgres_user:
+                errors.append("POSTGRES_USER is not configured")
+            if not self.postgres_password:
+                errors.append(
+                    "POSTGRES_PASSWORD is not configured but ENABLE_POSTGRES is True. "
+                    "Set POSTGRES_PASSWORD in .env or set ENABLE_POSTGRES=false to disable."
+                )
 
         # Check Kafka configuration (only if event routing is enabled)
         if self.use_event_routing and not self.get_effective_kafka_bootstrap_servers():
@@ -312,9 +326,18 @@ class Settings(BaseSettings):
                 "KAFKA_BOOTSTRAP_SERVERS is not configured but USE_EVENT_ROUTING is enabled"
             )
 
-        # Note: Qdrant configuration is not validated here because both qdrant_url
-        # and qdrant_host have defaults. Use log_default_warnings() to detect
-        # localhost usage that may need production configuration.
+        # Check Qdrant configuration (only when enabled)
+        # Validates that non-localhost values are set for production use
+        if self.enable_qdrant:
+            # Check if Qdrant is configured with meaningful (non-default) values
+            is_default_host = self.qdrant_host == "localhost"
+            is_default_url = self.qdrant_url == "http://localhost:6333"
+
+            if is_default_host and is_default_url:
+                errors.append(
+                    "QDRANT_HOST and QDRANT_URL are using localhost defaults but ENABLE_QDRANT is True. "
+                    "Set QDRANT_HOST or QDRANT_URL in .env for production, or set ENABLE_QDRANT=false to disable."
+                )
 
         return errors
 
@@ -336,7 +359,7 @@ class Settings(BaseSettings):
             return
         self._defaults_warned = True
 
-        if self.postgres_host == "localhost":
+        if self.enable_postgres and self.postgres_host == "localhost":
             logger.warning(
                 "Using default postgres_host='localhost'. Set POSTGRES_HOST in .env for production."
             )
@@ -347,7 +370,7 @@ class Settings(BaseSettings):
                 "Set KAFKA_BOOTSTRAP_SERVERS in .env for event routing."
             )
 
-        if self.qdrant_host == "localhost":
+        if self.enable_qdrant and self.qdrant_host == "localhost":
             logger.warning(
                 "Using default qdrant_host='localhost'. Set QDRANT_HOST in .env for production."
             )
@@ -372,10 +395,46 @@ class Settings(BaseSettings):
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    """Get singleton settings instance."""
+    """Get singleton settings instance.
+
+    Returns a cached Settings instance. The singleton pattern ensures
+    consistent configuration across the application. The instance is
+    created lazily on first call and reused thereafter.
+
+    Note:
+        For test isolation, use `clear_settings_cache()` to reset the
+        singleton before each test that needs fresh settings.
+    """
     instance = Settings()
     instance.log_default_warnings()
     return instance
+
+
+def clear_settings_cache() -> None:
+    """Clear the settings singleton cache for test isolation.
+
+    This function clears the lru_cache on `get_settings()`, ensuring
+    the next call creates a fresh Settings instance. Use this in test
+    fixtures to guarantee test isolation.
+
+    Example:
+        @pytest.fixture(autouse=True)
+        def reset_settings():
+            clear_settings_cache()
+            yield
+            clear_settings_cache()
+
+        def test_warning_behavior():
+            # Fresh settings instance, warnings will fire
+            settings = get_settings()
+            assert settings._defaults_warned is True
+
+        def test_another_warning_scenario():
+            # Also gets fresh settings due to fixture
+            settings = get_settings()
+            # ...
+    """
+    get_settings.cache_clear()
 
 
 settings = get_settings()

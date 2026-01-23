@@ -28,6 +28,11 @@ class TopicBase(StrEnum):
     # Future (OMN-1402)
     LEARNING_PATTERN = "omniclaude.learning.pattern.v1"
 
+    # Agent routing topics (omninode domain, following EVENT_BUS_INTEGRATION_GUIDE)
+    ROUTING_REQUESTED = "omninode.agent.routing.requested.v1"
+    ROUTING_COMPLETED = "omninode.agent.routing.completed.v1"
+    ROUTING_FAILED = "omninode.agent.routing.failed.v1"
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).

@@ -21,6 +21,9 @@ from omniclaude.lib.models.intelligence_context import (
     get_default_intelligence,
 )
 
+# All tests in this module are unit tests
+pytestmark = pytest.mark.unit
+
 
 class TestIntelligenceContextDefaults:
     """Tests for IntelligenceContext default field values."""

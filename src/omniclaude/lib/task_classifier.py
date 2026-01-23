@@ -331,11 +331,15 @@ class TaskClassifier:
         # Extract entities (file names, table names)
         entities = self._extract_entities(user_prompt)
 
-        # Extract mentioned services
-        mentioned_services = [svc for svc in self.SERVICE_PATTERNS if svc in prompt_lower]
+        # Extract mentioned services (sorted for deterministic output)
+        mentioned_services = sorted(
+            svc for svc in self.SERVICE_PATTERNS if svc in prompt_lower
+        )
 
-        # Extract mentioned node types
-        mentioned_node_types = [nt.upper() for nt in self.NODE_TYPE_PATTERNS if nt in prompt_lower]
+        # Extract mentioned node types (sorted for deterministic output)
+        mentioned_node_types = sorted(
+            nt.upper() for nt in self.NODE_TYPE_PATTERNS if nt in prompt_lower
+        )
 
         return TaskContext(
             primary_intent=primary_intent,

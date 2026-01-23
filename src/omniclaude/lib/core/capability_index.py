@@ -156,20 +156,20 @@ class CapabilityIndex:
                 },
             )
 
-        except FileNotFoundError:
+        except FileNotFoundError as e:
             logger.error(f"Registry file not found: {self.registry_path}")
             raise OnexError(
                 code=EnumCoreErrorCode.CONFIGURATION_ERROR,
                 message=f"Registry file not found: {self.registry_path}",
                 details={"registry_path": self.registry_path},
-            )
+            ) from e
         except yaml.YAMLError as e:
             logger.error(f"Invalid YAML in registry: {e}")
             raise OnexError(
                 code=EnumCoreErrorCode.VALIDATION_ERROR,
                 message=f"Invalid YAML in registry file: {e}",
                 details={"registry_path": self.registry_path, "yaml_error": str(e)},
-            )
+            ) from e
         except OnexError:
             # Re-raise OnexError as-is
             raise

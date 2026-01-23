@@ -20,7 +20,7 @@ import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import yaml
 
@@ -33,7 +33,7 @@ from omniclaude.config import settings
 # Import internal modules (fail fast - no fallbacks for required internal dependencies)
 from .consensus.quorum import AIQuorum
 from .correction.generator import CorrectionGenerator
-from .naming_validator import NamingValidator
+from .naming_validator import NamingValidator, Violation
 
 
 def load_config() -> dict[str, Any]:
@@ -92,7 +92,7 @@ class ViolationsLogger:
         self.violations_log.parent.mkdir(parents=True, exist_ok=True)
         self.violations_summary.parent.mkdir(parents=True, exist_ok=True)
 
-    def log_violations(self, file_path: str, violations: list[Any]) -> None:
+    def log_violations(self, file_path: str, violations: list[Violation]) -> None:
         """
         Log violations to dedicated violations.log file.
 
@@ -138,7 +138,7 @@ class ViolationsLogger:
             # Don't fail enforcement if logging fails
             print(f"[Warning] Failed to log violations: {e}", file=sys.stderr)
 
-    def _update_summary(self, file_path: str, violations: list[Any], timestamp: str) -> None:
+    def _update_summary(self, file_path: str, violations: list[Violation], timestamp: str) -> None:
         """Update violations_summary.json with new violation data."""
         try:
             # Load existing summary
@@ -363,7 +363,7 @@ class QualityEnforcer:
 
     async def _run_phase_1_validation(
         self, content: str, file_path: str, language: str
-    ) -> list[Any]:
+    ) -> list[Violation]:
         """
         Run Phase 1: Fast local validation.
 
@@ -380,7 +380,7 @@ class QualityEnforcer:
             repo_type = "Omninode" if is_omninode else "Standard PEP 8"
             self._log(f"[Phase 1] Detected repository type: {repo_type}")
 
-            return cast("list[Any]", violations)
+            return violations
 
         except Exception as e:
             self._log(f"[Phase 1] Validation failed: {e}")
@@ -389,7 +389,7 @@ class QualityEnforcer:
     async def _intelligent_correction_pipeline(
         self,
         tool_call: dict[str, Any],
-        violations: list[Any],
+        violations: list[Violation],
         content: str,
         file_path: str,
         language: str,
@@ -491,7 +491,7 @@ class QualityEnforcer:
 
         return result
 
-    def _generate_simple_corrections(self, violations: list[Any]) -> list[dict[str, Any]]:
+    def _generate_simple_corrections(self, violations: list[Violation]) -> list[dict[str, Any]]:
         """
         Generate simple corrections without RAG intelligence.
         Fallback when Phase 2 is disabled or fails.
@@ -673,7 +673,7 @@ class QualityEnforcer:
         return mapping.get(ext)
 
     def _build_violations_system_message(
-        self, violations: list[Any], file_path: str, mode: str = "warn"
+        self, violations: list[Violation], file_path: str, mode: str = "warn"
     ) -> str:
         """
         Build system message for Claude Code with violation warnings.
@@ -681,7 +681,9 @@ class QualityEnforcer:
         Args:
             violations: List of violations found
             file_path: Path to the file being checked
-            mode: "warn" for warnings only, "blocking" for blocking mode
+            mode: Enforcement mode. Valid values:
+                - "warn": Warnings only, write proceeds
+                - "block" or "blocking": Write blocked until violations fixed
 
         Returns a formatted string that will be displayed to the user via
         the systemMessage field in the hook's JSON output.
@@ -700,7 +702,7 @@ class QualityEnforcer:
         lines.append("")
 
         # Group violations by type for better readability
-        violations_by_type: dict[str, list[Any]] = {}
+        violations_by_type: dict[str, list[Violation]] = {}
         for v in violations:
             vtype = v.violation_type
             if vtype not in violations_by_type:
@@ -774,7 +776,7 @@ class QualityEnforcer:
             self._log(f"[Warning] Failed to capture tool selection metadata: {e}")
             self.tool_selection_metadata = None
 
-    def _update_quality_check_metadata(self, violations: list[Any]) -> None:
+    def _update_quality_check_metadata(self, violations: list[Violation]) -> None:
         """
         Update quality check metadata after validation.
 
@@ -912,7 +914,8 @@ async def main() -> int:
         # Check if we have violations
         if enforcer.system_message:
             # Choose permission decision based on enforcement mode
-            if ENFORCEMENT_MODE == "blocking":
+            # Valid blocking modes: "block" or "blocking" (both accepted for consistency)
+            if ENFORCEMENT_MODE in {"block", "blocking"}:
                 # Block mode: prevent write execution
                 permission_decision = "deny"
                 exit_code = 1  # Bash wrapper converts to exit 2

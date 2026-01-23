@@ -49,15 +49,14 @@ from uuid import uuid4
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from aiokafka.errors import KafkaError as AIOKafkaError
 
-# CRITICAL: Add project root FIRST to avoid config module conflicts
-# There's a config module in agents/lib/config/ that conflicts with main config/
-# Note: 4 parents needed (core/ -> lib/ -> claude/ -> project_root)
-_project_root = PathLib(__file__).parent.parent.parent.parent
-if str(_project_root) not in sys.path:
-    sys.path.insert(0, str(_project_root))
+# NOTE: omniclaude.* imports require package to be installed (pip install -e .)
+# No sys.path manipulation needed for package imports when properly installed.
 
-# Add routing adapter schemas to path (AFTER project root)
-_routing_adapter_path = str(_project_root / "services" / "routing_adapter")
+# Add routing adapter schemas to path - REQUIRED because services/routing_adapter/
+# is not an installable package; it contains Pydantic models shared with the
+# routing_adapter service. Path: <project_root>/services/routing_adapter/schemas/
+_project_root = PathLib(__file__).parent.parent.parent.parent  # core/ -> lib/ -> omniclaude/ -> src/
+_routing_adapter_path = str(_project_root.parent / "services" / "routing_adapter")
 if _routing_adapter_path not in sys.path:
     sys.path.append(_routing_adapter_path)
 
@@ -82,6 +81,9 @@ logger = logging.getLogger(__name__)
 
 # ONEX-compliant error handling from shared module
 from omniclaude.lib.errors import EnumCoreErrorCode, OnexError
+
+# Topic building for environment-prefixed Kafka topics
+from omniclaude.hooks.topics import TopicBase, build_topic
 
 # Import agent execution logger for observability (optional integration)
 try:
@@ -149,12 +151,6 @@ class RoutingEventClient:
             )
     """
 
-    # Kafka topic names (following EVENT_BUS_INTEGRATION_GUIDE standard)
-    # Format: omninode.{domain}.{entity}.{action}.v{major}
-    TOPIC_REQUEST = "omninode.agent.routing.requested.v1"
-    TOPIC_COMPLETED = "omninode.agent.routing.completed.v1"
-    TOPIC_FAILED = "omninode.agent.routing.failed.v1"
-
     def __init__(
         self,
         bootstrap_servers: str | None = None,
@@ -201,6 +197,13 @@ class RoutingEventClient:
             )
         self.request_timeout_ms = request_timeout_ms
         self.consumer_group_id = consumer_group_id or f"omniclaude-routing-{uuid4().hex[:8]}"
+
+        # Build environment-prefixed topic names
+        # Uses settings.kafka_environment (dev/staging/prod) for proper topic routing
+        kafka_env = settings.kafka_environment
+        self.TOPIC_REQUEST = build_topic(kafka_env, TopicBase.ROUTING_REQUESTED)
+        self.TOPIC_COMPLETED = build_topic(kafka_env, TopicBase.ROUTING_COMPLETED)
+        self.TOPIC_FAILED = build_topic(kafka_env, TopicBase.ROUTING_FAILED)
 
         self._producer: AIOKafkaProducer | None = None
         self._consumer: AIOKafkaConsumer | None = None
@@ -874,10 +877,11 @@ class RoutingEventClient:
                         continue
 
                     # Determine event type (lowercase dot notation per EVENT_BUS_INTEGRATION_GUIDE)
+                    # Compare against TopicBase constant (base name without prefix) or full topic
                     event_type = response.get("event_type", "")
 
                     if (
-                        event_type == "omninode.agent.routing.completed.v1"
+                        event_type == TopicBase.ROUTING_COMPLETED
                         or msg.topic == self.TOPIC_COMPLETED
                     ):
                         # Success response
@@ -909,7 +913,7 @@ class RoutingEventClient:
                             )
 
                     elif (
-                        event_type == "omninode.agent.routing.failed.v1"
+                        event_type == TopicBase.ROUTING_FAILED
                         or msg.topic == self.TOPIC_FAILED
                     ):
                         # Error response

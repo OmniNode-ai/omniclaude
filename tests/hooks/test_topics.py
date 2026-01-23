@@ -13,6 +13,9 @@ from omnibase_core.models.errors import ModelOnexError
 
 from omniclaude.hooks.topics import TopicBase, build_topic
 
+# All tests in this module are unit tests
+pytestmark = pytest.mark.unit
+
 # =============================================================================
 # Topic Base Tests
 # =============================================================================
@@ -23,11 +26,16 @@ class TestTopicBase:
 
     def test_topic_base_names(self) -> None:
         """Topic base names are defined correctly."""
+        # Claude Code session/prompt/tool topics
         assert TopicBase.SESSION_STARTED == "omniclaude.session.started.v1"
         assert TopicBase.SESSION_ENDED == "omniclaude.session.ended.v1"
         assert TopicBase.PROMPT_SUBMITTED == "omniclaude.prompt.submitted.v1"
         assert TopicBase.TOOL_EXECUTED == "omniclaude.tool.executed.v1"
         assert TopicBase.LEARNING_PATTERN == "omniclaude.learning.pattern.v1"
+        # Agent routing topics (omninode domain)
+        assert TopicBase.ROUTING_REQUESTED == "omninode.agent.routing.requested.v1"
+        assert TopicBase.ROUTING_COMPLETED == "omninode.agent.routing.completed.v1"
+        assert TopicBase.ROUTING_FAILED == "omninode.agent.routing.failed.v1"
 
     def test_topic_base_is_str_enum(self) -> None:
         """TopicBase values are strings (StrEnum)."""
@@ -36,10 +44,20 @@ class TestTopicBase:
             assert isinstance(topic.value, str)
 
     def test_all_topics_follow_naming_convention(self) -> None:
-        """All topics follow omniclaude.{category}.{event}.v{version} pattern."""
+        """All topics follow {domain}.{entity}.{action}.v{version} pattern.
+
+        Supported domains:
+        - omniclaude: Claude Code hook events (session, prompt, tool)
+        - omninode: Platform-wide events (agent routing)
+        """
         import re
 
-        pattern = re.compile(r"^omniclaude\.[a-z]+\.[a-z]+\.v\d+$")
+        # Pattern: {domain}.{entity}.{action}.v{version}
+        # Domain: omniclaude or omninode
+        # Entity: one or more segments (e.g., "session", "agent.routing")
+        # Action: lowercase action verb (e.g., "started", "requested")
+        # Version: v followed by digits
+        pattern = re.compile(r"^(omniclaude|omninode)\.([a-z]+\.)+[a-z]+\.v\d+$")
         for topic in TopicBase:
             assert pattern.match(topic.value), (
                 f"Topic {topic.name} does not follow naming convention: {topic.value}"

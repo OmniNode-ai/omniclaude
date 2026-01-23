@@ -265,7 +265,7 @@ class PatternQualityScorer:
         return min(1.0, score)
 
     def _score_metadata_richness(
-        self, use_cases: list[Any], examples: list[Any], metadata: dict[str, Any]
+        self, use_cases: list[Any] | None, examples: list[Any] | None, metadata: dict[str, Any] | None
     ) -> float:
         """
         Score metadata richness.
@@ -276,14 +276,19 @@ class PatternQualityScorer:
         - +0.3 for rich metadata (>3 fields)
 
         Args:
-            use_cases: List of use case descriptions
-            examples: List of example implementations
-            metadata: Additional metadata dictionary
+            use_cases: List of use case descriptions (None-safe)
+            examples: List of example implementations (None-safe)
+            metadata: Additional metadata dictionary (None-safe)
 
         Returns:
             Metadata richness score (0.0-1.0)
         """
         score = 0.0
+
+        # Defensive None guards - handle None values gracefully
+        use_cases = use_cases or []
+        examples = examples or []
+        metadata = metadata or {}
 
         # Score use cases
         if use_cases:

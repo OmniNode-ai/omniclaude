@@ -40,6 +40,18 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from omniclaude.config import settings
 
+# Topic base names (without environment prefix)
+# These are combined with kafka_environment to create full topic names
+TOPIC_BASE_CODE_ANALYSIS_REQUESTED = (
+    "onex-intelligence.intelligence.code-analysis-requested.v1"
+)
+TOPIC_BASE_CODE_ANALYSIS_COMPLETED = (
+    "onex-intelligence.intelligence.code-analysis-completed.v1"
+)
+TOPIC_BASE_CODE_ANALYSIS_FAILED = (
+    "onex-intelligence.intelligence.code-analysis-failed.v1"
+)
+
 
 class IntelligenceConfig(BaseModel):
     """
@@ -56,12 +68,13 @@ class IntelligenceConfig(BaseModel):
         kafka_pattern_discovery_timeout_ms: Pattern discovery timeout
         kafka_code_analysis_timeout_ms: Code analysis timeout
         kafka_consumer_group_prefix: Consumer group prefix for isolation
+        kafka_environment: Environment prefix for topic names (dev, staging, prod)
         enable_event_based_discovery: Enable event-based pattern discovery
         enable_filesystem_fallback: Enable fallback to built-in patterns
         prefer_event_patterns: Prefer event-based patterns (higher confidence)
-        topic_code_analysis_requested: Request topic name
-        topic_code_analysis_completed: Success response topic name
-        topic_code_analysis_failed: Error response topic name
+        topic_code_analysis_requested: Request topic name (built from kafka_environment)
+        topic_code_analysis_completed: Success response topic name (built from kafka_environment)
+        topic_code_analysis_failed: Error response topic name (built from kafka_environment)
     """
 
     # =========================================================================
@@ -124,30 +137,79 @@ class IntelligenceConfig(BaseModel):
     )
 
     # =========================================================================
+    # Environment Configuration
+    # =========================================================================
+
+    kafka_environment: str = Field(
+        default="dev",
+        description="Kafka topic environment prefix (dev, staging, prod)",
+    )
+
+    # =========================================================================
     # Topic Configuration
     # =========================================================================
-    # NOTE: Default topics use 'dev' prefix for local development.
-    # For production, use IntelligenceConfig.from_env() which constructs
-    # topics dynamically based on settings.kafka_environment.
+    # Topic names are constructed dynamically by combining kafka_environment
+    # with the base topic name. If not explicitly provided, they are built
+    # automatically via the model validator.
 
     topic_code_analysis_requested: str = Field(
-        default="dev.onex-intelligence.intelligence.code-analysis-requested.v1",
-        description="Topic for code analysis requests (dev default; use from_env() for dynamic prefix)",
+        default="",
+        description="Topic for code analysis requests (built from kafka_environment if empty)",
     )
 
     topic_code_analysis_completed: str = Field(
-        default="dev.onex-intelligence.intelligence.code-analysis-completed.v1",
-        description="Topic for successful analysis responses (dev default; use from_env() for dynamic prefix)",
+        default="",
+        description="Topic for successful analysis responses (built from kafka_environment if empty)",
     )
 
     topic_code_analysis_failed: str = Field(
-        default="dev.onex-intelligence.intelligence.code-analysis-failed.v1",
-        description="Topic for failed analysis responses (dev default; use from_env() for dynamic prefix)",
+        default="",
+        description="Topic for failed analysis responses (built from kafka_environment if empty)",
     )
 
     # =========================================================================
     # Validators
     # =========================================================================
+
+    @model_validator(mode="before")
+    @classmethod
+    def build_dynamic_topic_names(cls, data: Any) -> Any:
+        """Build topic names dynamically based on kafka_environment.
+
+        This validator ensures topic names are consistently constructed
+        using the kafka_environment prefix, whether the config is created
+        via from_env() or direct instantiation.
+
+        If topic names are explicitly provided, they are preserved.
+        Otherwise, they are built from kafka_environment + base topic name.
+
+        Args:
+            data: Input data (dict when creating from kwargs, may be other types
+                in Pydantic's internal validation flows)
+
+        Returns:
+            The data with topic names populated if not already set
+        """
+        if not isinstance(data, dict):
+            return data
+
+        env: str = data.get("kafka_environment", "dev")
+
+        # Build topic names if not explicitly provided
+        if not data.get("topic_code_analysis_requested"):
+            data["topic_code_analysis_requested"] = (
+                f"{env}.{TOPIC_BASE_CODE_ANALYSIS_REQUESTED}"
+            )
+        if not data.get("topic_code_analysis_completed"):
+            data["topic_code_analysis_completed"] = (
+                f"{env}.{TOPIC_BASE_CODE_ANALYSIS_COMPLETED}"
+            )
+        if not data.get("topic_code_analysis_failed"):
+            data["topic_code_analysis_failed"] = (
+                f"{env}.{TOPIC_BASE_CODE_ANALYSIS_FAILED}"
+            )
+
+        return data
 
     @field_validator("kafka_bootstrap_servers")
     @classmethod
@@ -246,6 +308,7 @@ class IntelligenceConfig(BaseModel):
                 "Example: KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092"
             )
 
+        # Topic names are built dynamically by model validator using kafka_environment
         return cls(
             kafka_bootstrap_servers=bootstrap_servers,
             kafka_enable_intelligence=settings.use_event_routing,
@@ -253,21 +316,11 @@ class IntelligenceConfig(BaseModel):
             kafka_pattern_discovery_timeout_ms=settings.request_timeout_ms,
             kafka_code_analysis_timeout_ms=settings.request_timeout_ms * 2,
             kafka_consumer_group_prefix=settings.kafka_group_id,
+            kafka_environment=settings.kafka_environment,
             enable_event_based_discovery=settings.use_event_routing,
             enable_filesystem_fallback=True,
             prefer_event_patterns=True,
-            topic_code_analysis_requested=(
-                f"{settings.kafka_environment}.onex-intelligence."
-                "intelligence.code-analysis-requested.v1"
-            ),
-            topic_code_analysis_completed=(
-                f"{settings.kafka_environment}.onex-intelligence."
-                "intelligence.code-analysis-completed.v1"
-            ),
-            topic_code_analysis_failed=(
-                f"{settings.kafka_environment}.onex-intelligence."
-                "intelligence.code-analysis-failed.v1"
-            ),
+            # Topic names will be constructed by build_dynamic_topic_names validator
         )
 
     # =========================================================================

@@ -32,6 +32,36 @@ from uuid import UUID
 
 import asyncpg
 
+
+def _json_default_serializer(obj: Any) -> str:
+    """
+    Default JSON serializer for non-serializable types.
+
+    Handles:
+    - datetime objects: Converts to ISO-8601 format string
+    - UUID objects: Converts to standard UUID string
+    - bytes: Converts to hex string
+    - Other objects: Converts to string representation
+
+    Args:
+        obj: Object that json.dumps() cannot serialize natively
+
+    Returns:
+        String representation of the object
+
+    Example:
+        >>> json.dumps({"ts": datetime.now(UTC), "id": uuid4()}, default=_json_default_serializer)
+        '{"ts": "2024-01-15T10:30:00.123456+00:00", "id": "123e4567-e89b-12d3-a456-426614174000"}'
+    """
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    if isinstance(obj, UUID):
+        return str(obj)
+    if isinstance(obj, bytes):
+        return obj.hex()
+    # Fallback for any other non-serializable type
+    return str(obj)
+
 from omniclaude.config import settings
 
 logger = logging.getLogger(__name__)
@@ -368,18 +398,22 @@ class IntelligenceUsageTracker:
             pool = await self._get_pool()
 
             # Prepare JSON data (asyncpg accepts json strings directly)
-            # Use default=str to handle UUIDs, datetimes, and other non-serializable types
+            # Use _json_default_serializer to handle UUIDs, datetimes, and other non-serializable types
             intelligence_snapshot_json = (
-                json.dumps(record.intelligence_snapshot, default=str)
+                json.dumps(record.intelligence_snapshot, default=_json_default_serializer)
                 if record.intelligence_snapshot
                 else None
             )
             application_details_json = (
-                json.dumps(record.application_details, default=str)
+                json.dumps(record.application_details, default=_json_default_serializer)
                 if record.application_details
                 else None
             )
-            metadata_json = json.dumps(record.metadata, default=str) if record.metadata else None
+            metadata_json = (
+                json.dumps(record.metadata, default=_json_default_serializer)
+                if record.metadata
+                else None
+            )
 
             async with pool.acquire() as conn:
                 result = await conn.execute(
@@ -480,9 +514,11 @@ class IntelligenceUsageTracker:
             pool = await self._get_pool()
 
             # Prepare JSON data (asyncpg accepts json strings directly)
-            # Use default=str to handle UUIDs, datetimes, and other non-serializable types
+            # Use _json_default_serializer to handle UUIDs, datetimes, and other non-serializable types
             application_details_json = (
-                json.dumps(application_details, default=str) if application_details else None
+                json.dumps(application_details, default=_json_default_serializer)
+                if application_details
+                else None
             )
 
             async with pool.acquire() as conn:

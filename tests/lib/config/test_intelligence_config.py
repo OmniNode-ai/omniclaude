@@ -13,6 +13,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+# All tests in this module are unit tests
+pytestmark = pytest.mark.unit
+
 
 class TestIntelligenceConfigFromEnv:
     """Tests for IntelligenceConfig.from_env() factory method."""

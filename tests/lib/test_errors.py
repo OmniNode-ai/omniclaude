@@ -10,6 +10,9 @@ from __future__ import annotations
 
 import pytest
 
+# All tests in this module are unit tests
+pytestmark = pytest.mark.unit
+
 
 class TestErrorsImports:
     """Tests for error module imports."""

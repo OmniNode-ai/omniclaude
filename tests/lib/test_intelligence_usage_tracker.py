@@ -18,6 +18,9 @@ from uuid import uuid4
 
 import pytest
 
+# All tests in this module are unit tests
+pytestmark = pytest.mark.unit
+
 
 class TestIntelligenceUsageRecord:
     """Tests for IntelligenceUsageRecord dataclass."""

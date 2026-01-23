@@ -37,6 +37,9 @@ from omniclaude.hooks.schemas import (
     ModelHookToolExecutedPayload,
 )
 
+# All tests in this module are unit tests
+pytestmark = pytest.mark.unit
+
 # =============================================================================
 # Contract Loading Helpers
 # =============================================================================

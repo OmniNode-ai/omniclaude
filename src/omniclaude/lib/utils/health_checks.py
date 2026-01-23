@@ -29,18 +29,52 @@ from typing import TYPE_CHECKING, Any
 import requests
 
 # Use httpx for async requests if available
-try:
-    import httpx
+# This pattern provides graceful degradation when httpx is not installed:
+# - When available: exception aliases point to real httpx exception types
+# - When unavailable: placeholder exception classes are created that will never
+#   be raised by any code, making the except blocks effectively unreachable
+#   (which is the desired behavior for graceful degradation)
+HAS_HTTPX = False
+httpx: Any = None  # Module placeholder for when httpx is unavailable
 
+
+class _HttpxPlaceholderException(Exception):
+    """
+    Base class for placeholder exceptions when httpx is not installed.
+
+    These placeholders exist so that except clauses referencing httpx exception
+    types don't cause NameError when httpx is unavailable. Since nothing raises
+    these placeholder types, the except blocks become unreachable - providing
+    graceful degradation without runtime errors.
+    """
+
+    pass
+
+
+# Default to placeholder types - overwritten if httpx import succeeds
+HttpxTimeoutException: type[Exception] = type(
+    "HttpxTimeoutException", (_HttpxPlaceholderException,), {}
+)
+HttpxConnectError: type[Exception] = type(
+    "HttpxConnectError", (_HttpxPlaceholderException,), {}
+)
+HttpxRequestError: type[Exception] = type(
+    "HttpxRequestError", (_HttpxPlaceholderException,), {}
+)
+
+try:
+    import httpx as _httpx_module
+
+    # Import succeeded - update module reference and exception aliases
+    httpx = _httpx_module
     HAS_HTTPX = True
-    # Export exception types for use in except handlers
-    HttpxTimeoutException: type[Exception] = httpx.TimeoutException
-    HttpxConnectError: type[Exception] = httpx.ConnectError
+    # Point to actual httpx exception types for proper exception handling
+    HttpxTimeoutException = _httpx_module.TimeoutException
+    HttpxConnectError = _httpx_module.ConnectError
+    HttpxRequestError = _httpx_module.RequestError
 except ImportError:
-    HAS_HTTPX = False
-    # Create placeholder exception types that will never match when httpx unavailable
-    HttpxTimeoutException = type("HttpxTimeoutException", (Exception,), {})
-    HttpxConnectError = type("HttpxConnectError", (Exception,), {})
+    # httpx not available - placeholders already set above
+    pass  # nosec B110 - Optional dependency, graceful degradation
 
 # Import pattern tracker for configuration
 HAS_PATTERN_TRACKER = False

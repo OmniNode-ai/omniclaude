@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
+
+# Import Violation from naming_validator to ensure type consistency
+from omniclaude.lib.utils.naming_validator import Violation
 
 logger = logging.getLogger(__name__)
 
@@ -63,19 +65,6 @@ class IntelligenceClientStub:
     ) -> dict[str, Any]:
         """Return fallback response when RAG is unavailable."""
         return {"fallback": True, "results": [], "error": "intelligence client not available"}
-
-
-@dataclass
-class Violation:
-    """Represents a naming convention violation."""
-
-    type: str  # variable, function, class, constant, interface
-    name: str
-    line: int
-    column: int
-    severity: str  # error, warning
-    rule: str
-    suggestion: str | None = None
 
 
 class CorrectionGenerator:
@@ -385,24 +374,26 @@ class CorrectionGenerator:
 async def main() -> None:
     """Example usage of the CorrectionGenerator."""
 
-    # Example violations
+    # Example violations (using naming_validator.Violation structure)
     violations = [
         Violation(
-            type="function",
-            name="MyFunction",
+            file="example.py",
             line=10,
             column=5,
-            severity="error",
-            rule="Python: function names should be snake_case",
+            name="MyFunction",
+            violation_type="function",
+            expected_format="snake_case",
+            message="Python: function names should be snake_case",
             suggestion="my_function",
         ),
         Violation(
-            type="class",
-            name="my_class",
+            file="example.py",
             line=20,
             column=7,
-            severity="error",
-            rule="Python: class names should be PascalCase",
+            name="my_class",
+            violation_type="class",
+            expected_format="PascalCase",
+            message="Python: class names should be PascalCase",
             suggestion="MyClass",
         ),
     ]

@@ -90,4 +90,5 @@ asyncio_default_fixture_loop_scope = "function"
 markers = [
     "unit: Unit tests that don't require external services",
     "integration: Integration tests that may require external services",
+    "slow: Slow tests that may take significant time to run",
 ]

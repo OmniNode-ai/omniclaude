@@ -24,6 +24,9 @@ from omniclaude.lib.pattern_quality_scorer import (
     PatternQualityScorer,
 )
 
+# All tests in this module are unit tests
+pytestmark = pytest.mark.unit
+
 # =============================================================================
 # Test Fixtures
 # =============================================================================
