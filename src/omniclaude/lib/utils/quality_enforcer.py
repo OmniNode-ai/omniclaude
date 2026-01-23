@@ -140,7 +140,9 @@ class ViolationsLogger:
             # Don't fail enforcement if logging fails
             print(f"[Warning] Failed to log violations: {e}", file=sys.stderr)
 
-    def _update_summary(self, file_path: str, violations: list[Any], timestamp: str) -> None:
+    def _update_summary(
+        self, file_path: str, violations: list[Any], timestamp: str
+    ) -> None:
         """Update violations_summary.json with new violation data."""
         try:
             # Load existing summary
@@ -523,7 +525,9 @@ class QualityEnforcer:
 
         return result
 
-    def _generate_simple_corrections(self, violations: list[Any]) -> list[dict[str, Any]]:
+    def _generate_simple_corrections(
+        self, violations: list[Any]
+    ) -> list[dict[str, Any]]:
         """
         Generate simple corrections without RAG intelligence.
         Fallback when Phase 2 is disabled or fails.
@@ -544,7 +548,9 @@ class QualityEnforcer:
 
         return corrections
 
-    def _create_fallback_scores(self, corrections: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _create_fallback_scores(
+        self, corrections: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """
         Create fallback scores when AI Quorum is disabled or fails.
         Use medium confidence scores that won't trigger auto-apply.
@@ -566,7 +572,10 @@ class QualityEnforcer:
         return scored
 
     def _apply_decisions(
-        self, tool_call: dict[str, Any], scored_corrections: list[dict[str, Any]], content: str
+        self,
+        tool_call: dict[str, Any],
+        scored_corrections: list[dict[str, Any]],
+        content: str,
     ) -> dict[str, Any]:
         """
         Apply corrections based on AI consensus scores.
@@ -670,7 +679,9 @@ class QualityEnforcer:
 
         return ""
 
-    def _update_tool_content(self, tool_call: dict[str, Any], new_content: str) -> dict[str, Any]:
+    def _update_tool_content(
+        self, tool_call: dict[str, Any], new_content: str
+    ) -> dict[str, Any]:
         """Update tool call with corrected content (Claude Code uses 'tool_input')."""
         params_key = "tool_input" if "tool_input" in tool_call else "parameters"
         params = tool_call.get(params_key, {})
@@ -682,7 +693,9 @@ class QualityEnforcer:
 
         return tool_call
 
-    def _append_comment(self, tool_call: dict[str, Any], comment: str) -> dict[str, Any]:
+    def _append_comment(
+        self, tool_call: dict[str, Any], comment: str
+    ) -> dict[str, Any]:
         """Append a comment to the content (Claude Code uses 'tool_input')."""
         params_key = "tool_input" if "tool_input" in tool_call else "parameters"
         params = tool_call.get(params_key, {})

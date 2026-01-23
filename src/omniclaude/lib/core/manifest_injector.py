@@ -936,7 +936,9 @@ class ManifestInjector:
         # Return False to propagate any exceptions
         return False
 
-    async def _filter_by_quality(self, patterns: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    async def _filter_by_quality(
+        self, patterns: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """
         Filter patterns by quality score.
 

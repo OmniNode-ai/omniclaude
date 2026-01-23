@@ -176,7 +176,9 @@ class NamingValidator:
         r"^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_][A-Za-z0-9_]*)\s*[=:]"
     )
 
-    def __init__(self, language: str | None = None, validation_mode: str = "auto") -> None:
+    def __init__(
+        self, language: str | None = None, validation_mode: str = "auto"
+    ) -> None:
         """
         Initialize the naming validator.
 

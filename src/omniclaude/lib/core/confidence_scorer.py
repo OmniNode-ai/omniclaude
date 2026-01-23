@@ -119,7 +119,9 @@ class ConfidenceScorer:
             explanation=explanation,
         )
 
-    def _calculate_context_score(self, agent_data: dict[str, Any], context: dict[str, Any]) -> float:
+    def _calculate_context_score(
+        self, agent_data: dict[str, Any], context: dict[str, Any]
+    ) -> float:
         """
         Score based on context alignment.
 
@@ -147,7 +149,9 @@ class ConfidenceScorer:
             # Domain mismatch
             return 0.4
 
-    def _calculate_capability_score(self, agent_data: dict[str, Any], request: str) -> float:
+    def _calculate_capability_score(
+        self, agent_data: dict[str, Any], request: str
+    ) -> float:
         """
         Score based on capability match.
 

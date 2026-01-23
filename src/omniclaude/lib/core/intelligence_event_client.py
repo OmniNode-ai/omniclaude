@@ -817,7 +817,12 @@ class IntelligenceEventClientContext:
         await self.client.start()
         return self.client
 
-    async def __aexit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: Any) -> bool:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any,
+    ) -> bool:
         await self.client.stop()
         return False
 

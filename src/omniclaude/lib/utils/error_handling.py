@@ -365,7 +365,9 @@ def log_success(operation: str, details: dict[str, Any]) -> None:
     get_default_logger().log_success(operation, details)
 
 
-def log_error(operation: str, error: Exception, context: dict[str, Any] | None = None) -> None:
+def log_error(
+    operation: str, error: Exception, context: dict[str, Any] | None = None
+) -> None:
     """Quick error logging"""
     get_default_logger().log_error(operation, error, context)
 

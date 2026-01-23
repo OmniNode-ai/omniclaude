@@ -266,7 +266,9 @@ class RoutingEventClient:
         self._started = False
         self._pending_requests: dict[str, asyncio.Future[dict[str, Any]]] = {}
         self._consumer_ready = asyncio.Event()  # Signal when consumer is polling
-        self._consumer_task: asyncio.Task[None] | None = None  # Store task to prevent GC
+        self._consumer_task: asyncio.Task[None] | None = (
+            None  # Store task to prevent GC
+        )
 
         self.logger = logging.getLogger(__name__)
 

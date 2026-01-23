@@ -332,7 +332,9 @@ class PerformanceMonitor:
 class BatchAggregator:
     """Aggregates and processes batches of pattern tracking operations."""
 
-    def __init__(self, tracker: "PatternTracker", config: BatchProcessingConfig) -> None:
+    def __init__(
+        self, tracker: "PatternTracker", config: BatchProcessingConfig
+    ) -> None:
         self.tracker = tracker
         self.config = config
         self._queue: asyncio.Queue[tuple[str, dict[str, Any], float] | None] = (
