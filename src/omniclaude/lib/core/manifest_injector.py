@@ -383,13 +383,13 @@ class ManifestInjectionStorage:
         Initialize storage handler.
 
         Args:
-            db_host: PostgreSQL host (default: env POSTGRES_HOST or 192.168.86.200)
+            db_host: PostgreSQL host (default: env POSTGRES_HOST or localhost)
             db_port: PostgreSQL port (default: env POSTGRES_PORT or 5436)
             db_name: Database name (default: env POSTGRES_DATABASE or omninode_bridge)
             db_user: Database user (default: env POSTGRES_USER or postgres)
             db_password: Database password (default: env POSTGRES_PASSWORD)
         """
-        self.db_host = db_host or os.environ.get("POSTGRES_HOST", "192.168.86.200")
+        self.db_host = db_host or os.environ.get("POSTGRES_HOST", "localhost")
         self.db_port = db_port or int(os.environ.get("POSTGRES_PORT", "5436"))
         self.db_name = db_name or os.environ.get("POSTGRES_DATABASE", "omninode_bridge")
         self.db_user = db_user or os.environ.get("POSTGRES_USER", "postgres")
@@ -1370,8 +1370,9 @@ class ManifestInjector:
             model = "Alibaba-NLP/gte-Qwen2-1.5B-instruct"
 
         # GTE-Qwen2 embedding service (OpenAI-compatible API)
+        # Default to localhost - production URLs should be set via EMBEDDING_SERVICE_URL env var
         embedding_url = os.environ.get(
-            "EMBEDDING_SERVICE_URL", "http://192.168.86.201:8002/v1/embeddings"
+            "EMBEDDING_SERVICE_URL", "http://localhost:8002/v1/embeddings"
         )
 
         try:
@@ -1455,7 +1456,7 @@ class ManifestInjector:
                 raise OnexError(
                     code=EnumCoreErrorCode.DEPENDENCY_ERROR,
                     message="Embedding service required for semantic search. "
-                    "Ensure GTE-Qwen2 service is running at http://192.168.86.201:8002",
+                    "Set EMBEDDING_SERVICE_URL in .env to the GTE-Qwen2 service endpoint.",
                 ) from e
 
         try:
@@ -2383,9 +2384,11 @@ class ManifestInjector:
                 }
 
             driver = None
+            # Get Memgraph URL from environment (default to localhost for development)
+            memgraph_url = os.environ.get("MEMGRAPH_URL", "bolt://localhost:7687")
             try:
-                # Connect to Memgraph at bolt://192.168.86.101:7687
-                driver = GraphDatabase.driver("bolt://192.168.86.101:7687")
+                # Connect to Memgraph
+                driver = GraphDatabase.driver(memgraph_url)
 
                 with driver.session() as session:
                     # Query file statistics by language
@@ -2445,7 +2448,7 @@ class ManifestInjector:
                     pattern_files = pattern_count["pattern_file_count"] if pattern_count else 0
 
                     return {
-                        "url": "bolt://192.168.86.101:7687",
+                        "url": memgraph_url,
                         "status": "connected",
                         "file_stats": file_stats,
                         "relationships": relationships,
@@ -2456,7 +2459,7 @@ class ManifestInjector:
 
             except Exception as e:
                 return {
-                    "url": "bolt://192.168.86.101:7687",
+                    "url": memgraph_url,
                     "status": "unavailable",
                     "error": f"Connection failed: {str(e)}",
                 }
@@ -2470,7 +2473,7 @@ class ManifestInjector:
         except Exception as e:
             self.logger.debug(f"Memgraph query failed: {e}")
             return {
-                "url": "bolt://192.168.86.101:7687",
+                "url": memgraph_url,
                 "status": "unavailable",
                 "error": str(e),
             }
@@ -2767,7 +2770,8 @@ class ManifestInjector:
 
         try:
             # Get PostgreSQL connection details from environment
-            pg_host = os.environ.get("POSTGRES_HOST", "192.168.86.200")
+            # Default to localhost - production values should be set via .env
+            pg_host = os.environ.get("POSTGRES_HOST", "localhost")
             pg_port = int(os.environ.get("POSTGRES_PORT", "5436"))
             pg_user = os.environ.get("POSTGRES_USER", "postgres")
             pg_password = os.environ.get("POSTGRES_PASSWORD", "")
@@ -3951,7 +3955,7 @@ class ManifestInjector:
                 "enabled": True,
                 "topic": "agent-actions",
                 "bootstrap_servers": os.environ.get(
-                    "KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:29092"
+                    "KAFKA_BOOTSTRAP_SERVERS", ""
                 ),
             },
             "correlation_tracking": True,
@@ -4262,9 +4266,9 @@ class ManifestInjector:
             "infrastructure": {
                 "remote_services": {
                     "postgresql": {
-                        "host": "192.168.86.200",
-                        "port": 5436,
-                        "database": "omninode_bridge",
+                        "host": os.environ.get("POSTGRES_HOST", "localhost"),
+                        "port": int(os.environ.get("POSTGRES_PORT", "5436")),
+                        "database": os.environ.get("POSTGRES_DATABASE", "omninode_bridge"),
                         "note": "Connection details only - schemas unavailable",
                     },
                     "kafka": {
@@ -4778,9 +4782,12 @@ class ManifestInjector:
         # Check status
         status = search_data.get("status", "unknown")
 
+        # Get semantic search URL from settings
+        semantic_url = str(settings.semantic_search_url)
+
         if status == "error" or status == "unavailable":
             error_msg = search_data.get("error", "Unknown error")
-            output.append("  Service: http://192.168.86.101:8055 (unavailable)")
+            output.append(f"  Service: {semantic_url} (unavailable)")
             output.append(f"  Status: ❌ {error_msg}")
             return "\n".join(output)
 
@@ -4791,7 +4798,7 @@ class ManifestInjector:
         returned_results = search_data.get("returned_results", 0)
         query_time_ms = search_data.get("query_time_ms", 0)
 
-        output.append("  Service: http://192.168.86.101:8055")
+        output.append(f"  Service: {semantic_url}")
         output.append("  Status: ✅ Available")
         output.append(f'  Query: "{query}"')
         output.append(f"  Mode: {mode} (full-text + semantic)")

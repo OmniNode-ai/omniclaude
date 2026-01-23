@@ -265,7 +265,7 @@ class IntelligenceConfig(BaseModel):
                 "kafka_bootstrap_servers cannot be empty. "
                 "Use IntelligenceConfig.from_env() to load from environment settings, "
                 "or provide kafka_bootstrap_servers explicitly when instantiating. "
-                "Example: IntelligenceConfig(kafka_bootstrap_servers='192.168.86.200:29092')"
+                "Example: IntelligenceConfig(kafka_bootstrap_servers='<host>:<port>')"
             )
         return self
 
@@ -296,7 +296,7 @@ class IntelligenceConfig(BaseModel):
             >>> # Ensure KAFKA_BOOTSTRAP_SERVERS is set in .env
             >>> config = IntelligenceConfig.from_env()
             >>> print(config.kafka_bootstrap_servers)
-            192.168.86.200:29092
+            kafka.example.com:9092
         """
         # Get bootstrap servers from settings (fail-fast if not configured)
         bootstrap_servers = settings.get_effective_kafka_bootstrap_servers()
@@ -305,7 +305,7 @@ class IntelligenceConfig(BaseModel):
                 "KAFKA_BOOTSTRAP_SERVERS is not configured. "
                 "Please set this value in your .env file. "
                 "The .env file is the single source of truth for infrastructure configuration. "
-                "Example: KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092"
+                "Example: KAFKA_BOOTSTRAP_SERVERS=kafka.example.com:9092"
             )
 
         # Topic names are built dynamically by model validator using kafka_environment

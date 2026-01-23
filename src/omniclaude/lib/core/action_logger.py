@@ -33,7 +33,7 @@ Usage:
     await logger.log_error(
         error_type="DatabaseConnectionError",
         error_message="Failed to connect to PostgreSQL",
-        error_context={"host": "192.168.86.200", "port": 5436},
+        error_context={"host": "db.example.com", "port": 5432},
         severity="critical"  # 'error' or 'critical' triggers Slack notification
     )
 
@@ -543,11 +543,11 @@ if __name__ == "__main__":
         # Test critical error logging (with Slack notification if configured)
         await logger.log_error(
             error_type="DatabaseConnectionError",
-            error_message="Failed to connect to PostgreSQL at 192.168.86.200:5436",
+            error_message="Failed to connect to PostgreSQL at db.example.com:5432",
             error_context={
-                "host": "192.168.86.200",
-                "port": 5436,
-                "database": "omninode_bridge",
+                "host": "db.example.com",
+                "port": 5432,
+                "database": "mydb",
                 "retry_count": 3,
             },
             severity="critical",  # Will trigger Slack if SLACK_WEBHOOK_URL is set

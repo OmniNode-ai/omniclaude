@@ -162,8 +162,8 @@ class RoutingEventClient:
 
         Args:
             bootstrap_servers: Kafka bootstrap servers
-                - External host: "localhost:9092" or "192.168.86.200:9092"
-                - Docker internal: "omninode-bridge-redpanda:9092"
+                - External host: "localhost:9092" or "kafka.example.com:9092"
+                - Docker internal: "kafka:9092"
             request_timeout_ms: Default timeout for requests in milliseconds
             consumer_group_id: Optional consumer group ID (default: auto-generated)
         """
@@ -192,7 +192,7 @@ class RoutingEventClient:
                     "component": "RoutingEventClient",
                     "operation": "initialization",
                     "current_value": self.bootstrap_servers,
-                    "suggestion": "Set KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:9092 in .env file",
+                    "suggestion": "Set KAFKA_BOOTSTRAP_SERVERS=localhost:9092 in .env file",
                 },
             )
         self.request_timeout_ms = request_timeout_ms
@@ -248,7 +248,7 @@ class RoutingEventClient:
                     "component": "RoutingEventClient",
                     "operation": "service_validation",
                     "bootstrap_servers": self.bootstrap_servers,
-                    "suggestion": "Set valid KAFKA_BOOTSTRAP_SERVERS in .env (e.g., 192.168.86.200:9092)",
+                    "suggestion": "Set valid KAFKA_BOOTSTRAP_SERVERS in .env (e.g., localhost:9092)",
                 },
             )
 

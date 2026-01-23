@@ -115,8 +115,8 @@ class IntelligenceEventClient:
 
         Args:
             bootstrap_servers: Kafka bootstrap servers
-                - External host: "localhost:9092" or "192.168.86.200:9092"
-                - Docker internal: "omninode-bridge-redpanda:9092"
+                - External host: "localhost:9092" or "kafka.example.com:9092"
+                - Docker internal: "kafka:9092"
             enable_intelligence: Enable event-based intelligence (feature flag)
             request_timeout_ms: Default timeout for requests in milliseconds
             consumer_group_id: Optional consumer group ID (default: auto-generated)
@@ -133,7 +133,7 @@ class IntelligenceEventClient:
                     "  1. KAFKA_BOOTSTRAP_SERVERS (general config)\n"
                     "  2. KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS (intelligence-specific)\n"
                     "  3. KAFKA_BROKERS (legacy compatibility)\n"
-                    "Example: KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:9092\n"
+                    "Example: KAFKA_BOOTSTRAP_SERVERS=localhost:9092\n"
                     "Current values: KAFKA_BOOTSTRAP_SERVERS={}, KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS={}, KAFKA_BROKERS={}".format(
                         getattr(settings, "kafka_bootstrap_servers", "not set"),
                         os.getenv("KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS", "not set"),

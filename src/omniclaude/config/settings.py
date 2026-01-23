@@ -8,6 +8,40 @@ Provides comprehensive configuration for all OmniClaude services including:
 - Service URLs
 - Feature flags
 - Quality enforcement phases
+
+IMPORTANT: Required Configuration
+---------------------------------
+This module follows FAIL-FAST principles. Required services must be explicitly
+configured via environment variables or .env file. There are NO hardcoded
+localhost defaults that could mask missing configuration.
+
+Required environment variables when services are enabled:
+
+    # Kafka (required when USE_EVENT_ROUTING=true)
+    KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+    KAFKA_ENVIRONMENT=dev  # or staging, prod - MUST be explicit
+
+    # PostgreSQL (required when ENABLE_POSTGRES=true)
+    POSTGRES_HOST=localhost
+    POSTGRES_PORT=5432
+    POSTGRES_DATABASE=mydb
+    POSTGRES_USER=postgres
+    POSTGRES_PASSWORD=your_password
+
+    # Qdrant (required when ENABLE_QDRANT=true)
+    QDRANT_HOST=localhost
+    QDRANT_PORT=6333
+    QDRANT_URL=http://localhost:6333
+
+    # Service URLs (optional, but recommended for production)
+    INTELLIGENCE_SERVICE_URL=http://localhost:8053
+    MAIN_SERVER_URL=http://localhost:8181
+    SEMANTIC_SEARCH_URL=http://localhost:8055
+
+To disable a service entirely, set its enable flag to false:
+    ENABLE_POSTGRES=false
+    ENABLE_QDRANT=false
+    USE_EVENT_ROUTING=false
 """
 
 import logging
@@ -52,15 +86,19 @@ class Settings(BaseSettings):
     # =========================================================================
     kafka_bootstrap_servers: str = Field(
         default="",
-        description="Kafka broker addresses (e.g., 192.168.86.200:29092)",
+        description="Kafka broker addresses (e.g., localhost:9092)",
     )
     kafka_intelligence_bootstrap_servers: str | None = Field(
         default=None,
         description="Legacy alias for kafka_bootstrap_servers",
     )
     kafka_environment: str = Field(
-        default="dev",
-        description="Kafka topic environment prefix (dev, staging, prod)",
+        default="",
+        description=(
+            "Kafka topic environment prefix (dev, staging, prod). "
+            "REQUIRED when USE_EVENT_ROUTING=true. No default to prevent "
+            "accidental cross-environment event routing."
+        ),
     )
     kafka_group_id: str = Field(
         default="omniclaude-hooks",
@@ -75,56 +113,89 @@ class Settings(BaseSettings):
 
     # =========================================================================
     # POSTGRESQL DATABASE CONFIGURATION
-    # Note: Production values should be configured via .env file, not hardcoded.
+    # -------------------------------------------------------------------------
+    # FAIL-FAST: All fields default to empty. When ENABLE_POSTGRES=true,
+    # validate_required_services() will catch missing configuration.
+    # This prevents silent localhost connections in production.
     # =========================================================================
     postgres_host: str = Field(
-        default="localhost",
-        description="PostgreSQL host address",
+        default="",
+        description=(
+            "PostgreSQL host address. REQUIRED when ENABLE_POSTGRES=true. "
+            "No default to prevent silent localhost connections."
+        ),
     )
     postgres_port: int = Field(
-        default=5436,
-        ge=1,
+        default=0,
+        ge=0,
         le=65535,
-        description="PostgreSQL port",
+        description=(
+            "PostgreSQL port. REQUIRED when ENABLE_POSTGRES=true. "
+            "Standard port is 5432. Set to 0 to indicate unconfigured."
+        ),
     )
     postgres_database: str = Field(
-        default="omninode_bridge",
-        description="PostgreSQL database name",
+        default="",
+        description=(
+            "PostgreSQL database name. REQUIRED when ENABLE_POSTGRES=true. "
+            "No default to prevent connecting to wrong database."
+        ),
     )
     postgres_user: str = Field(
-        default="postgres",
-        description="PostgreSQL username",
+        default="",
+        description=(
+            "PostgreSQL username. REQUIRED when ENABLE_POSTGRES=true. "
+            "No default to prevent unauthorized access attempts."
+        ),
     )
     postgres_password: str = Field(
         default="",
-        description="PostgreSQL password (loaded from environment)",
+        description="PostgreSQL password. REQUIRED when ENABLE_POSTGRES=true.",
     )
     enable_postgres: bool = Field(
-        default=True,
-        description="Enable PostgreSQL database connection (validates password when True)",
+        default=False,
+        description=(
+            "Enable PostgreSQL database connection. When True, all POSTGRES_* "
+            "fields must be configured. Defaults to False for safety."
+        ),
     )
 
     # =========================================================================
     # QDRANT VECTOR DATABASE CONFIGURATION
-    # Note: Production values should be configured via .env file, not hardcoded.
+    # -------------------------------------------------------------------------
+    # FAIL-FAST: All fields default to empty/zero. When ENABLE_QDRANT=true,
+    # validate_required_services() will catch missing configuration.
+    # This prevents silent localhost connections in production.
     # =========================================================================
     qdrant_host: str = Field(
-        default="localhost",
-        description="Qdrant host address",
+        default="",
+        description=(
+            "Qdrant host address. REQUIRED when ENABLE_QDRANT=true. "
+            "No default to prevent silent localhost connections."
+        ),
     )
     qdrant_port: int = Field(
-        default=6333,
-        ge=1,
+        default=0,
+        ge=0,
         le=65535,
-        description="Qdrant port",
+        description=(
+            "Qdrant port. REQUIRED when ENABLE_QDRANT=true. "
+            "Standard port is 6333. Set to 0 to indicate unconfigured."
+        ),
     )
     qdrant_url: str = Field(
-        default="http://localhost:6333",
-        description="Full Qdrant URL",
+        default="",
+        description=(
+            "Full Qdrant URL. REQUIRED when ENABLE_QDRANT=true. "
+            "No default to prevent silent localhost connections."
+        ),
     )
     enable_qdrant: bool = Field(
-        default=True,
-        description="Enable Qdrant vector database (validates connection settings when True)",
+        default=False,
+        description=(
+            "Enable Qdrant vector database. When True, QDRANT_HOST/QDRANT_URL "
+            "must be configured. Defaults to False for safety."
+        ),
     )
 
     # =========================================================================
@@ -159,15 +230,19 @@ class Settings(BaseSettings):
     # =========================================================================
     # SERVICE URLS CONFIGURATION
     # -------------------------------------------------------------------------
-    # HttpUrl fields use `type: ignore[assignment]` because Pydantic validates
-    # and coerces string defaults to HttpUrl at runtime. Mypy sees a type
-    # mismatch (str assigned to HttpUrl) but Pydantic handles this correctly
-    # via its Field() mechanism. This is a known pattern in pydantic-settings.
-    # See: https://docs.pydantic.dev/latest/concepts/types/#urls
+    # These service URLs are OPTIONAL. When not configured, features that depend
+    # on them will be gracefully disabled. No localhost defaults to prevent
+    # silent connection attempts to non-existent local services.
+    #
+    # HttpUrl | None pattern allows empty/None values while still validating
+    # any provided URLs.
     # =========================================================================
-    intelligence_service_url: HttpUrl = Field(
-        default="http://localhost:8053",  # type: ignore[assignment]  # Pydantic coerces str to HttpUrl at runtime
-        description="Intelligence service URL for ONEX pattern discovery and code analysis",
+    intelligence_service_url: HttpUrl | None = Field(
+        default=None,
+        description=(
+            "Intelligence service URL for ONEX pattern discovery and code analysis. "
+            "Optional - when not set, intelligence features are disabled."
+        ),
     )
     # DEPRECATED: Use intelligence_service_url instead. This alias is retained
     # for backward compatibility during migration from archon to ONEX naming.
@@ -175,21 +250,30 @@ class Settings(BaseSettings):
         default=None,
         description="[DEPRECATED] Legacy alias for intelligence_service_url. Use intelligence_service_url instead.",
     )
-    main_server_url: HttpUrl = Field(
-        default="http://localhost:8181",  # type: ignore[assignment]  # Pydantic coerces str to HttpUrl at runtime
-        description="Main server URL",
+    main_server_url: HttpUrl | None = Field(
+        default=None,
+        description=(
+            "Main server URL. Optional - when not set, main server features are disabled."
+        ),
     )
-    semantic_search_url: HttpUrl = Field(
-        default="http://localhost:8055",  # type: ignore[assignment]  # Pydantic coerces str to HttpUrl at runtime
-        description="Semantic search service URL for hybrid text/vector search queries",
+    semantic_search_url: HttpUrl | None = Field(
+        default=None,
+        description=(
+            "Semantic search service URL for hybrid text/vector search queries. "
+            "Optional - when not set, semantic search features are disabled."
+        ),
     )
 
     # =========================================================================
     # FEATURE FLAGS
     # =========================================================================
     use_event_routing: bool = Field(
-        default=True,
-        description="Enable event-based agent routing",
+        default=False,
+        description=(
+            "Enable event-based agent routing via Kafka. When True, "
+            "KAFKA_BOOTSTRAP_SERVERS and KAFKA_ENVIRONMENT must be configured. "
+            "Defaults to False for safety."
+        ),
     )
     enable_pattern_quality_filter: bool = Field(
         default=False,
@@ -301,51 +385,93 @@ class Settings(BaseSettings):
     def validate_required_services(self) -> list[str]:
         """Validate that required services are configured.
 
+        This method implements FAIL-FAST validation. When a service is enabled,
+        ALL required configuration must be explicitly provided. There are no
+        fallback defaults that could mask missing configuration.
+
         Returns:
             List of validation error messages. Empty list means valid.
+
+        Example:
+            >>> settings = Settings(enable_postgres=True)
+            >>> errors = settings.validate_required_services()
+            >>> if errors:
+            ...     raise ValueError(f"Missing configuration: {errors}")
         """
         errors: list[str] = []
 
-        # Check PostgreSQL configuration (only when enabled)
-        if self.enable_postgres:
-            if not self.postgres_host:
-                errors.append("POSTGRES_HOST is not configured")
-            if not self.postgres_database:
-                errors.append("POSTGRES_DATABASE is not configured")
-            if not self.postgres_user:
-                errors.append("POSTGRES_USER is not configured")
-            if not self.postgres_password:
+        # =====================================================================
+        # KAFKA VALIDATION
+        # When event routing is enabled, both bootstrap servers AND environment
+        # must be explicitly configured. No defaults to prevent cross-env routing.
+        # =====================================================================
+        if self.use_event_routing:
+            if not self.get_effective_kafka_bootstrap_servers():
                 errors.append(
-                    "POSTGRES_PASSWORD is not configured but ENABLE_POSTGRES is True. "
-                    "Set POSTGRES_PASSWORD in .env or set ENABLE_POSTGRES=false to disable."
+                    "KAFKA_BOOTSTRAP_SERVERS is required when USE_EVENT_ROUTING=true. "
+                    "Set KAFKA_BOOTSTRAP_SERVERS in .env or set USE_EVENT_ROUTING=false."
+                )
+            if not self.kafka_environment:
+                errors.append(
+                    "KAFKA_ENVIRONMENT is required when USE_EVENT_ROUTING=true. "
+                    "Must be explicitly set to 'dev', 'staging', or 'prod' to prevent "
+                    "accidental cross-environment event routing."
                 )
 
-        # Check Kafka configuration (only if event routing is enabled)
-        if self.use_event_routing and not self.get_effective_kafka_bootstrap_servers():
-            errors.append(
-                "KAFKA_BOOTSTRAP_SERVERS is not configured but USE_EVENT_ROUTING is enabled"
-            )
-
-        # Check Qdrant configuration (only when enabled)
-        # Validates that non-localhost values are set for production use
-        if self.enable_qdrant:
-            # Check if Qdrant is configured with meaningful (non-default) values
-            is_default_host = self.qdrant_host == "localhost"
-            is_default_url = self.qdrant_url == "http://localhost:6333"
-
-            if is_default_host and is_default_url:
+        # =====================================================================
+        # POSTGRESQL VALIDATION
+        # When enabled, ALL connection parameters must be explicitly configured.
+        # No localhost defaults to prevent silent local connections in production.
+        # =====================================================================
+        if self.enable_postgres:
+            if not self.postgres_host:
                 errors.append(
-                    "QDRANT_HOST and QDRANT_URL are using localhost defaults but ENABLE_QDRANT is True. "
-                    "Set QDRANT_HOST or QDRANT_URL in .env for production, or set ENABLE_QDRANT=false to disable."
+                    "POSTGRES_HOST is required when ENABLE_POSTGRES=true. "
+                    "Set POSTGRES_HOST in .env or set ENABLE_POSTGRES=false."
+                )
+            if self.postgres_port == 0:
+                errors.append(
+                    "POSTGRES_PORT is required when ENABLE_POSTGRES=true. "
+                    "Standard port is 5432. Set POSTGRES_PORT in .env or set ENABLE_POSTGRES=false."
+                )
+            if not self.postgres_database:
+                errors.append(
+                    "POSTGRES_DATABASE is required when ENABLE_POSTGRES=true. "
+                    "Set POSTGRES_DATABASE in .env or set ENABLE_POSTGRES=false."
+                )
+            if not self.postgres_user:
+                errors.append(
+                    "POSTGRES_USER is required when ENABLE_POSTGRES=true. "
+                    "Set POSTGRES_USER in .env or set ENABLE_POSTGRES=false."
+                )
+            if not self.postgres_password:
+                errors.append(
+                    "POSTGRES_PASSWORD is required when ENABLE_POSTGRES=true. "
+                    "Set POSTGRES_PASSWORD in .env or set ENABLE_POSTGRES=false."
+                )
+
+        # =====================================================================
+        # QDRANT VALIDATION
+        # When enabled, connection parameters must be explicitly configured.
+        # Either qdrant_url OR (qdrant_host + qdrant_port) must be set.
+        # =====================================================================
+        if self.enable_qdrant:
+            has_url = bool(self.qdrant_url)
+            has_host_port = bool(self.qdrant_host) and self.qdrant_port != 0
+
+            if not has_url and not has_host_port:
+                errors.append(
+                    "QDRANT_URL or (QDRANT_HOST + QDRANT_PORT) is required when ENABLE_QDRANT=true. "
+                    "Set QDRANT_URL in .env (e.g., http://localhost:6333) or set ENABLE_QDRANT=false."
                 )
 
         return errors
 
     def log_default_warnings(self) -> None:
-        """Log warnings when using default localhost values.
+        """Log informational messages about disabled services.
 
-        This method logs a warning for each service configured with default
-        localhost values, which may indicate missing production configuration.
+        This method logs INFO messages for services that are disabled by default.
+        These are not warnings since the defaults are intentionally safe (disabled).
         Warnings are only logged once per instance to avoid log spam.
 
         Note:
@@ -359,20 +485,30 @@ class Settings(BaseSettings):
             return
         self._defaults_warned = True
 
-        if self.enable_postgres and self.postgres_host == "localhost":
-            logger.warning(
-                "Using default postgres_host='localhost'. Set POSTGRES_HOST in .env for production."
+        # Log disabled services as INFO (not warnings, since disabled is safe)
+        if not self.enable_postgres:
+            logger.info(
+                "PostgreSQL is disabled (ENABLE_POSTGRES=false). "
+                "Set ENABLE_POSTGRES=true and configure POSTGRES_* variables to enable."
             )
 
-        if not self.kafka_bootstrap_servers:
-            logger.warning(
-                "Using empty kafka_bootstrap_servers (disabled). "
-                "Set KAFKA_BOOTSTRAP_SERVERS in .env for event routing."
+        if not self.use_event_routing:
+            logger.info(
+                "Kafka event routing is disabled (USE_EVENT_ROUTING=false). "
+                "Set USE_EVENT_ROUTING=true and configure KAFKA_* variables to enable."
             )
 
-        if self.enable_qdrant and self.qdrant_host == "localhost":
-            logger.warning(
-                "Using default qdrant_host='localhost'. Set QDRANT_HOST in .env for production."
+        if not self.enable_qdrant:
+            logger.info(
+                "Qdrant vector database is disabled (ENABLE_QDRANT=false). "
+                "Set ENABLE_QDRANT=true and configure QDRANT_* variables to enable."
+            )
+
+        # Warn about optional services that enhance functionality
+        if not self.intelligence_service_url:
+            logger.info(
+                "Intelligence service URL not configured. "
+                "Set INTELLIGENCE_SERVICE_URL to enable pattern discovery features."
             )
 
     def reset_warnings(self) -> None:
