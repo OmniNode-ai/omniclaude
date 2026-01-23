@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import logging
 import os
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
@@ -60,6 +61,125 @@ if TYPE_CHECKING:
     from omniclaude.hooks.schemas import ModelHookPayload
 
 logger = logging.getLogger(__name__)
+
+# =============================================================================
+# Event Config Models (ONEX: Parameter reduction pattern)
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class ModelEventTracingConfig:
+    """Common tracing configuration for hook event emission.
+
+    Groups related tracing parameters that are shared across all emit_*
+    functions to reduce function signature complexity per ONEX guidelines.
+
+    Attributes:
+        correlation_id: Correlation ID for distributed tracing.
+        causation_id: ID of the event/trigger that caused this event.
+        emitted_at: Event timestamp (defaults to now UTC if not provided).
+        environment: Kafka environment prefix (e.g., "dev", "staging", "prod").
+    """
+
+    correlation_id: UUID | None = None
+    causation_id: UUID | None = None
+    emitted_at: datetime | None = None
+    environment: str | None = None
+
+
+@dataclass(frozen=True)
+class ModelToolExecutedConfig:
+    """Configuration for tool executed events.
+
+    Groups parameters for emit_tool_executed() to reduce function signature
+    complexity per ONEX parameter guidelines.
+
+    Attributes:
+        session_id: Unique session identifier.
+        tool_execution_id: Unique identifier for this tool execution.
+        tool_name: Name of the tool (Read, Write, Edit, Bash, etc.).
+        success: Whether the tool execution succeeded.
+        duration_ms: Tool execution duration in milliseconds.
+        summary: Brief summary of the tool execution result.
+        tracing: Optional tracing configuration.
+    """
+
+    session_id: UUID
+    tool_execution_id: UUID
+    tool_name: str
+    success: bool = True
+    duration_ms: int | None = None
+    summary: str | None = None
+    tracing: ModelEventTracingConfig = field(default_factory=ModelEventTracingConfig)
+
+
+@dataclass(frozen=True)
+class ModelPromptSubmittedConfig:
+    """Configuration for prompt submitted events.
+
+    Groups parameters for emit_prompt_submitted() to reduce function signature
+    complexity per ONEX parameter guidelines.
+
+    Attributes:
+        session_id: Unique session identifier.
+        prompt_id: Unique identifier for this specific prompt.
+        prompt_preview: Sanitized/truncated preview of the prompt.
+        prompt_length: Total character count of the original prompt.
+        detected_intent: Classified intent if available.
+        tracing: Optional tracing configuration.
+    """
+
+    session_id: UUID
+    prompt_id: UUID
+    prompt_preview: str
+    prompt_length: int
+    detected_intent: str | None = None
+    tracing: ModelEventTracingConfig = field(default_factory=ModelEventTracingConfig)
+
+
+@dataclass(frozen=True)
+class ModelSessionStartedConfig:
+    """Configuration for session started events.
+
+    Groups parameters for emit_session_started() to reduce function signature
+    complexity per ONEX parameter guidelines.
+
+    Attributes:
+        session_id: Unique session identifier.
+        working_directory: Current working directory of the session.
+        hook_source: What triggered the session start.
+        git_branch: Current git branch if in a git repository.
+        tracing: Optional tracing configuration.
+    """
+
+    session_id: UUID
+    working_directory: str
+    hook_source: HookSource
+    git_branch: str | None = None
+    tracing: ModelEventTracingConfig = field(default_factory=ModelEventTracingConfig)
+
+
+@dataclass(frozen=True)
+class ModelSessionEndedConfig:
+    """Configuration for session ended events.
+
+    Groups parameters for emit_session_ended() to reduce function signature
+    complexity per ONEX parameter guidelines.
+
+    Attributes:
+        session_id: Unique session identifier.
+        reason: What caused the session to end.
+        duration_seconds: Total session duration in seconds.
+        tools_used_count: Number of tool invocations during the session.
+        tracing: Optional tracing configuration.
+    """
+
+    session_id: UUID
+    reason: SessionEndReason
+    duration_seconds: float | None = None
+    tools_used_count: int = 0
+    tracing: ModelEventTracingConfig = field(default_factory=ModelEventTracingConfig)
+
 
 # =============================================================================
 # Configuration Constants
@@ -361,6 +481,32 @@ async def emit_hook_event(
                 )
 
 
+async def emit_session_started_from_config(
+    config: ModelSessionStartedConfig,
+) -> ModelEventPublishResult:
+    """Emit a session started event from config object.
+
+    Args:
+        config: Session started configuration containing all event data.
+
+    Returns:
+        ModelEventPublishResult indicating success or failure.
+    """
+    tracing = config.tracing
+    payload = ModelHookSessionStartedPayload(
+        entity_id=config.session_id,
+        session_id=str(config.session_id),
+        correlation_id=tracing.correlation_id or config.session_id,
+        causation_id=tracing.causation_id or uuid4(),
+        emitted_at=tracing.emitted_at or datetime.now(UTC),
+        working_directory=config.working_directory,
+        git_branch=config.git_branch,
+        hook_source=config.hook_source,
+    )
+
+    return await emit_hook_event(payload, environment=tracing.environment)
+
+
 async def emit_session_started(
     session_id: UUID,
     working_directory: str,
@@ -374,8 +520,9 @@ async def emit_session_started(
 ) -> ModelEventPublishResult:
     """Emit a session started event.
 
-    Convenience function for emitting session.started events with
-    automatic timestamp injection and ID generation.
+    Note:
+        Consider using emit_session_started_from_config() with
+        ModelSessionStartedConfig for better parameter organization.
 
     Args:
         session_id: Unique session identifier (also used as entity_id).
@@ -390,18 +537,46 @@ async def emit_session_started(
     Returns:
         ModelEventPublishResult indicating success or failure.
     """
-    payload = ModelHookSessionStartedPayload(
-        entity_id=session_id,
-        session_id=str(session_id),
-        correlation_id=correlation_id or session_id,
-        causation_id=causation_id or uuid4(),
-        emitted_at=emitted_at or datetime.now(UTC),
+    # ONEX: exempt - backwards compatibility wrapper for config-based method
+    config = ModelSessionStartedConfig(
+        session_id=session_id,
         working_directory=working_directory,
-        git_branch=git_branch,
         hook_source=hook_source,
+        git_branch=git_branch,
+        tracing=ModelEventTracingConfig(
+            correlation_id=correlation_id,
+            causation_id=causation_id,
+            emitted_at=emitted_at,
+            environment=environment,
+        ),
+    )
+    return await emit_session_started_from_config(config)
+
+
+async def emit_session_ended_from_config(
+    config: ModelSessionEndedConfig,
+) -> ModelEventPublishResult:
+    """Emit a session ended event from config object.
+
+    Args:
+        config: Session ended configuration containing all event data.
+
+    Returns:
+        ModelEventPublishResult indicating success or failure.
+    """
+    tracing = config.tracing
+    payload = ModelHookSessionEndedPayload(
+        entity_id=config.session_id,
+        session_id=str(config.session_id),
+        correlation_id=tracing.correlation_id or config.session_id,
+        causation_id=tracing.causation_id or uuid4(),
+        emitted_at=tracing.emitted_at or datetime.now(UTC),
+        reason=config.reason,
+        duration_seconds=config.duration_seconds,
+        tools_used_count=config.tools_used_count,
     )
 
-    return await emit_hook_event(payload, environment=environment)
+    return await emit_hook_event(payload, environment=tracing.environment)
 
 
 async def emit_session_ended(
@@ -417,7 +592,9 @@ async def emit_session_ended(
 ) -> ModelEventPublishResult:
     """Emit a session ended event.
 
-    Convenience function for emitting session.ended events.
+    Note:
+        Consider using emit_session_ended_from_config() with
+        ModelSessionEndedConfig for better parameter organization.
 
     Args:
         session_id: Unique session identifier (also used as entity_id).
@@ -432,18 +609,47 @@ async def emit_session_ended(
     Returns:
         ModelEventPublishResult indicating success or failure.
     """
-    payload = ModelHookSessionEndedPayload(
-        entity_id=session_id,
-        session_id=str(session_id),
-        correlation_id=correlation_id or session_id,
-        causation_id=causation_id or uuid4(),
-        emitted_at=emitted_at or datetime.now(UTC),
+    # ONEX: exempt - backwards compatibility wrapper for config-based method
+    config = ModelSessionEndedConfig(
+        session_id=session_id,
         reason=reason,
         duration_seconds=duration_seconds,
         tools_used_count=tools_used_count,
+        tracing=ModelEventTracingConfig(
+            correlation_id=correlation_id,
+            causation_id=causation_id,
+            emitted_at=emitted_at,
+            environment=environment,
+        ),
+    )
+    return await emit_session_ended_from_config(config)
+
+
+async def emit_prompt_submitted_from_config(
+    config: ModelPromptSubmittedConfig,
+) -> ModelEventPublishResult:
+    """Emit a prompt submitted event from config object.
+
+    Args:
+        config: Prompt submitted configuration containing all event data.
+
+    Returns:
+        ModelEventPublishResult indicating success or failure.
+    """
+    tracing = config.tracing
+    payload = ModelHookPromptSubmittedPayload(
+        entity_id=config.session_id,
+        session_id=str(config.session_id),
+        correlation_id=tracing.correlation_id or config.session_id,
+        causation_id=tracing.causation_id or uuid4(),
+        emitted_at=tracing.emitted_at or datetime.now(UTC),
+        prompt_id=config.prompt_id,
+        prompt_preview=config.prompt_preview,
+        prompt_length=config.prompt_length,
+        detected_intent=config.detected_intent,
     )
 
-    return await emit_hook_event(payload, environment=environment)
+    return await emit_hook_event(payload, environment=tracing.environment)
 
 
 async def emit_prompt_submitted(
@@ -460,7 +666,9 @@ async def emit_prompt_submitted(
 ) -> ModelEventPublishResult:
     """Emit a prompt submitted event.
 
-    Convenience function for emitting prompt.submitted events.
+    Note:
+        Consider using emit_prompt_submitted_from_config() with
+        ModelPromptSubmittedConfig for better parameter organization.
 
     Args:
         session_id: Unique session identifier (also used as entity_id).
@@ -476,19 +684,49 @@ async def emit_prompt_submitted(
     Returns:
         ModelEventPublishResult indicating success or failure.
     """
-    payload = ModelHookPromptSubmittedPayload(
-        entity_id=session_id,
-        session_id=str(session_id),
-        correlation_id=correlation_id or session_id,
-        causation_id=causation_id or uuid4(),
-        emitted_at=emitted_at or datetime.now(UTC),
+    # ONEX: exempt - backwards compatibility wrapper for config-based method
+    config = ModelPromptSubmittedConfig(
+        session_id=session_id,
         prompt_id=prompt_id,
         prompt_preview=prompt_preview,
         prompt_length=prompt_length,
         detected_intent=detected_intent,
+        tracing=ModelEventTracingConfig(
+            correlation_id=correlation_id,
+            causation_id=causation_id,
+            emitted_at=emitted_at,
+            environment=environment,
+        ),
+    )
+    return await emit_prompt_submitted_from_config(config)
+
+
+async def emit_tool_executed_from_config(
+    config: ModelToolExecutedConfig,
+) -> ModelEventPublishResult:
+    """Emit a tool executed event from config object.
+
+    Args:
+        config: Tool executed configuration containing all event data.
+
+    Returns:
+        ModelEventPublishResult indicating success or failure.
+    """
+    tracing = config.tracing
+    payload = ModelHookToolExecutedPayload(
+        entity_id=config.session_id,
+        session_id=str(config.session_id),
+        correlation_id=tracing.correlation_id or config.session_id,
+        causation_id=tracing.causation_id or uuid4(),
+        emitted_at=tracing.emitted_at or datetime.now(UTC),
+        tool_execution_id=config.tool_execution_id,
+        tool_name=config.tool_name,
+        success=config.success,
+        duration_ms=config.duration_ms,
+        summary=config.summary,
     )
 
-    return await emit_hook_event(payload, environment=environment)
+    return await emit_hook_event(payload, environment=tracing.environment)
 
 
 async def emit_tool_executed(
@@ -506,7 +744,9 @@ async def emit_tool_executed(
 ) -> ModelEventPublishResult:
     """Emit a tool executed event.
 
-    Convenience function for emitting tool.executed events.
+    Note:
+        Consider using emit_tool_executed_from_config() with
+        ModelToolExecutedConfig for better parameter organization.
 
     Args:
         session_id: Unique session identifier (also used as entity_id).
@@ -523,26 +763,39 @@ async def emit_tool_executed(
     Returns:
         ModelEventPublishResult indicating success or failure.
     """
-    payload = ModelHookToolExecutedPayload(
-        entity_id=session_id,
-        session_id=str(session_id),
-        correlation_id=correlation_id or session_id,
-        causation_id=causation_id or uuid4(),
-        emitted_at=emitted_at or datetime.now(UTC),
+    # ONEX: exempt - backwards compatibility wrapper for config-based method
+    config = ModelToolExecutedConfig(
+        session_id=session_id,
         tool_execution_id=tool_execution_id,
         tool_name=tool_name,
         success=success,
         duration_ms=duration_ms,
         summary=summary,
+        tracing=ModelEventTracingConfig(
+            correlation_id=correlation_id,
+            causation_id=causation_id,
+            emitted_at=emitted_at,
+            environment=environment,
+        ),
     )
-
-    return await emit_hook_event(payload, environment=environment)
+    return await emit_tool_executed_from_config(config)
 
 
 __all__ = [
+    # Config models
+    "ModelEventTracingConfig",
+    "ModelToolExecutedConfig",
+    "ModelPromptSubmittedConfig",
+    "ModelSessionStartedConfig",
+    "ModelSessionEndedConfig",
     # Core emission function
     "emit_hook_event",
-    # Convenience functions
+    # Config-based convenience functions
+    "emit_session_started_from_config",
+    "emit_session_ended_from_config",
+    "emit_prompt_submitted_from_config",
+    "emit_tool_executed_from_config",
+    # Backwards-compatible convenience functions
     "emit_session_started",
     "emit_session_ended",
     "emit_prompt_submitted",

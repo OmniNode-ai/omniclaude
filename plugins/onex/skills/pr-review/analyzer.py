@@ -26,10 +26,10 @@ from models import (
     BotType,
     CommentSeverity,
     CommentStatus,
-    PRAnalysis,
-    PRComment,
-    PRCommentSource,
-    PRData,
+    ModelPRAnalysis,
+    ModelPRComment,
+    ModelPRCommentSource,
+    ModelPRData,
     classify_severity,
 )
 
@@ -42,7 +42,7 @@ class PRAnalyzer:
     tracking list for Claude comments.
     """
 
-    def __init__(self, pr_data: PRData):
+    def __init__(self, pr_data: ModelPRData):
         self.pr_data = pr_data
         self._validate_claude_comments()
 
@@ -85,11 +85,11 @@ class PRAnalyzer:
         )
         print(f"[Analyzer] Found {claude_count} Claude bot comments", file=sys.stderr)
 
-    def analyze(self) -> PRAnalysis:
+    def analyze(self) -> ModelPRAnalysis:
         """Run full analysis on PR data.
 
         Returns:
-            PRAnalysis with categorized issues and merge readiness info
+            ModelPRAnalysis with categorized issues and merge readiness info
         """
         all_comments = self.pr_data.comments
 
@@ -98,12 +98,12 @@ class PRAnalyzer:
         by_status: dict[str, int] = defaultdict(int)
         by_author_type: dict[str, int] = defaultdict(int)
 
-        critical_issues: list[PRComment] = []
-        major_issues: list[PRComment] = []
-        minor_issues: list[PRComment] = []
-        nitpick_issues: list[PRComment] = []
-        claude_issues: list[PRComment] = []
-        merge_blockers: list[PRComment] = []
+        critical_issues: list[ModelPRComment] = []
+        major_issues: list[ModelPRComment] = []
+        minor_issues: list[ModelPRComment] = []
+        nitpick_issues: list[ModelPRComment] = []
+        claude_issues: list[ModelPRComment] = []
+        merge_blockers: list[ModelPRComment] = []
 
         for comment in all_comments:
             # Update counts
@@ -144,7 +144,7 @@ class PRAnalyzer:
             blockers=len(merge_blockers),
         )
 
-        return PRAnalysis(
+        return ModelPRAnalysis(
             pr_data=self.pr_data,
             analyzed_at=datetime.now(),
             total_comments=len(all_comments),
@@ -248,7 +248,7 @@ class PRAnalyzer:
 
         return result
 
-    def _format_issue(self, comment: PRComment) -> dict:
+    def _format_issue(self, comment: ModelPRComment) -> dict:
         """Format a comment for output."""
         return {
             "id": comment.id,
@@ -271,7 +271,7 @@ class PRAnalyzer:
         }
 
 
-def analyze_pr(repo: str, pr_number: int, use_cache: bool = True) -> PRAnalysis:
+def analyze_pr(repo: str, pr_number: int, use_cache: bool = True) -> ModelPRAnalysis:
     """Convenience function to fetch and analyze a PR.
 
     Args:
@@ -280,7 +280,7 @@ def analyze_pr(repo: str, pr_number: int, use_cache: bool = True) -> PRAnalysis:
         use_cache: Whether to use cached data
 
     Returns:
-        PRAnalysis with complete categorization
+        ModelPRAnalysis with complete categorization
     """
     fetcher = PRFetcher(repo, pr_number)
     pr_data = fetcher.fetch(use_cache=use_cache)
@@ -288,11 +288,11 @@ def analyze_pr(repo: str, pr_number: int, use_cache: bool = True) -> PRAnalysis:
     return analyzer.analyze()
 
 
-def generate_markdown_report(analysis: PRAnalysis) -> str:
+def generate_markdown_report(analysis: ModelPRAnalysis) -> str:
     """Generate a markdown report from analysis.
 
     Args:
-        analysis: PRAnalysis to format
+        analysis: ModelPRAnalysis to format
 
     Returns:
         Markdown-formatted report string

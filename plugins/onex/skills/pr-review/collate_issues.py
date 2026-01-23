@@ -7,7 +7,7 @@ Pydantic models. It integrates with GitHub's GraphQL API to detect
 resolved review threads and supports filtering by resolution status.
 
 Features:
-- Type-safe Pydantic models (PRIssue, CollatedIssues)
+- Type-safe Pydantic models (ModelPRIssue, ModelCollatedIssues)
 - Resolution detection via GitHub review threads
 - Outdated detection (file changed after comment)
 - --hide-resolved flag to filter resolved issues
@@ -42,12 +42,12 @@ SCRIPT_DIR = Path(__file__).parent
 try:
     from models import (
         BotType,
-        CollatedIssues,
+        ModelCollatedIssues,
         CommentSeverity,
         CommentStatus,
-        PRComment,
-        PRCommentSource,
-        PRIssue,
+        ModelPRComment,
+        ModelPRCommentSource,
+        ModelPRIssue,
         detect_bot_type,
     )
 except ImportError:
@@ -56,12 +56,12 @@ except ImportError:
         sys.path.insert(0, str(SCRIPT_DIR))
     from models import (
         BotType,
-        CollatedIssues,
+        ModelCollatedIssues,
         CommentSeverity,
         CommentStatus,
-        PRComment,
-        PRCommentSource,
-        PRIssue,
+        ModelPRComment,
+        ModelPRCommentSource,
+        ModelPRIssue,
         detect_bot_type,
     )
 
@@ -1292,7 +1292,7 @@ def collate_pr_issues(
     hide_resolved: bool = False,
     show_resolved_only: bool = False,
     include_nitpicks: bool = False,
-) -> CollatedIssues:
+) -> ModelCollatedIssues:
     """
     Collate PR review issues with resolution detection.
 
@@ -1304,7 +1304,7 @@ def collate_pr_issues(
         include_nitpicks: If True, include nitpick issues (otherwise filtered).
 
     Returns:
-        CollatedIssues instance with categorized issues.
+        ModelCollatedIssues instance with categorized issues.
 
     Raises:
         OnexError: If PR data fetch fails or invalid options provided.
@@ -1323,7 +1323,7 @@ def collate_pr_issues(
     resolution_map = build_resolution_map(resolved_threads)
 
     # Collect all issues
-    all_issues: list[PRIssue] = []
+    all_issues: list[ModelPRIssue] = []
 
     # Process each comment source
     comment_sources = [
@@ -1403,7 +1403,7 @@ def collate_pr_issues(
                         if comment_id_str.isdigit():
                             safe_comment_id = int(comment_id_str)
 
-                    issue = PRIssue(
+                    issue = ModelPRIssue(
                         file_path=path,
                         line_number=(
                             int(line)
@@ -1460,7 +1460,7 @@ def collate_pr_issues(
                     if comment_id_str.isdigit():
                         safe_comment_id = int(comment_id_str)
 
-                issue = PRIssue(
+                issue = ModelPRIssue(
                     file_path=path,
                     line_number=(
                         int(line)
@@ -1478,7 +1478,7 @@ def collate_pr_issues(
 
     # Deduplicate by description (keep first occurrence)
     seen_descriptions: set[str] = set()
-    unique_issues: list[PRIssue] = []
+    unique_issues: list[ModelPRIssue] = []
     for issue in all_issues:
         key = f"{issue.location}|{issue.description}"
         if key not in seen_descriptions:
@@ -1486,11 +1486,11 @@ def collate_pr_issues(
             unique_issues.append(issue)
 
     # Categorize by severity
-    critical: list[PRIssue] = []
-    major: list[PRIssue] = []
-    minor: list[PRIssue] = []
-    nitpick: list[PRIssue] = []
-    unclassified: list[PRIssue] = []
+    critical: list[ModelPRIssue] = []
+    major: list[ModelPRIssue] = []
+    minor: list[ModelPRIssue] = []
+    nitpick: list[ModelPRIssue] = []
+    unclassified: list[ModelPRIssue] = []
 
     for issue in unique_issues:
         if issue.severity == CommentSeverity.CRITICAL:
@@ -1504,11 +1504,11 @@ def collate_pr_issues(
         else:
             unclassified.append(issue)
 
-    # Build CollatedIssues
+    # Build ModelCollatedIssues
     # Extract PR number from fetched data (it's already resolved by fetch-pr-data)
     actual_pr_number = pr_data.get("pr_number", 0)
     actual_repository = pr_data.get("repository", get_repo_name())
-    result = CollatedIssues(
+    result = ModelCollatedIssues(
         pr_number=actual_pr_number,
         repository=actual_repository,
         collated_at=datetime.now(),
@@ -1535,7 +1535,7 @@ def collate_pr_issues(
 
 
 def format_issues_human(
-    issues: CollatedIssues,
+    issues: ModelCollatedIssues,
     show_status: bool = True,
     include_nitpicks: bool = False,
 ) -> str:
@@ -1545,7 +1545,7 @@ def format_issues_human(
     resolution status indicators.
 
     Args:
-        issues: CollatedIssues instance containing categorized issues.
+        issues: ModelCollatedIssues instance containing categorized issues.
         show_status: If True, include [RESOLVED]/[OUTDATED] indicators.
         include_nitpicks: If True, include nitpick-level issues.
 
@@ -1642,13 +1642,13 @@ def format_issues_human(
     return "\n".join(lines)
 
 
-def format_issues_json(issues: CollatedIssues) -> str:
+def format_issues_json(issues: ModelCollatedIssues) -> str:
     """Format issues as JSON output.
 
-    Serializes the CollatedIssues model to JSON with indentation.
+    Serializes the ModelCollatedIssues model to JSON with indentation.
 
     Args:
-        issues: CollatedIssues instance to serialize.
+        issues: ModelCollatedIssues instance to serialize.
 
     Returns:
         JSON string representation of the issues.
@@ -1668,7 +1668,7 @@ def format_issues_json(issues: CollatedIssues) -> str:
 
 
 def format_issues_parallel_solve(
-    issues: CollatedIssues,
+    issues: ModelCollatedIssues,
     include_nitpicks: bool = False,
 ) -> str:
     """Format issues for /parallel-solve command consumption.
@@ -1676,7 +1676,7 @@ def format_issues_parallel_solve(
     Generates a list format ready to pass to /parallel-solve.
 
     Args:
-        issues: CollatedIssues instance containing categorized issues.
+        issues: ModelCollatedIssues instance containing categorized issues.
         include_nitpicks: If True, include nitpick-level issues.
 
     Returns:

@@ -29,12 +29,12 @@ from models import (
     BotType,
     CommentSeverity,
     CommentStatus,
-    FileReference,
-    PRComment,
-    PRCommentSource,
-    PRData,
-    PRReview,
-    StructuredSection,
+    ModelFileReference,
+    ModelPRComment,
+    ModelPRCommentSource,
+    ModelPRData,
+    ModelPRReview,
+    ModelStructuredSection,
     detect_bot_type,
 )
 
@@ -66,14 +66,14 @@ class PRFetcher:
         self.cache_dir = CACHE_DIR
         self.cache_dir.mkdir(exist_ok=True)
 
-    def fetch(self, use_cache: bool = True) -> PRData:
+    def fetch(self, use_cache: bool = True) -> ModelPRData:
         """Fetch PR data, using cache if available and valid.
 
         Args:
             use_cache: Whether to use cached data if available
 
         Returns:
-            PRData model with all comments from all 4 endpoints
+            ModelPRData model with all comments from all 4 endpoints
         """
         if use_cache:
             cached = self._load_cache()
@@ -88,7 +88,7 @@ class PRFetcher:
 
         return pr_data
 
-    def _fetch_from_github(self) -> PRData:
+    def _fetch_from_github(self) -> ModelPRData:
         """Fetch all PR data from GitHub API via 4 endpoints."""
         # Fetch PR metadata first
         pr_meta = self._gh_api(f"repos/{self.repo}/pulls/{self.pr_number}")
@@ -122,23 +122,23 @@ class PRFetcher:
 
         # Inline comments (code review comments with file/line info)
         for c in inline_data or []:
-            comment = self._parse_comment(c, PRCommentSource.INLINE)
+            comment = self._parse_comment(c, ModelPRCommentSource.INLINE)
             if comment:
                 all_comments.append(comment)
 
         # PR conversation comments
         for c in pr_comments_data or []:
-            comment = self._parse_comment(c, PRCommentSource.PR_COMMENT)
+            comment = self._parse_comment(c, ModelPRCommentSource.PR_COMMENT)
             if comment:
                 all_comments.append(comment)
 
         # Issue comments (WHERE CLAUDE BOT POSTS!)
         for c in issue_comments_data or []:
-            comment = self._parse_comment(c, PRCommentSource.ISSUE_COMMENT)
+            comment = self._parse_comment(c, ModelPRCommentSource.ISSUE_COMMENT)
             if comment:
                 all_comments.append(comment)
 
-        # Build and return PRData
+        # Build and return ModelPRData
         created_at = None
         updated_at = None
         try:
@@ -153,7 +153,7 @@ class PRFetcher:
         except (ValueError, TypeError):
             pass
 
-        return PRData(
+        return ModelPRData(
             pr_number=self.pr_number,
             repository=self.repo,
             title=pr_meta.get("title", ""),
@@ -169,8 +169,8 @@ class PRFetcher:
             fetch_source="github_api",
         )
 
-    def _parse_review(self, data: dict) -> Optional[PRReview]:
-        """Parse a GitHub review into a PRReview model."""
+    def _parse_review(self, data: dict) -> Optional[ModelPRReview]:
+        """Parse a GitHub review into a ModelPRReview model."""
         try:
             author = data.get("user", {}).get("login", "unknown")
             state_str = data.get("state", "COMMENTED")
@@ -187,7 +187,7 @@ class PRFetcher:
                     submitted_at_str.replace("Z", "+00:00")
                 )
 
-            return PRReview(
+            return ModelPRReview(
                 id=str(data.get("id", "")),
                 author=author,
                 author_type=detect_bot_type(author),
@@ -202,9 +202,9 @@ class PRFetcher:
             return None
 
     def _parse_comment(
-        self, data: dict, source: PRCommentSource
-    ) -> Optional[PRComment]:
-        """Parse a GitHub comment into a PRComment model."""
+        self, data: dict, source: ModelPRCommentSource
+    ) -> Optional[ModelPRComment]:
+        """Parse a GitHub comment into a ModelPRComment model."""
         try:
             # Handle different field names between endpoints
             author = (
@@ -218,7 +218,7 @@ class PRFetcher:
             # Extract file reference if present (inline comments have this)
             file_ref = None
             if "path" in data:
-                file_ref = FileReference(
+                file_ref = ModelFileReference(
                     path=data["path"],
                     line=data.get("line") or data.get("original_line"),
                     end_line=data.get("end_line"),
@@ -247,7 +247,7 @@ class PRFetcher:
                     updated_at_str.replace("Z", "+00:00")
                 )
 
-            return PRComment(
+            return ModelPRComment(
                 id=str(data.get("id", "")),
                 source=source,
                 author=author,
@@ -271,7 +271,7 @@ class PRFetcher:
 
     def _extract_structured_sections(
         self, body: str, author_type: BotType
-    ) -> list[StructuredSection]:
+    ) -> list[ModelStructuredSection]:
         """Extract structured sections from bot comments."""
         sections = []
 
@@ -338,7 +338,7 @@ class PRFetcher:
                                         next_section = idx
                             content = content[:next_section].strip()
                             sections.append(
-                                StructuredSection(
+                                ModelStructuredSection(
                                     section_type=section_type,
                                     content=content,
                                     extracted_issues=self._extract_issues_from_section(
@@ -370,7 +370,7 @@ class PRFetcher:
                                         next_section = idx
                             content = content[:next_section].strip()
                             sections.append(
-                                StructuredSection(
+                                ModelStructuredSection(
                                     section_type=section_type,
                                     content=content,
                                     extracted_issues=self._extract_issues_from_section(
@@ -403,7 +403,7 @@ class PRFetcher:
         return issues
 
     def _determine_severity(
-        self, body: str, sections: list[StructuredSection], author_type: BotType
+        self, body: str, sections: list[ModelStructuredSection], author_type: BotType
     ) -> CommentSeverity:
         """Determine comment severity from content."""
         body_lower = body.lower() if body else ""
@@ -550,11 +550,11 @@ class PRFetcher:
         safe_repo = self.repo.replace("/", "_")
         return self.cache_dir / f"pr_{safe_repo}_{self.pr_number}.json"
 
-    def _load_cache(self) -> Optional[PRData]:
+    def _load_cache(self) -> Optional[ModelPRData]:
         """Load PR data from cache if valid.
 
         Returns:
-            PRData if cache is valid, None otherwise
+            ModelPRData if cache is valid, None otherwise
         """
         cache_file = self._cache_path()
         if not cache_file.exists():
@@ -569,16 +569,16 @@ class PRFetcher:
             with open(cache_file) as f:
                 data = json.load(f)
 
-            return PRData.model_validate(data)
+            return ModelPRData.model_validate(data)
         except Exception as e:
             print(f"Warning: Cache load error: {e}", file=sys.stderr)
             return None
 
-    def _save_cache(self, pr_data: PRData) -> None:
+    def _save_cache(self, pr_data: ModelPRData) -> None:
         """Save PR data to cache.
 
         Args:
-            pr_data: PRData to cache
+            pr_data: ModelPRData to cache
         """
         try:
             cache_file = self._cache_path()
@@ -667,7 +667,7 @@ def main():
 
             # By source
             print("By Source:")
-            for source in PRCommentSource:
+            for source in ModelPRCommentSource:
                 count = len(pr_data.get_comments_by_source(source))
                 if count > 0:
                     print(f"  {source.value}: {count}")

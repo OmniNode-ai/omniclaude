@@ -7,18 +7,18 @@ manipulating PR review data from GitHub. It ensures that no comments are
 ever lost, with special attention to bot comments (especially Claude Code).
 
 Usage:
-    from models import PRData, PRComment, PRCommentSource, BotType
+    from models import ModelPRData, ModelPRComment, ModelPRCommentSource, BotType
 
     # Parse GitHub API response
-    comment = PRComment.from_github_response(github_data, PRCommentSource.ISSUE_COMMENT)
+    comment = ModelPRComment.from_github_response(github_data, ModelPRCommentSource.ISSUE_COMMENT)
 
     # Check if it's a Claude bot comment
     if comment.is_claude_bot():
         print(f"Claude comment found: {comment.body[:100]}")
 
     # Full PR analysis
-    pr_data = PRData.from_github_responses(...)
-    analysis = PRAnalysis.from_pr_data(pr_data)
+    pr_data = ModelPRData.from_github_responses(...)
+    analysis = ModelPRAnalysis.from_pr_data(pr_data)
 """
 
 from __future__ import annotations
@@ -109,7 +109,7 @@ def detect_bot_type(author: str) -> BotType:
 # =============================================================================
 
 
-class PRCommentSource(str, Enum):
+class ModelPRCommentSource(str, Enum):
     """
     Source of a PR comment in GitHub.
 
@@ -241,7 +241,7 @@ class BotType(str, Enum):
 # =============================================================================
 
 
-class FileReference(BaseModel):
+class ModelFileReference(BaseModel):
     """
     Reference to a specific location in a file.
 
@@ -258,7 +258,7 @@ class FileReference(BaseModel):
     diff_hunk: Optional[str] = Field(None, description="Diff context around the line")
 
     @model_validator(mode="after")
-    def validate_line_range(self) -> FileReference:
+    def validate_line_range(self) -> ModelFileReference:
         """Ensure end_line >= line if both are specified."""
         if self.line is not None and self.end_line is not None:
             if self.end_line < self.line:
@@ -270,20 +270,20 @@ class FileReference(BaseModel):
     def __repr__(self) -> str:
         if self.line:
             if self.end_line and self.end_line != self.line:
-                return f"FileReference({self.path}:{self.line}-{self.end_line})"
-            return f"FileReference({self.path}:{self.line})"
-        return f"FileReference({self.path})"
+                return f"ModelFileReference({self.path}:{self.line}-{self.end_line})"
+            return f"ModelFileReference({self.path}:{self.line})"
+        return f"ModelFileReference({self.path})"
 
     @classmethod
-    def from_github_response(cls, data: dict[str, Any]) -> Optional[FileReference]:
+    def from_github_response(cls, data: dict[str, Any]) -> Optional[ModelFileReference]:
         """
-        Create a FileReference from GitHub API response data.
+        Create a ModelFileReference from GitHub API response data.
 
         Args:
             data: GitHub API response for a comment with file info.
 
         Returns:
-            FileReference if file info exists, None otherwise.
+            ModelFileReference if file info exists, None otherwise.
         """
         path = data.get("path")
         if not path:
@@ -297,7 +297,7 @@ class FileReference(BaseModel):
         )
 
 
-class StructuredSection(BaseModel):
+class ModelStructuredSection(BaseModel):
     """
     A structured section within a bot's comment.
 
@@ -322,10 +322,10 @@ class StructuredSection(BaseModel):
 
     def __repr__(self) -> str:
         issue_count = len(self.extracted_issues)
-        return f"StructuredSection({self.section_type}, {issue_count} issues)"
+        return f"ModelStructuredSection({self.section_type}, {issue_count} issues)"
 
     @classmethod
-    def extract_from_body(cls, body: str) -> list[StructuredSection]:
+    def extract_from_body(cls, body: str) -> list[ModelStructuredSection]:
         """
         Extract structured sections from a comment body.
 
@@ -340,12 +340,12 @@ class StructuredSection(BaseModel):
             body: The raw comment body text.
 
         Returns:
-            List of StructuredSection objects found in the body.
+            List of ModelStructuredSection objects found in the body.
         """
         if not body:
             return []
 
-        sections: list[StructuredSection] = []
+        sections: list[ModelStructuredSection] = []
 
         # Pattern to match markdown headers
         section_patterns = {
@@ -380,7 +380,7 @@ class StructuredSection(BaseModel):
         return sections
 
 
-class PRComment(BaseModel):
+class ModelPRComment(BaseModel):
     """
     A single comment on a PR from any source.
 
@@ -395,7 +395,7 @@ class PRComment(BaseModel):
     model_config = ConfigDict(extra="allow", frozen=False)
 
     id: str = Field(..., description="GitHub comment ID")
-    source: PRCommentSource = Field(..., description="Where this comment came from")
+    source: ModelPRCommentSource = Field(..., description="Where this comment came from")
     author: str = Field(..., description="GitHub username of comment author")
     author_type: BotType = Field(default=BotType.HUMAN, description="Type of author")
     body: str = Field(..., description="Comment body text")
@@ -405,7 +405,7 @@ class PRComment(BaseModel):
     status: CommentStatus = Field(
         default=CommentStatus.UNADDRESSED, description="Resolution status"
     )
-    file_ref: Optional[FileReference] = Field(
+    file_ref: Optional[ModelFileReference] = Field(
         None, description="File location if inline"
     )
     created_at: datetime = Field(..., description="When comment was created")
@@ -415,7 +415,7 @@ class PRComment(BaseModel):
     in_reply_to_id: Optional[str] = Field(
         None, description="Parent comment ID if reply"
     )
-    structured_sections: list[StructuredSection] = Field(
+    structured_sections: list[ModelStructuredSection] = Field(
         default_factory=list, description="Parsed structured sections"
     )
     raw_json: dict[str, Any] = Field(
@@ -436,14 +436,14 @@ class PRComment(BaseModel):
     )
 
     @model_validator(mode="after")
-    def detect_author_type_and_sections(self) -> PRComment:
+    def detect_author_type_and_sections(self) -> ModelPRComment:
         """Auto-detect author type and parse structured sections."""
         # Always re-detect author type to ensure Claude comments aren't missed
         self.author_type = detect_bot_type(self.author)
 
         # Parse structured sections if not already done
         if not self.structured_sections and self.body:
-            self.structured_sections = StructuredSection.extract_from_body(self.body)
+            self.structured_sections = ModelStructuredSection.extract_from_body(self.body)
 
         # Auto-classify severity if unclassified
         if self.severity == CommentSeverity.UNCLASSIFIED:
@@ -583,7 +583,7 @@ class PRComment(BaseModel):
         # Create a temporary instance to use the instance method
         temp = cls(
             id="temp",
-            source=PRCommentSource.PR_COMMENT,
+            source=ModelPRCommentSource.PR_COMMENT,
             author="temp",
             body=body,
             created_at=datetime.now(),
@@ -598,7 +598,7 @@ class PRComment(BaseModel):
         body_preview = self.body[:50] + "..." if len(self.body) > 50 else self.body
         body_preview = body_preview.replace("\n", " ")
         return (
-            f"PRComment(id={self.id}, source={source_str}, "
+            f"ModelPRComment(id={self.id}, source={source_str}, "
             f"author={author_str}, severity={severity_str}, "
             f"body={body_preview!r})"
         )
@@ -607,13 +607,13 @@ class PRComment(BaseModel):
     def from_github_response(
         cls,
         data: dict[str, Any],
-        source: PRCommentSource,
+        source: ModelPRCommentSource,
         *,
         default_severity: CommentSeverity = CommentSeverity.UNCLASSIFIED,
         default_status: CommentStatus = CommentStatus.UNADDRESSED,
-    ) -> PRComment:
+    ) -> ModelPRComment:
         """
-        Create a PRComment from GitHub API response data.
+        Create a ModelPRComment from GitHub API response data.
 
         Args:
             data: Raw GitHub API response for a single comment.
@@ -622,11 +622,11 @@ class PRComment(BaseModel):
             default_status: Default status for new comments.
 
         Returns:
-            PRComment instance with all fields populated.
+            ModelPRComment instance with all fields populated.
 
         Example:
             >>> data = {"id": 123, "user": {"login": "claude[bot]"}, ...}
-            >>> comment = PRComment.from_github_response(data, PRCommentSource.ISSUE_COMMENT)
+            >>> comment = ModelPRComment.from_github_response(data, ModelPRCommentSource.ISSUE_COMMENT)
             >>> comment.is_claude_bot()
             True
         """
@@ -658,7 +658,7 @@ class PRComment(BaseModel):
         body = data.get("body") or ""
 
         # Extract file reference for inline comments
-        file_ref = FileReference.from_github_response(data)
+        file_ref = ModelFileReference.from_github_response(data)
 
         # Extract reply-to ID
         in_reply_to_id = None
@@ -680,7 +680,7 @@ class PRComment(BaseModel):
         )
 
 
-class PRReview(BaseModel):
+class ModelPRReview(BaseModel):
     """
     A formal PR review (approve, request changes, comment).
 
@@ -698,10 +698,10 @@ class PRReview(BaseModel):
     ] = Field(..., description="Review state")
     body: Optional[str] = Field(None, description="Review body text")
     submitted_at: datetime = Field(..., description="When review was submitted")
-    comments: list[PRComment] = Field(
+    comments: list[ModelPRComment] = Field(
         default_factory=list, description="Inline comments in this review"
     )
-    structured_sections: list[StructuredSection] = Field(
+    structured_sections: list[ModelStructuredSection] = Field(
         default_factory=list, description="Parsed structured sections from body"
     )
     raw_json: dict[str, Any] = Field(
@@ -709,12 +709,12 @@ class PRReview(BaseModel):
     )
 
     @model_validator(mode="after")
-    def detect_author_type_and_sections(self) -> PRReview:
+    def detect_author_type_and_sections(self) -> ModelPRReview:
         """Auto-detect author type and parse structured sections."""
         self.author_type = detect_bot_type(self.author)
 
         if not self.structured_sections and self.body:
-            self.structured_sections = StructuredSection.extract_from_body(self.body)
+            self.structured_sections = ModelStructuredSection.extract_from_body(self.body)
 
         return self
 
@@ -732,20 +732,20 @@ class PRReview(BaseModel):
 
     def __repr__(self) -> str:
         return (
-            f"PRReview(id={self.id}, author={self.author} ({self.author_type.value}), "
+            f"ModelPRReview(id={self.id}, author={self.author} ({self.author_type.value}), "
             f"state={self.state}, comments={len(self.comments)})"
         )
 
     @classmethod
-    def from_github_response(cls, data: dict[str, Any]) -> PRReview:
+    def from_github_response(cls, data: dict[str, Any]) -> ModelPRReview:
         """
-        Create a PRReview from GitHub API response data.
+        Create a ModelPRReview from GitHub API response data.
 
         Args:
             data: Raw GitHub API response for a review.
 
         Returns:
-            PRReview instance.
+            ModelPRReview instance.
         """
         author = ""
         if data.get("user"):
@@ -768,7 +768,7 @@ class PRReview(BaseModel):
         )
 
 
-class PRData(BaseModel):
+class ModelPRData(BaseModel):
     """
     Complete PR data aggregated from all GitHub endpoints.
 
@@ -789,8 +789,8 @@ class PRData(BaseModel):
     )
     created_at: Optional[datetime] = Field(None, description="When PR was created")
     updated_at: Optional[datetime] = Field(None, description="When PR was last updated")
-    reviews: list[PRReview] = Field(default_factory=list, description="Formal reviews")
-    comments: list[PRComment] = Field(
+    reviews: list[ModelPRReview] = Field(default_factory=list, description="Formal reviews")
+    comments: list[ModelPRComment] = Field(
         default_factory=list, description="All unified comments"
     )
     fetched_at: datetime = Field(
@@ -805,11 +805,11 @@ class PRData(BaseModel):
 
     def __repr__(self) -> str:
         return (
-            f"PRData(#{self.pr_number} {self.repository}, "
+            f"ModelPRData(#{self.pr_number} {self.repository}, "
             f"reviews={len(self.reviews)}, comments={len(self.comments)})"
         )
 
-    def get_all_comments(self) -> list[PRComment]:
+    def get_all_comments(self) -> list[ModelPRComment]:
         """
         Get all comments from all sources.
 
@@ -819,9 +819,9 @@ class PRData(BaseModel):
         - Issue comments (where Claude posts!)
 
         Returns:
-            List of all PRComment objects, sorted by created_at.
+            List of all ModelPRComment objects, sorted by created_at.
         """
-        all_comments: list[PRComment] = list(self.comments)
+        all_comments: list[ModelPRComment] = list(self.comments)
 
         # Add comments from reviews
         for review in self.reviews:
@@ -830,7 +830,7 @@ class PRData(BaseModel):
         # Sort by creation time
         return sorted(all_comments, key=lambda c: c.created_at)
 
-    def get_bot_comments(self, bot_type: Optional[BotType] = None) -> list[PRComment]:
+    def get_bot_comments(self, bot_type: Optional[BotType] = None) -> list[ModelPRComment]:
         """
         Get all comments from bots.
 
@@ -847,7 +847,7 @@ class PRData(BaseModel):
 
         return [c for c in all_comments if c.is_bot()]
 
-    def get_claude_comments(self) -> list[PRComment]:
+    def get_claude_comments(self) -> list[ModelPRComment]:
         """
         Get all Claude Code bot comments.
 
@@ -858,7 +858,7 @@ class PRData(BaseModel):
         """
         return self.get_bot_comments(BotType.CLAUDE_CODE)
 
-    def get_unaddressed_comments(self) -> list[PRComment]:
+    def get_unaddressed_comments(self) -> list[ModelPRComment]:
         """
         Get all comments that need attention.
 
@@ -868,7 +868,7 @@ class PRData(BaseModel):
         all_comments = self.get_all_comments()
         return [c for c in all_comments if c.status.needs_attention]
 
-    def get_by_severity(self, severity: CommentSeverity) -> list[PRComment]:
+    def get_by_severity(self, severity: CommentSeverity) -> list[ModelPRComment]:
         """
         Get all comments with a specific severity.
 
@@ -881,7 +881,7 @@ class PRData(BaseModel):
         all_comments = self.get_all_comments()
         return [c for c in all_comments if c.severity == severity]
 
-    def get_actionable_issues(self) -> list[PRComment]:
+    def get_actionable_issues(self) -> list[ModelPRComment]:
         """
         Get all actionable issues that need resolution.
 
@@ -898,7 +898,7 @@ class PRData(BaseModel):
         # Sort by severity (critical first)
         return sorted(actionable, key=lambda c: c.severity.priority_order)
 
-    def get_comments_by_source(self, source: PRCommentSource) -> list[PRComment]:
+    def get_comments_by_source(self, source: ModelPRCommentSource) -> list[ModelPRComment]:
         """
         Get comments from a specific source.
 
@@ -930,9 +930,9 @@ class PRData(BaseModel):
         issue_comments: Optional[list[dict[str, Any]]] = None,
         *,
         fetch_source: Literal["github_api", "cache", "gh_cli"] = "github_api",
-    ) -> PRData:
+    ) -> ModelPRData:
         """
-        Create PRData from GitHub API responses.
+        Create ModelPRData from GitHub API responses.
 
         Args:
             pr_data: PR details from GitHub API.
@@ -943,7 +943,7 @@ class PRData(BaseModel):
             fetch_source: How the data was fetched.
 
         Returns:
-            PRData instance with all data unified.
+            ModelPRData instance with all data unified.
         """
         reviews = reviews or []
         inline_comments = inline_comments or []
@@ -971,14 +971,14 @@ class PRData(BaseModel):
             state = "closed"
 
         # Parse reviews
-        parsed_reviews: list[PRReview] = []
+        parsed_reviews: list[ModelPRReview] = []
         for review_data in reviews:
-            review = PRReview.from_github_response(review_data)
+            review = ModelPRReview.from_github_response(review_data)
 
             # Find inline comments that belong to this review
             review_id = str(review_data.get("id", ""))
             review_comments = [
-                PRComment.from_github_response(c, PRCommentSource.INLINE)
+                ModelPRComment.from_github_response(c, ModelPRCommentSource.INLINE)
                 for c in inline_comments
                 if str(c.get("pull_request_review_id", "")) == review_id
             ]
@@ -988,20 +988,20 @@ class PRData(BaseModel):
         # Parse standalone inline comments (not part of a review)
         review_ids = {str(r.id) for r in parsed_reviews}
         standalone_inline = [
-            PRComment.from_github_response(c, PRCommentSource.INLINE)
+            ModelPRComment.from_github_response(c, ModelPRCommentSource.INLINE)
             for c in inline_comments
             if str(c.get("pull_request_review_id", "")) not in review_ids
         ]
 
         # Parse PR comments
         parsed_pr_comments = [
-            PRComment.from_github_response(c, PRCommentSource.PR_COMMENT)
+            ModelPRComment.from_github_response(c, ModelPRCommentSource.PR_COMMENT)
             for c in pr_comments
         ]
 
         # Parse issue comments (CRITICAL: This is where Claude posts!)
         parsed_issue_comments = [
-            PRComment.from_github_response(c, PRCommentSource.ISSUE_COMMENT)
+            ModelPRComment.from_github_response(c, ModelPRCommentSource.ISSUE_COMMENT)
             for c in issue_comments
         ]
 
@@ -1039,7 +1039,7 @@ class PRData(BaseModel):
         )
 
 
-class PRAnalysis(BaseModel):
+class ModelPRAnalysis(BaseModel):
     """
     Analysis results for a PR.
 
@@ -1049,7 +1049,7 @@ class PRAnalysis(BaseModel):
 
     model_config = ConfigDict(extra="allow", frozen=False)
 
-    pr_data: PRData = Field(..., description="Source PR data")
+    pr_data: ModelPRData = Field(..., description="Source PR data")
     analyzed_at: datetime = Field(
         default_factory=datetime.now, description="When analysis was performed"
     )
@@ -1063,29 +1063,29 @@ class PRAnalysis(BaseModel):
     by_author_type: dict[str, int] = Field(
         default_factory=dict, description="Comment counts by author type"
     )
-    critical_issues: list[PRComment] = Field(
+    critical_issues: list[ModelPRComment] = Field(
         default_factory=list, description="Critical severity issues"
     )
-    major_issues: list[PRComment] = Field(
+    major_issues: list[ModelPRComment] = Field(
         default_factory=list, description="Major severity issues"
     )
-    minor_issues: list[PRComment] = Field(
+    minor_issues: list[ModelPRComment] = Field(
         default_factory=list, description="Minor severity issues"
     )
-    nitpick_issues: list[PRComment] = Field(
+    nitpick_issues: list[ModelPRComment] = Field(
         default_factory=list, description="Nitpick severity issues"
     )
-    claude_issues: list[PRComment] = Field(
+    claude_issues: list[ModelPRComment] = Field(
         default_factory=list, description="All Claude bot comments (NEVER MISS)"
     )
-    merge_blockers: list[PRComment] = Field(
+    merge_blockers: list[ModelPRComment] = Field(
         default_factory=list, description="Issues that block merging"
     )
     summary: str = Field(default="", description="Human-readable summary")
 
     def __repr__(self) -> str:
         return (
-            f"PRAnalysis(PR #{self.pr_data.pr_number}, "
+            f"ModelPRAnalysis(PR #{self.pr_data.pr_number}, "
             f"total={self.total_comments}, critical={len(self.critical_issues)}, "
             f"major={len(self.major_issues)}, claude={len(self.claude_issues)})"
         )
@@ -1124,15 +1124,15 @@ class PRAnalysis(BaseModel):
         return f"Blocked: {', '.join(parts)} issue(s) remaining"
 
     @classmethod
-    def from_pr_data(cls, pr_data: PRData) -> PRAnalysis:
+    def from_pr_data(cls, pr_data: ModelPRData) -> ModelPRAnalysis:
         """
         Create analysis from PR data.
 
         Args:
-            pr_data: PRData instance to analyze.
+            pr_data: ModelPRData instance to analyze.
 
         Returns:
-            PRAnalysis with all statistics computed.
+            ModelPRAnalysis with all statistics computed.
         """
         all_comments = pr_data.get_all_comments()
 
@@ -1214,7 +1214,7 @@ class PRAnalysis(BaseModel):
         return self.model_dump()
 
 
-class PRIssue(BaseModel):
+class ModelPRIssue(BaseModel):
     """
     A collated PR review issue with resolution tracking.
 
@@ -1224,9 +1224,9 @@ class PRIssue(BaseModel):
     status and file modification tracking.
 
     Usage:
-        from models import PRIssue, IssueSeverity, IssueStatus
+        from models import ModelPRIssue, IssueSeverity, IssueStatus
 
-        issue = PRIssue(
+        issue = ModelPRIssue(
             file_path="src/main.py",
             line_number=42,
             severity=IssueSeverity.CRITICAL,
@@ -1268,8 +1268,8 @@ class PRIssue(BaseModel):
     is_outdated: bool = Field(
         default=False, description="True if file changed after comment"
     )
-    source_comment: Optional[PRComment] = Field(
-        None, description="Original PRComment this issue was extracted from"
+    source_comment: Optional[ModelPRComment] = Field(
+        None, description="Original ModelPRComment this issue was extracted from"
     )
 
     @property
@@ -1334,19 +1334,19 @@ class PRIssue(BaseModel):
     @classmethod
     def from_pr_comment(
         cls,
-        comment: PRComment,
+        comment: ModelPRComment,
         description: Optional[str] = None,
         severity: Optional[CommentSeverity] = None,
-    ) -> PRIssue:
-        """Create a PRIssue from a PRComment.
+    ) -> ModelPRIssue:
+        """Create a ModelPRIssue from a ModelPRComment.
 
         Args:
-            comment: The source PRComment.
+            comment: The source ModelPRComment.
             description: Override description (defaults to first line of body).
             severity: Override severity (defaults to comment's severity).
 
         Returns:
-            PRIssue instance linked to the source comment.
+            ModelPRIssue instance linked to the source comment.
         """
         # Extract file path and line from file_ref
         file_path = ""
@@ -1393,10 +1393,10 @@ class PRIssue(BaseModel):
     def __repr__(self) -> str:
         status_str = f" [{self.status.value}]" if self.is_resolved else ""
         loc = self.location or "(no location)"
-        return f"PRIssue({self.severity.value}{status_str}, {loc}, {self.description[:40]}...)"
+        return f"ModelPRIssue({self.severity.value}{status_str}, {loc}, {self.description[:40]}...)"
 
 
-class CollatedIssues(BaseModel):
+class ModelCollatedIssues(BaseModel):
     """
     Container for collated PR issues organized by severity.
 
@@ -1416,24 +1416,24 @@ class CollatedIssues(BaseModel):
     collated_at: datetime = Field(
         default_factory=datetime.now, description="When issues were collated"
     )
-    critical: list[PRIssue] = Field(
+    critical: list[ModelPRIssue] = Field(
         default_factory=list, description="Critical severity issues"
     )
-    major: list[PRIssue] = Field(
+    major: list[ModelPRIssue] = Field(
         default_factory=list, description="Major severity issues"
     )
-    minor: list[PRIssue] = Field(
+    minor: list[ModelPRIssue] = Field(
         default_factory=list, description="Minor severity issues"
     )
-    nitpick: list[PRIssue] = Field(
+    nitpick: list[ModelPRIssue] = Field(
         default_factory=list, description="Nitpick severity issues"
     )
-    unclassified: list[PRIssue] = Field(
+    unclassified: list[ModelPRIssue] = Field(
         default_factory=list, description="Unclassified issues"
     )
 
     @cached_property
-    def all_issues(self) -> list[PRIssue]:
+    def all_issues(self) -> list[ModelPRIssue]:
         """Get all issues across all severity levels.
 
         Returns a cached concatenation of all issue lists. The cache is
@@ -1445,12 +1445,12 @@ class CollatedIssues(BaseModel):
         )
 
     @property
-    def open_issues(self) -> list[PRIssue]:
+    def open_issues(self) -> list[ModelPRIssue]:
         """Get all issues that are not resolved."""
         return [i for i in self.all_issues if i.is_open]
 
     @property
-    def resolved_issues(self) -> list[PRIssue]:
+    def resolved_issues(self) -> list[ModelPRIssue]:
         """Get all resolved issues."""
         return [i for i in self.all_issues if i.is_resolved]
 
@@ -1476,35 +1476,35 @@ class CollatedIssues(BaseModel):
 
     def filter_by_status(
         self, hide_resolved: bool = False, show_resolved_only: bool = False
-    ) -> CollatedIssues:
-        """Return a new CollatedIssues with filtered issues.
+    ) -> ModelCollatedIssues:
+        """Return a new ModelCollatedIssues with filtered issues.
 
         Args:
             hide_resolved: If True, exclude resolved issues.
             show_resolved_only: If True, only include resolved issues.
 
         Returns:
-            New CollatedIssues instance with filtered issues.
+            New ModelCollatedIssues instance with filtered issues.
 
         Raises:
             ValueError: If both hide_resolved and show_resolved_only are True.
 
         Example:
-            >>> issues = CollatedIssues(pr_number=40, critical=[...])
+            >>> issues = ModelCollatedIssues(pr_number=40, critical=[...])
             >>> open_only = issues.filter_by_status(hide_resolved=True)
             >>> resolved_only = issues.filter_by_status(show_resolved_only=True)
         """
         if hide_resolved and show_resolved_only:
             raise ValueError("Cannot use both hide_resolved and show_resolved_only")
 
-        def filter_list(issues: list[PRIssue]) -> list[PRIssue]:
+        def filter_list(issues: list[ModelPRIssue]) -> list[ModelPRIssue]:
             if hide_resolved:
                 return [i for i in issues if i.is_open]
             if show_resolved_only:
                 return [i for i in issues if i.is_resolved]
             return issues
 
-        return CollatedIssues(
+        return ModelCollatedIssues(
             pr_number=self.pr_number,
             repository=self.repository,
             collated_at=self.collated_at,
@@ -1567,7 +1567,7 @@ def parse_github_datetime(dt_str: Optional[str]) -> Optional[datetime]:
         return None
 
 
-def merge_comments_by_id(comments: list[PRComment]) -> list[PRComment]:
+def merge_comments_by_id(comments: list[ModelPRComment]) -> list[ModelPRComment]:
     """
     Merge duplicate comments by ID.
 
@@ -1580,7 +1580,7 @@ def merge_comments_by_id(comments: list[PRComment]) -> list[PRComment]:
     Returns:
         Deduplicated list of comments.
     """
-    seen: dict[str, PRComment] = {}
+    seen: dict[str, ModelPRComment] = {}
 
     for comment in comments:
         if comment.id in seen:
@@ -1598,7 +1598,7 @@ def classify_severity(body: str) -> CommentSeverity:
     """
     Classify comment severity based on body content.
 
-    Standalone function for use without creating a PRComment instance.
+    Standalone function for use without creating a ModelPRComment instance.
 
     Args:
         body: The comment body text.
@@ -1606,7 +1606,7 @@ def classify_severity(body: str) -> CommentSeverity:
     Returns:
         Detected severity level.
     """
-    return PRComment.classify_severity(body)
+    return ModelPRComment.classify_severity(body)
 
 
 # =============================================================================
@@ -1619,22 +1619,22 @@ __all__ = [
     "CODERABBIT_PATTERNS",
     "GITHUB_ACTIONS_PATTERNS",
     "BotType",
-    "CollatedIssues",
+    "ModelCollatedIssues",
     "CommentSeverity",
     "CommentStatus",
     # Models
-    "FileReference",
+    "ModelFileReference",
     # Enum aliases (for backward compatibility)
     "IssueSeverity",
     "IssueStatus",
-    "PRAnalysis",
-    "PRComment",
+    "ModelPRAnalysis",
+    "ModelPRComment",
     # Enums
-    "PRCommentSource",
-    "PRData",
-    "PRIssue",
-    "PRReview",
-    "StructuredSection",
+    "ModelPRCommentSource",
+    "ModelPRData",
+    "ModelPRIssue",
+    "ModelPRReview",
+    "ModelStructuredSection",
     "classify_severity",
     # Functions
     "detect_bot_type",

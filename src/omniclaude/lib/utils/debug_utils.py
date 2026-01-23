@@ -457,10 +457,10 @@ def test_pattern_tracking_flow() -> dict[str, Any]:
 
     # Test 2: Import error handling
     try:
-        from .error_handling import PatternTrackingErrorHandler, PatternTrackingLogger
+        from .error_handling import PatternTrackingErrorPolicy, PatternTrackingLogger
 
         logger = PatternTrackingLogger()
-        PatternTrackingErrorHandler(logger)
+        PatternTrackingErrorPolicy(logger)
         test_results["tests"]["import_error_handling"] = {
             "status": "success",
             "message": "Error handling imported successfully",

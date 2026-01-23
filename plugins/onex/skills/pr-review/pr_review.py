@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from analyzer import PRAnalyzer, generate_markdown_report
 from fetcher import PRFetcher
-from models import BotType, CommentSeverity, PRAnalysis, PRData
+from models import BotType, CommentSeverity, ModelPRAnalysis, ModelPRData
 
 
 def main():
@@ -147,7 +147,7 @@ Examples:
 
 
 def format_summary(
-    analysis: PRAnalysis, include_details: bool = False, no_nitpicks: bool = False
+    analysis: ModelPRAnalysis, include_details: bool = False, no_nitpicks: bool = False
 ) -> str:
     """Format analysis as summary text."""
     lines = [
@@ -205,7 +205,7 @@ def format_summary(
     return "\n".join(lines)
 
 
-def format_claude_only(analysis: PRAnalysis) -> str:
+def format_claude_only(analysis: ModelPRAnalysis) -> str:
     """Format only Claude bot comments."""
     lines = [
         f"======================================================================",
@@ -234,7 +234,7 @@ def format_claude_only(analysis: PRAnalysis) -> str:
     return "\n".join(lines)
 
 
-def format_blockers(analysis: PRAnalysis) -> str:
+def format_blockers(analysis: ModelPRAnalysis) -> str:
     """Format only merge blockers."""
     lines = [
         f"======================================================================",
@@ -260,7 +260,7 @@ def format_blockers(analysis: PRAnalysis) -> str:
     return "\n".join(lines)
 
 
-def format_critical(analysis: PRAnalysis) -> str:
+def format_critical(analysis: ModelPRAnalysis) -> str:
     """Format only critical issues."""
     lines = [
         f"======================================================================",

@@ -85,7 +85,9 @@ class PatternTrackingLogger:
         return self.log_file
 
 
-class PatternTrackingErrorHandler:
+class PatternTrackingErrorPolicy:
+    """Error handling policy for pattern tracking operations."""
+
     def __init__(self, logger: PatternTrackingLogger):
         self.logger = logger
         self.retryable_errors = [
@@ -251,7 +253,7 @@ def safe_execute_operation(
     operation_name: str,
     operation_func,
     logger: PatternTrackingLogger,
-    error_handler: PatternTrackingErrorHandler,
+    error_handler: PatternTrackingErrorPolicy,
     max_retries: int = 3,
     circuit_breaker: CircuitBreaker | None = None,
 ) -> dict[str, Any]:
@@ -334,11 +336,11 @@ def get_default_logger() -> PatternTrackingLogger:
     return _default_logger
 
 
-def get_default_error_handler() -> PatternTrackingErrorHandler:
-    """Get or create default error handler instance"""
+def get_default_error_handler() -> PatternTrackingErrorPolicy:
+    """Get or create default error policy instance"""
     global _default_error_handler
     if _default_error_handler is None:
-        _default_error_handler = PatternTrackingErrorHandler(get_default_logger())
+        _default_error_handler = PatternTrackingErrorPolicy(get_default_logger())
     return _default_error_handler
 
 
@@ -363,7 +365,7 @@ def handle_error(
 if __name__ == "__main__":
     # Test the error handling system
     logger = PatternTrackingLogger()
-    error_handler = PatternTrackingErrorHandler(logger)
+    error_handler = PatternTrackingErrorPolicy(logger)
 
     print("Testing error handling system...")
 

@@ -78,6 +78,10 @@ class Metadata:
         }
 
 
+# ONEX: exempt - single-responsibility metrics collector
+# Rationale: 13 methods, but all serve the single purpose of quality/performance
+# metric collection. Methods are highly cohesive (quality checks, performance
+# extraction, execution analysis) and extracting would fragment the metrics API.
 class PostToolMetricsCollector:
     """Fast metrics collection for PostToolUse hook."""
 

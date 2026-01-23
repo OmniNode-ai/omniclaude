@@ -37,6 +37,7 @@ import logging
 import os
 import sys
 import uuid
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -81,6 +82,93 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+# =============================================================================
+# Event Config Models (ONEX: Parameter reduction pattern)
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class ModelRoutingDecisionConfig:
+    """Configuration for routing decision events.
+
+    Groups related parameters for publish_routing_decision() to reduce
+    function signature complexity per ONEX parameter guidelines.
+    """
+
+    agent_name: str
+    confidence: float
+    strategy: str
+    latency_ms: int
+    correlation_id: str
+    user_request: str | None = None
+    alternatives: list[Any] | None = None
+    reasoning: str | None = None
+    context: dict[str, Any] | None = None
+    project_path: str | None = None
+    project_name: str | None = None
+    session_id: str | None = None
+
+
+@dataclass(frozen=True)
+class ModelAgentActionConfig:
+    """Configuration for agent action events.
+
+    Groups related parameters for publish_agent_action() to reduce
+    function signature complexity per ONEX parameter guidelines.
+    """
+
+    agent_name: str
+    action_type: str
+    action_name: str
+    correlation_id: str
+    action_details: dict[str, Any] | None = None
+    duration_ms: int | None = None
+    success: bool = True
+    debug_mode: bool = True
+    project_path: str | None = None
+    project_name: str | None = None
+    working_directory: str | None = None
+
+
+@dataclass(frozen=True)
+class ModelDetectionFailureConfig:
+    """Configuration for detection failure events.
+
+    Groups related parameters for publish_detection_failure() to reduce
+    function signature complexity per ONEX parameter guidelines.
+    """
+
+    user_request: str
+    failure_reason: str
+    attempted_methods: list[Any] | None = None
+    error_details: dict[str, Any] | None = None
+    correlation_id: str | None = None
+    project_path: str | None = None
+    project_name: str | None = None
+    session_id: str | None = None
+
+
+@dataclass(frozen=True)
+class ModelPerformanceMetricsConfig:
+    """Configuration for performance metrics events.
+
+    Groups related parameters for publish_performance_metrics() to reduce
+    function signature complexity per ONEX parameter guidelines.
+    """
+
+    agent_name: str
+    metric_name: str
+    metric_value: float
+    correlation_id: str
+    metric_type: str = "gauge"
+    metric_unit: str | None = None
+    tags: dict[str, str] | None = None
+
+
+# ONEX: exempt - facade with backward compatibility wrappers
+# Rationale: 13 methods, but 5 are backward-compatible wrappers (publish_X calls
+# publish_X_from_config). True unique methods are ~8. This is a facade pattern
+# for unified event publishing and methods are highly cohesive.
 class HookEventAdapter:
     """
     Synchronous event adapter for hook scripts.
@@ -224,6 +312,36 @@ class HookEventAdapter:
             self.logger.error(f"Failed to publish event to {topic}: {e}")
             return False
 
+    def publish_routing_decision_from_config(
+        self,
+        config: ModelRoutingDecisionConfig,
+    ) -> bool:
+        """Publish agent routing decision event from config object.
+
+        Args:
+            config: Routing decision configuration containing all event data.
+
+        Returns:
+            True if published successfully, False otherwise.
+        """
+        event = {
+            "correlation_id": config.correlation_id,
+            "user_request": config.user_request or "",
+            "selected_agent": config.agent_name,
+            "confidence_score": config.confidence,
+            "alternatives": config.alternatives or [],
+            "reasoning": config.reasoning,
+            "routing_strategy": config.strategy,
+            "context": config.context or {},
+            "routing_time_ms": config.latency_ms,
+            "project_path": config.project_path,
+            "project_name": config.project_name,
+            "session_id": config.session_id,
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+
+        return self._publish(self.TOPIC_ROUTING_DECISIONS, event)
+
     def publish_routing_decision(
         self,
         agent_name: str,
@@ -239,8 +357,11 @@ class HookEventAdapter:
         project_name: str | None = None,
         session_id: str | None = None,
     ) -> bool:
-        """
-        Publish agent routing decision event.
+        """Publish agent routing decision event.
+
+        Note:
+            Consider using publish_routing_decision_from_config() with
+            ModelRoutingDecisionConfig for better parameter organization.
 
         Args:
             agent_name: Selected agent name
@@ -259,23 +380,51 @@ class HookEventAdapter:
         Returns:
             True if published successfully, False otherwise
         """
+        # ONEX: exempt - backwards compatibility wrapper for config-based method
+        config = ModelRoutingDecisionConfig(
+            agent_name=agent_name,
+            confidence=confidence,
+            strategy=strategy,
+            latency_ms=latency_ms,
+            correlation_id=correlation_id,
+            user_request=user_request,
+            alternatives=alternatives,
+            reasoning=reasoning,
+            context=context,
+            project_path=project_path,
+            project_name=project_name,
+            session_id=session_id,
+        )
+        return self.publish_routing_decision_from_config(config)
+
+    def publish_agent_action_from_config(
+        self,
+        config: ModelAgentActionConfig,
+    ) -> bool:
+        """Publish agent action event from config object.
+
+        Args:
+            config: Agent action configuration containing all event data.
+
+        Returns:
+            True if published successfully, False otherwise.
+        """
         event = {
-            "correlation_id": correlation_id,
-            "user_request": user_request or "",
-            "selected_agent": agent_name,
-            "confidence_score": confidence,
-            "alternatives": alternatives or [],
-            "reasoning": reasoning,
-            "routing_strategy": strategy,
-            "context": context or {},
-            "routing_time_ms": latency_ms,
-            "project_path": project_path,
-            "project_name": project_name,
-            "session_id": session_id,
+            "correlation_id": config.correlation_id,
+            "agent_name": config.agent_name,
+            "action_type": config.action_type,
+            "action_name": config.action_name,
+            "action_details": config.action_details or {},
+            "duration_ms": config.duration_ms,
+            "success": config.success,
+            "debug_mode": config.debug_mode,
+            "project_path": config.project_path,
+            "project_name": config.project_name,
+            "working_directory": config.working_directory,
             "timestamp": datetime.now(UTC).isoformat(),
         }
 
-        return self._publish(self.TOPIC_ROUTING_DECISIONS, event)
+        return self._publish(self.TOPIC_AGENT_ACTIONS, event)
 
     def publish_agent_action(
         self,
@@ -291,8 +440,11 @@ class HookEventAdapter:
         project_name: str | None = None,
         working_directory: str | None = None,
     ) -> bool:
-        """
-        Publish agent action event.
+        """Publish agent action event.
+
+        Note:
+            Consider using publish_agent_action_from_config() with
+            ModelAgentActionConfig for better parameter organization.
 
         Args:
             agent_name: Agent performing the action
@@ -310,22 +462,46 @@ class HookEventAdapter:
         Returns:
             True if published successfully, False otherwise
         """
+        # ONEX: exempt - backwards compatibility wrapper for config-based method
+        config = ModelAgentActionConfig(
+            agent_name=agent_name,
+            action_type=action_type,
+            action_name=action_name,
+            correlation_id=correlation_id,
+            action_details=action_details,
+            duration_ms=duration_ms,
+            success=success,
+            debug_mode=debug_mode,
+            project_path=project_path,
+            project_name=project_name,
+            working_directory=working_directory,
+        )
+        return self.publish_agent_action_from_config(config)
+
+    def publish_performance_metrics_from_config(
+        self,
+        config: ModelPerformanceMetricsConfig,
+    ) -> bool:
+        """Publish agent performance metrics event from config object.
+
+        Args:
+            config: Performance metrics configuration containing all event data.
+
+        Returns:
+            True if published successfully, False otherwise.
+        """
         event = {
-            "correlation_id": correlation_id,
-            "agent_name": agent_name,
-            "action_type": action_type,
-            "action_name": action_name,
-            "action_details": action_details or {},
-            "duration_ms": duration_ms,
-            "success": success,
-            "debug_mode": debug_mode,
-            "project_path": project_path,
-            "project_name": project_name,
-            "working_directory": working_directory,
+            "correlation_id": config.correlation_id,
+            "agent_name": config.agent_name,
+            "metric_name": config.metric_name,
+            "metric_value": config.metric_value,
+            "metric_type": config.metric_type,
+            "metric_unit": config.metric_unit,
+            "tags": config.tags or {},
             "timestamp": datetime.now(UTC).isoformat(),
         }
 
-        return self._publish(self.TOPIC_AGENT_ACTIONS, event)
+        return self._publish(self.TOPIC_PERFORMANCE_METRICS, event)
 
     def publish_performance_metrics(
         self,
@@ -337,8 +513,11 @@ class HookEventAdapter:
         metric_unit: str | None = None,
         tags: dict[str, str] | None = None,
     ) -> bool:
-        """
-        Publish agent performance metrics event.
+        """Publish agent performance metrics event.
+
+        Note:
+            Consider using publish_performance_metrics_from_config() with
+            ModelPerformanceMetricsConfig for better parameter organization.
 
         Args:
             agent_name: Agent name
@@ -352,18 +531,17 @@ class HookEventAdapter:
         Returns:
             True if published successfully, False otherwise
         """
-        event = {
-            "correlation_id": correlation_id,
-            "agent_name": agent_name,
-            "metric_name": metric_name,
-            "metric_value": metric_value,
-            "metric_type": metric_type,
-            "metric_unit": metric_unit,
-            "tags": tags or {},
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
-
-        return self._publish(self.TOPIC_PERFORMANCE_METRICS, event)
+        # ONEX: exempt - backwards compatibility wrapper for config-based method
+        config = ModelPerformanceMetricsConfig(
+            agent_name=agent_name,
+            metric_name=metric_name,
+            metric_value=metric_value,
+            correlation_id=correlation_id,
+            metric_type=metric_type,
+            metric_unit=metric_unit,
+            tags=tags,
+        )
+        return self.publish_performance_metrics_from_config(config)
 
     def publish_transformation(
         self,
@@ -400,6 +578,32 @@ class HookEventAdapter:
 
         return self._publish(self.TOPIC_TRANSFORMATIONS, event)
 
+    def publish_detection_failure_from_config(
+        self,
+        config: ModelDetectionFailureConfig,
+    ) -> bool:
+        """Publish agent detection failure event from config object.
+
+        Args:
+            config: Detection failure configuration containing all event data.
+
+        Returns:
+            True if published successfully, False otherwise.
+        """
+        event = {
+            "correlation_id": config.correlation_id or str(uuid.uuid4()),
+            "user_request": config.user_request,
+            "failure_reason": config.failure_reason,
+            "attempted_methods": config.attempted_methods or [],
+            "error_details": config.error_details or {},
+            "project_path": config.project_path,
+            "project_name": config.project_name,
+            "session_id": config.session_id,
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+
+        return self._publish(self.TOPIC_DETECTION_FAILURES, event)
+
     def publish_detection_failure(
         self,
         user_request: str,
@@ -411,8 +615,11 @@ class HookEventAdapter:
         project_name: str | None = None,
         session_id: str | None = None,
     ) -> bool:
-        """
-        Publish agent detection failure event.
+        """Publish agent detection failure event.
+
+        Note:
+            Consider using publish_detection_failure_from_config() with
+            ModelDetectionFailureConfig for better parameter organization.
 
         Args:
             user_request: User's original request text
@@ -427,19 +634,18 @@ class HookEventAdapter:
         Returns:
             True if published successfully, False otherwise
         """
-        event = {
-            "correlation_id": correlation_id or str(uuid.uuid4()),
-            "user_request": user_request,
-            "failure_reason": failure_reason,
-            "attempted_methods": attempted_methods or [],
-            "error_details": error_details or {},
-            "project_path": project_path,
-            "project_name": project_name,
-            "session_id": session_id,
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
-
-        return self._publish(self.TOPIC_DETECTION_FAILURES, event)
+        # ONEX: exempt - backwards compatibility wrapper for config-based method
+        config = ModelDetectionFailureConfig(
+            user_request=user_request,
+            failure_reason=failure_reason,
+            attempted_methods=attempted_methods,
+            error_details=error_details,
+            correlation_id=correlation_id,
+            project_path=project_path,
+            project_name=project_name,
+            session_id=session_id,
+        )
+        return self.publish_detection_failure_from_config(config)
 
     def close(self) -> None:
         """
@@ -479,6 +685,12 @@ def get_hook_event_adapter() -> HookEventAdapter:
 
 
 __all__ = [
+    # Config models
+    "ModelRoutingDecisionConfig",
+    "ModelAgentActionConfig",
+    "ModelDetectionFailureConfig",
+    "ModelPerformanceMetricsConfig",
+    # Adapter class
     "HookEventAdapter",
     "get_hook_event_adapter",
 ]

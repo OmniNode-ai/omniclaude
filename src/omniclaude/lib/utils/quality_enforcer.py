@@ -230,6 +230,12 @@ class ViolationsLogger:
             print(f"[Warning] Failed to rotate violations log: {e}", file=sys.stderr)
 
 
+# ONEX: exempt - pipeline orchestrator
+# Rationale: QualityEnforcer has 19 methods because it orchestrates a 5-phase
+# validation pipeline (validation, RAG, correction, AI quorum, decision).
+# The methods are private helpers for the main enforce() workflow and splitting
+# them would create unnecessary indirection without improving cohesion.
+# Phases: Phase 1 (<100ms), Phase 2 (<500ms), Phase 3, Phase 4 (<1000ms), Phase 5
 class QualityEnforcer:
     """Main orchestrator for quality enforcement."""
 

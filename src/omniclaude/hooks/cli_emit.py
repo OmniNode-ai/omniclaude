@@ -340,6 +340,7 @@ def cmd_prompt_submitted(
     dry_run: bool,
 ) -> None:
     """Emit a prompt.submitted event."""
+    # ONEX: exempt - CLI command parameters defined by click decorators
     try:
         # Parse session_id as UUID or generate deterministic UUID from string
         sid = _string_to_uuid(session_id)
@@ -400,6 +401,7 @@ def cmd_tool_executed(
     dry_run: bool,
 ) -> None:
     """Emit a tool.executed event."""
+    # ONEX: exempt - CLI command parameters defined by click decorators
     try:
         # Parse session_id as UUID or generate deterministic UUID from string
         sid = _string_to_uuid(session_id)

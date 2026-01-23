@@ -313,8 +313,8 @@ class PerformanceMonitor:
         }
 
 
-class BatchProcessor:
-    """Handles batch processing of pattern tracking operations."""
+class BatchAggregator:
+    """Aggregates and processes batches of pattern tracking operations."""
 
     def __init__(self, tracker: "PatternTracker", config: BatchProcessingConfig):
         self.tracker = tracker
@@ -474,7 +474,7 @@ class PatternTracker:
         )
 
         # Batch processing
-        self.batch_processor = BatchProcessor(self, self.config.batch_config)
+        self.batch_processor = BatchAggregator(self, self.config.batch_config)
 
         # Setup logging
         self._setup_logging()
@@ -854,6 +854,6 @@ __all__ = [
     "PerformanceMetrics",
     "ProcessingMode",
     "PerformanceMonitor",
-    "BatchProcessor",
+    "BatchAggregator",
     "get_tracker",
 ]

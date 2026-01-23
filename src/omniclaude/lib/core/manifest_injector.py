@@ -697,6 +697,26 @@ class ManifestInjectionStorage:
             return False
 
 
+# ONEX: exempt - orchestrator facade
+# Rationale: ManifestInjector is the central orchestration hub for dynamic manifest
+# generation. Its ~60 methods span multiple responsibilities that are intentionally
+# colocated for operational coherence:
+#   1. Backend queries (15 methods): _query_patterns, _query_infrastructure, etc.
+#   2. Result formatting (13 methods): _format_patterns, _format_models, etc.
+#   3. Caching (6 methods): in-memory + Valkey cache management
+#   4. Storage (3 methods): PostgreSQL traceability records
+#   5. Sync/async interfaces (4 methods): support both sync hooks and async code
+#
+# Future Refactoring Candidates:
+#   - Extract ManifestFormatter: Move all _format_* methods (~13 methods)
+#   - Extract IntelligenceQueryService: Move all _query_* methods (~15 methods)
+#   - Extract ManifestCacheManager: Consolidate cache operations
+#
+# This exemption is granted because:
+#   - Class implements facade pattern for manifest generation subsystem
+#   - Methods have high cohesion (all serve manifest generation)
+#   - Splitting now would break existing API contracts
+#   - Performance-critical paths benefit from single-class locality
 class ManifestInjector:
     """
     Dynamic manifest generator using event bus intelligence.
@@ -723,6 +743,7 @@ class ManifestInjector:
         formatted = injector.format_for_prompt()
     """
 
+    # ONEX: exempt - constructor with independent feature flag parameters
     def __init__(
         self,
         kafka_brokers: str | None = None,

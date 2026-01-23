@@ -37,6 +37,7 @@ import logging
 import os
 import threading
 import time
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
@@ -76,6 +77,78 @@ except ImportError:
         logging.debug("Prometheus metrics not available - metrics disabled")
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Event Config Models (ONEX: Parameter reduction pattern)
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class ModelActionEventConfig:
+    """Configuration for action event publishing.
+
+    Groups related parameters for publish_action_event() to reduce
+    function signature complexity per ONEX parameter guidelines.
+
+    Attributes:
+        agent_name: Agent executing the action.
+        action_type: Type of action ('tool_call', 'decision', 'error', 'success').
+        action_name: Specific action name.
+        action_details: Full details of action.
+        correlation_id: Request correlation ID for distributed tracing.
+        duration_ms: How long the action took in milliseconds.
+        debug_mode: Whether this was logged in debug mode.
+        project_path: Path to project directory.
+        project_name: Name of project.
+        working_directory: Current working directory.
+    """
+
+    agent_name: str
+    action_type: str
+    action_name: str
+    action_details: dict[str, Any] | None = None
+    correlation_id: str | UUID | None = None
+    duration_ms: int | None = None
+    debug_mode: bool = True
+    project_path: str | None = None
+    project_name: str | None = None
+    working_directory: str | None = None
+
+
+@dataclass(frozen=True)
+class ModelToolCallConfig:
+    """Configuration for tool call event publishing.
+
+    Groups related parameters for publish_tool_call() to reduce
+    function signature complexity per ONEX parameter guidelines.
+
+    Attributes:
+        agent_name: Agent executing the tool.
+        tool_name: Tool name (e.g., 'Read', 'Write', 'Bash').
+        tool_parameters: Tool input parameters.
+        tool_result: Tool execution result.
+        correlation_id: Correlation ID.
+        duration_ms: Execution time.
+        success: Whether tool succeeded.
+        error_message: Error message if failed.
+        project_path: Path to project directory.
+        project_name: Name of project.
+        working_directory: Current working directory.
+    """
+
+    agent_name: str
+    tool_name: str
+    tool_parameters: dict[str, Any] | None = None
+    tool_result: dict[str, Any] | None = None
+    correlation_id: str | UUID | None = None
+    duration_ms: int | None = None
+    success: bool = True
+    error_message: str | None = None
+    project_path: str | None = None
+    project_name: str | None = None
+    working_directory: str | None = None
+
 
 # Kafka publish timeout (10 seconds)
 # Prevents indefinite blocking if broker is slow/unresponsive
@@ -193,6 +266,31 @@ async def _get_kafka_producer() -> Any:
             return None
 
 
+async def publish_action_event_from_config(
+    config: ModelActionEventConfig,
+) -> bool:
+    """Publish agent action event to Kafka from config object.
+
+    Args:
+        config: Action event configuration containing all event data.
+
+    Returns:
+        bool: True if published successfully, False otherwise.
+    """
+    return await publish_action_event(
+        agent_name=config.agent_name,
+        action_type=config.action_type,
+        action_name=config.action_name,
+        action_details=config.action_details,
+        correlation_id=config.correlation_id,
+        duration_ms=config.duration_ms,
+        debug_mode=config.debug_mode,
+        project_path=config.project_path,
+        project_name=config.project_name,
+        working_directory=config.working_directory,
+    )
+
+
 async def publish_action_event(
     agent_name: str,
     action_type: str,
@@ -205,8 +303,11 @@ async def publish_action_event(
     project_name: str | None = None,
     working_directory: str | None = None,
 ) -> bool:
-    """
-    Publish agent action event to Kafka.
+    """Publish agent action event to Kafka.
+
+    Note:
+        Consider using publish_action_event_from_config() with
+        ModelActionEventConfig for better parameter organization.
 
     Args:
         agent_name: Agent executing the action (e.g., "agent-researcher")
@@ -223,6 +324,7 @@ async def publish_action_event(
     Returns:
         bool: True if published successfully, False otherwise
     """
+    # ONEX: exempt - core implementation (config-based wrapper available)
     try:
         # Generate correlation ID if not provided
         if correlation_id is None:
@@ -329,6 +431,39 @@ async def publish_action_event(
         return False
 
 
+async def publish_tool_call_from_config(
+    config: ModelToolCallConfig,
+) -> bool:
+    """Publish tool call action event from config object.
+
+    Args:
+        config: Tool call configuration containing all event data.
+
+    Returns:
+        bool: True if published successfully.
+    """
+    action_details = {
+        "tool_parameters": config.tool_parameters or {},
+        "tool_result": config.tool_result or {},
+        "success": config.success,
+    }
+
+    if config.error_message:
+        action_details["error_message"] = config.error_message
+
+    return await publish_action_event(
+        agent_name=config.agent_name,
+        action_type="tool_call",
+        action_name=config.tool_name,
+        action_details=action_details,
+        correlation_id=config.correlation_id,
+        duration_ms=config.duration_ms,
+        project_path=config.project_path,
+        project_name=config.project_name,
+        working_directory=config.working_directory,
+    )
+
+
 async def publish_tool_call(
     agent_name: str,
     tool_name: str,
@@ -340,10 +475,11 @@ async def publish_tool_call(
     error_message: str | None = None,
     **kwargs,
 ) -> bool:
-    """
-    Publish tool call action event.
+    """Publish tool call action event.
 
-    Convenience method for publishing tool executions (Read, Write, Edit, Bash, etc.).
+    Note:
+        Consider using publish_tool_call_from_config() with
+        ModelToolCallConfig for better parameter organization.
 
     Args:
         agent_name: Agent executing the tool
@@ -359,6 +495,7 @@ async def publish_tool_call(
     Returns:
         bool: True if published successfully
     """
+    # ONEX: exempt - convenience wrapper (config-based method available)
     action_details = {
         "tool_parameters": tool_parameters or {},
         "tool_result": tool_result or {},

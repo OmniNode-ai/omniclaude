@@ -136,6 +136,7 @@ class ConsumerMetrics:
         }
 
 
+# ONEX: exempt - implements external interface (http.server.BaseHTTPRequestHandler)
 class HealthCheckHandler(BaseHTTPRequestHandler):
     """Simple HTTP handler for health checks."""
 
