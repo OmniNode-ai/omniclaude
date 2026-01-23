@@ -7,8 +7,17 @@ Runs ONEX-compliant validators from omnibase-core:
 - ValidatorNamingConvention: Enforce naming standards
 
 Usage:
-    python scripts/validate_onex.py [directory]
-    python scripts/validate_onex.py --strict [directory]
+    # Validate specific files (pre-commit passes staged files)
+    python scripts/validate_onex.py file1.py file2.py
+
+    # Validate entire directory
+    python scripts/validate_onex.py src/
+
+    # Validate with strict mode (fail on warnings too)
+    python scripts/validate_onex.py --strict src/
+
+    # No arguments defaults to src/
+    python scripts/validate_onex.py
 
 Exit codes:
     0: All validations passed
@@ -55,11 +64,11 @@ def _is_error_severity(issue: object) -> bool:
     return "error" in severity_str or "critical" in severity_str
 
 
-def main(directory: str = "src/", *, strict: bool = False) -> int:
-    """Run ONEX validators on the specified directory.
+def validate_paths(paths: list[Path], *, strict: bool = False) -> int:
+    """Run ONEX validators on the specified paths.
 
     Args:
-        directory: Path to validate (default: src/)
+        paths: List of file or directory paths to validate.
         strict: If True, fail on any issue (warnings or errors).
                 If False, only errors cause non-zero exit code.
 
@@ -75,27 +84,27 @@ def main(directory: str = "src/", *, strict: bool = False) -> int:
         ValidatorNamingConvention(),
     ]
 
-    src_path = Path(directory)
-    if not src_path.exists():
-        print(f"Error: Directory '{directory}' does not exist")
-        return 1
-
     error_count = 0
     warning_count = 0
 
-    for validator in validators:
-        result = validator.validate(src_path)
-        for issue in result.issues:
-            is_error = _is_error_severity(issue)
-            severity_label = "ERROR" if is_error else "WARNING"
-            print(
-                f"{issue.file_path}:{issue.line_number}: "
-                f"[{severity_label}] [{issue.code}] {issue.message}"
-            )
-            if is_error:
-                error_count += 1
-            else:
-                warning_count += 1
+    for path in paths:
+        if not path.exists():
+            print(f"Warning: Path '{path}' does not exist, skipping")
+            continue
+
+        for validator in validators:
+            result = validator.validate(path)
+            for issue in result.issues:
+                is_error = _is_error_severity(issue)
+                severity_label = "ERROR" if is_error else "WARNING"
+                print(
+                    f"{issue.file_path}:{issue.line_number}: "
+                    f"[{severity_label}] [{issue.code}] {issue.message}"
+                )
+                if is_error:
+                    error_count += 1
+                else:
+                    warning_count += 1
 
     total_issues = error_count + warning_count
 
@@ -116,8 +125,29 @@ def main(directory: str = "src/", *, strict: bool = False) -> int:
             print("\nWarnings found (use --strict to fail on warnings)")
             return 2
 
-    print("ONEX validation passed")
+    if paths:
+        print("ONEX validation passed")
     return 0
+
+
+def main(paths: list[str] | None = None, *, strict: bool = False) -> int:
+    """Run ONEX validators on the specified paths.
+
+    Args:
+        paths: List of file or directory paths to validate.
+               If None or empty, defaults to ["src/"].
+        strict: If True, fail on any issue (warnings or errors).
+                If False, only errors cause non-zero exit code.
+
+    Returns:
+        Exit code (see validate_paths for details).
+    """
+    if not paths:
+        # Default to src/ when no paths provided
+        paths = ["src/"]
+
+    path_objects = [Path(p) for p in paths]
+    return validate_paths(path_objects, strict=strict)
 
 
 def _parse_args(args: list[str] | None = None) -> argparse.Namespace:
@@ -130,18 +160,21 @@ def _parse_args(args: list[str] | None = None) -> argparse.Namespace:
         Parsed arguments namespace
     """
     parser = argparse.ArgumentParser(
-        description="Run ONEX validators on a directory.",
+        description="Run ONEX validators on files or directories.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
+  python scripts/validate_onex.py src/module.py tests/test_module.py
+      Validate specific files (used by pre-commit with staged files).
+
   python scripts/validate_onex.py src/
-      Run validation on src/, fail only on errors.
+      Validate entire src/ directory.
 
-  python scripts/validate_onex.py --strict src/
-      Run validation on src/, fail on any warning or error.
+  python scripts/validate_onex.py --strict src/ tests/
+      Validate src/ and tests/ directories, fail on any warning or error.
 
-  python scripts/validate_onex.py --strict .
-      Run validation on current directory in strict mode.
+  python scripts/validate_onex.py
+      No arguments defaults to validating src/.
 
 Exit codes:
   0  All validations passed (or only warnings in non-strict mode)
@@ -150,10 +183,10 @@ Exit codes:
 """,
     )
     parser.add_argument(
-        "directory",
-        nargs="?",
-        default="src/",
-        help="Directory to validate (default: src/)",
+        "paths",
+        nargs="*",
+        default=[],
+        help="Files or directories to validate (default: src/)",
     )
     parser.add_argument(
         "--strict",
@@ -165,4 +198,4 @@ Exit codes:
 
 if __name__ == "__main__":
     parsed = _parse_args()
-    sys.exit(main(parsed.directory, strict=parsed.strict))
+    sys.exit(main(parsed.paths, strict=parsed.strict))

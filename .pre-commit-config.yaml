@@ -12,8 +12,9 @@ repos:
       - id: check-merge-conflict
       - id: check-toml
 
-  # Fast Python formatting and linting (optimized for speed)
+  # Fast Python formatting and linting (staged files only)
   # Order: format → fix → check (matches CI behavior)
+  # Note: To run on entire codebase, use: uv run ruff check src/ tests/
   - repo: local
     hooks:
       - id: clean-output-directory
@@ -24,52 +25,52 @@ repos:
         stages: [pre-commit]
 
       - id: ruff-format
-        name: ruff format (auto-format entire codebase)
-        entry: uv run ruff format src/ tests/
+        name: ruff format (staged files)
+        entry: uv run ruff format
         language: system
-        pass_filenames: false
-        always_run: true
+        types: [python]
+        exclude: '^\.[^/]*$|^\..*/.*|_archive/.*'
         stages: [pre-commit]
 
       - id: ruff-fix
-        name: ruff check (auto-fix entire codebase)
-        entry: uv run ruff check --fix --exit-non-zero-on-fix src/ tests/
+        name: ruff check --fix (staged files)
+        entry: uv run ruff check --fix --exit-non-zero-on-fix
         language: system
-        pass_filenames: false
-        always_run: true
+        types: [python]
+        exclude: '^\.[^/]*$|^\..*/.*|_archive/.*'
         stages: [pre-commit]
 
       - id: ruff-check
-        name: ruff check (strict - match CI)
-        entry: uv run ruff check src/ tests/
+        name: ruff check (staged files)
+        entry: uv run ruff check
         language: system
-        pass_filenames: false
-        always_run: true
+        types: [python]
+        exclude: '^\.[^/]*$|^\..*/.*|_archive/.*'
         stages: [pre-commit]
 
       - id: bandit-security
-        name: bandit (security scanner - match CI)
-        entry: bash -c 'uv run bandit -r src/ -c .bandit'
+        name: bandit (staged files)
+        entry: uv run bandit -c .bandit
         language: system
         types: [python]
+        exclude: '^\.[^/]*$|^\..*/.*|_archive/.*|tests/.*'
         stages: [pre-commit]
-        pass_filenames: false
 
       - id: mypy-typecheck
-        name: mypy (type checking - match CI)
-        entry: bash -c 'uv run mypy src/ --ignore-missing-imports'
+        name: mypy (staged files)
+        entry: uv run mypy --ignore-missing-imports
         language: system
         types: [python]
+        exclude: '^\.[^/]*$|^\..*/.*|_archive/.*'
         stages: [pre-commit]
-        pass_filenames: false
 
       - id: onex-validate
-        name: ONEX validation (any-type, patterns, naming)
-        entry: uv run python scripts/validate_onex.py src/
+        name: ONEX validation (staged files)
+        entry: uv run python scripts/validate_onex.py
         language: system
         types: [python]
+        exclude: '^\.[^/]*$|^\..*/.*|_archive/.*|tests/.*'
         stages: [pre-commit]
-        pass_filenames: false
 
 # Configuration
 ci:
