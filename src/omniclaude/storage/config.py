@@ -97,3 +97,24 @@ class ConfigSessionStorage(BaseSettings):
             f"@{self.postgres_host}:{self.postgres_port}"
             f"/{self.postgres_database}"
         )
+
+    @property
+    def dsn_safe(self) -> str:
+        """Build PostgreSQL DSN with password masked (safe for logging).
+
+        Returns:
+            PostgreSQL connection string with password replaced by ***.
+        """
+        return (
+            f"postgresql://{self.postgres_user}:***"
+            f"@{self.postgres_host}:{self.postgres_port}"
+            f"/{self.postgres_database}"
+        )
+
+    def __repr__(self) -> str:
+        """Safe string representation that doesn't expose credentials.
+
+        Returns:
+            String representation with masked password.
+        """
+        return f"ConfigSessionStorage(dsn={self.dsn_safe!r})"

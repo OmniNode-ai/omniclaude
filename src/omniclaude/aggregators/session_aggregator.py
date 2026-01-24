@@ -25,8 +25,9 @@ State Machine:
     Terminal states (ENDED, TIMED_OUT) reject further events.
 
 Thread Safety:
-    Uses asyncio.Lock for state modifications. Concurrent calls for
-    different sessions are safe; calls for the same session are serialized.
+    Uses per-session asyncio.Lock instances for state modifications.
+    Concurrent calls for different sessions proceed in parallel without
+    blocking each other; calls for the same session are serialized.
 
 Related Tickets:
     - OMN-1401: Session storage in OmniMemory (current)
@@ -208,7 +209,8 @@ class SessionAggregator:
         self._config = config
         self._aggregator_id = aggregator_id or f"aggregator-{uuid4().hex[:8]}"
         self._sessions: dict[str, SessionState] = {}
-        self._lock = asyncio.Lock()
+        self._session_locks: dict[str, asyncio.Lock] = {}
+        self._locks_lock = asyncio.Lock()  # Lock for accessing the locks dict
 
         logger.info(
             "SessionAggregator initialized",
@@ -330,7 +332,8 @@ class SessionAggregator:
             Dictionary representation of the session snapshot, or None if
             the session does not exist.
         """
-        async with self._lock:
+        lock = await self._get_session_lock(session_id)
+        async with lock:
             session = self._sessions.get(session_id)
             if session is None:
                 logger.debug(
@@ -377,7 +380,8 @@ class SessionAggregator:
         Returns:
             The final sealed snapshot as a dictionary, or None if session not found.
         """
-        async with self._lock:
+        lock = await self._get_session_lock(session_id)
+        async with lock:
             session = self._sessions.get(session_id)
             if session is None:
                 logger.warning(
@@ -428,7 +432,13 @@ class SessionAggregator:
                 },
             )
 
-            return self._session_to_dict(session)
+            snapshot = self._session_to_dict(session)
+
+        # Clean up the session lock after finalization (outside session lock)
+        async with self._locks_lock:
+            self._cleanup_session_lock(session_id)
+
+        return snapshot
 
     # =========================================================================
     # Protocol Implementation: get_active_sessions
@@ -446,7 +456,7 @@ class SessionAggregator:
         Returns:
             List of session IDs with non-terminal status.
         """
-        async with self._lock:
+        async with self._locks_lock:
             active_ids = [
                 session_id
                 for session_id, session in self._sessions.items()
@@ -485,7 +495,8 @@ class SessionAggregator:
         Returns:
             Timestamp of the last event, or None if session not found.
         """
-        async with self._lock:
+        lock = await self._get_session_lock(session_id)
+        async with lock:
             session = self._sessions.get(session_id)
             if session is None:
                 return None
@@ -514,8 +525,9 @@ class SessionAggregator:
         Returns:
             True if processed, False if rejected (duplicate or finalized).
         """
-        async with self._lock:
-            session_id = payload.session_id
+        session_id = payload.session_id
+        lock = await self._get_session_lock(session_id)
+        async with lock:
 
             session = self._sessions.get(session_id)
 
@@ -617,8 +629,9 @@ class SessionAggregator:
         Returns:
             True if processed, False if rejected.
         """
-        async with self._lock:
-            session_id = payload.session_id
+        session_id = payload.session_id
+        lock = await self._get_session_lock(session_id)
+        async with lock:
 
             session = self._sessions.get(session_id)
 
@@ -707,9 +720,10 @@ class SessionAggregator:
         Returns:
             True if processed, False if rejected.
         """
-        async with self._lock:
-            session_id = payload.session_id
-            prompt_id = payload.prompt_id
+        session_id = payload.session_id
+        prompt_id = payload.prompt_id
+        lock = await self._get_session_lock(session_id)
+        async with lock:
 
             session = self._sessions.get(session_id)
 
@@ -812,9 +826,10 @@ class SessionAggregator:
         Returns:
             True if processed, False if rejected.
         """
-        async with self._lock:
-            session_id = payload.session_id
-            tool_execution_id = payload.tool_execution_id
+        session_id = payload.session_id
+        tool_execution_id = payload.tool_execution_id
+        lock = await self._get_session_lock(session_id)
+        async with lock:
 
             session = self._sessions.get(session_id)
 
@@ -906,6 +921,36 @@ class SessionAggregator:
     # Private: Helper Methods
     # =========================================================================
 
+    async def _get_session_lock(self, session_id: str) -> asyncio.Lock:
+        """Get or create a lock for a specific session.
+
+        This enables per-session locking to reduce contention when processing
+        events for different sessions concurrently.
+
+        Args:
+            session_id: The session identifier to get a lock for.
+
+        Returns:
+            The asyncio.Lock for the specified session.
+        """
+        async with self._locks_lock:
+            if session_id not in self._session_locks:
+                self._session_locks[session_id] = asyncio.Lock()
+            return self._session_locks[session_id]
+
+    def _cleanup_session_lock(self, session_id: str) -> None:
+        """Remove the lock for a finalized session.
+
+        Called during session finalization to prevent memory leaks
+        from accumulating locks for completed sessions.
+
+        Note: This should only be called when already holding _locks_lock.
+
+        Args:
+            session_id: The session identifier to clean up.
+        """
+        self._session_locks.pop(session_id, None)
+
     def _is_within_buffer(self, session: SessionState, event_time: datetime) -> bool:
         """Check if event is within out-of-order buffer window.
 
@@ -955,6 +1000,11 @@ class SessionAggregator:
         event (due to out-of-order delivery). They transition to ACTIVE
         when SessionStarted is eventually received.
 
+        This method also adds the session to the sessions dict and triggers
+        cleanup of excess orphan sessions to prevent unbounded memory growth.
+
+        Note: This method must be called while holding the appropriate lock.
+
         Args:
             session_id: The session identifier.
             correlation_id: The correlation ID from the event.
@@ -963,13 +1013,74 @@ class SessionAggregator:
         Returns:
             A new SessionState in ORPHAN status.
         """
-        return SessionState(
+        session = SessionState(
             session_id=session_id,
             status=EnumSessionStatus.ORPHAN,
             correlation_id=correlation_id,
             last_event_at=event_time,
             event_count=0,  # Will be incremented by _update_activity
         )
+        self._sessions[session_id] = session
+
+        # Clean up excess orphan sessions to prevent memory exhaustion
+        self._cleanup_orphan_sessions(correlation_id)
+
+        return session
+
+    def _cleanup_orphan_sessions(self, correlation_id: UUID) -> int:
+        """Remove oldest orphan sessions if over limit.
+
+        Called when creating new orphan sessions to enforce the
+        max_orphan_sessions configuration and prevent unbounded
+        memory growth.
+
+        Note: This method must be called while holding the appropriate lock.
+
+        Args:
+            correlation_id: Correlation ID for distributed tracing.
+
+        Returns:
+            Number of orphan sessions removed.
+        """
+        # Find all orphan sessions
+        orphan_sessions = [
+            (session_id, state)
+            for session_id, state in self._sessions.items()
+            if state.status == EnumSessionStatus.ORPHAN
+        ]
+
+        # Check if over limit
+        excess = len(orphan_sessions) - self._config.max_orphan_sessions
+        if excess <= 0:
+            return 0
+
+        # Sort by last_event_at (oldest first) and remove excess
+        orphan_sessions.sort(key=lambda x: x[1].last_event_at)
+        removed = 0
+        for session_id, _ in orphan_sessions[:excess]:
+            del self._sessions[session_id]
+            removed += 1
+            logger.info(
+                "Cleaned up orphan session",
+                extra={
+                    "session_id": session_id,
+                    "correlation_id": str(correlation_id),
+                    "reason": "max_orphan_sessions_exceeded",
+                    "orphan_count": len(orphan_sessions),
+                    "max_orphan_sessions": self._config.max_orphan_sessions,
+                },
+            )
+
+        logger.info(
+            "Orphan session cleanup completed",
+            extra={
+                "removed_count": removed,
+                "remaining_orphans": len(orphan_sessions) - removed,
+                "correlation_id": str(correlation_id),
+            },
+        )
+
+        return removed
 
     def _session_to_dict(self, session: SessionState) -> dict[str, Any]:
         """Convert session state to dictionary representation.

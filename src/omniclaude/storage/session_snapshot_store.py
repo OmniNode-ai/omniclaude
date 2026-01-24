@@ -32,6 +32,25 @@ logger = logging.getLogger(__name__)
 _IDEMPOTENCY_DOMAIN = "claude_session"
 
 
+def _ensure_uuid(value: str | UUID | None) -> UUID | None:
+    """Convert string to UUID if needed.
+
+    Handles values that may be either string (from JSON deserialization)
+    or UUID objects, converting strings to proper UUID type for database.
+
+    Args:
+        value: A string, UUID, or None.
+
+    Returns:
+        UUID object or None if input was None.
+    """
+    if value is None:
+        return None
+    if isinstance(value, UUID):
+        return value
+    return UUID(value)
+
+
 class SessionSnapshotStore:
     """PostgreSQL storage for session snapshots.
 
@@ -691,12 +710,12 @@ class SessionSnapshotStore:
             [
                 (
                     snapshot_id,
-                    p["prompt_id"],
+                    _ensure_uuid(p["prompt_id"]),
                     p["emitted_at"],
                     p.get("prompt_preview"),
                     p["prompt_length"],
                     p.get("detected_intent"),
-                    p.get("causation_id"),
+                    _ensure_uuid(p.get("causation_id")),
                 )
                 for p in prompts
             ],
@@ -732,13 +751,13 @@ class SessionSnapshotStore:
             [
                 (
                     snapshot_id,
-                    t["tool_execution_id"],
+                    _ensure_uuid(t["tool_execution_id"]),
                     t["emitted_at"],
                     t["tool_name"],
                     t["success"],
                     t["duration_ms"],
                     t.get("summary"),
-                    t.get("causation_id"),
+                    _ensure_uuid(t.get("causation_id")),
                 )
                 for t in tools
             ],
