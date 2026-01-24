@@ -245,9 +245,9 @@ class PerformanceMonitor:
         self.metrics = PerformanceMetrics()
         self._lock = threading.Lock()
         self._start_time = time.time()
-        self._response_times: deque[float] = deque(
+        self._response_times: deque[tuple[float, float]] = deque(
             maxlen=1000
-        )  # Rolling window of response times
+        )  # Rolling window of (timestamp, duration_ms) tuples
         self._operation_counts: dict[str, int] = defaultdict(int)
 
     def record_operation(
@@ -269,7 +269,7 @@ class PerformanceMonitor:
 
             self.metrics.update_processing_time(duration_ms)
             self._operation_counts[operation] += 1
-            self._response_times.append(duration_ms)
+            self._response_times.append((time.time(), duration_ms))
 
             if api_response_time_ms:
                 self.metrics.update_api_time(api_response_time_ms)
@@ -311,21 +311,27 @@ class PerformanceMonitor:
     def get_recent_performance(self, window_seconds: int = 60) -> dict[str, float]:
         """Get performance metrics for recent time window."""
         cutoff_time = time.time() - window_seconds
-        recent_times = [
-            t for t in self._response_times if (time.time() - t / 1000) > cutoff_time
+        # Filter by timestamp (first element of tuple), extract duration_ms (second element)
+        recent_durations = [
+            duration_ms
+            for timestamp, duration_ms in self._response_times
+            if timestamp >= cutoff_time
         ]
 
-        if not recent_times:
-            return {"avg_time_ms": 0, "operations_per_second": 0, "p95_time_ms": 0}
+        if not recent_durations:
+            return {
+                "avg_time_ms": 0.0,
+                "operations_per_second": 0.0,
+                "p95_time_ms": 0.0,
+            }
+
+        sorted_durations = sorted(recent_durations)
+        p95_index = min(int(len(sorted_durations) * 0.95), len(sorted_durations) - 1)
 
         return {
-            "avg_time_ms": sum(recent_times) / len(recent_times),
-            "operations_per_second": len(recent_times) / window_seconds,
-            "p95_time_ms": (
-                sorted(recent_times)[int(len(recent_times) * 0.95)]
-                if recent_times
-                else 0
-            ),
+            "avg_time_ms": sum(recent_durations) / len(recent_durations),
+            "operations_per_second": len(recent_durations) / window_seconds,
+            "p95_time_ms": sorted_durations[p95_index],
         }
 
 
@@ -343,6 +349,9 @@ class BatchAggregator:
         self._workers: list[asyncio.Task[None]] = []
         self._running = False
         self._current_batch: list[tuple[str, dict[str, Any]]] = []
+        self._batch_lock: asyncio.Lock = (
+            asyncio.Lock()
+        )  # Protects _current_batch access
         self._batch_timer: asyncio.Task[None] | None = None
 
     async def start(self) -> None:
@@ -392,15 +401,19 @@ class BatchAggregator:
                     break
 
                 task_type, kwargs, _ = task_data
-                self._current_batch.append((task_type, kwargs))
+                async with self._batch_lock:
+                    self._current_batch.append((task_type, kwargs))
+                    batch_size = len(self._current_batch)
 
-                # Process batch if full
-                if len(self._current_batch) >= self.config.max_batch_size:
+                # Process batch if full (check outside lock, process acquires its own)
+                if batch_size >= self.config.max_batch_size:
                     await self._process_batch()
 
             except TimeoutError:
                 # Check if we have pending items to process
-                if self._current_batch:
+                async with self._batch_lock:
+                    has_items = bool(self._current_batch)
+                if has_items:
                     await self._process_batch()
             except Exception as e:
                 print(f"Error in worker {worker_name}: {e}")
@@ -410,16 +423,18 @@ class BatchAggregator:
         while self._running:
             await asyncio.sleep(self.config.max_batch_wait_time)
 
-            if self._current_batch:
+            async with self._batch_lock:
+                has_items = bool(self._current_batch)
+            if has_items:
                 await self._process_batch()
 
     async def _process_batch(self) -> None:
         """Process current batch of tasks."""
-        if not self._current_batch:
-            return
-
-        batch = self._current_batch
-        self._current_batch = []
+        async with self._batch_lock:
+            if not self._current_batch:
+                return
+            batch = self._current_batch
+            self._current_batch = []
 
         try:
             # Group by task type for batch processing
@@ -493,16 +508,10 @@ class PatternTracker:
 
         # Batch processing
         self.batch_processor = BatchAggregator(self, self.config.batch_config)
+        self._batch_processor_started = False
 
         # Setup logging
         self._setup_logging()
-
-        # Start batch processor if enabled
-        if (
-            self.config.batch_config.enabled
-            and self.config.processing_mode == ProcessingMode.BATCH
-        ):
-            asyncio.create_task(self.batch_processor.start())
 
     def _create_http_client(self) -> httpx.AsyncClient:
         """Create HTTP client with connection pooling."""
@@ -529,6 +538,26 @@ class PatternTracker:
         )
         log_file.parent.mkdir(parents=True, exist_ok=True)
         self.log_file = log_file
+
+    async def start(self) -> None:
+        """Start the pattern tracker (including batch processor if enabled).
+
+        This method should be called from an async context to start background tasks.
+        If not called explicitly, batch processing will be started lazily when first needed.
+        """
+        await self._ensure_batch_processor_started()
+
+    async def _ensure_batch_processor_started(self) -> None:
+        """Lazily start batch processor if enabled and not yet started."""
+        if self._batch_processor_started:
+            return
+
+        if (
+            self.config.batch_config.enabled
+            and self.config.processing_mode == ProcessingMode.BATCH
+        ):
+            await self.batch_processor.start()
+            self._batch_processor_started = True
 
     def _generate_session_id(self) -> str:
         """Generate unique session identifier."""
@@ -584,6 +613,7 @@ class PatternTracker:
 
         # Use batch processor if enabled and requested
         if use_batch and self.config.batch_config.enabled:
+            await self._ensure_batch_processor_started()
             await self.batch_processor.add_task(
                 "track_pattern_creation",
                 code=code,

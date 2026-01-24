@@ -1,6 +1,6 @@
 # Validation Contracts Schema Documentation
 
-**Source**: omnibase-core v0.8.x
+**Source**: omnibase-core v0.9.x
 **Location**: `omnibase_core/validation/contracts/*.validation.yaml`
 **Pydantic Models**: `omnibase_core.models.contracts.subcontracts.model_validator_subcontract`
 
@@ -553,4 +553,4 @@ python -m omnibase_core.validation.validator_any_type src/ -v
 ---
 
 **Last Updated**: 2026-01-23
-**omnibase-core Version**: 0.8.x
+**omnibase-core Version**: 0.9.x

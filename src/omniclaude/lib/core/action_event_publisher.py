@@ -42,6 +42,9 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
+# Import ONEX topic utilities
+from omniclaude.hooks.topics import TopicBase, build_topic
+
 # Import Pydantic Settings for type-safe configuration
 try:
     from config import settings as _settings_instance
@@ -212,6 +215,28 @@ def _get_kafka_bootstrap_servers() -> str:
     return default_servers
 
 
+def _get_kafka_topic_prefix() -> str:
+    """Get Kafka topic prefix (environment) from settings or environment.
+
+    Returns:
+        Topic prefix (e.g., "dev", "staging", "prod"). Defaults to "dev".
+    """
+    # Try Pydantic settings first (if available)
+    if settings is not None:
+        try:
+            prefix: str | None = getattr(settings, "kafka_topic_prefix", None)
+            if prefix:
+                return prefix
+        except Exception as e:
+            logger.debug(f"Failed to get Kafka topic prefix from settings: {e}")
+
+    # Fall back to environment variables
+    # Check KAFKA_TOPIC_PREFIX first (documented in CLAUDE.md)
+    # Then KAFKA_ENVIRONMENT for compatibility with handler_event_emitter.py
+    env_prefix = os.getenv("KAFKA_TOPIC_PREFIX") or os.getenv("KAFKA_ENVIRONMENT")
+    return env_prefix if env_prefix else "dev"
+
+
 async def _get_kafka_producer() -> Any:
     """
     Get or create Kafka producer (async singleton pattern).
@@ -355,18 +380,19 @@ async def publish_action_event(
         # Remove None values to keep payload compact
         event = {k: v for k, v in event.items() if v is not None}
 
+        # Build ONEX-compliant topic name
+        topic_prefix = _get_kafka_topic_prefix()
+        topic = build_topic(topic_prefix, TopicBase.AGENT_ACTION)
+
         # Get producer
         producer = await _get_kafka_producer()
         if producer is None:
             logger.warning("Kafka producer unavailable, action event not published")
             if PROMETHEUS_AVAILABLE:
-                event_publish_counter.labels(
-                    topic="agent-actions", status="unavailable"
-                ).inc()
+                event_publish_counter.labels(topic=topic, status="unavailable").inc()
             return False
 
         # Publish to Kafka
-        topic = "agent-actions"
         partition_key = correlation_id.encode("utf-8")
 
         # Track timing for Prometheus
@@ -399,6 +425,12 @@ async def publish_action_event(
 
     except TimeoutError:
         # Handle timeout specifically for better observability
+        # Build topic name for error reporting (may fail if topic construction failed earlier)
+        try:
+            error_topic = build_topic(_get_kafka_topic_prefix(), TopicBase.AGENT_ACTION)
+        except Exception:
+            error_topic = TopicBase.AGENT_ACTION  # Fall back to base name
+
         logger.error(
             f"Timeout publishing action event to Kafka "
             f"(action_type={action_type}, action_name={action_name}, "
@@ -408,22 +440,28 @@ async def publish_action_event(
 
         # Record failure in Prometheus
         if PROMETHEUS_AVAILABLE:
-            event_publish_counter.labels(topic="agent-actions", status="timeout").inc()
+            event_publish_counter.labels(topic=error_topic, status="timeout").inc()
             event_publish_errors_counter.labels(
-                topic="agent-actions", error_type="TimeoutError"
+                topic=error_topic, error_type="TimeoutError"
             ).inc()
 
         return False
 
     except Exception as e:
         # Log error but don't fail - observability shouldn't break execution
+        # Build topic name for error reporting (may fail if topic construction failed earlier)
+        try:
+            error_topic = build_topic(_get_kafka_topic_prefix(), TopicBase.AGENT_ACTION)
+        except Exception:
+            error_topic = TopicBase.AGENT_ACTION  # Fall back to base name
+
         logger.error(f"Failed to publish action event: {e}", exc_info=True)
 
         # Record failure in Prometheus
         if PROMETHEUS_AVAILABLE:
-            event_publish_counter.labels(topic="agent-actions", status="failure").inc()
+            event_publish_counter.labels(topic=error_topic, status="failure").inc()
             event_publish_errors_counter.labels(
-                topic="agent-actions", error_type=type(e).__name__
+                topic=error_topic, error_type=type(e).__name__
             ).inc()
 
         return False

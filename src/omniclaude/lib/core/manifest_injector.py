@@ -421,10 +421,16 @@ class ManifestInjectionStorage:
         self.db_name = db_name or os.environ.get("POSTGRES_DATABASE", "omninode_bridge")
         self.db_user = db_user or os.environ.get("POSTGRES_USER", "postgres")
         self.db_password = db_password or os.environ.get("POSTGRES_PASSWORD")
+
+        # Graceful degradation: disable database features if password is missing
         if not self.db_password:
-            raise ValueError(
-                "POSTGRES_PASSWORD environment variable not set. Run: source .env"
+            logger.warning(
+                "POSTGRES_PASSWORD not set - database storage features disabled. "
+                "Set POSTGRES_PASSWORD or run: source .env"
             )
+            self.db_enabled = False
+        else:
+            self.db_enabled = True
 
     @staticmethod
     def _serialize_for_json(obj: Any) -> Any:
@@ -507,6 +513,14 @@ class ManifestInjectionStorage:
         Returns:
             True if successful, False otherwise
         """
+        # Early return if database is disabled (graceful degradation)
+        if not self.db_enabled:
+            logger.debug(
+                "Database storage disabled - skipping manifest injection storage "
+                f"for correlation_id={correlation_id}"
+            )
+            return False
+
         try:
             import psycopg2
             import psycopg2.extras
@@ -654,6 +668,14 @@ class ManifestInjectionStorage:
             >>> storage.mark_agent_completed(correlation_id, success=True)
             True
         """
+        # Early return if database is disabled (graceful degradation)
+        if not self.db_enabled:
+            logger.debug(
+                "Database storage disabled - skipping mark_agent_completed "
+                f"for correlation_id={correlation_id}"
+            )
+            return False
+
         try:
             import psycopg2
 

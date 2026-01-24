@@ -50,6 +50,83 @@ def load_config() -> dict[str, Any]:
     return config
 
 
+def _get_safe_tool_metadata(tool_call: dict[str, Any]) -> dict[str, Any]:
+    """Extract safe metadata from tool_call without exposing sensitive data.
+
+    This function extracts only non-sensitive metadata from tool calls for logging,
+    avoiding exposure of file contents, code snippets, commands with credentials,
+    or other potentially sensitive user input.
+
+    Args:
+        tool_call: The raw tool call dictionary from Claude Code.
+
+    Returns:
+        A dictionary containing only safe metadata fields.
+    """
+    # Sensitive fields that should never be logged (may contain secrets/PII)
+    sensitive_fields = {
+        "content",  # Write tool - file contents
+        "new_string",  # Edit tool - code to insert
+        "old_string",  # Edit tool - code to replace
+        "command",  # Bash tool - may contain credentials
+        "prompt",  # WebFetch - user queries
+        "query",  # Search tools - user queries
+        "body",  # API calls - request bodies
+        "message",  # Message content
+        "text",  # Text content
+        "data",  # Generic data field
+        "input",  # Generic input field
+    }
+
+    tool_name = tool_call.get("tool_name", "unknown")
+    params = tool_call.get("tool_input", tool_call.get("parameters", {}))
+
+    # Build safe metadata
+    safe_metadata: dict[str, Any] = {
+        "tool_name": tool_name,
+        "has_tool_input": "tool_input" in tool_call,
+        "param_count": len(params) if isinstance(params, dict) else 0,
+    }
+
+    # Extract specific safe fields based on tool type
+    if isinstance(params, dict):
+        # File path is generally safe (already logged separately)
+        if "file_path" in params:
+            safe_metadata["file_path"] = params["file_path"]
+        if "notebook_path" in params:
+            safe_metadata["notebook_path"] = params["notebook_path"]
+
+        # For Edit tool, log operation type without content
+        if tool_name == "Edit":
+            safe_metadata["has_old_string"] = "old_string" in params
+            safe_metadata["has_new_string"] = "new_string" in params
+            safe_metadata["replace_all"] = params.get("replace_all", False)
+
+        # For Write tool, log content length without content
+        if tool_name == "Write" and "content" in params:
+            safe_metadata["content_length"] = len(params["content"])
+
+        # For Bash tool, log command presence without the command itself
+        if tool_name == "Bash":
+            safe_metadata["has_command"] = "command" in params
+            if "timeout" in params:
+                safe_metadata["timeout"] = params["timeout"]
+
+        # For Read tool, log offset/limit if present
+        if tool_name == "Read":
+            if "offset" in params:
+                safe_metadata["offset"] = params["offset"]
+            if "limit" in params:
+                safe_metadata["limit"] = params["limit"]
+
+        # Log param keys (excluding sensitive ones) for debugging
+        safe_param_keys = [k for k in params.keys() if k not in sensitive_fields]
+        if safe_param_keys:
+            safe_metadata["param_keys"] = safe_param_keys
+
+    return safe_metadata
+
+
 # Load configuration
 CONFIG = load_config()
 
@@ -954,11 +1031,9 @@ async def main() -> int:
         file_path = params.get("file_path", "unknown")
         with open(hook_exec_log, "a") as f:
             f.write(f"[{timestamp}] Tool: {tool_name}, File: {file_path}\n")
-            # Debug: log full tool call structure (first 500 chars)
-            tool_call_str = json.dumps(tool_call, indent=2)
-            f.write(
-                f"[{timestamp}] Tool call structure (first 500 chars): {tool_call_str[:500]}\n"
-            )
+            # Log safe metadata only (avoid exposing secrets/PII in raw payloads)
+            safe_metadata = _get_safe_tool_metadata(tool_call)
+            f.write(f"[{timestamp}] Tool metadata: {json.dumps(safe_metadata)}\n")
 
         # Run enforcement
         enforcer = QualityEnforcer()

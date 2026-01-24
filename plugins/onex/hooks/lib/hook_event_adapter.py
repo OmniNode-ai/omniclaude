@@ -37,7 +37,7 @@ import logging
 import os
 import sys
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -56,13 +56,23 @@ try:
 except ImportError:
     from agents.lib.errors import EnumCoreErrorCode, OnexError
 
+# Topic constants and builder (centralized in omniclaude.hooks.topics)
+try:
+    from omniclaude.hooks.topics import TopicBase, build_topic
+except ImportError:
+    # Fallback: add src to path for direct execution
+    _SRC_PATH = _PROJECT_ROOT / "src"
+    if str(_SRC_PATH) not in sys.path:
+        sys.path.insert(0, str(_SRC_PATH))
+    from omniclaude.hooks.topics import TopicBase, build_topic
+
 
 # Use kafka-python for synchronous publishing (simpler for hooks)
 # Graceful degradation: if kafka-python is not installed, we skip Kafka operations
 # but don't crash the hook. This is defense-in-depth - the hooks venv should have
 # the package, but we handle the case where it doesn't gracefully.
 KAFKA_AVAILABLE = False
-KafkaProducer = None  # type: ignore
+KafkaProducer = None  # noqa: N806
 
 try:
     from kafka import KafkaProducer as _KafkaProducer
@@ -184,19 +194,14 @@ class HookEventAdapter:
     - Automatic topic routing based on event type
     - JSON serialization
     - Graceful error handling (non-blocking)
+    - Configurable topic prefix for environment isolation
     """
-
-    # Event topics (ONEX event bus architecture)
-    TOPIC_ROUTING_DECISIONS = "agent-routing-decisions"
-    TOPIC_AGENT_ACTIONS = "agent-actions"
-    TOPIC_PERFORMANCE_METRICS = "router-performance-metrics"
-    TOPIC_TRANSFORMATIONS = "agent-transformation-events"
-    TOPIC_DETECTION_FAILURES = "agent-detection-failures"
 
     def __init__(
         self,
         bootstrap_servers: str | None = None,
         enable_events: bool = True,
+        topic_prefix: str | None = None,
     ):
         """
         Initialize hook event adapter.
@@ -207,9 +212,18 @@ class HookEventAdapter:
                 - Remote broker: "192.168.86.200:9092" (primary)
                 - Docker internal: "omninode-bridge-redpanda:9092"
             enable_events: Enable event publishing (feature flag)
+            topic_prefix: Optional environment prefix for topics (e.g., "dev", "staging").
+                - Default: KAFKA_TOPIC_PREFIX env var or empty string (no prefix)
+                - When set, topics become "{prefix}.{base}" (e.g., "dev.agent-routing-decisions")
         """
         self.bootstrap_servers = bootstrap_servers or os.environ.get(
             "KAFKA_BOOTSTRAP_SERVERS", "omninode-bridge-redpanda:9092"
+        )
+        # Topic prefix for environment isolation
+        self.topic_prefix = (
+            topic_prefix
+            if topic_prefix is not None
+            else os.environ.get("KAFKA_TOPIC_PREFIX", "")
         )
         # Disable events if Kafka is not available
         self.enable_events = enable_events and KAFKA_AVAILABLE
@@ -219,6 +233,17 @@ class HookEventAdapter:
         self._kafka_available = KAFKA_AVAILABLE
 
         self.logger = logging.getLogger(__name__)
+
+    def _build_topic(self, base: TopicBase) -> str:
+        """Build full topic name from TopicBase constant.
+
+        Args:
+            base: TopicBase enum constant (e.g., TopicBase.ROUTING_DECISIONS)
+
+        Returns:
+            Full topic name with optional prefix (e.g., "dev.agent-routing-decisions")
+        """
+        return build_topic(self.topic_prefix, base)
 
     def _get_producer(self) -> Any:
         """
@@ -240,11 +265,15 @@ class HookEventAdapter:
         if self._producer is None:
             try:
                 # Configurable timeouts from environment variables
-                request_timeout_ms = int(os.environ.get("KAFKA_REQUEST_TIMEOUT_MS", "1000"))
+                request_timeout_ms = int(
+                    os.environ.get("KAFKA_REQUEST_TIMEOUT_MS", "1000")
+                )
                 connections_max_idle_ms = int(
                     os.environ.get("KAFKA_CONNECTIONS_MAX_IDLE_MS", "5000")
                 )
-                metadata_max_age_ms = int(os.environ.get("KAFKA_METADATA_MAX_AGE_MS", "5000"))
+                metadata_max_age_ms = int(
+                    os.environ.get("KAFKA_METADATA_MAX_AGE_MS", "5000")
+                )
                 max_block_ms = int(os.environ.get("KAFKA_MAX_BLOCK_MS", "2000"))
 
                 self._producer = KafkaProducer(
@@ -266,7 +295,9 @@ class HookEventAdapter:
                     api_version_auto_timeout_ms=1000,  # 1s for API version detection
                 )
                 self._initialized = True
-                self.logger.debug(f"Initialized Kafka producer (brokers: {self.bootstrap_servers})")
+                self.logger.debug(
+                    f"Initialized Kafka producer (brokers: {self.bootstrap_servers})"
+                )
             except Exception as e:
                 self.logger.error(f"Failed to create Kafka producer: {e}")
                 raise
@@ -342,7 +373,7 @@ class HookEventAdapter:
             "timestamp": datetime.now(UTC).isoformat(),
         }
 
-        return self._publish(self.TOPIC_ROUTING_DECISIONS, event)
+        return self._publish(self._build_topic(TopicBase.ROUTING_DECISIONS), event)
 
     def publish_routing_decision(
         self,
@@ -426,7 +457,7 @@ class HookEventAdapter:
             "timestamp": datetime.now(UTC).isoformat(),
         }
 
-        return self._publish(self.TOPIC_AGENT_ACTIONS, event)
+        return self._publish(self._build_topic(TopicBase.AGENT_ACTIONS), event)
 
     def publish_agent_action(
         self,
@@ -503,7 +534,7 @@ class HookEventAdapter:
             "timestamp": datetime.now(UTC).isoformat(),
         }
 
-        return self._publish(self.TOPIC_PERFORMANCE_METRICS, event)
+        return self._publish(self._build_topic(TopicBase.PERFORMANCE_METRICS), event)
 
     def publish_performance_metrics(
         self,
@@ -578,7 +609,7 @@ class HookEventAdapter:
             "timestamp": datetime.now(UTC).isoformat(),
         }
 
-        return self._publish(self.TOPIC_TRANSFORMATIONS, event)
+        return self._publish(self._build_topic(TopicBase.TRANSFORMATIONS), event)
 
     def publish_detection_failure_from_config(
         self,
@@ -604,7 +635,7 @@ class HookEventAdapter:
             "timestamp": datetime.now(UTC).isoformat(),
         }
 
-        return self._publish(self.TOPIC_DETECTION_FAILURES, event)
+        return self._publish(self._build_topic(TopicBase.DETECTION_FAILURES), event)
 
     def publish_detection_failure(
         self,

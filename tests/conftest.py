@@ -551,9 +551,8 @@ async def wait_for_records():
             query = "SELECT COUNT(*) FROM agent_actions WHERE correlation_id = $1"
             args = (correlation_id,)
         elif agent_name:
-            query = (
-                f"SELECT COUNT(*) FROM agent_actions WHERE agent_name = '{agent_name}'"
-            )
+            query = "SELECT COUNT(*) FROM agent_actions WHERE agent_name = $1"
+            args = (agent_name,)
         else:
             raise ValueError("Must provide either correlation_id or agent_name")
 

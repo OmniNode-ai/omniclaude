@@ -26,7 +26,8 @@ Exit codes:
 
 Options:
     --strict    Fail on any validation issue (warnings or errors).
-                Without this flag, only errors cause a non-zero exit code.
+                Without this flag, only errors cause exit 1 (failure).
+                Warnings-only returns exit 2 (informational, non-blocking).
     --help, -h  Show this help message and exit.
 """
 
@@ -74,9 +75,9 @@ def validate_paths(paths: list[Path], *, strict: bool = False) -> int:
 
     Returns:
         Exit code:
-        - 0: No issues (or only warnings in non-strict mode)
+        - 0: No issues found
         - 1: Errors found (or any issues in strict mode)
-        - 2: Warnings found (non-strict mode only)
+        - 2: Warnings only (non-strict mode, informational)
     """
     validators = [
         ValidatorAnyType(),
@@ -177,9 +178,9 @@ Examples:
       No arguments defaults to validating src/.
 
 Exit codes:
-  0  All validations passed (or only warnings in non-strict mode)
-  1  Validation errors found (or any issues in strict mode)
-  2  Warnings found (non-strict mode only)
+  0  No issues found
+  1  Errors found (or any issues in strict mode)
+  2  Warnings only (non-strict mode, informational)
 """,
     )
     parser.add_argument(
