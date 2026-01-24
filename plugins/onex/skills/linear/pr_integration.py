@@ -32,7 +32,7 @@ if str(PR_REVIEW_PATH) not in sys.path:
 
 from analyzer import PRAnalyzer
 from fetcher import PRFetcher, get_repo_from_git
-from models import CommentSeverity, PRComment
+from models import CommentSeverity, ModelPRComment
 
 
 def get_pr_issues_for_linear(
@@ -129,7 +129,7 @@ def get_pr_issues_for_linear(
 
 
 def format_for_linear(
-    comment: PRComment, pr_number: int, repo: str, source: str
+    comment: ModelPRComment, pr_number: int, repo: str, source: str
 ) -> dict:
     """
     Format a PR comment for Linear ticket creation.

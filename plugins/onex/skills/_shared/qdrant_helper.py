@@ -34,7 +34,7 @@ try:
 except ImportError:
     from common_utils import get_timeout_seconds
 
-from config import settings
+from omniclaude.config import settings
 
 # ONEX-compliant error handling
 # Try to import from omniclaude.lib.core (preferred), fallback to agents.lib.errors, then local definitions

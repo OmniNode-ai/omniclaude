@@ -55,7 +55,7 @@ def load_contract(path: Path) -> dict[str, Any]:
         FileNotFoundError: If the contract file does not exist.
         yaml.YAMLError: If the YAML is invalid.
     """
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 

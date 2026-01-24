@@ -65,7 +65,7 @@ class CorrelationRegistry:
         existing_state = {}
         if self.correlation_file.exists():
             try:
-                with open(self.correlation_file) as f:
+                with open(self.correlation_file, encoding="utf-8") as f:
                     existing_state = json.load(f)
             except Exception:
                 pass
@@ -79,7 +79,8 @@ class CorrelationRegistry:
             "agent_domain": agent_domain,
             "prompt_preview": prompt_preview,
             "prompt_count": prompt_count,
-            "created_at": existing_state.get("created_at") or datetime.now(UTC).isoformat(),
+            "created_at": existing_state.get("created_at")
+            or datetime.now(UTC).isoformat(),
             "last_accessed": datetime.now(UTC).isoformat(),
         }
 
@@ -107,7 +108,7 @@ class CorrelationRegistry:
             if age_seconds > 3600:
                 return None
 
-            with open(self.correlation_file) as f:
+            with open(self.correlation_file, encoding="utf-8") as f:
                 state = json.load(f)
 
             # Update last accessed time

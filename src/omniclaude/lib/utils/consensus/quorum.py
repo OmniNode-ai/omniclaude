@@ -171,7 +171,7 @@ class AIQuorum:
             return self.DEFAULT_MODELS
 
         try:
-            with open(config_path) as f:
+            with open(config_path, encoding="utf-8") as f:
                 config = yaml.safe_load(f)
 
             quorum_config = config.get("quorum", {})

@@ -1063,38 +1063,34 @@ class ManifestInjector:
                 return self._manifest_data
 
         # Run async query in event loop
+        # Use get_running_loop() first to avoid Python 3.12+ DeprecationWarning
+        # from get_event_loop() when no loop is running
+        loop = None
+        loop_created = False
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             # With nest_asyncio.apply(), we can run_until_complete even in running loop
+        except RuntimeError:
+            # No running event loop - create a new one
+            self.logger.debug("Creating new event loop")
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop_created = True
+
+        try:
             return loop.run_until_complete(
                 self.generate_dynamic_manifest_async(
                     correlation_id, force_refresh=force_refresh
                 )
             )
-        except RuntimeError as e:
-            if "no running event loop" in str(e).lower():
-                # Create new event loop if none exists
-                self.logger.debug("Creating new event loop")
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    return loop.run_until_complete(
-                        self.generate_dynamic_manifest_async(
-                            correlation_id, force_refresh=force_refresh
-                        )
-                    )
-                finally:
-                    loop.close()
-            else:
-                self.logger.error(
-                    f"Failed to generate dynamic manifest: {e}", exc_info=True
-                )
-                return self._get_minimal_manifest()
         except Exception as e:
             self.logger.error(
                 f"Failed to generate dynamic manifest: {e}", exc_info=True
             )
             return self._get_minimal_manifest()
+        finally:
+            if loop_created and loop is not None:
+                loop.close()
 
     def _get_action_logger(self, correlation_id: str) -> _ActionLoggerType | None:
         """
@@ -2802,7 +2798,7 @@ class ManifestInjector:
             provider_config = {}
             if providers_file.exists():
                 try:
-                    with open(providers_file) as f:
+                    with open(providers_file, encoding="utf-8") as f:
                         provider_config = json.load(f).get("providers", {})
                 except Exception as e:
                     self.logger.warning(
@@ -3477,7 +3473,7 @@ class ManifestInjector:
 
             for log_file in log_files:
                 try:
-                    with open(log_file) as f:
+                    with open(log_file, encoding="utf-8") as f:
                         log_data = json.load(f)
 
                     # Extract workflow info
@@ -5517,34 +5513,37 @@ def inject_manifest(
     correlation_id = correlation_id or str(uuid4())
 
     # Run async version in event loop
-    # With nest_asyncio, we can always use run_until_complete
+    # Use get_running_loop() first to avoid Python 3.12+ DeprecationWarning
+    # from get_event_loop() when no loop is running
+    loop = None
+    loop_created = False
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
+        # With nest_asyncio.apply(), we can run_until_complete even in running loop
+    except RuntimeError:
+        # No running event loop - create a new one
+        logger.debug("Creating new event loop")
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop_created = True
+
+    try:
         return loop.run_until_complete(
             inject_manifest_async(correlation_id, sections, agent_name)
         )
     except RuntimeError as e:
-        if "no running event loop" in str(e).lower():
-            # Create new event loop if none exists
-            logger.debug("Creating new event loop")
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                return loop.run_until_complete(
-                    inject_manifest_async(correlation_id, sections, agent_name)
-                )
-            finally:
-                loop.close()
-        else:
-            logger.error(f"Failed to run inject_manifest_async: {e}", exc_info=True)
-            # Fallback to minimal manifest
-            injector = ManifestInjector(agent_name=agent_name)
-            return injector.format_for_prompt(sections)
+        logger.error(f"Failed to run inject_manifest_async: {e}", exc_info=True)
+        # Fallback to minimal manifest
+        injector = ManifestInjector(agent_name=agent_name)
+        return injector.format_for_prompt(sections)
     except Exception as e:
         logger.error(f"Failed to run inject_manifest_async: {e}", exc_info=True)
         # Fallback to minimal manifest
         injector = ManifestInjector(agent_name=agent_name)
         return injector.format_for_prompt(sections)
+    finally:
+        if loop_created and loop is not None:
+            loop.close()
 
 
 __all__ = [

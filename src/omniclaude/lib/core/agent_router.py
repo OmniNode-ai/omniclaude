@@ -183,7 +183,7 @@ class AgentRouter:
 
         try:
             # Load registry
-            with open(registry_path) as f:
+            with open(registry_path, encoding="utf-8") as f:
                 self.registry = yaml.safe_load(f)
 
             # Convert relative definition_path to absolute paths
@@ -779,7 +779,7 @@ class AgentRouter:
         try:
             logger.info(f"Reloading registry from {path}")
 
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 self.registry = yaml.safe_load(f)
 
             # Convert relative definition_path to absolute paths

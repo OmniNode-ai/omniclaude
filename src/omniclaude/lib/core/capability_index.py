@@ -126,7 +126,7 @@ class CapabilityIndex:
             >>> index._build_index()
         """
         try:
-            with open(self.registry_path) as f:
+            with open(self.registry_path, encoding="utf-8") as f:
                 registry = yaml.safe_load(f)
 
             if registry is None:

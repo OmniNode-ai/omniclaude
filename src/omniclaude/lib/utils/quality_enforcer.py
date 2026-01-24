@@ -114,7 +114,7 @@ def load_config() -> dict[str, Any]:
     # Load from YAML if exists
     if config_path.exists():
         try:
-            with open(config_path) as f:
+            with open(config_path, encoding="utf-8") as f:
                 config = yaml.safe_load(f) or {}
         except Exception as e:
             # Sanitize exception message before logging
@@ -130,6 +130,14 @@ def _get_safe_tool_metadata(tool_call: dict[str, Any]) -> dict[str, Any]:
     This function extracts only non-sensitive metadata from tool calls for logging,
     avoiding exposure of file contents, code snippets, commands with credentials,
     or other potentially sensitive user input.
+
+    IMPORTANT: All logging of tool_call data MUST use this function.
+    Never log raw tool_call payloads directly as they may contain:
+    - File contents (Write tool)
+    - Code snippets (Edit tool)
+    - Shell commands with credentials (Bash tool)
+    - User queries (Search/WebFetch tools)
+    - API request bodies
 
     Args:
         tool_call: The raw tool call dictionary from Claude Code.
@@ -178,7 +186,19 @@ def _get_safe_tool_metadata(tool_call: dict[str, Any]) -> dict[str, Any]:
 
         # For Write tool, log content length without content
         if tool_name == "Write" and "content" in params:
-            safe_metadata["content_length"] = len(params["content"])
+            # Robust content_length calculation for non-sized payloads
+            try:
+                content = params["content"]
+                if isinstance(content, (str, bytes, bytearray)) or hasattr(
+                    content, "__len__"
+                ):
+                    safe_metadata["content_length"] = len(content)
+                else:
+                    # Non-sized content (e.g., int, float) - log type instead
+                    safe_metadata["content_type"] = type(content).__name__
+            except (TypeError, AttributeError):
+                # Fallback if len() fails unexpectedly
+                safe_metadata["content_type"] = type(params["content"]).__name__
 
         # For Bash tool, log command presence without the command itself
         if tool_name == "Bash":

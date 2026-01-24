@@ -53,6 +53,12 @@ from kafka_publisher import get_kafka_producer
 
 
 # Load .env file from project directory
+# TODO: This load_env_file() function is duplicated across all agent-tracking skills:
+#   - log-transformation/execute_kafka.py
+#   - log-performance-metrics/execute_kafka.py
+#   - log-agent-action/execute_kafka.py
+#   - log-routing-decision/execute_kafka.py
+# Consider consolidating into plugins/onex/skills/_shared/env_loader.py
 def load_env_file():
     """Load environment variables from project .env file."""
     # Calculate project root from this file's location (skills/agent-tracking/log-routing-decision/)
@@ -64,7 +70,7 @@ def load_env_file():
 
     for env_path in env_paths:
         if env_path.exists():
-            with open(env_path) as f:
+            with open(env_path, encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if line and not line.startswith("#") and "=" in line:

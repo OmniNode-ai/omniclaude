@@ -39,7 +39,7 @@ from models import (
 # Review states as Literal type (no longer enum)
 REVIEW_STATES = ["APPROVED", "CHANGES_REQUESTED", "COMMENTED", "PENDING", "DISMISSED"]
 
-CACHE_DIR = Path("/tmp/pr-review-cache-v2")
+CACHE_DIR = Path("/tmp/pr-review-cache-v2")  # noqa: S108 - PR cache, not security sensitive
 CACHE_TTL_SECONDS = 300  # 5 minutes
 
 
@@ -565,7 +565,7 @@ class PRFetcher:
             if datetime.now(tz=UTC) - mtime > timedelta(seconds=CACHE_TTL_SECONDS):
                 return None  # Cache expired
 
-            with open(cache_file) as f:
+            with open(cache_file, encoding="utf-8") as f:
                 data = json.load(f)
 
             return ModelPRData.model_validate(data)

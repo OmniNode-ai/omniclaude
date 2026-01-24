@@ -20,9 +20,9 @@ Usage:
     python scripts/validate_onex.py
 
 Exit codes:
-    0: No issues found (validations passed)
-    1: Validation errors found (or any issues in --strict mode)
-    2: Warnings only found (non-strict mode, informational)
+    0: All validations passed (no errors or warnings)
+    1: Validation errors found, or any issues in --strict mode
+    2: Warnings only found (non-strict mode, non-blocking)
 
 Options:
     --strict    Fail on any validation issue (warnings or errors).
@@ -91,6 +91,7 @@ def validate_paths(paths: list[Path], *, strict: bool = False) -> int:
     for path in paths:
         if not path.exists():
             print(f"Warning: Path '{path}' does not exist, skipping")
+            warning_count += 1
             continue
 
         for validator in validators:
@@ -192,7 +193,7 @@ Exit codes:
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="Exit 1 on any validation issue (warnings or errors)",
+        help="Exit 1 on any issue (warnings or errors). Default: exit 1 for errors only, exit 2 for warnings only",
     )
     return parser.parse_args(args)
 

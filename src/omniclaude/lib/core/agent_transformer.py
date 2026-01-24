@@ -167,7 +167,7 @@ class AgentTransformer:
             )
 
         # Load YAML
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8") as f:
             config = yaml.safe_load(f)
 
         # Parse capabilities (handle dict or list format)
@@ -338,9 +338,12 @@ class AgentTransformer:
         Returns:
             Formatted prompt for identity assumption
         """
+        # Note: asyncio.get_event_loop() is deprecated since Python 3.10.
+        # Use get_running_loop() to check for existing loop, then create new if needed.
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
         except RuntimeError:
+            # No running loop - create a new one for sync execution
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 

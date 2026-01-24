@@ -509,7 +509,7 @@ if __name__ == "__main__":
     registry_path = Path.home() / ".claude" / "agents" / "onex" / "agent-registry.yaml"
 
     if registry_path.exists():
-        with open(registry_path) as f:
+        with open(registry_path, encoding="utf-8") as f:
             registry = yaml.safe_load(f)
 
         matcher = TriggerMatcher(registry)

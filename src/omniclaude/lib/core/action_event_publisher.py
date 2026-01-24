@@ -709,11 +709,17 @@ def _cleanup_producer_sync() -> None:
                 pass
 
             # Try to use existing event loop if available and not closed
+            # Note: asyncio.get_event_loop() is deprecated since Python 3.10.
+            # We can't use get_running_loop() here because this is sync code.
+            # If no running loop exists, create a new one for cleanup.
             try:
-                loop = asyncio.get_event_loop()
-                if not loop.is_closed():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
                     loop.run_until_complete(close_producer())
-                    return
+                finally:
+                    loop.close()
+                return
             except RuntimeError:
                 pass
 
@@ -764,9 +770,12 @@ def publish_action_event_sync(
 
     Creates new event loop if needed. Use async version when possible.
     """
+    # Note: asyncio.get_event_loop() is deprecated since Python 3.10.
+    # Use get_running_loop() to check for existing loop, then create new if needed.
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
     except RuntimeError:
+        # No running loop - create a new one for sync execution
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 

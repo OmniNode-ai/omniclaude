@@ -40,7 +40,7 @@ except ImportError:
 def load_config():
     """Load configuration from config.yaml."""
     config_path = _SCRIPT_DIR / "config.yaml"
-    with open(config_path) as f:
+    with open(config_path, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
@@ -105,7 +105,7 @@ def track_pattern_for_file(file_path_str: str, config: dict) -> bool:
 
     # Read content
     try:
-        with open(file_path) as f:
+        with open(file_path, encoding="utf-8") as f:
             content = f.read()
         print(
             f"[PostToolUse] Pattern tracking: Read {len(content)} chars",
@@ -243,7 +243,7 @@ async def apply_fixes_to_file_async(file_path_str: str, config: dict) -> bool:
 
     # Read current content
     try:
-        with open(file_path) as f:
+        with open(file_path, encoding="utf-8") as f:
             original_content = f.read()
         print(
             f"[PostToolUse] Read {len(original_content)} chars from {file_path}",

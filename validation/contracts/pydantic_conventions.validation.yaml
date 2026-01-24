@@ -17,7 +17,7 @@ validation:
     - Missing model_config in Pydantic models (including legacy class Config:)
     - Empty ConfigDict() with no arguments
     - frozen=True without from_attributes=True (pytest-xdist compatibility)
-    - Models missing explicit extra= policy (extra="forbid" recommended)
+    - Models missing explicit extra= policy (context-dependent: see rule)
     - Model prefix naming convention enforcement
 
   target_patterns:
@@ -63,9 +63,21 @@ validation:
 
     - rule_id: missing-extra-policy
       description: |
-        Pydantic models should explicitly declare extra= policy. Use extra="forbid"
-        for strict contracts (rejects unknown fields), extra="ignore" to silently
-        drop unknown fields, or extra="allow" to accept them.
+        Pydantic models should explicitly declare extra= policy. The choice depends
+        on the model's role in ONEX event schema evolution:
+
+        - PRODUCER/SCHEMA MODELS (extra="forbid"): Use for event envelope definitions,
+          API schemas, and contract models. Strict validation catches typos and ensures
+          producers emit only the documented fields.
+
+        - CONSUMER MODELS (extra="ignore"): Use for models that deserialize events from
+          Kafka or external APIs. Allows forward compatibility when producers add new
+          optional fields - consumers can continue processing without breaking.
+
+        - DOMAIN MODELS (extra="allow"): Rarely needed. Use only when unknown fields
+          must be preserved for round-trip serialization.
+
+        Default recommendation: extra="forbid" unless building event consumers.
       severity: error
       enabled: true
 
