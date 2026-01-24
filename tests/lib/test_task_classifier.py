@@ -34,7 +34,7 @@ def classifier() -> Generator[TaskClassifier, None, None]:
     This fixture ensures consistent classifier instantiation across tests
     and enables potential future extensions like mocking or configuration.
     """
-    yield TaskClassifier()
+    return TaskClassifier()
 
 
 # =============================================================================
@@ -283,7 +283,9 @@ class TestClassifyImplementIntent:
         result = classifier.classify("develop the payment system")
         assert result.primary_intent == TaskIntent.IMPLEMENT
 
-    def test_classify_domain_indicator_fallback(self, classifier: TaskClassifier) -> None:
+    def test_classify_domain_indicator_fallback(
+        self, classifier: TaskClassifier
+    ) -> None:
         """Domain-specific terms trigger IMPLEMENT even without explicit verbs."""
         result = classifier.classify("ONEX authentication system")
         assert result.primary_intent == TaskIntent.IMPLEMENT
@@ -532,7 +534,9 @@ class TestClassifyEntityExtraction:
     def test_extract_multiple_entities(self) -> None:
         """Multiple entities are extracted from a single prompt."""
         classifier = TaskClassifier()
-        result = classifier.classify("compare config.py and settings.yaml in user_service")
+        result = classifier.classify(
+            "compare config.py and settings.yaml in user_service"
+        )
         assert "config.py" in result.entities
         assert "settings.yaml" in result.entities
         assert "user_service" in result.entities
@@ -678,7 +682,9 @@ class TestClassifyEdgeCases:
         assert result_upper.primary_intent == TaskIntent.DEBUG
         assert result_mixed.primary_intent == TaskIntent.DEBUG
 
-    def test_multiple_intents_highest_score_wins(self, classifier: TaskClassifier) -> None:
+    def test_multiple_intents_highest_score_wins(
+        self, classifier: TaskClassifier
+    ) -> None:
         """When multiple intents match, highest score wins."""
         # This has "fix" (DEBUG) and "error" (DEBUG) - should be DEBUG
         result = classifier.classify("fix the error in the failing test")

@@ -37,6 +37,7 @@ import logging
 import os
 import sys
 import uuid
+import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -415,8 +416,18 @@ class HookEventAdapter:
 
         Returns:
             True if published successfully, False otherwise
+
+        .. deprecated::
+            Use :meth:`publish_routing_decision_from_config` with
+            :class:`ModelRoutingDecisionConfig` instead.
         """
         # ONEX: exempt - backwards compatibility wrapper for config-based method
+        warnings.warn(
+            "publish_routing_decision() is deprecated, use "
+            "publish_routing_decision_from_config() with ModelRoutingDecisionConfig instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         config = ModelRoutingDecisionConfig(
             agent_name=agent_name,
             confidence=confidence,
@@ -497,8 +508,18 @@ class HookEventAdapter:
 
         Returns:
             True if published successfully, False otherwise
+
+        .. deprecated::
+            Use :meth:`publish_agent_action_from_config` with
+            :class:`ModelAgentActionConfig` instead.
         """
         # ONEX: exempt - backwards compatibility wrapper for config-based method
+        warnings.warn(
+            "publish_agent_action() is deprecated, use "
+            "publish_agent_action_from_config() with ModelAgentActionConfig instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         config = ModelAgentActionConfig(
             agent_name=agent_name,
             action_type=action_type,
@@ -566,8 +587,19 @@ class HookEventAdapter:
 
         Returns:
             True if published successfully, False otherwise
+
+        .. deprecated::
+            Use :meth:`publish_performance_metrics_from_config` with
+            :class:`ModelPerformanceMetricsConfig` instead.
         """
         # ONEX: exempt - backwards compatibility wrapper for config-based method
+        warnings.warn(
+            "publish_performance_metrics() is deprecated, use "
+            "publish_performance_metrics_from_config() with ModelPerformanceMetricsConfig "
+            "instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         config = ModelPerformanceMetricsConfig(
             agent_name=agent_name,
             metric_name=metric_name,
@@ -669,8 +701,19 @@ class HookEventAdapter:
 
         Returns:
             True if published successfully, False otherwise
+
+        .. deprecated::
+            Use :meth:`publish_detection_failure_from_config` with
+            :class:`ModelDetectionFailureConfig` instead.
         """
         # ONEX: exempt - backwards compatibility wrapper for config-based method
+        warnings.warn(
+            "publish_detection_failure() is deprecated, use "
+            "publish_detection_failure_from_config() with ModelDetectionFailureConfig "
+            "instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         config = ModelDetectionFailureConfig(
             user_request=user_request,
             failure_reason=failure_reason,

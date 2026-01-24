@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import logging
 import os
+import warnings
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -538,8 +539,18 @@ async def emit_session_started(
 
     Returns:
         ModelEventPublishResult indicating success or failure.
+
+    .. deprecated::
+        Use :func:`emit_session_started_from_config` with
+        :class:`ModelSessionStartedConfig` instead.
     """
     # ONEX: exempt - backwards compatibility wrapper for config-based method
+    warnings.warn(
+        "emit_session_started() is deprecated, use emit_session_started_from_config() "
+        "with ModelSessionStartedConfig instead",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     config = ModelSessionStartedConfig(
         session_id=session_id,
         working_directory=working_directory,
@@ -610,8 +621,18 @@ async def emit_session_ended(
 
     Returns:
         ModelEventPublishResult indicating success or failure.
+
+    .. deprecated::
+        Use :func:`emit_session_ended_from_config` with
+        :class:`ModelSessionEndedConfig` instead.
     """
     # ONEX: exempt - backwards compatibility wrapper for config-based method
+    warnings.warn(
+        "emit_session_ended() is deprecated, use emit_session_ended_from_config() "
+        "with ModelSessionEndedConfig instead",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     config = ModelSessionEndedConfig(
         session_id=session_id,
         reason=reason,
@@ -685,8 +706,18 @@ async def emit_prompt_submitted(
 
     Returns:
         ModelEventPublishResult indicating success or failure.
+
+    .. deprecated::
+        Use :func:`emit_prompt_submitted_from_config` with
+        :class:`ModelPromptSubmittedConfig` instead.
     """
     # ONEX: exempt - backwards compatibility wrapper for config-based method
+    warnings.warn(
+        "emit_prompt_submitted() is deprecated, use emit_prompt_submitted_from_config() "
+        "with ModelPromptSubmittedConfig instead",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     config = ModelPromptSubmittedConfig(
         session_id=session_id,
         prompt_id=prompt_id,
@@ -764,8 +795,18 @@ async def emit_tool_executed(
 
     Returns:
         ModelEventPublishResult indicating success or failure.
+
+    .. deprecated::
+        Use :func:`emit_tool_executed_from_config` with
+        :class:`ModelToolExecutedConfig` instead.
     """
     # ONEX: exempt - backwards compatibility wrapper for config-based method
+    warnings.warn(
+        "emit_tool_executed() is deprecated, use emit_tool_executed_from_config() "
+        "with ModelToolExecutedConfig instead",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     config = ModelToolExecutedConfig(
         session_id=session_id,
         tool_execution_id=tool_execution_id,

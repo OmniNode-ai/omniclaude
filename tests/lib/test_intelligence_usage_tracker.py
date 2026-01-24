@@ -268,7 +268,9 @@ class TestIntelligenceUsageTrackerInit:
         mock_settings.postgres_port = 5436
         mock_settings.postgres_database = "test_db"
         mock_settings.postgres_user = "test_user"
-        mock_settings.get_effective_postgres_password.return_value = ""  # Missing password
+        mock_settings.get_effective_postgres_password.return_value = (
+            ""  # Missing password
+        )
 
         with patch("omniclaude.lib.intelligence_usage_tracker.settings", mock_settings):
             from omniclaude.lib.intelligence_usage_tracker import (
