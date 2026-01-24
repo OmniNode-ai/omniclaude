@@ -44,8 +44,8 @@ class ConfigSessionStorage(BaseSettings):
         description="PostgreSQL user",
     )
     postgres_password: SecretStr = Field(
-        default=...,
-        description="PostgreSQL password",
+        ...,  # Required
+        description="PostgreSQL password - set via OMNICLAUDE_STORAGE_POSTGRES_PASSWORD env var",
     )
 
     # Connection pool

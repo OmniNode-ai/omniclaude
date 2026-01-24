@@ -15,7 +15,7 @@ See migrations/016_create_session_snapshots.sql for full schema.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -603,7 +603,7 @@ class SessionSnapshotStore:
         status = snapshot.get("status", "active")
         working_directory = snapshot["working_directory"]
         hook_source = snapshot["hook_source"]
-        last_event_at = snapshot.get("last_event_at", datetime.now(timezone.utc))
+        last_event_at = snapshot.get("last_event_at", datetime.now(UTC))
 
         # Extract optional fields
         correlation_id = snapshot.get("correlation_id")

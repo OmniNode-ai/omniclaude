@@ -986,7 +986,7 @@ class SessionAggregator:
         return {
             "session_id": session.session_id,
             "status": session.status.value,
-            "correlation_id": session.correlation_id,
+            "correlation_id": str(session.correlation_id) if session.correlation_id else None,
             "started_at": session.started_at.isoformat() if session.started_at else None,
             "ended_at": session.ended_at.isoformat() if session.ended_at else None,
             "duration_seconds": session.duration_seconds,
@@ -1001,24 +1001,24 @@ class SessionAggregator:
             "last_event_at": session.last_event_at.isoformat(),
             "prompts": [
                 {
-                    "prompt_id": p.prompt_id,
+                    "prompt_id": str(p.prompt_id) if p.prompt_id else None,
                     "emitted_at": p.emitted_at.isoformat(),
                     "prompt_preview": p.prompt_preview,
                     "prompt_length": p.prompt_length,
                     "detected_intent": p.detected_intent,
-                    "causation_id": p.causation_id,
+                    "causation_id": str(p.causation_id) if p.causation_id else None,
                 }
                 for p in sorted(session.prompts.values(), key=lambda x: x.emitted_at)
             ],
             "tools": [
                 {
-                    "tool_execution_id": t.tool_execution_id,
+                    "tool_execution_id": str(t.tool_execution_id) if t.tool_execution_id else None,
                     "emitted_at": t.emitted_at.isoformat(),
                     "tool_name": t.tool_name,
                     "success": t.success,
                     "duration_ms": t.duration_ms,
                     "summary": t.summary,
-                    "causation_id": t.causation_id,
+                    "causation_id": str(t.causation_id) if t.causation_id else None,
                 }
                 for t in sorted(session.tools.values(), key=lambda x: x.emitted_at)
             ],

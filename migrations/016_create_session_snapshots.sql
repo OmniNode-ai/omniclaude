@@ -46,6 +46,7 @@ CREATE INDEX IF NOT EXISTS idx_session_snapshots_status ON claude_session_snapsh
 CREATE INDEX IF NOT EXISTS idx_session_snapshots_working_directory ON claude_session_snapshots(working_directory);
 CREATE INDEX IF NOT EXISTS idx_session_snapshots_last_event_at ON claude_session_snapshots(last_event_at);
 CREATE INDEX IF NOT EXISTS idx_session_snapshots_created_at ON claude_session_snapshots(created_at);
+CREATE INDEX IF NOT EXISTS idx_session_snapshots_git_branch ON claude_session_snapshots(git_branch);
 
 -- Unique constraint: one snapshot per session_id (latest wins on conflict)
 CREATE UNIQUE INDEX IF NOT EXISTS idx_session_snapshots_session_id_unique ON claude_session_snapshots(session_id);
