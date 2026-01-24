@@ -37,10 +37,10 @@ import logging
 import os
 import sys
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 # Ensure project root is in path for imports
 # This file is at: claude/hooks/lib/hook_event_adapter.py
@@ -55,6 +55,9 @@ try:
     from claude.lib.core import EnumCoreErrorCode, OnexError
 except ImportError:
     from agents.lib.errors import EnumCoreErrorCode, OnexError
+
+# ONEX types for routing alternatives (replaces dict union soup)
+from omnibase_core.types import TypedDictRoutingAlternative
 
 # Topic constants and builder (centralized in omniclaude.hooks.topics)
 try:
@@ -112,9 +115,9 @@ class ModelRoutingDecisionConfig:
     correlation_id: str
     user_request: str | None = None
     # Each alternative contains agent_name (str) and confidence (float)
-    alternatives: list[dict[str, str | float]] | None = None
+    alternatives: list[TypedDictRoutingAlternative] | None = None
     reasoning: str | None = None
-    context: dict[str, Any] | None = None
+    context: Mapping[str, object] | None = None
     project_path: str | None = None
     project_name: str | None = None
     session_id: str | None = None
@@ -132,7 +135,7 @@ class ModelAgentActionConfig:
     action_type: str
     action_name: str
     correlation_id: str
-    action_details: dict[str, Any] | None = None
+    action_details: Mapping[str, object] | None = None
     duration_ms: int | None = None
     success: bool = True
     debug_mode: bool = True
@@ -153,7 +156,7 @@ class ModelDetectionFailureConfig:
     failure_reason: str
     # Detection method names tried (e.g., "fuzzy_matching", "exact_match")
     attempted_methods: list[str] | None = None
-    error_details: dict[str, Any] | None = None
+    error_details: Mapping[str, object] | None = None
     correlation_id: str | None = None
     project_path: str | None = None
     project_name: str | None = None
@@ -228,7 +231,7 @@ class HookEventAdapter:
         # Disable events if Kafka is not available
         self.enable_events = enable_events and KAFKA_AVAILABLE
 
-        self._producer: Any | None = None  # KafkaProducer or None
+        self._producer: object | None = None  # KafkaProducer or None
         self._initialized = False
         self._kafka_available = KAFKA_AVAILABLE
 
@@ -245,7 +248,7 @@ class HookEventAdapter:
         """
         return build_topic(self.topic_prefix, base)
 
-    def _get_producer(self) -> Any:
+    def _get_producer(self) -> object:
         """
         Get or create Kafka producer (lazy initialization).
 
@@ -304,7 +307,7 @@ class HookEventAdapter:
 
         return self._producer
 
-    def _publish(self, topic: str, event: dict[str, Any]) -> bool:
+    def _publish(self, topic: str, event: Mapping[str, object]) -> bool:
         """
         Publish event to Kafka topic.
 
@@ -383,9 +386,9 @@ class HookEventAdapter:
         latency_ms: int,
         correlation_id: str,
         user_request: str | None = None,
-        alternatives: list[dict[str, str | float]] | None = None,
+        alternatives: list[TypedDictRoutingAlternative] | None = None,
         reasoning: str | None = None,
-        context: dict[str, Any] | None = None,
+        context: Mapping[str, object] | None = None,
         project_path: str | None = None,
         project_name: str | None = None,
         session_id: str | None = None,
@@ -465,7 +468,7 @@ class HookEventAdapter:
         action_type: str,
         action_name: str,
         correlation_id: str,
-        action_details: dict[str, Any] | None = None,
+        action_details: Mapping[str, object] | None = None,
         duration_ms: int | None = None,
         success: bool = True,
         debug_mode: bool = True,
@@ -581,9 +584,9 @@ class HookEventAdapter:
         agent_name: str,
         transformation_type: str,
         correlation_id: str,
-        input_data: dict[str, Any] | None = None,
-        output_data: dict[str, Any] | None = None,
-        metadata: dict[str, Any] | None = None,
+        input_data: Mapping[str, object] | None = None,
+        output_data: Mapping[str, object] | None = None,
+        metadata: Mapping[str, object] | None = None,
     ) -> bool:
         """
         Publish agent transformation event.
@@ -642,7 +645,7 @@ class HookEventAdapter:
         user_request: str,
         failure_reason: str,
         attempted_methods: list[str] | None = None,
-        error_details: dict[str, Any] | None = None,
+        error_details: Mapping[str, object] | None = None,
         correlation_id: str | None = None,
         project_path: str | None = None,
         project_name: str | None = None,
