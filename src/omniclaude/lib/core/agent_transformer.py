@@ -21,7 +21,7 @@ import yaml
 # Set up logging
 logger = logging.getLogger(__name__)
 
-# Import transformation event publisher
+# Import transformation event publisher (optional integration)
 try:
     from omniclaude.lib.transformation_event_publisher import (
         TransformationEventType,
@@ -29,19 +29,11 @@ try:
     )
 
     KAFKA_AVAILABLE = True
-except ImportError:
-    try:
-        from agents.lib.transformation_event_publisher import (
-            TransformationEventType,
-            publish_transformation_event,
-        )
-
-        KAFKA_AVAILABLE = True
-    except ImportError:
-        logger.warning(
-            "transformation_event_publisher not available, transformation events will not be logged"
-        )
-        KAFKA_AVAILABLE = False
+except ImportError:  # nosec B110 - Optional dependency, graceful degradation
+    logger.warning(
+        "transformation_event_publisher not available, transformation events will not be logged"
+    )
+    KAFKA_AVAILABLE = False
 
 
 @dataclass
@@ -52,10 +44,10 @@ class AgentIdentity:
     purpose: str
     domain: str
     description: str
-    capabilities: list[Any]
-    triggers: list[Any]
+    capabilities: list[str]
+    triggers: list[str]
     intelligence_integration: str | None = None
-    success_criteria: list[Any] | None = None
+    success_criteria: list[str] | None = None
 
     def format_assumption_prompt(self) -> str:
         """Format identity for assumption by coordinator."""

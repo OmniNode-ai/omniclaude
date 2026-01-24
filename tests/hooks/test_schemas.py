@@ -36,6 +36,9 @@ from omniclaude.hooks.schemas import (
 )
 from omniclaude.hooks.topics import TopicBase, build_topic
 
+# All tests in this module are unit tests
+pytestmark = pytest.mark.unit
+
 # =============================================================================
 # Helper Factories
 # =============================================================================

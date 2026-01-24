@@ -68,6 +68,7 @@ if _src_path not in sys.path:
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.asyncio,
+    pytest.mark.slow,
 ]
 
 

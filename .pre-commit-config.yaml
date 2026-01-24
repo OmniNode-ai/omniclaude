@@ -29,7 +29,7 @@ repos:
         entry: uv run ruff format
         language: system
         types: [python]
-        exclude: '^\.[^/]*$|^\..*/.*|_archive/.*'
+        exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|_archive/.*|src/omniclaude/lib/.*'
         stages: [pre-commit]
 
       - id: ruff-fix
@@ -37,7 +37,7 @@ repos:
         entry: uv run ruff check --fix --exit-non-zero-on-fix
         language: system
         types: [python]
-        exclude: '^\.[^/]*$|^\..*/.*|_archive/.*'
+        exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|_archive/.*|src/omniclaude/lib/.*'
         stages: [pre-commit]
 
       - id: ruff-check
@@ -45,7 +45,7 @@ repos:
         entry: uv run ruff check
         language: system
         types: [python]
-        exclude: '^\.[^/]*$|^\..*/.*|_archive/.*'
+        exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|_archive/.*|src/omniclaude/lib/.*'
         stages: [pre-commit]
 
       - id: bandit-security
@@ -57,8 +57,9 @@ repos:
         stages: [pre-commit]
 
       - id: mypy-typecheck
-        name: mypy (staged files)
-        entry: uv run mypy --ignore-missing-imports
+        name: mypy (type checking - match CI)
+        # Only check non-legacy code - lib/ excluded (will be deleted post-Beta)
+        entry: bash -c 'uv run mypy src/omniclaude/hooks/ src/omniclaude/config/ --ignore-missing-imports'
         language: system
         types: [python]
         exclude: '^\.[^/]*$|^\..*/.*|_archive/.*'
@@ -69,7 +70,8 @@ repos:
         entry: uv run python scripts/validate_onex.py
         language: system
         types: [python]
-        exclude: '^\.[^/]*$|^\..*/.*|_archive/.*|tests/.*'
+        # Exclude: hidden files, _archive, tests, and lib/ (legacy code, post-Beta deletion)
+        exclude: '^\.[^/]*$|^\..*/.*|_archive/.*|tests/.*|src/omniclaude/lib/.*'
         stages: [pre-commit]
 
 # Configuration

@@ -4,7 +4,7 @@ Intelligence Gatherer - RAG Integration for Node Generation
 
 This module gathers contextual intelligence for enhanced node generation by:
 1. Loading built-in pattern library (offline fallback)
-2. Querying Archon RAG for production examples (if available)
+2. Querying Intelligence RAG for production examples (if available)
 3. Analyzing codebase for existing patterns
 
 The intelligence gathered includes:
@@ -18,16 +18,9 @@ The intelligence gathered includes:
 import logging
 from typing import Any
 
-# External imports (try claude.lib first, fallback to agents.lib)
-try:
-    from omniclaude.lib.config.intelligence_config import IntelligenceConfig
-except ImportError:
-    from agents.lib.config.intelligence_config import IntelligenceConfig
-
-try:
-    from omniclaude.lib.models.intelligence_context import IntelligenceContext
-except ImportError:
-    from agents.lib.models.intelligence_context import IntelligenceContext
+# FAIL FAST: Required dependencies
+from omniclaude.lib.config.intelligence_config import IntelligenceConfig
+from omniclaude.lib.models.intelligence_context import IntelligenceContext
 
 # Internal imports (within this package)
 from .intelligence_event_client import IntelligenceEventClient
@@ -41,7 +34,7 @@ class IntelligenceGatherer:
 
     This class implements a multi-source intelligence gathering system:
     1. Built-in pattern library (always available)
-    2. Archon RAG integration (optional, for production examples)
+    2. Intelligence RAG integration (optional, for production examples)
     3. Codebase pattern analysis (optional, for local patterns)
 
     The gatherer gracefully degrades when external sources are unavailable.
@@ -49,7 +42,7 @@ class IntelligenceGatherer:
 
     def __init__(
         self,
-        archon_client: Any = None,
+        intelligence_client: Any = None,
         config: IntelligenceConfig | None = None,
         event_client: IntelligenceEventClient | None = None,
     ) -> None:
@@ -57,11 +50,11 @@ class IntelligenceGatherer:
         Initialize intelligence gatherer.
 
         Args:
-            archon_client: Optional Archon MCP client for RAG queries
+            intelligence_client: Optional intelligence MCP client for RAG queries
             config: Optional intelligence configuration (default: load from env)
             event_client: Optional Kafka event client for event-based pattern discovery
         """
-        self.archon = archon_client
+        self.intelligence_client = intelligence_client
         self.config = config or IntelligenceConfig.from_env()
         self.event_client = event_client
         self.pattern_library = self._load_pattern_library()
@@ -88,9 +81,7 @@ class IntelligenceGatherer:
         Returns:
             IntelligenceContext with gathered patterns and best practices
         """
-        self.logger.info(
-            f"Gathering intelligence for {node_type} node in {domain} domain"
-        )
+        self.logger.info(f"Gathering intelligence for {node_type} node in {domain} domain")
 
         intelligence = IntelligenceContext()
 
@@ -110,24 +101,20 @@ class IntelligenceGatherer:
                         "Event-based discovery successful, continuing with additional sources"
                     )
             except Exception as e:
-                self.logger.warning(
-                    f"Event-based discovery failed: {e}, using fallback sources"
-                )
+                self.logger.warning(f"Event-based discovery failed: {e}, using fallback sources")
 
         # Source 2: Built-in pattern library (always available as fallback)
         # Only skip if event discovery was successful and fallback is disabled
         if not event_success or self.config.enable_filesystem_fallback:
-            self._gather_builtin_patterns(
-                intelligence, node_type, domain, service_name, operations
-            )
+            self._gather_builtin_patterns(intelligence, node_type, domain, service_name, operations)
 
-        # Source 3: Archon RAG (if available)
-        if self.archon:
-            await self._gather_archon_intelligence(
+        # Source 3: Intelligence RAG (if available)
+        if self.intelligence_client:
+            await self._gather_rag_intelligence(
                 intelligence, node_type, domain, service_name, prompt
             )
         else:
-            self.logger.debug("Archon client not available, skipping RAG queries")
+            self.logger.debug("Intelligence client not available, skipping RAG queries")
 
         # Source 4: Codebase pattern analysis (future enhancement)
         # await self._gather_codebase_patterns(intelligence, node_type, domain)
@@ -165,13 +152,9 @@ class IntelligenceGatherer:
 
         # Get common operations
         if node_type == "EFFECT":
-            intelligence.common_operations.extend(
-                ["create", "read", "update", "delete", "execute"]
-            )
+            intelligence.common_operations.extend(["create", "read", "update", "delete", "execute"])
         elif node_type == "COMPUTE":
-            intelligence.common_operations.extend(
-                ["calculate", "transform", "validate", "process"]
-            )
+            intelligence.common_operations.extend(["calculate", "transform", "validate", "process"])
         elif node_type == "REDUCER":
             intelligence.common_operations.extend(
                 ["aggregate", "reduce", "summarize", "consolidate"]
@@ -182,14 +165,10 @@ class IntelligenceGatherer:
             )
 
         # Get performance targets
-        intelligence.performance_targets.update(
-            self._get_performance_targets(node_type)
-        )
+        intelligence.performance_targets.update(self._get_performance_targets(node_type))
 
         # Get error scenarios
-        intelligence.error_scenarios.extend(
-            self._get_error_scenarios(node_type, domain)
-        )
+        intelligence.error_scenarios.extend(self._get_error_scenarios(node_type, domain))
 
         # Get recommended mixins
         intelligence.required_mixins.extend(self._recommend_mixins(node_type, domain))
@@ -202,7 +181,7 @@ class IntelligenceGatherer:
         if intelligence.confidence_score < 0.7:
             intelligence.confidence_score = 0.7
 
-    async def _gather_archon_intelligence(
+    async def _gather_rag_intelligence(
         self,
         intelligence: IntelligenceContext,
         node_type: str,
@@ -210,29 +189,29 @@ class IntelligenceGatherer:
         service_name: str,
         prompt: str,
     ) -> None:
-        """Gather intelligence from Archon RAG (if available)"""
+        """Gather intelligence from Intelligence RAG (if available)"""
         try:
-            self.logger.debug(f"Querying Archon RAG for {node_type} examples")
+            self.logger.debug(f"Querying Intelligence RAG for {node_type} examples")
 
-            # This would call Archon's perform_rag_query
+            # This would call the intelligence service's perform_rag_query
             # For now, this is a placeholder for future integration
             # Example query:
             # rag_query = f"Find production examples of {node_type} nodes in {domain} domain with similar operations to {service_name}"
-            # result = await self.archon.perform_rag_query(
+            # result = await self.intelligence_client.perform_rag_query(
             #     query=rag_query,
             #     sources=["code_examples", "documentation"],
             #     filters={"node_type": node_type, "domain": domain}
             # )
 
             # intelligence.production_examples.extend(result.get("examples", []))
-            # intelligence.intelligence_sources.append("archon_rag")
+            # intelligence.intelligence_sources.append("intelligence_rag")
 
             self.logger.debug(
-                "Archon RAG integration placeholder - will be implemented in future phase"
+                "Intelligence RAG integration placeholder - will be implemented in future phase"
             )
 
         except Exception as e:
-            self.logger.warning(f"Archon RAG query failed: {e}")
+            self.logger.warning(f"Intelligence RAG query failed: {e}")
 
     async def _gather_event_based_patterns(
         self,
@@ -243,9 +222,9 @@ class IntelligenceGatherer:
         timeout_ms: int = 5000,
     ) -> bool:
         """
-        Gather patterns via Kafka events from omniarchon intelligence adapter.
+        Gather patterns via Kafka events from ONEX intelligence adapter.
 
-        This method uses event-based pattern discovery to query the omniarchon
+        This method uses event-based pattern discovery to query the
         codebase for production examples and best practices.
 
         Args:
@@ -265,9 +244,7 @@ class IntelligenceGatherer:
             are logged but not propagated.
         """
         if not self.event_client:
-            self.logger.debug(
-                "Event client not available, skipping event-based discovery"
-            )
+            self.logger.debug("Event client not available, skipping event-based discovery")
             return False
 
         try:
@@ -296,7 +273,7 @@ class IntelligenceGatherer:
 
             # Extract and integrate patterns into intelligence context
             for pattern in patterns:
-                # Pattern structure from omniarchon intelligence adapter:
+                # Pattern structure from ONEX intelligence adapter:
                 # {
                 #   "file_path": str,
                 #   "confidence": float,

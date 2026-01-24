@@ -24,53 +24,13 @@ Core Modules:
     result_cache: In-memory result caching
 """
 
-# Import errors from agents.lib.errors (canonical location)
-# Re-export for unified access via claude.lib.core
-try:
-    from agents.lib.errors import (
-        CoreErrorCode,
-        EnumCoreErrorCode,
-        ModelOnexError,
-        OnexError,
-    )
-
-    _errors_available = True
-except ImportError:
-    # Fallback: Define minimal error classes if agents.lib.errors not available
-    from enum import Enum
-    from typing import Any
-
-    class _FallbackEnumCoreErrorCode(str, Enum):
-        """Core error codes for ONEX operations."""
-
-        VALIDATION_ERROR = "VALIDATION_ERROR"
-        CONFIGURATION_ERROR = "CONFIGURATION_ERROR"
-        OPERATION_FAILED = "OPERATION_FAILED"
-        EXTERNAL_SERVICE_ERROR = "EXTERNAL_SERVICE_ERROR"
-        FILE_NOT_FOUND = "FILE_NOT_FOUND"
-        IO_ERROR = "IO_ERROR"
-
-    EnumCoreErrorCode = _FallbackEnumCoreErrorCode
-    CoreErrorCode = _FallbackEnumCoreErrorCode
-
-    class _FallbackOnexError(Exception):
-        """Base exception class for ONEX operations."""
-
-        def __init__(
-            self,
-            code: _FallbackEnumCoreErrorCode,
-            message: str,
-            details: dict[str, Any] | None = None,
-        ) -> None:
-            self.code = code
-            self.error_code = code
-            self.message = message
-            self.details = details or {}
-            super().__init__(message)
-
-    OnexError = _FallbackOnexError
-    ModelOnexError = _FallbackOnexError
-    _errors_available = False
+# Import errors from shared errors module (canonical location)
+# Re-export for unified access via omniclaude.lib.core
+from omniclaude.lib.errors import (
+    EnumCoreErrorCode,
+    ModelOnexError,
+    OnexError,
+)
 
 # Event Publishing (Kafka integration for agent actions)
 from .action_event_publisher import (
@@ -111,11 +71,9 @@ from .trigger_matcher import TriggerMatcher
 
 __all__ = [
     # Error Handling
-    "CoreErrorCode",
     "EnumCoreErrorCode",
     "ModelOnexError",
     "OnexError",
-    "_errors_available",
     # Manifest Injection
     "ManifestInjector",
     "inject_manifest",

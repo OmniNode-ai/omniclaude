@@ -33,7 +33,7 @@ Usage:
     await logger.log_error(
         error_type="DatabaseConnectionError",
         error_message="Failed to connect to PostgreSQL",
-        error_context={"host": "192.168.86.200", "port": 5436},
+        error_context={"host": "db.example.com", "port": 5432},
         severity="critical"  # 'error' or 'critical' triggers Slack notification
     )
 
@@ -50,7 +50,7 @@ import asyncio
 import logging
 import os
 import time
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from types import TracebackType
 from typing import Any
@@ -64,21 +64,16 @@ from .action_event_publisher import (
     publish_tool_call,
 )
 
-# Import Slack notifier for error notifications
+# Import Slack notifier for error notifications (optional integration)
 try:
     from omniclaude.lib.slack_notifier import get_slack_notifier
 
     SLACK_NOTIFIER_AVAILABLE = True
-except ImportError:
-    try:
-        from agents.lib.slack_notifier import get_slack_notifier
+except ImportError:  # nosec B110 - Optional dependency, graceful degradation
+    SLACK_NOTIFIER_AVAILABLE = False
+    logging.warning("SlackNotifier not available - error notifications disabled")
 
-        SLACK_NOTIFIER_AVAILABLE = True
-    except ImportError:
-        SLACK_NOTIFIER_AVAILABLE = False
-        logging.warning("SlackNotifier not available - error notifications disabled")
-
-# Import Prometheus metrics
+# Import Prometheus metrics (optional integration)
 try:
     from omniclaude.lib.prometheus_metrics import (
         action_log_errors_counter,
@@ -86,17 +81,9 @@ try:
     )
 
     PROMETHEUS_AVAILABLE = True
-except ImportError:
-    try:
-        from agents.lib.prometheus_metrics import (
-            action_log_errors_counter,
-            record_action_log,
-        )
-
-        PROMETHEUS_AVAILABLE = True
-    except ImportError:
-        PROMETHEUS_AVAILABLE = False
-        logging.debug("Prometheus metrics not available - metrics disabled")
+except ImportError:  # nosec B110 - Optional dependency, graceful degradation
+    PROMETHEUS_AVAILABLE = False
+    logging.debug("Prometheus metrics not available - metrics disabled")
 
 logger = logging.getLogger(__name__)
 
@@ -247,7 +234,7 @@ class ActionLogger:
         self,
         tool_name: str,
         tool_parameters: dict[str, Any] | None = None,
-    ) -> AsyncGenerator[ToolCallContext, None]:
+    ) -> AsyncIterator[ToolCallContext]:
         """
         Context manager for logging tool call with automatic timing.
 
@@ -556,11 +543,11 @@ if __name__ == "__main__":
         # Test critical error logging (with Slack notification if configured)
         await logger.log_error(
             error_type="DatabaseConnectionError",
-            error_message="Failed to connect to PostgreSQL at 192.168.86.200:5436",
+            error_message="Failed to connect to PostgreSQL at db.example.com:5432",
             error_context={
-                "host": "192.168.86.200",
-                "port": 5436,
-                "database": "omninode_bridge",
+                "host": "db.example.com",
+                "port": 5432,
+                "database": "mydb",
                 "retry_count": 3,
             },
             severity="critical",  # Will trigger Slack if SLACK_WEBHOOK_URL is set

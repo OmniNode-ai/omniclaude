@@ -706,10 +706,7 @@ Provide your evaluation:"""
             )
 
         # Calculate consensus score
-        if total_weight > 0:
-            consensus_score = weighted_score_sum / total_weight
-        else:
-            consensus_score = 0.5
+        consensus_score = weighted_score_sum / total_weight if total_weight > 0 else 0.5
 
         # Calculate confidence based on score variance
         if len(valid_scores) > 1:

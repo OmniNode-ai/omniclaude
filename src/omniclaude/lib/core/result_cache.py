@@ -32,7 +32,7 @@ class ResultCache:
     for repeated queries.
     """
 
-    def __init__(self, default_ttl_seconds: int = 3600):
+    def __init__(self, default_ttl_seconds: int = 3600) -> None:
         """
         Initialize cache.
 
@@ -278,7 +278,7 @@ if __name__ == "__main__":
 
     # Test hit tracking
     print("\n4. Hit Tracking:")
-    for i in range(5):
+    for _i in range(5):
         cache.get("test query")
     stats = cache.stats()
     print(f"   Total hits: {stats['total_hits']}")

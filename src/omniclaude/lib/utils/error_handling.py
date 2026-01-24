@@ -20,6 +20,7 @@ import os
 import sys
 import time
 import traceback
+from collections.abc import Callable
 from datetime import datetime
 from collections.abc import Callable
 from typing import Any
@@ -28,7 +29,7 @@ import requests
 
 
 class PatternTrackingLogger:
-    def __init__(self, log_file: str | None = None):
+    def __init__(self, log_file: str | None = None) -> None:
         if log_file:
             self.log_file = log_file
         else:
@@ -90,12 +91,10 @@ class PatternTrackingLogger:
         return self.log_file
 
 
-class PatternTrackingErrorPolicy:
-    """Error handling policy for pattern tracking operations."""
-
-    def __init__(self, logger: PatternTrackingLogger):
+class PatternTrackingErrorHandler:
+    def __init__(self, logger: PatternTrackingLogger) -> None:
         self.logger = logger
-        self.retryable_errors = [
+        self.retryable_errors: list[type[Exception]] = [
             requests.exceptions.ConnectionError,
             requests.exceptions.Timeout,
             requests.exceptions.ReadTimeout,
@@ -107,11 +106,6 @@ class PatternTrackingErrorPolicy:
     ) -> dict[str, Any]:
         """Handle API-related errors, return handling information"""
         error_type = type(error).__name__
-
-        # Determine if error is retryable
-        is_retryable = any(
-            isinstance(error, error_class) for error_class in self.retryable_errors
-        )
 
         # Initialize retry_delay_seconds to avoid unbound variable
         retry_delay_seconds: int = 5
@@ -163,7 +157,10 @@ class PatternTrackingErrorPolicy:
         else:
             error_category = "unknown"
             suggestion = f"Unknown error type: {error_type}. Check the error details."
-            retry_suggested = False
+            # Only compute retryable check for unknown error types where it's needed
+            retry_suggested = any(
+                isinstance(error, error_class) for error_class in self.retryable_errors
+            )
 
         # Log the error with enhanced context
         enhanced_context = {
@@ -228,7 +225,7 @@ class PatternTrackingErrorPolicy:
 class CircuitBreaker:
     """Simple circuit breaker to prevent cascading failures"""
 
-    def __init__(self, failure_threshold: int = 5, timeout: int = 60):
+    def __init__(self, failure_threshold: int = 5, timeout: int = 60) -> None:
         self.failure_threshold = failure_threshold
         self.timeout = timeout
         self.failure_count = 0
@@ -275,10 +272,7 @@ def safe_execute_operation(
     """
     for attempt in range(max_retries + 1):
         try:
-            if circuit_breaker:
-                result = circuit_breaker.call(operation_func)
-            else:
-                result = operation_func()
+            result = circuit_breaker.call(operation_func) if circuit_breaker else operation_func()
 
             if attempt > 0:
                 logger.log_success(
@@ -365,9 +359,7 @@ def log_success(operation: str, details: dict[str, Any]) -> None:
     get_default_logger().log_success(operation, details)
 
 
-def log_error(
-    operation: str, error: Exception, context: dict[str, Any] | None = None
-) -> None:
+def log_error(operation: str, error: Exception, context: dict[str, Any] | None = None) -> None:
     """Quick error logging"""
     get_default_logger().log_error(operation, error, context)
 

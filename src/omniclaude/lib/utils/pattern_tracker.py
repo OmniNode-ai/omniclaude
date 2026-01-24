@@ -21,6 +21,7 @@ Performance Optimizations:
 import asyncio
 import hashlib
 import json
+import logging
 import threading
 import time
 import uuid
@@ -35,7 +36,11 @@ import cachetools  # type: ignore[import-untyped]
 import httpx
 import psutil
 import yaml
-from config import settings
+
+from omniclaude.config import settings
+
+# Module-level logger for structured logging
+logger = logging.getLogger(__name__)
 
 
 class ProcessingMode(Enum):
@@ -68,16 +73,12 @@ class PerformanceMetrics:
         """Update processing time metrics.
 
         Note: This method does NOT increment total_operations to avoid double-counting.
-        The caller (e.g., PerformanceMonitor.record_operation) is responsible for
-        incrementing total_operations before calling this method.
+        The caller (record_operation) is responsible for incrementing total_operations.
         """
         self.total_processing_time_ms += duration_ms
-        # Calculate average only if we have operations recorded
-        # (total_operations is incremented by the caller, not here)
+        # Avoid division by zero; total_operations is incremented by record_operation
         if self.total_operations > 0:
-            self.avg_processing_time_ms = (
-                self.total_processing_time_ms / self.total_operations
-            )
+            self.avg_processing_time_ms = self.total_processing_time_ms / self.total_operations
 
     def update_api_time(self, response_time_ms: float) -> None:
         """Update API response time metrics."""
@@ -139,10 +140,8 @@ class ConnectionPoolConfig:
 class PatternTrackerConfig:
     """Configuration with performance optimizations."""
 
-    def __init__(self, config_path: Path | None = None) -> None:
-        self.config_path = (
-            config_path or Path.home() / ".claude" / "hooks" / "config.yaml"
-        )
+    def __init__(self, config_path: Path | None = None):
+        self.config_path = config_path or Path.home() / ".claude" / "hooks" / "config.yaml"
         self._config = self._load_config()
 
     def _load_config(self) -> dict[str, Any]:
@@ -151,10 +150,10 @@ class PatternTrackerConfig:
             return {}
 
         try:
-            with open(self.config_path, encoding="utf-8") as f:
+            with open(self.config_path) as f:
                 return yaml.safe_load(f) or {}
         except Exception as e:
-            print(f"Warning: Could not load {self.config_path}: {e}")
+            logger.warning("Could not load config file %s: %s", self.config_path, e)
             return {}
 
     def get(self, key: str, yaml_path: list[str], default: Any) -> Any:
@@ -175,15 +174,13 @@ class PatternTrackerConfig:
         result = self.get(
             "INTELLIGENCE_SERVICE_URL",
             ["pattern_tracking", "intelligence_url"],
-            str(settings.archon_intelligence_url),
+            str(settings.intelligence_service_url),
         )
         return str(result)
 
     @property
     def enabled(self) -> bool:
-        result = self.get(
-            "PATTERN_TRACKING_ENABLED", ["pattern_tracking", "enabled"], True
-        )
+        result = self.get("PATTERN_TRACKING_ENABLED", ["pattern_tracking", "enabled"], True)
         return bool(result)
 
     @property
@@ -198,16 +195,12 @@ class PatternTrackerConfig:
 
     @property
     def timeout_seconds(self) -> float:
-        result = self.get(
-            "PATTERN_TRACKING_TIMEOUT", ["pattern_tracking", "timeout_seconds"], 5.0
-        )
+        result = self.get("PATTERN_TRACKING_TIMEOUT", ["pattern_tracking", "timeout_seconds"], 5.0)
         return float(result)
 
     @property
     def max_retries(self) -> int:
-        result = self.get(
-            "PATTERN_TRACKING_MAX_RETRIES", ["pattern_tracking", "max_retries"], 3
-        )
+        result = self.get("PATTERN_TRACKING_MAX_RETRIES", ["pattern_tracking", "max_retries"], 3)
         return int(result)
 
     @property
@@ -246,14 +239,12 @@ class PatternTrackerConfig:
 class PerformanceMonitor:
     """Real-time performance monitoring for pattern tracking."""
 
-    def __init__(self, tracker_id: str) -> None:
+    def __init__(self, tracker_id: str):
         self.tracker_id = tracker_id
         self.metrics = PerformanceMetrics()
         self._lock = threading.Lock()
         self._start_time = time.time()
-        self._response_times: deque[tuple[float, float]] = deque(
-            maxlen=1000
-        )  # Rolling window of (timestamp, duration_ms) tuples
+        self._response_times: deque[float] = deque(maxlen=1000)  # Rolling window of response times
         self._operation_counts: dict[str, int] = defaultdict(int)
 
     def record_operation(
@@ -275,7 +266,7 @@ class PerformanceMonitor:
 
             self.metrics.update_processing_time(duration_ms)
             self._operation_counts[operation] += 1
-            self._response_times.append((time.time(), duration_ms))
+            self._response_times.append(duration_ms)
 
             if api_response_time_ms:
                 self.metrics.update_api_time(api_response_time_ms)
@@ -285,7 +276,7 @@ class PerformanceMonitor:
                 process = psutil.Process()
                 self.metrics.memory_usage_mb = process.memory_info().rss / 1024 / 1024
             except Exception:
-                pass
+                pass  # nosec B110 - Intentional silent failure for non-critical memory metric
 
     def record_cache_hit(self) -> None:
         """Record a cache hit."""
@@ -315,115 +306,39 @@ class PerformanceMonitor:
             )
 
     def get_recent_performance(self, window_seconds: int = 60) -> dict[str, float]:
-        """Get performance metrics for recent time window.
-
-        Args:
-            window_seconds: Time window in seconds to analyze (default: 60s)
-
-        Returns:
-            Dict with avg_time_ms, operations_per_second, and p95_time_ms
-
-        Note:
-            The _response_times deque stores tuples of (timestamp, duration_ms).
-            - timestamp: Unix timestamp (float) when the operation completed
-            - duration_ms: How long the operation took in milliseconds
-
-            We filter by TIMESTAMP (first element) to get recent entries,
-            then extract DURATION_MS (second element) for statistics.
-        """
+        """Get performance metrics for recent time window."""
         cutoff_time = time.time() - window_seconds
+        recent_times = [t for t in self._response_times if (time.time() - t / 1000) > cutoff_time]
 
-        # Thread-safe copy of response times
-        with self._lock:
-            response_times_snapshot = list(self._response_times)
-
-        # Filter by timestamp (first tuple element), extract duration_ms (second tuple element)
-        # This correctly filters entries within the time window and extracts their durations
-        recent_durations = [
-            duration_ms  # Extract duration (second element)
-            for timestamp, duration_ms in response_times_snapshot
-            if timestamp >= cutoff_time  # Filter by timestamp (first element)
-        ]
-
-        if not recent_durations:
-            return {
-                "avg_time_ms": 0.0,
-                "operations_per_second": 0.0,
-                "p95_time_ms": 0.0,
-            }
-
-        sorted_durations = sorted(recent_durations)
-        p95_index = min(int(len(sorted_durations) * 0.95), len(sorted_durations) - 1)
+        if not recent_times:
+            return {"avg_time_ms": 0, "operations_per_second": 0, "p95_time_ms": 0}
 
         return {
-            "avg_time_ms": sum(recent_durations) / len(recent_durations),
-            "operations_per_second": len(recent_durations) / window_seconds,
-            "p95_time_ms": sorted_durations[p95_index],
+            "avg_time_ms": sum(recent_times) / len(recent_times),
+            "operations_per_second": len(recent_times) / window_seconds,
+            "p95_time_ms": (
+                sorted(recent_times)[int(len(recent_times) * 0.95)] if recent_times else 0
+            ),
         }
 
 
-class BatchAggregator:
-    """Aggregates and processes batches of pattern tracking operations."""
+class BatchProcessor:
+    """Handles batch processing of pattern tracking operations."""
 
-    def __init__(
-        self, tracker: "PatternTracker", config: BatchProcessingConfig
-    ) -> None:
+    def __init__(self, tracker: "PatternTracker", config: BatchProcessingConfig):
         self.tracker = tracker
         self.config = config
-        # Lazy-initialized asyncio primitives to avoid RuntimeError when no event loop
-        # These are created in _ensure_initialized() which is called from start()
-        self._queue: asyncio.Queue[tuple[str, dict[str, Any], float] | None] | None = (
-            None
+        self._queue: asyncio.Queue[tuple[str, dict[str, Any], float] | None] = asyncio.Queue(
+            maxsize=config.max_queue_size
         )
         self._workers: list[asyncio.Task[None]] = []
         self._running = False
-        self._initialized = False
         self._current_batch: list[tuple[str, dict[str, Any]]] = []
-        # Lock for protecting _current_batch - lazy initialized
-        self._batch_lock: asyncio.Lock | None = None
         self._batch_timer: asyncio.Task[None] | None = None
-
-    def _ensure_initialized(self) -> None:
-        """Initialize asyncio primitives. Must be called from async context.
-
-        Raises:
-            RuntimeError: If called outside of an async context (no running event loop).
-        """
-        if self._initialized:
-            return
-
-        # Verify we're in an async context before creating asyncio primitives
-        try:
-            asyncio.get_running_loop()
-        except RuntimeError as e:
-            raise RuntimeError(
-                "BatchAggregator._ensure_initialized() must be called from async context. "
-                "Use 'await batch_aggregator.start()' from an async function."
-            ) from e
-
-        self._queue = asyncio.Queue(maxsize=self.config.max_queue_size)
-        self._batch_lock = asyncio.Lock()
-        self._initialized = True
-
-    def _can_process_batches(self) -> bool:
-        """Check if batch processing is properly configured and can run.
-
-        Returns True only if:
-        - Batch processing is initialized
-        - Workers are running or will be started
-        """
-        return self._initialized and self._running and self.config.worker_count > 0
 
     async def start(self) -> None:
         """Start batch processing workers."""
         if self._running:
-            return
-
-        # Initialize asyncio primitives (safe now that we're in async context)
-        self._ensure_initialized()
-
-        # Guard: Don't start if no workers configured
-        if self.config.worker_count <= 0:
             return
 
         self._running = True
@@ -451,41 +366,15 @@ class BatchAggregator:
         await asyncio.gather(*self._workers, return_exceptions=True)
         self._workers.clear()
 
-    async def add_task(self, task_type: str, **kwargs: Any) -> bool:
-        """Add a task to the processing queue.
-
-        Returns:
-            True if task was enqueued, False if workers not available.
-        """
-        # Guard: Don't enqueue if no workers will process
-        if not self._can_process_batches():
-            print(
-                "Warning: Batch processor not running or no workers configured, "
-                "task not enqueued"
-            )
-            return False
-
-        if self._queue is None:
-            return False
-
+    async def add_task(self, task_type: str, **kwargs: Any) -> None:
+        """Add a task to the processing queue."""
         try:
-            await self._queue.put((task_type, kwargs, time.time()))
-            return True
+            self._queue.put_nowait((task_type, kwargs, time.time()))
         except asyncio.QueueFull:
-            print("Warning: Batch processor queue full, dropping task")
-            return False
+            logger.warning("Batch processor queue full, dropping task")
 
     async def _worker(self, worker_name: str) -> None:
-        """Worker coroutine for processing batches.
-
-        Thread Safety:
-            All accesses to _current_batch are protected by _batch_lock.
-            The lock is held during batch extraction to prevent race conditions
-            where multiple workers might try to process the same batch.
-        """
-        if self._queue is None or self._batch_lock is None:
-            return
-
+        """Worker coroutine for processing batches."""
         while self._running:
             try:
                 # Wait for batch or timeout
@@ -494,94 +383,38 @@ class BatchAggregator:
                     break
 
                 task_type, kwargs, _ = task_data
+                self._current_batch.append((task_type, kwargs))
 
-                # Acquire lock to safely modify _current_batch and check if processing needed
-                batch_to_process: list[tuple[str, dict[str, Any]]] | None = None
-                async with self._batch_lock:
-                    self._current_batch.append((task_type, kwargs))
-                    # Extract batch while holding lock to prevent race condition
-                    # where multiple workers check size and all try to process
-                    if len(self._current_batch) >= self.config.max_batch_size:
-                        batch_to_process = self._current_batch
-                        self._current_batch = []
-
-                # Process batch outside lock (safe - we have exclusive ownership of batch_to_process)
-                if batch_to_process is not None:
-                    await self._process_batch_items(batch_to_process)
+                # Process batch if full
+                if len(self._current_batch) >= self.config.max_batch_size:
+                    await self._process_batch()
 
             except TimeoutError:
-                # Check if we have pending items to process on timeout
-                # Note: _batch_lock is guaranteed non-None here (checked at function entry)
-                batch_to_process = None
-                async with self._batch_lock:
-                    if self._current_batch:
-                        batch_to_process = self._current_batch
-                        self._current_batch = []
-                if batch_to_process is not None:
-                    await self._process_batch_items(batch_to_process)
+                # Check if we have pending items to process
+                if self._current_batch:
+                    await self._process_batch()
             except Exception as e:
-                print(f"Error in worker {worker_name}: {e}")
+                logger.error("Error in worker %s: %s", worker_name, e)
 
     async def _batch_timer_handler(self) -> None:
-        """Handle batch timing - process batch if items pending for too long.
-
-        Thread Safety:
-            Extracts batch under lock to prevent race conditions with workers.
-        """
+        """Handle batch timing - process batch if items pending for too long."""
         while self._running:
             await asyncio.sleep(self.config.max_batch_wait_time)
 
-            if self._batch_lock is None:
-                continue
-
-            # Extract batch under lock to prevent race with workers
-            batch_to_process: list[tuple[str, dict[str, Any]]] | None = None
-            async with self._batch_lock:
-                if self._current_batch:
-                    batch_to_process = self._current_batch
-                    self._current_batch = []
-
-            if batch_to_process is not None:
-                await self._process_batch_items(batch_to_process)
+            if self._current_batch:
+                await self._process_batch()
 
     async def _process_batch(self) -> None:
-        """Process current batch of tasks.
-
-        Note: This method extracts the batch under lock. For callers that already
-        have the batch extracted, use _process_batch_items() directly.
-        """
-        if self._batch_lock is None:
+        """Process current batch of tasks."""
+        if not self._current_batch:
             return
 
-        # Extract batch under lock
-        batch: list[tuple[str, dict[str, Any]]] | None = None
-        async with self._batch_lock:
-            if self._current_batch:
-                batch = self._current_batch
-                self._current_batch = []
-
-        if batch is not None:
-            await self._process_batch_items(batch)
-
-    async def _process_batch_items(
-        self, batch: list[tuple[str, dict[str, Any]]]
-    ) -> None:
-        """Process a list of batch items.
-
-        Args:
-            batch: List of (task_type, kwargs) tuples to process.
-
-        Thread Safety:
-            This method does not access _current_batch and is safe to call
-            without holding _batch_lock. The caller is responsible for
-            providing an exclusive reference to the batch.
-        """
-        if not batch:
-            return
+        batch = self._current_batch
+        self._current_batch = []
 
         try:
             # Group by task type for batch processing
-            task_groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
+            task_groups = defaultdict(list)
             for task_type, kwargs in batch:
                 task_groups[task_type].append(kwargs)
 
@@ -592,9 +425,10 @@ class BatchAggregator:
                 # Note: track_pattern_execution and track_pattern_modification
                 # methods would need to be implemented for batch processing
                 # For now, we only support track_pattern_creation
+                pass
 
         except Exception as e:
-            print(f"Error processing batch: {e}")
+            logger.error("Error processing batch: %s", e)
 
     async def _batch_track_creation(self, tasks: list[dict[str, Any]]) -> None:
         """Batch process pattern creation tasks."""
@@ -611,7 +445,7 @@ class BatchAggregator:
         # Log any errors
         for i, result in enumerate(results):
             if isinstance(result, Exception):
-                print(f"Error in batch creation task {i}: {result}")
+                logger.error("Error in batch creation task %d: %s", i, result)
 
 
 class PatternTracker:
@@ -627,7 +461,7 @@ class PatternTracker:
         "get_analytics": "/api/pattern-traceability/analytics/get",
     }
 
-    def __init__(self, config: PatternTrackerConfig | None = None) -> None:
+    def __init__(self, config: PatternTrackerConfig | None = None):
         self.config = config or PatternTrackerConfig()
         self.session_id = self._generate_session_id()
         self.tracker_id = f"tracker-{self.session_id[:8]}"
@@ -649,11 +483,14 @@ class PatternTracker:
         )
 
         # Batch processing
-        self.batch_processor = BatchAggregator(self, self.config.batch_config)
-        self._batch_processor_started = False
+        self.batch_processor = BatchProcessor(self, self.config.batch_config)
 
         # Setup logging
         self._setup_logging()
+
+        # Start batch processor if enabled
+        if self.config.batch_config.enabled and self.config.processing_mode == ProcessingMode.BATCH:
+            asyncio.create_task(self.batch_processor.start())
 
     def _create_http_client(self) -> httpx.AsyncClient:
         """Create HTTP client with connection pooling."""
@@ -672,42 +509,16 @@ class PatternTracker:
         log_file = (
             self.config.log_file
             if hasattr(self.config, "log_file")
-            else Path.home()
-            / ".claude"
-            / "hooks"
-            / "logs"
-            / "enhanced-pattern-tracker.log"
+            else Path.home() / ".claude" / "hooks" / "logs" / "enhanced-pattern-tracker.log"
         )
         log_file.parent.mkdir(parents=True, exist_ok=True)
         self.log_file = log_file
-
-    async def start(self) -> None:
-        """Start the pattern tracker (including batch processor if enabled).
-
-        This method should be called from an async context to start background tasks.
-        If not called explicitly, batch processing will be started lazily when first needed.
-        """
-        await self._ensure_batch_processor_started()
-
-    async def _ensure_batch_processor_started(self) -> None:
-        """Lazily start batch processor if enabled and not yet started."""
-        if self._batch_processor_started:
-            return
-
-        if (
-            self.config.batch_config.enabled
-            and self.config.processing_mode == ProcessingMode.BATCH
-        ):
-            await self.batch_processor.start()
-            self._batch_processor_started = True
 
     def _generate_session_id(self) -> str:
         """Generate unique session identifier."""
         return str(uuid.uuid4())
 
-    def _generate_pattern_id_cached(
-        self, code: str, context: dict[str, Any] | None = None
-    ) -> str:
+    def _generate_pattern_id_cached(self, code: str, context: dict[str, Any] | None = None) -> str:
         """Generate pattern ID with caching."""
         if not self.config.cache_config.enable_pattern_caching:
             return self._generate_pattern_id_uncached(code, context)
@@ -754,26 +565,15 @@ class PatternTracker:
         start_time = time.time()
 
         # Use batch processor if enabled and requested
-        # Guard: Only use batch if batch mode is enabled AND processing_mode is BATCH
-        # AND worker_count > 0 to prevent orphan batches
-        can_use_batch = (
-            use_batch
-            and self.config.batch_config.enabled
-            and self.config.processing_mode == ProcessingMode.BATCH
-            and self.config.batch_config.worker_count > 0
-        )
-        if can_use_batch:
-            await self._ensure_batch_processor_started()
-            enqueued = await self.batch_processor.add_task(
+        if use_batch and self.config.batch_config.enabled:
+            await self.batch_processor.add_task(
                 "track_pattern_creation",
                 code=code,
                 context=context,
                 metadata=metadata,
                 correlation_id=correlation_id,
             )
-            if enqueued:
-                return self._generate_pattern_id_cached(code, context)
-            # Fall through to sync processing if enqueueing failed
+            return self._generate_pattern_id_cached(code, context)
 
         # Generate identifiers with caching
         pattern_id = self._generate_pattern_id_cached(code, context)
@@ -828,7 +628,7 @@ class PatternTracker:
                 self.response_cache[cache_key] = response
 
         except Exception as e:
-            print(f"Error tracking pattern creation: {e}")
+            logger.error("Error tracking pattern creation: %s", e)
 
         # Record metrics
         duration_ms = (time.time() - start_time) * 1000
@@ -847,8 +647,7 @@ class PatternTracker:
 
         if not self.config.enabled:
             return [
-                self._generate_pattern_id_cached(code, context)
-                for code, context, _ in patterns
+                self._generate_pattern_id_cached(code, context) for code, context, _ in patterns
             ]
 
         start_time = time.time()
@@ -900,7 +699,7 @@ class PatternTracker:
             success = response is not None
 
         except Exception as e:
-            print(f"Error tracking batch pattern creation: {e}")
+            logger.error("Error tracking batch pattern creation: %s", e)
 
         # Record metrics
         duration_ms = (time.time() - start_time) * 1000
@@ -950,7 +749,7 @@ class PatternTracker:
             api_success = response is not None
 
         except Exception as e:
-            print(f"Error tracking pattern execution: {e}")
+            logger.error("Error tracking pattern execution: %s", e)
 
         # Record metrics
         duration_ms = (time.time() - start_time) * 1000
@@ -981,21 +780,15 @@ class PatternTracker:
         except httpx.TimeoutException:
             if retry_count < self.config.max_retries:
                 await asyncio.sleep(2**retry_count)
-                return await self._send_to_api_optimized(
-                    endpoint_key, data, retry_count + 1
-                )
+                return await self._send_to_api_optimized(endpoint_key, data, retry_count + 1)
         except httpx.NetworkError:
             if retry_count < self.config.max_retries:
                 await asyncio.sleep(2**retry_count)
-                return await self._send_to_api_optimized(
-                    endpoint_key, data, retry_count + 1
-                )
+                return await self._send_to_api_optimized(endpoint_key, data, retry_count + 1)
         except httpx.HTTPStatusError:
             if retry_count < self.config.max_retries:
                 await asyncio.sleep(2**retry_count)
-                return await self._send_to_api_optimized(
-                    endpoint_key, data, retry_count + 1
-                )
+                return await self._send_to_api_optimized(endpoint_key, data, retry_count + 1)
 
         return None
 
@@ -1020,17 +813,13 @@ class PatternTracker:
             },
             "connection_pool": {
                 "max_connections": self.config.connection_pool_config.max_connections,
-                "current_connections": getattr(
-                    self.http_client, "_connection_pool", {}
-                ).get("_num_connections", 0),
+                "current_connections": getattr(self.http_client, "_connection_pool", {}).get(
+                    "_num_connections", 0
+                ),
             },
             "batch_processing": {
                 "enabled": self.config.batch_config.enabled,
-                "queue_size": (
-                    self.batch_processor._queue.qsize()
-                    if self.batch_processor._queue is not None
-                    else 0
-                ),
+                "queue_size": (self.batch_processor._queue.qsize() if self.batch_processor else 0),
                 "worker_count": self.config.batch_config.worker_count,
             },
         }
@@ -1047,17 +836,11 @@ class PatternTracker:
     def __del__(self) -> None:
         """Cleanup on destruction."""
         try:
-            # Use get_running_loop() instead of deprecated get_event_loop()
-            # This is the correct pattern for __del__ in Python 3.10+
-            loop = asyncio.get_running_loop()
-            # If we have a running loop, schedule cleanup as a task
-            loop.create_task(self.close())
-        except RuntimeError:
-            # No running event loop - cleanup will be handled by GC
-            pass
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                loop.create_task(self.close())
         except Exception:
-            # Suppress all other exceptions in __del__
-            pass
+            pass  # nosec B110 - Expected when event loop closed, best-effort cleanup in destructor
 
 
 # Global instance with lazy initialization
@@ -1082,6 +865,6 @@ __all__ = [
     "PerformanceMetrics",
     "ProcessingMode",
     "PerformanceMonitor",
-    "BatchAggregator",
+    "BatchProcessor",
     "get_tracker",
 ]

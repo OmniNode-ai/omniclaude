@@ -10,7 +10,7 @@ Caches:
 Performance targets:
 - Cache hit rate: >60%
 - Cache lookup: <10ms p95
-- Reduces Archon load by 60%+
+- Reduces intelligence service load by 60%+
 
 Architecture:
 - Uses Valkey (Redis-compatible) for distributed caching
@@ -51,14 +51,8 @@ import logging
 import os
 from typing import Any
 
-# Import Pydantic Settings for type-safe configuration
-settings: Any | None = None
-try:
-    from config import settings as _settings
-
-    settings = _settings
-except ImportError:
-    pass
+# FAIL FAST: Required configuration
+from omniclaude.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -78,63 +72,33 @@ class IntelligenceCache:
             redis_url: Valkey connection URL (default: from env)
             enabled: Enable/disable caching (default: True)
         """
-        # Use Pydantic Settings if available, otherwise fall back to os.getenv
-        if settings is not None:
-            cache_enabled_str = str(settings.enable_intelligence_cache).lower()
-            self.enabled = enabled and cache_enabled_str == "true"
-        else:
-            self.enabled = (
-                enabled
-                and os.getenv("ENABLE_INTELLIGENCE_CACHE", "true").lower() == "true"
-            )
+        # Use Pydantic Settings for configuration
+        # enable_intelligence_cache is already a bool from Pydantic settings
+        self.enabled = enabled and settings.enable_intelligence_cache
 
         if not self.enabled:
             logger.info("Intelligence cache disabled via configuration")
             return
 
-        # Default uses Docker hostname (archon-valkey:6379); override with VALKEY_URL in .env for localhost development
+        # Default uses Docker hostname (onex-valkey:6379); override with VALKEY_URL in .env for localhost development
         # Password must be set via VALKEY_PASSWORD environment variable (no hardcoded defaults)
         valkey_password = os.getenv("VALKEY_PASSWORD", "")
         if valkey_password:
-            default_url = f"redis://:{valkey_password}@archon-valkey:6379/0"
+            default_url = f"redis://:{valkey_password}@onex-valkey:6379/0"
         else:
-            default_url = "redis://archon-valkey:6379/0"
-        if settings is not None:
-            self.redis_url = redis_url or settings.valkey_url or default_url
-        else:
-            self.redis_url = redis_url or os.getenv("VALKEY_URL", default_url)
+            default_url = "redis://onex-valkey:6379/0"
+        self.redis_url = redis_url or settings.valkey_url or default_url
         self._client: Any | None = None
 
-        # Default TTLs by operation type (in seconds) - declare once
-        self._default_ttls: dict[str, int]
-        if settings is not None:
-            self._default_ttls = {
-                "pattern_discovery": settings.cache_ttl_patterns,
-                "infrastructure_query": settings.cache_ttl_infrastructure,
-                "schema_query": settings.cache_ttl_schemas,
-                "model_query": settings.cache_ttl_infrastructure,
-                "debug_intelligence_query": settings.cache_ttl_patterns,
-                "filesystem_query": settings.cache_ttl_patterns,
-            }
-        else:
-            self._default_ttls = {
-                "pattern_discovery": int(
-                    os.getenv("CACHE_TTL_PATTERNS", "300")
-                ),  # 5 min
-                "infrastructure_query": int(
-                    os.getenv("CACHE_TTL_INFRASTRUCTURE", "3600")
-                ),  # 1 hour
-                "schema_query": int(os.getenv("CACHE_TTL_SCHEMAS", "1800")),  # 30 min
-                "model_query": int(
-                    os.getenv("CACHE_TTL_INFRASTRUCTURE", "3600")
-                ),  # 1 hour
-                "debug_intelligence_query": int(
-                    os.getenv("CACHE_TTL_PATTERNS", "300")
-                ),  # 5 min
-                "filesystem_query": int(
-                    os.getenv("CACHE_TTL_PATTERNS", "300")
-                ),  # 5 min
-            }
+        # Default TTLs by operation type (in seconds)
+        self._default_ttls: dict[str, int] = {
+            "pattern_discovery": settings.cache_ttl_patterns,
+            "infrastructure_query": settings.cache_ttl_infrastructure,
+            "schema_query": settings.cache_ttl_schemas,
+            "model_query": settings.cache_ttl_infrastructure,
+            "debug_intelligence_query": settings.cache_ttl_patterns,
+            "filesystem_query": settings.cache_ttl_patterns,
+        }
 
         # Redact credentials from URL before logging
         safe_url = self.redis_url

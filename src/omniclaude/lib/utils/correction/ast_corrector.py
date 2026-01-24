@@ -10,7 +10,7 @@ This replaces the broken regex-based correction approach that caused false posit
 
 Performance Target: <100ms for typical files (95th percentile)
 
-Author: Claude Code + Archon AI Quality Enforcer
+Author: Claude Code + ONEX AI Quality Enforcer
 Date: 2025-09-30
 """
 
@@ -73,7 +73,7 @@ class ContextAwareRenameTransformer(cst.CSTTransformer if LIBCST_AVAIL else obje
         corrections: dict[tuple[Any, Any, Any], Any],
         framework_detector: FrameworkMethodDetector,
         original_tree: ast.Module,
-    ):
+    ) -> None:
         """
         Initialize transformer.
 
@@ -108,9 +108,7 @@ class ContextAwareRenameTransformer(cst.CSTTransformer if LIBCST_AVAIL else obje
             old_name = original_node.name.value
 
             # Check if this name should be corrected
-            new_name = self._check_correction(
-                pos.start.line, pos.start.column, old_name
-            )
+            new_name = self._check_correction(pos.start.line, pos.start.column, old_name)
             if new_name:
                 logger.debug(f"Renaming class '{old_name}' → '{new_name}'")
                 self.corrections_applied += 1
@@ -155,9 +153,7 @@ class ContextAwareRenameTransformer(cst.CSTTransformer if LIBCST_AVAIL else obje
                     break
 
             # Check if this function should be renamed
-            new_name = self._check_correction(
-                pos.start.line, pos.start.column, old_name
-            )
+            new_name = self._check_correction(pos.start.line, pos.start.column, old_name)
             if new_name:
                 logger.debug(f"Renaming function '{old_name}' → '{new_name}'")
                 self.corrections_applied += 1
@@ -179,9 +175,7 @@ class ContextAwareRenameTransformer(cst.CSTTransformer if LIBCST_AVAIL else obje
             old_name = original_node.value
 
             # Check if this name should be corrected
-            new_name = self._check_correction(
-                pos.start.line, pos.start.column, old_name
-            )
+            new_name = self._check_correction(pos.start.line, pos.start.column, old_name)
             if new_name:
                 logger.debug(f"Renaming identifier '{old_name}' → '{new_name}'")
                 self.corrections_applied += 1
@@ -391,9 +385,7 @@ def apply_corrections_with_ast(
         )
 
 
-def _fallback_regex_correction(
-    content: str, corrections: list[dict[str, Any]]
-) -> CorrectionResult:
+def _fallback_regex_correction(content: str, corrections: list[dict[str, Any]]) -> CorrectionResult:
     """
     Fallback to regex-based correction when libcst is not available.
 

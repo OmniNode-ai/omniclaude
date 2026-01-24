@@ -13,6 +13,9 @@ from omnibase_core.models.errors import ModelOnexError
 
 from omniclaude.hooks.topics import TopicBase, build_topic
 
+# All tests in this module are unit tests
+pytestmark = pytest.mark.unit
+
 # =============================================================================
 # Topic Base Tests
 # =============================================================================
@@ -23,13 +26,17 @@ class TestTopicBase:
 
     def test_topic_base_names(self) -> None:
         """Topic base names are defined correctly."""
-        # ONEX event schema topics
+        # Claude Code session/prompt/tool topics
         assert TopicBase.SESSION_STARTED == "omniclaude.session.started.v1"
         assert TopicBase.SESSION_ENDED == "omniclaude.session.ended.v1"
         assert TopicBase.PROMPT_SUBMITTED == "omniclaude.prompt.submitted.v1"
         assert TopicBase.TOOL_EXECUTED == "omniclaude.tool.executed.v1"
         assert TopicBase.AGENT_ACTION == "omniclaude.agent.action.v1"
         assert TopicBase.LEARNING_PATTERN == "omniclaude.learning.pattern.v1"
+        # Agent routing topics (omninode domain)
+        assert TopicBase.ROUTING_REQUESTED == "omninode.agent.routing.requested.v1"
+        assert TopicBase.ROUTING_COMPLETED == "omninode.agent.routing.completed.v1"
+        assert TopicBase.ROUTING_FAILED == "omninode.agent.routing.failed.v1"
 
         # Agent observability topics (legacy naming for backward compatibility)
         assert TopicBase.ROUTING_DECISIONS == "agent-routing-decisions"
@@ -49,7 +56,7 @@ class TestTopicBase:
         import re
 
         # ONEX naming pattern: omniclaude.{category}.{event}.v{version}
-        onex_pattern = re.compile(r"^omniclaude\.[a-z]+\.[a-z-]+\.v\d+$")
+        onex_pattern = re.compile(r"^(omniclaude|omninode)\.[a-z]+\.[a-z-]+\.v\d+$")
 
         # Legacy observability topics (backward compatibility with existing consumers)
         # These use simple hyphenated names without the omniclaude prefix

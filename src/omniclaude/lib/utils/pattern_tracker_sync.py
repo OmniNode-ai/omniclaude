@@ -14,7 +14,7 @@ from typing import Any
 
 import requests
 
-from config import settings
+from omniclaude.config import settings
 
 
 class PatternTrackerSync:
@@ -22,7 +22,7 @@ class PatternTrackerSync:
 
     def __init__(self, session_id: str | None = None):
         self.session_id = session_id or str(uuid.uuid4())
-        self.base_url = str(settings.archon_intelligence_url)
+        self.base_url = str(settings.intelligence_service_url)
         self.timeout = 5  # seconds
 
         # Performance optimizations

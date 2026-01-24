@@ -48,6 +48,9 @@ from omniclaude.hooks.schemas import (
 )
 from omniclaude.hooks.topics import TopicBase
 
+# All tests in this module are unit tests
+pytestmark = pytest.mark.unit
+
 # =============================================================================
 # Fixtures
 # =============================================================================
@@ -214,7 +217,7 @@ class TestKafkaConfig:
         """Missing KAFKA_BOOTSTRAP_SERVERS raises ModelOnexError."""
         with (
             patch.dict("os.environ", {}, clear=True),
-            pytest.raises(ModelOnexError, match="KAFKA_BOOTSTRAP_SERVERS.*required"),
+            pytest.raises(ModelOnexError, match=r"KAFKA_BOOTSTRAP_SERVERS.*required"),
         ):
             _create_kafka_config()
 

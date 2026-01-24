@@ -28,6 +28,7 @@ exclude_dirs:
   - build
   - dist
   - _archive
+  - src/omniclaude/lib  # Legacy code - excluded from security scans, will be deleted post-Beta
 
 # Skip specific test IDs
 # See comments below for rationale

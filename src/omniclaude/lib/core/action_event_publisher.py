@@ -42,18 +42,10 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-# Import ONEX topic utilities
-from omniclaude.hooks.topics import TopicBase, build_topic
+# FAIL FAST: Required configuration
+from omniclaude.config import settings
 
-# Import Pydantic Settings for type-safe configuration
-try:
-    from config import settings as _settings_instance
-
-    settings: Any = _settings_instance
-except ImportError:
-    settings = None
-
-# Import Prometheus metrics
+# Import Prometheus metrics (optional integration)
 try:
     from omniclaude.lib.prometheus_metrics import (
         event_publish_counter,
@@ -62,18 +54,9 @@ try:
     )
 
     PROMETHEUS_AVAILABLE = True
-except ImportError:
-    try:
-        from agents.lib.prometheus_metrics import (
-            event_publish_counter,
-            event_publish_errors_counter,
-            record_event_publish,
-        )
-
-        PROMETHEUS_AVAILABLE = True
-    except ImportError:
-        PROMETHEUS_AVAILABLE = False
-        logging.debug("Prometheus metrics not available - metrics disabled")
+except ImportError:  # nosec B110 - Optional dependency, graceful degradation
+    PROMETHEUS_AVAILABLE = False
+    logging.debug("Prometheus metrics not available - metrics disabled")
 
 logger = logging.getLogger(__name__)
 
@@ -189,14 +172,13 @@ async def get_producer_lock() -> asyncio.Lock:
 
 
 def _get_kafka_bootstrap_servers() -> str:
-    """Get Kafka bootstrap servers from environment or settings."""
-    # Try Pydantic settings first (if available)
-    if settings is not None:
-        try:
-            servers: str = settings.get_effective_kafka_bootstrap_servers()
-            return servers
-        except Exception as e:
-            logger.debug(f"Failed to get Kafka servers from settings: {e}")
+    """Get Kafka bootstrap servers from settings."""
+    # Use Pydantic settings (fail fast if not configured properly)
+    try:
+        servers: str = settings.get_effective_kafka_bootstrap_servers()
+        return servers
+    except Exception as e:
+        logger.debug(f"Failed to get Kafka servers from settings: {e}")
 
     # Fall back to environment variable
     env_servers: str | None = os.getenv("KAFKA_BOOTSTRAP_SERVERS")
@@ -348,10 +330,7 @@ async def publish_action_event(
     # ONEX: exempt - core implementation (config-based wrapper available)
     try:
         # Generate correlation ID if not provided
-        if correlation_id is None:
-            correlation_id = str(uuid4())
-        else:
-            correlation_id = str(correlation_id)
+        correlation_id = str(uuid4()) if correlation_id is None else str(correlation_id)
 
         # Validate action_type
         valid_types = ["tool_call", "decision", "error", "success"]
@@ -706,7 +685,7 @@ def _cleanup_producer_sync() -> None:
                 return
             except RuntimeError:
                 # No running loop, try to get the main event loop
-                pass
+                pass  # nosec B110 - Expected when no event loop running
 
             # Try to use existing event loop if available and not closed
             # Note: asyncio.get_event_loop() is deprecated since Python 3.10.
@@ -721,7 +700,7 @@ def _cleanup_producer_sync() -> None:
                     loop.close()
                 return
             except RuntimeError:
-                pass
+                pass  # nosec B110 - Expected when event loop unavailable
 
             # Event loop is closed. The producer was created on a closed loop.
             # We can't use async cleanup properly.

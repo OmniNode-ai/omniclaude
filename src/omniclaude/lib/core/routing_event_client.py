@@ -49,105 +49,62 @@ from uuid import uuid4
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from aiokafka.errors import KafkaError as AIOKafkaError
 
-# CRITICAL: Add project root FIRST to avoid config module conflicts
-# There's a config module in agents/lib/config/ that conflicts with main config/
-# Note: 4 parents needed (core/ -> lib/ -> claude/ -> project_root)
-_project_root = PathLib(__file__).parent.parent.parent.parent
-if str(_project_root) not in sys.path:
-    sys.path.insert(0, str(_project_root))
+# NOTE: omniclaude.* imports require package to be installed (pip install -e .)
+# No sys.path manipulation needed for package imports when properly installed.
 
-# Add routing adapter schemas to path (AFTER project root)
-_routing_adapter_path = str(_project_root / "services" / "routing_adapter")
+# Add routing adapter schemas to path - REQUIRED because services/routing_adapter/
+# is not an installable package; it contains Pydantic models shared with the
+# routing_adapter service. Path: <project_root>/services/routing_adapter/schemas/
+_project_root = PathLib(__file__).parent.parent.parent.parent  # core/ -> lib/ -> omniclaude/ -> src/
+_routing_adapter_path = str(_project_root.parent / "services" / "routing_adapter")
 if _routing_adapter_path not in sys.path:
     sys.path.append(_routing_adapter_path)
 
 # Import routing event schemas
+# Note: Schemas are optional - if not available, RoutingEventClient cannot be used
+# but route_via_events() will fall back to local AgentRouter
 try:
     from schemas.model_routing_event_envelope import ModelRoutingEventEnvelope
     from schemas.model_routing_request import ModelRoutingOptions
 
     SCHEMAS_AVAILABLE = True
-except ImportError as e:
+except ImportError:
     SCHEMAS_AVAILABLE = False
-    logging.error(f"Failed to import routing schemas: {e}")
+    # DEBUG level: This is expected when routing_adapter schemas are not deployed
+    # The fallback to local AgentRouter in route_via_events() handles this gracefully
+    logging.debug(
+        "Routing schemas not available (services/routing_adapter/schemas/). "
+        "Event-based routing disabled; will fall back to local AgentRouter."
+    )
 
 logger = logging.getLogger(__name__)
 
-# ONEX-compliant error handling with fallback
-try:
-    from omniclaude.lib.errors import EnumCoreErrorCode, OnexError
-except ImportError:
-    try:
-        from agents.lib.errors import EnumCoreErrorCode, OnexError
-    except ImportError:
-        from enum import Enum
+# ONEX-compliant error handling from shared module
+from omniclaude.lib.errors import EnumCoreErrorCode, OnexError
 
-        class _FallbackEnumCoreErrorCode(str, Enum):
-            """Fallback error codes for ONEX compliance."""
+# Topic building for environment-prefixed Kafka topics
+from omniclaude.hooks.topics import TopicBase, build_topic
 
-            VALIDATION_ERROR = "VALIDATION_ERROR"
-            CONFIGURATION_ERROR = "CONFIGURATION_ERROR"
-            OPERATION_FAILED = "OPERATION_FAILED"
-
-        class _FallbackOnexError(Exception):
-            """Fallback OnexError for ONEX compliance."""
-
-            def __init__(
-                self,
-                code: _FallbackEnumCoreErrorCode,
-                message: str,
-                details: dict[str, Any] | None = None,
-            ):
-                self.code = code
-                self.error_code = code
-                self.message = message
-                self.details = details or {}
-                super().__init__(message)
-
-        # Assign to expected names for use throughout module
-        EnumCoreErrorCode = _FallbackEnumCoreErrorCode
-        OnexError = _FallbackOnexError
-
-
-# Import agent execution logger for observability
+# Import agent execution logger for observability (optional integration)
 try:
     from omniclaude.lib.agent_execution_logger import log_agent_execution
 
     AGENT_LOGGER_AVAILABLE = True
-except ImportError:
-    try:
-        from agents.lib.agent_execution_logger import log_agent_execution
+except ImportError:  # nosec B110 - Optional dependency, graceful degradation
+    AGENT_LOGGER_AVAILABLE = False
+    logging.debug("Agent execution logger not available - execution logging disabled")
 
-        AGENT_LOGGER_AVAILABLE = True
-    except ImportError:
-        AGENT_LOGGER_AVAILABLE = False
-        logging.debug(
-            "Agent execution logger not available - execution logging disabled"
-        )
+# FAIL FAST: Required configuration
+from omniclaude.config import settings
 
-try:
-    from config import settings
-
-    SETTINGS_AVAILABLE = True
-except ImportError:
-    SETTINGS_AVAILABLE = False
-    logging.warning(
-        "config.settings not available, falling back to environment variables"
-    )
-
-# Import Slack notifier for error notifications
+# Import Slack notifier for error notifications (optional integration)
 try:
     from omniclaude.lib.slack_notifier import get_slack_notifier
 
     SLACK_NOTIFIER_AVAILABLE = True
-except ImportError:
-    try:
-        from agents.lib.slack_notifier import get_slack_notifier
-
-        SLACK_NOTIFIER_AVAILABLE = True
-    except ImportError:
-        SLACK_NOTIFIER_AVAILABLE = False
-        logging.warning("SlackNotifier not available - error notifications disabled")
+except ImportError:  # nosec B110 - Optional dependency, graceful degradation
+    SLACK_NOTIFIER_AVAILABLE = False
+    logging.warning("SlackNotifier not available - error notifications disabled")
 
 
 class RoutingEventClient:
@@ -194,12 +151,6 @@ class RoutingEventClient:
             )
     """
 
-    # Kafka topic names (following EVENT_BUS_INTEGRATION_GUIDE standard)
-    # Format: omninode.{domain}.{entity}.{action}.v{major}
-    TOPIC_REQUEST = "omninode.agent.routing.requested.v1"
-    TOPIC_COMPLETED = "omninode.agent.routing.completed.v1"
-    TOPIC_FAILED = "omninode.agent.routing.failed.v1"
-
     def __init__(
         self,
         bootstrap_servers: str | None = None,
@@ -211,8 +162,8 @@ class RoutingEventClient:
 
         Args:
             bootstrap_servers: Kafka bootstrap servers
-                - External host: "localhost:9092" or "192.168.86.200:9092"
-                - Docker internal: "omninode-bridge-redpanda:9092"
+                - External host: "localhost:9092" or "kafka.example.com:9092"
+                - Docker internal: "kafka:9092"
             request_timeout_ms: Default timeout for requests in milliseconds
             consumer_group_id: Optional consumer group ID (default: auto-generated)
         """
@@ -230,20 +181,8 @@ class RoutingEventClient:
         # Bootstrap servers - use type-safe configuration if not provided
         if bootstrap_servers:
             self.bootstrap_servers = bootstrap_servers
-        elif SETTINGS_AVAILABLE:
-            self.bootstrap_servers = settings.get_effective_kafka_bootstrap_servers()
         else:
-            # This should not happen - settings should always be available
-            raise OnexError(
-                code=EnumCoreErrorCode.CONFIGURATION_ERROR,
-                message="config.settings not available. Cannot initialize RoutingEventClient.",
-                details={
-                    "component": "RoutingEventClient",
-                    "required_module": "config/settings.py",
-                    "required_env_var": "KAFKA_BOOTSTRAP_SERVERS",
-                    "suggestion": "Ensure config/settings.py is accessible and KAFKA_BOOTSTRAP_SERVERS is set in .env",
-                },
-            )
+            self.bootstrap_servers = settings.get_effective_kafka_bootstrap_servers()
 
         if not self.bootstrap_servers:
             raise OnexError(
@@ -253,22 +192,25 @@ class RoutingEventClient:
                     "component": "RoutingEventClient",
                     "operation": "initialization",
                     "current_value": self.bootstrap_servers,
-                    "suggestion": "Set KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:9092 in .env file",
+                    "suggestion": "Set KAFKA_BOOTSTRAP_SERVERS=localhost:9092 in .env file",
                 },
             )
         self.request_timeout_ms = request_timeout_ms
-        self.consumer_group_id = (
-            consumer_group_id or f"omniclaude-routing-{uuid4().hex[:8]}"
-        )
+        self.consumer_group_id = consumer_group_id or f"omniclaude-routing-{uuid4().hex[:8]}"
+
+        # Build environment-prefixed topic names
+        # Uses settings.kafka_environment (dev/staging/prod) for proper topic routing
+        kafka_env = settings.kafka_environment
+        self.TOPIC_REQUEST = build_topic(kafka_env, TopicBase.ROUTING_REQUESTED)
+        self.TOPIC_COMPLETED = build_topic(kafka_env, TopicBase.ROUTING_COMPLETED)
+        self.TOPIC_FAILED = build_topic(kafka_env, TopicBase.ROUTING_FAILED)
 
         self._producer: AIOKafkaProducer | None = None
         self._consumer: AIOKafkaConsumer | None = None
         self._started = False
-        self._pending_requests: dict[str, asyncio.Future[dict[str, Any]]] = {}
+        self._pending_requests: dict[str, asyncio.Future[Any]] = {}
         self._consumer_ready = asyncio.Event()  # Signal when consumer is polling
-        self._consumer_task: asyncio.Task[None] | None = (
-            None  # Store task to prevent GC
-        )
+        self._consumer_task: asyncio.Task[None] | None = None  # Store task to prevent GC
 
         self.logger = logging.getLogger(__name__)
 
@@ -289,14 +231,13 @@ class RoutingEventClient:
 
         # Validate required services before attempting connection
         # This follows coding guidelines for service validation at startup
-        if SETTINGS_AVAILABLE:
-            validation_errors = settings.validate_required_services()
-            # Filter to only Kafka-related errors for this client
-            kafka_errors = [e for e in validation_errors if "kafka" in e.lower()]
-            if kafka_errors:
-                self.logger.warning(f"Service validation warnings: {kafka_errors}")
-                # Log but don't fail - allow connection attempt to provide
-                # more specific error messages
+        validation_errors = settings.validate_required_services()
+        # Filter to only Kafka-related errors for this client
+        kafka_errors = [e for e in validation_errors if "kafka" in e.lower()]
+        if kafka_errors:
+            self.logger.warning(f"Service validation warnings: {kafka_errors}")
+            # Log but don't fail - allow connection attempt to provide
+            # more specific error messages
 
         # Validate bootstrap servers format
         if not self.bootstrap_servers or not isinstance(self.bootstrap_servers, str):
@@ -307,14 +248,12 @@ class RoutingEventClient:
                     "component": "RoutingEventClient",
                     "operation": "service_validation",
                     "bootstrap_servers": self.bootstrap_servers,
-                    "suggestion": "Set valid KAFKA_BOOTSTRAP_SERVERS in .env (e.g., 192.168.86.200:9092)",
+                    "suggestion": "Set valid KAFKA_BOOTSTRAP_SERVERS in .env (e.g., localhost:9092)",
                 },
             )
 
         try:
-            self.logger.info(
-                f"Starting routing event client (broker: {self.bootstrap_servers})"
-            )
+            self.logger.info(f"Starting routing event client (broker: {self.bootstrap_servers})")
 
             # Initialize producer
             self._producer = AIOKafkaProducer(
@@ -345,13 +284,13 @@ class RoutingEventClient:
                 f"Waiting for consumer partition assignment (topics: {self.TOPIC_COMPLETED}, {self.TOPIC_FAILED})..."
             )
             max_wait_seconds = 10
-            start_time = asyncio.get_running_loop().time()
+            start_time = asyncio.get_event_loop().time()
             check_count = 0
 
             while not self._consumer.assignment():
                 check_count += 1
                 await asyncio.sleep(0.1)
-                elapsed = asyncio.get_running_loop().time() - start_time
+                elapsed = asyncio.get_event_loop().time() - start_time
 
                 # Log progress every 1 second
                 if check_count % 10 == 0:
@@ -360,7 +299,9 @@ class RoutingEventClient:
                     )
 
                 if elapsed > max_wait_seconds:
-                    error_msg = f"Consumer failed to get partition assignment after {max_wait_seconds}s"
+                    error_msg = (
+                        f"Consumer failed to get partition assignment after {max_wait_seconds}s"
+                    )
                     self.logger.error(error_msg)
                     raise OnexError(
                         code=EnumCoreErrorCode.OPERATION_FAILED,
@@ -396,12 +337,12 @@ class RoutingEventClient:
             self.logger.info("Waiting for consumer task to start polling...")
             consumer_ready_timeout = 5.0
             try:
-                await asyncio.wait_for(
-                    self._consumer_ready.wait(), timeout=consumer_ready_timeout
-                )
+                await asyncio.wait_for(self._consumer_ready.wait(), timeout=consumer_ready_timeout)
                 self.logger.info("Consumer task confirmed polling - ready for requests")
             except TimeoutError:
-                error_msg = f"Consumer task failed to start polling within {consumer_ready_timeout}s"
+                error_msg = (
+                    f"Consumer task failed to start polling within {consumer_ready_timeout}s"
+                )
                 self.logger.error(error_msg)
                 raise OnexError(
                     code=EnumCoreErrorCode.OPERATION_FAILED,
@@ -435,9 +376,7 @@ class RoutingEventClient:
                         },
                     )
                 except Exception as notify_error:
-                    self.logger.debug(
-                        f"Failed to send Slack notification: {notify_error}"
-                    )
+                    self.logger.debug(f"Failed to send Slack notification: {notify_error}")
 
             await self.stop()
             raise OnexError(
@@ -464,9 +403,7 @@ class RoutingEventClient:
         """
         # Always run cleanup, even after partial startup failures
         if not self._started:
-            self.logger.info(
-                "Stopping routing event client after partial startup failure"
-            )
+            self.logger.info("Stopping routing event client after partial startup failure")
         else:
             self.logger.info("Stopping routing event client")
 
@@ -481,7 +418,7 @@ class RoutingEventClient:
                     try:
                         await self._consumer_task
                     except asyncio.CancelledError:
-                        pass  # Expected when cancelling
+                        pass  # nosec B110 - Expected when cancelling task
                 self.logger.debug("Consumer task cancelled successfully")
             except Exception as e:
                 self.logger.error(f"Error cancelling consumer task: {e}")
@@ -565,10 +502,7 @@ class RoutingEventClient:
 
         try:
             # Verify producer is connected
-            if self._producer is None:
-                return False
-
-            return True
+            return self._producer is not None
 
         except Exception as e:
             self.logger.warning(f"Health check failed: {e}")
@@ -654,9 +588,7 @@ class RoutingEventClient:
                 "Routing request started",
                 extra={
                     **log_extra,
-                    "user_request_preview": (
-                        user_request[:100] if user_request else None
-                    ),
+                    "user_request_preview": (user_request[:100] if user_request else None),
                     "max_recommendations": max_recommendations,
                     "min_confidence": min_confidence,
                     "routing_strategy": routing_strategy,
@@ -713,9 +645,7 @@ class RoutingEventClient:
             if AGENT_LOGGER_AVAILABLE and recommendations:
                 try:
                     top_agent = recommendations[0].get("agent_name", "unknown")
-                    top_confidence = (
-                        recommendations[0].get("confidence", {}).get("total", 0.0)
-                    )
+                    top_confidence = recommendations[0].get("confidence", {}).get("total", 0.0)
                     execution_logger = await log_agent_execution(
                         agent_name=f"routing-decision:{top_agent}",
                         user_prompt=user_request[:500] if user_request else None,
@@ -732,9 +662,7 @@ class RoutingEventClient:
                             "all_recommendations": [
                                 {
                                     "agent": r.get("agent_name"),
-                                    "confidence": r.get("confidence", {}).get(
-                                        "total", 0.0
-                                    ),
+                                    "confidence": r.get("confidence", {}).get("total", 0.0),
                                 }
                                 for r in recommendations[:5]
                             ],
@@ -747,7 +675,7 @@ class RoutingEventClient:
                         extra=log_extra,
                     )
 
-            return cast("list[dict[str, Any]]", recommendations)
+            return cast(list[dict[str, Any]], recommendations)
 
         except TimeoutError:
             # Log timeout with structured correlation ID tracking
@@ -766,9 +694,7 @@ class RoutingEventClient:
                 try:
                     notifier = get_slack_notifier()
                     await notifier.send_error_notification(
-                        error=TimeoutError(
-                            f"Routing request timeout after {timeout}ms"
-                        ),
+                        error=TimeoutError(f"Routing request timeout after {timeout}ms"),
                         context={
                             "service": "routing_event_client",
                             "operation": "routing_request",
@@ -778,9 +704,7 @@ class RoutingEventClient:
                         },
                     )
                 except Exception as notify_error:
-                    self.logger.debug(
-                        f"Failed to send Slack notification: {notify_error}"
-                    )
+                    self.logger.debug(f"Failed to send Slack notification: {notify_error}")
 
             raise OnexError(
                 code=EnumCoreErrorCode.OPERATION_FAILED,
@@ -791,9 +715,7 @@ class RoutingEventClient:
                     "operation": "routing_request",
                     "correlation_id": correlation_id,
                     "timeout_ms": timeout,
-                    "user_request_preview": (
-                        user_request[:100] if user_request else None
-                    ),
+                    "user_request_preview": (user_request[:100] if user_request else None),
                 },
             )
 
@@ -823,9 +745,7 @@ class RoutingEventClient:
                         },
                     )
                 except Exception as notify_error:
-                    self.logger.debug(
-                        f"Failed to send Slack notification: {notify_error}"
-                    )
+                    self.logger.debug(f"Failed to send Slack notification: {notify_error}")
 
             # Wrap non-OnexError exceptions for ONEX compliance
             if isinstance(e, OnexError):
@@ -837,9 +757,7 @@ class RoutingEventClient:
                     "component": "RoutingEventClient",
                     "operation": "request_routing",
                     "correlation_id": correlation_id,
-                    "user_request_preview": (
-                        user_request[:100] if user_request else None
-                    ),
+                    "user_request_preview": (user_request[:100] if user_request else None),
                     "original_error_type": type(e).__name__,
                     "original_error": str(e),
                 },
@@ -873,7 +791,7 @@ class RoutingEventClient:
             OnexError: With OPERATION_FAILED if producer not initialized
         """
         # Create future for this request
-        future: asyncio.Future[dict[str, Any]] = asyncio.Future()
+        future: asyncio.Future[Any] = asyncio.Future()
         self._pending_requests[correlation_id] = future
 
         try:
@@ -897,7 +815,7 @@ class RoutingEventClient:
                 timeout=timeout_ms / 1000.0,  # Convert to seconds
             )
 
-            return result
+            return cast(dict[str, Any], result)
 
         finally:
             # Clean up pending request
@@ -959,10 +877,11 @@ class RoutingEventClient:
                         continue
 
                     # Determine event type (lowercase dot notation per EVENT_BUS_INTEGRATION_GUIDE)
+                    # Compare against TopicBase constant (base name without prefix) or full topic
                     event_type = response.get("event_type", "")
 
                     if (
-                        event_type == "omninode.agent.routing.completed.v1"
+                        event_type == TopicBase.ROUTING_COMPLETED
                         or msg.topic == self.TOPIC_COMPLETED
                     ):
                         # Success response
@@ -980,9 +899,7 @@ class RoutingEventClient:
                                 else:
                                     # Convert Pydantic model to dict
                                     formatted_recommendations.append(
-                                        rec.model_dump()
-                                        if hasattr(rec, "model_dump")
-                                        else rec
+                                        rec.model_dump() if hasattr(rec, "model_dump") else rec
                                     )
 
                             result = {
@@ -996,7 +913,7 @@ class RoutingEventClient:
                             )
 
                     elif (
-                        event_type == "omninode.agent.routing.failed.v1"
+                        event_type == TopicBase.ROUTING_FAILED
                         or msg.topic == self.TOPIC_FAILED
                     ):
                         # Error response
@@ -1150,19 +1067,15 @@ async def route_via_events(
         )
     """
     # Feature flag: USE_EVENT_ROUTING (default: True)
-    if SETTINGS_AVAILABLE:
-        use_events = settings.use_event_routing
-    else:
-        # Fallback for when settings not available
-        use_events = os.getenv("USE_EVENT_ROUTING", "true").lower() in (
-            "true",
-            "1",
-            "yes",
-        )
+    use_events = settings.use_event_routing
 
-    if not use_events and fallback_to_local:
+    # Skip event routing if schemas aren't available or feature is disabled
+    if (not use_events or not SCHEMAS_AVAILABLE) and fallback_to_local:
         # Skip events, go straight to local routing
-        logger.info("USE_EVENT_ROUTING=false, using local AgentRouter")
+        if not SCHEMAS_AVAILABLE:
+            logger.debug("Routing schemas not available, using local AgentRouter")
+        else:
+            logger.info("USE_EVENT_ROUTING=false, using local AgentRouter")
         from .agent_router import AgentRouter
 
         router = AgentRouter()
@@ -1173,7 +1086,10 @@ async def route_via_events(
         )
         return _format_recommendations(recommendations)
 
-    # Try event-based routing first
+    # Try event-based routing
+    # Capture error for fallback path (only used if fallback_to_local=True)
+    event_error: Exception | None = None
+
     try:
         async with RoutingEventClientContext(request_timeout_ms=timeout_ms) as client:
             return await client.request_routing(
@@ -1183,44 +1099,39 @@ async def route_via_events(
                 min_confidence=min_confidence,
                 timeout_ms=timeout_ms,
             )
-
     except (OnexError, AIOKafkaError) as e:
+        # If no fallback requested, re-raise immediately
+        if not fallback_to_local:
+            raise
+        # Capture error and continue to fallback
+        event_error = e
         logger.warning(f"Event-based routing failed: {e}")
 
-        if fallback_to_local:
-            # Fallback to local AgentRouter
-            logger.info("Falling back to local AgentRouter")
-            try:
-                from .agent_router import AgentRouter
+    # Fallback to local AgentRouter
+    # Note: Only reached when event routing failed AND fallback_to_local=True
+    logger.info("Falling back to local AgentRouter")
+    try:
+        from .agent_router import AgentRouter
 
-                router = AgentRouter()
-                recommendations = router.route(
-                    user_request=user_request,
-                    context=context or {},
-                    max_recommendations=max_recommendations,
-                )
-                return _format_recommendations(recommendations)
-            except Exception as fallback_error:
-                logger.error(f"Local routing fallback also failed: {fallback_error}")
-                raise OnexError(
-                    code=EnumCoreErrorCode.OPERATION_FAILED,
-                    message="Both event-based and local routing failed",
-                    details={
-                        "component": "route_via_events",
-                        "event_routing_error": str(e),
-                        "local_routing_error": str(fallback_error),
-                        "user_request_preview": (
-                            user_request[:100] if user_request else None
-                        ),
-                    },
-                ) from e
-        else:
-            # No fallback, re-raise original error
-            raise
-
-    # Unreachable: all code paths above either return or raise.
-    # This explicit return satisfies mypy's control flow analysis.
-    return []
+        router = AgentRouter()
+        recommendations = router.route(
+            user_request=user_request,
+            context=context or {},
+            max_recommendations=max_recommendations,
+        )
+        return _format_recommendations(recommendations)
+    except Exception as fallback_error:
+        logger.error(f"Local routing fallback also failed: {fallback_error}")
+        raise OnexError(
+            code=EnumCoreErrorCode.OPERATION_FAILED,
+            message="Both event-based and local routing failed",
+            details={
+                "component": "route_via_events",
+                "event_routing_error": str(event_error),
+                "local_routing_error": str(fallback_error),
+                "user_request_preview": (user_request[:100] if user_request else None),
+            },
+        ) from event_error
 
 
 __all__ = [

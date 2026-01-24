@@ -58,7 +58,7 @@ class ConfidenceScorer:
         """Initialize confidence scorer."""
         # Historical success rates (loaded from tracking data)
         # In Phase 2+, this would come from actual usage tracking
-        self.historical_success: dict[str, dict[str, float]] = {}
+        self.historical_success: dict[str, dict[str, Any]] = {}
 
     def score(
         self,
@@ -149,9 +149,7 @@ class ConfidenceScorer:
             # Domain mismatch
             return 0.4
 
-    def _calculate_capability_score(
-        self, agent_data: dict[str, Any], request: str
-    ) -> float:
+    def _calculate_capability_score(self, agent_data: dict[str, Any], request: str) -> float:
         """
         Score based on capability match.
 

@@ -30,6 +30,9 @@ from omniclaude.hooks.cli_emit import (
     run_with_timeout,
 )
 
+# All tests in this module are unit tests
+pytestmark = pytest.mark.unit
+
 # =============================================================================
 # Timeout Wrapper Tests
 # =============================================================================

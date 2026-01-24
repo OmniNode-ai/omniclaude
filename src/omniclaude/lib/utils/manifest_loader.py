@@ -6,13 +6,13 @@ Used by user-prompt-submit hook to inject manifest into agent context.
 
 Key Changes (v2.0):
 - Now uses event bus pattern (Kafka) instead of static YAML
-- Queries archon-intelligence-adapter for dynamic system state
+- Queries onex-intelligence-adapter for dynamic system state
 - Falls back to minimal manifest if queries timeout or fail
 - Maintains same API for backward compatibility
 
 Architecture:
     manifest_loader.py → manifest_injector.py → IntelligenceEventClient
-      → Kafka event bus → archon-intelligence-adapter
+      → Kafka event bus → onex-intelligence-adapter
       → Qdrant/Memgraph/PostgreSQL queries → formatted manifest
 """
 
@@ -32,7 +32,7 @@ def load_manifest(
     """
     Load and return dynamic system manifest.
 
-    Queries archon-intelligence-adapter via event bus for current system state.
+    Queries onex-intelligence-adapter via event bus for current system state.
     Falls back to minimal manifest if queries fail or timeout.
 
     Args:

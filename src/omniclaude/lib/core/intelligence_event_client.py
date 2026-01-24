@@ -3,7 +3,7 @@
 Intelligence Event Client - Kafka-based Intelligence Discovery
 
 This module provides a Kafka client for event-based intelligence discovery,
-replacing hard-coded omniarchon repository paths with event-driven pattern discovery.
+replacing hard-coded repository paths with event-driven pattern discovery.
 
 Key Features:
 - Request-response pattern with correlation tracking
@@ -15,7 +15,7 @@ Key Features:
 
 Event Flow:
 1. Client publishes omninode.intelligence.code-analysis.requested.v1 event
-2. omniarchon Intelligence Adapter handler processes request
+2. ONEX Intelligence Adapter handler processes request
 3. Client waits for completed or failed response
 4. On timeout/error: graceful degradation with caller handling fallback
 
@@ -28,7 +28,7 @@ EVENT_BUS_INTEGRATION_GUIDE Compliance:
 
 Integration:
 - Uses EVENT_BUS_INTEGRATION_GUIDE event contracts (frozen envelope)
-- Compatible with omniarchon's confluent-kafka handler (wire protocol)
+- Compatible with the ONEX intelligence service's confluent-kafka handler (wire protocol)
 - Designed for request-response client usage (not 24/7 consumer service)
 
 Performance Targets:
@@ -56,8 +56,9 @@ from uuid import uuid4
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from aiokafka.errors import KafkaError
-from config import settings
 from omnibase_core.errors import EnumCoreErrorCode, ModelOnexError
+
+from omniclaude.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -70,8 +71,8 @@ class IntelligenceEventClient:
     timeout handling, and graceful fallback for intelligence operations.
 
     This client uses aiokafka for native async/await integration, perfect
-    for request-response patterns. It is wire-compatible with omniarchon's
-    confluent-kafka service-side handler.
+    for request-response patterns. It is wire-compatible with the ONEX
+    intelligence service's confluent-kafka handler.
 
     Usage:
         client = IntelligenceEventClient(
@@ -114,8 +115,8 @@ class IntelligenceEventClient:
 
         Args:
             bootstrap_servers: Kafka bootstrap servers
-                - External host: "localhost:9092" or "192.168.86.200:9092"
-                - Docker internal: "omninode-bridge-redpanda:9092"
+                - External host: "localhost:9092" or "kafka.example.com:9092"
+                - Docker internal: "kafka:9092"
             enable_intelligence: Enable event-based intelligence (feature flag)
             request_timeout_ms: Default timeout for requests in milliseconds
             consumer_group_id: Optional consumer group ID (default: auto-generated)
@@ -132,7 +133,7 @@ class IntelligenceEventClient:
                     "  1. KAFKA_BOOTSTRAP_SERVERS (general config)\n"
                     "  2. KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS (intelligence-specific)\n"
                     "  3. KAFKA_BROKERS (legacy compatibility)\n"
-                    "Example: KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:9092\n"
+                    "Example: KAFKA_BOOTSTRAP_SERVERS=localhost:9092\n"
                     "Current values: KAFKA_BOOTSTRAP_SERVERS={}, KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS={}, KAFKA_BROKERS={}".format(
                         getattr(settings, "kafka_bootstrap_servers", "not set"),
                         os.getenv("KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS", "not set"),
@@ -144,17 +145,13 @@ class IntelligenceEventClient:
             )
         self.enable_intelligence = enable_intelligence
         self.request_timeout_ms = request_timeout_ms
-        self.consumer_group_id = (
-            consumer_group_id or f"omniclaude-intelligence-{uuid4().hex[:8]}"
-        )
+        self.consumer_group_id = consumer_group_id or f"omniclaude-intelligence-{uuid4().hex[:8]}"
 
         self._producer: AIOKafkaProducer | None = None
         self._consumer: AIOKafkaConsumer | None = None
-        self._consumer_task: asyncio.Task[None] | None = (
-            None  # Track background consumer task
-        )
+        self._consumer_task: asyncio.Task[None] | None = None  # Track background consumer task
         self._started = False
-        self._pending_requests: dict[str, asyncio.Future[dict[str, Any]]] = {}
+        self._pending_requests: dict[str, asyncio.Future[Any]] = {}
         self._consumer_ready = asyncio.Event()  # Signal when consumer is polling
 
         self.logger = logging.getLogger(__name__)
@@ -216,13 +213,13 @@ class IntelligenceEventClient:
                 f"Waiting for consumer partition assignment (topics: {self.TOPIC_COMPLETED}, {self.TOPIC_FAILED})..."
             )
             max_wait_seconds = 10  # Increased from 5s for slow networks
-            start_time = asyncio.get_running_loop().time()
+            start_time = asyncio.get_event_loop().time()
             check_count = 0
 
             while not self._consumer.assignment():
                 check_count += 1
                 await asyncio.sleep(0.1)
-                elapsed = asyncio.get_running_loop().time() - start_time
+                elapsed = asyncio.get_event_loop().time() - start_time
 
                 # Log progress every 1 second
                 if check_count % 10 == 0:
@@ -258,9 +255,7 @@ class IntelligenceEventClient:
             self.logger.info("Waiting for consumer task to start polling...")
             consumer_ready_timeout = 5.0  # 5 seconds
             try:
-                await asyncio.wait_for(
-                    self._consumer_ready.wait(), timeout=consumer_ready_timeout
-                )
+                await asyncio.wait_for(self._consumer_ready.wait(), timeout=consumer_ready_timeout)
                 self.logger.info("Consumer task confirmed polling - ready for requests")
             except TimeoutError:
                 error_msg = (
@@ -312,7 +307,7 @@ class IntelligenceEventClient:
                 self._consumer = None
 
             # Cancel pending requests
-            for correlation_id, future in self._pending_requests.items():
+            for _correlation_id, future in self._pending_requests.items():
                 if not future.done():
                     future.set_exception(
                         ModelOnexError(
@@ -370,7 +365,7 @@ class IntelligenceEventClient:
         """
         Request pattern discovery via events.
 
-        This is the main method for discovering patterns from omniarchon
+        This is the main method for discovering patterns from the
         codebase using event-based communication.
 
         Args:
@@ -411,9 +406,7 @@ class IntelligenceEventClient:
         if file_path.exists() and file_path.is_file():
             try:
                 content = file_path.read_text(encoding="utf-8")
-                self.logger.debug(
-                    f"Read file content from {source_path} ({len(content)} bytes)"
-                )
+                self.logger.debug(f"Read file content from {source_path} ({len(content)} bytes)")
             except Exception as e:
                 self.logger.warning(
                     f"Failed to read file {source_path}: {e}. Proceeding with empty content."
@@ -433,7 +426,7 @@ class IntelligenceEventClient:
         )
 
         # Extract patterns list from result dict
-        return cast("list[dict[str, Any]]", result.get("patterns", []))
+        return cast(list[dict[str, Any]], result.get("patterns", []))
 
     async def request_code_analysis(
         self,
@@ -512,9 +505,7 @@ class IntelligenceEventClient:
                 timeout_ms=timeout,
             )
 
-            self.logger.debug(
-                f"Code analysis completed (correlation_id: {correlation_id})"
-            )
+            self.logger.debug(f"Code analysis completed (correlation_id: {correlation_id})")
 
             return result
 
@@ -626,7 +617,7 @@ class IntelligenceEventClient:
             KafkaError: If Kafka operation fails
         """
         # Create future for this request
-        future: asyncio.Future[dict[str, Any]] = asyncio.Future()
+        future: asyncio.Future[Any] = asyncio.Future()
         self._pending_requests[correlation_id] = future
 
         try:
@@ -674,7 +665,7 @@ class IntelligenceEventClient:
                 timeout=timeout_ms / 1000.0,  # Convert to seconds
             )
 
-            return result
+            return cast(dict[str, Any], result)
 
         finally:
             # Clean up pending request
@@ -737,8 +728,7 @@ class IntelligenceEventClient:
                     # Check for completion event (full dotted notation)
                     if (
                         event_type == "omninode.intelligence.code-analysis.completed.v1"
-                        or event_type
-                        == "CODE_ANALYSIS_COMPLETED"  # Backward compatibility
+                        or event_type == "CODE_ANALYSIS_COMPLETED"  # Backward compatibility
                         or msg.topic == self.TOPIC_COMPLETED
                     ):
                         # Success response
@@ -752,8 +742,7 @@ class IntelligenceEventClient:
                     # Check for failure event (full dotted notation)
                     elif (
                         event_type == "omninode.intelligence.code-analysis.failed.v1"
-                        or event_type
-                        == "CODE_ANALYSIS_FAILED"  # Backward compatibility
+                        or event_type == "CODE_ANALYSIS_FAILED"  # Backward compatibility
                         or msg.topic == self.TOPIC_FAILED
                     ):
                         # Error response
@@ -762,9 +751,7 @@ class IntelligenceEventClient:
                         error_message = payload.get("error_message", "Analysis failed")
 
                         if not future.done():
-                            future.set_exception(
-                                KafkaError(f"{error_code}: {error_message}")
-                            )
+                            future.set_exception(KafkaError(f"{error_code}: {error_message}"))
                             self.logger.warning(
                                 f"Failed request (correlation_id: {correlation_id}, error: {error_code})"
                             )
