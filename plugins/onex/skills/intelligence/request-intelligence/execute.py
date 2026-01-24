@@ -88,7 +88,9 @@ except ImportError:
 
 # Add _shared to path for helper functions
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
-from db_helper import get_correlation_id  # noqa: E402
+from db_helper import (
+    get_correlation_id,  # noqa: E402 - import after sys.path modification
+)
 
 OPERATION_TYPES = {
     "pattern-discovery": "PATTERN_EXTRACTION",

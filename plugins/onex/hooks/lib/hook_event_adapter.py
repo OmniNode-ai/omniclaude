@@ -72,7 +72,7 @@ except ImportError:
 # but don't crash the hook. This is defense-in-depth - the hooks venv should have
 # the package, but we handle the case where it doesn't gracefully.
 KAFKA_AVAILABLE = False
-KafkaProducer = None  # noqa: N806
+KafkaProducer = None  # noqa: N806 - intentional PascalCase for class reference placeholder
 
 try:
     from kafka import KafkaProducer as _KafkaProducer

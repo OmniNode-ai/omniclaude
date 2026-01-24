@@ -28,6 +28,7 @@ from pathlib import Path
 # Add _shared to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 from db_helper import get_correlation_id
+from env_loader import load_env_file
 
 # Add shared_lib to path for kafka_config and kafka_publisher
 # Path: execute_kafka.py -> log-transformation/ -> agent-tracking/ -> skills/ -> claude/ -> omniclaude/
@@ -48,36 +49,6 @@ agents_lib_path = Path(__file__).parent.parent.parent.parent.parent / "agents" /
 if agents_lib_path.exists():
     sys.path.insert(0, str(agents_lib_path))
     from transformation_validator import validate_transformation
-
-
-# Load .env file from project directory
-# TODO: This load_env_file() function is duplicated across all agent-tracking skills:
-#   - log-transformation/execute_kafka.py
-#   - log-performance-metrics/execute_kafka.py
-#   - log-agent-action/execute_kafka.py
-#   - log-routing-decision/execute_kafka.py
-# Consider consolidating into plugins/onex/skills/_shared/env_loader.py
-# See: https://linear.app/omniclaude/issue/OMN-XXXX (if ticket created)
-def load_env_file():
-    """Load environment variables from project .env file."""
-    # Calculate project root from this file's location (skills/agent-tracking/log-transformation/)
-    project_root = Path(__file__).parent.parent.parent.parent.parent.resolve()
-    env_paths = [
-        project_root / ".env",
-        Path.home() / "Code" / "omniclaude" / ".env",
-    ]
-
-    for env_path in env_paths:
-        if env_path.exists():
-            with open(env_path, encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith("#") and "=" in line:
-                        key, value = line.split("=", 1)
-                        # Only set if not already in environment
-                        if key not in os.environ:
-                            os.environ[key] = value.strip('"').strip("'")
-            return
 
 
 # Load .env on import
