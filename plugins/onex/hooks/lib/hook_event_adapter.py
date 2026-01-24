@@ -37,9 +37,11 @@ import logging
 import os
 import sys
 import uuid
+import warnings
+from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 # Ensure project root is in path for imports
 # This file is at: claude/hooks/lib/hook_event_adapter.py
@@ -55,13 +57,26 @@ try:
 except ImportError:
     from agents.lib.errors import EnumCoreErrorCode, OnexError
 
+# ONEX types for routing alternatives (replaces dict union soup)
+from omnibase_core.types import TypedDictRoutingAlternative
+
+# Topic constants and builder (centralized in omniclaude.hooks.topics)
+try:
+    from omniclaude.hooks.topics import TopicBase, build_topic
+except ImportError:
+    # Fallback: add src to path for direct execution
+    _SRC_PATH = _PROJECT_ROOT / "src"
+    if str(_SRC_PATH) not in sys.path:
+        sys.path.insert(0, str(_SRC_PATH))
+    from omniclaude.hooks.topics import TopicBase, build_topic
+
 
 # Use kafka-python for synchronous publishing (simpler for hooks)
 # Graceful degradation: if kafka-python is not installed, we skip Kafka operations
 # but don't crash the hook. This is defense-in-depth - the hooks venv should have
 # the package, but we handle the case where it doesn't gracefully.
 KAFKA_AVAILABLE = False
-KafkaProducer = None  # type: ignore
+KafkaProducer = None  # noqa: N806 - intentional PascalCase for class reference placeholder
 
 try:
     from kafka import KafkaProducer as _KafkaProducer
@@ -81,6 +96,95 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+# =============================================================================
+# Event Config Models (ONEX: Parameter reduction pattern)
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class ModelRoutingDecisionConfig:
+    """Configuration for routing decision events.
+
+    Groups related parameters for publish_routing_decision() to reduce
+    function signature complexity per ONEX parameter guidelines.
+    """
+
+    agent_name: str
+    confidence: float
+    strategy: str
+    latency_ms: int
+    correlation_id: str
+    user_request: str | None = None
+    # Each alternative contains agent_name (str) and confidence (float)
+    alternatives: list[TypedDictRoutingAlternative] | None = None
+    reasoning: str | None = None
+    context: Mapping[str, object] | None = None
+    project_path: str | None = None
+    project_name: str | None = None
+    session_id: str | None = None
+
+
+@dataclass(frozen=True)
+class ModelAgentActionConfig:
+    """Configuration for agent action events.
+
+    Groups related parameters for publish_agent_action() to reduce
+    function signature complexity per ONEX parameter guidelines.
+    """
+
+    agent_name: str
+    action_type: str
+    action_name: str
+    correlation_id: str
+    action_details: Mapping[str, object] | None = None
+    duration_ms: int | None = None
+    success: bool = True
+    debug_mode: bool = True
+    project_path: str | None = None
+    project_name: str | None = None
+    working_directory: str | None = None
+
+
+@dataclass(frozen=True)
+class ModelDetectionFailureConfig:
+    """Configuration for detection failure events.
+
+    Groups related parameters for publish_detection_failure() to reduce
+    function signature complexity per ONEX parameter guidelines.
+    """
+
+    user_request: str
+    failure_reason: str
+    # Detection method names tried (e.g., "fuzzy_matching", "exact_match")
+    attempted_methods: list[str] | None = None
+    error_details: Mapping[str, object] | None = None
+    correlation_id: str | None = None
+    project_path: str | None = None
+    project_name: str | None = None
+    session_id: str | None = None
+
+
+@dataclass(frozen=True)
+class ModelPerformanceMetricsConfig:
+    """Configuration for performance metrics events.
+
+    Groups related parameters for publish_performance_metrics() to reduce
+    function signature complexity per ONEX parameter guidelines.
+    """
+
+    agent_name: str
+    metric_name: str
+    metric_value: float
+    correlation_id: str
+    metric_type: str = "gauge"
+    metric_unit: str | None = None
+    tags: dict[str, str] | None = None
+
+
+# ONEX: exempt - facade with backward compatibility wrappers
+# Rationale: 13 methods, but 5 are backward-compatible wrappers (publish_X calls
+# publish_X_from_config). True unique methods are ~8. This is a facade pattern
+# for unified event publishing and methods are highly cohesive.
 class HookEventAdapter:
     """
     Synchronous event adapter for hook scripts.
@@ -94,19 +198,14 @@ class HookEventAdapter:
     - Automatic topic routing based on event type
     - JSON serialization
     - Graceful error handling (non-blocking)
+    - Configurable topic prefix for environment isolation
     """
-
-    # Event topics (ONEX event bus architecture)
-    TOPIC_ROUTING_DECISIONS = "agent-routing-decisions"
-    TOPIC_AGENT_ACTIONS = "agent-actions"
-    TOPIC_PERFORMANCE_METRICS = "router-performance-metrics"
-    TOPIC_TRANSFORMATIONS = "agent-transformation-events"
-    TOPIC_DETECTION_FAILURES = "agent-detection-failures"
 
     def __init__(
         self,
         bootstrap_servers: str | None = None,
         enable_events: bool = True,
+        topic_prefix: str | None = None,
     ):
         """
         Initialize hook event adapter.
@@ -117,20 +216,40 @@ class HookEventAdapter:
                 - Remote broker: "192.168.86.200:9092" (primary)
                 - Docker internal: "omninode-bridge-redpanda:9092"
             enable_events: Enable event publishing (feature flag)
+            topic_prefix: Optional environment prefix for topics (e.g., "dev", "staging").
+                - Default: KAFKA_TOPIC_PREFIX env var or empty string (no prefix)
+                - When set, topics become "{prefix}.{base}" (e.g., "dev.agent-routing-decisions")
         """
         self.bootstrap_servers = bootstrap_servers or os.environ.get(
             "KAFKA_BOOTSTRAP_SERVERS", "omninode-bridge-redpanda:9092"
         )
+        # Topic prefix for environment isolation
+        self.topic_prefix = (
+            topic_prefix
+            if topic_prefix is not None
+            else os.environ.get("KAFKA_TOPIC_PREFIX", "")
+        )
         # Disable events if Kafka is not available
         self.enable_events = enable_events and KAFKA_AVAILABLE
 
-        self._producer: Any | None = None  # KafkaProducer or None
+        self._producer: object | None = None  # KafkaProducer or None
         self._initialized = False
         self._kafka_available = KAFKA_AVAILABLE
 
         self.logger = logging.getLogger(__name__)
 
-    def _get_producer(self) -> Any:
+    def _build_topic(self, base: TopicBase) -> str:
+        """Build full topic name from TopicBase constant.
+
+        Args:
+            base: TopicBase enum constant (e.g., TopicBase.ROUTING_DECISIONS)
+
+        Returns:
+            Full topic name with optional prefix (e.g., "dev.agent-routing-decisions")
+        """
+        return build_topic(self.topic_prefix, base)
+
+    def _get_producer(self) -> object:
         """
         Get or create Kafka producer (lazy initialization).
 
@@ -150,11 +269,15 @@ class HookEventAdapter:
         if self._producer is None:
             try:
                 # Configurable timeouts from environment variables
-                request_timeout_ms = int(os.environ.get("KAFKA_REQUEST_TIMEOUT_MS", "1000"))
+                request_timeout_ms = int(
+                    os.environ.get("KAFKA_REQUEST_TIMEOUT_MS", "1000")
+                )
                 connections_max_idle_ms = int(
                     os.environ.get("KAFKA_CONNECTIONS_MAX_IDLE_MS", "5000")
                 )
-                metadata_max_age_ms = int(os.environ.get("KAFKA_METADATA_MAX_AGE_MS", "5000"))
+                metadata_max_age_ms = int(
+                    os.environ.get("KAFKA_METADATA_MAX_AGE_MS", "5000")
+                )
                 max_block_ms = int(os.environ.get("KAFKA_MAX_BLOCK_MS", "2000"))
 
                 self._producer = KafkaProducer(
@@ -176,14 +299,16 @@ class HookEventAdapter:
                     api_version_auto_timeout_ms=1000,  # 1s for API version detection
                 )
                 self._initialized = True
-                self.logger.debug(f"Initialized Kafka producer (brokers: {self.bootstrap_servers})")
+                self.logger.debug(
+                    f"Initialized Kafka producer (brokers: {self.bootstrap_servers})"
+                )
             except Exception as e:
                 self.logger.error(f"Failed to create Kafka producer: {e}")
                 raise
 
         return self._producer
 
-    def _publish(self, topic: str, event: dict[str, Any]) -> bool:
+    def _publish(self, topic: str, event: Mapping[str, object]) -> bool:
         """
         Publish event to Kafka topic.
 
@@ -224,6 +349,36 @@ class HookEventAdapter:
             self.logger.error(f"Failed to publish event to {topic}: {e}")
             return False
 
+    def publish_routing_decision_from_config(
+        self,
+        config: ModelRoutingDecisionConfig,
+    ) -> bool:
+        """Publish agent routing decision event from config object.
+
+        Args:
+            config: Routing decision configuration containing all event data.
+
+        Returns:
+            True if published successfully, False otherwise.
+        """
+        event = {
+            "correlation_id": config.correlation_id,
+            "user_request": config.user_request or "",
+            "selected_agent": config.agent_name,
+            "confidence_score": config.confidence,
+            "alternatives": config.alternatives or [],
+            "reasoning": config.reasoning,
+            "routing_strategy": config.strategy,
+            "context": config.context or {},
+            "routing_time_ms": config.latency_ms,
+            "project_path": config.project_path,
+            "project_name": config.project_name,
+            "session_id": config.session_id,
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+
+        return self._publish(self._build_topic(TopicBase.ROUTING_DECISIONS), event)
+
     def publish_routing_decision(
         self,
         agent_name: str,
@@ -232,15 +387,18 @@ class HookEventAdapter:
         latency_ms: int,
         correlation_id: str,
         user_request: str | None = None,
-        alternatives: list | None = None,
+        alternatives: list[TypedDictRoutingAlternative] | None = None,
         reasoning: str | None = None,
-        context: dict[str, Any] | None = None,
+        context: Mapping[str, object] | None = None,
         project_path: str | None = None,
         project_name: str | None = None,
         session_id: str | None = None,
     ) -> bool:
-        """
-        Publish agent routing decision event.
+        """Publish agent routing decision event.
+
+        Note:
+            Consider using publish_routing_decision_from_config() with
+            ModelRoutingDecisionConfig for better parameter organization.
 
         Args:
             agent_name: Selected agent name
@@ -258,24 +416,62 @@ class HookEventAdapter:
 
         Returns:
             True if published successfully, False otherwise
+
+        .. deprecated::
+            Use :meth:`publish_routing_decision_from_config` with
+            :class:`ModelRoutingDecisionConfig` instead.
+        """
+        # ONEX: exempt - backwards compatibility wrapper for config-based method
+        warnings.warn(
+            "publish_routing_decision() is deprecated, use "
+            "publish_routing_decision_from_config() with ModelRoutingDecisionConfig instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        config = ModelRoutingDecisionConfig(
+            agent_name=agent_name,
+            confidence=confidence,
+            strategy=strategy,
+            latency_ms=latency_ms,
+            correlation_id=correlation_id,
+            user_request=user_request,
+            alternatives=alternatives,
+            reasoning=reasoning,
+            context=context,
+            project_path=project_path,
+            project_name=project_name,
+            session_id=session_id,
+        )
+        return self.publish_routing_decision_from_config(config)
+
+    def publish_agent_action_from_config(
+        self,
+        config: ModelAgentActionConfig,
+    ) -> bool:
+        """Publish agent action event from config object.
+
+        Args:
+            config: Agent action configuration containing all event data.
+
+        Returns:
+            True if published successfully, False otherwise.
         """
         event = {
-            "correlation_id": correlation_id,
-            "user_request": user_request or "",
-            "selected_agent": agent_name,
-            "confidence_score": confidence,
-            "alternatives": alternatives or [],
-            "reasoning": reasoning,
-            "routing_strategy": strategy,
-            "context": context or {},
-            "routing_time_ms": latency_ms,
-            "project_path": project_path,
-            "project_name": project_name,
-            "session_id": session_id,
+            "correlation_id": config.correlation_id,
+            "agent_name": config.agent_name,
+            "action_type": config.action_type,
+            "action_name": config.action_name,
+            "action_details": config.action_details or {},
+            "duration_ms": config.duration_ms,
+            "success": config.success,
+            "debug_mode": config.debug_mode,
+            "project_path": config.project_path,
+            "project_name": config.project_name,
+            "working_directory": config.working_directory,
             "timestamp": datetime.now(UTC).isoformat(),
         }
 
-        return self._publish(self.TOPIC_ROUTING_DECISIONS, event)
+        return self._publish(self._build_topic(TopicBase.AGENT_ACTIONS), event)
 
     def publish_agent_action(
         self,
@@ -283,7 +479,7 @@ class HookEventAdapter:
         action_type: str,
         action_name: str,
         correlation_id: str,
-        action_details: dict[str, Any] | None = None,
+        action_details: Mapping[str, object] | None = None,
         duration_ms: int | None = None,
         success: bool = True,
         debug_mode: bool = True,
@@ -291,8 +487,11 @@ class HookEventAdapter:
         project_name: str | None = None,
         working_directory: str | None = None,
     ) -> bool:
-        """
-        Publish agent action event.
+        """Publish agent action event.
+
+        Note:
+            Consider using publish_agent_action_from_config() with
+            ModelAgentActionConfig for better parameter organization.
 
         Args:
             agent_name: Agent performing the action
@@ -309,23 +508,57 @@ class HookEventAdapter:
 
         Returns:
             True if published successfully, False otherwise
+
+        .. deprecated::
+            Use :meth:`publish_agent_action_from_config` with
+            :class:`ModelAgentActionConfig` instead.
+        """
+        # ONEX: exempt - backwards compatibility wrapper for config-based method
+        warnings.warn(
+            "publish_agent_action() is deprecated, use "
+            "publish_agent_action_from_config() with ModelAgentActionConfig instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        config = ModelAgentActionConfig(
+            agent_name=agent_name,
+            action_type=action_type,
+            action_name=action_name,
+            correlation_id=correlation_id,
+            action_details=action_details,
+            duration_ms=duration_ms,
+            success=success,
+            debug_mode=debug_mode,
+            project_path=project_path,
+            project_name=project_name,
+            working_directory=working_directory,
+        )
+        return self.publish_agent_action_from_config(config)
+
+    def publish_performance_metrics_from_config(
+        self,
+        config: ModelPerformanceMetricsConfig,
+    ) -> bool:
+        """Publish agent performance metrics event from config object.
+
+        Args:
+            config: Performance metrics configuration containing all event data.
+
+        Returns:
+            True if published successfully, False otherwise.
         """
         event = {
-            "correlation_id": correlation_id,
-            "agent_name": agent_name,
-            "action_type": action_type,
-            "action_name": action_name,
-            "action_details": action_details or {},
-            "duration_ms": duration_ms,
-            "success": success,
-            "debug_mode": debug_mode,
-            "project_path": project_path,
-            "project_name": project_name,
-            "working_directory": working_directory,
+            "correlation_id": config.correlation_id,
+            "agent_name": config.agent_name,
+            "metric_name": config.metric_name,
+            "metric_value": config.metric_value,
+            "metric_type": config.metric_type,
+            "metric_unit": config.metric_unit,
+            "tags": config.tags or {},
             "timestamp": datetime.now(UTC).isoformat(),
         }
 
-        return self._publish(self.TOPIC_AGENT_ACTIONS, event)
+        return self._publish(self._build_topic(TopicBase.PERFORMANCE_METRICS), event)
 
     def publish_performance_metrics(
         self,
@@ -337,8 +570,11 @@ class HookEventAdapter:
         metric_unit: str | None = None,
         tags: dict[str, str] | None = None,
     ) -> bool:
-        """
-        Publish agent performance metrics event.
+        """Publish agent performance metrics event.
+
+        Note:
+            Consider using publish_performance_metrics_from_config() with
+            ModelPerformanceMetricsConfig for better parameter organization.
 
         Args:
             agent_name: Agent name
@@ -351,28 +587,38 @@ class HookEventAdapter:
 
         Returns:
             True if published successfully, False otherwise
-        """
-        event = {
-            "correlation_id": correlation_id,
-            "agent_name": agent_name,
-            "metric_name": metric_name,
-            "metric_value": metric_value,
-            "metric_type": metric_type,
-            "metric_unit": metric_unit,
-            "tags": tags or {},
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
 
-        return self._publish(self.TOPIC_PERFORMANCE_METRICS, event)
+        .. deprecated::
+            Use :meth:`publish_performance_metrics_from_config` with
+            :class:`ModelPerformanceMetricsConfig` instead.
+        """
+        # ONEX: exempt - backwards compatibility wrapper for config-based method
+        warnings.warn(
+            "publish_performance_metrics() is deprecated, use "
+            "publish_performance_metrics_from_config() with ModelPerformanceMetricsConfig "
+            "instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        config = ModelPerformanceMetricsConfig(
+            agent_name=agent_name,
+            metric_name=metric_name,
+            metric_value=metric_value,
+            correlation_id=correlation_id,
+            metric_type=metric_type,
+            metric_unit=metric_unit,
+            tags=tags,
+        )
+        return self.publish_performance_metrics_from_config(config)
 
     def publish_transformation(
         self,
         agent_name: str,
         transformation_type: str,
         correlation_id: str,
-        input_data: dict[str, Any] | None = None,
-        output_data: dict[str, Any] | None = None,
-        metadata: dict[str, Any] | None = None,
+        input_data: Mapping[str, object] | None = None,
+        output_data: Mapping[str, object] | None = None,
+        metadata: Mapping[str, object] | None = None,
     ) -> bool:
         """
         Publish agent transformation event.
@@ -398,21 +644,50 @@ class HookEventAdapter:
             "timestamp": datetime.now(UTC).isoformat(),
         }
 
-        return self._publish(self.TOPIC_TRANSFORMATIONS, event)
+        return self._publish(self._build_topic(TopicBase.TRANSFORMATIONS), event)
+
+    def publish_detection_failure_from_config(
+        self,
+        config: ModelDetectionFailureConfig,
+    ) -> bool:
+        """Publish agent detection failure event from config object.
+
+        Args:
+            config: Detection failure configuration containing all event data.
+
+        Returns:
+            True if published successfully, False otherwise.
+        """
+        event = {
+            "correlation_id": config.correlation_id or str(uuid.uuid4()),
+            "user_request": config.user_request,
+            "failure_reason": config.failure_reason,
+            "attempted_methods": config.attempted_methods or [],
+            "error_details": config.error_details or {},
+            "project_path": config.project_path,
+            "project_name": config.project_name,
+            "session_id": config.session_id,
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+
+        return self._publish(self._build_topic(TopicBase.DETECTION_FAILURES), event)
 
     def publish_detection_failure(
         self,
         user_request: str,
         failure_reason: str,
-        attempted_methods: list | None = None,
-        error_details: dict[str, Any] | None = None,
+        attempted_methods: list[str] | None = None,
+        error_details: Mapping[str, object] | None = None,
         correlation_id: str | None = None,
         project_path: str | None = None,
         project_name: str | None = None,
         session_id: str | None = None,
     ) -> bool:
-        """
-        Publish agent detection failure event.
+        """Publish agent detection failure event.
+
+        Note:
+            Consider using publish_detection_failure_from_config() with
+            ModelDetectionFailureConfig for better parameter organization.
 
         Args:
             user_request: User's original request text
@@ -426,20 +701,30 @@ class HookEventAdapter:
 
         Returns:
             True if published successfully, False otherwise
-        """
-        event = {
-            "correlation_id": correlation_id or str(uuid.uuid4()),
-            "user_request": user_request,
-            "failure_reason": failure_reason,
-            "attempted_methods": attempted_methods or [],
-            "error_details": error_details or {},
-            "project_path": project_path,
-            "project_name": project_name,
-            "session_id": session_id,
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
 
-        return self._publish(self.TOPIC_DETECTION_FAILURES, event)
+        .. deprecated::
+            Use :meth:`publish_detection_failure_from_config` with
+            :class:`ModelDetectionFailureConfig` instead.
+        """
+        # ONEX: exempt - backwards compatibility wrapper for config-based method
+        warnings.warn(
+            "publish_detection_failure() is deprecated, use "
+            "publish_detection_failure_from_config() with ModelDetectionFailureConfig "
+            "instead",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        config = ModelDetectionFailureConfig(
+            user_request=user_request,
+            failure_reason=failure_reason,
+            attempted_methods=attempted_methods,
+            error_details=error_details,
+            correlation_id=correlation_id,
+            project_path=project_path,
+            project_name=project_name,
+            session_id=session_id,
+        )
+        return self.publish_detection_failure_from_config(config)
 
     def close(self) -> None:
         """
@@ -479,6 +764,12 @@ def get_hook_event_adapter() -> HookEventAdapter:
 
 
 __all__ = [
+    # Config models
+    "ModelRoutingDecisionConfig",
+    "ModelAgentActionConfig",
+    "ModelDetectionFailureConfig",
+    "ModelPerformanceMetricsConfig",
+    # Adapter class
     "HookEventAdapter",
     "get_hook_event_adapter",
 ]

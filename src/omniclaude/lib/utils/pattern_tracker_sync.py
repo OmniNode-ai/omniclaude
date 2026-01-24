@@ -37,7 +37,9 @@ class PatternTrackerSync:
         }
 
         # Configure session with connection pooling
-        adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=20, max_retries=3)
+        adapter = requests.adapters.HTTPAdapter(
+            pool_connections=10, pool_maxsize=20, max_retries=3
+        )
         self._session.mount("http://", adapter)
         self._session.mount("https://", adapter)
 

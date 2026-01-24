@@ -85,7 +85,9 @@ class TestIntelligenceConfigFromEnv:
     def test_from_env_succeeds_when_kafka_configured(self) -> None:
         """Test that from_env() succeeds when KAFKA_BOOTSTRAP_SERVERS is properly set."""
         mock_settings = MagicMock()
-        mock_settings.get_effective_kafka_bootstrap_servers.return_value = "192.168.86.200:29092"
+        mock_settings.get_effective_kafka_bootstrap_servers.return_value = (
+            "192.168.86.200:29092"
+        )
         mock_settings.use_event_routing = True
         mock_settings.request_timeout_ms = 5000
         mock_settings.kafka_group_id = "test-group"
@@ -191,7 +193,9 @@ class TestIntelligenceConfigValidation:
         config = IntelligenceConfig(
             kafka_bootstrap_servers="broker1:9092,broker2:9092,broker3:9092"
         )
-        assert config.kafka_bootstrap_servers == "broker1:9092,broker2:9092,broker3:9092"
+        assert (
+            config.kafka_bootstrap_servers == "broker1:9092,broker2:9092,broker3:9092"
+        )
 
     def test_bootstrap_servers_port_boundary_lower(self) -> None:
         """Test that port 1 is accepted (lowest valid port)."""
@@ -250,7 +254,9 @@ class TestIntelligenceConfigValidation:
         from omniclaude.lib.config.intelligence_config import IntelligenceConfig
 
         # Spaces around brokers should be trimmed during validation
-        config = IntelligenceConfig(kafka_bootstrap_servers="  broker1:9092 , broker2:9093  ")
+        config = IntelligenceConfig(
+            kafka_bootstrap_servers="  broker1:9092 , broker2:9093  "
+        )
         assert config.kafka_bootstrap_servers == "  broker1:9092 , broker2:9093  "
 
     def test_bootstrap_servers_ipv4_address(self) -> None:
@@ -265,7 +271,9 @@ class TestIntelligenceConfigValidation:
         from omniclaude.lib.config.intelligence_config import IntelligenceConfig
 
         with pytest.raises(ValueError) as exc_info:
-            IntelligenceConfig(kafka_bootstrap_servers="broker1:9092,invalid-no-port,broker3:9092")
+            IntelligenceConfig(
+                kafka_bootstrap_servers="broker1:9092,invalid-no-port,broker3:9092"
+            )
 
         assert "Expected 'host:port'" in str(exc_info.value)
 
@@ -688,7 +696,9 @@ class TestFromEnvTopicConstruction:
     def test_from_env_builds_topic_names_from_environment(self) -> None:
         """Test that from_env() builds topic names using kafka_environment from settings."""
         mock_settings = MagicMock()
-        mock_settings.get_effective_kafka_bootstrap_servers.return_value = "localhost:9092"
+        mock_settings.get_effective_kafka_bootstrap_servers.return_value = (
+            "localhost:9092"
+        )
         mock_settings.use_event_routing = True
         mock_settings.request_timeout_ms = 5000
         mock_settings.kafka_group_id = "test-group"
@@ -706,7 +716,9 @@ class TestFromEnvTopicConstruction:
     def test_from_env_uses_settings_values(self) -> None:
         """Test that from_env() correctly maps all settings values."""
         mock_settings = MagicMock()
-        mock_settings.get_effective_kafka_bootstrap_servers.return_value = "broker1:9092"
+        mock_settings.get_effective_kafka_bootstrap_servers.return_value = (
+            "broker1:9092"
+        )
         mock_settings.use_event_routing = False
         mock_settings.request_timeout_ms = 10000
         mock_settings.kafka_group_id = "custom-group"
@@ -737,7 +749,9 @@ class TestKafkaEnvironmentValidation:
         '.omniclaude.session.started.v1' with a leading dot.
         """
         mock_settings = MagicMock()
-        mock_settings.get_effective_kafka_bootstrap_servers.return_value = "localhost:9092"
+        mock_settings.get_effective_kafka_bootstrap_servers.return_value = (
+            "localhost:9092"
+        )
         mock_settings.use_event_routing = True
         mock_settings.request_timeout_ms = 5000
         mock_settings.kafka_group_id = "test-group"
@@ -756,7 +770,9 @@ class TestKafkaEnvironmentValidation:
     def test_from_env_raises_when_kafka_environment_whitespace(self) -> None:
         """Test that from_env() raises ValueError when KAFKA_ENVIRONMENT is whitespace."""
         mock_settings = MagicMock()
-        mock_settings.get_effective_kafka_bootstrap_servers.return_value = "localhost:9092"
+        mock_settings.get_effective_kafka_bootstrap_servers.return_value = (
+            "localhost:9092"
+        )
         mock_settings.use_event_routing = True
         mock_settings.request_timeout_ms = 5000
         mock_settings.kafka_group_id = "test-group"
@@ -783,7 +799,9 @@ class TestKafkaEnvironmentValidation:
         error_message = str(exc_info.value)
         assert "cannot be empty" in error_message.lower()
 
-    def test_kafka_environment_rejects_invalid_format_starting_with_hyphen(self) -> None:
+    def test_kafka_environment_rejects_invalid_format_starting_with_hyphen(
+        self,
+    ) -> None:
         """Test that kafka_environment rejects values starting with hyphen."""
         from omniclaude.lib.config.intelligence_config import IntelligenceConfig
 
@@ -856,7 +874,9 @@ class TestKafkaEnvironmentValidation:
     def test_from_env_error_message_includes_guidance(self) -> None:
         """Test that the error message includes helpful guidance for fixing."""
         mock_settings = MagicMock()
-        mock_settings.get_effective_kafka_bootstrap_servers.return_value = "localhost:9092"
+        mock_settings.get_effective_kafka_bootstrap_servers.return_value = (
+            "localhost:9092"
+        )
         mock_settings.kafka_environment = ""
 
         with patch("omniclaude.lib.config.intelligence_config.settings", mock_settings):
@@ -869,6 +889,10 @@ class TestKafkaEnvironmentValidation:
             # Should mention .env file
             assert ".env" in error_message
             # Should provide example values
-            assert "dev" in error_message or "staging" in error_message or "prod" in error_message
+            assert (
+                "dev" in error_message
+                or "staging" in error_message
+                or "prod" in error_message
+            )
             # Should have example syntax
             assert "KAFKA_ENVIRONMENT=" in error_message

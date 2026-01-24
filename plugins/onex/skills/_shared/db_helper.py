@@ -12,24 +12,20 @@ import logging
 import os
 import sys
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import UTC, datetime
+from typing import Any
 
 import psycopg2
 from psycopg2.extensions import connection as psycopg_connection
 from psycopg2.extras import RealDictCursor
 from psycopg2.pool import SimpleConnectionPool
 
-
 # Module-level logger for structured logging
 logger = logging.getLogger(__name__)
 
 
 # Add config for type-safe settings (Pydantic Settings framework)
-# Path: _shared -> skills -> claude -> project_root (3 levels up)
-sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), "..", "..", "..")))
-from config import settings
-
+from omniclaude.config import settings
 
 # Database configuration - all values from type-safe Pydantic Settings
 DB_CONFIG = {
@@ -41,7 +37,7 @@ DB_CONFIG = {
 }
 
 # Connection pool (lazy initialization)
-_connection_pool: Optional[SimpleConnectionPool] = None
+_connection_pool: SimpleConnectionPool | None = None
 
 
 def get_connection_pool() -> SimpleConnectionPool:
@@ -62,7 +58,7 @@ def get_connection_pool() -> SimpleConnectionPool:
     return _connection_pool
 
 
-def get_connection() -> Optional[psycopg_connection]:
+def get_connection() -> psycopg_connection | None:
     """
     Get a database connection from the pool.
     Returns a connection with RealDictCursor for dict-like row access.
@@ -78,13 +74,13 @@ def get_connection() -> Optional[psycopg_connection]:
         # psycopg2.Error: database-level errors (connection, auth, pool exhaustion)
         logger.error(f"Database connection error: {e}")
         return None
-    except (OSError, IOError) as e:
+    except OSError as e:
         # OSError/IOError: system-level errors (network issues, file descriptors)
         logger.error(f"System error getting database connection: {e}")
         return None
 
 
-def release_connection(conn: Optional[psycopg_connection]) -> None:
+def release_connection(conn: psycopg_connection | None) -> None:
     """
     Release connection back to pool.
 
@@ -101,8 +97,8 @@ def release_connection(conn: Optional[psycopg_connection]) -> None:
 
 
 def execute_query(
-    sql: str, params: Optional[Tuple[Any, ...]] = None, fetch: bool = True
-) -> Dict[str, Any]:
+    sql: str, params: tuple[Any, ...] | None = None, fetch: bool = True
+) -> dict[str, Any]:
     """
     Execute a SQL query safely with parameterized inputs.
 
@@ -221,7 +217,7 @@ def get_correlation_id() -> str:
     return str(uuid.uuid4())
 
 
-def handle_db_error(error: Exception, operation: str) -> Dict[str, Any]:
+def handle_db_error(error: Exception, operation: str) -> dict[str, Any]:
     """
     Handle database errors gracefully and return error info.
 
@@ -239,7 +235,7 @@ def handle_db_error(error: Exception, operation: str) -> Dict[str, Any]:
         "success": False,
         "error": str(error),
         "operation": operation,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
 
@@ -264,7 +260,7 @@ def test_connection() -> bool:
         # psycopg2.Error: database-level errors during connection test
         logger.error(f"Connection test failed (database error): {e}")
         return False
-    except (OSError, IOError) as e:
+    except OSError as e:
         # OSError/IOError: network issues, system-level errors
         logger.error(f"Connection test failed (system error): {e}")
         return False
@@ -273,14 +269,14 @@ def test_connection() -> bool:
             release_connection(conn)
 
 
-def format_timestamp(dt: Optional[datetime] = None) -> str:
+def format_timestamp(dt: datetime | None = None) -> str:
     """Format timestamp for database insertion."""
     if dt is None:
-        dt = datetime.now(timezone.utc)
+        dt = datetime.now(UTC)
     return dt.isoformat()
 
 
-def parse_json_param(param: Optional[str]) -> Optional[Dict[str, Any]]:
+def parse_json_param(param: str | None) -> dict[str, Any] | None:
     """
     Safely parse JSON parameter from command line.
 

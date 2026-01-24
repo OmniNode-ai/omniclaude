@@ -7,7 +7,6 @@ Created: 2025-11-20
 """
 
 import importlib.util
-import sys
 from pathlib import Path
 
 import pytest
@@ -167,9 +166,9 @@ class TestInputSanitization:
         try:
             result = validate_limit(" 10 ")
             # Success path: Python's int() strips whitespace
-            assert (
-                result == 10
-            ), "Whitespace should be stripped and value converted to 10"
+            assert result == 10, (
+                "Whitespace should be stripped and value converted to 10"
+            )
         except ValueError as e:
             # Rejection path: Validator explicitly rejects whitespace
             # Verify error message is informative

@@ -9,7 +9,7 @@ Created: 2025-11-23
 Purpose: Prevent tech debt from inconsistent return patterns
 """
 
-from typing import Any, Dict, List, Optional, TypedDict
+from typing import Any, TypedDict
 
 
 class KafkaConnectionResult(TypedDict):
@@ -33,8 +33,8 @@ class KafkaConnectionResult(TypedDict):
     status: str
     broker: str
     reachable: bool
-    error: Optional[str]
-    return_code: Optional[int]
+    error: str | None
+    return_code: int | None
 
 
 class KafkaTopicsResult(TypedDict):
@@ -54,10 +54,10 @@ class KafkaTopicsResult(TypedDict):
     """
 
     success: bool
-    topics: List[str]
+    topics: list[str]
     count: int
-    error: Optional[str]
-    return_code: Optional[int]
+    error: str | None
+    return_code: int | None
 
 
 class KafkaTopicStatsResult(TypedDict):
@@ -79,8 +79,8 @@ class KafkaTopicStatsResult(TypedDict):
     success: bool
     topic: str
     partitions: int
-    error: Optional[str]
-    return_code: Optional[int]
+    error: str | None
+    return_code: int | None
 
 
 class KafkaConsumerGroupsResult(TypedDict):
@@ -101,11 +101,11 @@ class KafkaConsumerGroupsResult(TypedDict):
     """
 
     success: bool
-    groups: List[str]
+    groups: list[str]
     count: int
-    error: Optional[str]
+    error: str | None
     implemented: bool
-    return_code: Optional[int]
+    return_code: int | None
 
 
 class KafkaMessageCountResult(TypedDict):
@@ -133,8 +133,8 @@ class KafkaMessageCountResult(TypedDict):
     topic: str
     messages_sampled: int
     sample_duration_s: int
-    error: Optional[str]
-    return_code: Optional[int]
+    error: str | None
+    return_code: int | None
 
 
 class KafkaPublishResult(TypedDict):
@@ -154,8 +154,8 @@ class KafkaPublishResult(TypedDict):
 
     success: bool
     topic: str
-    data: Optional[Dict[str, Any]]
-    error: Optional[str]
+    data: dict[str, Any] | None
+    error: str | None
 
 
 class KafkaConsumeResult(TypedDict):
@@ -176,8 +176,8 @@ class KafkaConsumeResult(TypedDict):
 
     success: bool
     topic: str
-    data: Optional[Dict[str, Any]]
-    error: Optional[str]
+    data: dict[str, Any] | None
+    error: str | None
     timeout: bool
 
 

@@ -19,7 +19,6 @@ import json
 import sys
 from pathlib import Path
 
-
 sys.path.insert(
     0, str(Path(__file__).parent.parent.parent.parent.parent / "skills" / "_shared")
 )
@@ -125,9 +124,9 @@ def main() -> int:
                             )
                         else:
                             # Stats query failed - include error
-                            topics_detail[topic_pattern][
-                                "error"
-                            ] = f"Stats query failed: {stats.get('error', 'unknown error')}"
+                            topics_detail[topic_pattern]["error"] = (
+                                f"Stats query failed: {stats.get('error', 'unknown error')}"
+                            )
 
             result["topics"] = topics_detail
 

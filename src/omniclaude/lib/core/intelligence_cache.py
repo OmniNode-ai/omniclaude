@@ -107,7 +107,9 @@ class IntelligenceCache:
             prefix_end = safe_url.find("://") + 3
             at_pos = safe_url.find("@")
             safe_url = safe_url[:prefix_end] + "***REDACTED***" + safe_url[at_pos:]
-        logger.info(f"Intelligence cache initialized: enabled={self.enabled}, url={safe_url}")
+        logger.info(
+            f"Intelligence cache initialized: enabled={self.enabled}, url={safe_url}"
+        )
 
     async def connect(self) -> None:
         """Establish connection to Valkey"""
@@ -158,7 +160,9 @@ class IntelligenceCache:
 
         return f"intelligence:{operation_type}:{params_hash}"
 
-    async def get(self, operation_type: str, params: dict[str, Any]) -> dict[str, Any] | None:
+    async def get(
+        self, operation_type: str, params: dict[str, Any]
+    ) -> dict[str, Any] | None:
         """Get cached result if available"""
         if not self.enabled or not self._client:
             return None
@@ -199,7 +203,9 @@ class IntelligenceCache:
         try:
             result_json = json.dumps(result)
             await self._client.setex(cache_key, ttl_seconds, result_json)
-            logger.debug(f"Cache SET: {operation_type} (key: {cache_key}, ttl: {ttl_seconds}s)")
+            logger.debug(
+                f"Cache SET: {operation_type} (key: {cache_key}, ttl: {ttl_seconds}s)"
+            )
         except Exception as e:
             # Log but don't fail on cache errors
             logger.warning(f"Cache set failed for {operation_type}: {e}")

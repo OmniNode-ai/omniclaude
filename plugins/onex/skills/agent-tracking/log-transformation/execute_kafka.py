@@ -22,52 +22,33 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-
 
 # Add _shared to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 from db_helper import get_correlation_id
-
+from env_loader import load_env_file
 
 # Add shared_lib to path for kafka_config and kafka_publisher
 # Path: execute_kafka.py -> log-transformation/ -> agent-tracking/ -> skills/ -> claude/ -> omniclaude/
 sys.path.insert(
     0, str(Path(__file__).parent.parent.parent.parent.parent / "shared_lib")
 )
-from kafka_config import get_kafka_bootstrap_servers
 from kafka_publisher import get_kafka_producer
 
+# Add src to path for omniclaude.hooks.topics
+# Path: execute_kafka.py -> log-transformation/ -> agent-tracking/ -> skills/ -> onex/ -> plugins/ -> omniclaude2/ -> src/
+sys.path.insert(
+    0, str(Path(__file__).parent.parent.parent.parent.parent.parent / "src")
+)
+from omniclaude.hooks.topics import TopicBase, build_topic
 
 # Add agents/lib to path for transformation_validator (or use claude.lib.core)
 agents_lib_path = Path(__file__).parent.parent.parent.parent.parent / "agents" / "lib"
 if agents_lib_path.exists():
     sys.path.insert(0, str(agents_lib_path))
     from transformation_validator import validate_transformation
-
-
-# Load .env file from project directory
-def load_env_file():
-    """Load environment variables from project .env file."""
-    # Calculate project root from this file's location (skills/agent-tracking/log-transformation/)
-    project_root = Path(__file__).parent.parent.parent.parent.parent.resolve()
-    env_paths = [
-        project_root / ".env",
-        Path.home() / "Code" / "omniclaude" / ".env",
-    ]
-
-    for env_path in env_paths:
-        if env_path.exists():
-            with open(env_path) as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith("#") and "=" in line:
-                        key, value = line.split("=", 1)
-                        # Only set if not already in environment
-                        if key not in os.environ:
-                            os.environ[key] = value.strip('"').strip("'")
-            return
 
 
 # Load .env on import
@@ -81,17 +62,30 @@ def parse_boolean(value: str) -> bool:
     return value.lower() in ("true", "1", "yes", "y")
 
 
-def publish_to_kafka(event: dict, topic: str = "agent-transformation-events") -> bool:
+def get_transformation_topic() -> str:
+    """Build the transformation events topic using ONEX topic conventions.
+
+    Returns:
+        Full topic name with environment prefix (e.g., "dev.agent-transformation-events").
+    """
+    prefix = os.environ.get("KAFKA_TOPIC_PREFIX", "")
+    return build_topic(prefix, TopicBase.TRANSFORMATIONS)
+
+
+def publish_to_kafka(event: dict, topic: str | None = None) -> tuple[bool, str]:
     """
     Publish event to Kafka topic.
 
     Args:
         event: Event dictionary to publish
-        topic: Kafka topic name
+        topic: Kafka topic name (defaults to transformation events topic)
 
     Returns:
-        True if published successfully, False otherwise
+        Tuple of (success, topic_name) - True if published successfully, False otherwise
     """
+    if topic is None:
+        topic = get_transformation_topic()
+
     try:
         producer = get_kafka_producer()
 
@@ -104,13 +98,13 @@ def publish_to_kafka(event: dict, topic: str = "agent-transformation-events") ->
         # Wait up to 1 second for send to complete
         future.get(timeout=1.0)
 
-        return True
+        return True, topic
 
     except Exception as e:
         # Log error but don't fail - this is observability, not critical path
         error_msg = f"Failed to publish to Kafka: {e}"
         print(error_msg, file=sys.stderr)
-        return False
+        return False, topic
 
 
 def log_transformation_kafka(args):
@@ -205,11 +199,11 @@ def log_transformation_kafka(args):
         "confidence_score": confidence,
         "transformation_duration_ms": int(args.duration_ms),
         "success": success,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
-    # Publish to Kafka
-    success_publish = publish_to_kafka(event, topic="agent-transformation-events")
+    # Publish to Kafka using ONEX topic conventions
+    success_publish, topic_name = publish_to_kafka(event)
 
     if success_publish:
         output = {
@@ -220,7 +214,7 @@ def log_transformation_kafka(args):
             "transformation_success": success,
             "duration_ms": int(args.duration_ms),
             "published_to": "kafka",
-            "topic": "agent-transformation-events",
+            "topic": topic_name,
         }
         print(json.dumps(output, indent=2))
         return 0
@@ -229,6 +223,7 @@ def log_transformation_kafka(args):
         error = {
             "success": False,
             "error": "Failed to publish to Kafka",
+            "topic": topic_name,
             "fallback": "Consider implementing direct DB fallback",
         }
         print(json.dumps(error), file=sys.stderr)

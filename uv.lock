@@ -1486,7 +1486,7 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=0.24.0" },
     { name = "pytest-cov", specifier = ">=4.1.0" },
     { name = "pytest-split", specifier = ">=0.8.0" },
-    { name = "ruff", specifier = ">=0.12.5" },
+    { name = "ruff", specifier = ">=0.14.0" },
     { name = "types-docker", specifier = ">=7.1.0.20260109" },
     { name = "types-psutil", specifier = ">=7.2.1.20260116" },
     { name = "types-psycopg2", specifier = ">=2.9.21.20251012" },

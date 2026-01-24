@@ -13,6 +13,7 @@ import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 import yaml
@@ -55,7 +56,9 @@ class AgentIdentity:
         caps_formatted = "\n".join(f"  - {cap}" for cap in self.capabilities)
 
         # Format triggers
-        triggers_formatted = "\n".join(f"  - {trig}" for trig in self.triggers[:5])  # Top 5
+        triggers_formatted = "\n".join(
+            f"  - {trig}" for trig in self.triggers[:5]
+        )  # Top 5
 
         # Format success criteria if available
         success_formatted = ""
@@ -67,9 +70,7 @@ class AgentIdentity:
         # Format intelligence integration if available
         intelligence_formatted = ""
         if self.intelligence_integration:
-            intelligence_formatted = (
-                f"\n\n**INTELLIGENCE WORKFLOWS**:\n{self.intelligence_integration[:1000]}..."
-            )
+            intelligence_formatted = f"\n\n**INTELLIGENCE WORKFLOWS**:\n{self.intelligence_integration[:1000]}..."
 
         prompt = f"""
 ========================================================================
@@ -158,7 +159,7 @@ class AgentTransformer:
             )
 
         # Load YAML
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8") as f:
             config = yaml.safe_load(f)
 
         # Parse capabilities (handle dict or list format)
@@ -193,7 +194,9 @@ class AgentTransformer:
             name=agent_name,
             purpose=config.get("agent_purpose", "No purpose defined"),
             domain=config.get("agent_domain", "general"),
-            description=config.get("agent_description", config.get("agent_purpose", "")),
+            description=config.get(
+                "agent_description", config.get("agent_purpose", "")
+            ),
             capabilities=capabilities,
             triggers=config.get("triggers", []),
             intelligence_integration=intelligence,
@@ -327,9 +330,12 @@ class AgentTransformer:
         Returns:
             Formatted prompt for identity assumption
         """
+        # Note: asyncio.get_event_loop() is deprecated since Python 3.10.
+        # Use get_running_loop() to check for existing loop, then create new if needed.
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
         except RuntimeError:
+            # No running loop - create a new one for sync execution
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 

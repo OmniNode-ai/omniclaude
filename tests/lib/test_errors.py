@@ -75,7 +75,9 @@ class TestEnumCoreErrorCode:
 
         # EnumCoreErrorCode should be a StrEnum or have string values
         validation_error = EnumCoreErrorCode.VALIDATION_ERROR
-        assert isinstance(validation_error.value, str) or isinstance(validation_error, str)
+        assert isinstance(validation_error.value, str) or isinstance(
+            validation_error, str
+        )
 
 
 class TestModelOnexError:

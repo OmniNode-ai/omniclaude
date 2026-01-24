@@ -31,11 +31,19 @@ class TestTopicBase:
         assert TopicBase.SESSION_ENDED == "omniclaude.session.ended.v1"
         assert TopicBase.PROMPT_SUBMITTED == "omniclaude.prompt.submitted.v1"
         assert TopicBase.TOOL_EXECUTED == "omniclaude.tool.executed.v1"
+        assert TopicBase.AGENT_ACTION == "omniclaude.agent.action.v1"
         assert TopicBase.LEARNING_PATTERN == "omniclaude.learning.pattern.v1"
         # Agent routing topics (omninode domain)
         assert TopicBase.ROUTING_REQUESTED == "omninode.agent.routing.requested.v1"
         assert TopicBase.ROUTING_COMPLETED == "omninode.agent.routing.completed.v1"
         assert TopicBase.ROUTING_FAILED == "omninode.agent.routing.failed.v1"
+
+        # Agent observability topics (legacy naming for backward compatibility)
+        assert TopicBase.ROUTING_DECISIONS == "agent-routing-decisions"
+        assert TopicBase.AGENT_ACTIONS == "agent-actions"
+        assert TopicBase.PERFORMANCE_METRICS == "router-performance-metrics"
+        assert TopicBase.TRANSFORMATIONS == "agent-transformation-events"
+        assert TopicBase.DETECTION_FAILURES == "agent-detection-failures"
 
     def test_topic_base_is_str_enum(self) -> None:
         """TopicBase values are strings (StrEnum)."""
@@ -44,24 +52,34 @@ class TestTopicBase:
             assert isinstance(topic.value, str)
 
     def test_all_topics_follow_naming_convention(self) -> None:
-        """All topics follow {domain}.{entity}.{action}.v{version} pattern.
-
-        Supported domains:
-        - omniclaude: Claude Code hook events (session, prompt, tool)
-        - omninode: Platform-wide events (agent routing)
-        """
+        """Topics follow either ONEX or legacy naming conventions."""
         import re
 
-        # Pattern: {domain}.{entity}.{action}.v{version}
-        # Domain: omniclaude or omninode
-        # Entity: one or more segments (e.g., "session", "agent.routing")
-        # Action: lowercase action verb (e.g., "started", "requested")
-        # Version: v followed by digits
-        pattern = re.compile(r"^(omniclaude|omninode)\.([a-z]+\.)+[a-z]+\.v\d+$")
+        # ONEX naming pattern: domain.seg1.seg2...segN.vX (multiple category segments allowed)
+        onex_pattern = re.compile(r"^(omniclaude|omninode)(?:\.[a-z-]+)+\.v\d+$")
+
+        # Legacy observability topics (backward compatibility with existing consumers)
+        # These use simple hyphenated names without the omniclaude prefix
+        legacy_topics = {
+            TopicBase.ROUTING_DECISIONS,
+            TopicBase.AGENT_ACTIONS,
+            TopicBase.PERFORMANCE_METRICS,
+            TopicBase.TRANSFORMATIONS,
+            TopicBase.DETECTION_FAILURES,
+        }
+        legacy_pattern = re.compile(r"^[a-z]+-[a-z-]+$")
+
         for topic in TopicBase:
-            assert pattern.match(topic.value), (
-                f"Topic {topic.name} does not follow naming convention: {topic.value}"
-            )
+            if topic in legacy_topics:
+                # Legacy topics use simple hyphenated names
+                assert legacy_pattern.match(topic.value), (
+                    f"Legacy topic {topic.name} does not follow naming convention: {topic.value}"
+                )
+            else:
+                # ONEX topics use omniclaude.{category}.{event}.v{version}
+                assert onex_pattern.match(topic.value), (
+                    f"Topic {topic.name} does not follow ONEX naming convention: {topic.value}"
+                )
 
 
 # =============================================================================

@@ -70,6 +70,7 @@ def check_running_services() -> dict[str, Any]:
             capture_output=True,
             text=True,
             timeout=5,
+            check=False,
         )
         if result.returncode == 0:
             try:
@@ -111,6 +112,7 @@ def check_running_services() -> dict[str, Any]:
             capture_output=True,
             text=True,
             timeout=5,
+            check=False,
         )
         if result.returncode == 0:
             services["main_server"] = {
@@ -134,6 +136,7 @@ def check_running_services() -> dict[str, Any]:
             capture_output=True,
             text=True,
             timeout=5,
+            check=False,
         )
         if result.returncode == 0:
             services["mcp_server"] = {
@@ -158,10 +161,13 @@ def check_running_services() -> dict[str, Any]:
             capture_output=True,
             text=True,
             timeout=10,
+            check=False,
         )
         if result.returncode == 0 and result.stdout.strip():
             docker_containers = [
-                json.loads(line) for line in result.stdout.strip().split("\n") if line.strip()
+                json.loads(line)
+                for line in result.stdout.strip().split("\n")
+                if line.strip()
             ]
             postgres_containers = [
                 c for c in docker_containers if DOCKER_CONTAINER_POSTGRES in c.get("Names", "").lower()
@@ -195,10 +201,13 @@ def check_running_services() -> dict[str, Any]:
             capture_output=True,
             text=True,
             timeout=10,
+            check=False,
         )
         if result.returncode == 0 and result.stdout.strip():
             docker_containers = [
-                json.loads(line) for line in result.stdout.strip().split("\n") if line.strip()
+                json.loads(line)
+                for line in result.stdout.strip().split("\n")
+                if line.strip()
             ]
             memgraph_containers = [
                 c for c in docker_containers if DOCKER_CONTAINER_MEMGRAPH in c.get("Names", "").lower()
@@ -232,10 +241,13 @@ def check_running_services() -> dict[str, Any]:
             capture_output=True,
             text=True,
             timeout=10,
+            check=False,
         )
         if result.returncode == 0 and result.stdout.strip():
             docker_containers = [
-                json.loads(line) for line in result.stdout.strip().split("\n") if line.strip()
+                json.loads(line)
+                for line in result.stdout.strip().split("\n")
+                if line.strip()
             ]
             qdrant_containers = [
                 c for c in docker_containers if DOCKER_CONTAINER_QDRANT in c.get("Names", "").lower()
@@ -469,10 +481,10 @@ def test_pattern_tracking_flow() -> dict[str, Any]:
 
     # Test 2: Import error handling
     try:
-        from .error_handling import PatternTrackingErrorHandler, PatternTrackingLogger
+        from .error_handling import PatternTrackingErrorPolicy, PatternTrackingLogger
 
         logger = PatternTrackingLogger()
-        PatternTrackingErrorHandler(logger)
+        PatternTrackingErrorPolicy(logger)
         test_results["tests"]["import_error_handling"] = {
             "status": "success",
             "message": "Error handling imported successfully",
@@ -492,7 +504,9 @@ def test_pattern_tracking_flow() -> dict[str, Any]:
             health_results = checker.run_comprehensive_health_check()
             test_results["tests"]["health_check"] = {
                 "status": (
-                    "success" if health_results["overall_status"] == "healthy" else "partial"
+                    "success"
+                    if health_results["overall_status"] == "healthy"
+                    else "partial"
                 ),
                 "overall_status": health_results["overall_status"],
                 "summary": health_results["summary"],
@@ -540,8 +554,12 @@ def test_pattern_tracking_flow() -> dict[str, Any]:
 
     # Summary
     total_tests = len(test_results["tests"])
-    successful_tests = len([t for t in test_results["tests"].values() if t["status"] == "success"])
-    failed_tests = len([t for t in test_results["tests"].values() if t["status"] == "error"])
+    successful_tests = len(
+        [t for t in test_results["tests"].values() if t["status"] == "success"]
+    )
+    failed_tests = len(
+        [t for t in test_results["tests"].values() if t["status"] == "error"]
+    )
 
     test_results["summary"] = {
         "total_tests": total_tests,

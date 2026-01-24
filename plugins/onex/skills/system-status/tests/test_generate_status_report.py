@@ -10,17 +10,12 @@ Tests:
 Created: 2025-11-20
 """
 
-import sys
 from pathlib import Path
 from unittest.mock import patch
-
-import pytest
-
 
 # Import load_skill_module from conftest
 conftest_path = Path(__file__).parent / "conftest.py"
 import importlib.util
-
 
 spec = importlib.util.spec_from_file_location("conftest", conftest_path)
 conftest = importlib.util.module_from_spec(spec)
@@ -44,7 +39,6 @@ class TestGenerateStatusReport:
             patch.object(execute, "collect_report_data") as mock_collect,
             patch("sys.argv", ["execute.py", "--format", "json"]),
         ):
-
             mock_collect.return_value = {
                 "generated": "2025-11-20T12:00:00Z",
                 "timeframe": "24h",
@@ -91,7 +85,6 @@ class TestGenerateStatusReport:
             patch.object(execute, "collect_report_data") as mock_collect,
             patch("sys.argv", ["execute.py", "--format", "markdown"]),
         ):
-
             mock_collect.return_value = {
                 "generated": "2025-11-20T12:00:00Z",
                 "timeframe": "24h",
@@ -128,7 +121,6 @@ class TestGenerateStatusReport:
             patch.object(execute, "collect_report_data") as mock_collect,
             patch("sys.argv", ["execute.py", "--include-trends"]),
         ):
-
             mock_collect.return_value = {
                 "generated": "2025-11-20T12:00:00Z",
                 "timeframe": "24h",
@@ -164,7 +156,6 @@ class TestGenerateStatusReport:
             patch.object(execute, "collect_report_data") as mock_collect,
             patch("sys.argv", ["execute.py", "--timeframe", "7d"]),
         ):
-
             mock_collect.return_value = {
                 "generated": "2025-11-20T12:00:00Z",
                 "timeframe": "7d",
@@ -191,7 +182,6 @@ class TestGenerateStatusReport:
             patch.object(execute, "collect_report_data") as mock_collect,
             patch("sys.argv", ["execute.py"]),
         ):
-
             # Some infrastructure components failed
             mock_collect.return_value = {
                 "generated": "2025-11-20T12:00:00Z",
@@ -226,7 +216,6 @@ class TestGenerateStatusReport:
                 patch.object(execute, "collect_report_data") as mock_collect,
                 patch("sys.argv", ["execute.py", "--output", output_path]),
             ):
-
                 mock_collect.return_value = {
                     "generated": "2025-11-20T12:00:00Z",
                     "timeframe": "24h",

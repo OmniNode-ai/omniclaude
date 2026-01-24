@@ -34,7 +34,7 @@ try:
 except ImportError:
     from common_utils import get_timeout_seconds
 
-from config import settings
+from omniclaude.config import settings
 
 # ONEX-compliant error handling
 # Try to import from omniclaude.lib.core (preferred), fallback to agents.lib.errors, then local definitions
@@ -76,9 +76,7 @@ except ImportError:
                 return f"{self.code}: {self.message}"
 
             def __repr__(self):
-                return (
-                    f"OnexError(code={self.code}, message={self.message}, details={self.details})"
-                )
+                return f"OnexError(code={self.code}, message={self.message}, details={self.details})"
 
 
 def validate_qdrant_url(url: str) -> str:
@@ -296,7 +294,7 @@ def check_qdrant_connection() -> dict[str, Any]:
     """
     try:
         qdrant_url = get_qdrant_url()
-        req = urllib.request.Request(f"{qdrant_url}/", method="GET")  # noqa: S310
+        req = urllib.request.Request(f"{qdrant_url}/", method="GET")  # noqa: S310 - URL validated by get_qdrant_url()
         with urllib.request.urlopen(  # noqa: S310  # nosec B310 - URL validated by validate_qdrant_url() (http/https scheme only, host whitelist, safe port range)
             req, timeout=get_timeout_seconds()
         ) as response:
@@ -356,7 +354,7 @@ def list_collections() -> dict[str, Any]:
     """
     try:
         qdrant_url = get_qdrant_url()
-        req = urllib.request.Request(  # noqa: S310
+        req = urllib.request.Request(  # noqa: S310 - URL validated by get_qdrant_url()
             f"{qdrant_url}/collections", method="GET"
         )
         with urllib.request.urlopen(  # noqa: S310  # nosec B310 - URL validated by validate_qdrant_url() (http/https scheme only, host whitelist, safe port range)
@@ -435,7 +433,7 @@ def get_collection_stats(collection_name: str) -> dict[str, Any]:
         qdrant_url = get_qdrant_url()
         # URL-encode collection name to prevent URL injection attacks
         encoded_collection = urllib.parse.quote(collection_name, safe="")
-        req = urllib.request.Request(  # noqa: S310
+        req = urllib.request.Request(  # noqa: S310 - URL validated by get_qdrant_url()
             f"{qdrant_url}/collections/{encoded_collection}", method="GET"
         )
         with urllib.request.urlopen(  # noqa: S310  # nosec B310 - URL validated by validate_qdrant_url() (http/https scheme only, host whitelist, safe port range)

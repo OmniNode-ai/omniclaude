@@ -18,8 +18,6 @@ Created: 2025-11-20
 
 import os
 import sys
-from typing import List, Tuple
-
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(__file__))
@@ -27,7 +25,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from qdrant_helper import validate_qdrant_url
 
 
-def test_valid_urls() -> List[Tuple[str, bool, str]]:
+def test_valid_urls() -> list[tuple[str, bool, str]]:
     """Test valid URLs that should pass validation."""
     results = []
 
@@ -59,7 +57,7 @@ def test_valid_urls() -> List[Tuple[str, bool, str]]:
     return results
 
 
-def test_https_enforcement() -> List[Tuple[str, bool, str]]:
+def test_https_enforcement() -> list[tuple[str, bool, str]]:
     """Test HTTPS enforcement in production."""
     results = []
 
@@ -80,7 +78,7 @@ def test_https_enforcement() -> List[Tuple[str, bool, str]]:
                 results.append((description, True, f"✅ PASS: {result}"))
             else:
                 results.append(
-                    (description, False, f"❌ FAIL: Should have blocked but allowed")
+                    (description, False, "❌ FAIL: Should have blocked but allowed")
                 )
         except ValueError as e:
             if not should_pass:
@@ -99,7 +97,7 @@ def test_https_enforcement() -> List[Tuple[str, bool, str]]:
     return results
 
 
-def test_malicious_urls() -> List[Tuple[str, bool, str]]:
+def test_malicious_urls() -> list[tuple[str, bool, str]]:
     """Test malicious URLs that should be blocked."""
     results = []
 
@@ -139,7 +137,7 @@ def test_malicious_urls() -> List[Tuple[str, bool, str]]:
     return results
 
 
-def test_port_validation() -> List[Tuple[str, bool, str]]:
+def test_port_validation() -> list[tuple[str, bool, str]]:
     """Test port validation."""
     results = []
 
@@ -162,7 +160,7 @@ def test_port_validation() -> List[Tuple[str, bool, str]]:
                 results.append((description, True, f"✅ PASS: {result}"))
             else:
                 results.append(
-                    (description, False, f"❌ FAIL: Should have blocked but allowed")
+                    (description, False, "❌ FAIL: Should have blocked but allowed")
                 )
         except (ValueError, Exception) as e:
             if not should_pass:
@@ -181,7 +179,7 @@ def test_port_validation() -> List[Tuple[str, bool, str]]:
     return results
 
 
-def test_additional_allowed_hosts() -> List[Tuple[str, bool, str]]:
+def test_additional_allowed_hosts() -> list[tuple[str, bool, str]]:
     """Test QDRANT_ALLOWED_HOSTS environment variable."""
     results = []
 
@@ -204,7 +202,7 @@ def test_additional_allowed_hosts() -> List[Tuple[str, bool, str]]:
                 results.append((description, True, f"✅ PASS: {result}"))
             else:
                 results.append(
-                    (description, False, f"❌ FAIL: Should have blocked but allowed")
+                    (description, False, "❌ FAIL: Should have blocked but allowed")
                 )
         except ValueError as e:
             if not should_pass:
@@ -228,7 +226,7 @@ def test_additional_allowed_hosts() -> List[Tuple[str, bool, str]]:
     return results
 
 
-def print_results(title: str, results: List[Tuple[str, bool, str]]):
+def print_results(title: str, results: list[tuple[str, bool, str]]):
     """Print test results."""
     print(f"\n{'=' * 70}")
     print(f"{title}")

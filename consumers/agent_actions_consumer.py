@@ -37,20 +37,18 @@ import logging
 import os
 import signal
 import sys
-import threading
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from threading import Event, Thread
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import psycopg2
 import psycopg2.pool
 from kafka import KafkaConsumer, KafkaProducer, OffsetAndMetadata, TopicPartition
 from psycopg2.extras import execute_batch
-
 
 # Add _shared to path for db_helper
 SCRIPT_DIR = Path(__file__).parent
@@ -97,8 +95,8 @@ class ConsumerMetrics:
         self.messages_failed = 0
         self.batches_processed = 0
         self.total_processing_time_ms = 0
-        self.last_commit_time = datetime.now(timezone.utc)
-        self.started_at = datetime.now(timezone.utc)
+        self.last_commit_time = datetime.now(UTC)
+        self.started_at = datetime.now(UTC)
 
     def record_batch(
         self, consumed: int, inserted: int, failed: int, processing_time_ms: float
@@ -109,11 +107,11 @@ class ConsumerMetrics:
         self.messages_failed += failed
         self.batches_processed += 1
         self.total_processing_time_ms += processing_time_ms
-        self.last_commit_time = datetime.now(timezone.utc)
+        self.last_commit_time = datetime.now(UTC)
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get current statistics."""
-        uptime_seconds = (datetime.now(timezone.utc) - self.started_at).total_seconds()
+        uptime_seconds = (datetime.now(UTC) - self.started_at).total_seconds()
         avg_processing_time = (
             self.total_processing_time_ms / self.batches_processed
             if self.batches_processed > 0
@@ -136,6 +134,7 @@ class ConsumerMetrics:
         }
 
 
+# ONEX: exempt - implements external interface (http.server.BaseHTTPRequestHandler)
 class HealthCheckHandler(BaseHTTPRequestHandler):
     """Simple HTTP handler for health checks."""
 
@@ -194,7 +193,7 @@ class HealthCheckHandler(BaseHTTPRequestHandler):
 class AgentActionsConsumer:
     """Production-ready Kafka consumer for agent actions."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         self.config = config
         self.shutdown_event = Event()
         self.running_event = (
@@ -203,7 +202,7 @@ class AgentActionsConsumer:
         self.metrics = ConsumerMetrics()
 
         # Retry management for poison message handling
-        self.retry_counts: Dict[str, int] = {}  # Track retries per message
+        self.retry_counts: dict[str, int] = {}  # Track retries per message
         self.max_retries = 3
         self.backoff_base_ms = 100
 
@@ -321,23 +320,23 @@ class AgentActionsConsumer:
             )
 
         # Components (initialized in start())
-        self.consumer: Optional[KafkaConsumer] = None
-        self.dlq_producer: Optional[KafkaProducer] = None
-        self.db_pool: Optional[psycopg2.pool.ThreadedConnectionPool] = None
-        self.health_server: Optional[HTTPServer] = None
+        self.consumer: KafkaConsumer | None = None
+        self.dlq_producer: KafkaProducer | None = None
+        self.db_pool: psycopg2.pool.ThreadedConnectionPool | None = None
+        self.health_server: HTTPServer | None = None
 
         logger.info(
             "AgentActionsConsumer initialized with config: %s", self._safe_config()
         )
 
-    def _safe_config(self) -> Dict[str, Any]:
+    def _safe_config(self) -> dict[str, Any]:
         """Return config with sensitive data redacted."""
         safe = self.config.copy()
         if "postgres_password" in safe:
-            safe["postgres_password"] = "***REDACTED***"
+            safe["postgres_password"] = "***REDACTED***"  # noqa: S105 - redaction marker, not a password
         return safe
 
-    def _validate_correlation_id(self, event: Dict[str, Any]) -> str:
+    def _validate_correlation_id(self, event: dict[str, Any]) -> str:
         """
         Standardized correlation_id validation.
 
@@ -382,8 +381,8 @@ class AgentActionsConsumer:
         correlation_id: str,
         agent_name: str,
         action_name: str,
-        action_details: Dict[str, Any],
-        duration_ms: Optional[int] = None,
+        action_details: dict[str, Any],
+        duration_ms: int | None = None,
     ):
         """
         Log file operation to agent_file_operations table asynchronously.
@@ -548,7 +547,7 @@ class AgentActionsConsumer:
         )
 
     def insert_batch(
-        self, events_by_topic: Dict[str, List[Dict[str, Any]]]
+        self, events_by_topic: dict[str, list[dict[str, Any]]]
     ) -> tuple[int, int]:
         """
         Insert batch of events to PostgreSQL with idempotency.
@@ -631,7 +630,7 @@ class AgentActionsConsumer:
             self.db_pool.putconn(db_conn)
 
     def _insert_agent_actions(
-        self, cursor, events: List[Dict[str, Any]]
+        self, cursor, events: list[dict[str, Any]]
     ) -> tuple[int, int]:
         """Insert agent_actions events."""
         insert_sql = """
@@ -651,7 +650,7 @@ class AgentActionsConsumer:
         for event in events:
             event_id = str(uuid.uuid4())
             correlation_id = self._validate_correlation_id(event)
-            timestamp = event.get("timestamp", datetime.now(timezone.utc).isoformat())
+            timestamp = event.get("timestamp", datetime.now(UTC).isoformat())
 
             batch_data.append(
                 (
@@ -710,7 +709,7 @@ class AgentActionsConsumer:
         return inserted, duplicates
 
     def _insert_routing_decisions(
-        self, cursor, events: List[Dict[str, Any]]
+        self, cursor, events: list[dict[str, Any]]
     ) -> tuple[int, int]:
         """Insert agent_routing_decisions events."""
         insert_sql = """
@@ -726,7 +725,7 @@ class AgentActionsConsumer:
         batch_data = []
         for event in events:
             event_id = str(uuid.uuid4())
-            timestamp = event.get("timestamp", datetime.now(timezone.utc).isoformat())
+            timestamp = event.get("timestamp", datetime.now(UTC).isoformat())
 
             # Use standardized correlation_id validation
             correlation_id = self._validate_correlation_id(event)
@@ -753,7 +752,7 @@ class AgentActionsConsumer:
         return inserted, duplicates
 
     def _insert_transformation_events(
-        self, cursor, events: List[Dict[str, Any]]
+        self, cursor, events: list[dict[str, Any]]
     ) -> tuple[int, int]:
         """
         Insert agent_transformation_events events with comprehensive schema support.
@@ -786,7 +785,7 @@ class AgentActionsConsumer:
         batch_data = []
         for event in events:
             event_id = str(uuid.uuid4())
-            timestamp = event.get("timestamp", datetime.now(timezone.utc).isoformat())
+            timestamp = event.get("timestamp", datetime.now(UTC).isoformat())
 
             # Handle both old format (confidence_score) and new format (routing_confidence)
             # IMPORTANT: Use explicit None check to preserve zero confidence values
@@ -865,7 +864,7 @@ class AgentActionsConsumer:
         return inserted, duplicates
 
     def _insert_performance_metrics(
-        self, cursor, events: List[Dict[str, Any]]
+        self, cursor, events: list[dict[str, Any]]
     ) -> tuple[int, int]:
         """Insert router_performance_metrics events."""
         insert_sql = """
@@ -881,7 +880,7 @@ class AgentActionsConsumer:
         batch_data = []
         for event in events:
             event_id = str(uuid.uuid4())
-            timestamp = event.get("timestamp", datetime.now(timezone.utc).isoformat())
+            timestamp = event.get("timestamp", datetime.now(UTC).isoformat())
 
             batch_data.append(
                 (
@@ -924,7 +923,7 @@ class AgentActionsConsumer:
             return "error"
 
     def _insert_detection_failures(
-        self, cursor, events: List[Dict[str, Any]]
+        self, cursor, events: list[dict[str, Any]]
     ) -> tuple[int, int]:
         """Insert agent_detection_failures events."""
         insert_sql = """
@@ -945,7 +944,7 @@ class AgentActionsConsumer:
             user_request = event.get("user_request", "")
             prompt_length = len(user_request)
             prompt_hash = hashlib.sha256(user_request.encode()).hexdigest()
-            timestamp = event.get("timestamp", datetime.now(timezone.utc).isoformat())
+            timestamp = event.get("timestamp", datetime.now(UTC).isoformat())
 
             # Derive detection status from failure reason using helper method
             failure_reason = event.get("failure_reason", "")
@@ -974,7 +973,7 @@ class AgentActionsConsumer:
         return inserted, duplicates
 
     def _insert_execution_logs(
-        self, cursor, events: List[Dict[str, Any]]
+        self, cursor, events: list[dict[str, Any]]
     ) -> tuple[int, int]:
         """Insert agent_execution_logs events with upsert for start/complete."""
         insert_sql = """
@@ -1018,7 +1017,7 @@ class AgentActionsConsumer:
             if isinstance(started_at, str):
                 started_at = datetime.fromisoformat(started_at.replace("Z", "+00:00"))
             elif not started_at:
-                started_at = datetime.now(timezone.utc)
+                started_at = datetime.now(UTC)
 
             completed_at = event.get("completed_at")
             if isinstance(completed_at, str):
@@ -1058,7 +1057,7 @@ class AgentActionsConsumer:
 
     def send_to_dlq(
         self,
-        events: List[Dict[str, Any]],
+        events: list[dict[str, Any]],
         error: str,
         topic: str = "agent-observability",
     ):
@@ -1070,7 +1069,7 @@ class AgentActionsConsumer:
                 dlq_event = {
                     "original_event": event,
                     "error": str(error),
-                    "failed_at": datetime.now(timezone.utc).isoformat(),
+                    "failed_at": datetime.now(UTC).isoformat(),
                     "consumer_group": self.group_id,
                 }
 
@@ -1085,7 +1084,7 @@ class AgentActionsConsumer:
         # Flush to ensure delivery
         self.dlq_producer.flush()
 
-    def process_batch(self, messages: List[Any]) -> tuple[int, int]:
+    def process_batch(self, messages: list[Any]) -> tuple[int, int]:
         """
         Process a batch of Kafka messages.
 
@@ -1115,7 +1114,7 @@ class AgentActionsConsumer:
         failed = 0
 
         try:
-            inserted, duplicates = self.insert_batch(events_by_topic)
+            inserted, _duplicates = self.insert_batch(events_by_topic)
             failed = len(failed_events)
 
             # Commit Kafka offsets after successful DB insert (ensures exactly-once processing with consumer group coordination)
@@ -1298,12 +1297,12 @@ class AgentActionsConsumer:
         logger.info("Final metrics: %s", json.dumps(final_metrics, indent=2))
 
 
-def load_config(config_path: Optional[str] = None) -> Dict[str, Any]:
+def load_config(config_path: str | None = None) -> dict[str, Any]:
     """Load configuration from file or environment."""
     config = {}
 
     if config_path and Path(config_path).exists():
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8") as f:
             config = json.load(f)
         logger.info("Loaded config from file: %s", config_path)
 

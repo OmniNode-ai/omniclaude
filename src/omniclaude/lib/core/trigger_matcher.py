@@ -49,7 +49,9 @@ class TriggerMatcher:
             ValueError: If registry structure is invalid
         """
         if not isinstance(registry, dict):
-            raise ValueError(f"Registry must be a dictionary, got {type(registry).__name__}")
+            raise ValueError(
+                f"Registry must be a dictionary, got {type(registry).__name__}"
+            )
         if "agents" not in registry:
             raise ValueError(
                 "Registry must contain 'agents' key. "
@@ -129,7 +131,9 @@ class TriggerMatcher:
             # 3. Keyword overlap
             keyword_score = self._keyword_overlap_score(keywords, triggers)
             if keyword_score > 0.5:
-                scores.append((keyword_score * 0.8, f"Keyword overlap ({keyword_score:.0%})"))
+                scores.append(
+                    (keyword_score * 0.8, f"Keyword overlap ({keyword_score:.0%})")
+                )
 
             # 4. Capability match
             capabilities = agent_data.get("capabilities", [])
@@ -287,7 +291,9 @@ class TriggerMatcher:
 
         return overlap / len(keyword_set) if keyword_set else 0.0
 
-    def _capability_match_score(self, keywords: list[str], capabilities: list[str]) -> float:
+    def _capability_match_score(
+        self, keywords: list[str], capabilities: list[str]
+    ) -> float:
         """
         Calculate capability match score.
 
@@ -338,7 +344,9 @@ class TriggerMatcher:
         pattern = r"\b" + re.escape(trigger_lower) + r"\b"
         return bool(re.search(pattern, text))
 
-    def _is_context_appropriate(self, trigger: str, user_request: str, agent_name: str) -> bool:
+    def _is_context_appropriate(
+        self, trigger: str, user_request: str, agent_name: str
+    ) -> bool:
         """
         Check if trigger match is contextually appropriate.
 
@@ -462,7 +470,9 @@ class TriggerMatcher:
                 r"\b(use|spawn|dispatch|coordinate|invoke|call|run|execute|trigger)\b.*\b"
                 + re.escape(trigger_lower)
                 + r"\b",
-                r"\b" + re.escape(trigger_lower) + r"\b.*(agent|coordinator|for workflow)",
+                r"\b"
+                + re.escape(trigger_lower)
+                + r"\b.*(agent|coordinator|for workflow)",
             ]
             return any(re.search(pattern, request_lower) for pattern in action_patterns)
 
@@ -489,7 +499,7 @@ if __name__ == "__main__":
     registry_path = Path.home() / ".claude" / "agents" / "onex" / "agent-registry.yaml"
 
     if registry_path.exists():
-        with open(registry_path) as f:
+        with open(registry_path, encoding="utf-8") as f:
             registry = yaml.safe_load(f)
 
         matcher = TriggerMatcher(registry)

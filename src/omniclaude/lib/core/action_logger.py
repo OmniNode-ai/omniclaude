@@ -76,8 +76,6 @@ except ImportError:  # nosec B110 - Optional dependency, graceful degradation
 # Import Prometheus metrics (optional integration)
 try:
     from omniclaude.lib.prometheus_metrics import (
-        action_log_counter,
-        action_log_duration,
         action_log_errors_counter,
         record_action_log,
     )
@@ -502,7 +500,9 @@ if __name__ == "__main__":
         )
 
         # Test tool call with context manager
-        async with logger.tool_call("Read", {"file_path": "/path/to/file.py"}) as action:
+        async with logger.tool_call(
+            "Read", {"file_path": "/path/to/file.py"}
+        ) as action:
             # Simulate file reading
             await asyncio.sleep(0.05)  # 50ms
             action.set_result({"line_count": 100, "file_size_bytes": 5432})

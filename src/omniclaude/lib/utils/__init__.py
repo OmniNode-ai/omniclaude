@@ -31,7 +31,7 @@ from .debug_utils import (
 )
 from .error_handling import (
     CircuitBreaker,
-    PatternTrackingErrorHandler,
+    PatternTrackingErrorPolicy,
     PatternTrackingLogger,
     get_default_error_handler,
     get_default_logger,
@@ -61,7 +61,7 @@ from .naming_validator import (
 
 # Pattern Tracking
 from .pattern_tracker import (
-    BatchProcessor,
+    BatchAggregator,
     PatternTracker,
     PatternTrackerConfig,
     PerformanceMetrics,
@@ -79,7 +79,7 @@ from .quality_enforcer import (
 __all__ = [
     # Error Handling
     "PatternTrackingLogger",
-    "PatternTrackingErrorHandler",
+    "PatternTrackingErrorPolicy",
     "CircuitBreaker",
     "safe_execute_operation",
     "get_default_logger",
@@ -104,7 +104,7 @@ __all__ = [
     "PerformanceMetrics",
     "PatternTrackerConfig",
     "PerformanceMonitor",
-    "BatchProcessor",
+    "BatchAggregator",
     "PatternTracker",
     "get_tracker",
     # Debug Utilities

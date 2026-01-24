@@ -322,7 +322,7 @@ class PerformanceMonitor:
         }
 
 
-class BatchProcessor:
+class BatchAggregator:
     """Handles batch processing of pattern tracking operations."""
 
     def __init__(self, tracker: "PatternTracker", config: BatchProcessingConfig):
@@ -483,14 +483,14 @@ class PatternTracker:
         )
 
         # Batch processing
-        self.batch_processor = BatchProcessor(self, self.config.batch_config)
+        self.batch_aggregator = BatchAggregator(self, self.config.batch_config)
 
         # Setup logging
         self._setup_logging()
 
         # Start batch processor if enabled
         if self.config.batch_config.enabled and self.config.processing_mode == ProcessingMode.BATCH:
-            asyncio.create_task(self.batch_processor.start())
+            asyncio.create_task(self.batch_aggregator.start())
 
     def _create_http_client(self) -> httpx.AsyncClient:
         """Create HTTP client with connection pooling."""
@@ -566,7 +566,7 @@ class PatternTracker:
 
         # Use batch processor if enabled and requested
         if use_batch and self.config.batch_config.enabled:
-            await self.batch_processor.add_task(
+            await self.batch_aggregator.add_task(
                 "track_pattern_creation",
                 code=code,
                 context=context,
@@ -819,7 +819,7 @@ class PatternTracker:
             },
             "batch_processing": {
                 "enabled": self.config.batch_config.enabled,
-                "queue_size": (self.batch_processor._queue.qsize() if self.batch_processor else 0),
+                "queue_size": (self.batch_aggregator._queue.qsize() if self.batch_aggregator else 0),
                 "worker_count": self.config.batch_config.worker_count,
             },
         }
@@ -827,8 +827,8 @@ class PatternTracker:
     async def close(self) -> None:
         """Clean up resources."""
         # Stop batch processor
-        if self.batch_processor and self.batch_processor._running:
-            await self.batch_processor.stop()
+        if self.batch_aggregator and self.batch_aggregator._running:
+            await self.batch_aggregator.stop()
 
         # Close HTTP client
         await self.http_client.aclose()
@@ -865,6 +865,6 @@ __all__ = [
     "PerformanceMetrics",
     "ProcessingMode",
     "PerformanceMonitor",
-    "BatchProcessor",
+    "BatchAggregator",
     "get_tracker",
 ]

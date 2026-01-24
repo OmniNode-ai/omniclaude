@@ -15,7 +15,6 @@ from pathlib import Path
 
 from psycopg2 import sql
 
-
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 
 try:

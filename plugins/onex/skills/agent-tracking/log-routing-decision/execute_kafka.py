@@ -27,16 +27,14 @@ Project context (optional):
 
 import argparse
 import json
-import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-
 
 # Add _shared to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 from db_helper import get_correlation_id, parse_json_param
-
+from env_loader import load_env_file
 
 # Add shared_lib to path for kafka_config and kafka_publisher
 # Relative path resolution from execute_kafka.py:
@@ -51,32 +49,7 @@ from db_helper import get_correlation_id, parse_json_param
 sys.path.insert(
     0, str(Path(__file__).parent.parent.parent.parent.parent / "shared_lib")
 )
-from kafka_config import get_kafka_bootstrap_servers
 from kafka_publisher import get_kafka_producer
-
-
-# Load .env file from project directory
-def load_env_file():
-    """Load environment variables from project .env file."""
-    # Calculate project root from this file's location (skills/agent-tracking/log-routing-decision/)
-    project_root = Path(__file__).parent.parent.parent.parent.parent.resolve()
-    env_paths = [
-        project_root / ".env",
-        Path.home() / "Code" / "omniclaude" / ".env",
-    ]
-
-    for env_path in env_paths:
-        if env_path.exists():
-            with open(env_path) as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith("#") and "=" in line:
-                        key, value = line.split("=", 1)
-                        # Only set if not already in environment
-                        if key not in os.environ:
-                            os.environ[key] = value.strip('"').strip("'")
-            return
-
 
 # Load .env on import
 load_env_file()
@@ -177,7 +150,7 @@ def log_routing_decision_kafka(args):
         "session_id": (
             args.session_id if hasattr(args, "session_id") and args.session_id else None
         ),
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
     # Publish to Kafka

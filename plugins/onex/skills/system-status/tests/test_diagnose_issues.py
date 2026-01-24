@@ -10,17 +10,12 @@ Tests:
 Created: 2025-11-20
 """
 
-import sys
 from pathlib import Path
 from unittest.mock import patch
-
-import pytest
-
 
 # Import load_skill_module from conftest
 conftest_path = Path(__file__).parent / "conftest.py"
 import importlib.util
-
 
 spec = importlib.util.spec_from_file_location("conftest", conftest_path)
 conftest = importlib.util.module_from_spec(spec)
@@ -205,14 +200,14 @@ class TestDiagnoseIssues:
             assert mock_qdrant.called, "Qdrant check should be called"
             assert mock_containers.called, "Docker containers check should be called"
             # get_container_status should be called for each container
-            assert (
-                mock_container_status.call_count == 2
-            ), "Container status should be checked for each container"
+            assert mock_container_status.call_count == 2, (
+                "Container status should be checked for each container"
+            )
 
             # No issues, expect exit code 0 (healthy)
-            assert (
-                exit_code == 0
-            ), "Exit code should be 0 when all containers are healthy"
+            assert exit_code == 0, (
+                "Exit code should be 0 when all containers are healthy"
+            )
 
     def test_severity_classification(self):
         """Test issue severity classification."""

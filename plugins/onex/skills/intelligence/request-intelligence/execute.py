@@ -88,7 +88,9 @@ except ImportError:
 
 # Add _shared to path for helper functions
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
-from db_helper import get_correlation_id  # noqa: E402
+from db_helper import (
+    get_correlation_id,  # noqa: E402 - import after sys.path modification
+)
 
 OPERATION_TYPES = {
     "pattern-discovery": "PATTERN_EXTRACTION",
@@ -285,7 +287,9 @@ async def main():
     # Operation-specific arguments
     parser.add_argument("--source-path", help="File pattern or path to analyze")
     parser.add_argument("--file", help="Specific file to analyze")
-    parser.add_argument("--content", help="Code content to analyze (alternative to --file)")
+    parser.add_argument(
+        "--content", help="Code content to analyze (alternative to --file)"
+    )
     parser.add_argument(
         "--language", default="python", help="Programming language (default: python)"
     )
@@ -314,7 +318,9 @@ async def main():
     args = parser.parse_args()
 
     # Get or generate correlation ID
-    correlation_id = args.correlation_id if args.correlation_id else get_correlation_id()
+    correlation_id = (
+        args.correlation_id if args.correlation_id else get_correlation_id()
+    )
 
     # Validate operation-specific arguments
     if args.operation == "pattern-discovery":

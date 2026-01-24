@@ -12,8 +12,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional
-
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 
@@ -27,7 +26,7 @@ except ImportError as e:
     sys.exit(1)
 
 
-def check_kafka(detailed: bool = False) -> Dict[str, Any]:
+def check_kafka(detailed: bool = False) -> dict[str, Any]:
     """Check Kafka infrastructure.
 
     Args:
@@ -48,7 +47,7 @@ def check_kafka(detailed: bool = False) -> Dict[str, Any]:
     }
 
 
-def check_postgres(detailed: bool = False) -> Dict[str, Any]:
+def check_postgres(detailed: bool = False) -> dict[str, Any]:
     """Check PostgreSQL infrastructure.
 
     Args:
@@ -90,7 +89,7 @@ def check_postgres(detailed: bool = False) -> Dict[str, Any]:
         return {"status": "error", "error": str(e)}
 
 
-def check_qdrant(detailed: bool = False) -> Dict[str, Any]:
+def check_qdrant(detailed: bool = False) -> dict[str, Any]:
     """Check Qdrant infrastructure.
 
     Args:

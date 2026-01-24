@@ -344,7 +344,11 @@ class Settings(BaseSettings):
     # =========================================================================
     def get_effective_kafka_bootstrap_servers(self) -> str:
         """Get Kafka servers with legacy alias fallback."""
-        return self.kafka_bootstrap_servers or self.kafka_intelligence_bootstrap_servers or ""
+        return (
+            self.kafka_bootstrap_servers
+            or self.kafka_intelligence_bootstrap_servers
+            or ""
+        )
 
     def get_effective_postgres_password(self) -> str:
         """Get PostgreSQL password.

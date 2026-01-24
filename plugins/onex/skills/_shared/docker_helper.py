@@ -21,8 +21,7 @@ import subprocess
 
 # Import type-safe configuration (Phase 2 - Pydantic Settings migration)
 import sys
-from typing import Any, Dict, List, Optional
-
+from typing import Any
 
 # Add project root for config module (type-safe Pydantic Settings)
 # Path: claude/skills/_shared/ -> claude/skills/ -> claude/ -> project root
@@ -35,10 +34,8 @@ try:
 except ImportError:
     from common_utils import get_timeout_seconds
 
-from config import settings
 
-
-def list_containers(name_filter: Optional[str] = None) -> Dict[str, Any]:
+def list_containers(name_filter: str | None = None) -> dict[str, Any]:
     """
     List all Docker containers, optionally filtered by name.
 
@@ -53,7 +50,11 @@ def list_containers(name_filter: Optional[str] = None) -> Dict[str, Any]:
     try:
         cmd = ["docker", "ps", "-a", "--format", "{{json .}}"]
         result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=get_timeout_seconds()
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=get_timeout_seconds(),
+            check=False,
         )
 
         if result.returncode != 0:
@@ -141,7 +142,7 @@ def list_containers(name_filter: Optional[str] = None) -> Dict[str, Any]:
         }
 
 
-def get_container_status(container_name: str) -> Dict[str, Any]:
+def get_container_status(container_name: str) -> dict[str, Any]:
     """
     Get detailed status for a specific container.
 
@@ -158,6 +159,7 @@ def get_container_status(container_name: str) -> Dict[str, Any]:
             capture_output=True,
             text=True,
             timeout=get_timeout_seconds(),
+            check=False,
         )
 
         if result.returncode != 0:
@@ -235,7 +237,7 @@ def get_container_status(container_name: str) -> Dict[str, Any]:
         }
 
 
-def check_container_health(container_name: str) -> Dict[str, Any]:
+def check_container_health(container_name: str) -> dict[str, Any]:
     """
     Check health status of a container.
 
@@ -261,7 +263,7 @@ def check_container_health(container_name: str) -> Dict[str, Any]:
     }
 
 
-def get_container_stats(container_name: str) -> Dict[str, Any]:
+def get_container_stats(container_name: str) -> dict[str, Any]:
     """
     Get resource usage stats for a container.
 
@@ -284,6 +286,7 @@ def get_container_stats(container_name: str) -> Dict[str, Any]:
             capture_output=True,
             text=True,
             timeout=get_timeout_seconds(),
+            check=False,
         )
 
         if result.returncode != 0:
@@ -352,7 +355,7 @@ def get_container_stats(container_name: str) -> Dict[str, Any]:
         }
 
 
-def get_container_logs(container_name: str, tail: int = 50) -> Dict[str, Any]:
+def get_container_logs(container_name: str, tail: int = 50) -> dict[str, Any]:
     """
     Get recent logs from a container.
 
@@ -369,6 +372,7 @@ def get_container_logs(container_name: str, tail: int = 50) -> Dict[str, Any]:
             capture_output=True,
             text=True,
             timeout=get_timeout_seconds(),
+            check=False,
         )
 
         # Check if Docker command failed
@@ -430,7 +434,7 @@ def get_container_logs(container_name: str, tail: int = 50) -> Dict[str, Any]:
         }
 
 
-def get_service_summary(name_filter: Optional[str] = None) -> Dict[str, Any]:
+def get_service_summary(name_filter: str | None = None) -> dict[str, Any]:
     """
     Get summary of all services matching filter.
 

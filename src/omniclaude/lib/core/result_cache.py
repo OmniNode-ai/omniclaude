@@ -160,7 +160,9 @@ class ResultCache:
         """
         current_time = time.time()
         expired_keys = [
-            key for key, entry in self.cache.items() if current_time > entry["expires_at"]
+            key
+            for key, entry in self.cache.items()
+            if current_time > entry["expires_at"]
         ]
 
         for key in expired_keys:

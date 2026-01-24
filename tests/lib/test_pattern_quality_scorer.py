@@ -320,7 +320,9 @@ class TestScorePattern:
         after = datetime.now(UTC)
         assert before <= result.measurement_timestamp <= after
 
-    def test_handles_missing_fields_gracefully(self, scorer: PatternQualityScorer) -> None:
+    def test_handles_missing_fields_gracefully(
+        self, scorer: PatternQualityScorer
+    ) -> None:
         """score_pattern handles missing fields gracefully."""
         empty_pattern: dict[str, Any] = {}
         result = scorer.score_pattern(empty_pattern)
@@ -358,7 +360,9 @@ class TestScoreCompleteness:
         score_without = scorer._score_completeness(code_without_todo, "")
         assert score_with < score_without
 
-    def test_stub_not_implemented_error_penalized(self, scorer: PatternQualityScorer) -> None:
+    def test_stub_not_implemented_error_penalized(
+        self, scorer: PatternQualityScorer
+    ) -> None:
         """Code with 'raise NotImplementedError' is penalized."""
         code_with_error = "def foo():\n    raise NotImplementedError('Not done')"
         code_without_error = "def foo():\n    return 42"
@@ -391,7 +395,9 @@ class TestScoreCompleteness:
 
         Use code with a stub penalty so bonuses are visible below the 1.0 cap.
         """
-        code_with_for = "def foo(items):\n    pass\n    for item in items:\n        x = 1"
+        code_with_for = (
+            "def foo(items):\n    pass\n    for item in items:\n        x = 1"
+        )
         code_without_for = "def foo(items):\n    pass\n    x = items"
         score_with = scorer._score_completeness(code_with_for, "")
         score_without = scorer._score_completeness(code_without_for, "")
@@ -484,7 +490,9 @@ class MyClass:
         score = scorer._score_completeness(terrible_code, "")
         assert score >= 0.0
 
-    def test_multiple_stubs_cumulative_penalty(self, scorer: PatternQualityScorer) -> None:
+    def test_multiple_stubs_cumulative_penalty(
+        self, scorer: PatternQualityScorer
+    ) -> None:
         """Multiple stub indicators apply cumulative penalties."""
         one_stub = "def foo():\n    pass"
         two_stubs = "def foo():\n    pass\n    # TODO"
@@ -503,12 +511,16 @@ class MyClass:
 class TestScoreDocumentation:
     """Tests for _score_documentation method."""
 
-    def test_empty_code_and_text_returns_zero(self, scorer: PatternQualityScorer) -> None:
+    def test_empty_code_and_text_returns_zero(
+        self, scorer: PatternQualityScorer
+    ) -> None:
         """Empty code and text returns 0.0."""
         score = scorer._score_documentation("", "")
         assert score == 0.0
 
-    def test_docstring_triple_double_quotes_rewarded(self, scorer: PatternQualityScorer) -> None:
+    def test_docstring_triple_double_quotes_rewarded(
+        self, scorer: PatternQualityScorer
+    ) -> None:
         """Code with triple double-quote docstrings gets bonus."""
         code_with_docstring = '''def foo():
     """This is a docstring."""
@@ -518,7 +530,9 @@ class TestScoreDocumentation:
         score_without = scorer._score_documentation(code_without_docstring, "")
         assert score_with > score_without
 
-    def test_docstring_triple_single_quotes_rewarded(self, scorer: PatternQualityScorer) -> None:
+    def test_docstring_triple_single_quotes_rewarded(
+        self, scorer: PatternQualityScorer
+    ) -> None:
         """Code with triple single-quote docstrings gets bonus."""
         code_with_docstring = "def foo():\n    '''This is a docstring.'''\n    return 1"
         code_without_docstring = "def foo():\n    return 1"
@@ -583,7 +597,9 @@ class TestScoreDocumentation:
         score_long = scorer._score_documentation("def foo(): pass", long_text)
         assert score_long > score_short
 
-    def test_text_exactly_100_chars_no_bonus(self, scorer: PatternQualityScorer) -> None:
+    def test_text_exactly_100_chars_no_bonus(
+        self, scorer: PatternQualityScorer
+    ) -> None:
         """Text at exactly 100 characters does not get bonus."""
         text_100 = "x" * 100
         text_101 = "x" * 101
@@ -628,7 +644,9 @@ class TestScoreOnexCompliance:
         score = scorer._score_onex_compliance("def foo(): pass", None, "SimplePattern")
         assert score == 0.3
 
-    def test_no_node_type_name_suggests_type(self, scorer: PatternQualityScorer) -> None:
+    def test_no_node_type_name_suggests_type(
+        self, scorer: PatternQualityScorer
+    ) -> None:
         """No node_type but name suggests type returns 0.5."""
         for name in [
             "MyEffect",
@@ -641,45 +659,67 @@ class TestScoreOnexCompliance:
 
     def test_has_node_type_base_score(self, scorer: PatternQualityScorer) -> None:
         """Having node_type gives base score of 0.7."""
-        score = scorer._score_onex_compliance("def foo(): pass", "effect", "SimplePattern")
+        score = scorer._score_onex_compliance(
+            "def foo(): pass", "effect", "SimplePattern"
+        )
         assert score >= 0.7
 
     def test_proper_naming_bonus(self, scorer: PatternQualityScorer) -> None:
         """Proper naming (node_type in pattern_name) gives bonus."""
-        score_proper = scorer._score_onex_compliance("def foo(): pass", "effect", "NodeTestEffect")
-        score_improper = scorer._score_onex_compliance("def foo(): pass", "effect", "SomePattern")
+        score_proper = scorer._score_onex_compliance(
+            "def foo(): pass", "effect", "NodeTestEffect"
+        )
+        score_improper = scorer._score_onex_compliance(
+            "def foo(): pass", "effect", "SomePattern"
+        )
         assert score_proper > score_improper
 
     def test_proper_naming_case_insensitive(self, scorer: PatternQualityScorer) -> None:
         """Proper naming check is case-insensitive."""
-        score = scorer._score_onex_compliance("def foo(): pass", "EFFECT", "nodetesteffect")
+        score = scorer._score_onex_compliance(
+            "def foo(): pass", "EFFECT", "nodetesteffect"
+        )
         assert score > 0.7  # Should get naming bonus
 
     def test_onex_method_signature_effect(self, scorer: PatternQualityScorer) -> None:
         """Effect node with execute_effect method gets bonus."""
         code_with_sig = "async def execute_effect(self): pass"
         code_without_sig = "async def run(self): pass"
-        score_with = scorer._score_onex_compliance(code_with_sig, "effect", "TestEffect")
-        score_without = scorer._score_onex_compliance(code_without_sig, "effect", "TestEffect")
+        score_with = scorer._score_onex_compliance(
+            code_with_sig, "effect", "TestEffect"
+        )
+        score_without = scorer._score_onex_compliance(
+            code_without_sig, "effect", "TestEffect"
+        )
         assert score_with > score_without
 
     def test_onex_method_signature_compute(self, scorer: PatternQualityScorer) -> None:
         """Compute node with execute_compute method gets bonus."""
         code_with_sig = "async def execute_compute(self): pass"
         code_without_sig = "async def run(self): pass"
-        score_with = scorer._score_onex_compliance(code_with_sig, "compute", "TestCompute")
-        score_without = scorer._score_onex_compliance(code_without_sig, "compute", "TestCompute")
+        score_with = scorer._score_onex_compliance(
+            code_with_sig, "compute", "TestCompute"
+        )
+        score_without = scorer._score_onex_compliance(
+            code_without_sig, "compute", "TestCompute"
+        )
         assert score_with > score_without
 
     def test_onex_method_signature_reducer(self, scorer: PatternQualityScorer) -> None:
         """Reducer node with execute_reduction method gets bonus."""
         code_with_sig = "async def execute_reduction(self): pass"
         code_without_sig = "async def run(self): pass"
-        score_with = scorer._score_onex_compliance(code_with_sig, "reducer", "TestReducer")
-        score_without = scorer._score_onex_compliance(code_without_sig, "reducer", "TestReducer")
+        score_with = scorer._score_onex_compliance(
+            code_with_sig, "reducer", "TestReducer"
+        )
+        score_without = scorer._score_onex_compliance(
+            code_without_sig, "reducer", "TestReducer"
+        )
         assert score_with > score_without
 
-    def test_onex_method_signature_orchestrator(self, scorer: PatternQualityScorer) -> None:
+    def test_onex_method_signature_orchestrator(
+        self, scorer: PatternQualityScorer
+    ) -> None:
         """Orchestrator node with execute_orchestration method gets bonus."""
         code_with_sig = "async def execute_orchestration(self): pass"
         code_without_sig = "async def run(self): pass"
@@ -727,7 +767,9 @@ class TestScoreMetadataRichness:
     def test_use_cases_bonus_capped(self, scorer: PatternQualityScorer) -> None:
         """Use cases bonus is capped at 0.4 (3 use cases)."""
         score_3 = scorer._score_metadata_richness(["UC1", "UC2", "UC3"], [], {})
-        score_5 = scorer._score_metadata_richness(["UC1", "UC2", "UC3", "UC4", "UC5"], [], {})
+        score_5 = scorer._score_metadata_richness(
+            ["UC1", "UC2", "UC3", "UC4", "UC5"], [], {}
+        )
         # Both should have same use cases contribution (capped at 0.4)
         assert score_3 == pytest.approx(score_5, rel=1e-6)
 
@@ -740,7 +782,9 @@ class TestScoreMetadataRichness:
     def test_examples_bonus_capped(self, scorer: PatternQualityScorer) -> None:
         """Examples bonus is capped at 0.3 (2 examples)."""
         score_2 = scorer._score_metadata_richness([], ["Ex1", "Ex2"], {})
-        score_5 = scorer._score_metadata_richness([], ["Ex1", "Ex2", "Ex3", "Ex4", "Ex5"], {})
+        score_5 = scorer._score_metadata_richness(
+            [], ["Ex1", "Ex2", "Ex3", "Ex4", "Ex5"], {}
+        )
         # Both should have same examples contribution (capped at 0.3)
         assert score_2 == pytest.approx(score_5, rel=1e-6)
 
@@ -757,7 +801,9 @@ class TestScoreMetadataRichness:
         score_sparse = scorer._score_metadata_richness([], [], sparse_metadata)
         assert score_rich > score_sparse
 
-    def test_metadata_exactly_3_fields_no_bonus(self, scorer: PatternQualityScorer) -> None:
+    def test_metadata_exactly_3_fields_no_bonus(
+        self, scorer: PatternQualityScorer
+    ) -> None:
         """Metadata with exactly 3 fields does not get bonus."""
         metadata_3 = {"f1": "v1", "f2": "v2", "f3": "v3"}
         metadata_4 = {"f1": "v1", "f2": "v2", "f3": "v3", "f4": "v4"}
@@ -796,7 +842,9 @@ class TestScoreComplexity:
         score = scorer._score_complexity("", None)
         assert score == 0.4
 
-    def test_no_declaration_returns_base_score(self, scorer: PatternQualityScorer) -> None:
+    def test_no_declaration_returns_base_score(
+        self, scorer: PatternQualityScorer
+    ) -> None:
         """No declared complexity returns 0.4."""
         code = "def foo(): return 1"
         score = scorer._score_complexity(code, None)

@@ -138,7 +138,10 @@ class AIQuorum:
         self.parallel_execution = parallel_execution
 
         # Validate configuration - use getattr to avoid type narrowing issues
-        if self.enable_ai_scoring and getattr(sys.modules.get("httpx"), "__name__", None) is None:
+        if (
+            self.enable_ai_scoring
+            and getattr(sys.modules.get("httpx"), "__name__", None) is None
+        ):
             print(
                 "Warning: httpx not available, falling back to stub mode",
                 file=sys.stderr,
@@ -146,7 +149,9 @@ class AIQuorum:
             self.stub_mode = True
             self.enable_ai_scoring = False
 
-    def _load_models_from_config(self, config_path: Path | None = None) -> list[ModelConfig]:
+    def _load_models_from_config(
+        self, config_path: Path | None = None
+    ) -> list[ModelConfig]:
         """
         Load model configurations from config.yaml.
 
@@ -160,11 +165,13 @@ class AIQuorum:
             config_path = Path.home() / ".claude" / "hooks" / "config.yaml"
 
         if not config_path.exists():
-            print(f"Config file not found: {config_path}, using defaults", file=sys.stderr)
+            print(
+                f"Config file not found: {config_path}, using defaults", file=sys.stderr
+            )
             return self.DEFAULT_MODELS
 
         try:
-            with open(config_path) as f:
+            with open(config_path, encoding="utf-8") as f:
                 config = yaml.safe_load(f)
 
             quorum_config = config.get("quorum", {})
@@ -199,7 +206,9 @@ class AIQuorum:
                         endpoint = model_data["base_url"]
                     else:
                         ollama_config = quorum_config.get("ollama", {})
-                        endpoint = ollama_config.get("base_url", "http://localhost:11434")
+                        endpoint = ollama_config.get(
+                            "base_url", "http://localhost:11434"
+                        )
 
                 model_config = ModelConfig(
                     name=model_data.get("name", model_name),
@@ -339,7 +348,10 @@ class AIQuorum:
         # Score with all models in parallel or sequential
         if self.parallel_execution:
             scores = await asyncio.gather(
-                *[self._score_with_model(model, scoring_prompt) for model in self.models],
+                *[
+                    self._score_with_model(model, scoring_prompt)
+                    for model in self.models
+                ],
                 return_exceptions=True,
             )
         else:
@@ -599,7 +611,9 @@ Provide your evaluation:"""
 
                 result = response.json()
                 response_text = (
-                    result.get("choices", [{}])[0].get("message", {}).get("content", "{}")
+                    result.get("choices", [{}])[0]
+                    .get("message", {})
+                    .get("content", "{}")
                 )
 
                 # Parse JSON response - handle markdown code blocks
@@ -635,7 +649,9 @@ Provide your evaluation:"""
                 },
             )
 
-    def _calculate_consensus(self, scores: list[tuple[ModelConfig, dict[str, Any]]]) -> QuorumScore:
+    def _calculate_consensus(
+        self, scores: list[tuple[ModelConfig, dict[str, Any]]]
+    ) -> QuorumScore:
         """
         Calculate weighted consensus from model scores.
 
@@ -671,7 +687,9 @@ Provide your evaluation:"""
         # Enforce MIN_MODEL_PARTICIPATION threshold
         total_models = len(self.models)
         participating_models = len(valid_scores)
-        participation_rate = participating_models / total_models if total_models > 0 else 0.0
+        participation_rate = (
+            participating_models / total_models if total_models > 0 else 0.0
+        )
 
         if participation_rate < MIN_MODEL_PARTICIPATION:
             return QuorumScore(
@@ -692,9 +710,9 @@ Provide your evaluation:"""
 
         # Calculate confidence based on score variance
         if len(valid_scores) > 1:
-            score_variance = sum((s - consensus_score) ** 2 for s in valid_scores) / len(
-                valid_scores
-            )
+            score_variance = sum(
+                (s - consensus_score) ** 2 for s in valid_scores
+            ) / len(valid_scores)
             confidence = max(0.0, 1.0 - score_variance)
         else:
             confidence = 0.5

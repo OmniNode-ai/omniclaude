@@ -132,7 +132,8 @@ class CorrectionGenerator:
             correction = {
                 "violation": violation,
                 "old_name": violation.name,
-                "new_name": violation.suggestion or self._infer_correction(violation, rag_result),
+                "new_name": violation.suggestion
+                or self._infer_correction(violation, rag_result),
                 "rag_context": rag_result,
                 "confidence": self._calculate_base_confidence(violation, rag_result),
                 "explanation": self._generate_explanation(violation, rag_result),
@@ -145,7 +146,9 @@ class CorrectionGenerator:
 
         return corrections
 
-    def _extract_context(self, content: str, violation: Violation, context_lines: int = 3) -> str:
+    def _extract_context(
+        self, content: str, violation: Violation, context_lines: int = 3
+    ) -> str:
         """
         Extract surrounding context for the violation.
 
@@ -200,7 +203,9 @@ class CorrectionGenerator:
         }
 
         try:
-            result: dict[str, Any] = await self.intelligence_client.gather_domain_standards(
+            result: dict[
+                str, Any
+            ] = await self.intelligence_client.gather_domain_standards(
                 agent_type="naming_correction", task_context=task_context
             )
 
@@ -212,7 +217,9 @@ class CorrectionGenerator:
             # Return fallback with error info
             return {"error": str(e), "fallback": True, "results": []}
 
-    def _infer_correction(self, violation: Violation, rag_result: dict[str, Any]) -> str:
+    def _infer_correction(
+        self, violation: Violation, rag_result: dict[str, Any]
+    ) -> str:
         """
         Infer correction from RAG results or validator suggestion.
 
@@ -265,7 +272,9 @@ class CorrectionGenerator:
         result: str = transform_func(name)
         return result
 
-    def _generate_explanation(self, violation: Violation, rag_result: dict[str, Any]) -> str:
+    def _generate_explanation(
+        self, violation: Violation, rag_result: dict[str, Any]
+    ) -> str:
         """
         Generate human-readable explanation for the correction.
 
@@ -303,7 +312,9 @@ class CorrectionGenerator:
 
         return explanation
 
-    def _calculate_base_confidence(self, violation: Violation, rag_result: dict[str, Any]) -> float:
+    def _calculate_base_confidence(
+        self, violation: Violation, rag_result: dict[str, Any]
+    ) -> float:
         """
         Calculate base confidence score for the correction.
 

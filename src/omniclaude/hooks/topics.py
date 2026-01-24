@@ -25,6 +25,17 @@ class TopicBase(StrEnum):
     PROMPT_SUBMITTED = "omniclaude.prompt.submitted.v1"
     TOOL_EXECUTED = "omniclaude.tool.executed.v1"
 
+    # Agent action events (tool calls, decisions, errors, successes)
+    AGENT_ACTION = "omniclaude.agent.action.v1"
+
+    # Agent observability events (used by HookEventAdapter)
+    # Note: These use legacy naming for backward compatibility with existing consumers
+    ROUTING_DECISIONS = "agent-routing-decisions"
+    AGENT_ACTIONS = "agent-actions"
+    PERFORMANCE_METRICS = "router-performance-metrics"
+    TRANSFORMATIONS = "agent-transformation-events"
+    DETECTION_FAILURES = "agent-detection-failures"
+
     # Future (OMN-1402)
     LEARNING_PATTERN = "omniclaude.learning.pattern.v1"
 

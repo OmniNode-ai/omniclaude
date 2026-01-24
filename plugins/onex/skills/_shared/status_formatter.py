@@ -16,10 +16,9 @@ Created: 2025-11-12
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
-
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +35,7 @@ class StatusJSONEncoder(json.JSONEncoder):
         return super().default(obj)
 
 
-def format_json(data: Dict[str, Any], pretty: bool = True) -> str:
+def format_json(data: dict[str, Any], pretty: bool = True) -> str:
     """
     Format data as JSON.
 
@@ -85,11 +84,11 @@ def format_status_indicator(status: str) -> str:
         return "⚠"
 
     # Info indicators
-    return "ℹ"
+    return "ℹ"  # noqa: RUF001 - intentional Unicode info symbol
 
 
 def format_table(
-    headers: List[str], rows: List[List[Any]], title: Optional[str] = None
+    headers: list[str], rows: list[list[Any]], title: str | None = None
 ) -> str:
     """
     Format data as text-based table.
@@ -155,7 +154,7 @@ def format_table(
     return "\n".join(output)
 
 
-def format_markdown_table(headers: List[str], rows: List[List[Any]]) -> str:
+def format_markdown_table(headers: list[str], rows: list[list[Any]]) -> str:
     """
     Format data as Markdown table.
 
@@ -184,7 +183,7 @@ def format_markdown_table(headers: List[str], rows: List[List[Any]]) -> str:
     return "\n".join(output)
 
 
-def format_status_summary(data: Dict[str, Any]) -> str:
+def format_status_summary(data: dict[str, Any]) -> str:
     """
     Format a status summary with indicators.
 
@@ -322,7 +321,7 @@ def format_bytes(bytes_count: int) -> str:
     return f"{size:.1f} {units[unit_index]}"
 
 
-def format_timestamp(timestamp: Optional[datetime] = None) -> str:
+def format_timestamp(timestamp: datetime | None = None) -> str:
     """
     Format timestamp in ISO format.
 
@@ -333,12 +332,12 @@ def format_timestamp(timestamp: Optional[datetime] = None) -> str:
         ISO formatted timestamp string
     """
     if timestamp is None:
-        timestamp = datetime.now(timezone.utc)
+        timestamp = datetime.now(UTC)
 
     return timestamp.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def generate_markdown_report(title: str, sections: List[Dict[str, Any]]) -> str:
+def generate_markdown_report(title: str, sections: list[dict[str, Any]]) -> str:
     """
     Generate a complete Markdown report.
 

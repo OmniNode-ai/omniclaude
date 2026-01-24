@@ -11,18 +11,12 @@ Tests:
 Created: 2025-11-20
 """
 
-import json
-import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
-
+from unittest.mock import patch
 
 # Import load_skill_module from conftest
 conftest_path = Path(__file__).parent / "conftest.py"
 import importlib.util
-
 
 spec = importlib.util.spec_from_file_location("conftest", conftest_path)
 conftest = importlib.util.module_from_spec(spec)
@@ -47,7 +41,6 @@ class TestCheckInfrastructure:
             patch.object(execute, "check_kafka_connection") as mock_conn,
             patch.object(execute, "list_topics") as mock_topics,
         ):
-
             mock_conn.return_value = {
                 "status": "connected",
                 "broker": "192.168.86.200:29092",
@@ -123,7 +116,6 @@ class TestCheckInfrastructure:
             patch.object(execute, "check_qdrant_connection") as mock_conn,
             patch.object(execute, "get_all_collections_stats") as mock_stats,
         ):
-
             mock_conn.return_value = {
                 "status": "connected",
                 "url": "http://192.168.86.101:6333",
@@ -171,7 +163,6 @@ class TestCheckInfrastructure:
             patch.object(execute, "check_kafka") as mock_kafka,
             patch("sys.argv", ["execute.py", "--components", "kafka"]),
         ):
-
             mock_kafka.return_value = {"status": "connected"}
 
             exit_code = main()
@@ -185,7 +176,6 @@ class TestCheckInfrastructure:
             patch.object(execute, "check_kafka_connection") as mock_conn,
             patch.object(execute, "list_topics") as mock_topics,
         ):
-
             mock_conn.return_value = {
                 "status": "connected",
                 "reachable": True,
@@ -210,7 +200,6 @@ class TestCheckInfrastructure:
             patch.object(execute, "check_qdrant") as mock_qdrant,
             patch("sys.argv", ["execute.py"]),
         ):
-
             mock_kafka.return_value = {"status": "connected"}
             mock_postgres.return_value = {"status": "connected"}
             mock_qdrant.return_value = {"status": "connected"}
@@ -228,7 +217,6 @@ class TestCheckInfrastructure:
             patch.object(execute, "check_kafka") as mock_kafka,
             patch("sys.argv", ["execute.py", "--components", "kafka"]),
         ):
-
             mock_kafka.side_effect = Exception("Unexpected error")
 
             exit_code = main()

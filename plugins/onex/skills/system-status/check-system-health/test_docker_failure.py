@@ -11,8 +11,7 @@ Tests:
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
+from unittest.mock import patch
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
@@ -54,9 +53,9 @@ def test_docker_unavailable():
 
         result = check_docker_services(verbose=False)
 
-        assert not result[
-            "success"
-        ], "Should return success=False when Docker is unavailable"
+        assert not result["success"], (
+            "Should return success=False when Docker is unavailable"
+        )
         assert "error" in result, "Should include error message"
         assert result["total"] == 0, "Should set total to 0"
         assert result["running"] == 0, "Should set running to 0"
@@ -80,13 +79,13 @@ def test_permission_denied():
 
         result = check_docker_services(verbose=False)
 
-        assert not result[
-            "success"
-        ], "Should return success=False when permission denied"
+        assert not result["success"], (
+            "Should return success=False when permission denied"
+        )
         assert "error" in result, "Should include error message"
-        assert (
-            "permission denied" in result["error"].lower()
-        ), "Error should mention permission denied"
+        assert "permission denied" in result["error"].lower(), (
+            "Error should mention permission denied"
+        )
         print("✓ PASS: Permission denied is handled correctly")
         print(f"  Error: {result['error']}")
         print()
@@ -101,9 +100,9 @@ def test_exception_handling():
 
         result = check_docker_services(verbose=False)
 
-        assert not result[
-            "success"
-        ], "Should return success=False when exception occurs"
+        assert not result["success"], (
+            "Should return success=False when exception occurs"
+        )
         assert "error" in result, "Should include error message"
         print("✓ PASS: Exception handling works correctly")
         print(f"  Error: {result['error']}")
@@ -133,16 +132,18 @@ def test_determine_overall_status_integration():
         "qdrant": {"status": "connected", "reachable": True},
     }
 
-    status, issues, recommendations = determine_overall_status(services, infrastructure)
+    status, issues, _recommendations = determine_overall_status(
+        services, infrastructure
+    )
 
     assert status == "critical", "Overall status should be critical when Docker fails"
     assert len(issues) > 0, "Should have at least one issue"
 
     docker_issues = [i for i in issues if i["component"] == "docker"]
     assert len(docker_issues) > 0, "Should have Docker-related issue"
-    assert (
-        docker_issues[0]["severity"] == "critical"
-    ), "Docker failure should be critical"
+    assert docker_issues[0]["severity"] == "critical", (
+        "Docker failure should be critical"
+    )
 
     print("✓ PASS: Integration with determine_overall_status works correctly")
     print(f"  Status: {status}")

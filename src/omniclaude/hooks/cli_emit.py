@@ -51,13 +51,13 @@ except Exception:
     # Fallback for editable installs or when package metadata unavailable
     __version__ = "0.1.0-dev"
 
-from omniclaude.hooks.handler_event_emitter import (  # noqa: E402
+from omniclaude.hooks.handler_event_emitter import (
     emit_prompt_submitted,
     emit_session_ended,
     emit_session_started,
     emit_tool_executed,
 )
-from omniclaude.hooks.schemas import HookSource, SessionEndReason  # noqa: E402
+from omniclaude.hooks.schemas import HookSource, SessionEndReason
 
 # Configure logging for hook context
 logging.basicConfig(
@@ -134,7 +134,9 @@ def _string_to_uuid(value: str) -> UUID:
 # =============================================================================
 
 
-def run_with_timeout[T](coro: Awaitable[T], timeout: float = EMIT_TIMEOUT_SECONDS) -> T | None:
+def run_with_timeout[T](
+    coro: Awaitable[T], timeout: float = EMIT_TIMEOUT_SECONDS
+) -> T | None:
     """Run an async coroutine with a cooperative timeout.
 
     This function wraps asyncio.run() with asyncio.wait_for() for timeout handling.
@@ -220,7 +222,9 @@ def cli(ctx: click.Context, version: bool) -> None:
     help="What triggered the session start.",
 )
 @click.option("--git-branch", default=None, help="Current git branch if available.")
-@click.option("--json", "from_json", is_flag=True, help="Read event data from stdin JSON.")
+@click.option(
+    "--json", "from_json", is_flag=True, help="Read event data from stdin JSON."
+)
 @click.option("--dry-run", is_flag=True, help="Parse and validate but don't emit.")
 def cmd_session_started(
     session_id: str,
@@ -243,7 +247,9 @@ def cmd_session_started(
             git_branch = data.get("git_branch", git_branch)
 
         if dry_run:
-            click.echo(f"[DRY RUN] Would emit session.started: session_id={sid}, cwd={cwd}")
+            click.echo(
+                f"[DRY RUN] Would emit session.started: session_id={sid}, cwd={cwd}"
+            )
             return
 
         result = run_with_timeout(
@@ -258,7 +264,9 @@ def cmd_session_started(
         if result and result.success:
             logger.debug("session_started_emitted", extra={"topic": result.topic})
         elif result:
-            logger.warning("session_started_failed", extra={"error": result.error_message})
+            logger.warning(
+                "session_started_failed", extra={"error": result.error_message}
+            )
 
     except Exception as e:
         logger.warning("session_started_error", extra={"error": str(e)})
@@ -275,9 +283,13 @@ def cmd_session_started(
     type=click.Choice(["clear", "logout", "prompt_input_exit", "other"]),
     help="What caused the session to end.",
 )
-@click.option("--duration", default=None, type=float, help="Session duration in seconds.")
+@click.option(
+    "--duration", default=None, type=float, help="Session duration in seconds."
+)
 @click.option("--tools-count", default=0, type=int, help="Number of tools used.")
-@click.option("--json", "from_json", is_flag=True, help="Read event data from stdin JSON.")
+@click.option(
+    "--json", "from_json", is_flag=True, help="Read event data from stdin JSON."
+)
 @click.option("--dry-run", is_flag=True, help="Parse and validate but don't emit.")
 def cmd_session_ended(
     session_id: str,
@@ -296,10 +308,14 @@ def cmd_session_ended(
             data = json.loads(sys.stdin.read())
             reason = data.get("reason", reason)
             duration = data.get("duration_seconds", data.get("duration", duration))
-            tools_count = data.get("tools_used_count", data.get("tools_count", tools_count))
+            tools_count = data.get(
+                "tools_used_count", data.get("tools_count", tools_count)
+            )
 
         if dry_run:
-            click.echo(f"[DRY RUN] Would emit session.ended: session_id={sid}, reason={reason}")
+            click.echo(
+                f"[DRY RUN] Would emit session.ended: session_id={sid}, reason={reason}"
+            )
             return
 
         result = run_with_timeout(
@@ -314,7 +330,9 @@ def cmd_session_ended(
         if result and result.success:
             logger.debug("session_ended_emitted", extra={"topic": result.topic})
         elif result:
-            logger.warning("session_ended_failed", extra={"error": result.error_message})
+            logger.warning(
+                "session_ended_failed", extra={"error": result.error_message}
+            )
 
     except Exception as e:
         logger.warning("session_ended_error", extra={"error": str(e)})
@@ -324,11 +342,15 @@ def cmd_session_ended(
 
 @cli.command("prompt-submitted")
 @click.option("--session-id", required=True, help="Session UUID or string ID.")
-@click.option("--prompt-id", default=None, help="Prompt UUID (generated if not provided).")
+@click.option(
+    "--prompt-id", default=None, help="Prompt UUID (generated if not provided)."
+)
 @click.option("--preview", default="", help="Sanitized prompt preview (max 100 chars).")
 @click.option("--length", default=0, type=int, help="Original prompt length.")
 @click.option("--intent", default=None, help="Detected intent if available.")
-@click.option("--json", "from_json", is_flag=True, help="Read event data from stdin JSON.")
+@click.option(
+    "--json", "from_json", is_flag=True, help="Read event data from stdin JSON."
+)
 @click.option("--dry-run", is_flag=True, help="Parse and validate but don't emit.")
 def cmd_prompt_submitted(
     session_id: str,
@@ -340,6 +362,7 @@ def cmd_prompt_submitted(
     dry_run: bool,
 ) -> None:
     """Emit a prompt.submitted event."""
+    # ONEX: exempt - CLI command parameters defined by click decorators
     try:
         # Parse session_id as UUID or generate deterministic UUID from string
         sid = _string_to_uuid(session_id)
@@ -354,7 +377,9 @@ def cmd_prompt_submitted(
             intent = data.get("detected_intent", data.get("intent", intent))
 
         if dry_run:
-            click.echo(f"[DRY RUN] Would emit prompt.submitted: session_id={sid}, length={length}")
+            click.echo(
+                f"[DRY RUN] Would emit prompt.submitted: session_id={sid}, length={length}"
+            )
             return
 
         result = run_with_timeout(
@@ -370,7 +395,9 @@ def cmd_prompt_submitted(
         if result and result.success:
             logger.debug("prompt_submitted_emitted", extra={"topic": result.topic})
         elif result:
-            logger.warning("prompt_submitted_failed", extra={"error": result.error_message})
+            logger.warning(
+                "prompt_submitted_failed", extra={"error": result.error_message}
+            )
 
     except Exception as e:
         logger.warning("prompt_submitted_error", extra={"error": str(e)})
@@ -381,13 +408,21 @@ def cmd_prompt_submitted(
 @cli.command("tool-executed")
 @click.option("--session-id", required=True, help="Session UUID or string ID.")
 @click.option(
-    "--execution-id", default=None, help="Tool execution UUID (generated if not provided)."
+    "--execution-id",
+    default=None,
+    help="Tool execution UUID (generated if not provided).",
 )
-@click.option("--tool-name", required=True, help="Name of the tool (Read, Write, Bash, etc.).")
+@click.option(
+    "--tool-name", required=True, help="Name of the tool (Read, Write, Bash, etc.)."
+)
 @click.option("--success/--failure", default=True, help="Whether the tool succeeded.")
-@click.option("--duration-ms", default=None, type=int, help="Execution duration in milliseconds.")
+@click.option(
+    "--duration-ms", default=None, type=int, help="Execution duration in milliseconds."
+)
 @click.option("--summary", default=None, help="Brief summary of the result.")
-@click.option("--json", "from_json", is_flag=True, help="Read event data from stdin JSON.")
+@click.option(
+    "--json", "from_json", is_flag=True, help="Read event data from stdin JSON."
+)
 @click.option("--dry-run", is_flag=True, help="Parse and validate but don't emit.")
 def cmd_tool_executed(
     session_id: str,
@@ -400,6 +435,7 @@ def cmd_tool_executed(
     dry_run: bool,
 ) -> None:
     """Emit a tool.executed event."""
+    # ONEX: exempt - CLI command parameters defined by click decorators
     try:
         # Parse session_id as UUID or generate deterministic UUID from string
         sid = _string_to_uuid(session_id)
@@ -415,7 +451,9 @@ def cmd_tool_executed(
             summary = data.get("summary", summary)
 
         if dry_run:
-            click.echo(f"[DRY RUN] Would emit tool.executed: session_id={sid}, tool={tool_name}")
+            click.echo(
+                f"[DRY RUN] Would emit tool.executed: session_id={sid}, tool={tool_name}"
+            )
             return
 
         result = run_with_timeout(
@@ -432,7 +470,9 @@ def cmd_tool_executed(
         if result and result.success:
             logger.debug("tool_executed_emitted", extra={"topic": result.topic})
         elif result:
-            logger.warning("tool_executed_failed", extra={"error": result.error_message})
+            logger.warning(
+                "tool_executed_failed", extra={"error": result.error_message}
+            )
 
     except Exception as e:
         logger.warning("tool_executed_error", extra={"error": str(e)})

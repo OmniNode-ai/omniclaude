@@ -3,7 +3,7 @@
 Tests for PR review models and collate_issues module.
 
 This module provides comprehensive test coverage for:
-- models.py: Pydantic models (PRIssue, CollatedIssues, CommentSeverity, CommentStatus)
+- models.py: Pydantic models (ModelPRIssue, ModelCollatedIssues, CommentSeverity, CommentStatus)
 - collate_issues.py: Issue collation logic
 
 Run with: pytest test_models.py -v
@@ -12,21 +12,19 @@ Run with: pytest test_models.py -v
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 
 import pytest
 from models import (
     BotType,
-    CollatedIssues,
     CommentSeverity,
     CommentStatus,
-    FileReference,
-    PRComment,
-    PRCommentSource,
-    PRIssue,
+    EnumPRCommentSource,
+    ModelCollatedIssues,
+    ModelFileReference,
+    ModelPRComment,
+    ModelPRIssue,
     detect_bot_type,
 )
-
 
 # =============================================================================
 # CommentSeverity Enum Tests
@@ -187,16 +185,16 @@ class TestCommentStatus:
 
 
 # =============================================================================
-# PRIssue Model Tests
+# ModelPRIssue Model Tests
 # =============================================================================
 
 
-class TestPRIssue:
-    """Tests for PRIssue model."""
+class TestModelPRIssue:
+    """Tests for ModelPRIssue model."""
 
     def test_creation_with_valid_data(self) -> None:
-        """Test creating PRIssue with all required fields."""
-        issue = PRIssue(
+        """Test creating ModelPRIssue with all required fields."""
+        issue = ModelPRIssue(
             file_path="src/main.py",
             line_number=42,
             severity=CommentSeverity.CRITICAL,
@@ -209,8 +207,8 @@ class TestPRIssue:
         assert issue.status == CommentStatus.UNADDRESSED  # default
 
     def test_creation_minimal(self) -> None:
-        """Test creating PRIssue with only required fields."""
-        issue = PRIssue(
+        """Test creating ModelPRIssue with only required fields."""
+        issue = ModelPRIssue(
             severity=CommentSeverity.MINOR,
             description="Consider refactoring",
         )
@@ -220,8 +218,8 @@ class TestPRIssue:
         assert issue.description == "Consider refactoring"
 
     def test_creation_with_status(self) -> None:
-        """Test creating PRIssue with explicit status."""
-        issue = PRIssue(
+        """Test creating ModelPRIssue with explicit status."""
+        issue = ModelPRIssue(
             severity=CommentSeverity.MAJOR,
             description="Bug fix needed",
             status=CommentStatus.RESOLVED,
@@ -230,7 +228,7 @@ class TestPRIssue:
 
     def test_location_property_with_path_and_line(self) -> None:
         """Test location property with both path and line number."""
-        issue = PRIssue(
+        issue = ModelPRIssue(
             file_path="src/utils.py",
             line_number=100,
             severity=CommentSeverity.MINOR,
@@ -240,7 +238,7 @@ class TestPRIssue:
 
     def test_location_property_with_path_only(self) -> None:
         """Test location property with path but no line number."""
-        issue = PRIssue(
+        issue = ModelPRIssue(
             file_path="src/utils.py",
             severity=CommentSeverity.MINOR,
             description="Test",
@@ -249,7 +247,7 @@ class TestPRIssue:
 
     def test_location_property_empty(self) -> None:
         """Test location property with no path."""
-        issue = PRIssue(
+        issue = ModelPRIssue(
             severity=CommentSeverity.MINOR,
             description="Test",
         )
@@ -257,7 +255,7 @@ class TestPRIssue:
 
     def test_severity_emoji_critical(self) -> None:
         """Test severity emoji for CRITICAL."""
-        issue = PRIssue(
+        issue = ModelPRIssue(
             severity=CommentSeverity.CRITICAL,
             description="Test",
         )
@@ -265,7 +263,7 @@ class TestPRIssue:
 
     def test_severity_emoji_major(self) -> None:
         """Test severity emoji for MAJOR."""
-        issue = PRIssue(
+        issue = ModelPRIssue(
             severity=CommentSeverity.MAJOR,
             description="Test",
         )
@@ -273,7 +271,7 @@ class TestPRIssue:
 
     def test_severity_emoji_minor(self) -> None:
         """Test severity emoji for MINOR."""
-        issue = PRIssue(
+        issue = ModelPRIssue(
             severity=CommentSeverity.MINOR,
             description="Test",
         )
@@ -281,7 +279,7 @@ class TestPRIssue:
 
     def test_severity_emoji_nitpick(self) -> None:
         """Test severity emoji for NITPICK."""
-        issue = PRIssue(
+        issue = ModelPRIssue(
             severity=CommentSeverity.NITPICK,
             description="Test",
         )
@@ -289,7 +287,7 @@ class TestPRIssue:
 
     def test_severity_emoji_unclassified(self) -> None:
         """Test severity emoji for UNCLASSIFIED."""
-        issue = PRIssue(
+        issue = ModelPRIssue(
             severity=CommentSeverity.UNCLASSIFIED,
             description="Test",
         )
@@ -297,7 +295,7 @@ class TestPRIssue:
 
     def test_status_indicator_resolved(self) -> None:
         """Test status indicator for RESOLVED status."""
-        issue = PRIssue(
+        issue = ModelPRIssue(
             severity=CommentSeverity.MAJOR,
             description="Test",
             status=CommentStatus.RESOLVED,
@@ -306,7 +304,7 @@ class TestPRIssue:
 
     def test_status_indicator_outdated(self) -> None:
         """Test status indicator for OUTDATED status."""
-        issue = PRIssue(
+        issue = ModelPRIssue(
             severity=CommentSeverity.MAJOR,
             description="Test",
             status=CommentStatus.OUTDATED,
@@ -315,7 +313,7 @@ class TestPRIssue:
 
     def test_status_indicator_outdated_via_flag(self) -> None:
         """Test status indicator when is_outdated flag is True."""
-        issue = PRIssue(
+        issue = ModelPRIssue(
             severity=CommentSeverity.MAJOR,
             description="Test",
             status=CommentStatus.UNADDRESSED,
@@ -325,7 +323,7 @@ class TestPRIssue:
 
     def test_status_indicator_wont_fix(self) -> None:
         """Test status indicator for WONT_FIX status."""
-        issue = PRIssue(
+        issue = ModelPRIssue(
             severity=CommentSeverity.MAJOR,
             description="Test",
             status=CommentStatus.WONT_FIX,
@@ -334,7 +332,7 @@ class TestPRIssue:
 
     def test_status_indicator_unaddressed(self) -> None:
         """Test status indicator for UNADDRESSED status (empty)."""
-        issue = PRIssue(
+        issue = ModelPRIssue(
             severity=CommentSeverity.MAJOR,
             description="Test",
             status=CommentStatus.UNADDRESSED,
@@ -343,7 +341,7 @@ class TestPRIssue:
 
     def test_is_resolved_property_true(self) -> None:
         """Test is_resolved property when status is resolved."""
-        issue = PRIssue(
+        issue = ModelPRIssue(
             severity=CommentSeverity.MAJOR,
             description="Test",
             status=CommentStatus.RESOLVED,
@@ -352,7 +350,7 @@ class TestPRIssue:
 
     def test_is_resolved_property_false(self) -> None:
         """Test is_resolved property when status is not resolved."""
-        issue = PRIssue(
+        issue = ModelPRIssue(
             severity=CommentSeverity.MAJOR,
             description="Test",
             status=CommentStatus.UNADDRESSED,
@@ -361,14 +359,14 @@ class TestPRIssue:
 
     def test_is_open_property(self) -> None:
         """Test is_open property."""
-        open_issue = PRIssue(
+        open_issue = ModelPRIssue(
             severity=CommentSeverity.MAJOR,
             description="Test",
             status=CommentStatus.UNADDRESSED,
         )
         assert open_issue.is_open is True
 
-        resolved_issue = PRIssue(
+        resolved_issue = ModelPRIssue(
             severity=CommentSeverity.MAJOR,
             description="Test",
             status=CommentStatus.RESOLVED,
@@ -377,7 +375,7 @@ class TestPRIssue:
 
     def test_format_display_basic(self) -> None:
         """Test format_display with basic issue."""
-        issue = PRIssue(
+        issue = ModelPRIssue(
             file_path="src/main.py",
             line_number=42,
             severity=CommentSeverity.CRITICAL,
@@ -390,7 +388,7 @@ class TestPRIssue:
 
     def test_format_display_with_status(self) -> None:
         """Test format_display with status indicator."""
-        issue = PRIssue(
+        issue = ModelPRIssue(
             severity=CommentSeverity.MAJOR,
             description="Fixed bug",
             status=CommentStatus.RESOLVED,
@@ -400,16 +398,16 @@ class TestPRIssue:
 
     def test_from_pr_comment_with_numeric_id(self) -> None:
         """Test from_pr_comment with numeric comment ID."""
-        comment = PRComment(
+        comment = ModelPRComment(
             id="12345",  # Numeric ID (REST API style)
-            source=PRCommentSource.INLINE,
+            source=EnumPRCommentSource.INLINE,
             author="reviewer",
             body="This needs fixing",
             created_at=datetime.now(),
         )
-        comment.file_ref = FileReference(path="src/test.py", line=10)
+        comment.file_ref = ModelFileReference(path="src/test.py", line=10)
 
-        issue = PRIssue.from_pr_comment(comment)
+        issue = ModelPRIssue.from_pr_comment(comment)
 
         assert issue.comment_id == 12345  # Should be converted to int
         assert issue.file_path == "src/test.py"
@@ -418,15 +416,15 @@ class TestPRIssue:
 
     def test_from_pr_comment_with_non_numeric_id(self) -> None:
         """Test from_pr_comment with non-numeric ID (GraphQL style)."""
-        comment = PRComment(
+        comment = ModelPRComment(
             id="IC_kwDOABC123",  # GraphQL node ID
-            source=PRCommentSource.ISSUE_COMMENT,
+            source=EnumPRCommentSource.ISSUE_COMMENT,
             author="claude[bot]",
             body="Security vulnerability detected",
             created_at=datetime.now(),
         )
 
-        issue = PRIssue.from_pr_comment(comment)
+        issue = ModelPRIssue.from_pr_comment(comment)
 
         assert issue.comment_id is None  # Should be None for non-numeric IDs
         assert "Security vulnerability detected" in issue.description
@@ -434,9 +432,9 @@ class TestPRIssue:
     def test_from_pr_comment_with_resolved_status(self) -> None:
         """Test from_pr_comment preserves resolution info."""
         resolved_time = datetime.now()
-        comment = PRComment(
+        comment = ModelPRComment(
             id="999",
-            source=PRCommentSource.INLINE,
+            source=EnumPRCommentSource.INLINE,
             author="reviewer",
             body="Minor issue",
             created_at=datetime.now(),
@@ -444,7 +442,7 @@ class TestPRIssue:
             resolved_by="author",
         )
 
-        issue = PRIssue.from_pr_comment(comment)
+        issue = ModelPRIssue.from_pr_comment(comment)
 
         assert issue.status == CommentStatus.RESOLVED
         assert issue.resolved_at == resolved_time
@@ -452,61 +450,61 @@ class TestPRIssue:
 
     def test_from_pr_comment_with_outdated_flag(self) -> None:
         """Test from_pr_comment handles outdated flag."""
-        comment = PRComment(
+        comment = ModelPRComment(
             id="888",
-            source=PRCommentSource.INLINE,
+            source=EnumPRCommentSource.INLINE,
             author="reviewer",
             body="Old comment",
             created_at=datetime.now(),
             is_outdated=True,
         )
 
-        issue = PRIssue.from_pr_comment(comment)
+        issue = ModelPRIssue.from_pr_comment(comment)
 
         assert issue.status == CommentStatus.OUTDATED
         assert issue.is_outdated is True
 
     def test_from_pr_comment_extracts_description(self) -> None:
         """Test from_pr_comment extracts meaningful description."""
-        comment = PRComment(
+        comment = ModelPRComment(
             id="777",
-            source=PRCommentSource.PR_COMMENT,
+            source=EnumPRCommentSource.PR_COMMENT,
             author="reviewer",
             body="# Header\n\nThis is the actual issue content\n\nMore details",
             created_at=datetime.now(),
         )
 
-        issue = PRIssue.from_pr_comment(comment)
+        issue = ModelPRIssue.from_pr_comment(comment)
 
         # Should skip the header and get the meaningful line
         assert "This is the actual issue content" in issue.description
 
     def test_from_pr_comment_with_severity_override(self) -> None:
         """Test from_pr_comment with severity override."""
-        comment = PRComment(
+        comment = ModelPRComment(
             id="666",
-            source=PRCommentSource.REVIEW,
+            source=EnumPRCommentSource.REVIEW,
             author="reviewer",
             body="Minor style issue",
             created_at=datetime.now(),
             severity=CommentSeverity.NITPICK,
         )
 
-        issue = PRIssue.from_pr_comment(comment, severity=CommentSeverity.CRITICAL)
+        issue = ModelPRIssue.from_pr_comment(comment, severity=CommentSeverity.CRITICAL)
 
         assert issue.severity == CommentSeverity.CRITICAL
 
     def test_from_pr_comment_with_empty_string_id(self) -> None:
         """Test from_pr_comment with empty string ID (edge case from PR #40)."""
-        comment = PRComment(
+        comment = ModelPRComment(
             id="",  # Empty string ID
-            source=PRCommentSource.INLINE,
+            source=EnumPRCommentSource.INLINE,
             author="reviewer",
             body="Some issue to fix",
             created_at=datetime.now(),
         )
 
-        issue = PRIssue.from_pr_comment(comment)
+        issue = ModelPRIssue.from_pr_comment(comment)
 
         # Empty string should be converted to None (not raise TypeError)
         assert issue.comment_id is None
@@ -515,73 +513,73 @@ class TestPRIssue:
     def test_from_pr_comment_with_none_like_values(self) -> None:
         """Test from_pr_comment handles edge cases for comment ID gracefully."""
         # Test with whitespace-only ID
-        comment = PRComment(
+        comment = ModelPRComment(
             id="   ",  # Whitespace - isdigit() returns False
-            source=PRCommentSource.PR_COMMENT,
+            source=EnumPRCommentSource.PR_COMMENT,
             author="reviewer",
             body="Issue description",
             created_at=datetime.now(),
         )
 
-        issue = PRIssue.from_pr_comment(comment)
+        issue = ModelPRIssue.from_pr_comment(comment)
         # Whitespace string has isdigit() = False, so should be None
         assert issue.comment_id is None
 
 
 # =============================================================================
-# CollatedIssues Model Tests
+# ModelCollatedIssues Model Tests
 # =============================================================================
 
 
-class TestCollatedIssues:
-    """Tests for CollatedIssues model."""
+class TestModelCollatedIssues:
+    """Tests for ModelCollatedIssues model."""
 
     @pytest.fixture
-    def sample_issues(self) -> CollatedIssues:
-        """Create a sample CollatedIssues for testing."""
-        return CollatedIssues(
+    def sample_issues(self) -> ModelCollatedIssues:
+        """Create a sample ModelCollatedIssues for testing."""
+        return ModelCollatedIssues(
             pr_number=42,
             repository="owner/repo",
             critical=[
-                PRIssue(
+                ModelPRIssue(
                     severity=CommentSeverity.CRITICAL,
                     description="Security flaw",
                     status=CommentStatus.UNADDRESSED,
                 ),
-                PRIssue(
+                ModelPRIssue(
                     severity=CommentSeverity.CRITICAL,
                     description="Data loss risk",
                     status=CommentStatus.RESOLVED,
                 ),
             ],
             major=[
-                PRIssue(
+                ModelPRIssue(
                     severity=CommentSeverity.MAJOR,
                     description="Bug in logic",
                     status=CommentStatus.UNADDRESSED,
                 ),
-                PRIssue(
+                ModelPRIssue(
                     severity=CommentSeverity.MAJOR,
                     description="Missing test",
                     status=CommentStatus.OUTDATED,
                 ),
             ],
             minor=[
-                PRIssue(
+                ModelPRIssue(
                     severity=CommentSeverity.MINOR,
                     description="Docs update needed",
                     status=CommentStatus.UNADDRESSED,
                 ),
             ],
             nitpick=[
-                PRIssue(
+                ModelPRIssue(
                     severity=CommentSeverity.NITPICK,
                     description="Naming convention",
                     status=CommentStatus.WONT_FIX,
                 ),
             ],
             unclassified=[
-                PRIssue(
+                ModelPRIssue(
                     severity=CommentSeverity.UNCLASSIFIED,
                     description="Unknown issue",
                     status=CommentStatus.UNADDRESSED,
@@ -589,7 +587,7 @@ class TestCollatedIssues:
             ],
         )
 
-    def test_all_issues_property(self, sample_issues: CollatedIssues) -> None:
+    def test_all_issues_property(self, sample_issues: ModelCollatedIssues) -> None:
         """Test all_issues returns all issues across severities."""
         all_issues = sample_issues.all_issues
         assert len(all_issues) == 7
@@ -600,7 +598,7 @@ class TestCollatedIssues:
         assert "Naming convention" in descriptions
         assert "Unknown issue" in descriptions
 
-    def test_open_issues_property(self, sample_issues: CollatedIssues) -> None:
+    def test_open_issues_property(self, sample_issues: ModelCollatedIssues) -> None:
         """Test open_issues excludes resolved issues."""
         open_issues = sample_issues.open_issues
         # Should exclude: "Data loss risk" (resolved), "Missing test" (outdated), "Naming convention" (wont_fix)
@@ -615,7 +613,7 @@ class TestCollatedIssues:
         assert "Missing test" not in descriptions
         assert "Naming convention" not in descriptions
 
-    def test_resolved_issues_property(self, sample_issues: CollatedIssues) -> None:
+    def test_resolved_issues_property(self, sample_issues: ModelCollatedIssues) -> None:
         """Test resolved_issues includes only resolved issues."""
         resolved = sample_issues.resolved_issues
         assert len(resolved) == 3
@@ -624,19 +622,19 @@ class TestCollatedIssues:
         assert "Missing test" in descriptions  # outdated (counts as resolved)
         assert "Naming convention" in descriptions  # wont_fix (counts as resolved)
 
-    def test_total_count_property(self, sample_issues: CollatedIssues) -> None:
+    def test_total_count_property(self, sample_issues: ModelCollatedIssues) -> None:
         """Test total_count returns correct count."""
         assert sample_issues.total_count == 7
 
-    def test_open_count_property(self, sample_issues: CollatedIssues) -> None:
+    def test_open_count_property(self, sample_issues: ModelCollatedIssues) -> None:
         """Test open_count returns correct count."""
         assert sample_issues.open_count == 4
 
-    def test_resolved_count_property(self, sample_issues: CollatedIssues) -> None:
+    def test_resolved_count_property(self, sample_issues: ModelCollatedIssues) -> None:
         """Test resolved_count returns correct count."""
         assert sample_issues.resolved_count == 3
 
-    def test_blocking_count_property(self, sample_issues: CollatedIssues) -> None:
+    def test_blocking_count_property(self, sample_issues: ModelCollatedIssues) -> None:
         """Test blocking_count returns open critical + major count."""
         # Open critical: "Security flaw"
         # Open major: "Bug in logic"
@@ -644,7 +642,7 @@ class TestCollatedIssues:
         assert sample_issues.blocking_count == 2
 
     def test_filter_by_status_hide_resolved(
-        self, sample_issues: CollatedIssues
+        self, sample_issues: ModelCollatedIssues
     ) -> None:
         """Test filter_by_status with hide_resolved=True."""
         filtered = sample_issues.filter_by_status(hide_resolved=True)
@@ -664,7 +662,7 @@ class TestCollatedIssues:
         assert len(filtered.nitpick) == 0  # wont_fix was removed
 
     def test_filter_by_status_show_resolved_only(
-        self, sample_issues: CollatedIssues
+        self, sample_issues: ModelCollatedIssues
     ) -> None:
         """Test filter_by_status with show_resolved_only=True."""
         filtered = sample_issues.filter_by_status(show_resolved_only=True)
@@ -681,27 +679,29 @@ class TestCollatedIssues:
         assert filtered.nitpick[0].description == "Naming convention"
 
     def test_filter_by_status_conflicting_options(
-        self, sample_issues: CollatedIssues
+        self, sample_issues: ModelCollatedIssues
     ) -> None:
         """Test filter_by_status raises error with conflicting options."""
         with pytest.raises(ValueError, match="Cannot use both"):
             sample_issues.filter_by_status(hide_resolved=True, show_resolved_only=True)
 
-    def test_filter_by_status_no_filter(self, sample_issues: CollatedIssues) -> None:
+    def test_filter_by_status_no_filter(
+        self, sample_issues: ModelCollatedIssues
+    ) -> None:
         """Test filter_by_status with no filters returns all issues."""
         filtered = sample_issues.filter_by_status()
         assert filtered.total_count == sample_issues.total_count
 
     def test_get_summary_basic(self) -> None:
         """Test get_summary with basic issues."""
-        issues = CollatedIssues(
+        issues = ModelCollatedIssues(
             pr_number=1,
             critical=[
-                PRIssue(severity=CommentSeverity.CRITICAL, description="c1"),
-                PRIssue(severity=CommentSeverity.CRITICAL, description="c2"),
+                ModelPRIssue(severity=CommentSeverity.CRITICAL, description="c1"),
+                ModelPRIssue(severity=CommentSeverity.CRITICAL, description="c2"),
             ],
             major=[
-                PRIssue(severity=CommentSeverity.MAJOR, description="m1"),
+                ModelPRIssue(severity=CommentSeverity.MAJOR, description="m1"),
             ],
             minor=[],
             nitpick=[],
@@ -714,16 +714,16 @@ class TestCollatedIssues:
 
     def test_get_summary_with_nitpicks(self) -> None:
         """Test get_summary including nitpicks."""
-        issues = CollatedIssues(
+        issues = ModelCollatedIssues(
             pr_number=1,
             critical=[],
             major=[
-                PRIssue(severity=CommentSeverity.MAJOR, description="m1"),
+                ModelPRIssue(severity=CommentSeverity.MAJOR, description="m1"),
             ],
             minor=[],
             nitpick=[
-                PRIssue(severity=CommentSeverity.NITPICK, description="n1"),
-                PRIssue(severity=CommentSeverity.NITPICK, description="n2"),
+                ModelPRIssue(severity=CommentSeverity.NITPICK, description="n1"),
+                ModelPRIssue(severity=CommentSeverity.NITPICK, description="n2"),
             ],
         )
 
@@ -734,19 +734,19 @@ class TestCollatedIssues:
 
     def test_get_summary_no_issues(self) -> None:
         """Test get_summary with no issues."""
-        issues = CollatedIssues(pr_number=1)
+        issues = ModelCollatedIssues(pr_number=1)
         summary = issues.get_summary()
         assert summary == "No issues found"
 
     def test_get_summary_excludes_nitpicks_by_default(self) -> None:
         """Test get_summary excludes nitpicks by default."""
-        issues = CollatedIssues(
+        issues = ModelCollatedIssues(
             pr_number=1,
             major=[
-                PRIssue(severity=CommentSeverity.MAJOR, description="m1"),
+                ModelPRIssue(severity=CommentSeverity.MAJOR, description="m1"),
             ],
             nitpick=[
-                PRIssue(severity=CommentSeverity.NITPICK, description="n1"),
+                ModelPRIssue(severity=CommentSeverity.NITPICK, description="n1"),
             ],
         )
 
@@ -755,8 +755,8 @@ class TestCollatedIssues:
         assert "1 actionable" in summary
 
     def test_empty_collated_issues(self) -> None:
-        """Test empty CollatedIssues works correctly."""
-        issues = CollatedIssues(pr_number=99)
+        """Test empty ModelCollatedIssues works correctly."""
+        issues = ModelCollatedIssues(pr_number=99)
 
         assert issues.total_count == 0
         assert issues.open_count == 0
@@ -786,9 +786,9 @@ class TestBotTypeDetection:
             "CLAUDE",
         ]
         for author in claude_authors:
-            assert (
-                detect_bot_type(author) == BotType.CLAUDE_CODE
-            ), f"Failed for {author}"
+            assert detect_bot_type(author) == BotType.CLAUDE_CODE, (
+                f"Failed for {author}"
+            )
 
     def test_detect_coderabbit(self) -> None:
         """Test detection of CodeRabbit bot."""
@@ -848,9 +848,9 @@ class TestCollateIssuesClassifySeverity:
             "blocker for release",
         ]
         for text in critical_texts:
-            assert (
-                classify_severity(text) == CommentSeverity.CRITICAL
-            ), f"Failed for: {text}"
+            assert classify_severity(text) == CommentSeverity.CRITICAL, (
+                f"Failed for: {text}"
+            )
 
     def test_classify_major_patterns(self) -> None:
         """Test classification of major severity patterns."""
@@ -864,9 +864,9 @@ class TestCollateIssuesClassifySeverity:
             "Missing test coverage",
         ]
         for text in major_texts:
-            assert (
-                classify_severity(text) == CommentSeverity.MAJOR
-            ), f"Failed for: {text}"
+            assert classify_severity(text) == CommentSeverity.MAJOR, (
+                f"Failed for: {text}"
+            )
 
     def test_classify_minor_patterns(self) -> None:
         """Test classification of minor severity patterns."""
@@ -879,9 +879,9 @@ class TestCollateIssuesClassifySeverity:
             "This might be cleaner",
         ]
         for text in minor_texts:
-            assert (
-                classify_severity(text) == CommentSeverity.MINOR
-            ), f"Failed for: {text}"
+            assert classify_severity(text) == CommentSeverity.MINOR, (
+                f"Failed for: {text}"
+            )
 
     def test_classify_nitpick_patterns(self) -> None:
         """Test classification of nitpick severity patterns."""
@@ -895,9 +895,9 @@ class TestCollateIssuesClassifySeverity:
             "optional: rename this",
         ]
         for text in nitpick_texts:
-            assert (
-                classify_severity(text) == CommentSeverity.NITPICK
-            ), f"Failed for: {text}"
+            assert classify_severity(text) == CommentSeverity.NITPICK, (
+                f"Failed for: {text}"
+            )
 
     def test_classify_unclassified(self) -> None:
         """Test unclassified when no patterns match."""
@@ -1091,7 +1091,9 @@ class TestCollateIssuesResolutionMap:
             200: {"is_resolved": False, "is_outdated": True, "resolved_by": None}
         }
 
-        status, is_outdated, resolved_by = determine_comment_status(200, resolution_map)
+        status, is_outdated, _resolved_by = determine_comment_status(
+            200, resolution_map
+        )
 
         assert status == CommentStatus.OUTDATED
         assert is_outdated is True
@@ -1108,45 +1110,45 @@ class TestCollateIssuesResolutionMap:
 
 
 # =============================================================================
-# FileReference Tests
+# ModelFileReference Tests
 # =============================================================================
 
 
-class TestFileReference:
-    """Tests for FileReference model."""
+class TestModelFileReference:
+    """Tests for ModelFileReference model."""
 
     def test_create_with_path_only(self) -> None:
-        """Test creating FileReference with path only."""
-        ref = FileReference(path="src/main.py")
+        """Test creating ModelFileReference with path only."""
+        ref = ModelFileReference(path="src/main.py")
         assert ref.path == "src/main.py"
         assert ref.line is None
         assert ref.end_line is None
 
     def test_create_with_line(self) -> None:
-        """Test creating FileReference with path and line."""
-        ref = FileReference(path="src/main.py", line=42)
+        """Test creating ModelFileReference with path and line."""
+        ref = ModelFileReference(path="src/main.py", line=42)
         assert ref.path == "src/main.py"
         assert ref.line == 42
 
     def test_create_with_line_range(self) -> None:
-        """Test creating FileReference with line range."""
-        ref = FileReference(path="src/main.py", line=10, end_line=20)
+        """Test creating ModelFileReference with line range."""
+        ref = ModelFileReference(path="src/main.py", line=10, end_line=20)
         assert ref.line == 10
         assert ref.end_line == 20
 
     def test_invalid_line_range(self) -> None:
         """Test that end_line < line raises error."""
-        with pytest.raises(ValueError, match="end_line.*must be >= line"):
-            FileReference(path="src/main.py", line=20, end_line=10)
+        with pytest.raises(ValueError, match=r"end_line.*must be >= line"):
+            ModelFileReference(path="src/main.py", line=20, end_line=10)
 
     def test_repr_with_line(self) -> None:
         """Test repr with single line."""
-        ref = FileReference(path="src/main.py", line=42)
+        ref = ModelFileReference(path="src/main.py", line=42)
         assert "src/main.py:42" in repr(ref)
 
     def test_repr_with_range(self) -> None:
         """Test repr with line range."""
-        ref = FileReference(path="src/main.py", line=10, end_line=20)
+        ref = ModelFileReference(path="src/main.py", line=10, end_line=20)
         assert "src/main.py:10-20" in repr(ref)
 
     def test_from_github_response(self) -> None:
@@ -1157,7 +1159,7 @@ class TestFileReference:
             "end_line": 55,
             "diff_hunk": "@@ -48,10 +48,10 @@",
         }
-        ref = FileReference.from_github_response(data)
+        ref = ModelFileReference.from_github_response(data)
 
         assert ref is not None
         assert ref.path == "src/utils.py"
@@ -1168,37 +1170,37 @@ class TestFileReference:
     def test_from_github_response_no_path(self) -> None:
         """Test from_github_response returns None when no path."""
         data = {"line": 50}
-        ref = FileReference.from_github_response(data)
+        ref = ModelFileReference.from_github_response(data)
         assert ref is None
 
 
 # =============================================================================
-# PRComment Tests
+# ModelPRComment Tests
 # =============================================================================
 
 
-class TestPRComment:
-    """Tests for PRComment model."""
+class TestModelPRComment:
+    """Tests for ModelPRComment model."""
 
     def test_create_basic_comment(self) -> None:
         """Test creating a basic PR comment."""
-        comment = PRComment(
+        comment = ModelPRComment(
             id="123",
-            source=PRCommentSource.INLINE,
+            source=EnumPRCommentSource.INLINE,
             author="reviewer",
             body="This needs attention",
             created_at=datetime.now(),
         )
         assert comment.id == "123"
-        assert comment.source == PRCommentSource.INLINE
+        assert comment.source == EnumPRCommentSource.INLINE
         assert comment.author == "reviewer"
         assert comment.author_type == BotType.HUMAN
 
     def test_auto_detect_claude_bot(self) -> None:
         """Test auto-detection of Claude bot author."""
-        comment = PRComment(
+        comment = ModelPRComment(
             id="456",
-            source=PRCommentSource.ISSUE_COMMENT,
+            source=EnumPRCommentSource.ISSUE_COMMENT,
             author="claude[bot]",
             body="Code review",
             created_at=datetime.now(),
@@ -1208,18 +1210,18 @@ class TestPRComment:
 
     def test_is_bot_method(self) -> None:
         """Test is_bot method."""
-        bot_comment = PRComment(
+        bot_comment = ModelPRComment(
             id="1",
-            source=PRCommentSource.PR_COMMENT,
+            source=EnumPRCommentSource.PR_COMMENT,
             author="some-bot",
             body="Auto message",
             created_at=datetime.now(),
         )
         assert bot_comment.is_bot() is True
 
-        human_comment = PRComment(
+        human_comment = ModelPRComment(
             id="2",
-            source=PRCommentSource.PR_COMMENT,
+            source=EnumPRCommentSource.PR_COMMENT,
             author="johndoe",
             body="My review",
             created_at=datetime.now(),
@@ -1228,9 +1230,9 @@ class TestPRComment:
 
     def test_is_blocking(self) -> None:
         """Test is_blocking method."""
-        blocking_comment = PRComment(
+        blocking_comment = ModelPRComment(
             id="1",
-            source=PRCommentSource.INLINE,
+            source=EnumPRCommentSource.INLINE,
             author="reviewer",
             body="Critical security issue",
             created_at=datetime.now(),
@@ -1239,9 +1241,9 @@ class TestPRComment:
         )
         assert blocking_comment.is_blocking() is True
 
-        resolved_critical = PRComment(
+        resolved_critical = ModelPRComment(
             id="2",
-            source=PRCommentSource.INLINE,
+            source=EnumPRCommentSource.INLINE,
             author="reviewer",
             body="Critical security issue",
             created_at=datetime.now(),
@@ -1252,9 +1254,9 @@ class TestPRComment:
 
     def test_severity_auto_classification(self) -> None:
         """Test auto-classification of severity from content."""
-        comment = PRComment(
+        comment = ModelPRComment(
             id="1",
-            source=PRCommentSource.REVIEW,
+            source=EnumPRCommentSource.REVIEW,
             author="reviewer",
             body="This is a security vulnerability that could cause data loss",
             created_at=datetime.now(),

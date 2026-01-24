@@ -22,6 +22,7 @@ import time
 import traceback
 from collections.abc import Callable
 from datetime import datetime
+from collections.abc import Callable
 from typing import Any
 
 import requests
@@ -50,7 +51,9 @@ class PatternTrackingLogger:
         # Also add console handler for immediate feedback
         console_handler = logging.StreamHandler(sys.stderr)
         console_handler.setLevel(logging.INFO)
-        console_formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+        console_formatter = logging.Formatter(
+            "%(asctime)s - %(levelname)s - %(message)s"
+        )
         console_handler.setFormatter(console_formatter)
         self.logger.addHandler(console_handler)
 
@@ -88,7 +91,7 @@ class PatternTrackingLogger:
         return self.log_file
 
 
-class PatternTrackingErrorHandler:
+class PatternTrackingErrorPolicy:
     def __init__(self, logger: PatternTrackingLogger) -> None:
         self.logger = logger
         self.retryable_errors: list[type[Exception]] = [
@@ -110,7 +113,9 @@ class PatternTrackingErrorHandler:
         # Specific handling for different error types
         if isinstance(error, requests.exceptions.Timeout):
             error_category = "timeout"
-            suggestion = "The request timed out. The service might be overloaded or slow."
+            suggestion = (
+                "The request timed out. The service might be overloaded or slow."
+            )
             retry_suggested = True
             retry_delay_seconds = 10
 
@@ -136,13 +141,17 @@ class PatternTrackingErrorHandler:
                 retry_suggested = False
         elif isinstance(error, requests.exceptions.ConnectionError):
             error_category = "connection_error"
-            suggestion = "Network connection error. Check your network and the service status."
+            suggestion = (
+                "Network connection error. Check your network and the service status."
+            )
             retry_suggested = True
             retry_delay_seconds = 10
 
         elif isinstance(error, json.JSONDecodeError):
             error_category = "json_decode"
-            suggestion = "Failed to parse JSON response. The service returned invalid data."
+            suggestion = (
+                "Failed to parse JSON response. The service returned invalid data."
+            )
             retry_suggested = False
 
         else:
@@ -254,7 +263,7 @@ def safe_execute_operation(
     operation_name: str,
     operation_func: Callable[[], Any],
     logger: PatternTrackingLogger,
-    error_handler: PatternTrackingErrorHandler,
+    error_handler: PatternTrackingErrorPolicy,
     max_retries: int = 3,
     circuit_breaker: CircuitBreaker | None = None,
 ) -> dict[str, Any]:
@@ -275,7 +284,9 @@ def safe_execute_operation(
                     },
                 )
             else:
-                logger.log_success(operation_name, {"attempt": attempt + 1, "result": "success"})
+                logger.log_success(
+                    operation_name, {"attempt": attempt + 1, "result": "success"}
+                )
 
             return {"success": True, "result": result, "attempts": attempt + 1}
 
@@ -334,11 +345,11 @@ def get_default_logger() -> PatternTrackingLogger:
     return _default_logger
 
 
-def get_default_error_handler() -> PatternTrackingErrorHandler:
-    """Get or create default error handler instance"""
+def get_default_error_handler() -> PatternTrackingErrorPolicy:
+    """Get or create default error policy instance"""
     global _default_error_handler
     if _default_error_handler is None:
-        _default_error_handler = PatternTrackingErrorHandler(get_default_logger())
+        _default_error_handler = PatternTrackingErrorPolicy(get_default_logger())
     return _default_error_handler
 
 
@@ -363,7 +374,7 @@ def handle_error(
 if __name__ == "__main__":
     # Test the error handling system
     logger = PatternTrackingLogger()
-    error_handler = PatternTrackingErrorHandler(logger)
+    error_handler = PatternTrackingErrorPolicy(logger)
 
     print("Testing error handling system...")
 

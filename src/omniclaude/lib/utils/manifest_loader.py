@@ -26,7 +26,9 @@ if TYPE_CHECKING:
     pass
 
 
-def load_manifest(correlation_id: str | None = None, agent_name: str | None = None) -> str:
+def load_manifest(
+    correlation_id: str | None = None, agent_name: str | None = None
+) -> str:
     """
     Load and return dynamic system manifest.
 
@@ -68,7 +70,9 @@ def load_manifest(correlation_id: str | None = None, agent_name: str | None = No
 
         # Call inject_manifest with correlation_id and agent_name (new v2.0 API)
         # This will query event bus for dynamic data or fall back to minimal manifest
-        manifest: str = inject_manifest(correlation_id=correlation_id, agent_name=agent_name)
+        manifest: str = inject_manifest(
+            correlation_id=correlation_id, agent_name=agent_name
+        )
         return manifest
 
     except ImportError as e:
@@ -98,7 +102,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Get correlation_id from args, environment, or generate new one
-    correlation_id = args.correlation_id or os.environ.get("CORRELATION_ID") or str(uuid4())
+    correlation_id = (
+        args.correlation_id or os.environ.get("CORRELATION_ID") or str(uuid4())
+    )
 
     # Get agent_name from args or environment (command-line takes precedence)
     agent_name = args.agent_name or os.environ.get("AGENT_NAME")

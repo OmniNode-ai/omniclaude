@@ -151,11 +151,11 @@ class RoutingEventClient:
 
             # Wait for consumer partition assignment
             max_wait_seconds = 10
-            start_time = asyncio.get_event_loop().time()
+            start_time = asyncio.get_running_loop().time()
 
             while not self._consumer.assignment():
                 await asyncio.sleep(0.1)
-                if asyncio.get_event_loop().time() - start_time > max_wait_seconds:
+                if asyncio.get_running_loop().time() - start_time > max_wait_seconds:
                     raise TimeoutError(
                         f"Consumer failed to get partition assignment after {max_wait_seconds}s"
                     )
@@ -188,7 +188,9 @@ class RoutingEventClient:
 
             for correlation_id, future in self._pending_requests.items():
                 if not future.done():
-                    future.set_exception(RuntimeError("Client stopped while request pending"))
+                    future.set_exception(
+                        RuntimeError("Client stopped while request pending")
+                    )
             self._pending_requests.clear()
             self._consumer_ready.clear()
 
@@ -317,12 +319,18 @@ class RoutingEventClient:
 
                     event_type = response.get("event_type", "")
 
-                    if event_type == "AGENT_ROUTING_COMPLETED" or msg.topic == self.TOPIC_COMPLETED:
+                    if (
+                        event_type == "AGENT_ROUTING_COMPLETED"
+                        or msg.topic == self.TOPIC_COMPLETED
+                    ):
                         payload = response.get("payload", {})
                         if not future.done():
                             future.set_result(payload)
 
-                    elif event_type == "AGENT_ROUTING_FAILED" or msg.topic == self.TOPIC_FAILED:
+                    elif (
+                        event_type == "AGENT_ROUTING_FAILED"
+                        or msg.topic == self.TOPIC_FAILED
+                    ):
                         payload = response.get("payload", {})
                         error_message = payload.get("error", "Routing failed")
                         if not future.done():
@@ -386,7 +394,9 @@ async def request_routing_async(
 
 def main():
     """Main entry point for skill."""
-    parser = argparse.ArgumentParser(description="Request agent routing via Kafka event bus")
+    parser = argparse.ArgumentParser(
+        description="Request agent routing via Kafka event bus"
+    )
     parser.add_argument("--user-request", required=True, help="User's task description")
     parser.add_argument(
         "--context",

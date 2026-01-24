@@ -152,7 +152,9 @@ class TestIntelligenceContextWithData:
         assert context.domain_best_practices == ["Use prepared statements"]
         assert context.code_examples == [{"name": "example", "code": "pass"}]
         assert context.anti_patterns == ["Avoid N+1 queries"]
-        assert context.recommended_dependencies == [{"name": "PostgreSQL", "type": "database"}]
+        assert context.recommended_dependencies == [
+            {"name": "PostgreSQL", "type": "database"}
+        ]
         assert context.testing_recommendations == ["Use integration tests"]
         assert context.security_considerations == ["Sanitize inputs"]
         assert context.rag_sources == ["code_analysis"]
@@ -251,7 +253,9 @@ class TestDefaultNodeTypeIntelligenceDict:
     def test_all_values_are_node_type_intelligence(self) -> None:
         """Test that all values are NodeTypeIntelligence instances."""
         for key, value in DEFAULT_NODE_TYPE_INTELLIGENCE.items():
-            assert isinstance(value, NodeTypeIntelligence), f"Key {key} is not NodeTypeIntelligence"
+            assert isinstance(value, NodeTypeIntelligence), (
+                f"Key {key} is not NodeTypeIntelligence"
+            )
 
     def test_effect_has_appropriate_patterns(self) -> None:
         """Test that EFFECT has appropriate patterns for I/O operations."""
@@ -262,9 +266,15 @@ class TestDefaultNodeTypeIntelligenceDict:
         patterns_text = " ".join(effect.default_patterns).lower()
         assert "connection" in patterns_text or "retry" in patterns_text
         # Should have CRUD-like operations
-        assert any(op in effect.typical_operations for op in ["create", "read", "update", "delete"])
+        assert any(
+            op in effect.typical_operations
+            for op in ["create", "read", "update", "delete"]
+        )
         # Should have retry/event mixins
-        assert "MixinRetry" in effect.common_mixins or "MixinEventBus" in effect.common_mixins
+        assert (
+            "MixinRetry" in effect.common_mixins
+            or "MixinEventBus" in effect.common_mixins
+        )
 
     def test_compute_has_appropriate_patterns(self) -> None:
         """Test that COMPUTE has appropriate patterns for pure computations."""
@@ -276,10 +286,14 @@ class TestDefaultNodeTypeIntelligenceDict:
         assert "pure" in patterns_text or "deterministic" in patterns_text
         # Should have computational operations
         assert any(
-            op in compute.typical_operations for op in ["calculate", "transform", "validate"]
+            op in compute.typical_operations
+            for op in ["calculate", "transform", "validate"]
         )
         # Should have caching/validation mixins
-        assert "MixinCaching" in compute.common_mixins or "MixinValidation" in compute.common_mixins
+        assert (
+            "MixinCaching" in compute.common_mixins
+            or "MixinValidation" in compute.common_mixins
+        )
 
     def test_reducer_has_appropriate_patterns(self) -> None:
         """Test that REDUCER has appropriate patterns for aggregation."""
@@ -290,7 +304,9 @@ class TestDefaultNodeTypeIntelligenceDict:
         patterns_text = " ".join(reducer.default_patterns).lower()
         assert "aggregate" in patterns_text or "state" in patterns_text
         # Should have aggregation operations
-        assert any(op in reducer.typical_operations for op in ["aggregate", "reduce", "merge"])
+        assert any(
+            op in reducer.typical_operations for op in ["aggregate", "reduce", "merge"]
+        )
 
     def test_orchestrator_has_appropriate_patterns(self) -> None:
         """Test that ORCHESTRATOR has appropriate patterns for coordination."""
@@ -300,7 +316,9 @@ class TestDefaultNodeTypeIntelligenceDict:
         # Should have patterns related to coordination
         patterns_text = " ".join(orchestrator.default_patterns).lower()
         assert (
-            "coordinate" in patterns_text or "workflow" in patterns_text or "lease" in patterns_text
+            "coordinate" in patterns_text
+            or "workflow" in patterns_text
+            or "lease" in patterns_text
         )
         # Should have coordination operations
         assert any(
