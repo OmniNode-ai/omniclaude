@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS claude_session_tools (
     emitted_at TIMESTAMPTZ NOT NULL,
     tool_name VARCHAR(100) NOT NULL,
     success BOOLEAN NOT NULL,
-    duration_ms INTEGER NOT NULL,
+    duration_ms INTEGER,  -- Nullable: tool may not have duration yet
     summary VARCHAR(500),  -- Truncated
     causation_id UUID,
 

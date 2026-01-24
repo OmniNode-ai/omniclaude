@@ -690,7 +690,7 @@ class SessionEventConsumer:
         # Parse JSON into envelope
         envelope = ModelHookEventEnvelope.model_validate_json(value)
 
-        # Extract the payload and route to aggregator
+        # Extract payload for logging context only
         payload = envelope.payload
 
         logger.debug(
@@ -705,8 +705,8 @@ class SessionEventConsumer:
         )
 
         # Process through aggregator
-        # The aggregator's process_event handles all event types
-        result = await self._aggregator.process_event(payload, correlation_id)
+        # Pass full envelope - aggregator extracts payload and routes by event_type
+        result = await self._aggregator.process_event(envelope, correlation_id)
 
         return result
 
