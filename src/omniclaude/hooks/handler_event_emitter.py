@@ -34,7 +34,6 @@ from __future__ import annotations
 
 import logging
 import os
-import warnings
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -484,10 +483,10 @@ async def emit_hook_event(
                 )
 
 
-async def emit_session_started_from_config(
+async def emit_session_started(
     config: ModelSessionStartedConfig,
 ) -> ModelEventPublishResult:
-    """Emit a session started event from config object.
+    """Emit a session started event.
 
     Args:
         config: Session started configuration containing all event data.
@@ -510,66 +509,10 @@ async def emit_session_started_from_config(
     return await emit_hook_event(payload, environment=tracing.environment)
 
 
-async def emit_session_started(
-    session_id: UUID,
-    working_directory: str,
-    hook_source: HookSource,
-    *,
-    git_branch: str | None = None,
-    correlation_id: UUID | None = None,
-    causation_id: UUID | None = None,
-    emitted_at: datetime | None = None,
-    environment: str | None = None,
-) -> ModelEventPublishResult:
-    """Emit a session started event.
-
-    Note:
-        Consider using emit_session_started_from_config() with
-        ModelSessionStartedConfig for better parameter organization.
-
-    Args:
-        session_id: Unique session identifier (also used as entity_id).
-        working_directory: Current working directory of the session.
-        hook_source: What triggered the session (HookSource enum).
-        git_branch: Current git branch if in a git repository.
-        correlation_id: Correlation ID for tracing (defaults to session_id).
-        causation_id: Causation ID for event chain (generated if not provided).
-        emitted_at: Event timestamp (defaults to now UTC).
-        environment: Kafka environment prefix.
-
-    Returns:
-        ModelEventPublishResult indicating success or failure.
-
-    .. deprecated::
-        Use :func:`emit_session_started_from_config` with
-        :class:`ModelSessionStartedConfig` instead.
-    """
-    # ONEX: exempt - backwards compatibility wrapper for config-based method
-    warnings.warn(
-        "emit_session_started() is deprecated, use emit_session_started_from_config() "
-        "with ModelSessionStartedConfig instead",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    config = ModelSessionStartedConfig(
-        session_id=session_id,
-        working_directory=working_directory,
-        hook_source=hook_source,
-        git_branch=git_branch,
-        tracing=ModelEventTracingConfig(
-            correlation_id=correlation_id,
-            causation_id=causation_id,
-            emitted_at=emitted_at,
-            environment=environment,
-        ),
-    )
-    return await emit_session_started_from_config(config)
-
-
-async def emit_session_ended_from_config(
+async def emit_session_ended(
     config: ModelSessionEndedConfig,
 ) -> ModelEventPublishResult:
-    """Emit a session ended event from config object.
+    """Emit a session ended event.
 
     Args:
         config: Session ended configuration containing all event data.
@@ -592,66 +535,10 @@ async def emit_session_ended_from_config(
     return await emit_hook_event(payload, environment=tracing.environment)
 
 
-async def emit_session_ended(
-    session_id: UUID,
-    reason: SessionEndReason,
-    *,
-    duration_seconds: float | None = None,
-    tools_used_count: int = 0,
-    correlation_id: UUID | None = None,
-    causation_id: UUID | None = None,
-    emitted_at: datetime | None = None,
-    environment: str | None = None,
-) -> ModelEventPublishResult:
-    """Emit a session ended event.
-
-    Note:
-        Consider using emit_session_ended_from_config() with
-        ModelSessionEndedConfig for better parameter organization.
-
-    Args:
-        session_id: Unique session identifier (also used as entity_id).
-        reason: What caused the session to end (SessionEndReason enum).
-        duration_seconds: Total session duration in seconds.
-        tools_used_count: Number of tool invocations during the session.
-        correlation_id: Correlation ID for tracing (defaults to session_id).
-        causation_id: Causation ID for event chain (generated if not provided).
-        emitted_at: Event timestamp (defaults to now UTC).
-        environment: Kafka environment prefix.
-
-    Returns:
-        ModelEventPublishResult indicating success or failure.
-
-    .. deprecated::
-        Use :func:`emit_session_ended_from_config` with
-        :class:`ModelSessionEndedConfig` instead.
-    """
-    # ONEX: exempt - backwards compatibility wrapper for config-based method
-    warnings.warn(
-        "emit_session_ended() is deprecated, use emit_session_ended_from_config() "
-        "with ModelSessionEndedConfig instead",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    config = ModelSessionEndedConfig(
-        session_id=session_id,
-        reason=reason,
-        duration_seconds=duration_seconds,
-        tools_used_count=tools_used_count,
-        tracing=ModelEventTracingConfig(
-            correlation_id=correlation_id,
-            causation_id=causation_id,
-            emitted_at=emitted_at,
-            environment=environment,
-        ),
-    )
-    return await emit_session_ended_from_config(config)
-
-
-async def emit_prompt_submitted_from_config(
+async def emit_prompt_submitted(
     config: ModelPromptSubmittedConfig,
 ) -> ModelEventPublishResult:
-    """Emit a prompt submitted event from config object.
+    """Emit a prompt submitted event.
 
     Args:
         config: Prompt submitted configuration containing all event data.
@@ -675,69 +562,10 @@ async def emit_prompt_submitted_from_config(
     return await emit_hook_event(payload, environment=tracing.environment)
 
 
-async def emit_prompt_submitted(
-    session_id: UUID,
-    prompt_id: UUID,
-    prompt_preview: str,
-    prompt_length: int,
-    *,
-    detected_intent: str | None = None,
-    correlation_id: UUID | None = None,
-    causation_id: UUID | None = None,
-    emitted_at: datetime | None = None,
-    environment: str | None = None,
-) -> ModelEventPublishResult:
-    """Emit a prompt submitted event.
-
-    Note:
-        Consider using emit_prompt_submitted_from_config() with
-        ModelPromptSubmittedConfig for better parameter organization.
-
-    Args:
-        session_id: Unique session identifier (also used as entity_id).
-        prompt_id: Unique identifier for this specific prompt.
-        prompt_preview: Sanitized/truncated preview of the prompt (max 100 chars).
-        prompt_length: Total character count of the original prompt.
-        detected_intent: Classified intent if available.
-        correlation_id: Correlation ID for tracing (defaults to session_id).
-        causation_id: Causation ID for event chain (generated if not provided).
-        emitted_at: Event timestamp (defaults to now UTC).
-        environment: Kafka environment prefix.
-
-    Returns:
-        ModelEventPublishResult indicating success or failure.
-
-    .. deprecated::
-        Use :func:`emit_prompt_submitted_from_config` with
-        :class:`ModelPromptSubmittedConfig` instead.
-    """
-    # ONEX: exempt - backwards compatibility wrapper for config-based method
-    warnings.warn(
-        "emit_prompt_submitted() is deprecated, use emit_prompt_submitted_from_config() "
-        "with ModelPromptSubmittedConfig instead",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    config = ModelPromptSubmittedConfig(
-        session_id=session_id,
-        prompt_id=prompt_id,
-        prompt_preview=prompt_preview,
-        prompt_length=prompt_length,
-        detected_intent=detected_intent,
-        tracing=ModelEventTracingConfig(
-            correlation_id=correlation_id,
-            causation_id=causation_id,
-            emitted_at=emitted_at,
-            environment=environment,
-        ),
-    )
-    return await emit_prompt_submitted_from_config(config)
-
-
-async def emit_tool_executed_from_config(
+async def emit_tool_executed(
     config: ModelToolExecutedConfig,
 ) -> ModelEventPublishResult:
-    """Emit a tool executed event from config object.
+    """Emit a tool executed event.
 
     Args:
         config: Tool executed configuration containing all event data.
@@ -762,68 +590,6 @@ async def emit_tool_executed_from_config(
     return await emit_hook_event(payload, environment=tracing.environment)
 
 
-async def emit_tool_executed(
-    session_id: UUID,
-    tool_execution_id: UUID,
-    tool_name: str,
-    *,
-    success: bool = True,
-    duration_ms: int | None = None,
-    summary: str | None = None,
-    correlation_id: UUID | None = None,
-    causation_id: UUID | None = None,
-    emitted_at: datetime | None = None,
-    environment: str | None = None,
-) -> ModelEventPublishResult:
-    """Emit a tool executed event.
-
-    Note:
-        Consider using emit_tool_executed_from_config() with
-        ModelToolExecutedConfig for better parameter organization.
-
-    Args:
-        session_id: Unique session identifier (also used as entity_id).
-        tool_execution_id: Unique identifier for this tool execution.
-        tool_name: Name of the tool (Read, Write, Edit, Bash, etc.).
-        success: Whether the tool execution succeeded.
-        duration_ms: Tool execution duration in milliseconds.
-        summary: Brief summary of the tool execution result.
-        correlation_id: Correlation ID for tracing (defaults to session_id).
-        causation_id: Causation ID for event chain (generated if not provided).
-        emitted_at: Event timestamp (defaults to now UTC).
-        environment: Kafka environment prefix.
-
-    Returns:
-        ModelEventPublishResult indicating success or failure.
-
-    .. deprecated::
-        Use :func:`emit_tool_executed_from_config` with
-        :class:`ModelToolExecutedConfig` instead.
-    """
-    # ONEX: exempt - backwards compatibility wrapper for config-based method
-    warnings.warn(
-        "emit_tool_executed() is deprecated, use emit_tool_executed_from_config() "
-        "with ModelToolExecutedConfig instead",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    config = ModelToolExecutedConfig(
-        session_id=session_id,
-        tool_execution_id=tool_execution_id,
-        tool_name=tool_name,
-        success=success,
-        duration_ms=duration_ms,
-        summary=summary,
-        tracing=ModelEventTracingConfig(
-            correlation_id=correlation_id,
-            causation_id=causation_id,
-            emitted_at=emitted_at,
-            environment=environment,
-        ),
-    )
-    return await emit_tool_executed_from_config(config)
-
-
 __all__ = [
     # Config models
     "ModelEventTracingConfig",
@@ -833,12 +599,7 @@ __all__ = [
     "ModelSessionEndedConfig",
     # Core emission function
     "emit_hook_event",
-    # Config-based convenience functions
-    "emit_session_started_from_config",
-    "emit_session_ended_from_config",
-    "emit_prompt_submitted_from_config",
-    "emit_tool_executed_from_config",
-    # Backwards-compatible convenience functions
+    # Convenience functions (take config objects)
     "emit_session_started",
     "emit_session_ended",
     "emit_prompt_submitted",

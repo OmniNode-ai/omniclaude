@@ -33,7 +33,7 @@ from pathlib import Path
 # Add claude/hooks/lib to path (4 parents from claude/skills/agent-tracking/log-routing-decision/)
 # Path: execute_unified.py -> log-routing-decision -> agent-tracking -> skills -> claude -> hooks/lib
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "hooks" / "lib"))
-from hook_event_adapter import get_hook_event_adapter
+from hook_event_adapter import get_hook_event_adapter, ModelRoutingDecisionConfig
 
 # Add _shared to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
@@ -83,8 +83,8 @@ def log_routing_decision_unified(args):
     # Get hook event adapter
     adapter = get_hook_event_adapter()
 
-    # Publish routing decision event
-    success = adapter.publish_routing_decision(
+    # Publish routing decision event using config-based API
+    config = ModelRoutingDecisionConfig(
         agent_name=args.agent,
         confidence=confidence,
         strategy=args.strategy,
@@ -98,6 +98,7 @@ def log_routing_decision_unified(args):
         project_name=args.project_name or None,
         session_id=args.session_id or None,
     )
+    success = adapter.publish_routing_decision(config)
 
     if success:
         output = {

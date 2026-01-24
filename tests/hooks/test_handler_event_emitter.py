@@ -28,6 +28,11 @@ import pytest
 from omnibase_core.models.errors import ModelOnexError
 
 from omniclaude.hooks.handler_event_emitter import (
+    ModelEventTracingConfig,
+    ModelPromptSubmittedConfig,
+    ModelSessionEndedConfig,
+    ModelSessionStartedConfig,
+    ModelToolExecutedConfig,
     _create_kafka_config,
     _get_event_type,
     _get_topic_base,
@@ -414,12 +419,13 @@ class TestConvenienceFunctions:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
-            result = await emit_session_started(
+            config = ModelSessionStartedConfig(
                 session_id=session_id,
                 working_directory="/workspace",
                 hook_source=HookSource.STARTUP,
                 git_branch="main",
             )
+            result = await emit_session_started(config)
 
             assert result.success is True
             assert "session.started" in result.topic
@@ -435,12 +441,13 @@ class TestConvenienceFunctions:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
-            result = await emit_session_ended(
+            config = ModelSessionEndedConfig(
                 session_id=session_id,
                 reason=SessionEndReason.CLEAR,
                 duration_seconds=1800.0,
                 tools_used_count=10,
             )
+            result = await emit_session_ended(config)
 
             assert result.success is True
             assert "session.ended" in result.topic
@@ -457,12 +464,13 @@ class TestConvenienceFunctions:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
-            result = await emit_prompt_submitted(
+            config = ModelPromptSubmittedConfig(
                 session_id=session_id,
                 prompt_id=prompt_id,
                 prompt_preview="Test prompt",
                 prompt_length=100,
             )
+            result = await emit_prompt_submitted(config)
 
             assert result.success is True
             assert "prompt.submitted" in result.topic
@@ -479,20 +487,21 @@ class TestConvenienceFunctions:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
-            result = await emit_tool_executed(
+            config = ModelToolExecutedConfig(
                 session_id=session_id,
                 tool_execution_id=execution_id,
                 tool_name="Read",
                 success=True,
                 duration_ms=50,
             )
+            result = await emit_tool_executed(config)
 
             assert result.success is True
             assert "tool.executed" in result.topic
 
     @pytest.mark.asyncio
     async def test_convenience_functions_auto_generate_ids(self) -> None:
-        """Convenience functions auto-generate causation_id if not provided."""
+        """Config-based functions auto-generate causation_id if not provided."""
         session_id = uuid4()
 
         with patch(
@@ -501,18 +510,19 @@ class TestConvenienceFunctions:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
-            # Should not raise even without causation_id
-            result = await emit_session_started(
+            # Should not raise even without explicit tracing config
+            config = ModelSessionStartedConfig(
                 session_id=session_id,
                 working_directory="/workspace",
                 hook_source=HookSource.STARTUP,
             )
+            result = await emit_session_started(config)
 
             assert result.success is True
 
     @pytest.mark.asyncio
     async def test_convenience_functions_auto_timestamp(self) -> None:
-        """Convenience functions auto-generate emitted_at if not provided."""
+        """Config-based functions auto-generate emitted_at if not provided."""
         session_id = uuid4()
 
         with patch(
@@ -521,12 +531,13 @@ class TestConvenienceFunctions:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
-            # Should not raise even without emitted_at
-            result = await emit_session_started(
+            # Should not raise even without explicit emitted_at in tracing config
+            config = ModelSessionStartedConfig(
                 session_id=session_id,
                 working_directory="/workspace",
                 hook_source=HookSource.STARTUP,
             )
+            result = await emit_session_started(config)
 
             assert result.success is True
 
@@ -566,12 +577,13 @@ class TestEdgeCases:
             mock_bus_class.return_value = mock_bus
 
             for preview in unicode_previews:
-                result = await emit_prompt_submitted(
+                config = ModelPromptSubmittedConfig(
                     session_id=session_id,
                     prompt_id=uuid4(),
                     prompt_preview=preview,
                     prompt_length=len(preview),
                 )
+                result = await emit_prompt_submitted(config)
                 assert result.success is True, f"Failed for preview: {preview!r}"
 
     @pytest.mark.asyncio
@@ -589,12 +601,13 @@ class TestEdgeCases:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
-            result = await emit_prompt_submitted(
+            config = ModelPromptSubmittedConfig(
                 session_id=session_id,
                 prompt_id=uuid4(),
                 prompt_preview="",
                 prompt_length=0,
             )
+            result = await emit_prompt_submitted(config)
             assert result.success is True
 
     @pytest.mark.asyncio
@@ -612,11 +625,12 @@ class TestEdgeCases:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
-            result = await emit_session_ended(
+            config = ModelSessionEndedConfig(
                 session_id=session_id,
                 reason=SessionEndReason.OTHER,
                 duration_seconds=float(duration_29_days),
             )
+            result = await emit_session_ended(config)
             assert result.success is True
 
     @pytest.mark.asyncio
@@ -634,11 +648,12 @@ class TestEdgeCases:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
-            result = await emit_session_ended(
+            config = ModelSessionEndedConfig(
                 session_id=session_id,
                 reason=SessionEndReason.LOGOUT,
                 duration_seconds=float(duration_30_days),
             )
+            result = await emit_session_ended(config)
             assert result.success is True
 
     @pytest.mark.asyncio
@@ -663,11 +678,12 @@ class TestEdgeCases:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
-            await emit_session_ended(
+            config = ModelSessionEndedConfig(
                 session_id=session_id,
                 reason=SessionEndReason.OTHER,
                 duration_seconds=float(duration_31_days),
             )
+            await emit_session_ended(config)
 
     @pytest.mark.asyncio
     async def test_tool_duration_at_max_bound(self) -> None:
@@ -684,13 +700,14 @@ class TestEdgeCases:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
-            result = await emit_tool_executed(
+            config = ModelToolExecutedConfig(
                 session_id=session_id,
                 tool_execution_id=uuid4(),
                 tool_name="Bash",
                 success=True,
                 duration_ms=duration_1_hour_ms,
             )
+            result = await emit_tool_executed(config)
             assert result.success is True
 
     @pytest.mark.asyncio
@@ -715,13 +732,14 @@ class TestEdgeCases:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
-            await emit_tool_executed(
+            config = ModelToolExecutedConfig(
                 session_id=session_id,
                 tool_execution_id=uuid4(),
                 tool_name="Bash",
                 success=True,
                 duration_ms=duration_over_1_hour_ms,
             )
+            await emit_tool_executed(config)
 
     @pytest.mark.asyncio
     async def test_tool_summary_at_max_length(self) -> None:
@@ -735,13 +753,14 @@ class TestEdgeCases:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
-            result = await emit_tool_executed(
+            config = ModelToolExecutedConfig(
                 session_id=session_id,
                 tool_execution_id=uuid4(),
                 tool_name="Write",
                 success=True,
                 summary=summary_500_chars,
             )
+            result = await emit_tool_executed(config)
             assert result.success is True
 
     @pytest.mark.asyncio
@@ -766,13 +785,14 @@ class TestEdgeCases:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
-            await emit_tool_executed(
+            config = ModelToolExecutedConfig(
                 session_id=session_id,
                 tool_execution_id=uuid4(),
                 tool_name="Write",
                 success=True,
                 summary=summary_600_chars,
             )
+            await emit_tool_executed(config)
 
     @pytest.mark.asyncio
     async def test_prompt_preview_at_max_length(self) -> None:
@@ -786,12 +806,13 @@ class TestEdgeCases:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
-            result = await emit_prompt_submitted(
+            config = ModelPromptSubmittedConfig(
                 session_id=session_id,
                 prompt_id=uuid4(),
                 prompt_preview=preview_100_chars,
                 prompt_length=100,
             )
+            result = await emit_prompt_submitted(config)
             assert result.success is True
 
     @pytest.mark.asyncio
@@ -810,10 +831,11 @@ class TestEdgeCases:
             mock_bus_class.return_value = mock_bus
 
             # Should succeed because validator auto-truncates
-            result = await emit_prompt_submitted(
+            config = ModelPromptSubmittedConfig(
                 session_id=session_id,
                 prompt_id=uuid4(),
                 prompt_preview=preview_150_chars,
                 prompt_length=150,
             )
+            result = await emit_prompt_submitted(config)
             assert result.success is True

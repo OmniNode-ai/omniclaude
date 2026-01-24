@@ -40,6 +40,17 @@ except ImportError as e:
 Connection = Any  # psycopg2.extensions.connection when available
 
 
+__all__ = [
+    "ModelUserPromptLogConfig",
+    "HookEventLogger",
+    "get_logger",
+    "log_pretooluse",
+    "log_posttooluse",
+    "log_userprompt",
+    "log_hook_event",
+]
+
+
 # Add project root to path for config import
 project_root = Path(__file__).resolve().parents[3]  # lib → hooks → claude → omniclaude root
 sys.path.insert(0, str(project_root))
@@ -349,11 +360,11 @@ class HookEventLogger:
             metadata=metadata,
         )
 
-    def log_userprompt_from_config(
+    def log_userprompt(
         self,
         config: ModelUserPromptLogConfig,
     ) -> str | None:
-        """Log UserPromptSubmit hook event from config object.
+        """Log UserPromptSubmit hook event.
 
         Args:
             config: User prompt log configuration containing all event data.
@@ -392,55 +403,6 @@ class HookEventLogger:
             payload=payload,
             metadata=event_metadata,
         )
-
-    def log_userprompt(
-        self,
-        prompt: str,
-        agent_detected: str | None = None,
-        agent_domain: str | None = None,
-        correlation_id: str | None = None,
-        intelligence_queries: dict[str, str] | None = None,
-        metadata: dict[str, Any] | None = None,
-        detection_method: str | None = None,
-        confidence: float | None = None,
-        latency_ms: float | None = None,
-        reasoning: str | None = None,
-    ) -> str | None:
-        """Log UserPromptSubmit hook event.
-
-        Note:
-            Consider using log_userprompt_from_config() with
-            ModelUserPromptLogConfig for better parameter organization.
-
-        Args:
-            prompt: User's prompt text (truncated to 500 chars)
-            agent_detected: Detected agent name if applicable
-            agent_domain: Agent domain if applicable
-            correlation_id: Request correlation ID
-            intelligence_queries: Intelligence queries triggered
-            metadata: Enhanced metadata (workflow stage, editor context, etc.)
-            detection_method: Method used to detect agent (pattern, trigger, ai, meta_trigger)
-            confidence: Detection confidence score (0.0-1.0)
-            latency_ms: Detection latency in milliseconds
-            reasoning: AI reasoning for agent selection (if applicable)
-
-        Returns:
-            Event ID if successful, None if failed
-        """
-        # ONEX: exempt - backwards compatibility wrapper for config-based method
-        config = ModelUserPromptLogConfig(
-            prompt=prompt,
-            agent_detected=agent_detected,
-            agent_domain=agent_domain,
-            correlation_id=correlation_id,
-            intelligence_queries=intelligence_queries,
-            metadata=metadata,
-            detection_method=detection_method,
-            confidence=confidence,
-            latency_ms=latency_ms,
-            reasoning=reasoning,
-        )
-        return self.log_userprompt_from_config(config)
 
     def close(self) -> None:
         """Close database connection."""
@@ -482,9 +444,9 @@ def log_posttooluse(tool_name: str, **kwargs) -> str | None:
     return get_logger().log_posttooluse(tool_name, **kwargs)
 
 
-def log_userprompt(prompt: str, **kwargs) -> str | None:
+def log_userprompt(config: ModelUserPromptLogConfig) -> str | None:
     """Quick log UserPromptSubmit event."""
-    return get_logger().log_userprompt(prompt, **kwargs)
+    return get_logger().log_userprompt(config)
 
 
 def log_hook_event(
@@ -529,12 +491,15 @@ if __name__ == "__main__":
     print(f"✓ PostToolUse event logged: {event_id}")
 
     # Test UserPromptSubmit event
-    event_id = logger.log_userprompt(
+    config = ModelUserPromptLogConfig(
         prompt="Create a function to calculate fibonacci",
         agent_detected="agent-code-generator",
-        agent_domain="code_generation",
-        correlation_id="test-correlation-456",
+        agent_domain="code",
+        detection_method="manifest_matching",
+        confidence=0.95,
+        latency_ms=45.2,
     )
+    event_id = logger.log_userprompt(config)
     print(f"✓ UserPromptSubmit event logged: {event_id}")
 
     logger.close()

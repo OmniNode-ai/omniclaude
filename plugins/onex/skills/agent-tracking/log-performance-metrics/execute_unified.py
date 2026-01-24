@@ -25,7 +25,7 @@ from pathlib import Path
 # Add claude/hooks/lib to path (4 parents from claude/skills/agent-tracking/log-performance-metrics/)
 # Path: execute_unified.py -> log-performance-metrics -> agent-tracking -> skills -> claude -> hooks/lib
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "hooks" / "lib"))
-from hook_event_adapter import get_hook_event_adapter
+from hook_event_adapter import get_hook_event_adapter, ModelPerformanceMetricsConfig
 
 # Add _shared to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
@@ -58,9 +58,9 @@ def main():
     # Parse tags
     tags = parse_json_param(args.tags) if args.tags else {}
 
-    # Get adapter and publish
+    # Get adapter and publish using config-based API
     adapter = get_hook_event_adapter()
-    success = adapter.publish_performance_metrics(
+    config = ModelPerformanceMetricsConfig(
         agent_name=args.agent,
         metric_name=args.metric_name,
         metric_value=args.metric_value,
@@ -69,6 +69,7 @@ def main():
         metric_unit=args.metric_unit,
         tags=tags,
     )
+    success = adapter.publish_performance_metrics(config)
 
     if success:
         print(

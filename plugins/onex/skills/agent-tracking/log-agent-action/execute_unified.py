@@ -31,7 +31,7 @@ from pathlib import Path
 # Add claude/hooks/lib to path (4 parents from claude/skills/agent-tracking/log-agent-action/)
 # Path: execute_unified.py -> log-agent-action -> agent-tracking -> skills -> claude -> hooks/lib
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "hooks" / "lib"))
-from hook_event_adapter import get_hook_event_adapter
+from hook_event_adapter import ModelAgentActionConfig, get_hook_event_adapter
 
 # Add _shared to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
@@ -86,9 +86,9 @@ def main():
     # Parse details
     action_details = parse_json_param(args.details) if args.details else {}
 
-    # Get adapter and publish (argparse guarantees attributes exist, even if None)
+    # Get adapter and publish using config-based API
     adapter = get_hook_event_adapter()
-    success = adapter.publish_agent_action(
+    config = ModelAgentActionConfig(
         agent_name=args.agent,
         action_type=args.action_type,
         action_name=args.action_name,
@@ -100,6 +100,7 @@ def main():
         project_name=args.project_name or None,
         working_directory=args.working_directory or None,
     )
+    success = adapter.publish_agent_action(config)
 
     if success:
         print(

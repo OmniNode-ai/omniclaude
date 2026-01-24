@@ -10,26 +10,32 @@ This adapter publishes observability events (routing decisions, agent actions,
 performance metrics, etc.) through the unified event bus architecture.
 
 Usage:
-    from hook_event_adapter import HookEventAdapter
+    from hook_event_adapter import (
+        HookEventAdapter,
+        ModelRoutingDecisionConfig,
+        ModelAgentActionConfig,
+    )
 
     adapter = HookEventAdapter()
 
-    # Publish routing decision
-    adapter.publish_routing_decision(
+    # Publish routing decision using config object
+    config = ModelRoutingDecisionConfig(
         agent_name="agent-research",
         confidence=0.95,
         strategy="fuzzy_matching",
         latency_ms=45,
         correlation_id="uuid",
     )
+    adapter.publish_routing_decision(config)
 
-    # Publish agent action
-    adapter.publish_agent_action(
+    # Publish agent action using config object
+    action_config = ModelAgentActionConfig(
         agent_name="agent-research",
         action_type="tool_call",
         action_name="grep_codebase",
         correlation_id="uuid",
     )
+    adapter.publish_agent_action(action_config)
 """
 
 import json
@@ -37,7 +43,6 @@ import logging
 import os
 import sys
 import uuid
-import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -181,10 +186,9 @@ class ModelPerformanceMetricsConfig:
     tags: dict[str, str] | None = None
 
 
-# ONEX: exempt - facade with backward compatibility wrappers
-# Rationale: 13 methods, but 5 are backward-compatible wrappers (publish_X calls
-# publish_X_from_config). True unique methods are ~8. This is a facade pattern
-# for unified event publishing and methods are highly cohesive.
+# ONEX: exempt - facade pattern for unified event publishing
+# Rationale: Methods are highly cohesive, all serving the same purpose of
+# publishing observability events through a unified interface.
 class HookEventAdapter:
     """
     Synchronous event adapter for hook scripts.
@@ -349,11 +353,11 @@ class HookEventAdapter:
             self.logger.error(f"Failed to publish event to {topic}: {e}")
             return False
 
-    def publish_routing_decision_from_config(
+    def publish_routing_decision(
         self,
         config: ModelRoutingDecisionConfig,
     ) -> bool:
-        """Publish agent routing decision event from config object.
+        """Publish agent routing decision event.
 
         Args:
             config: Routing decision configuration containing all event data.
@@ -379,76 +383,11 @@ class HookEventAdapter:
 
         return self._publish(self._build_topic(TopicBase.ROUTING_DECISIONS), event)
 
-    def publish_routing_decision(
-        self,
-        agent_name: str,
-        confidence: float,
-        strategy: str,
-        latency_ms: int,
-        correlation_id: str,
-        user_request: str | None = None,
-        alternatives: list[TypedDictRoutingAlternative] | None = None,
-        reasoning: str | None = None,
-        context: Mapping[str, object] | None = None,
-        project_path: str | None = None,
-        project_name: str | None = None,
-        session_id: str | None = None,
-    ) -> bool:
-        """Publish agent routing decision event.
-
-        Note:
-            Consider using publish_routing_decision_from_config() with
-            ModelRoutingDecisionConfig for better parameter organization.
-
-        Args:
-            agent_name: Selected agent name
-            confidence: Confidence score (0.0-1.0)
-            strategy: Routing strategy used
-            latency_ms: Routing latency in milliseconds
-            correlation_id: Correlation ID for tracking
-            user_request: Original user request text
-            alternatives: List of alternative agents considered
-            reasoning: Reasoning for agent selection
-            context: Additional context
-            project_path: Absolute path to project directory
-            project_name: Project name
-            session_id: Claude session ID
-
-        Returns:
-            True if published successfully, False otherwise
-
-        .. deprecated::
-            Use :meth:`publish_routing_decision_from_config` with
-            :class:`ModelRoutingDecisionConfig` instead.
-        """
-        # ONEX: exempt - backwards compatibility wrapper for config-based method
-        warnings.warn(
-            "publish_routing_decision() is deprecated, use "
-            "publish_routing_decision_from_config() with ModelRoutingDecisionConfig instead",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        config = ModelRoutingDecisionConfig(
-            agent_name=agent_name,
-            confidence=confidence,
-            strategy=strategy,
-            latency_ms=latency_ms,
-            correlation_id=correlation_id,
-            user_request=user_request,
-            alternatives=alternatives,
-            reasoning=reasoning,
-            context=context,
-            project_path=project_path,
-            project_name=project_name,
-            session_id=session_id,
-        )
-        return self.publish_routing_decision_from_config(config)
-
-    def publish_agent_action_from_config(
+    def publish_agent_action(
         self,
         config: ModelAgentActionConfig,
     ) -> bool:
-        """Publish agent action event from config object.
+        """Publish agent action event.
 
         Args:
             config: Agent action configuration containing all event data.
@@ -473,73 +412,11 @@ class HookEventAdapter:
 
         return self._publish(self._build_topic(TopicBase.AGENT_ACTIONS), event)
 
-    def publish_agent_action(
-        self,
-        agent_name: str,
-        action_type: str,
-        action_name: str,
-        correlation_id: str,
-        action_details: Mapping[str, object] | None = None,
-        duration_ms: int | None = None,
-        success: bool = True,
-        debug_mode: bool = True,
-        project_path: str | None = None,
-        project_name: str | None = None,
-        working_directory: str | None = None,
-    ) -> bool:
-        """Publish agent action event.
-
-        Note:
-            Consider using publish_agent_action_from_config() with
-            ModelAgentActionConfig for better parameter organization.
-
-        Args:
-            agent_name: Agent performing the action
-            action_type: Type of action (tool_call, decision, error, success)
-            action_name: Specific action name
-            correlation_id: Correlation ID for tracking
-            action_details: Action-specific details (matches consumer schema)
-            duration_ms: Action duration in milliseconds
-            success: Whether action succeeded
-            debug_mode: Enable debug information in consumer
-            project_path: Absolute path to project directory
-            project_name: Project name
-            working_directory: Current working directory
-
-        Returns:
-            True if published successfully, False otherwise
-
-        .. deprecated::
-            Use :meth:`publish_agent_action_from_config` with
-            :class:`ModelAgentActionConfig` instead.
-        """
-        # ONEX: exempt - backwards compatibility wrapper for config-based method
-        warnings.warn(
-            "publish_agent_action() is deprecated, use "
-            "publish_agent_action_from_config() with ModelAgentActionConfig instead",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        config = ModelAgentActionConfig(
-            agent_name=agent_name,
-            action_type=action_type,
-            action_name=action_name,
-            correlation_id=correlation_id,
-            action_details=action_details,
-            duration_ms=duration_ms,
-            success=success,
-            debug_mode=debug_mode,
-            project_path=project_path,
-            project_name=project_name,
-            working_directory=working_directory,
-        )
-        return self.publish_agent_action_from_config(config)
-
-    def publish_performance_metrics_from_config(
+    def publish_performance_metrics(
         self,
         config: ModelPerformanceMetricsConfig,
     ) -> bool:
-        """Publish agent performance metrics event from config object.
+        """Publish agent performance metrics event.
 
         Args:
             config: Performance metrics configuration containing all event data.
@@ -559,57 +436,6 @@ class HookEventAdapter:
         }
 
         return self._publish(self._build_topic(TopicBase.PERFORMANCE_METRICS), event)
-
-    def publish_performance_metrics(
-        self,
-        agent_name: str,
-        metric_name: str,
-        metric_value: float,
-        correlation_id: str,
-        metric_type: str = "gauge",
-        metric_unit: str | None = None,
-        tags: dict[str, str] | None = None,
-    ) -> bool:
-        """Publish agent performance metrics event.
-
-        Note:
-            Consider using publish_performance_metrics_from_config() with
-            ModelPerformanceMetricsConfig for better parameter organization.
-
-        Args:
-            agent_name: Agent name
-            metric_name: Metric name
-            metric_value: Metric value
-            correlation_id: Correlation ID for tracking
-            metric_type: Metric type (gauge, counter, histogram)
-            metric_unit: Metric unit (ms, bytes, count, etc.)
-            tags: Metric tags
-
-        Returns:
-            True if published successfully, False otherwise
-
-        .. deprecated::
-            Use :meth:`publish_performance_metrics_from_config` with
-            :class:`ModelPerformanceMetricsConfig` instead.
-        """
-        # ONEX: exempt - backwards compatibility wrapper for config-based method
-        warnings.warn(
-            "publish_performance_metrics() is deprecated, use "
-            "publish_performance_metrics_from_config() with ModelPerformanceMetricsConfig "
-            "instead",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        config = ModelPerformanceMetricsConfig(
-            agent_name=agent_name,
-            metric_name=metric_name,
-            metric_value=metric_value,
-            correlation_id=correlation_id,
-            metric_type=metric_type,
-            metric_unit=metric_unit,
-            tags=tags,
-        )
-        return self.publish_performance_metrics_from_config(config)
 
     def publish_transformation(
         self,
@@ -646,11 +472,11 @@ class HookEventAdapter:
 
         return self._publish(self._build_topic(TopicBase.TRANSFORMATIONS), event)
 
-    def publish_detection_failure_from_config(
+    def publish_detection_failure(
         self,
         config: ModelDetectionFailureConfig,
     ) -> bool:
-        """Publish agent detection failure event from config object.
+        """Publish agent detection failure event.
 
         Args:
             config: Detection failure configuration containing all event data.
@@ -671,60 +497,6 @@ class HookEventAdapter:
         }
 
         return self._publish(self._build_topic(TopicBase.DETECTION_FAILURES), event)
-
-    def publish_detection_failure(
-        self,
-        user_request: str,
-        failure_reason: str,
-        attempted_methods: list[str] | None = None,
-        error_details: Mapping[str, object] | None = None,
-        correlation_id: str | None = None,
-        project_path: str | None = None,
-        project_name: str | None = None,
-        session_id: str | None = None,
-    ) -> bool:
-        """Publish agent detection failure event.
-
-        Note:
-            Consider using publish_detection_failure_from_config() with
-            ModelDetectionFailureConfig for better parameter organization.
-
-        Args:
-            user_request: User's original request text
-            failure_reason: Why detection failed
-            attempted_methods: List of detection methods tried
-            error_details: Additional error information
-            correlation_id: Correlation ID for tracking
-            project_path: Absolute path to project directory
-            project_name: Project name
-            session_id: Claude session ID
-
-        Returns:
-            True if published successfully, False otherwise
-
-        .. deprecated::
-            Use :meth:`publish_detection_failure_from_config` with
-            :class:`ModelDetectionFailureConfig` instead.
-        """
-        # ONEX: exempt - backwards compatibility wrapper for config-based method
-        warnings.warn(
-            "publish_detection_failure() is deprecated, use "
-            "publish_detection_failure_from_config() with ModelDetectionFailureConfig "
-            "instead",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        config = ModelDetectionFailureConfig(
-            user_request=user_request,
-            failure_reason=failure_reason,
-            attempted_methods=attempted_methods,
-            error_details=error_details,
-            correlation_id=correlation_id,
-            project_path=project_path,
-            project_name=project_name,
-            session_id=session_id,
-        )
-        return self.publish_detection_failure_from_config(config)
 
     def close(self) -> None:
         """
