@@ -55,8 +55,8 @@ class TestTopicBase:
         """Topics follow either ONEX or legacy naming conventions."""
         import re
 
-        # ONEX naming pattern: omniclaude.{category}.{event}.v{version}
-        onex_pattern = re.compile(r"^(omniclaude|omninode)\.[a-z]+\.[a-z-]+\.v\d+$")
+        # ONEX naming pattern: domain.seg1.seg2...segN.vX (multiple category segments allowed)
+        onex_pattern = re.compile(r"^(omniclaude|omninode)(?:\.[a-z-]+)+\.v\d+$")
 
         # Legacy observability topics (backward compatibility with existing consumers)
         # These use simple hyphenated names without the omniclaude prefix
