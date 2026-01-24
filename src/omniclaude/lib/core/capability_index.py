@@ -20,28 +20,8 @@ from pathlib import Path
 
 import yaml
 
-# Import ONEX error handling
-try:
-    from agents.lib.errors import EnumCoreErrorCode, OnexError
-except ImportError:
-    from enum import Enum
-
-    class EnumCoreErrorCode(str, Enum):
-        """Fallback error codes for ONEX compliance."""
-
-        VALIDATION_ERROR = "VALIDATION_ERROR"
-        CONFIGURATION_ERROR = "CONFIGURATION_ERROR"
-        OPERATION_FAILED = "OPERATION_FAILED"
-
-    class OnexError(Exception):
-        """Fallback OnexError for ONEX compliance."""
-
-        def __init__(self, code, message, details=None):
-            self.code = code
-            self.message = message
-            self.details = details or {}
-            super().__init__(message)
-
+# Import ONEX error handling from shared module
+from omniclaude.lib.errors import EnumCoreErrorCode, OnexError
 
 logger = logging.getLogger(__name__)
 
@@ -176,20 +156,20 @@ class CapabilityIndex:
                 },
             )
 
-        except FileNotFoundError:
+        except FileNotFoundError as e:
             logger.error(f"Registry file not found: {self.registry_path}")
             raise OnexError(
                 code=EnumCoreErrorCode.CONFIGURATION_ERROR,
                 message=f"Registry file not found: {self.registry_path}",
                 details={"registry_path": self.registry_path},
-            )
+            ) from e
         except yaml.YAMLError as e:
             logger.error(f"Invalid YAML in registry: {e}")
             raise OnexError(
                 code=EnumCoreErrorCode.VALIDATION_ERROR,
                 message=f"Invalid YAML in registry file: {e}",
                 details={"registry_path": self.registry_path, "yaml_error": str(e)},
-            )
+            ) from e
         except OnexError:
             # Re-raise OnexError as-is
             raise
@@ -203,7 +183,7 @@ class CapabilityIndex:
                     "error_type": type(e).__name__,
                     "error_message": str(e),
                 },
-            )
+            ) from e
 
     def find_by_capability(self, capability: str) -> list[str]:
         """

@@ -1,0 +1,451 @@
+"""Intelligence Configuration Management.
+
+Provides centralized configuration for event-based intelligence gathering with
+environment variable support, feature flags, and validation.
+
+Usage:
+    >>> from omniclaude.lib.config import IntelligenceConfig
+    >>>
+    >>> # Load from environment (uses centralized settings)
+    >>> config = IntelligenceConfig.from_env()
+    >>> config.validate_config()
+    >>>
+    >>> # Check if event discovery is enabled
+    >>> if config.is_event_discovery_enabled():
+    ...     client = IntelligenceEventClient(config.kafka_bootstrap_servers)
+    ...
+    >>> # Get appropriate bootstrap servers
+    >>> servers = config.get_bootstrap_servers()
+
+Configuration precedence:
+1. System environment variables (highest)
+2. .env file (via pydantic-settings)
+3. Default values in Settings class (lowest)
+
+Environment Variables:
+    KAFKA_BOOTSTRAP_SERVERS: Kafka broker addresses (REQUIRED - no default)
+    USE_EVENT_ROUTING: Enable event-based intelligence (default: true)
+    REQUEST_TIMEOUT_MS: Request timeout in milliseconds (default: 5000)
+
+Note:
+    The from_env() method follows fail-fast principles. If KAFKA_BOOTSTRAP_SERVERS
+    is not configured in the environment, it will raise a ValueError rather than
+    silently using a hardcoded default. This ensures .env is the single source
+    of truth for infrastructure configuration.
+"""
+
+from typing import Any
+
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from omniclaude.config import settings
+
+# Topic base names (without environment prefix)
+# These are combined with kafka_environment to create full topic names
+TOPIC_BASE_CODE_ANALYSIS_REQUESTED = (
+    "onex-intelligence.intelligence.code-analysis-requested.v1"
+)
+TOPIC_BASE_CODE_ANALYSIS_COMPLETED = (
+    "onex-intelligence.intelligence.code-analysis-completed.v1"
+)
+TOPIC_BASE_CODE_ANALYSIS_FAILED = (
+    "onex-intelligence.intelligence.code-analysis-failed.v1"
+)
+
+
+class IntelligenceConfig(BaseModel):
+    """
+    Configuration for intelligence gathering system.
+
+    This configuration manages both event-based intelligence discovery and
+    fallback mechanisms. It supports environment variable overrides and
+    provides validation for configuration consistency.
+
+    Attributes:
+        kafka_bootstrap_servers: Kafka broker addresses
+        kafka_enable_intelligence: Enable Kafka-based intelligence
+        kafka_request_timeout_ms: Request timeout in milliseconds
+        kafka_pattern_discovery_timeout_ms: Pattern discovery timeout
+        kafka_code_analysis_timeout_ms: Code analysis timeout
+        kafka_consumer_group_prefix: Consumer group prefix for isolation
+        kafka_environment: Environment prefix for topic names (dev, staging, prod)
+        enable_event_based_discovery: Enable event-based pattern discovery
+        enable_filesystem_fallback: Enable fallback to built-in patterns
+        prefer_event_patterns: Prefer event-based patterns (higher confidence)
+        topic_code_analysis_requested: Request topic name (built from kafka_environment)
+        topic_code_analysis_completed: Success response topic name (built from kafka_environment)
+        topic_code_analysis_failed: Error response topic name (built from kafka_environment)
+    """
+
+    # =========================================================================
+    # Kafka Configuration
+    # =========================================================================
+
+    kafka_bootstrap_servers: str = Field(
+        default="",
+        description="Kafka bootstrap servers (required - configure via KAFKA_BOOTSTRAP_SERVERS env var)",
+    )
+
+    kafka_enable_intelligence: bool = Field(
+        default=True,
+        description="Enable Kafka-based intelligence gathering",
+    )
+
+    kafka_request_timeout_ms: int = Field(
+        default=5000,
+        description="Default request timeout in milliseconds",
+        ge=1000,
+        le=60000,
+    )
+
+    kafka_pattern_discovery_timeout_ms: int = Field(
+        default=5000,
+        description="Pattern discovery timeout in milliseconds",
+        ge=1000,
+        le=60000,
+    )
+
+    kafka_code_analysis_timeout_ms: int = Field(
+        default=10000,
+        description="Code analysis timeout in milliseconds",
+        ge=1000,
+        le=120000,
+    )
+
+    kafka_consumer_group_prefix: str = Field(
+        default="omniclaude-intelligence",
+        description="Consumer group prefix for client isolation",
+    )
+
+    # =========================================================================
+    # Feature Flags
+    # =========================================================================
+
+    enable_event_based_discovery: bool = Field(
+        default=True,
+        description="Enable event-based pattern discovery",
+    )
+
+    enable_filesystem_fallback: bool = Field(
+        default=True,
+        description="Enable fallback to built-in patterns on failure",
+    )
+
+    prefer_event_patterns: bool = Field(
+        default=True,
+        description="Prefer event-based patterns with higher confidence scores",
+    )
+
+    # =========================================================================
+    # Environment Configuration
+    # =========================================================================
+
+    kafka_environment: str = Field(
+        default="dev",
+        description="Kafka topic environment prefix (dev, staging, prod)",
+    )
+
+    # =========================================================================
+    # Topic Configuration
+    # =========================================================================
+    # Topic names are constructed dynamically by combining kafka_environment
+    # with the base topic name. If not explicitly provided, they are built
+    # automatically via the model validator.
+
+    topic_code_analysis_requested: str = Field(
+        default="",
+        description="Topic for code analysis requests (built from kafka_environment if empty)",
+    )
+
+    topic_code_analysis_completed: str = Field(
+        default="",
+        description="Topic for successful analysis responses (built from kafka_environment if empty)",
+    )
+
+    topic_code_analysis_failed: str = Field(
+        default="",
+        description="Topic for failed analysis responses (built from kafka_environment if empty)",
+    )
+
+    # =========================================================================
+    # Validators
+    # =========================================================================
+
+    @model_validator(mode="before")
+    @classmethod
+    def build_dynamic_topic_names(cls, data: Any) -> Any:
+        """Build topic names dynamically based on kafka_environment.
+
+        This validator ensures topic names are consistently constructed
+        using the kafka_environment prefix, whether the config is created
+        via from_env() or direct instantiation.
+
+        If topic names are explicitly provided, they are preserved.
+        Otherwise, they are built from kafka_environment + base topic name.
+
+        Args:
+            data: Input data (dict when creating from kwargs, may be other types
+                in Pydantic's internal validation flows)
+
+        Returns:
+            The data with topic names populated if not already set
+
+        Raises:
+            ValueError: If kafka_environment is empty (would cause malformed topic names)
+        """
+        if not isinstance(data, dict):
+            return data
+
+        env: str = data.get("kafka_environment", "dev")
+
+        # Validate kafka_environment is not empty to prevent malformed topic names
+        # (e.g., '.omniclaude.session.started.v1' with a leading dot)
+        if not env or not env.strip():
+            raise ValueError(
+                "kafka_environment cannot be empty. "
+                "This field is REQUIRED to prevent malformed topic names. "
+                "Set KAFKA_ENVIRONMENT in your .env file to 'dev', 'staging', or 'prod'. "
+                "Example: KAFKA_ENVIRONMENT=dev"
+            )
+
+        env = env.strip()
+
+        # Build topic names if not explicitly provided
+        if not data.get("topic_code_analysis_requested"):
+            data["topic_code_analysis_requested"] = (
+                f"{env}.{TOPIC_BASE_CODE_ANALYSIS_REQUESTED}"
+            )
+        if not data.get("topic_code_analysis_completed"):
+            data["topic_code_analysis_completed"] = (
+                f"{env}.{TOPIC_BASE_CODE_ANALYSIS_COMPLETED}"
+            )
+        if not data.get("topic_code_analysis_failed"):
+            data["topic_code_analysis_failed"] = (
+                f"{env}.{TOPIC_BASE_CODE_ANALYSIS_FAILED}"
+            )
+
+        return data
+
+    @field_validator("kafka_bootstrap_servers")
+    @classmethod
+    def validate_bootstrap_servers(cls, v: str) -> str:
+        """Validate Kafka bootstrap servers format.
+
+        Note: Empty strings are allowed through this validator to enable
+        the model_validator to provide a more helpful error message about
+        configuration options. Format validation only applies to non-empty values.
+        """
+        # Allow empty strings through - model_validator will handle with better UX
+        if not v or not v.strip():
+            return v
+
+        # Check for basic host:port format
+        servers = [s.strip() for s in v.split(",")]
+        for server in servers:
+            if ":" not in server:
+                raise ValueError(f"Invalid server format '{server}'. Expected 'host:port'")
+            host, port = server.rsplit(":", 1)
+            if not host or not port:
+                raise ValueError(f"Invalid server format '{server}'. Expected 'host:port'")
+            try:
+                port_int = int(port)
+                if port_int < 1 or port_int > 65535:
+                    raise ValueError(f"Port {port_int} out of valid range (1-65535)")
+            except ValueError as e:
+                raise ValueError(f"Invalid port in '{server}': {e}") from e
+
+        return v
+
+    @field_validator("kafka_consumer_group_prefix")
+    @classmethod
+    def validate_consumer_group_prefix(cls, v: str) -> str:
+        """Validate consumer group prefix is not empty."""
+        if not v or not v.strip():
+            raise ValueError("kafka_consumer_group_prefix cannot be empty")
+        return v.strip()
+
+    @field_validator("kafka_environment")
+    @classmethod
+    def validate_kafka_environment(cls, v: str) -> str:
+        """Validate kafka_environment is properly configured.
+
+        The kafka_environment is used as a prefix for Kafka topic names.
+        An empty or invalid value would result in malformed topic names
+        (e.g., '.omniclaude.session.started.v1' with a leading dot).
+
+        Valid values are: dev, staging, prod (or custom environment names
+        that follow the pattern of lowercase alphanumeric with optional hyphens).
+
+        Raises:
+            ValueError: If kafka_environment is empty or contains invalid characters
+        """
+        if not v or not v.strip():
+            raise ValueError(
+                "kafka_environment cannot be empty. "
+                "This field is REQUIRED to prevent malformed topic names. "
+                "Set KAFKA_ENVIRONMENT in your .env file to 'dev', 'staging', or 'prod'. "
+                "Example: KAFKA_ENVIRONMENT=dev"
+            )
+
+        v = v.strip().lower()
+
+        # Validate format: lowercase alphanumeric with optional hyphens
+        # Must start and end with alphanumeric
+        import re
+
+        if not re.match(r"^[a-z][a-z0-9-]*[a-z0-9]$|^[a-z]$", v):
+            raise ValueError(
+                f"kafka_environment '{v}' has invalid format. "
+                "Must be lowercase alphanumeric, may contain hyphens, "
+                "and must start/end with a letter or number. "
+                "Valid examples: 'dev', 'staging', 'prod', 'test-env'"
+            )
+
+        return v
+
+    @model_validator(mode="after")
+    def validate_configuration_complete(self) -> "IntelligenceConfig":
+        """Validate configuration is complete with helpful guidance.
+
+        This validator runs after field validation to provide user-friendly
+        error messages that guide users toward the correct usage pattern.
+
+        Raises:
+            ValueError: If kafka_bootstrap_servers is empty, with guidance
+                on how to properly configure the instance.
+        """
+        if not self.kafka_bootstrap_servers or not self.kafka_bootstrap_servers.strip():
+            raise ValueError(
+                "kafka_bootstrap_servers cannot be empty. "
+                "Use IntelligenceConfig.from_env() to load from environment settings, "
+                "or provide kafka_bootstrap_servers explicitly when instantiating. "
+                "Example: IntelligenceConfig(kafka_bootstrap_servers='<host>:<port>')"
+            )
+        return self
+
+    # =========================================================================
+    # Factory Methods
+    # =========================================================================
+
+    @classmethod
+    def from_env(cls) -> "IntelligenceConfig":
+        """
+        Load configuration from centralized settings.
+
+        This method creates an IntelligenceConfig instance using values from
+        the centralized Pydantic Settings framework where available, with
+        sensible defaults for intelligence-specific options.
+
+        The .env file is the single source of truth for infrastructure configuration.
+        This method follows fail-fast principles: if required configuration is not
+        present, it raises a clear error rather than silently using defaults.
+
+        Returns:
+            IntelligenceConfig with values from centralized settings
+
+        Raises:
+            ValueError: If KAFKA_BOOTSTRAP_SERVERS is not configured in environment
+            ValueError: If KAFKA_ENVIRONMENT is empty (would cause malformed topic names)
+
+        Example:
+            >>> # Ensure KAFKA_BOOTSTRAP_SERVERS and KAFKA_ENVIRONMENT are set in .env
+            >>> config = IntelligenceConfig.from_env()
+            >>> print(config.kafka_bootstrap_servers)
+            kafka.example.com:9092
+            >>> print(config.kafka_environment)
+            dev
+        """
+        # Get bootstrap servers from settings (fail-fast if not configured)
+        bootstrap_servers = settings.get_effective_kafka_bootstrap_servers()
+        if not bootstrap_servers:
+            raise ValueError(
+                "KAFKA_BOOTSTRAP_SERVERS is not configured. "
+                "Please set this value in your .env file. "
+                "The .env file is the single source of truth for infrastructure configuration. "
+                "Example: KAFKA_BOOTSTRAP_SERVERS=kafka.example.com:9092"
+            )
+
+        # Validate kafka_environment (fail-fast if empty to prevent malformed topic names)
+        kafka_env = settings.kafka_environment
+        if not kafka_env or not kafka_env.strip():
+            raise ValueError(
+                "KAFKA_ENVIRONMENT is not configured. "
+                "This field is REQUIRED to prevent malformed topic names "
+                "(e.g., '.omniclaude.session.started.v1' with a leading dot). "
+                "Set KAFKA_ENVIRONMENT in your .env file to 'dev', 'staging', or 'prod'. "
+                "Example: KAFKA_ENVIRONMENT=dev"
+            )
+
+        # Topic names are built dynamically by model validator using kafka_environment
+        return cls(
+            kafka_bootstrap_servers=bootstrap_servers,
+            kafka_enable_intelligence=settings.use_event_routing,
+            kafka_request_timeout_ms=settings.request_timeout_ms,
+            kafka_pattern_discovery_timeout_ms=settings.request_timeout_ms,
+            kafka_code_analysis_timeout_ms=settings.request_timeout_ms * 2,
+            kafka_consumer_group_prefix=settings.kafka_group_id,
+            kafka_environment=settings.kafka_environment,
+            enable_event_based_discovery=settings.use_event_routing,
+            enable_filesystem_fallback=True,
+            prefer_event_patterns=True,
+            # Topic names will be constructed by build_dynamic_topic_names validator
+        )
+
+    # =========================================================================
+    # Validation & Utility Methods
+    # =========================================================================
+
+    def validate_config(self) -> None:
+        """
+        Validate configuration consistency.
+
+        Checks:
+        - If event discovery is disabled but no fallback is enabled
+        - Timeout values are reasonable
+        - Topic names are not empty
+
+        Raises:
+            ValueError: If configuration is inconsistent
+        """
+        # Check fallback configuration
+        if not self.enable_event_based_discovery and not self.enable_filesystem_fallback:
+            raise ValueError(
+                "At least one intelligence source must be enabled: "
+                "enable_event_based_discovery or enable_filesystem_fallback"
+            )
+
+        # Validate topic names
+        if not self.topic_code_analysis_requested.strip():
+            raise ValueError("topic_code_analysis_requested cannot be empty")
+        if not self.topic_code_analysis_completed.strip():
+            raise ValueError("topic_code_analysis_completed cannot be empty")
+        if not self.topic_code_analysis_failed.strip():
+            raise ValueError("topic_code_analysis_failed cannot be empty")
+
+    def is_event_discovery_enabled(self) -> bool:
+        """
+        Check if event-based discovery should be used.
+
+        Returns:
+            True if both kafka_enable_intelligence and
+            enable_event_based_discovery are True
+        """
+        return self.kafka_enable_intelligence and self.enable_event_based_discovery
+
+    def get_bootstrap_servers(self) -> str:
+        """
+        Get Kafka bootstrap servers.
+
+        Returns:
+            Bootstrap servers string (comma-separated)
+        """
+        return self.kafka_bootstrap_servers
+
+    def to_dict(self) -> dict[str, Any]:
+        """
+        Serialize configuration to dictionary.
+
+        Returns:
+            Dictionary with all configuration values
+        """
+        return self.model_dump()

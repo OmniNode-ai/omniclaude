@@ -41,15 +41,10 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-# Import Pydantic Settings for type-safe configuration
-try:
-    from config import settings as _settings_instance
+# FAIL FAST: Required configuration
+from omniclaude.config import settings
 
-    settings: Any = _settings_instance
-except ImportError:
-    settings = None
-
-# Import Prometheus metrics
+# Import Prometheus metrics (optional integration)
 try:
     from omniclaude.lib.prometheus_metrics import (
         event_publish_bytes,
@@ -60,20 +55,9 @@ try:
     )
 
     PROMETHEUS_AVAILABLE = True
-except ImportError:
-    try:
-        from agents.lib.prometheus_metrics import (
-            event_publish_bytes,
-            event_publish_counter,
-            event_publish_duration,
-            event_publish_errors_counter,
-            record_event_publish,
-        )
-
-        PROMETHEUS_AVAILABLE = True
-    except ImportError:
-        PROMETHEUS_AVAILABLE = False
-        logging.debug("Prometheus metrics not available - metrics disabled")
+except ImportError:  # nosec B110 - Optional dependency, graceful degradation
+    PROMETHEUS_AVAILABLE = False
+    logging.debug("Prometheus metrics not available - metrics disabled")
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +73,7 @@ _producer_lock: asyncio.Lock | None = None
 _lock_creation_lock = threading.Lock()
 
 
-async def get_producer_lock():
+async def get_producer_lock() -> asyncio.Lock:
     """
     Get or create the producer lock lazily under a running event loop.
 
@@ -117,14 +101,13 @@ async def get_producer_lock():
 
 
 def _get_kafka_bootstrap_servers() -> str:
-    """Get Kafka bootstrap servers from environment or settings."""
-    # Try Pydantic settings first (if available)
-    if settings is not None:
-        try:
-            servers: str = settings.get_effective_kafka_bootstrap_servers()
-            return servers
-        except Exception as e:
-            logger.debug(f"Failed to get Kafka servers from settings: {e}")
+    """Get Kafka bootstrap servers from settings."""
+    # Use Pydantic settings (fail fast if not configured properly)
+    try:
+        servers: str = settings.get_effective_kafka_bootstrap_servers()
+        return servers
+    except Exception as e:
+        logger.debug(f"Failed to get Kafka servers from settings: {e}")
 
     # Fall back to environment variable
     env_servers: str | None = os.getenv("KAFKA_BOOTSTRAP_SERVERS")
@@ -225,10 +208,7 @@ async def publish_action_event(
     """
     try:
         # Generate correlation ID if not provided
-        if correlation_id is None:
-            correlation_id = str(uuid4())
-        else:
-            correlation_id = str(correlation_id)
+        correlation_id = str(uuid4()) if correlation_id is None else str(correlation_id)
 
         # Validate action_type
         valid_types = ["tool_call", "decision", "error", "success"]
@@ -338,7 +318,7 @@ async def publish_tool_call(
     duration_ms: int | None = None,
     success: bool = True,
     error_message: str | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> bool:
     """
     Publish tool call action event.
@@ -386,7 +366,7 @@ async def publish_decision(
     decision_result: dict[str, Any] | None = None,
     correlation_id: str | UUID | None = None,
     duration_ms: int | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> bool:
     """
     Publish decision action event.
@@ -427,7 +407,7 @@ async def publish_error(
     error_message: str,
     error_context: dict[str, Any] | None = None,
     correlation_id: str | UUID | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> bool:
     """
     Publish error action event.
@@ -467,7 +447,7 @@ async def publish_success(
     success_details: dict[str, Any] | None = None,
     correlation_id: str | UUID | None = None,
     duration_ms: int | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> bool:
     """
     Publish success action event.
@@ -498,7 +478,7 @@ async def publish_success(
     )
 
 
-async def close_producer():
+async def close_producer() -> None:
     """Close Kafka producer on shutdown."""
     global _kafka_producer
     if _kafka_producer is not None:
@@ -511,7 +491,7 @@ async def close_producer():
             _kafka_producer = None
 
 
-def _cleanup_producer_sync():
+def _cleanup_producer_sync() -> None:
     """
     Synchronous wrapper for close_producer() to be called by atexit.
 
@@ -533,7 +513,7 @@ def _cleanup_producer_sync():
                 return
             except RuntimeError:
                 # No running loop, try to get the main event loop
-                pass
+                pass  # nosec B110 - Expected when no event loop running
 
             # Try to use existing event loop if available and not closed
             try:
@@ -542,7 +522,7 @@ def _cleanup_producer_sync():
                     loop.run_until_complete(close_producer())
                     return
             except RuntimeError:
-                pass
+                pass  # nosec B110 - Expected when event loop unavailable
 
             # Event loop is closed. The producer was created on a closed loop.
             # We can't use async cleanup properly.
@@ -584,7 +564,7 @@ atexit.register(_cleanup_producer_sync)
 
 # Synchronous wrapper for backward compatibility
 def publish_action_event_sync(
-    agent_name: str, action_type: str, action_name: str, **kwargs
+    agent_name: str, action_type: str, action_name: str, **kwargs: Any
 ) -> bool:
     """
     Synchronous wrapper for publish_action_event.
@@ -609,7 +589,7 @@ def publish_action_event_sync(
 
 if __name__ == "__main__":
     # Test action event publishing
-    async def test():
+    async def test() -> None:
         logging.basicConfig(level=logging.DEBUG)
 
         # Test tool call

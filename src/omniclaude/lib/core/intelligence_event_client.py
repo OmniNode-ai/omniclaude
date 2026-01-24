@@ -3,7 +3,7 @@
 Intelligence Event Client - Kafka-based Intelligence Discovery
 
 This module provides a Kafka client for event-based intelligence discovery,
-replacing hard-coded omniarchon repository paths with event-driven pattern discovery.
+replacing hard-coded repository paths with event-driven pattern discovery.
 
 Key Features:
 - Request-response pattern with correlation tracking
@@ -15,7 +15,7 @@ Key Features:
 
 Event Flow:
 1. Client publishes omninode.intelligence.code-analysis.requested.v1 event
-2. omniarchon Intelligence Adapter handler processes request
+2. ONEX Intelligence Adapter handler processes request
 3. Client waits for completed or failed response
 4. On timeout/error: graceful degradation with caller handling fallback
 
@@ -28,7 +28,7 @@ EVENT_BUS_INTEGRATION_GUIDE Compliance:
 
 Integration:
 - Uses EVENT_BUS_INTEGRATION_GUIDE event contracts (frozen envelope)
-- Compatible with omniarchon's confluent-kafka handler (wire protocol)
+- Compatible with the ONEX intelligence service's confluent-kafka handler (wire protocol)
 - Designed for request-response client usage (not 24/7 consumer service)
 
 Performance Targets:
@@ -58,7 +58,7 @@ from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from aiokafka.errors import KafkaError
 from omnibase_core.errors import EnumCoreErrorCode, ModelOnexError
 
-from config import settings
+from omniclaude.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -71,8 +71,8 @@ class IntelligenceEventClient:
     timeout handling, and graceful fallback for intelligence operations.
 
     This client uses aiokafka for native async/await integration, perfect
-    for request-response patterns. It is wire-compatible with omniarchon's
-    confluent-kafka service-side handler.
+    for request-response patterns. It is wire-compatible with the ONEX
+    intelligence service's confluent-kafka handler.
 
     Usage:
         client = IntelligenceEventClient(
@@ -115,8 +115,8 @@ class IntelligenceEventClient:
 
         Args:
             bootstrap_servers: Kafka bootstrap servers
-                - External host: "localhost:9092" or "192.168.86.200:9092"
-                - Docker internal: "omninode-bridge-redpanda:9092"
+                - External host: "localhost:9092" or "kafka.example.com:9092"
+                - Docker internal: "kafka:9092"
             enable_intelligence: Enable event-based intelligence (feature flag)
             request_timeout_ms: Default timeout for requests in milliseconds
             consumer_group_id: Optional consumer group ID (default: auto-generated)
@@ -133,7 +133,7 @@ class IntelligenceEventClient:
                     "  1. KAFKA_BOOTSTRAP_SERVERS (general config)\n"
                     "  2. KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS (intelligence-specific)\n"
                     "  3. KAFKA_BROKERS (legacy compatibility)\n"
-                    "Example: KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:9092\n"
+                    "Example: KAFKA_BOOTSTRAP_SERVERS=localhost:9092\n"
                     "Current values: KAFKA_BOOTSTRAP_SERVERS={}, KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS={}, KAFKA_BROKERS={}".format(
                         getattr(settings, "kafka_bootstrap_servers", "not set"),
                         os.getenv("KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS", "not set"),
@@ -149,9 +149,9 @@ class IntelligenceEventClient:
 
         self._producer: AIOKafkaProducer | None = None
         self._consumer: AIOKafkaConsumer | None = None
-        self._consumer_task: asyncio.Task | None = None  # Track background consumer task
+        self._consumer_task: asyncio.Task[None] | None = None  # Track background consumer task
         self._started = False
-        self._pending_requests: dict[str, asyncio.Future] = {}
+        self._pending_requests: dict[str, asyncio.Future[Any]] = {}
         self._consumer_ready = asyncio.Event()  # Signal when consumer is polling
 
         self.logger = logging.getLogger(__name__)
@@ -307,7 +307,7 @@ class IntelligenceEventClient:
                 self._consumer = None
 
             # Cancel pending requests
-            for correlation_id, future in self._pending_requests.items():
+            for _correlation_id, future in self._pending_requests.items():
                 if not future.done():
                     future.set_exception(
                         ModelOnexError(
@@ -365,7 +365,7 @@ class IntelligenceEventClient:
         """
         Request pattern discovery via events.
 
-        This is the main method for discovering patterns from omniarchon
+        This is the main method for discovering patterns from the
         codebase using event-based communication.
 
         Args:
@@ -617,7 +617,7 @@ class IntelligenceEventClient:
             KafkaError: If Kafka operation fails
         """
         # Create future for this request
-        future: asyncio.Future = asyncio.Future()
+        future: asyncio.Future[Any] = asyncio.Future()
         self._pending_requests[correlation_id] = future
 
         try:
@@ -803,7 +803,12 @@ class IntelligenceEventClientContext:
         await self.client.start()
         return self.client
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any,
+    ) -> bool:
         await self.client.stop()
         return False
 

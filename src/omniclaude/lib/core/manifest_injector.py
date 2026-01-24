@@ -2,11 +2,11 @@
 Manifest Injector - Dynamic System Manifest via Event Bus
 
 Provides agents with complete system awareness at spawn through dynamic queries
-to archon-intelligence-adapter via Kafka event bus.
+to onex-intelligence-adapter via Kafka event bus.
 
 Key Features:
 - Event-driven manifest generation (no static YAML)
-- Queries Qdrant, Memgraph, PostgreSQL via archon-intelligence-adapter
+- Queries Qdrant, Memgraph, PostgreSQL via onex-intelligence-adapter
 - Request-response pattern with correlation tracking
 - Graceful fallback to minimal manifest on timeout
 - Compatible with existing hook infrastructure
@@ -15,7 +15,7 @@ Key Features:
 Architecture:
     manifest_injector.py
       → Publishes to Kafka "intelligence.requests"
-      → archon-intelligence-adapter consumes and queries backends
+      → onex-intelligence-adapter consumes and queries backends
       → Publishes response to "intelligence.responses"
       → manifest_injector formats response for agent
 
@@ -56,9 +56,6 @@ import asyncio
 import logging
 import os
 
-# Import Pydantic Settings for type-safe configuration
-# Use absolute import to avoid conflict with agents/lib/config directory
-import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -71,10 +68,9 @@ from typing import (
 )
 from uuid import UUID
 
-_project_root = _Path(__file__).parent.parent.parent
-if str(_project_root) not in sys.path:
-    sys.path.insert(0, str(_project_root))
-from config import settings
+# NOTE: Package must be installed (pip install -e .) for this import to work.
+# No sys.path manipulation needed when package is properly installed.
+from omniclaude.config import settings
 
 # Import nest_asyncio for nested event loop support
 try:
@@ -84,31 +80,12 @@ try:
 except ImportError:
     nest_asyncio = None
 
-# Import IntelligenceEventClient for event bus communication
-# Import IntelligenceCache for Valkey-backed caching
-# Import IntelligenceUsageTracker for intelligence effectiveness tracking
-try:
-    from omniclaude.lib.intelligence_usage_tracker import IntelligenceUsageTracker
-except ImportError:
-    from agents.lib.intelligence_usage_tracker import IntelligenceUsageTracker
-
-# Import PatternQualityScorer for quality filtering
-try:
-    from omniclaude.lib.pattern_quality_scorer import PatternQualityScorer
-except ImportError:
-    from agents.lib.pattern_quality_scorer import PatternQualityScorer
-
-# Import TaskClassifier for task-aware section selection
-try:
-    from omniclaude.lib.task_classifier import TaskClassifier, TaskContext, TaskIntent
-except ImportError:
-    from agents.lib.task_classifier import TaskClassifier, TaskContext
-
-# Import ONEX error classes for compliant error handling
-try:
-    from omniclaude.lib.core import EnumCoreErrorCode, OnexError
-except ImportError:
-    from agents.lib.errors import EnumCoreErrorCode, OnexError
+# FAIL FAST: Required dependencies
+# FAIL FAST: Required ONEX error classes
+from omniclaude.lib.errors import EnumCoreErrorCode, OnexError
+from omniclaude.lib.intelligence_usage_tracker import IntelligenceUsageTracker
+from omniclaude.lib.pattern_quality_scorer import PatternQualityScorer
+from omniclaude.lib.task_classifier import TaskClassifier, TaskContext, TaskIntent
 
 from .intelligence_cache import IntelligenceCache
 from .intelligence_event_client import IntelligenceEventClient
@@ -139,27 +116,27 @@ def _load_action_logger() -> bool:
 _load_action_logger()
 
 
-# Import data sanitizer for secure logging
+# Import data sanitizer for secure logging (optional integration)
 def _load_sanitizers() -> tuple[Callable[[Any], Any], Callable[[Any], Any]]:
-    """Try to load sanitizer functions from various locations."""
+    """
+    Try to load sanitizer functions.
+
+    Returns no-op functions if data_sanitizer module is not available.
+    This is expected in minimal deployments without sanitization requirements.
+    """
     try:
         from omniclaude.lib.data_sanitizer import sanitize_dict, sanitize_string
 
         return sanitize_dict, sanitize_string
-    except ImportError:
-        try:
-            from agents.lib.data_sanitizer import sanitize_dict, sanitize_string
+    except ImportError:  # nosec B110 - Optional dependency, graceful degradation
+        # Fallback: no-op sanitization functions
+        def fallback_dict(d: Any, **kwargs: Any) -> Any:
+            return d
 
-            return sanitize_dict, sanitize_string
-        except ImportError:
-            # Fallback: no-op sanitization functions
-            def fallback_dict(d: Any, **kwargs: Any) -> Any:
-                return d
+        def fallback_string(s: Any, **kwargs: Any) -> Any:
+            return s
 
-            def fallback_string(s: Any, **kwargs: Any) -> Any:
-                return s
-
-            return fallback_dict, fallback_string
+        return fallback_dict, fallback_string
 
 
 sanitize_dict, sanitize_string = _load_sanitizers()
@@ -282,7 +259,7 @@ class ManifestCache:
         }
         self.metrics: dict[str, CacheMetrics] = {}
         if enable_metrics:
-            for query_type in self._ttls.keys():
+            for query_type in self._ttls:
                 self.metrics[query_type] = CacheMetrics()
         self.logger = logging.getLogger(__name__)
 
@@ -406,13 +383,13 @@ class ManifestInjectionStorage:
         Initialize storage handler.
 
         Args:
-            db_host: PostgreSQL host (default: env POSTGRES_HOST or 192.168.86.200)
+            db_host: PostgreSQL host (default: env POSTGRES_HOST or localhost)
             db_port: PostgreSQL port (default: env POSTGRES_PORT or 5436)
             db_name: Database name (default: env POSTGRES_DATABASE or omninode_bridge)
             db_user: Database user (default: env POSTGRES_USER or postgres)
             db_password: Database password (default: env POSTGRES_PASSWORD)
         """
-        self.db_host = db_host or os.environ.get("POSTGRES_HOST", "192.168.86.200")
+        self.db_host = db_host or os.environ.get("POSTGRES_HOST", "localhost")
         self.db_port = db_port or int(os.environ.get("POSTGRES_PORT", "5436"))
         self.db_name = db_name or os.environ.get("POSTGRES_DATABASE", "omninode_bridge")
         self.db_user = db_user or os.environ.get("POSTGRES_USER", "postgres")
@@ -481,7 +458,7 @@ class ManifestInjectionStorage:
         formatted_text: str,
         query_times: dict[str, int],
         sections_included: list[str],
-        **kwargs,
+        **kwargs: Any,
     ) -> bool:
         """
         Store manifest injection record in database.
@@ -701,7 +678,7 @@ class ManifestInjector:
     """
     Dynamic manifest generator using event bus intelligence.
 
-    Replaces static YAML with real-time queries to archon-intelligence-adapter,
+    Replaces static YAML with real-time queries to onex-intelligence-adapter,
     which queries Qdrant, Memgraph, and PostgreSQL for current system state.
 
     Features:
@@ -898,7 +875,7 @@ class ManifestInjector:
         # Return False to propagate any exceptions
         return False
 
-    async def _filter_by_quality(self, patterns: list[dict]) -> list[dict]:
+    async def _filter_by_quality(self, patterns: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """
         Filter patterns by quality score.
 
@@ -1049,10 +1026,13 @@ class ManifestInjector:
 
         # Create new instance
         try:
-            logger = ActionLogger(
-                agent_name=self.agent_name or "manifest-injector",
-                correlation_id=correlation_id,
-                project_path=os.getcwd(),
+            logger = cast(
+                "_ActionLoggerType",
+                ActionLogger(
+                    agent_name=self.agent_name or "manifest-injector",
+                    correlation_id=correlation_id,
+                    project_path=os.getcwd(),
+                ),
             )
             self._action_logger_cache[correlation_id] = logger
             return logger
@@ -1201,6 +1181,7 @@ class ManifestInjector:
                 }
 
             self._manifest_data = manifest
+            self._cached_formatted = None  # Invalidate formatted cache for fresh manifest
             self._last_update = datetime.now(UTC)
             return manifest
 
@@ -1249,10 +1230,10 @@ class ManifestInjector:
             # Add debug loop context query (always include for STF availability)
             query_tasks["debug_loop"] = self._query_debug_loop_context(correlation_id)
 
-            if "archon_search" in sections_to_query:
+            if "semantic_search" in sections_to_query:
                 # Use user_prompt for semantic search, or default query
                 search_query = user_prompt or "ONEX patterns implementation examples"
-                query_tasks["archon_search"] = self._query_archon_search(
+                query_tasks["semantic_search"] = self._query_semantic_search(
                     query=search_query, limit=10
                 )
 
@@ -1263,12 +1244,15 @@ class ManifestInjector:
             )
 
             # Build manifest from results (including filesystem queried earlier)
-            all_results = dict(zip(query_tasks.keys(), results))
+            # strict=False: Defensive - keys/results should match (same dict source),
+            # but prefer partial results over ValueError if counts ever diverge
+            all_results = dict(zip(query_tasks.keys(), results, strict=False))
             all_results["filesystem"] = filesystem_result  # Add filesystem result
             manifest = self._build_manifest_from_results(all_results)
 
             # Cache manifest
             self._manifest_data = manifest
+            self._cached_formatted = None  # Invalidate formatted cache for fresh manifest
             self._last_update = datetime.now(UTC)
 
             # Calculate total generation time
@@ -1386,8 +1370,9 @@ class ManifestInjector:
             model = "Alibaba-NLP/gte-Qwen2-1.5B-instruct"
 
         # GTE-Qwen2 embedding service (OpenAI-compatible API)
+        # Default to localhost - production URLs should be set via EMBEDDING_SERVICE_URL env var
         embedding_url = os.environ.get(
-            "EMBEDDING_SERVICE_URL", "http://192.168.86.201:8002/v1/embeddings"
+            "EMBEDDING_SERVICE_URL", "http://localhost:8002/v1/embeddings"
         )
 
         try:
@@ -1471,7 +1456,7 @@ class ManifestInjector:
                 raise OnexError(
                     code=EnumCoreErrorCode.DEPENDENCY_ERROR,
                     message="Embedding service required for semantic search. "
-                    "Ensure GTE-Qwen2 service is running at http://192.168.86.201:8002",
+                    "Set EMBEDDING_SERVICE_URL in .env to the GTE-Qwen2 service endpoint.",
                 ) from e
 
         try:
@@ -1857,7 +1842,7 @@ class ManifestInjector:
 
             # Execute BOTH collection queries in parallel using direct Qdrant HTTP
             # Query archon_vectors (ONEX templates) and code_generation_patterns (real implementations)
-            archon_task = self._query_patterns_direct_qdrant(
+            templates_task = self._query_patterns_direct_qdrant(
                 correlation_id=correlation_id,
                 collections=["archon_vectors"],
                 limit_per_collection=50,
@@ -1875,18 +1860,18 @@ class ManifestInjector:
 
             # Wait for both queries to complete in parallel
             self.logger.debug("Waiting for both pattern queries to complete in parallel...")
-            results = await asyncio.gather(archon_task, codegen_task, return_exceptions=True)
-            archon_result, codegen_result = results
+            results = await asyncio.gather(templates_task, codegen_task, return_exceptions=True)
+            templates_result, codegen_result = results
 
             # Handle exceptions from gather
-            archon_dict: dict[str, Any] = {"patterns": [], "query_time_ms": 0}
+            templates_dict: dict[str, Any] = {"patterns": [], "query_time_ms": 0}
             codegen_dict: dict[str, Any] = {"patterns": [], "query_time_ms": 0}
 
-            if isinstance(archon_result, Exception):
-                self.logger.warning(f"archon_vectors query failed: {archon_result}")
-                archon_dict = {"patterns": [], "query_time_ms": 0}
-            elif isinstance(archon_result, dict):
-                archon_dict = archon_result
+            if isinstance(templates_result, Exception):
+                self.logger.warning(f"archon_vectors query failed: {templates_result}")
+                templates_dict = {"patterns": [], "query_time_ms": 0}
+            elif isinstance(templates_result, dict):
+                templates_dict = templates_result
 
             if isinstance(codegen_result, Exception):
                 self.logger.warning(f"code_generation_patterns query failed: {codegen_result}")
@@ -1895,16 +1880,16 @@ class ManifestInjector:
                 codegen_dict = codegen_result
 
             # Merge results from both collections
-            archon_patterns = archon_dict.get("patterns", [])
+            template_patterns = templates_dict.get("patterns", [])
             codegen_patterns = codegen_dict.get("patterns", [])
 
-            all_patterns = archon_patterns + codegen_patterns
+            all_patterns = template_patterns + codegen_patterns
 
             # Apply quality filtering if enabled
             all_patterns = await self._filter_by_quality(all_patterns)
 
             # Calculate combined query time
-            exec_time = archon_dict.get("query_time_ms", 0)
+            exec_time = templates_dict.get("query_time_ms", 0)
             code_time = codegen_dict.get("query_time_ms", 0)
             total_query_time = exec_time + code_time
 
@@ -1916,7 +1901,7 @@ class ManifestInjector:
             speedup = round(total_query_time / max(elapsed_ms, 1), 1)
 
             self.logger.info(
-                f"[{correlation_id}] Pattern query results (PARALLEL via direct HTTP): {len(archon_patterns)} from archon_vectors, "
+                f"[{correlation_id}] Pattern query results (PARALLEL via direct HTTP): {len(template_patterns)} from archon_vectors, "
                 f"{len(codegen_patterns)} from code_generation_patterns, "
                 f"{len(all_patterns)} total patterns, "
                 f"query_time={total_query_time}ms, elapsed={elapsed_ms}ms, speedup={speedup}x"
@@ -1936,7 +1921,7 @@ class ManifestInjector:
                 "query_time_ms": total_query_time,
                 "total_count": len(all_patterns),
                 "collections_queried": {
-                    "archon_vectors": len(archon_patterns),
+                    "archon_vectors": len(template_patterns),
                     "code_generation_patterns": len(codegen_patterns),
                 },
             }
@@ -1947,8 +1932,8 @@ class ManifestInjector:
                     tracking_successes = 0
                     tracking_failures = 0
 
-                    # Track archon_vectors
-                    for i, pattern in enumerate(archon_patterns):
+                    # Track archon_vectors collection patterns
+                    for i, pattern in enumerate(template_patterns):
                         success = await self._usage_tracker.track_retrieval(
                             correlation_id=UUID(correlation_id),
                             agent_name=self.agent_name or "unknown",
@@ -2165,7 +2150,7 @@ class ManifestInjector:
             Dictionary with PostgreSQL connection info, status, and table count
         """
 
-        def _blocking_query():
+        def _blocking_query() -> dict[str, Any]:
             """Blocking PostgreSQL operations."""
             import psycopg2
 
@@ -2237,7 +2222,7 @@ class ManifestInjector:
             Dictionary with Kafka connection info, status, and topic count
         """
 
-        def _blocking_query():
+        def _blocking_query() -> dict[str, Any]:
             """Blocking Kafka operations."""
             from kafka import KafkaAdminClient
 
@@ -2325,30 +2310,36 @@ class ManifestInjector:
 
     async def _query_docker_services(self) -> list[dict[str, Any]]:
         """
-        Query Docker for running archon-* services.
+        Query Docker for running ONEX-related services.
 
         Returns:
             List of Docker service info dictionaries
         """
 
-        def _blocking_query():
+        def _blocking_query() -> list[dict[str, Any]]:
             """Blocking Docker operations."""
             import docker
 
             client = docker.from_env()
             containers = client.containers.list()
 
-            # Filter for archon-* and omninode-* services
+            # Filter for onex-*, archon-*, and omninode-* services
             services = []
             for container in containers:
                 name = container.name
-                if name.startswith("archon-") or name.startswith("omninode-"):
+                if name and (
+                    name.startswith("onex-")
+                    or name.startswith("archon-")
+                    or name.startswith("omninode-")
+                ):
                     services.append(
                         {
                             "name": name,
                             "status": container.status,
                             "image": (
-                                container.image.tags[0] if container.image.tags else "unknown"
+                                container.image.tags[0]
+                                if container.image and container.image.tags
+                                else "unknown"
                             ),
                             "ports": (
                                 [
@@ -2382,7 +2373,7 @@ class ManifestInjector:
             Dictionary with Memgraph connection info, statistics, and insights
         """
 
-        def _blocking_memgraph_query():
+        def _blocking_memgraph_query() -> dict[str, Any]:
             """Blocking Memgraph operations using neo4j driver."""
             try:
                 from neo4j import GraphDatabase
@@ -2393,9 +2384,11 @@ class ManifestInjector:
                 }
 
             driver = None
+            # Get Memgraph URL from environment (default to localhost for development)
+            memgraph_url = os.environ.get("MEMGRAPH_URL", "bolt://localhost:7687")
             try:
-                # Connect to Memgraph at bolt://192.168.86.101:7687
-                driver = GraphDatabase.driver("bolt://192.168.86.101:7687")
+                # Connect to Memgraph
+                driver = GraphDatabase.driver(memgraph_url)
 
                 with driver.session() as session:
                     # Query file statistics by language
@@ -2455,7 +2448,7 @@ class ManifestInjector:
                     pattern_files = pattern_count["pattern_file_count"] if pattern_count else 0
 
                     return {
-                        "url": "bolt://192.168.86.101:7687",
+                        "url": memgraph_url,
                         "status": "connected",
                         "file_stats": file_stats,
                         "relationships": relationships,
@@ -2466,7 +2459,7 @@ class ManifestInjector:
 
             except Exception as e:
                 return {
-                    "url": "bolt://192.168.86.101:7687",
+                    "url": memgraph_url,
                     "status": "unavailable",
                     "error": f"Connection failed: {str(e)}",
                 }
@@ -2480,20 +2473,20 @@ class ManifestInjector:
         except Exception as e:
             self.logger.debug(f"Memgraph query failed: {e}")
             return {
-                "url": "bolt://192.168.86.101:7687",
+                "url": memgraph_url,
                 "status": "unavailable",
                 "error": str(e),
             }
 
-    async def _query_archon_search(
+    async def _query_semantic_search(
         self,
         query: str = "ONEX patterns implementation examples",
         limit: int = 10,
     ) -> dict[str, Any]:
         """
-        Query archon-search service for semantic code search.
+        Query semantic search service for code search.
 
-        Uses archon-search hybrid search (full-text + semantic) to find
+        Uses hybrid search (full-text + semantic) to find
         relevant code examples, ONEX patterns, and implementation examples
         from the codebase graph (Memgraph + embeddings).
 
@@ -2521,14 +2514,14 @@ class ManifestInjector:
                 "content": "...",  # Full file content
                 "relevance_score": 0.85,
                 "semantic_score": 0.82,
-                "project_name": "omniarchon",
+                "project_name": "omniclaude",
                 ...
             }
         """
         import time
 
         start_time = time.time()
-        archon_search_url = "http://192.168.86.101:8055"
+        semantic_search_url = str(settings.semantic_search_url)
 
         try:
             import aiohttp
@@ -2541,7 +2534,7 @@ class ManifestInjector:
                 }
 
                 async with session.post(
-                    f"{archon_search_url}/search",
+                    f"{semantic_search_url}/search",
                     json=payload,
                     timeout=aiohttp.ClientTimeout(total=5.0),
                 ) as response:
@@ -2562,7 +2555,7 @@ class ManifestInjector:
                     else:
                         error_text = await response.text()
                         self.logger.warning(
-                            f"archon-search returned HTTP {response.status}: {error_text}"
+                            f"semantic-search returned HTTP {response.status}: {error_text}"
                         )
                         return {
                             "status": "unavailable",
@@ -2577,7 +2570,7 @@ class ManifestInjector:
             }
         except TimeoutError:
             query_time_ms = (time.time() - start_time) * 1000
-            self.logger.warning(f"archon-search query timed out after {query_time_ms:.0f}ms")
+            self.logger.warning(f"semantic-search query timed out after {query_time_ms:.0f}ms")
             return {
                 "status": "unavailable",
                 "error": f"Query timed out after {query_time_ms:.0f}ms",
@@ -2585,7 +2578,7 @@ class ManifestInjector:
             }
         except Exception as e:
             query_time_ms = (time.time() - start_time) * 1000
-            self.logger.warning(f"archon-search query failed: {e}", exc_info=True)
+            self.logger.warning(f"semantic-search query failed: {e}", exc_info=True)
             return {
                 "status": "error",
                 "error": f"Connection failed: {str(e)}",
@@ -2777,7 +2770,8 @@ class ManifestInjector:
 
         try:
             # Get PostgreSQL connection details from environment
-            pg_host = os.environ.get("POSTGRES_HOST", "192.168.86.200")
+            # Default to localhost - production values should be set via .env
+            pg_host = os.environ.get("POSTGRES_HOST", "localhost")
             pg_port = int(os.environ.get("POSTGRES_PORT", "5436"))
             pg_user = os.environ.get("POSTGRES_USER", "postgres")
             pg_password = os.environ.get("POSTGRES_PASSWORD", "")
@@ -3527,9 +3521,7 @@ class ManifestInjector:
                 if path.name in ignored_dirs:
                     return True
                 # Check file extension
-                if path.suffix in ignored_extensions:
-                    return True
-                return False
+                return path.suffix in ignored_extensions
 
             def get_onex_node_type(file_path: Path) -> str | None:
                 """Detect ONEX node type from filename."""
@@ -3852,7 +3844,7 @@ class ManifestInjector:
             "infrastructure",  # Service connectivity info
             "models",  # AI models and ONEX node types
             "debug_intelligence",  # Historical workflow data
-            "archon_search",  # Semantic search capability
+            "semantic_search",  # Semantic search capability
         ]
 
         self.logger.info(f"Including all {len(sections)} core sections for complete context")
@@ -3881,7 +3873,7 @@ class ManifestInjector:
                 "purpose": "Dynamic system context via event bus",
                 "target_agents": ["polymorphic-agent", "all-specialized-agents"],
                 "update_frequency": "on_demand",
-                "source": "archon-intelligence-adapter",
+                "source": "onex-intelligence-adapter",
             }
         }
 
@@ -3944,24 +3936,26 @@ class ManifestInjector:
         else:
             manifest["debug_loop"] = self._format_debug_loop_result(debug_loop_result)
 
-        # Extract archon_search results
-        archon_search_result = results.get("archon_search", {})
-        if isinstance(archon_search_result, Exception):
-            self.logger.warning(f"Archon search query failed: {archon_search_result}")
-            manifest["archon_search"] = {"error": str(archon_search_result)}
+        # Extract semantic_search results
+        semantic_search_result = results.get("semantic_search", {})
+        if isinstance(semantic_search_result, Exception):
+            self.logger.warning(f"Semantic search query failed: {semantic_search_result}")
+            manifest["semantic_search"] = {"error": str(semantic_search_result)}
         else:
-            manifest["archon_search"] = self._format_archon_search_result(archon_search_result)
+            manifest["semantic_search"] = self._format_semantic_search_result(
+                semantic_search_result
+            )
 
         # Add action logging (always included - uses local context only)
         # No Kafka query needed - correlation_id and agent_name come from self
         manifest["action_logging"] = {
             "status": "available",
-            "framework": "ActionLogger (agents.lib.action_logger)",
+            "framework": "ActionLogger (omniclaude.lib.core.action_logger)",
             "kafka_integration": {
                 "enabled": True,
                 "topic": "agent-actions",
                 "bootstrap_servers": os.environ.get(
-                    "KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:29092"
+                    "KAFKA_BOOTSTRAP_SERVERS", ""
                 ),
             },
             "correlation_tracking": True,
@@ -4038,7 +4032,7 @@ class ManifestInjector:
 
         # Build deduplicated list with enhanced metadata
         deduplicated = []
-        for name, group in pattern_groups.items():
+        for _name, group in pattern_groups.items():
             pattern = group["pattern"].copy()
 
             # Add aggregated metadata to pattern
@@ -4194,8 +4188,8 @@ class ManifestInjector:
             "query_time_ms": result.get("query_time_ms", 0),
         }
 
-    def _format_archon_search_result(self, result: dict[str, Any]) -> dict[str, Any]:
-        """Format archon-search query result into manifest structure."""
+    def _format_semantic_search_result(self, result: dict[str, Any]) -> dict[str, Any]:
+        """Format semantic search query result into manifest structure."""
         if result.get("status") != "success":
             return {
                 "status": result.get("status", "error"),
@@ -4272,9 +4266,9 @@ class ManifestInjector:
             "infrastructure": {
                 "remote_services": {
                     "postgresql": {
-                        "host": "192.168.86.200",
-                        "port": 5436,
-                        "database": "omninode_bridge",
+                        "host": os.environ.get("POSTGRES_HOST", "localhost"),
+                        "port": int(os.environ.get("POSTGRES_PORT", "5436")),
+                        "database": os.environ.get("POSTGRES_DATABASE", "omninode_bridge"),
                         "note": "Connection details only - schemas unavailable",
                     },
                     "kafka": {
@@ -4304,7 +4298,7 @@ class ManifestInjector:
                     ]
                 },
             },
-            "archon_search": {
+            "semantic_search": {
                 "status": "unavailable",
                 "error": "Intelligence service unavailable (fallback manifest)",
             },
@@ -4323,7 +4317,7 @@ class ManifestInjector:
                      Available: ['patterns', 'models', 'infrastructure',
                                 'database_schemas', 'debug_intelligence',
                                 'filesystem', 'debug_loop', 'action_logging',
-                                'archon_search']
+                                'semantic_search']
 
         Returns:
             Formatted string ready for prompt injection
@@ -4363,7 +4357,7 @@ class ManifestInjector:
             "filesystem": self._format_filesystem,
             "debug_loop": self._format_debug_loop,
             "action_logging": self._format_action_logging,
-            "archon_search": self._format_archon_search,
+            "semantic_search": self._format_semantic_search,
         }
 
         sections_to_include = sections or list(available_sections.keys())
@@ -4379,7 +4373,7 @@ class ManifestInjector:
         # Add note about minimal manifest
         if metadata.get("source") == "fallback":
             output.append("⚠️  NOTE: This is a minimal fallback manifest.")
-            output.append("Full system context requires archon-intelligence-adapter service.")
+            output.append("Full system context requires onex-intelligence-adapter service.")
             output.append("")
 
         output.append("=" * 70)
@@ -4781,16 +4775,19 @@ class ManifestInjector:
 
         return "\n".join(output)
 
-    def _format_archon_search(self, search_data: dict[str, Any]) -> str:
-        """Format archon-search section with semantic search results."""
-        output = ["ARCHON SEARCH RESULTS:"]
+    def _format_semantic_search(self, search_data: dict[str, Any]) -> str:
+        """Format semantic search section with search results."""
+        output = ["SEMANTIC SEARCH RESULTS:"]
 
         # Check status
         status = search_data.get("status", "unknown")
 
+        # Get semantic search URL from settings
+        semantic_url = str(settings.semantic_search_url)
+
         if status == "error" or status == "unavailable":
             error_msg = search_data.get("error", "Unknown error")
-            output.append("  Service: http://192.168.86.101:8055 (unavailable)")
+            output.append(f"  Service: {semantic_url} (unavailable)")
             output.append(f"  Status: ❌ {error_msg}")
             return "\n".join(output)
 
@@ -4801,7 +4798,7 @@ class ManifestInjector:
         returned_results = search_data.get("returned_results", 0)
         query_time_ms = search_data.get("query_time_ms", 0)
 
-        output.append("  Service: http://192.168.86.101:8055")
+        output.append(f"  Service: {semantic_url}")
         output.append("  Status: ✅ Available")
         output.append(f'  Query: "{query}"')
         output.append(f"  Mode: {mode} (full-text + semantic)")
@@ -4915,7 +4912,7 @@ class ManifestInjector:
         # Initialization code
         output.append("  Initialize ActionLogger:")
         output.append("  ```python")
-        output.append("  from agents.lib.action_logger import ActionLogger")
+        output.append("  from omniclaude.lib.core.action_logger import ActionLogger")
         output.append("")
         output.append("  logger = ActionLogger(")
         output.append(f'      agent_name="{agent_name}",')
@@ -5047,11 +5044,11 @@ class ManifestInjector:
             filesystem_files_count = filesystem_data.get("total_files", 0)
             filesystem_directories_count = filesystem_data.get("total_directories", 0)
 
-            # Get formatted text (generate if not cached)
-            if self._cached_formatted:
-                formatted_text = self._cached_formatted
-            else:
-                formatted_text = self.format_for_prompt()
+            # Get formatted text
+            # For fresh manifests, invalidate cache to ensure formatted text matches new data
+            if not from_cache:
+                self._cached_formatted = None
+            formatted_text = self._cached_formatted or self.format_for_prompt()
 
             # Determine sections included
             sections_included = list(manifest.keys())

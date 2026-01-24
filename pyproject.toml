@@ -4,12 +4,14 @@ version = "0.1.0"
 description = "Claude Code hooks + learning loop integration"
 requires-python = ">=3.12,<4.0"
 dependencies = [
-    "omnibase-core>=0.8.0,<0.9.0",
+    "omnibase-core>=0.9.1,<0.10.0",
     "omnibase-spi>=0.5.0,<0.6.0",
-    "omnibase-infra>=0.2.1,<0.3.0",
+    "omnibase-infra>=0.2.2,<0.3.0",
     "pydantic>=2.9.0",
     "pydantic-settings>=2.6.0",
+    "cachetools>=5.0.0",
     "click>=8.1.0",
+    "asyncpg>=0.29.0",
 ]
 
 [dependency-groups]
@@ -24,6 +26,12 @@ dev = [
     "coverage[toml]>=7.4.0",
     "psutil>=5.9.0",
     "kafka-python>=2.3.0",
+    "types-pyyaml>=6.0.12.20250915",
+    "types-requests>=2.32.4.20260107",
+    "types-psutil>=7.2.1.20260116",
+    "types-psycopg2>=2.9.21.20251012",
+    "types-docker>=7.1.0.20260109",
+    "bandit>=1.9.3",
 ]
 
 [project.scripts]
@@ -39,7 +47,7 @@ packages = ["src/omniclaude"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-exclude = ["_archive"]
+exclude = ["_archive", "src/omniclaude/lib"]
 
 [tool.ruff.lint]
 select = [
@@ -61,6 +69,7 @@ ignore = [
 # Tests often modify sys.path before imports
 "tests/**/test_*.py" = ["E402"]
 "tests/*.py" = ["E402"]
+# Note: src/omniclaude/lib/ is fully excluded in [tool.ruff] exclude - legacy code, will be deleted post-Beta
 
 [tool.ruff.lint.isort]
 known-first-party = ["omniclaude"]
@@ -71,9 +80,15 @@ strict = true
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
+exclude = ["src/omniclaude/lib/"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "unit: Unit tests that don't require external services",
+    "integration: Integration tests that may require external services",
+    "slow: Slow tests that may take significant time to run",
+]

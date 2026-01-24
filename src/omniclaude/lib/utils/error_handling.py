@@ -20,6 +20,7 @@ import os
 import sys
 import time
 import traceback
+from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
@@ -27,7 +28,7 @@ import requests
 
 
 class PatternTrackingLogger:
-    def __init__(self, log_file: str | None = None):
+    def __init__(self, log_file: str | None = None) -> None:
         if log_file:
             self.log_file = log_file
         else:
@@ -53,17 +54,19 @@ class PatternTrackingLogger:
         console_handler.setFormatter(console_formatter)
         self.logger.addHandler(console_handler)
 
-    def log_success(self, operation: str, details: dict[str, Any]):
+    def log_success(self, operation: str, details: dict[str, Any]) -> None:
         """Log successful operations"""
         message = f"✅ {operation}: {json.dumps(details, indent=2)}"
         self.logger.info(message)
 
-    def log_warning(self, operation: str, details: dict[str, Any]):
+    def log_warning(self, operation: str, details: dict[str, Any]) -> None:
         """Log warnings"""
         message = f"⚠️ {operation}: {json.dumps(details, indent=2)}"
         self.logger.warning(message)
 
-    def log_error(self, operation: str, error: Exception, context: dict[str, Any] | None = None):
+    def log_error(
+        self, operation: str, error: Exception, context: dict[str, Any] | None = None
+    ) -> None:
         """Log errors with full context"""
         error_details = {
             "operation": operation,
@@ -75,7 +78,7 @@ class PatternTrackingLogger:
         message = f"❌ {operation}: {json.dumps(error_details, indent=2)}"
         self.logger.error(message)
 
-    def log_debug(self, operation: str, details: dict[str, Any]):
+    def log_debug(self, operation: str, details: dict[str, Any]) -> None:
         """Log debug information"""
         message = f"🔍 {operation}: {json.dumps(details, indent=2)}"
         self.logger.debug(message)
@@ -86,9 +89,9 @@ class PatternTrackingLogger:
 
 
 class PatternTrackingErrorHandler:
-    def __init__(self, logger: PatternTrackingLogger):
+    def __init__(self, logger: PatternTrackingLogger) -> None:
         self.logger = logger
-        self.retryable_errors = [
+        self.retryable_errors: list[type[Exception]] = [
             requests.exceptions.ConnectionError,
             requests.exceptions.Timeout,
             requests.exceptions.ReadTimeout,
@@ -100,9 +103,6 @@ class PatternTrackingErrorHandler:
     ) -> dict[str, Any]:
         """Handle API-related errors, return handling information"""
         error_type = type(error).__name__
-
-        # Determine if error is retryable
-        is_retryable = any(isinstance(error, error_class) for error_class in self.retryable_errors)
 
         # Initialize retry_delay_seconds to avoid unbound variable
         retry_delay_seconds: int = 5
@@ -148,7 +148,10 @@ class PatternTrackingErrorHandler:
         else:
             error_category = "unknown"
             suggestion = f"Unknown error type: {error_type}. Check the error details."
-            retry_suggested = False
+            # Only compute retryable check for unknown error types where it's needed
+            retry_suggested = any(
+                isinstance(error, error_class) for error_class in self.retryable_errors
+            )
 
         # Log the error with enhanced context
         enhanced_context = {
@@ -173,7 +176,7 @@ class PatternTrackingErrorHandler:
     def handle_validation_error(
         self,
         operation: str,
-        validation_errors: list,
+        validation_errors: list[Any],
         context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Handle data validation errors"""
@@ -213,14 +216,14 @@ class PatternTrackingErrorHandler:
 class CircuitBreaker:
     """Simple circuit breaker to prevent cascading failures"""
 
-    def __init__(self, failure_threshold: int = 5, timeout: int = 60):
+    def __init__(self, failure_threshold: int = 5, timeout: int = 60) -> None:
         self.failure_threshold = failure_threshold
         self.timeout = timeout
         self.failure_count = 0
         self.last_failure_time: float | None = None
         self.state = "CLOSED"  # CLOSED, OPEN, HALF_OPEN
 
-    def call(self, func, *args, **kwargs):
+    def call(self, func: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
         """Execute function with circuit breaker protection"""
         if self.state == "OPEN":
             if (
@@ -249,7 +252,7 @@ class CircuitBreaker:
 
 def safe_execute_operation(
     operation_name: str,
-    operation_func,
+    operation_func: Callable[[], Any],
     logger: PatternTrackingLogger,
     error_handler: PatternTrackingErrorHandler,
     max_retries: int = 3,
@@ -260,10 +263,7 @@ def safe_execute_operation(
     """
     for attempt in range(max_retries + 1):
         try:
-            if circuit_breaker:
-                result = circuit_breaker.call(operation_func)
-            else:
-                result = operation_func()
+            result = circuit_breaker.call(operation_func) if circuit_breaker else operation_func()
 
             if attempt > 0:
                 logger.log_success(
@@ -343,12 +343,12 @@ def get_default_error_handler() -> PatternTrackingErrorHandler:
 
 
 # Convenience functions for quick usage
-def log_success(operation: str, details: dict[str, Any]):
+def log_success(operation: str, details: dict[str, Any]) -> None:
     """Quick success logging"""
     get_default_logger().log_success(operation, details)
 
 
-def log_error(operation: str, error: Exception, context: dict[str, Any] | None = None):
+def log_error(operation: str, error: Exception, context: dict[str, Any] | None = None) -> None:
     """Quick error logging"""
     get_default_logger().log_error(operation, error, context)
 

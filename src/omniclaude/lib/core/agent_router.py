@@ -36,30 +36,8 @@ from typing import Any, cast
 
 import yaml
 
-# ONEX-compliant error handling with fallback
-try:
-    from agents.lib.errors import EnumCoreErrorCode, OnexError
-except ImportError:
-    from enum import Enum
-
-    class EnumCoreErrorCode(str, Enum):
-        """Fallback error codes for ONEX compliance."""
-
-        VALIDATION_ERROR = "VALIDATION_ERROR"
-        CONFIGURATION_ERROR = "CONFIGURATION_ERROR"
-        INITIALIZATION_ERROR = "INITIALIZATION_ERROR"
-        OPERATION_FAILED = "OPERATION_FAILED"
-
-    class OnexError(Exception):
-        """Fallback OnexError for ONEX compliance."""
-
-        def __init__(self, code: EnumCoreErrorCode, message: str, details: dict | None = None):
-            self.code = code
-            self.error_code = code
-            self.message = message
-            self.details = details or {}
-            super().__init__(message)
-
+# ONEX-compliant error handling from shared module
+from omniclaude.lib.errors import EnumCoreErrorCode, OnexError
 
 logger = logging.getLogger(__name__)
 
@@ -179,7 +157,7 @@ class AgentRouter:
 
             # Convert relative definition_path to absolute paths
             registry_dir = Path(registry_path).parent
-            for agent_name, agent_data in self.registry.get("agents", {}).items():
+            for _agent_name, agent_data in self.registry.get("agents", {}).items():
                 if "definition_path" in agent_data:
                     def_path = agent_data["definition_path"]
                     # Convert relative path to absolute
@@ -234,7 +212,7 @@ class AgentRouter:
                 },
             )
             raise OnexError(
-                code=EnumCoreErrorCode.INITIALIZATION_ERROR,
+                code=EnumCoreErrorCode.INITIALIZATION_FAILED,
                 message=f"Router initialization failed: {e}",
                 details={
                     "component": "AgentRouter",
@@ -553,8 +531,7 @@ class AgentRouter:
                 # Fallback to synchronous local routing
                 logger.info("Falling back to local synchronous routing")
                 # Run sync route in executor to avoid blocking event loop
-                loop = asyncio.get_event_loop()
-                return await loop.run_in_executor(
+                return await asyncio.get_running_loop().run_in_executor(
                     None,
                     lambda: self.route(
                         user_request=user_request,
@@ -723,11 +700,11 @@ class AgentRouter:
 
         return stats
 
-    def invalidate_cache(self):
+    def invalidate_cache(self) -> None:
         """Invalidate entire routing cache."""
         self.cache.clear()
 
-    def reload_registry(self, registry_path: str | None = None):
+    def reload_registry(self, registry_path: str | None = None) -> None:
         """
         Reload agent registry.
 
@@ -761,7 +738,7 @@ class AgentRouter:
 
             # Convert relative definition_path to absolute paths
             registry_dir = Path(path).parent
-            for agent_name, agent_data in self.registry.get("agents", {}).items():
+            for _agent_name, agent_data in self.registry.get("agents", {}).items():
                 if "definition_path" in agent_data:
                     def_path = agent_data["definition_path"]
                     # Convert relative path to absolute

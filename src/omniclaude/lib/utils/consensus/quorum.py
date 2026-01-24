@@ -48,7 +48,7 @@ class ModelConfig:
     api_key: str | None = None
     timeout: float = 10.0
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate and set defaults."""
         if self.endpoint is None:
             if self.provider == ModelProvider.OLLAMA:
@@ -688,10 +688,7 @@ Provide your evaluation:"""
             )
 
         # Calculate consensus score
-        if total_weight > 0:
-            consensus_score = weighted_score_sum / total_weight
-        else:
-            consensus_score = 0.5
+        consensus_score = weighted_score_sum / total_weight if total_weight > 0 else 0.5
 
         # Calculate confidence based on score variance
         if len(valid_scores) > 1:
@@ -727,7 +724,7 @@ Provide your evaluation:"""
 
 
 # CLI interface for testing
-async def main():
+async def main() -> None:
     """Test CLI interface for AI Quorum system."""
 
     if len(sys.argv) < 3:

@@ -12,6 +12,7 @@ Uses multiple matching strategies:
 
 import re
 from difflib import SequenceMatcher
+from typing import Any
 
 
 class TriggerMatcher:
@@ -22,7 +23,7 @@ class TriggerMatcher:
     multiple matching strategies with confidence scoring.
     """
 
-    def __init__(self, agent_registry: dict):
+    def __init__(self, agent_registry: dict[str, Any]):
         """
         Initialize matcher with agent registry.
 
@@ -37,7 +38,7 @@ class TriggerMatcher:
         self.registry = agent_registry
         self.trigger_index = self._build_trigger_index()
 
-    def _validate_registry(self, registry: dict) -> None:
+    def _validate_registry(self, registry: dict[str, Any]) -> None:
         """
         Validate registry structure before use.
 
@@ -463,11 +464,7 @@ class TriggerMatcher:
                 + r"\b",
                 r"\b" + re.escape(trigger_lower) + r"\b.*(agent|coordinator|for workflow)",
             ]
-            for pattern in action_patterns:
-                if re.search(pattern, request_lower):
-                    return True
-            # No action context found for long trigger
-            return False
+            return any(re.search(pattern, request_lower) for pattern in action_patterns)
 
         # For short triggers like "poly" or "polly":
         # Require action/invocation context
@@ -480,13 +477,7 @@ class TriggerMatcher:
             + r"\b.*(coordinate|manage|handle|execute|for workflow)",
         ]
 
-        for pattern in action_patterns:
-            if re.search(pattern, request_lower):
-                return True  # Strong signal of agent invocation
-
-        # Default for short triggers without action context: REJECT
-        # This is more conservative but prevents false positives
-        return False
+        return any(re.search(pattern, request_lower) for pattern in action_patterns)
 
 
 # Standalone test

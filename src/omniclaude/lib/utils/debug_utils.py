@@ -32,17 +32,29 @@ from typing import Any
 
 import requests
 
-from config import settings
+from omniclaude.config import settings
 
-# Service URL configuration from environment
+# Service URL configuration from environment with settings fallback
 INTELLIGENCE_SERVICE_URL = os.environ.get(
-    "INTELLIGENCE_SERVICE_URL", str(settings.archon_intelligence_url)
+    "INTELLIGENCE_SERVICE_URL", str(settings.intelligence_service_url)
 )
-MAIN_SERVER_URL = os.environ.get("MAIN_SERVER_URL", "http://localhost:8181")
-# Support both MCP_SERVER_URL and ARCHON_MCP_URL for backward compatibility
-MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL") or os.environ.get(
-    "ARCHON_MCP_URL", "http://localhost:8051"
+MAIN_SERVER_URL = os.environ.get("MAIN_SERVER_URL", str(settings.main_server_url))
+# Support both MCP_SERVER_URL and legacy ONEX_MCP_URL/ARCHON_MCP_URL for backward compatibility
+# Note: MCP server URL is not yet in settings; uses environment variable with localhost fallback
+MCP_SERVER_URL = (
+    os.environ.get("MCP_SERVER_URL")
+    or os.environ.get("ONEX_MCP_URL")
+    or os.environ.get("ARCHON_MCP_URL", "http://localhost:8051")
 )
+
+# Docker container name patterns for health checks
+# Note: These are container name filters for `docker ps --filter`, not connection URLs.
+# The patterns are intentionally broad (e.g., "postgres" matches any container with postgres
+# in the name) to support various deployment naming conventions. This is appropriate for
+# diagnostic utilities where we want to detect any relevant container, not connect to it.
+DOCKER_CONTAINER_POSTGRES = "postgres"
+DOCKER_CONTAINER_MEMGRAPH = "memgraph"
+DOCKER_CONTAINER_QDRANT = "qdrant"
 
 
 def check_running_services() -> dict[str, Any]:
@@ -142,7 +154,7 @@ def check_running_services() -> dict[str, Any]:
     try:
         # Try to check if PostgreSQL container is running
         result = subprocess.run(  # nosec B607 B603 - controlled docker call with hardcoded args
-            ["docker", "ps", "--filter", "name=postgres", "--format", "{{json .}}"],
+            ["docker", "ps", "--filter", f"name={DOCKER_CONTAINER_POSTGRES}", "--format", "{{json .}}"],
             capture_output=True,
             text=True,
             timeout=10,
@@ -152,7 +164,7 @@ def check_running_services() -> dict[str, Any]:
                 json.loads(line) for line in result.stdout.strip().split("\n") if line.strip()
             ]
             postgres_containers = [
-                c for c in docker_containers if "postgres" in c.get("Names", "").lower()
+                c for c in docker_containers if DOCKER_CONTAINER_POSTGRES in c.get("Names", "").lower()
             ]
 
             if postgres_containers:
@@ -179,7 +191,7 @@ def check_running_services() -> dict[str, Any]:
     # Check Memgraph (if available)
     try:
         result = subprocess.run(  # nosec B607 B603 - controlled docker call with hardcoded args
-            ["docker", "ps", "--filter", "name=memgraph", "--format", "{{json .}}"],
+            ["docker", "ps", "--filter", f"name={DOCKER_CONTAINER_MEMGRAPH}", "--format", "{{json .}}"],
             capture_output=True,
             text=True,
             timeout=10,
@@ -189,7 +201,7 @@ def check_running_services() -> dict[str, Any]:
                 json.loads(line) for line in result.stdout.strip().split("\n") if line.strip()
             ]
             memgraph_containers = [
-                c for c in docker_containers if "memgraph" in c.get("Names", "").lower()
+                c for c in docker_containers if DOCKER_CONTAINER_MEMGRAPH in c.get("Names", "").lower()
             ]
 
             if memgraph_containers:
@@ -216,7 +228,7 @@ def check_running_services() -> dict[str, Any]:
     # Check Qdrant (if available)
     try:
         result = subprocess.run(  # nosec B607 B603 - controlled docker call with hardcoded args
-            ["docker", "ps", "--filter", "name=qdrant", "--format", "{{json .}}"],
+            ["docker", "ps", "--filter", f"name={DOCKER_CONTAINER_QDRANT}", "--format", "{{json .}}"],
             capture_output=True,
             text=True,
             timeout=10,
@@ -226,7 +238,7 @@ def check_running_services() -> dict[str, Any]:
                 json.loads(line) for line in result.stdout.strip().split("\n") if line.strip()
             ]
             qdrant_containers = [
-                c for c in docker_containers if "qdrant" in c.get("Names", "").lower()
+                c for c in docker_containers if DOCKER_CONTAINER_QDRANT in c.get("Names", "").lower()
             ]
 
             if qdrant_containers:
@@ -359,7 +371,7 @@ def check_python_environment() -> dict[str, Any]:
     return env_info
 
 
-def print_debug_status():
+def print_debug_status() -> None:
     """Print comprehensive debug status"""
     print("🔍 PATTERN TRACKING DEBUG STATUS", file=sys.stderr)
     print("=" * 60, file=sys.stderr)
@@ -551,7 +563,7 @@ def test_pattern_tracking_flow() -> dict[str, Any]:
     return test_results
 
 
-def main():
+def main() -> None:
     """Run all debug checks when script is executed directly"""
     print_debug_status()
     print("\n")

@@ -49,92 +49,62 @@ from uuid import uuid4
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from aiokafka.errors import KafkaError as AIOKafkaError
 
-# CRITICAL: Add project root FIRST to avoid config module conflicts
-# There's a config module in agents/lib/config/ that conflicts with main config/
-# Note: 4 parents needed (core/ -> lib/ -> claude/ -> project_root)
-_project_root = PathLib(__file__).parent.parent.parent.parent
-if str(_project_root) not in sys.path:
-    sys.path.insert(0, str(_project_root))
+# NOTE: omniclaude.* imports require package to be installed (pip install -e .)
+# No sys.path manipulation needed for package imports when properly installed.
 
-# Add routing adapter schemas to path (AFTER project root)
-_routing_adapter_path = str(_project_root / "services" / "routing_adapter")
+# Add routing adapter schemas to path - REQUIRED because services/routing_adapter/
+# is not an installable package; it contains Pydantic models shared with the
+# routing_adapter service. Path: <project_root>/services/routing_adapter/schemas/
+_project_root = PathLib(__file__).parent.parent.parent.parent  # core/ -> lib/ -> omniclaude/ -> src/
+_routing_adapter_path = str(_project_root.parent / "services" / "routing_adapter")
 if _routing_adapter_path not in sys.path:
     sys.path.append(_routing_adapter_path)
 
 # Import routing event schemas
+# Note: Schemas are optional - if not available, RoutingEventClient cannot be used
+# but route_via_events() will fall back to local AgentRouter
 try:
     from schemas.model_routing_event_envelope import ModelRoutingEventEnvelope
     from schemas.model_routing_request import ModelRoutingOptions
 
     SCHEMAS_AVAILABLE = True
-except ImportError as e:
+except ImportError:
     SCHEMAS_AVAILABLE = False
-    logging.error(f"Failed to import routing schemas: {e}")
+    # DEBUG level: This is expected when routing_adapter schemas are not deployed
+    # The fallback to local AgentRouter in route_via_events() handles this gracefully
+    logging.debug(
+        "Routing schemas not available (services/routing_adapter/schemas/). "
+        "Event-based routing disabled; will fall back to local AgentRouter."
+    )
 
 logger = logging.getLogger(__name__)
 
-# ONEX-compliant error handling with fallback
-try:
-    from omniclaude.lib.errors import EnumCoreErrorCode, OnexError
-except ImportError:
-    try:
-        from agents.lib.errors import EnumCoreErrorCode, OnexError
-    except ImportError:
-        from enum import Enum
+# ONEX-compliant error handling from shared module
+from omniclaude.lib.errors import EnumCoreErrorCode, OnexError
 
-        class EnumCoreErrorCode(str, Enum):
-            """Fallback error codes for ONEX compliance."""
+# Topic building for environment-prefixed Kafka topics
+from omniclaude.hooks.topics import TopicBase, build_topic
 
-            VALIDATION_ERROR = "VALIDATION_ERROR"
-            CONFIGURATION_ERROR = "CONFIGURATION_ERROR"
-            OPERATION_FAILED = "OPERATION_FAILED"
-
-        class OnexError(Exception):
-            """Fallback OnexError for ONEX compliance."""
-
-            def __init__(self, code: EnumCoreErrorCode, message: str, details: dict | None = None):
-                self.code = code
-                self.error_code = code
-                self.message = message
-                self.details = details or {}
-                super().__init__(message)
-
-
-# Import agent execution logger for observability
+# Import agent execution logger for observability (optional integration)
 try:
     from omniclaude.lib.agent_execution_logger import log_agent_execution
 
     AGENT_LOGGER_AVAILABLE = True
-except ImportError:
-    try:
-        from agents.lib.agent_execution_logger import log_agent_execution
+except ImportError:  # nosec B110 - Optional dependency, graceful degradation
+    AGENT_LOGGER_AVAILABLE = False
+    logging.debug("Agent execution logger not available - execution logging disabled")
 
-        AGENT_LOGGER_AVAILABLE = True
-    except ImportError:
-        AGENT_LOGGER_AVAILABLE = False
-        logging.debug("Agent execution logger not available - execution logging disabled")
+# FAIL FAST: Required configuration
+from omniclaude.config import settings
 
-try:
-    from config import settings
-
-    SETTINGS_AVAILABLE = True
-except ImportError:
-    SETTINGS_AVAILABLE = False
-    logging.warning("config.settings not available, falling back to environment variables")
-
-# Import Slack notifier for error notifications
+# Import Slack notifier for error notifications (optional integration)
 try:
     from omniclaude.lib.slack_notifier import get_slack_notifier
 
     SLACK_NOTIFIER_AVAILABLE = True
-except ImportError:
-    try:
-        from agents.lib.slack_notifier import get_slack_notifier
-
-        SLACK_NOTIFIER_AVAILABLE = True
-    except ImportError:
-        SLACK_NOTIFIER_AVAILABLE = False
-        logging.warning("SlackNotifier not available - error notifications disabled")
+except ImportError:  # nosec B110 - Optional dependency, graceful degradation
+    SLACK_NOTIFIER_AVAILABLE = False
+    logging.warning("SlackNotifier not available - error notifications disabled")
 
 
 class RoutingEventClient:
@@ -181,12 +151,6 @@ class RoutingEventClient:
             )
     """
 
-    # Kafka topic names (following EVENT_BUS_INTEGRATION_GUIDE standard)
-    # Format: omninode.{domain}.{entity}.{action}.v{major}
-    TOPIC_REQUEST = "omninode.agent.routing.requested.v1"
-    TOPIC_COMPLETED = "omninode.agent.routing.completed.v1"
-    TOPIC_FAILED = "omninode.agent.routing.failed.v1"
-
     def __init__(
         self,
         bootstrap_servers: str | None = None,
@@ -198,8 +162,8 @@ class RoutingEventClient:
 
         Args:
             bootstrap_servers: Kafka bootstrap servers
-                - External host: "localhost:9092" or "192.168.86.200:9092"
-                - Docker internal: "omninode-bridge-redpanda:9092"
+                - External host: "localhost:9092" or "kafka.example.com:9092"
+                - Docker internal: "kafka:9092"
             request_timeout_ms: Default timeout for requests in milliseconds
             consumer_group_id: Optional consumer group ID (default: auto-generated)
         """
@@ -217,20 +181,8 @@ class RoutingEventClient:
         # Bootstrap servers - use type-safe configuration if not provided
         if bootstrap_servers:
             self.bootstrap_servers = bootstrap_servers
-        elif SETTINGS_AVAILABLE:
-            self.bootstrap_servers = settings.get_effective_kafka_bootstrap_servers()
         else:
-            # This should not happen - settings should always be available
-            raise OnexError(
-                code=EnumCoreErrorCode.CONFIGURATION_ERROR,
-                message="config.settings not available. Cannot initialize RoutingEventClient.",
-                details={
-                    "component": "RoutingEventClient",
-                    "required_module": "config/settings.py",
-                    "required_env_var": "KAFKA_BOOTSTRAP_SERVERS",
-                    "suggestion": "Ensure config/settings.py is accessible and KAFKA_BOOTSTRAP_SERVERS is set in .env",
-                },
-            )
+            self.bootstrap_servers = settings.get_effective_kafka_bootstrap_servers()
 
         if not self.bootstrap_servers:
             raise OnexError(
@@ -240,18 +192,25 @@ class RoutingEventClient:
                     "component": "RoutingEventClient",
                     "operation": "initialization",
                     "current_value": self.bootstrap_servers,
-                    "suggestion": "Set KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:9092 in .env file",
+                    "suggestion": "Set KAFKA_BOOTSTRAP_SERVERS=localhost:9092 in .env file",
                 },
             )
         self.request_timeout_ms = request_timeout_ms
         self.consumer_group_id = consumer_group_id or f"omniclaude-routing-{uuid4().hex[:8]}"
 
+        # Build environment-prefixed topic names
+        # Uses settings.kafka_environment (dev/staging/prod) for proper topic routing
+        kafka_env = settings.kafka_environment
+        self.TOPIC_REQUEST = build_topic(kafka_env, TopicBase.ROUTING_REQUESTED)
+        self.TOPIC_COMPLETED = build_topic(kafka_env, TopicBase.ROUTING_COMPLETED)
+        self.TOPIC_FAILED = build_topic(kafka_env, TopicBase.ROUTING_FAILED)
+
         self._producer: AIOKafkaProducer | None = None
         self._consumer: AIOKafkaConsumer | None = None
         self._started = False
-        self._pending_requests: dict[str, asyncio.Future] = {}
+        self._pending_requests: dict[str, asyncio.Future[Any]] = {}
         self._consumer_ready = asyncio.Event()  # Signal when consumer is polling
-        self._consumer_task: asyncio.Task | None = None  # Store task to prevent GC
+        self._consumer_task: asyncio.Task[None] | None = None  # Store task to prevent GC
 
         self.logger = logging.getLogger(__name__)
 
@@ -272,14 +231,13 @@ class RoutingEventClient:
 
         # Validate required services before attempting connection
         # This follows coding guidelines for service validation at startup
-        if SETTINGS_AVAILABLE:
-            validation_errors = settings.validate_required_services()
-            # Filter to only Kafka-related errors for this client
-            kafka_errors = [e for e in validation_errors if "kafka" in e.lower()]
-            if kafka_errors:
-                self.logger.warning(f"Service validation warnings: {kafka_errors}")
-                # Log but don't fail - allow connection attempt to provide
-                # more specific error messages
+        validation_errors = settings.validate_required_services()
+        # Filter to only Kafka-related errors for this client
+        kafka_errors = [e for e in validation_errors if "kafka" in e.lower()]
+        if kafka_errors:
+            self.logger.warning(f"Service validation warnings: {kafka_errors}")
+            # Log but don't fail - allow connection attempt to provide
+            # more specific error messages
 
         # Validate bootstrap servers format
         if not self.bootstrap_servers or not isinstance(self.bootstrap_servers, str):
@@ -290,7 +248,7 @@ class RoutingEventClient:
                     "component": "RoutingEventClient",
                     "operation": "service_validation",
                     "bootstrap_servers": self.bootstrap_servers,
-                    "suggestion": "Set valid KAFKA_BOOTSTRAP_SERVERS in .env (e.g., 192.168.86.200:9092)",
+                    "suggestion": "Set valid KAFKA_BOOTSTRAP_SERVERS in .env (e.g., localhost:9092)",
                 },
             )
 
@@ -460,7 +418,7 @@ class RoutingEventClient:
                     try:
                         await self._consumer_task
                     except asyncio.CancelledError:
-                        pass  # Expected when cancelling
+                        pass  # nosec B110 - Expected when cancelling task
                 self.logger.debug("Consumer task cancelled successfully")
             except Exception as e:
                 self.logger.error(f"Error cancelling consumer task: {e}")
@@ -544,10 +502,7 @@ class RoutingEventClient:
 
         try:
             # Verify producer is connected
-            if self._producer is None:
-                return False
-
-            return True
+            return self._producer is not None
 
         except Exception as e:
             self.logger.warning(f"Health check failed: {e}")
@@ -836,7 +791,7 @@ class RoutingEventClient:
             OnexError: With OPERATION_FAILED if producer not initialized
         """
         # Create future for this request
-        future: asyncio.Future = asyncio.Future()
+        future: asyncio.Future[Any] = asyncio.Future()
         self._pending_requests[correlation_id] = future
 
         try:
@@ -922,10 +877,11 @@ class RoutingEventClient:
                         continue
 
                     # Determine event type (lowercase dot notation per EVENT_BUS_INTEGRATION_GUIDE)
+                    # Compare against TopicBase constant (base name without prefix) or full topic
                     event_type = response.get("event_type", "")
 
                     if (
-                        event_type == "omninode.agent.routing.completed.v1"
+                        event_type == TopicBase.ROUTING_COMPLETED
                         or msg.topic == self.TOPIC_COMPLETED
                     ):
                         # Success response
@@ -957,7 +913,7 @@ class RoutingEventClient:
                             )
 
                     elif (
-                        event_type == "omninode.agent.routing.failed.v1"
+                        event_type == TopicBase.ROUTING_FAILED
                         or msg.topic == self.TOPIC_FAILED
                     ):
                         # Error response
@@ -1030,12 +986,17 @@ class RoutingEventClientContext:
         await self.client.start()
         return self.client
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any,
+    ) -> bool:
         await self.client.stop()
         return False
 
 
-def _format_recommendations(recommendations: list) -> list[dict[str, Any]]:
+def _format_recommendations(recommendations: list[Any]) -> list[dict[str, Any]]:
     """
     Convert AgentRecommendation objects to dict format.
 
@@ -1106,19 +1067,15 @@ async def route_via_events(
         )
     """
     # Feature flag: USE_EVENT_ROUTING (default: True)
-    if SETTINGS_AVAILABLE:
-        use_events = settings.use_event_routing
-    else:
-        # Fallback for when settings not available
-        use_events = os.getenv("USE_EVENT_ROUTING", "true").lower() in (
-            "true",
-            "1",
-            "yes",
-        )
+    use_events = settings.use_event_routing
 
-    if not use_events and fallback_to_local:
+    # Skip event routing if schemas aren't available or feature is disabled
+    if (not use_events or not SCHEMAS_AVAILABLE) and fallback_to_local:
         # Skip events, go straight to local routing
-        logger.info("USE_EVENT_ROUTING=false, using local AgentRouter")
+        if not SCHEMAS_AVAILABLE:
+            logger.debug("Routing schemas not available, using local AgentRouter")
+        else:
+            logger.info("USE_EVENT_ROUTING=false, using local AgentRouter")
         from .agent_router import AgentRouter
 
         router = AgentRouter()
@@ -1129,7 +1086,10 @@ async def route_via_events(
         )
         return _format_recommendations(recommendations)
 
-    # Try event-based routing first
+    # Try event-based routing
+    # Capture error for fallback path (only used if fallback_to_local=True)
+    event_error: Exception | None = None
+
     try:
         async with RoutingEventClientContext(request_timeout_ms=timeout_ms) as client:
             return await client.request_routing(
@@ -1139,38 +1099,39 @@ async def route_via_events(
                 min_confidence=min_confidence,
                 timeout_ms=timeout_ms,
             )
-
     except (OnexError, AIOKafkaError) as e:
+        # If no fallback requested, re-raise immediately
+        if not fallback_to_local:
+            raise
+        # Capture error and continue to fallback
+        event_error = e
         logger.warning(f"Event-based routing failed: {e}")
 
-        if fallback_to_local:
-            # Fallback to local AgentRouter
-            logger.info("Falling back to local AgentRouter")
-            try:
-                from .agent_router import AgentRouter
+    # Fallback to local AgentRouter
+    # Note: Only reached when event routing failed AND fallback_to_local=True
+    logger.info("Falling back to local AgentRouter")
+    try:
+        from .agent_router import AgentRouter
 
-                router = AgentRouter()
-                recommendations = router.route(
-                    user_request=user_request,
-                    context=context or {},
-                    max_recommendations=max_recommendations,
-                )
-                return _format_recommendations(recommendations)
-            except Exception as fallback_error:
-                logger.error(f"Local routing fallback also failed: {fallback_error}")
-                raise OnexError(
-                    code=EnumCoreErrorCode.OPERATION_FAILED,
-                    message="Both event-based and local routing failed",
-                    details={
-                        "component": "route_via_events",
-                        "event_routing_error": str(e),
-                        "local_routing_error": str(fallback_error),
-                        "user_request_preview": (user_request[:100] if user_request else None),
-                    },
-                ) from e
-        else:
-            # No fallback, re-raise original error
-            raise
+        router = AgentRouter()
+        recommendations = router.route(
+            user_request=user_request,
+            context=context or {},
+            max_recommendations=max_recommendations,
+        )
+        return _format_recommendations(recommendations)
+    except Exception as fallback_error:
+        logger.error(f"Local routing fallback also failed: {fallback_error}")
+        raise OnexError(
+            code=EnumCoreErrorCode.OPERATION_FAILED,
+            message="Both event-based and local routing failed",
+            details={
+                "component": "route_via_events",
+                "event_routing_error": str(event_error),
+                "local_routing_error": str(fallback_error),
+                "user_request_preview": (user_request[:100] if user_request else None),
+            },
+        ) from event_error
 
 
 __all__ = [

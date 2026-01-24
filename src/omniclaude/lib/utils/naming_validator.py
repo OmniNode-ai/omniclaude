@@ -65,7 +65,7 @@ class Violation:
     message: str
     suggestion: str | None = None  # Suggested correction
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Set default suggestion from expected_format if not provided."""
         if self.suggestion is None:
             self.suggestion = self.expected_format
@@ -226,10 +226,7 @@ class NamingValidator:
 
         # Check for /omni followed by lowercase letter (omniauth, omnitools, etc.)
         # This pattern avoids false positives like "omni" in the middle of words
-        if re.search(r"/omni[a-z]", file_path):
-            return True
-
-        return False
+        return bool(re.search(r"/omni[a-z]", file_path))
 
     def validate_content(self, content: str, file_path: str) -> list[Violation]:
         """
@@ -278,7 +275,7 @@ class NamingValidator:
                 self._validate_typescript_javascript(file_path, content)
         except Exception:
             # Gracefully handle syntax errors and other issues
-            pass
+            pass  # nosec B110 - Intentional graceful degradation for malformed input
 
         return self.violations
 
@@ -311,7 +308,7 @@ class NamingValidator:
         except Exception:
             # Gracefully handle syntax errors and other issues
             # Invalid code should pass through without failing the validator
-            pass
+            pass  # nosec B110 - Intentional graceful degradation for malformed input
 
         return self.violations
 
@@ -922,9 +919,8 @@ class NamingValidator:
             if body_node == node:
                 # Check if any target is all uppercase
                 for target in node.targets:
-                    if isinstance(target, ast.Name):
-                        if target.id.isupper():
-                            return True
+                    if isinstance(target, ast.Name) and target.id.isupper():
+                        return True
                 return False
         return False
 
