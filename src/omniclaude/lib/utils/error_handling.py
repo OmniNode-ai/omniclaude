@@ -91,7 +91,7 @@ class PatternTrackingLogger:
         return self.log_file
 
 
-class PatternTrackingErrorHandler:
+class PatternTrackingErrorPolicy:
     def __init__(self, logger: PatternTrackingLogger) -> None:
         self.logger = logger
         self.retryable_errors: list[type[Exception]] = [
