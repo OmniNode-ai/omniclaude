@@ -13,8 +13,6 @@ import sys
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
-
 
 # Add the script directory to path for relative imports
 SCRIPT_DIR = Path(__file__).parent
@@ -28,9 +26,7 @@ from models import (
     CommentStatus,
     ModelPRAnalysis,
     ModelPRComment,
-    EnumPRCommentSource,
     ModelPRData,
-    classify_severity,
 )
 
 
@@ -434,7 +430,6 @@ def generate_markdown_report(analysis: ModelPRAnalysis) -> str:
 # CLI interface
 def main():
     import argparse
-    import json
 
     parser = argparse.ArgumentParser(description="Analyze PR comments with type safety")
     parser.add_argument("pr_number", type=int, help="PR number")

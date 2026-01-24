@@ -184,6 +184,7 @@ def check_kafka_connection() -> KafkaConnectionResult:
             capture_output=True,
             text=True,
             timeout=get_timeout_seconds(),
+            check=False,
         )
 
         if result.returncode == 0:
@@ -269,6 +270,7 @@ def list_topics() -> KafkaTopicsResult:
             capture_output=True,
             text=True,
             timeout=get_timeout_seconds(),
+            check=False,
         )
 
         if result.returncode != 0:
@@ -361,6 +363,7 @@ def get_topic_stats(topic_name: str) -> KafkaTopicStatsResult:
             capture_output=True,
             text=True,
             timeout=get_timeout_seconds(),
+            check=False,
         )
 
         if result.returncode != 0:
@@ -379,7 +382,9 @@ def get_topic_stats(topic_name: str) -> KafkaTopicStatsResult:
         partitions = 0
         for line in result.stdout.split("\n"):
             # Match: topic "topic-name" with X partitions:
-            match = re.search(rf'topic "{re.escape(topic_name)}" with (\d+) partitions?:', line)
+            match = re.search(
+                rf'topic "{re.escape(topic_name)}" with (\d+) partitions?:', line
+            )
             if match:
                 partitions = int(match.group(1))
                 break
@@ -453,6 +458,7 @@ def get_consumer_groups() -> KafkaConsumerGroupsResult:
             capture_output=True,
             text=True,
             timeout=get_timeout_seconds(),
+            check=False,
         )
 
         if result.returncode != 0:
@@ -524,7 +530,9 @@ def check_topic_exists(topic_name: str) -> bool:
     return topic_name in topics_result["topics"]
 
 
-def get_recent_message_count(topic_name: str, timeout_seconds: int = 2) -> KafkaMessageCountResult:
+def get_recent_message_count(
+    topic_name: str, timeout_seconds: int = 2
+) -> KafkaMessageCountResult:
     """
     Get count of recent messages in a topic (sample).
 
@@ -573,6 +581,7 @@ def get_recent_message_count(topic_name: str, timeout_seconds: int = 2) -> Kafka
             capture_output=True,
             text=True,
             timeout=timeout_seconds,
+            check=False,
         )
 
         # Check if kcat command failed (non-zero exit code)
@@ -611,7 +620,9 @@ def get_recent_message_count(topic_name: str, timeout_seconds: int = 2) -> Kafka
                 }
 
         # Count lines (each line is a message)
-        message_count = len([line for line in result.stdout.split("\n") if line.strip()])
+        message_count = len(
+            [line for line in result.stdout.split("\n") if line.strip()]
+        )
 
         return {
             "success": True,

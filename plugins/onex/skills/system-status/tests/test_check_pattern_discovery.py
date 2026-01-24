@@ -10,17 +10,12 @@ Tests:
 Created: 2025-11-20
 """
 
-import sys
 from pathlib import Path
 from unittest.mock import patch
-
-import pytest
-
 
 # Import load_skill_module from conftest
 conftest_path = Path(__file__).parent / "conftest.py"
 import importlib.util
-
 
 spec = importlib.util.spec_from_file_location("conftest", conftest_path)
 conftest = importlib.util.module_from_spec(spec)
@@ -42,7 +37,6 @@ class TestCheckPatternDiscovery:
             patch.object(execute, "get_all_collections_stats") as mock_stats,
             patch("sys.argv", ["execute.py"]),
         ):
-
             mock_stats.return_value = {
                 "success": True,
                 "collection_count": 2,
@@ -72,7 +66,6 @@ class TestCheckPatternDiscovery:
             patch.object(execute, "get_all_collections_stats") as mock_stats,
             patch("sys.argv", ["execute.py"]),
         ):
-
             mock_stats.return_value = {
                 "success": True,
                 "collection_count": 0,
@@ -90,7 +83,6 @@ class TestCheckPatternDiscovery:
             patch.object(execute, "get_all_collections_stats") as mock_stats,
             patch("sys.argv", ["execute.py"]),
         ):
-
             mock_stats.return_value = {
                 "success": False,
                 "error": "Connection timeout",
@@ -109,7 +101,6 @@ class TestCheckPatternDiscovery:
             patch.object(execute, "get_all_collections_stats") as mock_stats,
             patch("sys.argv", ["execute.py"]),
         ):
-
             mock_stats.return_value = {
                 "success": True,
                 "collection_count": 4,

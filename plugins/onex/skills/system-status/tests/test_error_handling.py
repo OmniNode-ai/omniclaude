@@ -10,17 +10,14 @@ Tests that skills handle errors gracefully:
 Created: 2025-11-20
 """
 
-import sys
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-
 # Import load_skill_module from conftest
 conftest_path = Path(__file__).parent / "conftest.py"
 import importlib.util
-
 
 spec = importlib.util.spec_from_file_location("conftest", conftest_path)
 conftest = importlib.util.module_from_spec(spec)
@@ -40,7 +37,6 @@ class TestDatabaseErrorHandling:
             patch.object(execute, "execute_query") as mock_query,
             patch("sys.argv", ["execute.py"]),
         ):
-
             mock_query.return_value = {
                 "success": False,
                 "error": "Connection timeout after 5 seconds",
@@ -63,7 +59,6 @@ class TestDatabaseErrorHandling:
             patch.object(execute, "execute_query") as mock_query,
             patch("sys.argv", ["execute.py"]),
         ):
-
             mock_query.return_value = {
                 "success": False,
                 "error": "syntax error at or near 'SELECT'",
@@ -182,7 +177,6 @@ class TestDataErrorHandling:
             patch.object(execute, "execute_query") as mock_query,
             patch("sys.argv", ["execute.py"]),
         ):
-
             # Mock execute_query to return NULL values (should handle gracefully)
             mock_query.side_effect = [
                 # Manifest injections query
@@ -226,7 +220,6 @@ class TestDataErrorHandling:
             patch.object(execute, "execute_query") as mock_query,
             patch("sys.argv", ["execute.py"]),
         ):
-
             # All queries return empty results
             mock_query.return_value = {"success": True, "rows": []}
 
@@ -244,7 +237,6 @@ class TestDataErrorHandling:
             patch.object(execute, "execute_query") as mock_query,
             patch("sys.argv", ["execute.py"]),
         ):
-
             # Missing expected columns (empty dictionary)
             mock_query.return_value = {
                 "success": True,
@@ -266,7 +258,6 @@ class TestDataErrorHandling:
             patch.object(execute, "execute_query") as mock_query,
             patch("sys.argv", ["execute.py", "--timeframe", "1h"]),
         ):
-
             # All queries succeed but return no rows (valid scenario)
             mock_query.side_effect = [
                 {"success": True, "rows": []},  # routing query
@@ -305,7 +296,6 @@ class TestExceptionHandling:
             patch.object(execute, "execute_query") as mock_query,
             patch("sys.argv", ["execute.py"]),
         ):
-
             mock_query.side_effect = KeyboardInterrupt()
 
             # Should propagate KeyboardInterrupt (not catch it)
@@ -364,7 +354,7 @@ class TestResourceManagement:
 
         # Get initial open file descriptors count
         try:
-            initial_fd_count = len(os.listdir("/proc/self/fd"))
+            initial_fd_count = len(os.listdir("/proc/self/fd"))  # noqa: PTH208 - procfs special case
         except (OSError, FileNotFoundError):
             # /proc not available (macOS), use alternative approach
             import resource
@@ -397,20 +387,20 @@ class TestResourceManagement:
 
         # Check file descriptors didn't increase significantly
         try:
-            final_fd_count = len(os.listdir("/proc/self/fd"))
+            final_fd_count = len(os.listdir("/proc/self/fd"))  # noqa: PTH208 - procfs special case
             # Allow small variance (±2 FDs) due to test infrastructure
-            assert (
-                abs(final_fd_count - initial_fd_count) <= 2
-            ), f"File descriptor leak detected: initial={initial_fd_count}, final={final_fd_count}"
+            assert abs(final_fd_count - initial_fd_count) <= 2, (
+                f"File descriptor leak detected: initial={initial_fd_count}, final={final_fd_count}"
+            )
         except (OSError, FileNotFoundError):
             # /proc not available, verify memory didn't grow excessively
             import resource
 
             final_fd_count = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
             # Allow 10% memory growth for test overhead
-            assert (
-                final_fd_count <= initial_fd_count * 1.1
-            ), f"Possible memory leak: initial={initial_fd_count}, final={final_fd_count}"
+            assert final_fd_count <= initial_fd_count * 1.1, (
+                f"Possible memory leak: initial={initial_fd_count}, final={final_fd_count}"
+            )
 
     def test_exception_during_query_cleanup(self):
         """Test that exceptions during query execution are handled properly."""

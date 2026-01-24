@@ -25,7 +25,6 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
-
 # Determine project root (skills are in plugin cache, not in project)
 # Priority: OMNICLAUDE_PATH env var > PROJECT_ROOT env var > auto-detection > error
 if "OMNICLAUDE_PATH" in os.environ:
@@ -59,8 +58,6 @@ else:
         sys.exit(1)
 
 sys.path.insert(0, str(OMNICLAUDE_PATH))
-from config import settings
-
 
 # Add _shared to path for utilities
 shared_path = Path(__file__).parent.parent.parent / "_shared"
@@ -78,7 +75,6 @@ if not shared_path.exists():
 
 sys.path.insert(0, str(shared_path))
 from db_helper import get_correlation_id
-
 
 # Add agents/lib to path for AgentRouter
 agents_lib_path = OMNICLAUDE_PATH / "agents" / "lib"

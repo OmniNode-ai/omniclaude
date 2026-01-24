@@ -11,8 +11,6 @@ Updated: 2025-11-21 - Added get_valid_timeframes() and is_valid_timeframe()
 """
 
 import logging
-from typing import Optional
-
 
 logger = logging.getLogger(__name__)
 

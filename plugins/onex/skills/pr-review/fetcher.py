@@ -15,10 +15,8 @@ Endpoints fetched:
 import json
 import subprocess
 import sys
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Optional
-
 
 # Add the script directory to path for relative imports
 SCRIPT_DIR = Path(__file__).parent
@@ -29,15 +27,14 @@ from models import (
     BotType,
     CommentSeverity,
     CommentStatus,
+    EnumPRCommentSource,
     ModelFileReference,
     ModelPRComment,
-    EnumPRCommentSource,
     ModelPRData,
     ModelPRReview,
     ModelStructuredSection,
     detect_bot_type,
 )
-
 
 # Review states as Literal type (no longer enum)
 REVIEW_STATES = ["APPROVED", "CHANGES_REQUESTED", "COMMENTED", "PENDING", "DISMISSED"]
@@ -169,7 +166,7 @@ class PRFetcher:
             fetch_source="github_api",
         )
 
-    def _parse_review(self, data: dict) -> Optional[ModelPRReview]:
+    def _parse_review(self, data: dict) -> ModelPRReview | None:
         """Parse a GitHub review into a ModelPRReview model."""
         try:
             author = data.get("user", {}).get("login", "unknown")
@@ -203,7 +200,7 @@ class PRFetcher:
 
     def _parse_comment(
         self, data: dict, source: EnumPRCommentSource
-    ) -> Optional[ModelPRComment]:
+    ) -> ModelPRComment | None:
         """Parse a GitHub comment into a ModelPRComment model."""
         try:
             # Handle different field names between endpoints
@@ -476,6 +473,7 @@ class PRFetcher:
                 capture_output=True,
                 text=True,
                 timeout=60,
+                check=False,
             )
 
             if result.returncode != 0:
@@ -523,6 +521,7 @@ class PRFetcher:
                 capture_output=True,
                 text=True,
                 timeout=60,
+                check=False,
             )
 
             if result.returncode != 0:
@@ -550,7 +549,7 @@ class PRFetcher:
         safe_repo = self.repo.replace("/", "_")
         return self.cache_dir / f"pr_{safe_repo}_{self.pr_number}.json"
 
-    def _load_cache(self) -> Optional[ModelPRData]:
+    def _load_cache(self) -> ModelPRData | None:
         """Load PR data from cache if valid.
 
         Returns:
@@ -562,8 +561,8 @@ class PRFetcher:
 
         # Check TTL
         try:
-            mtime = datetime.fromtimestamp(cache_file.stat().st_mtime)
-            if datetime.now() - mtime > timedelta(seconds=CACHE_TTL_SECONDS):
+            mtime = datetime.fromtimestamp(cache_file.stat().st_mtime, tz=UTC)
+            if datetime.now(tz=UTC) - mtime > timedelta(seconds=CACHE_TTL_SECONDS):
                 return None  # Cache expired
 
             with open(cache_file) as f:
@@ -588,7 +587,7 @@ class PRFetcher:
             print(f"Warning: Cache save error: {e}", file=sys.stderr)
 
 
-def get_repo_from_git() -> Optional[str]:
+def get_repo_from_git() -> str | None:
     """Get repository name from current git directory.
 
     Returns:
@@ -600,6 +599,7 @@ def get_repo_from_git() -> Optional[str]:
             capture_output=True,
             text=True,
             timeout=30,
+            check=False,
         )
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()
@@ -647,11 +647,11 @@ def main():
             # Output only Claude bot comments
             claude_comments = pr_data.get_claude_comments()
             for c in claude_comments:
-                print(f"\n{'='*60}")
+                print(f"\n{'=' * 60}")
                 print(f"Source: {c.source.value}")
                 print(f"Severity: {c.severity.value}")
                 print(f"Created: {c.created_at}")
-                print(f"{'='*60}")
+                print(f"{'=' * 60}")
                 print(c.body)
         else:
             # Print summary

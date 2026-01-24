@@ -142,8 +142,8 @@ async def consume_messages(
         # Small delay to allow consumer to join group
         await asyncio.sleep(0.5)
 
-        start_time = asyncio.get_event_loop().time()
-        while (asyncio.get_event_loop().time() - start_time) < timeout_seconds:
+        start_time = asyncio.get_running_loop().time()
+        while (asyncio.get_running_loop().time() - start_time) < timeout_seconds:
             if len(messages) >= max_messages:
                 break
 
@@ -208,8 +208,8 @@ async def wait_for_message_with_entity_id(
         # Seek to end first, then back a bit to catch recent messages
         await consumer.seek_to_end()
 
-        start_time = asyncio.get_event_loop().time()
-        while (asyncio.get_event_loop().time() - start_time) < timeout_seconds:
+        start_time = asyncio.get_running_loop().time()
+        while (asyncio.get_running_loop().time() - start_time) < timeout_seconds:
             try:
                 result = await consumer.getmany(timeout_ms=500, max_records=100)
                 for _tp, records in result.items():

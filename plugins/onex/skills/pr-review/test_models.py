@@ -12,21 +12,19 @@ Run with: pytest test_models.py -v
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
 
 import pytest
 from models import (
     BotType,
-    ModelCollatedIssues,
     CommentSeverity,
     CommentStatus,
+    EnumPRCommentSource,
+    ModelCollatedIssues,
     ModelFileReference,
     ModelPRComment,
-    EnumPRCommentSource,
     ModelPRIssue,
     detect_bot_type,
 )
-
 
 # =============================================================================
 # CommentSeverity Enum Tests
@@ -687,7 +685,9 @@ class TestModelCollatedIssues:
         with pytest.raises(ValueError, match="Cannot use both"):
             sample_issues.filter_by_status(hide_resolved=True, show_resolved_only=True)
 
-    def test_filter_by_status_no_filter(self, sample_issues: ModelCollatedIssues) -> None:
+    def test_filter_by_status_no_filter(
+        self, sample_issues: ModelCollatedIssues
+    ) -> None:
         """Test filter_by_status with no filters returns all issues."""
         filtered = sample_issues.filter_by_status()
         assert filtered.total_count == sample_issues.total_count
@@ -786,9 +786,9 @@ class TestBotTypeDetection:
             "CLAUDE",
         ]
         for author in claude_authors:
-            assert (
-                detect_bot_type(author) == BotType.CLAUDE_CODE
-            ), f"Failed for {author}"
+            assert detect_bot_type(author) == BotType.CLAUDE_CODE, (
+                f"Failed for {author}"
+            )
 
     def test_detect_coderabbit(self) -> None:
         """Test detection of CodeRabbit bot."""
@@ -848,9 +848,9 @@ class TestCollateIssuesClassifySeverity:
             "blocker for release",
         ]
         for text in critical_texts:
-            assert (
-                classify_severity(text) == CommentSeverity.CRITICAL
-            ), f"Failed for: {text}"
+            assert classify_severity(text) == CommentSeverity.CRITICAL, (
+                f"Failed for: {text}"
+            )
 
     def test_classify_major_patterns(self) -> None:
         """Test classification of major severity patterns."""
@@ -864,9 +864,9 @@ class TestCollateIssuesClassifySeverity:
             "Missing test coverage",
         ]
         for text in major_texts:
-            assert (
-                classify_severity(text) == CommentSeverity.MAJOR
-            ), f"Failed for: {text}"
+            assert classify_severity(text) == CommentSeverity.MAJOR, (
+                f"Failed for: {text}"
+            )
 
     def test_classify_minor_patterns(self) -> None:
         """Test classification of minor severity patterns."""
@@ -879,9 +879,9 @@ class TestCollateIssuesClassifySeverity:
             "This might be cleaner",
         ]
         for text in minor_texts:
-            assert (
-                classify_severity(text) == CommentSeverity.MINOR
-            ), f"Failed for: {text}"
+            assert classify_severity(text) == CommentSeverity.MINOR, (
+                f"Failed for: {text}"
+            )
 
     def test_classify_nitpick_patterns(self) -> None:
         """Test classification of nitpick severity patterns."""
@@ -895,9 +895,9 @@ class TestCollateIssuesClassifySeverity:
             "optional: rename this",
         ]
         for text in nitpick_texts:
-            assert (
-                classify_severity(text) == CommentSeverity.NITPICK
-            ), f"Failed for: {text}"
+            assert classify_severity(text) == CommentSeverity.NITPICK, (
+                f"Failed for: {text}"
+            )
 
     def test_classify_unclassified(self) -> None:
         """Test unclassified when no patterns match."""
@@ -1091,7 +1091,9 @@ class TestCollateIssuesResolutionMap:
             200: {"is_resolved": False, "is_outdated": True, "resolved_by": None}
         }
 
-        status, is_outdated, resolved_by = determine_comment_status(200, resolution_map)
+        status, is_outdated, _resolved_by = determine_comment_status(
+            200, resolution_map
+        )
 
         assert status == CommentStatus.OUTDATED
         assert is_outdated is True
@@ -1136,7 +1138,7 @@ class TestModelFileReference:
 
     def test_invalid_line_range(self) -> None:
         """Test that end_line < line raises error."""
-        with pytest.raises(ValueError, match="end_line.*must be >= line"):
+        with pytest.raises(ValueError, match=r"end_line.*must be >= line"):
             ModelFileReference(path="src/main.py", line=20, end_line=10)
 
     def test_repr_with_line(self) -> None:

@@ -22,21 +22,18 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-
 
 # Add _shared to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 from db_helper import get_correlation_id, parse_json_param
-
 
 # Add shared_lib to path for kafka_config and kafka_publisher
 # Path: execute_kafka.py -> log-performance-metrics/ -> agent-tracking/ -> skills/ -> claude-artifacts/ -> omniclaude/
 sys.path.insert(
     0, str(Path(__file__).parent.parent.parent.parent.parent / "shared_lib")
 )
-from kafka_config import get_kafka_bootstrap_servers
 from kafka_publisher import get_kafka_producer
 
 
@@ -145,7 +142,7 @@ def log_performance_metrics_kafka(args):
         ),
         "confidence_components": confidence_components,
         "candidates_evaluated": int(args.candidates),
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
     # Publish to Kafka

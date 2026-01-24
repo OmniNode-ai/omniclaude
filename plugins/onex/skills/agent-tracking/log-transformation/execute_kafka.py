@@ -22,23 +22,19 @@ import argparse
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-
 
 # Add _shared to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 from db_helper import get_correlation_id
-
 
 # Add shared_lib to path for kafka_config and kafka_publisher
 # Path: execute_kafka.py -> log-transformation/ -> agent-tracking/ -> skills/ -> claude/ -> omniclaude/
 sys.path.insert(
     0, str(Path(__file__).parent.parent.parent.parent.parent / "shared_lib")
 )
-from kafka_config import get_kafka_bootstrap_servers
 from kafka_publisher import get_kafka_producer
-
 
 # Add agents/lib to path for transformation_validator (or use claude.lib.core)
 agents_lib_path = Path(__file__).parent.parent.parent.parent.parent / "agents" / "lib"
@@ -205,7 +201,7 @@ def log_transformation_kafka(args):
         "confidence_score": confidence,
         "transformation_duration_ms": int(args.duration_ms),
         "success": success,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
     # Publish to Kafka

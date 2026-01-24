@@ -495,9 +495,9 @@ async def wait_for_db_condition(
     Raises:
         TimeoutError: If condition not met within timeout
     """
-    start_time = asyncio.get_event_loop().time()
+    start_time = asyncio.get_running_loop().time()
 
-    while (asyncio.get_event_loop().time() - start_time) < timeout_seconds:
+    while (asyncio.get_running_loop().time() - start_time) < timeout_seconds:
         async with db_pool.acquire() as conn:
             result = (
                 await conn.fetchval(query, *query_args)

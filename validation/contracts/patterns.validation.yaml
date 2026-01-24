@@ -121,6 +121,9 @@ validation:
   severity_default: warning
   fail_on_error: true
   fail_on_warning: false
+  # max_violations: 0 means "unlimited/no limit" - all violations will be
+  # reported without early termination. Set to a positive integer (e.g., 100)
+  # to stop validation after that many violations are found.
   max_violations: 0
 
   # ============================================================================

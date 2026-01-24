@@ -24,7 +24,6 @@ import os
 import sys
 from pathlib import Path
 
-
 # Add _shared to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 from db_helper import (

@@ -345,13 +345,13 @@ class RoutingEventClient:
                 f"Waiting for consumer partition assignment (topics: {self.TOPIC_COMPLETED}, {self.TOPIC_FAILED})..."
             )
             max_wait_seconds = 10
-            start_time = asyncio.get_event_loop().time()
+            start_time = asyncio.get_running_loop().time()
             check_count = 0
 
             while not self._consumer.assignment():
                 check_count += 1
                 await asyncio.sleep(0.1)
-                elapsed = asyncio.get_event_loop().time() - start_time
+                elapsed = asyncio.get_running_loop().time() - start_time
 
                 # Log progress every 1 second
                 if check_count % 10 == 0:
@@ -747,7 +747,7 @@ class RoutingEventClient:
                         extra=log_extra,
                     )
 
-            return cast(list[dict[str, Any]], recommendations)
+            return cast("list[dict[str, Any]]", recommendations)
 
         except TimeoutError:
             # Log timeout with structured correlation ID tracking

@@ -34,19 +34,16 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional, TypedDict
-
+from typing import Any, TypedDict
 
 SCRIPT_DIR = Path(__file__).parent
 
 try:
     from models import (
         BotType,
-        ModelCollatedIssues,
         CommentSeverity,
         CommentStatus,
-        ModelPRComment,
-        EnumPRCommentSource,
+        ModelCollatedIssues,
         ModelPRIssue,
         detect_bot_type,
     )
@@ -56,11 +53,9 @@ except ImportError:
         sys.path.insert(0, str(SCRIPT_DIR))
     from models import (
         BotType,
-        ModelCollatedIssues,
         CommentSeverity,
         CommentStatus,
-        ModelPRComment,
-        EnumPRCommentSource,
+        ModelCollatedIssues,
         ModelPRIssue,
         detect_bot_type,
     )
@@ -973,29 +968,29 @@ def extract_issues_from_body(body: str, source: str = "") -> list[ExtractedIssue
             re.search(r"\(BLOCKING\)", full_text, re.IGNORECASE)
             or re.search(r"\(CRITICAL\)", full_text, re.IGNORECASE)
             or re.search(r"\(REQUIRED\)", full_text, re.IGNORECASE)
-        ):
-            effective_severity = CommentSeverity.CRITICAL
-        elif re.search(
+        ) or re.search(
             r"\(Security|Security\s+Best\s+Practice|Potential\s+Bug\)",
             full_text,
             re.IGNORECASE,
         ):
             effective_severity = CommentSeverity.CRITICAL
-        elif re.search(r"\(Major\)", full_text, re.IGNORECASE) or re.search(
-            r"\(Bug\)", full_text, re.IGNORECASE
+        elif (
+            re.search(r"\(Major\)", full_text, re.IGNORECASE)
+            or re.search(r"\(Bug\)", full_text, re.IGNORECASE)
+            or (
+                re.search(r"\(NON-BLOCKING\)", full_text, re.IGNORECASE)
+                or "⚠️" in full_text
+            )
         ):
             effective_severity = CommentSeverity.MAJOR
         elif (
-            re.search(r"\(NON-BLOCKING\)", full_text, re.IGNORECASE) or "⚠️" in full_text
+            re.search(r"\(Minor\)", full_text, re.IGNORECASE)
+            or re.search(r"\(Very\s+Minor\)", full_text, re.IGNORECASE)
+            or re.search(r"\(SAFE\)", full_text, re.IGNORECASE)
+            or "✅" in full_text
+            or "🔍" in full_text
+            or re.search(r"\(REVIEW\)", full_text, re.IGNORECASE)
         ):
-            effective_severity = CommentSeverity.MAJOR
-        elif re.search(r"\(Minor\)", full_text, re.IGNORECASE) or re.search(
-            r"\(Very\s+Minor\)", full_text, re.IGNORECASE
-        ):
-            effective_severity = CommentSeverity.MINOR
-        elif re.search(r"\(SAFE\)", full_text, re.IGNORECASE) or "✅" in full_text:
-            effective_severity = CommentSeverity.MINOR
-        elif "🔍" in full_text or re.search(r"\(REVIEW\)", full_text, re.IGNORECASE):
             effective_severity = CommentSeverity.MINOR
         elif re.search(r"\(Nitpick\)", full_text, re.IGNORECASE):
             effective_severity = CommentSeverity.NITPICK
@@ -1174,9 +1169,9 @@ def build_resolution_map(
 
 
 def determine_comment_status(
-    comment_id: Optional[int],
+    comment_id: int | None,
     resolution_map: dict[int, dict[str, Any]],
-) -> tuple[CommentStatus, bool, Optional[str]]:
+) -> tuple[CommentStatus, bool, str | None]:
     """
     Determine comment resolution status from resolution map.
 
@@ -1230,6 +1225,7 @@ def fetch_pr_data(pr_input: str | int) -> dict[str, Any]:
             capture_output=True,
             text=True,
             timeout=120,
+            check=False,
         )
 
         if result.returncode != 0:
@@ -1279,6 +1275,7 @@ def get_repo_name() -> str:
             capture_output=True,
             text=True,
             timeout=30,
+            check=False,
         )
         if result.returncode == 0 and result.stdout.strip():
             return result.stdout.strip()
@@ -1407,7 +1404,7 @@ def collate_pr_issues(
                         file_path=path,
                         line_number=(
                             int(line)
-                            if isinstance(line, (int, str)) and str(line).isdigit()
+                            if isinstance(line, int | str) and str(line).isdigit()
                             else None
                         ),
                         severity=item["severity"],
@@ -1464,7 +1461,7 @@ def collate_pr_issues(
                     file_path=path,
                     line_number=(
                         int(line)
-                        if isinstance(line, (int, str)) and str(line).isdigit()
+                        if isinstance(line, int | str) and str(line).isdigit()
                         else None
                     ),
                     severity=severity,

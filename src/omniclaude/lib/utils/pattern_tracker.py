@@ -35,7 +35,6 @@ import cachetools  # type: ignore[import-untyped]
 import httpx
 import psutil
 import yaml
-
 from config import settings
 
 
@@ -309,12 +308,25 @@ class PerformanceMonitor:
             )
 
     def get_recent_performance(self, window_seconds: int = 60) -> dict[str, float]:
-        """Get performance metrics for recent time window."""
+        """Get performance metrics for recent time window.
+
+        Args:
+            window_seconds: Time window in seconds to analyze (default: 60s)
+
+        Returns:
+            Dict with avg_time_ms, operations_per_second, and p95_time_ms
+        """
         cutoff_time = time.time() - window_seconds
-        # Filter by timestamp (first element of tuple), extract duration_ms (second element)
+
+        # Thread-safe copy of response times
+        # Note: _response_times stores (timestamp, duration_ms) tuples
+        # We filter by timestamp and extract duration_ms values
+        with self._lock:
+            response_times_snapshot = list(self._response_times)
+
         recent_durations = [
             duration_ms
-            for timestamp, duration_ms in self._response_times
+            for timestamp, duration_ms in response_times_snapshot
             if timestamp >= cutoff_time
         ]
 
@@ -343,20 +355,46 @@ class BatchAggregator:
     ) -> None:
         self.tracker = tracker
         self.config = config
-        self._queue: asyncio.Queue[tuple[str, dict[str, Any], float] | None] = (
-            asyncio.Queue(maxsize=config.max_queue_size)
+        # Lazy-initialized asyncio primitives to avoid RuntimeError when no event loop
+        # These are created in _ensure_initialized() which is called from start()
+        self._queue: asyncio.Queue[tuple[str, dict[str, Any], float] | None] | None = (
+            None
         )
         self._workers: list[asyncio.Task[None]] = []
         self._running = False
+        self._initialized = False
         self._current_batch: list[tuple[str, dict[str, Any]]] = []
-        self._batch_lock: asyncio.Lock = (
-            asyncio.Lock()
-        )  # Protects _current_batch access
+        # Lock for protecting _current_batch - lazy initialized
+        self._batch_lock: asyncio.Lock | None = None
         self._batch_timer: asyncio.Task[None] | None = None
+
+    def _ensure_initialized(self) -> None:
+        """Initialize asyncio primitives. Must be called from async context."""
+        if self._initialized:
+            return
+        self._queue = asyncio.Queue(maxsize=self.config.max_queue_size)
+        self._batch_lock = asyncio.Lock()
+        self._initialized = True
+
+    def _can_process_batches(self) -> bool:
+        """Check if batch processing is properly configured and can run.
+
+        Returns True only if:
+        - Batch processing is initialized
+        - Workers are running or will be started
+        """
+        return self._initialized and self._running and self.config.worker_count > 0
 
     async def start(self) -> None:
         """Start batch processing workers."""
         if self._running:
+            return
+
+        # Initialize asyncio primitives (safe now that we're in async context)
+        self._ensure_initialized()
+
+        # Guard: Don't start if no workers configured
+        if self.config.worker_count <= 0:
             return
 
         self._running = True
@@ -384,15 +422,35 @@ class BatchAggregator:
         await asyncio.gather(*self._workers, return_exceptions=True)
         self._workers.clear()
 
-    async def add_task(self, task_type: str, **kwargs: Any) -> None:
-        """Add a task to the processing queue."""
+    async def add_task(self, task_type: str, **kwargs: Any) -> bool:
+        """Add a task to the processing queue.
+
+        Returns:
+            True if task was enqueued, False if workers not available.
+        """
+        # Guard: Don't enqueue if no workers will process
+        if not self._can_process_batches():
+            print(
+                "Warning: Batch processor not running or no workers configured, "
+                "task not enqueued"
+            )
+            return False
+
+        if self._queue is None:
+            return False
+
         try:
             await self._queue.put((task_type, kwargs, time.time()))
+            return True
         except asyncio.QueueFull:
             print("Warning: Batch processor queue full, dropping task")
+            return False
 
     async def _worker(self, worker_name: str) -> None:
         """Worker coroutine for processing batches."""
+        if self._queue is None or self._batch_lock is None:
+            return
+
         while self._running:
             try:
                 # Wait for batch or timeout
@@ -401,19 +459,28 @@ class BatchAggregator:
                     break
 
                 task_type, kwargs, _ = task_data
+
+                # Acquire lock to safely modify _current_batch
+                should_process = False
                 async with self._batch_lock:
                     self._current_batch.append((task_type, kwargs))
-                    batch_size = len(self._current_batch)
+                    # Check batch size while holding lock to avoid race condition
+                    should_process = (
+                        len(self._current_batch) >= self.config.max_batch_size
+                    )
 
-                # Process batch if full (check outside lock, process acquires its own)
-                if batch_size >= self.config.max_batch_size:
+                # Process batch outside lock (it acquires its own lock internally)
+                if should_process:
                     await self._process_batch()
 
             except TimeoutError:
                 # Check if we have pending items to process
+                if self._batch_lock is None:
+                    continue
+                should_process = False
                 async with self._batch_lock:
-                    has_items = bool(self._current_batch)
-                if has_items:
+                    should_process = bool(self._current_batch)
+                if should_process:
                     await self._process_batch()
             except Exception as e:
                 print(f"Error in worker {worker_name}: {e}")
@@ -423,13 +490,20 @@ class BatchAggregator:
         while self._running:
             await asyncio.sleep(self.config.max_batch_wait_time)
 
+            if self._batch_lock is None:
+                continue
+
+            should_process = False
             async with self._batch_lock:
-                has_items = bool(self._current_batch)
-            if has_items:
+                should_process = bool(self._current_batch)
+            if should_process:
                 await self._process_batch()
 
     async def _process_batch(self) -> None:
         """Process current batch of tasks."""
+        if self._batch_lock is None:
+            return
+
         async with self._batch_lock:
             if not self._current_batch:
                 return
@@ -612,16 +686,26 @@ class PatternTracker:
         start_time = time.time()
 
         # Use batch processor if enabled and requested
-        if use_batch and self.config.batch_config.enabled:
+        # Guard: Only use batch if batch mode is enabled AND processing_mode is BATCH
+        # AND worker_count > 0 to prevent orphan batches
+        can_use_batch = (
+            use_batch
+            and self.config.batch_config.enabled
+            and self.config.processing_mode == ProcessingMode.BATCH
+            and self.config.batch_config.worker_count > 0
+        )
+        if can_use_batch:
             await self._ensure_batch_processor_started()
-            await self.batch_processor.add_task(
+            enqueued = await self.batch_processor.add_task(
                 "track_pattern_creation",
                 code=code,
                 context=context,
                 metadata=metadata,
                 correlation_id=correlation_id,
             )
-            return self._generate_pattern_id_cached(code, context)
+            if enqueued:
+                return self._generate_pattern_id_cached(code, context)
+            # Fall through to sync processing if enqueueing failed
 
         # Generate identifiers with caching
         pattern_id = self._generate_pattern_id_cached(code, context)
@@ -893,10 +977,16 @@ class PatternTracker:
     def __del__(self) -> None:
         """Cleanup on destruction."""
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(self.close())
+            # Use get_running_loop() instead of deprecated get_event_loop()
+            # This is the correct pattern for __del__ in Python 3.10+
+            loop = asyncio.get_running_loop()
+            # If we have a running loop, schedule cleanup as a task
+            loop.create_task(self.close())
+        except RuntimeError:
+            # No running event loop - cleanup will be handled by GC
+            pass
         except Exception:
+            # Suppress all other exceptions in __del__
             pass
 
 

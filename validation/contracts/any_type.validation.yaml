@@ -47,6 +47,10 @@ validation:
       severity: warning
       enabled: true
       parameters:
+        # allow_in_tests: When true, suppresses violations in test files
+        # (files matching **/tests/**, **/*_test.py, **/test_*.py, **/conftest.py).
+        # This is useful because test fixtures often need dict[str, Any] for
+        # dynamic mock data and parametrized test inputs.
         allow_in_tests: true
 
     - rule_id: list_any
@@ -87,6 +91,9 @@ validation:
   # NOTE: fail_on_error is false initially for gradual adoption
   fail_on_error: false
   fail_on_warning: false
+  # max_violations: 0 means "unlimited/no limit" - all violations will be
+  # reported without early termination. Set to a positive integer (e.g., 100)
+  # to stop validation after that many violations are found.
   max_violations: 0
 
   # ============================================================================

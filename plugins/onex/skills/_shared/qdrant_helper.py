@@ -76,9 +76,7 @@ except ImportError:
                 return f"{self.code}: {self.message}"
 
             def __repr__(self):
-                return (
-                    f"OnexError(code={self.code}, message={self.message}, details={self.details})"
-                )
+                return f"OnexError(code={self.code}, message={self.message}, details={self.details})"
 
 
 def validate_qdrant_url(url: str) -> str:

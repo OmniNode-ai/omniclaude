@@ -11,10 +11,8 @@ Verifies that subprocess.run() error handling correctly:
 Tests for PR #33 fixes.
 """
 
-import json
 import os
 import sys
-
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -53,9 +51,9 @@ def test_docker_error_handling():
     print(f"  Return code: {result.get('return_code', 'MISSING')}")
     print(f"  Container count: {result['count']}")
     if result["success"]:
-        assert (
-            result.get("return_code") == 0
-        ), "Successful call should have return_code=0"
+        assert result.get("return_code") == 0, (
+            "Successful call should have return_code=0"
+        )
         print("  ✅ PASS\n")
     else:
         print(f"  ⚠️  Docker not available: {result.get('error')}\n")
@@ -78,9 +76,9 @@ def test_kafka_error_handling():
     if result["success"]:
         assert result.get("return_code") == 0, "Success should have return_code=0"
     else:
-        assert (
-            result.get("return_code") != 0 or "error" in result
-        ), "Failure should have non-zero return_code or error"
+        assert result.get("return_code") != 0 or "error" in result, (
+            "Failure should have non-zero return_code or error"
+        )
     print("  ✅ PASS\n")
 
     # Test 2: List topics (may succeed or fail depending on Kafka availability)
@@ -94,9 +92,9 @@ def test_kafka_error_handling():
         print("  ✅ PASS\n")
     else:
         print(f"  Error: {result.get('error', 'MISSING')[:80]}...")
-        assert (
-            "return_code" in result or "error" in result
-        ), "Failure should have return_code or error"
+        assert "return_code" in result or "error" in result, (
+            "Failure should have return_code or error"
+        )
         print("  ✅ PASS (Kafka unavailable)\n")
 
     # Test 3: Get recent message count (fixed function)
@@ -135,9 +133,9 @@ def test_return_code_consistency():
                 print(f"  Return code value: {result['return_code']}")
                 # Verify consistency: success=True should mean return_code=0
                 if result.get("success") is True:
-                    assert (
-                        result.get("return_code") == 0
-                    ), f"{name}: success=True should have return_code=0"
+                    assert result.get("return_code") == 0, (
+                        f"{name}: success=True should have return_code=0"
+                    )
             print("  ✅ PASS\n")
         else:
             print(f"  ⚠️  Unexpected result type: {type(result)}\n")

@@ -482,7 +482,7 @@ class ManifestInjectionStorage:
             }
 
         # Handle lists recursively
-        if isinstance(obj, (list, tuple)):
+        if isinstance(obj, list | tuple):
             return [ManifestInjectionStorage._serialize_for_json(item) for item in obj]
 
         # Handle other types (str, int, bool, etc.)
@@ -1492,7 +1492,7 @@ class ManifestInjector:
                         data = await response.json()
                         # OpenAI-compatible format: data[0].embedding
                         embedding = data["data"][0]["embedding"]
-                        return cast(list[float], embedding)
+                        return cast("list[float]", embedding)
                     else:
                         error_text = await response.text()
                         raise OnexError(
@@ -2953,8 +2953,15 @@ class ManifestInjector:
 
             if not pg_password:
                 self.logger.warning(
-                    f"[{correlation_id}] POSTGRES_PASSWORD not set, direct query may fail"
+                    f"[{correlation_id}] POSTGRES_PASSWORD not set - database features disabled"
                 )
+                elapsed_ms = int((time.time() - start_time) * 1000)
+                return {
+                    "schemas": [],
+                    "tables": [],
+                    "error": "POSTGRES_PASSWORD not set - database features disabled",
+                    "query_time_ms": elapsed_ms,
+                }
 
             # Connect to PostgreSQL
             conn = await asyncpg.connect(

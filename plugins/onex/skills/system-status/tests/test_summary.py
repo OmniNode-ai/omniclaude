@@ -8,7 +8,6 @@ Usage:
 Created: 2025-11-20
 """
 
-import sys
 from pathlib import Path
 
 

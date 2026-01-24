@@ -99,7 +99,9 @@ RATE_LIMIT_STATE_FILE = Path.home() / ".claude" / ".cache" / "rate-limit-state.j
 
 # Rate limiting feature flag (set to True to enable explicit rate limiting)
 # When False, relies on Claude Code's implicit 5000ms timeout rate limiting
-RATE_LIMIT_ENABLED = os.environ.get("PERMISSION_HOOK_RATE_LIMIT", "false").lower() == "true"
+RATE_LIMIT_ENABLED = (
+    os.environ.get("PERMISSION_HOOK_RATE_LIMIT", "false").lower() == "true"
+)
 
 # =============================================================================
 # CONSTANTS - Safe Temporary Directories
@@ -697,7 +699,9 @@ def check_rate_limit() -> bool:
 
         # Refill tokens based on elapsed time
         elapsed = current_time - last_update
-        tokens = min(RATE_LIMIT_BURST_SIZE, tokens + elapsed * RATE_LIMIT_REQUESTS_PER_SECOND)
+        tokens = min(
+            RATE_LIMIT_BURST_SIZE, tokens + elapsed * RATE_LIMIT_REQUESTS_PER_SECOND
+        )
 
         # Check if we have tokens available
         if tokens >= 1.0:

@@ -22,11 +22,8 @@ Usage:
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
-
 
 # Add pr-review to path for imports
 PR_REVIEW_PATH = Path(__file__).parent.parent / "pr-review"
@@ -35,12 +32,12 @@ if str(PR_REVIEW_PATH) not in sys.path:
 
 from analyzer import PRAnalyzer
 from fetcher import PRFetcher, get_repo_from_git
-from models import BotType, CommentSeverity, PRAnalysis, PRComment
+from models import CommentSeverity, PRComment
 
 
 def get_pr_issues_for_linear(
     pr_number: int,
-    repo: Optional[str] = None,
+    repo: str | None = None,
     include_claude: bool = True,
     include_critical: bool = True,
     include_major: bool = True,
@@ -243,7 +240,7 @@ def format_for_linear(
 
 def get_merge_status_for_linear(
     pr_number: int,
-    repo: Optional[str] = None,
+    repo: str | None = None,
     use_cache: bool = True,
 ) -> dict:
     """

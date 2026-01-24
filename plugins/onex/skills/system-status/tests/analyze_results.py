@@ -6,7 +6,6 @@ import re
 import sys
 from collections import defaultdict
 
-
 # Read the test results file
 if not os.path.exists("test_results_full.txt"):
     print("Error: test_results_full.txt not found")

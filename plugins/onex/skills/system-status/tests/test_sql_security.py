@@ -22,11 +22,9 @@ from pathlib import Path
 
 import pytest
 
-
 # Import load_skill_module from conftest
 conftest_path = Path(__file__).parent / "conftest.py"
 import importlib.util
-
 
 spec = importlib.util.spec_from_file_location("conftest", conftest_path)
 conftest = importlib.util.module_from_spec(spec)
@@ -87,10 +85,12 @@ class TestSQLParameterization:
                     }
                 )
 
-        assert (
-            len(violations) == 0
-        ), f"Found {len(violations)} files with f-string SQL queries:\n" + "\n".join(
-            f"  - {v['skill']}/{v['file']}: {v['count']} violations" for v in violations
+        assert len(violations) == 0, (
+            f"Found {len(violations)} files with f-string SQL queries:\n"
+            + "\n".join(
+                f"  - {v['skill']}/{v['file']}: {v['count']} violations"
+                for v in violations
+            )
         )
 
     def test_no_string_concat_in_sql(self, skill_paths):
@@ -270,9 +270,9 @@ def execute_unsafe_query(limit):
 
         # Verify we can detect this pattern
         content = test_file.read_text()
-        assert re.search(
-            r'f["\'].*?{.*?}', content
-        ), "Should detect f-string interpolation"
+        assert re.search(r'f["\'].*?{.*?}', content), (
+            "Should detect f-string interpolation"
+        )
 
         # Verify our actual skills don't have this pattern
         # Use same two-step approach as test_no_fstring_in_sql for consistency

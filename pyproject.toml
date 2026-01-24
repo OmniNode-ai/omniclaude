@@ -65,8 +65,6 @@ ignore = [
     "TC001",     # Type checking imports (technical debt)
     "TC003",     # Type checking imports (technical debt)
     "TC004",     # Type checking imports (technical debt)
-    "TC006",     # Quotes in typing.cast() (technical debt)
-    "UP046",     # Use PEP 695 type parameters (technical debt)
     "PLR0911",   # Too many returns (technical debt)
     "PLR0912",   # Too many branches (technical debt)
     "PLR0913",   # Too many arguments (technical debt)
@@ -161,7 +159,6 @@ ignore = [
     "E712",      # Comparison to True/False (intentional)
     "G101",      # Logging extra field clash (technical debt)
     "PT019",     # Pytest fixture without value (technical debt)
-    "RUF043",    # Pytest raises ambiguous pattern (technical debt)
     "TRY400",    # Use logging.exception instead of logging.error (technical debt)
     "G201",      # Use logging.exception instead of .error with exc_info (technical debt)
     "PTH109",    # os.getcwd() vs Path.cwd() (technical debt)
@@ -199,7 +196,6 @@ ignore = [
     "PTH116",    # os.stat vs Path.stat (technical debt)
     "PTH103",    # os.makedirs vs Path.mkdir (technical debt)
     "RUF100",    # Unused noqa directive (technical debt)
-    "I001",      # Import block unsorted (technical debt - config imports)
     "PLR5501",   # Use elif instead of else then if (technical debt)
 ]
 

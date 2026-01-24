@@ -11,21 +11,19 @@ import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any, Dict
-from unittest.mock import MagicMock, patch
-from urllib.error import URLError
-
+from typing import Any
+from unittest.mock import patch
 
 # Add _shared to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from qdrant_helper import get_collection_health, get_collection_stats
+from qdrant_helper import get_collection_health
 
 
 class MockResponse:
     """Mock HTTP response for testing."""
 
-    def __init__(self, status: int, data: Dict[str, Any]):
+    def __init__(self, status: int, data: dict[str, Any]):
         self.status = status
         self._data = data
 
@@ -65,9 +63,9 @@ def test_empty_collection_is_healthy():
 
     # Assertions
     assert result["success"] is True, "Should succeed"
-    assert (
-        result["healthy"] is True
-    ), "Empty collection with green status should be HEALTHY"
+    assert result["healthy"] is True, (
+        "Empty collection with green status should be HEALTHY"
+    )
     assert result["status"] == "green", "Status should be green"
     assert result["vectors_count"] == 0, "Should report 0 vectors"
     assert result["error"] is None, "Should have no error"

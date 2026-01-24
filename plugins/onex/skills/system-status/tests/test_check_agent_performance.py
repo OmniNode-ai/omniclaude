@@ -10,17 +10,14 @@ Tests:
 Created: 2025-11-20
 """
 
-import sys
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-
 # Import load_skill_module from conftest
 conftest_path = Path(__file__).parent / "conftest.py"
 import importlib.util
-
 
 spec = importlib.util.spec_from_file_location("conftest", conftest_path)
 conftest = importlib.util.module_from_spec(spec)
@@ -45,7 +42,6 @@ class TestCheckAgentPerformance:
                 "sys.argv", ["execute.py", "--top-agents", "5", "--timeframe", "24h"]
             ),
         ):
-
             # Mock returns data for multiple queries: routing stats, top agents, transformations
             mock_query.side_effect = [
                 {  # Routing stats query
@@ -99,7 +95,6 @@ class TestCheckAgentPerformance:
             patch.object(execute, "execute_query") as mock_query,
             patch("sys.argv", ["execute.py", "--timeframe", "7d"]),
         ):
-
             # Mock returns empty but successful results for all queries
             mock_query.side_effect = [
                 {
@@ -129,7 +124,6 @@ class TestCheckAgentPerformance:
             patch.object(execute, "execute_query") as mock_query,
             patch("sys.argv", ["execute.py"]),
         ):
-
             # Mock returns empty but successful results for all queries
             mock_query.side_effect = [
                 {
@@ -157,7 +151,6 @@ class TestCheckAgentPerformance:
             patch.object(execute, "execute_query") as mock_query,
             patch("sys.argv", ["execute.py"]),
         ):
-
             mock_query.return_value = {
                 "success": False,
                 "error": "Connection timeout",

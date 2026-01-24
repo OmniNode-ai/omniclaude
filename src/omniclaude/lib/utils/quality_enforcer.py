@@ -16,6 +16,7 @@ Performance Budget: <2000ms total
 import asyncio
 import json
 import os
+import re
 import sys
 import time
 from datetime import UTC, datetime
@@ -23,6 +24,77 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+
+# =============================================================================
+# Secret Sanitization (mirrors omniclaude.hooks.schemas patterns)
+# =============================================================================
+
+# Privacy: Patterns that may indicate secrets (compiled for performance)
+# These patterns mirror those in omniclaude.hooks.schemas for consistency
+_SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    # API keys with common prefixes
+    (re.compile(r"\b(sk-[a-zA-Z0-9]{20,})", re.IGNORECASE), "sk-***REDACTED***"),
+    (re.compile(r"\b(AKIA[A-Z0-9]{16})", re.IGNORECASE), "AKIA***REDACTED***"),
+    (re.compile(r"\b(ghp_[a-zA-Z0-9]{36})", re.IGNORECASE), "ghp_***REDACTED***"),
+    (re.compile(r"\b(gho_[a-zA-Z0-9]{36})", re.IGNORECASE), "gho_***REDACTED***"),
+    (
+        re.compile(r"\b(xox[baprs]-[a-zA-Z0-9-]{10,})", re.IGNORECASE),
+        "xox*-***REDACTED***",
+    ),
+    # Stripe API keys
+    (
+        re.compile(r"\b((?:sk|pk|rk)_(?:live|test)_[a-zA-Z0-9]{24,})", re.IGNORECASE),
+        "stripe_***REDACTED***",
+    ),
+    # Google Cloud Platform API keys
+    (re.compile(r"\b(AIza[0-9A-Za-z\-_]{35})"), "AIza***REDACTED***"),
+    # JWT tokens
+    (
+        re.compile(r"\b(eyJ[a-zA-Z0-9_-]*\.eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*)"),
+        "jwt_***REDACTED***",
+    ),
+    # Private keys (PEM format)
+    (
+        re.compile(
+            r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----"
+        ),
+        "-----BEGIN ***REDACTED*** PRIVATE KEY-----",
+    ),
+    # Bearer tokens
+    (re.compile(r"(Bearer\s+)[a-zA-Z0-9._-]{20,}", re.IGNORECASE), r"\1***REDACTED***"),
+    # Password in URLs
+    (re.compile(r"(://[^:]+:)[^@]+(@)"), r"\1***REDACTED***\2"),
+    # Generic secret patterns in key=value format
+    (
+        re.compile(
+            r"(\b(?:password|passwd|secret|token|api_key|apikey|auth)\s*[=:]\s*)"
+            r"['\"]?[^\s'\"]{8,}['\"]?",
+            re.IGNORECASE,
+        ),
+        r"\1***REDACTED***",
+    ),
+]
+
+
+def _sanitize_for_logging(text: str) -> str:
+    """Sanitize text by redacting common secret patterns before logging.
+
+    This function applies pattern-based redaction for common secret formats
+    (API keys, passwords, tokens, etc.) to prevent accidental exposure in logs.
+
+    Args:
+        text: The text to sanitize.
+
+    Returns:
+        Text with secrets redacted.
+    """
+    if not text:
+        return text
+    sanitized = text
+    for pattern, replacement in _SECRET_PATTERNS:
+        sanitized = pattern.sub(replacement, sanitized)
+    return sanitized
+
 
 # Add project root to path for config import
 project_root = Path(__file__).resolve().parent.parent
@@ -45,7 +117,9 @@ def load_config() -> dict[str, Any]:
             with open(config_path) as f:
                 config = yaml.safe_load(f) or {}
         except Exception as e:
-            print(f"Warning: Could not load config.yaml: {e}", file=sys.stderr)
+            # Sanitize exception message before logging
+            safe_error = _sanitize_for_logging(str(e))
+            print(f"Warning: Could not load config.yaml: {safe_error}", file=sys.stderr)
 
     return config
 
@@ -215,7 +289,9 @@ class ViolationsLogger:
 
         except Exception as e:
             # Don't fail enforcement if logging fails
-            print(f"[Warning] Failed to log violations: {e}", file=sys.stderr)
+            # Sanitize exception message before logging
+            safe_error = _sanitize_for_logging(str(e))
+            print(f"[Warning] Failed to log violations: {safe_error}", file=sys.stderr)
 
     def _update_summary(
         self, file_path: str, violations: list[Any], timestamp: str
@@ -282,8 +358,11 @@ class ViolationsLogger:
                 f.write("\n")  # Add trailing newline
 
         except Exception as e:
+            # Sanitize exception message before logging
+            safe_error = _sanitize_for_logging(str(e))
             print(
-                f"[Warning] Failed to update violations summary: {e}", file=sys.stderr
+                f"[Warning] Failed to update violations summary: {safe_error}",
+                file=sys.stderr,
             )
 
     def _rotate_log_if_needed(self) -> None:
@@ -312,7 +391,12 @@ class ViolationsLogger:
                     )
 
         except Exception as e:
-            print(f"[Warning] Failed to rotate violations log: {e}", file=sys.stderr)
+            # Sanitize exception message before logging
+            safe_error = _sanitize_for_logging(str(e))
+            print(
+                f"[Warning] Failed to rotate violations log: {safe_error}",
+                file=sys.stderr,
+            )
 
 
 # ONEX: exempt - pipeline orchestrator
@@ -442,7 +526,11 @@ class QualityEnforcer:
 
                     return corrected_tool_call
                 except Exception as e:
-                    self._log(f"[Error] Pipeline failed: {e} - {self._elapsed():.3f}s")
+                    # Sanitize exception message before logging
+                    safe_error = _sanitize_for_logging(str(e))
+                    self._log(
+                        f"[Error] Pipeline failed: {safe_error} - {self._elapsed():.3f}s"
+                    )
                     # Build system message and block on error
                     self.system_message = self._build_violations_system_message(
                         violations, file_path, mode=ENFORCEMENT_MODE
@@ -459,7 +547,9 @@ class QualityEnforcer:
                 return tool_call
 
         except Exception as e:
-            self._log(f"[Fatal Error] Enforcement failed: {e}")
+            # Sanitize exception message before logging
+            safe_error = _sanitize_for_logging(str(e))
+            self._log(f"[Fatal Error] Enforcement failed: {safe_error}")
             return tool_call  # Always return original on error
 
     async def _run_phase_1_validation(
@@ -486,10 +576,14 @@ class QualityEnforcer:
             return list(violations)
 
         except ImportError as e:
-            self._log(f"[Phase 1] Validator not available: {e}")
+            # Sanitize exception message before logging
+            safe_error = _sanitize_for_logging(str(e))
+            self._log(f"[Phase 1] Validator not available: {safe_error}")
             return []
         except Exception as e:
-            self._log(f"[Phase 1] Validation failed: {e}")
+            # Sanitize exception message before logging
+            safe_error = _sanitize_for_logging(str(e))
+            self._log(f"[Phase 1] Validation failed: {safe_error}")
             return []
 
     async def _intelligent_correction_pipeline(
@@ -536,11 +630,15 @@ class QualityEnforcer:
                 )
 
             except ImportError as e:
-                self._log(f"[Phase 2] RAG client not available: {e}")
+                # Sanitize exception message before logging
+                safe_error = _sanitize_for_logging(str(e))
+                self._log(f"[Phase 2] RAG client not available: {safe_error}")
                 # Fallback to simple corrections
                 corrections = self._generate_simple_corrections(violations)
             except Exception as e:
-                self._log(f"[Phase 2] RAG query failed: {e}")
+                # Sanitize exception message before logging
+                safe_error = _sanitize_for_logging(str(e))
+                self._log(f"[Phase 2] RAG query failed: {safe_error}")
                 corrections = self._generate_simple_corrections(violations)
         else:
             # Phase 2 disabled, use simple corrections
@@ -585,11 +683,15 @@ class QualityEnforcer:
                 )
 
             except ImportError as e:
-                self._log(f"[Phase 4] AI Quorum not available: {e}")
+                # Sanitize exception message before logging
+                safe_error = _sanitize_for_logging(str(e))
+                self._log(f"[Phase 4] AI Quorum not available: {safe_error}")
                 # Fallback to accepting all corrections with medium confidence
                 scored_corrections = self._create_fallback_scores(corrections)
             except Exception as e:
-                self._log(f"[Phase 4] AI Quorum failed: {e}")
+                # Sanitize exception message before logging
+                safe_error = _sanitize_for_logging(str(e))
+                self._log(f"[Phase 4] AI Quorum failed: {safe_error}")
                 scored_corrections = self._create_fallback_scores(corrections)
         else:
             # Phase 4 disabled, use fallback scores
@@ -895,15 +997,24 @@ class QualityEnforcer:
                 quality_checks=None,  # Will be updated after validation
             )
 
+            # Sanitize selection_reason before logging (may contain user intent/secrets)
+            raw_reason = self.tool_selection_metadata["tool_selection"][
+                "selection_reason"
+            ]
+            safe_reason = _sanitize_for_logging(str(raw_reason))
             self._log(
                 f"[Intelligence] Tool selection captured: {tool_name} "
-                f"(reason: {self.tool_selection_metadata['tool_selection']['selection_reason']}, "
+                f"(reason: {safe_reason}, "
                 f"analysis: {self.tool_selection_metadata['performance']['analysis_time_ms']:.2f}ms)"
             )
 
         except Exception as e:
             # Don't fail enforcement if metadata capture fails
-            self._log(f"[Warning] Failed to capture tool selection metadata: {e}")
+            # Sanitize exception message before logging
+            safe_error = _sanitize_for_logging(str(e))
+            self._log(
+                f"[Warning] Failed to capture tool selection metadata: {safe_error}"
+            )
             self.tool_selection_metadata = None
 
     def _update_quality_check_metadata(self, violations: list[Any]) -> None:
@@ -959,7 +1070,11 @@ class QualityEnforcer:
 
         except Exception as e:
             # Don't fail enforcement if metadata update fails
-            self._log(f"[Warning] Failed to update quality check metadata: {e}")
+            # Sanitize exception message before logging
+            safe_error = _sanitize_for_logging(str(e))
+            self._log(
+                f"[Warning] Failed to update quality check metadata: {safe_error}"
+            )
 
     def get_enhanced_metadata(self) -> dict[str, Any]:
         """
@@ -1087,15 +1202,24 @@ async def main() -> int:
             return 0
 
     except json.JSONDecodeError as e:
-        print(f"[Fatal Error] Invalid JSON input: {e}", file=sys.stderr)
-        # Try to pass through original input
+        # Sanitize error message before logging (may contain input fragments)
+        safe_error = _sanitize_for_logging(str(e))
+        print(f"[Fatal Error] Invalid JSON input: {safe_error}", file=sys.stderr)
+        # Try to pass through original input (to stdout for hook mechanism, not logged)
         print(input_data if "input_data" in locals() else "{}", file=sys.stdout)
         return 1
     except Exception as e:
-        print(f"[Fatal Error] {e}", file=sys.stderr)
+        # Sanitize error message before logging (may contain sensitive data)
+        safe_error = _sanitize_for_logging(str(e))
+        print(f"[Fatal Error] {safe_error}", file=sys.stderr)
+        # Note: Traceback may contain sensitive data in variable values
+        # Log only to stderr (not to persistent files) and only in debug mode
         import traceback
 
-        traceback.print_exc(file=sys.stderr)
+        # Sanitize traceback output
+        tb_str = traceback.format_exc()
+        safe_tb = _sanitize_for_logging(tb_str)
+        print(safe_tb, file=sys.stderr)
 
         # On error, pass through original
         if "tool_call" in locals():

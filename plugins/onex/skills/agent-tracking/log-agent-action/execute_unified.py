@@ -28,12 +28,10 @@ import sys
 from enum import Enum
 from pathlib import Path
 
-
 # Add claude/hooks/lib to path (4 parents from claude/skills/agent-tracking/log-agent-action/)
 # Path: execute_unified.py -> log-agent-action -> agent-tracking -> skills -> claude -> hooks/lib
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "hooks" / "lib"))
 from hook_event_adapter import get_hook_event_adapter
-
 
 # Add _shared to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))

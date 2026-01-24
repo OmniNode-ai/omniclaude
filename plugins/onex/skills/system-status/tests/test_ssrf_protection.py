@@ -28,7 +28,6 @@ from unittest.mock import patch
 
 import pytest
 
-
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 
 
@@ -172,12 +171,12 @@ class TestSSRFProtection:
                     result = qdrant_helper.validate_qdrant_url(url)
                     # If validation passes, verify the result is NOT localhost
                     # (meaning Unicode was NOT decoded to localhost)
-                    assert (
-                        "localhost" not in result.lower()
-                    ), f"Unicode URL {url} was incorrectly normalized to localhost"
-                    assert (
-                        "127.0.0.1" not in result
-                    ), f"Unicode URL {url} was incorrectly normalized to 127.0.0.1"
+                    assert "localhost" not in result.lower(), (
+                        f"Unicode URL {url} was incorrectly normalized to localhost"
+                    )
+                    assert "127.0.0.1" not in result, (
+                        f"Unicode URL {url} was incorrectly normalized to 127.0.0.1"
+                    )
                 except ValueError:
                     # Expected rejection - Unicode URL was caught
                     validation_failed = True
@@ -201,9 +200,9 @@ class TestSSRFProtection:
                 # These should NOT raise exceptions
                 try:
                     result = qdrant_helper.validate_qdrant_url(url)
-                    assert (
-                        result == url
-                    ), f"validate_qdrant_url should return the URL unchanged"
+                    assert result == url, (
+                        "validate_qdrant_url should return the URL unchanged"
+                    )
                 except ValueError as e:
                     pytest.fail(f"Whitelisted URL {url} was incorrectly rejected: {e}")
 
@@ -242,9 +241,9 @@ class TestSSRFProtection:
         at connection time, which is outside the scope of URL validation.
         """
         # Verify validate_qdrant_url exists for URL validation
-        assert hasattr(
-            qdrant_helper, "validate_qdrant_url"
-        ), "qdrant_helper should provide validate_qdrant_url for SSRF protection"
+        assert hasattr(qdrant_helper, "validate_qdrant_url"), (
+            "qdrant_helper should provide validate_qdrant_url for SSRF protection"
+        )
 
         # Test that validation properly checks whitelisted hosts
         # (this prevents initial DNS rebinding setup)
@@ -252,9 +251,9 @@ class TestSSRFProtection:
         if hasattr(qdrant_helper, "validate_qdrant_url"):
             # Should pass validation for whitelisted host
             result = qdrant_helper.validate_qdrant_url(test_url)
-            assert result.startswith("http://") or result.startswith(
-                "https://"
-            ), f"URL should start with http:// or https://, got: {result}"
+            assert result.startswith("http://") or result.startswith("https://"), (
+                f"URL should start with http:// or https://, got: {result}"
+            )
 
 
 class TestQdrantURLParsing:
@@ -287,9 +286,9 @@ class TestQdrantURLParsing:
             try:
                 parsed = urlparse(url)
                 # Should have no hostname or invalid components
-                assert (
-                    not parsed.hostname or not parsed.scheme
-                ), f"URL {url} should have no hostname or scheme"
+                assert not parsed.hostname or not parsed.scheme, (
+                    f"URL {url} should have no hostname or scheme"
+                )
             except ValueError:
                 # Some malformed URLs raise ValueError during parsing
                 pass  # Expected for malformed URLs

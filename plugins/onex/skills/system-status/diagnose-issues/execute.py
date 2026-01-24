@@ -19,8 +19,7 @@ import json
 import logging
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
-
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 
@@ -42,19 +41,19 @@ try:
     from docker_helper import get_container_status, list_containers
     from kafka_helper import check_kafka_connection
     from qdrant_helper import check_qdrant_connection
-    from status_formatter import format_json, format_status_indicator
+    from status_formatter import format_json
 except ImportError as e:
     print(json.dumps({"success": False, "error": f"Import failed: {e}"}))
     sys.exit(3)
 
 
-def check_service_issues() -> List[Dict[str, Any]]:
+def check_service_issues() -> list[dict[str, Any]]:
     """Check for Docker service issues.
 
     Returns:
         List of issue dictionaries containing severity, component, issue description, and recommendations
     """
-    issues: List[Dict[str, Any]] = []
+    issues: list[dict[str, Any]] = []
 
     try:
         containers = list_containers()
@@ -148,13 +147,13 @@ def check_service_issues() -> List[Dict[str, Any]]:
     return issues
 
 
-def check_infrastructure_issues() -> List[Dict[str, Any]]:
+def check_infrastructure_issues() -> list[dict[str, Any]]:
     """Check for infrastructure connectivity issues.
 
     Returns:
         List of issue dictionaries containing severity, component, issue description, and recommendations
     """
-    issues: List[Dict[str, Any]] = []
+    issues: list[dict[str, Any]] = []
 
     # Check Kafka (independent check - failures don't affect other checks)
     kafka_result = None
@@ -305,13 +304,13 @@ def check_infrastructure_issues() -> List[Dict[str, Any]]:
     return issues
 
 
-def check_performance_issues() -> List[Dict[str, Any]]:
+def check_performance_issues() -> list[dict[str, Any]]:
     """Check for performance degradation.
 
     Returns:
         List of issue dictionaries containing severity, component, issue description, and recommendations
     """
-    issues: List[Dict[str, Any]] = []
+    issues: list[dict[str, Any]] = []
 
     try:
         # Check manifest injection performance
@@ -441,7 +440,7 @@ def main() -> int:
             "critical": critical_count,
             "warnings": warning_count,
             "issues": all_issues,
-            "recommendations": list(set(i["recommendation"] for i in all_issues)),
+            "recommendations": list({i["recommendation"] for i in all_issues}),
         }
 
         # Output result

@@ -56,9 +56,8 @@ from uuid import uuid4
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from aiokafka.errors import KafkaError
-from omnibase_core.errors import EnumCoreErrorCode, ModelOnexError
-
 from config import settings
+from omnibase_core.errors import EnumCoreErrorCode, ModelOnexError
 
 logger = logging.getLogger(__name__)
 
@@ -217,13 +216,13 @@ class IntelligenceEventClient:
                 f"Waiting for consumer partition assignment (topics: {self.TOPIC_COMPLETED}, {self.TOPIC_FAILED})..."
             )
             max_wait_seconds = 10  # Increased from 5s for slow networks
-            start_time = asyncio.get_event_loop().time()
+            start_time = asyncio.get_running_loop().time()
             check_count = 0
 
             while not self._consumer.assignment():
                 check_count += 1
                 await asyncio.sleep(0.1)
-                elapsed = asyncio.get_event_loop().time() - start_time
+                elapsed = asyncio.get_running_loop().time() - start_time
 
                 # Log progress every 1 second
                 if check_count % 10 == 0:
@@ -434,7 +433,7 @@ class IntelligenceEventClient:
         )
 
         # Extract patterns list from result dict
-        return cast(list[dict[str, Any]], result.get("patterns", []))
+        return cast("list[dict[str, Any]]", result.get("patterns", []))
 
     async def request_code_analysis(
         self,

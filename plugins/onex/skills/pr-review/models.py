@@ -27,10 +27,9 @@ import re
 from datetime import datetime
 from enum import Enum
 from functools import cached_property
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # =============================================================================
 # Bot Detection Patterns - CRITICAL: Must be bulletproof
@@ -251,11 +250,11 @@ class ModelFileReference(BaseModel):
     model_config = ConfigDict(extra="allow", frozen=False)
 
     path: str = Field(..., description="File path relative to repository root")
-    line: Optional[int] = Field(None, ge=1, description="Line number (1-indexed)")
-    end_line: Optional[int] = Field(
+    line: int | None = Field(None, ge=1, description="Line number (1-indexed)")
+    end_line: int | None = Field(
         None, ge=1, description="End line for multi-line references"
     )
-    diff_hunk: Optional[str] = Field(None, description="Diff context around the line")
+    diff_hunk: str | None = Field(None, description="Diff context around the line")
 
     @model_validator(mode="after")
     def validate_line_range(self) -> ModelFileReference:
@@ -275,7 +274,7 @@ class ModelFileReference(BaseModel):
         return f"ModelFileReference({self.path})"
 
     @classmethod
-    def from_github_response(cls, data: dict[str, Any]) -> Optional[ModelFileReference]:
+    def from_github_response(cls, data: dict[str, Any]) -> ModelFileReference | None:
         """
         Create a ModelFileReference from GitHub API response data.
 
@@ -405,16 +404,14 @@ class ModelPRComment(BaseModel):
     status: CommentStatus = Field(
         default=CommentStatus.UNADDRESSED, description="Resolution status"
     )
-    file_ref: Optional[ModelFileReference] = Field(
+    file_ref: ModelFileReference | None = Field(
         None, description="File location if inline"
     )
     created_at: datetime = Field(..., description="When comment was created")
-    updated_at: Optional[datetime] = Field(
+    updated_at: datetime | None = Field(
         None, description="When comment was last updated"
     )
-    in_reply_to_id: Optional[str] = Field(
-        None, description="Parent comment ID if reply"
-    )
+    in_reply_to_id: str | None = Field(None, description="Parent comment ID if reply")
     structured_sections: list[ModelStructuredSection] = Field(
         default_factory=list, description="Parsed structured sections"
     )
@@ -422,13 +419,13 @@ class ModelPRComment(BaseModel):
         default_factory=dict, description="Original GitHub API response"
     )
     # Resolution tracking fields
-    thread_id: Optional[str] = Field(
+    thread_id: str | None = Field(
         None, description="GitHub review thread ID if part of a thread"
     )
-    resolved_at: Optional[datetime] = Field(
+    resolved_at: datetime | None = Field(
         None, description="When the thread was resolved"
     )
-    resolved_by: Optional[str] = Field(
+    resolved_by: str | None = Field(
         None, description="Username who resolved the thread"
     )
     is_outdated: bool = Field(
@@ -443,7 +440,9 @@ class ModelPRComment(BaseModel):
 
         # Parse structured sections if not already done
         if not self.structured_sections and self.body:
-            self.structured_sections = ModelStructuredSection.extract_from_body(self.body)
+            self.structured_sections = ModelStructuredSection.extract_from_body(
+                self.body
+            )
 
         # Auto-classify severity if unclassified
         if self.severity == CommentSeverity.UNCLASSIFIED:
@@ -696,7 +695,7 @@ class ModelPRReview(BaseModel):
     state: Literal[
         "APPROVED", "CHANGES_REQUESTED", "COMMENTED", "PENDING", "DISMISSED"
     ] = Field(..., description="Review state")
-    body: Optional[str] = Field(None, description="Review body text")
+    body: str | None = Field(None, description="Review body text")
     submitted_at: datetime = Field(..., description="When review was submitted")
     comments: list[ModelPRComment] = Field(
         default_factory=list, description="Inline comments in this review"
@@ -714,7 +713,9 @@ class ModelPRReview(BaseModel):
         self.author_type = detect_bot_type(self.author)
 
         if not self.structured_sections and self.body:
-            self.structured_sections = ModelStructuredSection.extract_from_body(self.body)
+            self.structured_sections = ModelStructuredSection.extract_from_body(
+                self.body
+            )
 
         return self
 
@@ -787,9 +788,11 @@ class ModelPRData(BaseModel):
     state: Literal["open", "closed", "merged"] = Field(
         default="open", description="PR state"
     )
-    created_at: Optional[datetime] = Field(None, description="When PR was created")
-    updated_at: Optional[datetime] = Field(None, description="When PR was last updated")
-    reviews: list[ModelPRReview] = Field(default_factory=list, description="Formal reviews")
+    created_at: datetime | None = Field(None, description="When PR was created")
+    updated_at: datetime | None = Field(None, description="When PR was last updated")
+    reviews: list[ModelPRReview] = Field(
+        default_factory=list, description="Formal reviews"
+    )
     comments: list[ModelPRComment] = Field(
         default_factory=list, description="All unified comments"
     )
@@ -830,7 +833,7 @@ class ModelPRData(BaseModel):
         # Sort by creation time
         return sorted(all_comments, key=lambda c: c.created_at)
 
-    def get_bot_comments(self, bot_type: Optional[BotType] = None) -> list[ModelPRComment]:
+    def get_bot_comments(self, bot_type: BotType | None = None) -> list[ModelPRComment]:
         """
         Get all comments from bots.
 
@@ -898,7 +901,9 @@ class ModelPRData(BaseModel):
         # Sort by severity (critical first)
         return sorted(actionable, key=lambda c: c.severity.priority_order)
 
-    def get_comments_by_source(self, source: EnumPRCommentSource) -> list[ModelPRComment]:
+    def get_comments_by_source(
+        self, source: EnumPRCommentSource
+    ) -> list[ModelPRComment]:
         """
         Get comments from a specific source.
 
@@ -924,10 +929,10 @@ class ModelPRData(BaseModel):
     def from_github_responses(
         cls,
         pr_data: dict[str, Any],
-        reviews: Optional[list[dict[str, Any]]] = None,
-        inline_comments: Optional[list[dict[str, Any]]] = None,
-        pr_comments: Optional[list[dict[str, Any]]] = None,
-        issue_comments: Optional[list[dict[str, Any]]] = None,
+        reviews: list[dict[str, Any]] | None = None,
+        inline_comments: list[dict[str, Any]] | None = None,
+        pr_comments: list[dict[str, Any]] | None = None,
+        issue_comments: list[dict[str, Any]] | None = None,
         *,
         fetch_source: Literal["github_api", "cache", "gh_cli"] = "github_api",
     ) -> ModelPRData:
@@ -1243,7 +1248,7 @@ class ModelPRIssue(BaseModel):
     file_path: str = Field(
         default="", description="File path relative to repository root"
     )
-    line_number: Optional[int] = Field(
+    line_number: int | None = Field(
         None, ge=1, description="Line number (1-indexed) if applicable"
     )
     severity: CommentSeverity = Field(
@@ -1253,22 +1258,18 @@ class ModelPRIssue(BaseModel):
     status: CommentStatus = Field(
         default=CommentStatus.UNADDRESSED, description="Resolution status"
     )
-    comment_id: Optional[int] = Field(
-        None, description="GitHub comment ID for tracking"
-    )
-    thread_id: Optional[str] = Field(
+    comment_id: int | None = Field(None, description="GitHub comment ID for tracking")
+    thread_id: str | None = Field(
         None, description="GitHub review thread ID if part of a thread"
     )
-    resolved_at: Optional[datetime] = Field(
+    resolved_at: datetime | None = Field(
         None, description="When the issue was resolved"
     )
-    resolved_by: Optional[str] = Field(
-        None, description="Username who resolved the issue"
-    )
+    resolved_by: str | None = Field(None, description="Username who resolved the issue")
     is_outdated: bool = Field(
         default=False, description="True if file changed after comment"
     )
-    source_comment: Optional[ModelPRComment] = Field(
+    source_comment: ModelPRComment | None = Field(
         None, description="Original ModelPRComment this issue was extracted from"
     )
 
@@ -1335,8 +1336,8 @@ class ModelPRIssue(BaseModel):
     def from_pr_comment(
         cls,
         comment: ModelPRComment,
-        description: Optional[str] = None,
-        severity: Optional[CommentSeverity] = None,
+        description: str | None = None,
+        severity: CommentSeverity | None = None,
     ) -> ModelPRIssue:
         """Create a ModelPRIssue from a ModelPRComment.
 
@@ -1549,7 +1550,7 @@ class ModelCollatedIssues(BaseModel):
 # =============================================================================
 
 
-def parse_github_datetime(dt_str: Optional[str]) -> Optional[datetime]:
+def parse_github_datetime(dt_str: str | None) -> datetime | None:
     """
     Parse a GitHub API datetime string.
 

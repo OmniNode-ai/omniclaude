@@ -20,9 +20,9 @@ Usage:
     python scripts/validate_onex.py
 
 Exit codes:
-    0: All validations passed
-    1: Validation errors found (or warnings in --strict mode)
-    2: Warnings found (non-strict mode only, for informational purposes)
+    0: No issues found (validations passed)
+    1: Validation errors found (or any issues in --strict mode)
+    2: Warnings only found (non-strict mode, informational)
 
 Options:
     --strict    Fail on any validation issue (warnings or errors).
@@ -75,9 +75,9 @@ def validate_paths(paths: list[Path], *, strict: bool = False) -> int:
 
     Returns:
         Exit code:
-        - 0: No issues found
-        - 1: Errors found (or any issues in strict mode)
-        - 2: Warnings only (non-strict mode, informational)
+        - 0: No issues found (validations passed)
+        - 1: Validation errors found (or any issues in strict mode)
+        - 2: Warnings only found (non-strict mode, informational)
     """
     validators = [
         ValidatorAnyType(),
@@ -178,9 +178,9 @@ Examples:
       No arguments defaults to validating src/.
 
 Exit codes:
-  0  No issues found
-  1  Errors found (or any issues in strict mode)
-  2  Warnings only (non-strict mode, informational)
+  0  No issues found (validations passed)
+  1  Validation errors found (or any issues in strict mode)
+  2  Warnings only found (non-strict mode, informational)
 """,
     )
     parser.add_argument(
@@ -192,7 +192,7 @@ Exit codes:
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="Fail on any validation issue (warnings or errors)",
+        help="Exit 1 on any validation issue (warnings or errors)",
     )
     return parser.parse_args(args)
 

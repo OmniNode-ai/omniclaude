@@ -11,10 +11,8 @@ Created: 2025-11-12
 import argparse
 import json
 import sys
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict
-
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 
@@ -31,7 +29,6 @@ try:
     from qdrant_helper import get_all_collections_stats
     from status_formatter import (
         format_json,
-        format_markdown_table,
         format_status_indicator,
         format_timestamp,
         generate_markdown_report,
@@ -42,7 +39,7 @@ except ImportError as e:
     sys.exit(1)
 
 
-def collect_report_data(timeframe: str, include_trends: bool) -> Dict[str, Any]:
+def collect_report_data(timeframe: str, include_trends: bool) -> dict[str, Any]:
     """Collect all data for the report.
 
     Args:
@@ -242,12 +239,12 @@ def generate_markdown_output(data: dict) -> str:
     services_total = len(data.get("services", []))
     perf = data.get("performance", {})
 
-    summary = f"""**Timeframe**: {data['timeframe']}
+    summary = f"""**Timeframe**: {data["timeframe"]}
 
 - **Services Running**: {services_running}/{services_total}
-- **Agent Executions**: {data.get('recent_activity', {}).get('agent_executions', 0)}
-- **Routing Decisions**: {perf.get('routing_decisions', 0)}
-- **Average Confidence**: {int(perf.get('avg_confidence', 0) * PERCENT_MULTIPLIER)}%
+- **Agent Executions**: {data.get("recent_activity", {}).get("agent_executions", 0)}
+- **Routing Decisions**: {perf.get("routing_decisions", 0)}
+- **Average Confidence**: {int(perf.get("avg_confidence", 0) * PERCENT_MULTIPLIER)}%
 """
     sections.append({"title": "Executive Summary", "content": summary})
 
@@ -333,9 +330,9 @@ def generate_markdown_output(data: dict) -> str:
         trends = data["trends"]
         trends_content = f"""**Comparison with Previous Period**:
 
-- **Routing Decisions**: {trends['decisions_change_pct']:+.1f}% change
-- **Average Routing Time**: {trends['routing_time_change_pct']:+.1f}% change
-- **Average Confidence**: {trends['confidence_change_pct']:+.1f}% change
+- **Routing Decisions**: {trends["decisions_change_pct"]:+.1f}% change
+- **Average Routing Time**: {trends["routing_time_change_pct"]:+.1f}% change
+- **Average Confidence**: {trends["confidence_change_pct"]:+.1f}% change
 
 *Positive values indicate increase, negative values indicate decrease*
 """
