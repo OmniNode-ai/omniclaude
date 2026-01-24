@@ -189,11 +189,26 @@ class IntelligenceConfig(BaseModel):
 
         Returns:
             The data with topic names populated if not already set
+
+        Raises:
+            ValueError: If kafka_environment is empty (would cause malformed topic names)
         """
         if not isinstance(data, dict):
             return data
 
         env: str = data.get("kafka_environment", "dev")
+
+        # Validate kafka_environment is not empty to prevent malformed topic names
+        # (e.g., '.omniclaude.session.started.v1' with a leading dot)
+        if not env or not env.strip():
+            raise ValueError(
+                "kafka_environment cannot be empty. "
+                "This field is REQUIRED to prevent malformed topic names. "
+                "Set KAFKA_ENVIRONMENT in your .env file to 'dev', 'staging', or 'prod'. "
+                "Example: KAFKA_ENVIRONMENT=dev"
+            )
+
+        env = env.strip()
 
         # Build topic names if not explicitly provided
         if not data.get("topic_code_analysis_requested"):
@@ -249,6 +264,45 @@ class IntelligenceConfig(BaseModel):
             raise ValueError("kafka_consumer_group_prefix cannot be empty")
         return v.strip()
 
+    @field_validator("kafka_environment")
+    @classmethod
+    def validate_kafka_environment(cls, v: str) -> str:
+        """Validate kafka_environment is properly configured.
+
+        The kafka_environment is used as a prefix for Kafka topic names.
+        An empty or invalid value would result in malformed topic names
+        (e.g., '.omniclaude.session.started.v1' with a leading dot).
+
+        Valid values are: dev, staging, prod (or custom environment names
+        that follow the pattern of lowercase alphanumeric with optional hyphens).
+
+        Raises:
+            ValueError: If kafka_environment is empty or contains invalid characters
+        """
+        if not v or not v.strip():
+            raise ValueError(
+                "kafka_environment cannot be empty. "
+                "This field is REQUIRED to prevent malformed topic names. "
+                "Set KAFKA_ENVIRONMENT in your .env file to 'dev', 'staging', or 'prod'. "
+                "Example: KAFKA_ENVIRONMENT=dev"
+            )
+
+        v = v.strip().lower()
+
+        # Validate format: lowercase alphanumeric with optional hyphens
+        # Must start and end with alphanumeric
+        import re
+
+        if not re.match(r"^[a-z][a-z0-9-]*[a-z0-9]$|^[a-z]$", v):
+            raise ValueError(
+                f"kafka_environment '{v}' has invalid format. "
+                "Must be lowercase alphanumeric, may contain hyphens, "
+                "and must start/end with a letter or number. "
+                "Valid examples: 'dev', 'staging', 'prod', 'test-env'"
+            )
+
+        return v
+
     @model_validator(mode="after")
     def validate_configuration_complete(self) -> "IntelligenceConfig":
         """Validate configuration is complete with helpful guidance.
@@ -283,20 +337,23 @@ class IntelligenceConfig(BaseModel):
         sensible defaults for intelligence-specific options.
 
         The .env file is the single source of truth for infrastructure configuration.
-        This method follows fail-fast principles: if KAFKA_BOOTSTRAP_SERVERS is not
-        configured, it raises a clear error rather than silently using defaults.
+        This method follows fail-fast principles: if required configuration is not
+        present, it raises a clear error rather than silently using defaults.
 
         Returns:
             IntelligenceConfig with values from centralized settings
 
         Raises:
             ValueError: If KAFKA_BOOTSTRAP_SERVERS is not configured in environment
+            ValueError: If KAFKA_ENVIRONMENT is empty (would cause malformed topic names)
 
         Example:
-            >>> # Ensure KAFKA_BOOTSTRAP_SERVERS is set in .env
+            >>> # Ensure KAFKA_BOOTSTRAP_SERVERS and KAFKA_ENVIRONMENT are set in .env
             >>> config = IntelligenceConfig.from_env()
             >>> print(config.kafka_bootstrap_servers)
             kafka.example.com:9092
+            >>> print(config.kafka_environment)
+            dev
         """
         # Get bootstrap servers from settings (fail-fast if not configured)
         bootstrap_servers = settings.get_effective_kafka_bootstrap_servers()
@@ -306,6 +363,17 @@ class IntelligenceConfig(BaseModel):
                 "Please set this value in your .env file. "
                 "The .env file is the single source of truth for infrastructure configuration. "
                 "Example: KAFKA_BOOTSTRAP_SERVERS=kafka.example.com:9092"
+            )
+
+        # Validate kafka_environment (fail-fast if empty to prevent malformed topic names)
+        kafka_env = settings.kafka_environment
+        if not kafka_env or not kafka_env.strip():
+            raise ValueError(
+                "KAFKA_ENVIRONMENT is not configured. "
+                "This field is REQUIRED to prevent malformed topic names "
+                "(e.g., '.omniclaude.session.started.v1' with a leading dot). "
+                "Set KAFKA_ENVIRONMENT in your .env file to 'dev', 'staging', or 'prod'. "
+                "Example: KAFKA_ENVIRONMENT=dev"
             )
 
         # Topic names are built dynamically by model validator using kafka_environment

@@ -20,6 +20,39 @@ jobs:
   # ============================================================================
   # Code Quality and Type Safety (Strict)
   # ============================================================================
+  #
+  # =============================================================================
+  # LEGACY CODE EXCLUSION NOTICE: src/omniclaude/lib/
+  # =============================================================================
+  # The src/omniclaude/lib/ directory contains legacy code that predates the
+  # strict type checking and linting standards established for this codebase.
+  # This code is EXCLUDED from:
+  #   - Ruff format checking (line ~62)
+  #   - Ruff linting (line ~70)
+  #   - Mypy strict type checking (line ~81)
+  #
+  # WHY EXCLUDED:
+  #   The lib/ directory contains utility modules with patterns that don't
+  #   conform to current standards (missing type annotations, dynamic typing,
+  #   etc.). Enforcing strict checks would require significant refactoring
+  #   that is out of scope for the current development phase.
+  #
+  # TIMELINE:
+  #   This exclusion is TEMPORARY. The lib/ directory will be:
+  #   1. Incrementally refactored to meet strict typing standards post-Beta
+  #   2. Migrated to proper src/omniclaude/ submodules with full typing
+  #   3. Eventually deleted once all code is properly migrated
+  #
+  # NEW CODE GUIDELINES:
+  #   If you must add new modules to lib/ (not recommended):
+  #   - Follow strict typing conventions (all functions fully annotated)
+  #   - Ensure code passes ruff format, ruff check, and mypy --strict
+  #   - Consider whether the code belongs in a proper module instead
+  #   - Prefer creating new modules in src/omniclaude/{hooks,config}/ instead
+  #
+  # TRACKING: OMN-1450 (PR #54 review feedback - document lib/ exclusion)
+  # REMOVAL TARGET: Post-Beta cleanup phase
+  # =============================================================================
   quality-strict:
     name: Code Quality (Strict Mode)
     runs-on: ubuntu-latest
@@ -54,16 +87,14 @@ jobs:
       - name: Run Ruff format (code formatting check)
         run: |
           echo "::group::Ruff Format Check"
-          # Scan only non-legacy source directories
-          # Legacy lib/ excluded - will be deleted post-Beta
+          # NOTE: lib/ excluded - see LEGACY CODE EXCLUSION NOTICE above
           uv run ruff format --check src/omniclaude/hooks/ src/omniclaude/config/ tests/
           echo "::endgroup::"
 
       - name: Run Ruff (linting - strict)
         run: |
           echo "::group::Ruff Linting"
-          # Scan only non-legacy source directories
-          # Legacy lib/ excluded - will be deleted post-Beta
+          # NOTE: lib/ excluded - see LEGACY CODE EXCLUSION NOTICE above
           uv run ruff check src/omniclaude/hooks/ src/omniclaude/config/ tests/ --output-format=full
           echo "::endgroup::"
 
@@ -74,7 +105,7 @@ jobs:
           # Only install additional type stubs not in dev dependencies
           uv run pip install types-PyYAML types-aiofiles types-redis
           # Strict type checking - this MUST pass for CI to succeed
-          # Exclude legacy lib/ folder (will be deleted post-Beta)
+          # NOTE: lib/ excluded - see LEGACY CODE EXCLUSION NOTICE above
           uv run mypy src/omniclaude/hooks/ src/omniclaude/config/ \
             --strict \
             --show-error-codes \
