@@ -366,10 +366,11 @@ class SessionAggregator:
         1. Sets session status to ENDED or TIMED_OUT
         2. Records finalization timestamp
         3. Computes final duration if start time is known
+        4. Cleans up session resources (locks and state) to prevent memory leaks
 
         Idempotency:
             Calling finalize on an already-finalized session returns the
-            existing snapshot without modification.
+            existing snapshot and still performs cleanup.
 
         Args:
             session_id: The session to finalize.
@@ -393,50 +394,52 @@ class SessionAggregator:
                 )
                 return None
 
-            # Already finalized - return existing snapshot (idempotent)
+            # Already finalized - capture snapshot but still cleanup
             if session.status in (EnumSessionStatus.ENDED, EnumSessionStatus.TIMED_OUT):
                 logger.debug(
-                    "Session already finalized",
+                    "Session already finalized, performing cleanup",
                     extra={
                         "session_id": session_id,
                         "status": session.status.value,
                         "correlation_id": str(correlation_id),
                     },
                 )
-                return self._session_to_dict(session)
-
-            # Determine terminal status
-            effective_reason = reason or "unspecified"
-            if effective_reason == "timeout":
-                session.status = EnumSessionStatus.TIMED_OUT
+                snapshot = self._session_to_dict(session)
             else:
-                session.status = EnumSessionStatus.ENDED
+                # Determine terminal status
+                effective_reason = reason or "unspecified"
+                if effective_reason == "timeout":
+                    session.status = EnumSessionStatus.TIMED_OUT
+                else:
+                    session.status = EnumSessionStatus.ENDED
 
-            session.end_reason = effective_reason
-            session.ended_at = datetime.now(UTC)
+                session.end_reason = effective_reason
+                session.ended_at = datetime.now(UTC)
 
-            # Compute duration if we have start time
-            if session.started_at is not None:
-                delta = session.ended_at - session.started_at
-                session.duration_seconds = delta.total_seconds()
+                # Compute duration if we have start time
+                if session.started_at is not None:
+                    delta = session.ended_at - session.started_at
+                    session.duration_seconds = delta.total_seconds()
 
-            logger.info(
-                "Session finalized",
-                extra={
-                    "session_id": session_id,
-                    "status": session.status.value,
-                    "reason": effective_reason,
-                    "duration_seconds": session.duration_seconds,
-                    "event_count": session.event_count,
-                    "correlation_id": str(correlation_id),
-                },
-            )
+                logger.info(
+                    "Session finalized",
+                    extra={
+                        "session_id": session_id,
+                        "status": session.status.value,
+                        "reason": effective_reason,
+                        "duration_seconds": session.duration_seconds,
+                        "event_count": session.event_count,
+                        "correlation_id": str(correlation_id),
+                    },
+                )
 
-            snapshot = self._session_to_dict(session)
+                snapshot = self._session_to_dict(session)
 
-        # Clean up the session lock after finalization (outside session lock)
-        async with self._locks_lock:
-            self._cleanup_session_lock(session_id)
+        # Clean up session lock after finalization (outside session lock)
+        # This happens for both newly finalized and already-finalized sessions
+        # Note: We only clean up the lock, not the state. This ensures events
+        # for finalized sessions are rejected rather than creating orphans.
+        await self._cleanup_session_lock_only(session_id)
 
         return snapshot
 
@@ -501,6 +504,74 @@ class SessionAggregator:
             if session is None:
                 return None
             return session.last_event_at
+
+    # =========================================================================
+    # Protocol Implementation: cleanup_finalized_sessions
+    # =========================================================================
+
+    async def cleanup_finalized_sessions(
+        self,
+        correlation_id: UUID,
+        older_than_seconds: float | None = None,
+    ) -> int:
+        """Clean up memory for finalized sessions.
+
+        Removes session state and locks for sessions in terminal states
+        (ENDED, TIMED_OUT). This should be called periodically by long-running
+        consumers to prevent memory growth.
+
+        After cleanup, any new events for these sessions will create orphan
+        sessions (they won't be rejected as finalized). Only call this for
+        sessions that are truly no longer needed.
+
+        Args:
+            correlation_id: Correlation ID for distributed tracing.
+            older_than_seconds: If provided, only clean up sessions that have
+                been in terminal state for at least this many seconds (based
+                on last_event_at). If None, cleans up all finalized sessions.
+
+        Returns:
+            Number of sessions cleaned up.
+        """
+        from datetime import UTC, datetime, timedelta
+
+        async with self._locks_lock:
+            # Find all finalized sessions
+            now = datetime.now(UTC)
+            sessions_to_cleanup: list[str] = []
+
+            for session_id, session in self._sessions.items():
+                if session.status not in (
+                    EnumSessionStatus.ENDED,
+                    EnumSessionStatus.TIMED_OUT,
+                ):
+                    continue
+
+                # Apply age filter if specified
+                if older_than_seconds is not None:
+                    age = (now - session.last_event_at).total_seconds()
+                    if age < older_than_seconds:
+                        continue
+
+                sessions_to_cleanup.append(session_id)
+
+            # Clean up the sessions
+            for session_id in sessions_to_cleanup:
+                self._sessions.pop(session_id, None)
+                self._session_locks.pop(session_id, None)
+
+        if sessions_to_cleanup:
+            logger.info(
+                "Cleaned up finalized sessions",
+                extra={
+                    "cleaned_count": len(sessions_to_cleanup),
+                    "older_than_seconds": older_than_seconds,
+                    "correlation_id": str(correlation_id),
+                    "aggregator_id": self._aggregator_id,
+                },
+            )
+
+        return len(sessions_to_cleanup)
 
     # =========================================================================
     # Private: Event Handlers
@@ -618,6 +689,9 @@ class SessionAggregator:
         """Handle SessionEnded event.
 
         Transitions an ACTIVE session to ENDED status.
+
+        Note: This method only transitions the status. Cleanup of session
+        resources (locks, state) happens when finalize_session() is called.
 
         Idempotency: Only one SessionEnded per session is accepted.
         The terminal status check provides idempotency.
@@ -951,6 +1025,65 @@ class SessionAggregator:
         """
         self._session_locks.pop(session_id, None)
 
+    async def _cleanup_session_lock_only(self, session_id: str) -> None:
+        """Clean up the lock for a finalized session.
+
+        Only removes the session lock, NOT the session state. The session
+        state is preserved so that events for finalized sessions can still
+        be rejected (rather than creating new orphan sessions).
+
+        For complete cleanup including state, use _cleanup_session_fully().
+
+        This method is safe to call multiple times for the same session
+        (idempotent cleanup).
+
+        Args:
+            session_id: The session identifier to clean up.
+        """
+        async with self._locks_lock:
+            lock_removed = self._session_locks.pop(session_id, None) is not None
+
+        if lock_removed:
+            logger.debug(
+                "Cleaned up session lock",
+                extra={
+                    "session_id": session_id,
+                    "aggregator_id": self._aggregator_id,
+                },
+            )
+
+    async def _cleanup_session_fully(self, session_id: str) -> None:
+        """Clean up all resources for a finalized session including state.
+
+        Removes both the session lock and session state from memory.
+        Called when sessions need to be completely removed (e.g., orphan
+        session eviction or periodic cleanup of old finalized sessions).
+
+        WARNING: After this cleanup, events for this session will create
+        a new orphan session instead of being rejected. Only use this for
+        sessions that are truly no longer needed.
+
+        This method is safe to call multiple times for the same session
+        (idempotent cleanup).
+
+        Args:
+            session_id: The session identifier to clean up.
+        """
+        async with self._locks_lock:
+            lock_removed = self._session_locks.pop(session_id, None) is not None
+            state_removed = self._sessions.pop(session_id, None) is not None
+
+        if lock_removed or state_removed:
+            logger.debug(
+                "Fully cleaned up session resources",
+                extra={
+                    "session_id": session_id,
+                    "lock_removed": lock_removed,
+                    "state_removed": state_removed,
+                    "aggregator_id": self._aggregator_id,
+                },
+            )
+
     def _is_within_buffer(self, session: SessionState, event_time: datetime) -> bool:
         """Check if event is within out-of-order buffer window.
 
@@ -1034,6 +1167,9 @@ class SessionAggregator:
         max_orphan_sessions configuration and prevent unbounded
         memory growth.
 
+        Removes both session state and associated locks to prevent
+        memory leaks.
+
         Note: This method must be called while holding the appropriate lock.
 
         Args:
@@ -1058,16 +1194,20 @@ class SessionAggregator:
         orphan_sessions.sort(key=lambda x: x[1].last_event_at)
         removed = 0
         for session_id, _ in orphan_sessions[:excess]:
+            # Remove session state
             del self._sessions[session_id]
+            # Remove associated lock to prevent memory leak
+            self._session_locks.pop(session_id, None)
             removed += 1
-            logger.info(
-                "Cleaned up orphan session",
+            logger.debug(
+                "Cleaned up orphan session and lock",
                 extra={
                     "session_id": session_id,
                     "correlation_id": str(correlation_id),
                     "reason": "max_orphan_sessions_exceeded",
                     "orphan_count": len(orphan_sessions),
                     "max_orphan_sessions": self._config.max_orphan_sessions,
+                    "aggregator_id": self._aggregator_id,
                 },
             )
 

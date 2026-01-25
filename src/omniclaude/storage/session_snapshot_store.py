@@ -14,6 +14,7 @@ See migrations/016_create_session_snapshots.sql for full schema.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -186,17 +187,27 @@ class SessionSnapshotStore:
 
         async with pool.acquire() as conn:
             async with conn.transaction():
-                # Upsert main snapshot
+                # Upsert main snapshot first (required for foreign key references)
                 snapshot_id = await self._upsert_snapshot(conn, snapshot)
 
-                # Sync child tables if provided
+                # Sync child tables in parallel if provided.
+                # This is safe because:
+                # 1. Both operations are within the same transaction (atomicity preserved)
+                # 2. prompts and tools tables are independent (no cross-table constraints)
+                # 3. Both reference the same snapshot_id but don't conflict with each other
                 prompts = snapshot.get("prompts", [])
-                if prompts:
-                    await self._sync_prompts(conn, snapshot_id, prompts)
-
                 tools = snapshot.get("tools", [])
-                if tools:
-                    await self._sync_tools(conn, snapshot_id, tools)
+
+                if prompts or tools:
+                    async with asyncio.TaskGroup() as tg:
+                        if prompts:
+                            tg.create_task(
+                                self._sync_prompts(conn, snapshot_id, prompts)
+                            )
+                        if tools:
+                            tg.create_task(
+                                self._sync_tools(conn, snapshot_id, tools)
+                            )
 
                 logger.debug(
                     "Saved session snapshot",
