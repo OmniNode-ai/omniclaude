@@ -88,14 +88,14 @@ jobs:
         run: |
           echo "::group::Ruff Format Check"
           # NOTE: lib/ excluded - see LEGACY CODE EXCLUSION NOTICE above
-          uv run ruff format --check src/omniclaude/hooks/ src/omniclaude/config/ tests/
+          uv run ruff format --check src/omniclaude/hooks/ src/omniclaude/config/ src/omniclaude/aggregators/ tests/
           echo "::endgroup::"
 
       - name: Run Ruff (linting - strict)
         run: |
           echo "::group::Ruff Linting"
           # NOTE: lib/ excluded - see LEGACY CODE EXCLUSION NOTICE above
-          uv run ruff check src/omniclaude/hooks/ src/omniclaude/config/ tests/ --output-format=full
+          uv run ruff check src/omniclaude/hooks/ src/omniclaude/config/ src/omniclaude/aggregators/ tests/ --output-format=full
           echo "::endgroup::"
 
       - name: Run type checking (mypy - strict mode)
@@ -106,7 +106,7 @@ jobs:
           uv run pip install types-PyYAML types-aiofiles types-redis
           # Strict type checking - this MUST pass for CI to succeed
           # NOTE: lib/ excluded - see LEGACY CODE EXCLUSION NOTICE above
-          uv run mypy src/omniclaude/hooks/ src/omniclaude/config/ \
+          uv run mypy src/omniclaude/hooks/ src/omniclaude/config/ src/omniclaude/aggregators/ \
             --strict \
             --show-error-codes \
             --show-column-numbers \
