@@ -262,6 +262,7 @@ class SessionEventConsumer:
         self._circuit_state = EnumCircuitState.CLOSED
         self._circuit_opened_at: datetime | None = None
         self._circuit_lock = asyncio.Lock()
+        self._consumer_paused = False  # Track pause state for circuit breaker
 
         # Metrics
         self.metrics = ConsumerMetrics()
@@ -413,6 +414,10 @@ class SessionEventConsumer:
         self._running = False
         self._shutdown_event.set()
 
+        # Resume consumer if paused (cleanup before stop)
+        if self._consumer is not None and self._consumer_paused:
+            await self._resume_consumer(correlation_id)
+
         # Close consumer connection
         if self._consumer is not None:
             try:
@@ -540,12 +545,12 @@ class SessionEventConsumer:
                 # Record message received
                 await self.metrics.record_received()
 
-                # Check circuit breaker
+                # Check circuit breaker - if open, pause and wait for recovery
+                # IMPORTANT: We do NOT skip this message. After circuit recovers,
+                # we process it normally. This prevents message loss during circuit open.
                 if await self._is_circuit_open():
-                    await self._handle_circuit_open(correlation_id)
-                    # Skip this message but don't commit
-                    # It will be reprocessed after circuit closes
-                    continue
+                    await self._wait_for_circuit_recovery(correlation_id)
+                    # Fall through to process this message after recovery
 
                 # Process the message
                 message_correlation_id = uuid4()
@@ -771,17 +776,29 @@ class SessionEventConsumer:
 
             return True
 
-    async def _handle_circuit_open(self, correlation_id: UUID) -> None:
-        """Wait for circuit breaker timeout.
+    async def _wait_for_circuit_recovery(self, correlation_id: UUID) -> None:
+        """Pause consumer and wait for circuit breaker to recover.
 
-        Called when the circuit is open to pause processing and wait
-        for the timeout to elapse.
+        Called when the circuit is open. This method:
+        1. Pauses the Kafka consumer to stop fetching new messages
+        2. Waits in a loop until circuit transitions to HALF_OPEN or CLOSED
+        3. Resumes the consumer before returning
+
+        This ensures no messages are lost during circuit open state - the current
+        message will be processed after this method returns, and no new messages
+        are fetched while waiting.
 
         Args:
             correlation_id: Correlation ID for logging.
         """
+        if self._consumer is None:
+            return
+
+        # Pause the consumer to stop fetching new messages
+        await self._pause_consumer(correlation_id)
+
         logger.warning(
-            "Circuit breaker is open, waiting for timeout",
+            "Circuit breaker is open, consumer paused - waiting for recovery",
             extra={
                 "consumer_id": self._consumer_id,
                 "correlation_id": str(correlation_id),
@@ -789,9 +806,101 @@ class SessionEventConsumer:
             },
         )
 
-        # Wait for a short interval before checking again
-        # This prevents tight looping while circuit is open
-        await asyncio.sleep(min(5.0, self._config.circuit_breaker_timeout_seconds))
+        # Wait in a loop until circuit is no longer open
+        check_interval = min(1.0, self._config.circuit_breaker_timeout_seconds / 10)
+        while self._running:
+            # Check if circuit has recovered
+            if not await self._is_circuit_open():
+                logger.info(
+                    "Circuit breaker recovered, resuming consumer",
+                    extra={
+                        "consumer_id": self._consumer_id,
+                        "correlation_id": str(correlation_id),
+                        "circuit_state": self._circuit_state.value,
+                    },
+                )
+                break
+
+            # Check for shutdown signal
+            if self._shutdown_event.is_set():
+                logger.debug(
+                    "Shutdown signal received while waiting for circuit recovery",
+                    extra={
+                        "consumer_id": self._consumer_id,
+                        "correlation_id": str(correlation_id),
+                    },
+                )
+                break
+
+            # Wait before checking again
+            await asyncio.sleep(check_interval)
+
+        # Resume the consumer before returning
+        await self._resume_consumer(correlation_id)
+
+    async def _pause_consumer(self, correlation_id: UUID) -> None:
+        """Pause the Kafka consumer on all assigned partitions.
+
+        Args:
+            correlation_id: Correlation ID for logging.
+        """
+        if self._consumer is None or self._consumer_paused:
+            return
+
+        try:
+            partitions = self._consumer.assignment()
+            if partitions:
+                self._consumer.pause(*partitions)
+                self._consumer_paused = True
+                logger.debug(
+                    "Consumer paused",
+                    extra={
+                        "consumer_id": self._consumer_id,
+                        "correlation_id": str(correlation_id),
+                        "partitions": [str(p) for p in partitions],
+                    },
+                )
+        except Exception as e:
+            logger.warning(
+                "Failed to pause consumer",
+                extra={
+                    "consumer_id": self._consumer_id,
+                    "correlation_id": str(correlation_id),
+                    "error": str(e),
+                },
+            )
+
+    async def _resume_consumer(self, correlation_id: UUID) -> None:
+        """Resume the Kafka consumer on all assigned partitions.
+
+        Args:
+            correlation_id: Correlation ID for logging.
+        """
+        if self._consumer is None or not self._consumer_paused:
+            return
+
+        try:
+            partitions = self._consumer.assignment()
+            if partitions:
+                self._consumer.resume(*partitions)
+                self._consumer_paused = False
+                logger.debug(
+                    "Consumer resumed",
+                    extra={
+                        "consumer_id": self._consumer_id,
+                        "correlation_id": str(correlation_id),
+                        "partitions": [str(p) for p in partitions],
+                    },
+                )
+        except Exception as e:
+            logger.warning(
+                "Failed to resume consumer",
+                extra={
+                    "consumer_id": self._consumer_id,
+                    "correlation_id": str(correlation_id),
+                    "error": str(e),
+                },
+            )
 
     async def _record_failure(self) -> None:
         """Record a processing failure for circuit breaker.
@@ -821,14 +930,16 @@ class SessionEventConsumer:
         """Record a processing success for circuit breaker.
 
         Resets consecutive failure count and closes circuit if in
-        half-open state.
+        half-open state. Also ensures consumer is resumed if it was paused.
         """
+        should_resume = False
         async with self._circuit_lock:
             self._consecutive_failures = 0
 
             if self._circuit_state == EnumCircuitState.HALF_OPEN:
                 self._circuit_state = EnumCircuitState.CLOSED
                 self._circuit_opened_at = None
+                should_resume = self._consumer_paused
 
                 logger.info(
                     "Circuit breaker closed after successful request",
@@ -836,6 +947,10 @@ class SessionEventConsumer:
                         "consumer_id": self._consumer_id,
                     },
                 )
+
+        # Resume consumer outside the lock if needed (safety check)
+        if should_resume:
+            await self._resume_consumer(uuid4())
 
     # =========================================================================
     # Health Check
@@ -861,6 +976,7 @@ class SessionEventConsumer:
             "healthy": self._running and self._circuit_state == EnumCircuitState.CLOSED,
             "running": self._running,
             "circuit_state": self._circuit_state.value,
+            "consumer_paused": self._consumer_paused,
             "consumer_id": self._consumer_id,
             "group_id": self._config.group_id,
             "topics": self._config.topics,

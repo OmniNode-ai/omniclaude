@@ -35,7 +35,7 @@ class ConfigSessionAggregator(BaseSettings):
     session_max_duration_seconds: int = Field(
         default=2592000,  # 30 days
         ge=3600,
-        le=2592000,
+        le=7776000,  # 90 days max - gives headroom for customization
         description="Maximum session duration",
     )
     orphan_buffer_duration_seconds: int = Field(

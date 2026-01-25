@@ -22,10 +22,10 @@ CREATE TABLE IF NOT EXISTS claude_session_snapshots (
     end_reason VARCHAR(50),  -- user_exit, timeout, error, compact, unknown
 
     -- Metrics
-    prompt_count INTEGER DEFAULT 0,
-    tool_count INTEGER DEFAULT 0,
-    tools_used_count INTEGER DEFAULT 0,
-    event_count INTEGER DEFAULT 0,
+    prompt_count BIGINT DEFAULT 0,
+    tool_count BIGINT DEFAULT 0,
+    tools_used_count BIGINT DEFAULT 0,
+    event_count BIGINT DEFAULT 0,
 
     -- Aggregation metadata
     last_event_at TIMESTAMPTZ NOT NULL,
@@ -48,6 +48,13 @@ CREATE INDEX IF NOT EXISTS idx_session_snapshots_last_event_at ON claude_session
 CREATE INDEX IF NOT EXISTS idx_session_snapshots_created_at ON claude_session_snapshots(created_at);
 CREATE INDEX IF NOT EXISTS idx_session_snapshots_git_branch ON claude_session_snapshots(git_branch);
 CREATE INDEX IF NOT EXISTS idx_session_snapshots_correlation_id ON claude_session_snapshots(correlation_id);
+
+-- Composite indexes for common query patterns
+CREATE INDEX IF NOT EXISTS idx_session_snapshots_status_working_dir
+    ON claude_session_snapshots(status, working_directory);
+
+CREATE INDEX IF NOT EXISTS idx_session_snapshots_status_last_event
+    ON claude_session_snapshots(status, last_event_at);
 
 -- Unique constraint: one snapshot per session_id (latest wins on conflict)
 CREATE UNIQUE INDEX IF NOT EXISTS idx_session_snapshots_session_id_unique ON claude_session_snapshots(session_id);

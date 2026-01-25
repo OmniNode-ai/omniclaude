@@ -530,8 +530,6 @@ class SessionAggregator:
         Returns:
             Number of sessions cleaned up.
         """
-        from datetime import UTC, datetime, timedelta
-
         async with self._locks_lock:
             # Find all finalized sessions
             now = datetime.now(UTC)
@@ -800,10 +798,9 @@ class SessionAggregator:
 
             # Create orphan session if none exists
             if session is None:
-                session = self._create_orphan_session(
+                session = await self._create_orphan_session(
                     session_id, payload.correlation_id, payload.emitted_at
                 )
-                self._sessions[session_id] = session
                 logger.debug(
                     "Created orphan session for prompt",
                     extra={
@@ -906,10 +903,9 @@ class SessionAggregator:
 
             # Create orphan session if none exists
             if session is None:
-                session = self._create_orphan_session(
+                session = await self._create_orphan_session(
                     session_id, payload.correlation_id, payload.emitted_at
                 )
-                self._sessions[session_id] = session
                 logger.debug(
                     "Created orphan session for tool execution",
                     extra={
@@ -1118,7 +1114,7 @@ class SessionAggregator:
         if event_time > session.last_event_at:
             session.last_event_at = event_time
 
-    def _create_orphan_session(
+    async def _create_orphan_session(
         self,
         session_id: str,
         correlation_id: UUID,
@@ -1133,7 +1129,8 @@ class SessionAggregator:
         This method also adds the session to the sessions dict and triggers
         cleanup of excess orphan sessions to prevent unbounded memory growth.
 
-        Note: This method must be called while holding the appropriate lock.
+        Note: This method must be called while holding the appropriate session lock.
+        The cleanup step will acquire _locks_lock internally.
 
         Args:
             session_id: The session identifier.
@@ -1153,11 +1150,11 @@ class SessionAggregator:
         self._sessions[session_id] = session
 
         # Clean up excess orphan sessions to prevent memory exhaustion
-        self._cleanup_orphan_sessions(correlation_id)
+        await self._cleanup_orphan_sessions(correlation_id)
 
         return session
 
-    def _cleanup_orphan_sessions(self, correlation_id: UUID) -> int:
+    async def _cleanup_orphan_sessions(self, correlation_id: UUID) -> int:
         """Remove oldest orphan sessions if over limit.
 
         Called when creating new orphan sessions to enforce the
@@ -1168,28 +1165,17 @@ class SessionAggregator:
         memory leaks.
 
         Threading Model:
-            This method is called while holding a session lock (via
-            _get_session_lock) but NOT while holding _locks_lock. This
-            creates a benign race condition when accessing _session_locks:
+            This method acquires _locks_lock to safely iterate and modify
+            _sessions and _session_locks. It may be called while a session
+            lock is held (from _create_orphan_session), but this is safe
+            because:
 
-            - _get_session_lock: Holds _locks_lock when reading/creating locks
-            - This method: Does NOT hold _locks_lock when popping locks
+            1. _get_session_lock acquires _locks_lock briefly, then releases
+               it before returning the session lock
+            2. Therefore, when this method runs, _locks_lock is not held by
+               the caller, so acquiring it here won't cause deadlock
 
-            The race is benign because the worst case is:
-            1. This method pops a lock for session X
-            2. Concurrently, _get_session_lock creates a new lock for session X
-            3. Result: Redundant lock creation, which is safe (just allocates
-               a new asyncio.Lock that will eventually be cleaned up)
-
-            We accept this small race window for simplicity rather than:
-            - Acquiring _locks_lock here (would require careful lock ordering
-              to avoid deadlocks since we already hold a session lock)
-            - Deferring lock cleanup to a separate async method (adds complexity)
-
-            The session state removal (del self._sessions[session_id]) is also
-            not protected by _locks_lock here, but callers are expected to hold
-            the session lock which serializes access to that specific session's
-            state.
+            Lock ordering: session_lock -> _locks_lock is the consistent order.
 
         Args:
             correlation_id: Correlation ID for distributed tracing.
@@ -1197,47 +1183,49 @@ class SessionAggregator:
         Returns:
             Number of orphan sessions removed.
         """
-        # Find all orphan sessions
-        orphan_sessions = [
-            (session_id, state)
-            for session_id, state in self._sessions.items()
-            if state.status == EnumSessionStatus.ORPHAN
-        ]
+        async with self._locks_lock:
+            # Find all orphan sessions
+            orphan_sessions = [
+                (session_id, state)
+                for session_id, state in self._sessions.items()
+                if state.status == EnumSessionStatus.ORPHAN
+            ]
 
-        # Check if over limit
-        excess = len(orphan_sessions) - self._config.max_orphan_sessions
-        if excess <= 0:
-            return 0
+            # Check if over limit
+            excess = len(orphan_sessions) - self._config.max_orphan_sessions
+            if excess <= 0:
+                return 0
 
-        # Sort by last_event_at (oldest first) and remove excess
-        orphan_sessions.sort(key=lambda x: x[1].last_event_at)
-        removed = 0
-        for session_id, _ in orphan_sessions[:excess]:
-            # Remove session state
-            del self._sessions[session_id]
-            # Remove associated lock to prevent memory leak
-            self._session_locks.pop(session_id, None)
-            removed += 1
-            logger.debug(
-                "Cleaned up orphan session and lock",
+            # Sort by last_event_at (oldest first) and remove excess
+            orphan_sessions.sort(key=lambda x: x[1].last_event_at)
+            removed = 0
+            for session_id, _ in orphan_sessions[:excess]:
+                # Remove session state
+                del self._sessions[session_id]
+                # Remove associated lock to prevent memory leak
+                self._session_locks.pop(session_id, None)
+                removed += 1
+                logger.debug(
+                    "Cleaned up orphan session and lock",
+                    extra={
+                        "session_id": session_id,
+                        "correlation_id": str(correlation_id),
+                        "reason": "max_orphan_sessions_exceeded",
+                        "orphan_count": len(orphan_sessions),
+                        "max_orphan_sessions": self._config.max_orphan_sessions,
+                        "aggregator_id": self._aggregator_id,
+                    },
+                )
+
+        if removed > 0:
+            logger.info(
+                "Orphan session cleanup completed",
                 extra={
-                    "session_id": session_id,
+                    "removed_count": removed,
+                    "remaining_orphans": len(orphan_sessions) - removed,
                     "correlation_id": str(correlation_id),
-                    "reason": "max_orphan_sessions_exceeded",
-                    "orphan_count": len(orphan_sessions),
-                    "max_orphan_sessions": self._config.max_orphan_sessions,
-                    "aggregator_id": self._aggregator_id,
                 },
             )
-
-        logger.info(
-            "Orphan session cleanup completed",
-            extra={
-                "removed_count": removed,
-                "remaining_orphans": len(orphan_sessions) - removed,
-                "correlation_id": str(correlation_id),
-            },
-        )
 
         return removed
 

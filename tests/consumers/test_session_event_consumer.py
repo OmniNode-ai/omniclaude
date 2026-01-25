@@ -249,6 +249,114 @@ class TestCircuitBreaker:
         metrics = await consumer.metrics.snapshot()
         assert metrics["circuit_opens"] == 1
 
+    async def test_pause_consumer_sets_paused_flag(
+        self, consumer: SessionEventConsumer
+    ) -> None:
+        """Pausing consumer should set _consumer_paused flag."""
+        # Mock the consumer with assignment
+        mock_kafka_consumer = MagicMock()
+        mock_kafka_consumer.assignment.return_value = [MagicMock()]
+        mock_kafka_consumer.pause = MagicMock()
+        consumer._consumer = mock_kafka_consumer
+
+        await consumer._pause_consumer(uuid4())
+
+        assert consumer._consumer_paused is True
+        mock_kafka_consumer.pause.assert_called_once()
+
+    async def test_resume_consumer_clears_paused_flag(
+        self, consumer: SessionEventConsumer
+    ) -> None:
+        """Resuming consumer should clear _consumer_paused flag."""
+        # Mock the consumer with assignment
+        mock_kafka_consumer = MagicMock()
+        mock_kafka_consumer.assignment.return_value = [MagicMock()]
+        mock_kafka_consumer.resume = MagicMock()
+        consumer._consumer = mock_kafka_consumer
+        consumer._consumer_paused = True
+
+        await consumer._resume_consumer(uuid4())
+
+        assert consumer._consumer_paused is False
+        mock_kafka_consumer.resume.assert_called_once()
+
+    async def test_pause_consumer_noop_when_already_paused(
+        self, consumer: SessionEventConsumer
+    ) -> None:
+        """Pausing already paused consumer should be a no-op."""
+        mock_kafka_consumer = MagicMock()
+        mock_kafka_consumer.assignment.return_value = [MagicMock()]
+        mock_kafka_consumer.pause = MagicMock()
+        consumer._consumer = mock_kafka_consumer
+        consumer._consumer_paused = True  # Already paused
+
+        await consumer._pause_consumer(uuid4())
+
+        mock_kafka_consumer.pause.assert_not_called()
+
+    async def test_resume_consumer_noop_when_not_paused(
+        self, consumer: SessionEventConsumer
+    ) -> None:
+        """Resuming non-paused consumer should be a no-op."""
+        mock_kafka_consumer = MagicMock()
+        mock_kafka_consumer.assignment.return_value = [MagicMock()]
+        mock_kafka_consumer.resume = MagicMock()
+        consumer._consumer = mock_kafka_consumer
+        consumer._consumer_paused = False  # Not paused
+
+        await consumer._resume_consumer(uuid4())
+
+        mock_kafka_consumer.resume.assert_not_called()
+
+    async def test_wait_for_circuit_recovery_pauses_consumer(
+        self, consumer: SessionEventConsumer
+    ) -> None:
+        """Circuit recovery should pause consumer and wait."""
+        # Mock the consumer
+        mock_kafka_consumer = MagicMock()
+        mock_kafka_consumer.assignment.return_value = [MagicMock()]
+        mock_kafka_consumer.pause = MagicMock()
+        mock_kafka_consumer.resume = MagicMock()
+        consumer._consumer = mock_kafka_consumer
+        consumer._running = True
+
+        # Open the circuit
+        for _ in range(consumer._config.circuit_breaker_threshold):
+            await consumer._record_failure()
+
+        # Manually set to half-open so recovery check passes immediately
+        async with consumer._circuit_lock:
+            consumer._circuit_state = EnumCircuitState.HALF_OPEN
+
+        await consumer._wait_for_circuit_recovery(uuid4())
+
+        # Should have paused and then resumed
+        mock_kafka_consumer.pause.assert_called()
+        mock_kafka_consumer.resume.assert_called()
+        assert consumer._consumer_paused is False
+
+    async def test_success_resumes_consumer_when_closing_circuit(
+        self, consumer: SessionEventConsumer
+    ) -> None:
+        """Recording success when closing circuit should resume consumer."""
+        # Mock the consumer
+        mock_kafka_consumer = MagicMock()
+        mock_kafka_consumer.assignment.return_value = [MagicMock()]
+        mock_kafka_consumer.resume = MagicMock()
+        consumer._consumer = mock_kafka_consumer
+        consumer._consumer_paused = True
+
+        # Set circuit to half-open
+        async with consumer._circuit_lock:
+            consumer._circuit_state = EnumCircuitState.HALF_OPEN
+
+        await consumer._record_success()
+
+        # Should have resumed
+        mock_kafka_consumer.resume.assert_called()
+        assert consumer._consumer_paused is False
+        assert consumer.circuit_state == EnumCircuitState.CLOSED
+
 
 # =============================================================================
 # Metrics Tests
@@ -349,6 +457,21 @@ class TestHealthCheck:
 
         assert "metrics" in health
         assert isinstance(health["metrics"], dict)
+
+    async def test_health_check_includes_consumer_paused(
+        self, consumer: SessionEventConsumer
+    ) -> None:
+        """Health check should include consumer_paused state."""
+        health = await consumer.health_check()
+
+        assert "consumer_paused" in health
+        assert health["consumer_paused"] is False
+
+        # Pause the consumer
+        consumer._consumer_paused = True
+        health = await consumer.health_check()
+
+        assert health["consumer_paused"] is True
 
 
 # =============================================================================
