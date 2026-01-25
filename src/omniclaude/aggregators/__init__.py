@@ -57,6 +57,7 @@ from omniclaude.aggregators.protocol_session_aggregator import (
     TSnapshot_co,
 )
 from omniclaude.aggregators.session_aggregator import (
+    AggregatorMetricsDict,
     PromptRecord,
     PromptSnapshotDict,
     SessionAggregator,
@@ -83,6 +84,7 @@ __all__ = [
     "ToolRecord",
     "SessionState",
     # Snapshot TypedDicts (for consumers of get_snapshot)
+    "AggregatorMetricsDict",
     "PromptSnapshotDict",
     "SessionSnapshotDict",
     "ToolSnapshotDict",

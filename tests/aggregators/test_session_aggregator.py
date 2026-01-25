@@ -1385,3 +1385,257 @@ class TestProtocolConformance:
         """Verify SessionAggregator implements ProtocolSessionAggregator."""
         aggregator = SessionAggregator(config)
         assert isinstance(aggregator, ProtocolSessionAggregator)
+
+
+# =============================================================================
+# Metrics Tests
+# =============================================================================
+
+
+class TestMetrics:
+    """Tests for aggregator metrics/counters."""
+
+    @pytest.mark.asyncio
+    async def test_get_metrics_returns_all_counters(
+        self, aggregator: SessionAggregator
+    ) -> None:
+        """get_metrics returns dict with all expected counters."""
+        metrics = aggregator.get_metrics()
+
+        assert "events_processed" in metrics
+        assert "events_rejected" in metrics
+        assert "sessions_created" in metrics
+        assert "sessions_finalized" in metrics
+
+    @pytest.mark.asyncio
+    async def test_metrics_start_at_zero(self, aggregator: SessionAggregator) -> None:
+        """All metrics counters start at zero."""
+        metrics = aggregator.get_metrics()
+
+        assert metrics["events_processed"] == 0
+        assert metrics["events_rejected"] == 0
+        assert metrics["sessions_created"] == 0
+        assert metrics["sessions_finalized"] == 0
+
+    @pytest.mark.asyncio
+    async def test_events_processed_increments_on_success(
+        self, aggregator: SessionAggregator, correlation_id: UUID
+    ) -> None:
+        """events_processed increments when event is successfully processed."""
+        session_id = "metrics-processed-session"
+
+        # Process events
+        start_event = make_session_started(session_id)
+        await aggregator.process_event(start_event, correlation_id)
+
+        prompt_event = make_prompt_submitted(session_id)
+        await aggregator.process_event(prompt_event, correlation_id)
+
+        tool_event = make_tool_executed(session_id)
+        await aggregator.process_event(tool_event, correlation_id)
+
+        metrics = aggregator.get_metrics()
+        assert metrics["events_processed"] == 3
+
+    @pytest.mark.asyncio
+    async def test_events_rejected_increments_on_duplicate(
+        self, aggregator: SessionAggregator, correlation_id: UUID
+    ) -> None:
+        """events_rejected increments when event is rejected."""
+        session_id = "metrics-rejected-session"
+        prompt_id = uuid4()
+
+        # Start session
+        start_event = make_session_started(session_id)
+        await aggregator.process_event(start_event, correlation_id)
+
+        # First prompt - should be processed
+        prompt1 = make_prompt_submitted(session_id, prompt_id=prompt_id)
+        await aggregator.process_event(prompt1, correlation_id)
+
+        # Duplicate prompt - should be rejected
+        prompt2 = make_prompt_submitted(session_id, prompt_id=prompt_id)
+        await aggregator.process_event(prompt2, correlation_id)
+
+        # Duplicate SessionStarted - should be rejected
+        start_event2 = make_session_started(session_id)
+        await aggregator.process_event(start_event2, correlation_id)
+
+        metrics = aggregator.get_metrics()
+        assert metrics["events_processed"] == 2  # start + first prompt
+        assert metrics["events_rejected"] == 2  # duplicate prompt + duplicate start
+
+    @pytest.mark.asyncio
+    async def test_events_rejected_increments_for_finalized_session(
+        self, aggregator: SessionAggregator, correlation_id: UUID
+    ) -> None:
+        """events_rejected increments when event sent to finalized session."""
+        session_id = "metrics-finalized-reject-session"
+
+        # Complete session lifecycle
+        start_event = make_session_started(session_id)
+        await aggregator.process_event(start_event, correlation_id)
+
+        end_event = make_session_ended(session_id)
+        await aggregator.process_event(end_event, correlation_id)
+
+        # Try to add prompt to ended session - should be rejected
+        prompt_event = make_prompt_submitted(session_id)
+        await aggregator.process_event(prompt_event, correlation_id)
+
+        metrics = aggregator.get_metrics()
+        assert metrics["events_processed"] == 2  # start + end
+        assert metrics["events_rejected"] == 1  # prompt to ended session
+
+    @pytest.mark.asyncio
+    async def test_sessions_created_increments_for_active(
+        self, aggregator: SessionAggregator, correlation_id: UUID
+    ) -> None:
+        """sessions_created increments when new ACTIVE session created."""
+        # Create two sessions
+        start1 = make_session_started("session-1")
+        await aggregator.process_event(start1, correlation_id)
+
+        start2 = make_session_started("session-2")
+        await aggregator.process_event(start2, correlation_id)
+
+        metrics = aggregator.get_metrics()
+        assert metrics["sessions_created"] == 2
+
+    @pytest.mark.asyncio
+    async def test_sessions_created_increments_for_orphan(
+        self, aggregator: SessionAggregator, correlation_id: UUID
+    ) -> None:
+        """sessions_created increments when ORPHAN session created."""
+        # Create orphan session via prompt (no SessionStarted)
+        prompt_event = make_prompt_submitted("orphan-session")
+        await aggregator.process_event(prompt_event, correlation_id)
+
+        metrics = aggregator.get_metrics()
+        assert metrics["sessions_created"] == 1
+
+    @pytest.mark.asyncio
+    async def test_sessions_created_increments_for_orphan_end(
+        self, aggregator: SessionAggregator, correlation_id: UUID
+    ) -> None:
+        """sessions_created increments when orphan end event creates session."""
+        # SessionEnded without SessionStarted creates session
+        end_event = make_session_ended("orphan-end-session")
+        await aggregator.process_event(end_event, correlation_id)
+
+        metrics = aggregator.get_metrics()
+        assert metrics["sessions_created"] == 1
+        # Also finalized immediately
+        assert metrics["sessions_finalized"] == 1
+
+    @pytest.mark.asyncio
+    async def test_sessions_finalized_increments_on_session_ended(
+        self, aggregator: SessionAggregator, correlation_id: UUID
+    ) -> None:
+        """sessions_finalized increments when session ends via SessionEnded."""
+        session_id = "metrics-finalized-session"
+
+        start_event = make_session_started(session_id)
+        await aggregator.process_event(start_event, correlation_id)
+
+        end_event = make_session_ended(session_id)
+        await aggregator.process_event(end_event, correlation_id)
+
+        metrics = aggregator.get_metrics()
+        assert metrics["sessions_finalized"] == 1
+
+    @pytest.mark.asyncio
+    async def test_sessions_finalized_increments_on_finalize_session(
+        self, aggregator: SessionAggregator, correlation_id: UUID
+    ) -> None:
+        """sessions_finalized increments when finalize_session called."""
+        session_id = "metrics-timeout-session"
+
+        start_event = make_session_started(session_id)
+        await aggregator.process_event(start_event, correlation_id)
+
+        # Finalize via method call (simulating timeout)
+        await aggregator.finalize_session(session_id, correlation_id, reason="timeout")
+
+        metrics = aggregator.get_metrics()
+        assert metrics["sessions_finalized"] == 1
+
+    @pytest.mark.asyncio
+    async def test_sessions_finalized_not_incremented_on_already_finalized(
+        self, aggregator: SessionAggregator, correlation_id: UUID
+    ) -> None:
+        """sessions_finalized not incremented when already finalized."""
+        session_id = "metrics-double-finalize-session"
+
+        start_event = make_session_started(session_id)
+        await aggregator.process_event(start_event, correlation_id)
+
+        # First finalization
+        await aggregator.finalize_session(session_id, correlation_id, reason="timeout")
+
+        # Second finalization (idempotent)
+        await aggregator.finalize_session(session_id, correlation_id, reason="timeout")
+
+        metrics = aggregator.get_metrics()
+        assert metrics["sessions_finalized"] == 1  # Only counted once
+
+    @pytest.mark.asyncio
+    async def test_complete_lifecycle_metrics(
+        self, aggregator: SessionAggregator, correlation_id: UUID
+    ) -> None:
+        """Verify metrics for complete session lifecycle."""
+        session_id = "metrics-complete-lifecycle"
+        base_time = make_timestamp()
+
+        # Start session
+        start_event = make_session_started(session_id, emitted_at=base_time)
+        await aggregator.process_event(start_event, correlation_id)
+
+        # Add prompts and tools
+        for i in range(3):
+            prompt = make_prompt_submitted(
+                session_id, emitted_at=base_time + timedelta(seconds=i + 1)
+            )
+            await aggregator.process_event(prompt, correlation_id)
+
+        for i in range(5):
+            tool = make_tool_executed(
+                session_id, emitted_at=base_time + timedelta(seconds=i + 10)
+            )
+            await aggregator.process_event(tool, correlation_id)
+
+        # End session
+        end_event = make_session_ended(
+            session_id, emitted_at=base_time + timedelta(seconds=20)
+        )
+        await aggregator.process_event(end_event, correlation_id)
+
+        metrics = aggregator.get_metrics()
+        assert (
+            metrics["events_processed"] == 10
+        )  # 1 start + 3 prompts + 5 tools + 1 end
+        assert metrics["events_rejected"] == 0
+        assert metrics["sessions_created"] == 1
+        assert metrics["sessions_finalized"] == 1
+
+    @pytest.mark.asyncio
+    async def test_metrics_across_multiple_sessions(
+        self, aggregator: SessionAggregator, correlation_id: UUID
+    ) -> None:
+        """Verify metrics accumulate across multiple sessions."""
+        # Create 3 sessions
+        for i in range(3):
+            session_id = f"multi-session-{i}"
+            start_event = make_session_started(session_id)
+            await aggregator.process_event(start_event, correlation_id)
+
+            prompt_event = make_prompt_submitted(session_id)
+            await aggregator.process_event(prompt_event, correlation_id)
+
+            end_event = make_session_ended(session_id)
+            await aggregator.process_event(end_event, correlation_id)
+
+        metrics = aggregator.get_metrics()
+        assert metrics["events_processed"] == 9  # 3 sessions * 3 events each
+        assert metrics["sessions_created"] == 3
+        assert metrics["sessions_finalized"] == 3

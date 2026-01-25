@@ -24,6 +24,16 @@ State Machine:
 
     Terminal states (ENDED, TIMED_OUT) reject further events.
 
+Memory Management:
+    IMPORTANT: Finalized sessions (ENDED, TIMED_OUT) remain in memory to reject
+    late-arriving events. Without periodic cleanup, this causes unbounded memory
+    growth in long-running consumers.
+
+    Long-running consumers MUST call SessionAggregator.cleanup_finalized_sessions()
+    periodically (recommended: every 1 hour, or after processing each batch).
+
+    See SessionAggregator class docstring for example cleanup patterns.
+
 Thread Safety:
     Uses per-session asyncio.Lock instances for state modifications.
     Concurrent calls for different sessions proceed in parallel without
@@ -69,6 +79,24 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # Snapshot TypedDicts (temporary until ModelClaudeCodeSessionSnapshot - OMN-1489)
 # =============================================================================
+
+
+class AggregatorMetricsDict(TypedDict):
+    """TypedDict for aggregator metrics.
+
+    These counters track operational metrics for monitoring and debugging.
+
+    Attributes:
+        events_processed: Total events successfully processed (state was modified).
+        events_rejected: Events rejected (duplicates, finalized sessions).
+        sessions_created: New sessions created (ACTIVE or ORPHAN).
+        sessions_finalized: Sessions transitioned to terminal state (ENDED or TIMED_OUT).
+    """
+
+    events_processed: int
+    events_rejected: int
+    sessions_created: int
+    sessions_finalized: int
 
 
 class PromptSnapshotDict(TypedDict):
@@ -238,11 +266,66 @@ class SessionAggregator:
     Attributes:
         aggregator_id: Unique identifier for this aggregator instance.
 
-    Example:
+    Memory Management:
+        IMPORTANT: Finalized sessions (ENDED, TIMED_OUT) are retained in memory
+        to reject late-arriving events. This design prevents creating spurious
+        orphan sessions when events arrive after finalization. However, without
+        periodic cleanup, this causes unbounded memory growth.
+
+        Long-running consumers MUST call cleanup_finalized_sessions() periodically.
+
+        Recommended cleanup intervals:
+        - High-throughput consumers: Every 15-30 minutes
+        - Standard consumers: Every 1 hour
+        - Batch processors: After each batch completes
+
+        The older_than_seconds parameter allows grace periods for late events.
+        A value of 3600 (1 hour) is typically safe for most use cases.
+
+    Example - Basic Usage:
         >>> config = ConfigSessionAggregator()
         >>> aggregator = SessionAggregator(config, aggregator_id="worker-1")
         >>> # Process events...
         >>> snapshot = await aggregator.get_snapshot("session-123", uuid4())
+
+    Example - Long-Running Consumer with Cleanup:
+        >>> import asyncio
+        >>> from uuid import uuid4
+        >>>
+        >>> async def run_consumer():
+        ...     config = ConfigSessionAggregator()
+        ...     aggregator = SessionAggregator(config)
+        ...     cleanup_interval = 3600  # 1 hour
+        ...
+        ...     async def cleanup_task():
+        ...         while True:
+        ...             await asyncio.sleep(cleanup_interval)
+        ...             correlation_id = uuid4()
+        ...             # Clean up sessions finalized more than 1 hour ago
+        ...             cleaned = await aggregator.cleanup_finalized_sessions(
+        ...                 correlation_id,
+        ...                 older_than_seconds=3600,
+        ...             )
+        ...             print(f"Cleaned up {cleaned} finalized sessions")
+        ...
+        ...     # Start cleanup task alongside event processing
+        ...     cleanup = asyncio.create_task(cleanup_task())
+        ...     try:
+        ...         await process_events(aggregator)  # Your event loop
+        ...     finally:
+        ...         cleanup.cancel()
+
+    Example - Batch Processor with Cleanup:
+        >>> async def process_batch(events, aggregator):
+        ...     correlation_id = uuid4()
+        ...     for event in events:
+        ...         await aggregator.process_event(event, correlation_id)
+        ...
+        ...     # Clean up after batch - sessions older than 30 minutes
+        ...     await aggregator.cleanup_finalized_sessions(
+        ...         correlation_id,
+        ...         older_than_seconds=1800,
+        ...     )
     """
 
     def __init__(
@@ -262,6 +345,12 @@ class SessionAggregator:
         self._sessions: dict[str, SessionState] = {}
         self._session_locks: dict[str, asyncio.Lock] = {}
         self._locks_lock = asyncio.Lock()  # Lock for accessing the locks dict
+
+        # Metrics counters for observability
+        self._events_processed: int = 0
+        self._events_rejected: int = 0
+        self._sessions_created: int = 0
+        self._sessions_finalized: int = 0
 
         logger.info(
             "SessionAggregator initialized",
@@ -329,36 +418,45 @@ class SessionAggregator:
         )
 
         # Dispatch to appropriate handler based on event type
+        result: bool
         if event.event_type == HookEventType.SESSION_STARTED:
             if not isinstance(payload, ModelHookSessionStartedPayload):
                 raise ValueError(
                     f"Expected ModelHookSessionStartedPayload, got {type(payload).__name__}"
                 )
-            return await self._handle_session_started(payload, correlation_id)
+            result = await self._handle_session_started(payload, correlation_id)
 
         elif event.event_type == HookEventType.SESSION_ENDED:
             if not isinstance(payload, ModelHookSessionEndedPayload):
                 raise ValueError(
                     f"Expected ModelHookSessionEndedPayload, got {type(payload).__name__}"
                 )
-            return await self._handle_session_ended(payload, correlation_id)
+            result = await self._handle_session_ended(payload, correlation_id)
 
         elif event.event_type == HookEventType.PROMPT_SUBMITTED:
             if not isinstance(payload, ModelHookPromptSubmittedPayload):
                 raise ValueError(
                     f"Expected ModelHookPromptSubmittedPayload, got {type(payload).__name__}"
                 )
-            return await self._handle_prompt_submitted(payload, correlation_id)
+            result = await self._handle_prompt_submitted(payload, correlation_id)
 
         elif event.event_type == HookEventType.TOOL_EXECUTED:
             if not isinstance(payload, ModelHookToolExecutedPayload):
                 raise ValueError(
                     f"Expected ModelHookToolExecutedPayload, got {type(payload).__name__}"
                 )
-            return await self._handle_tool_executed(payload, correlation_id)
+            result = await self._handle_tool_executed(payload, correlation_id)
 
         else:
             raise ValueError(f"Unknown event type: {event.event_type}")
+
+        # Update metrics
+        if result:
+            self._events_processed += 1
+        else:
+            self._events_rejected += 1
+
+        return result
 
     # =========================================================================
     # Protocol Implementation: get_snapshot
@@ -471,6 +569,8 @@ class SessionAggregator:
                 if session.started_at is not None:
                     delta = session.ended_at - session.started_at
                     session.duration_seconds = delta.total_seconds()
+
+                self._sessions_finalized += 1
 
                 logger.info(
                     "Session finalized",
@@ -623,6 +723,47 @@ class SessionAggregator:
         return len(sessions_to_cleanup)
 
     # =========================================================================
+    # Metrics
+    # =========================================================================
+
+    def get_metrics(self) -> AggregatorMetricsDict:
+        """Get current aggregator metrics.
+
+        Returns operational counters for monitoring and debugging.
+        These metrics are useful for:
+        - Observability dashboards
+        - Health checks
+        - Performance monitoring
+        - Debugging event processing issues
+
+        The counters are:
+        - events_processed: Successfully processed events
+        - events_rejected: Rejected events (duplicates, finalized sessions)
+        - sessions_created: New sessions created (ACTIVE or ORPHAN)
+        - sessions_finalized: Sessions transitioned to ENDED or TIMED_OUT
+
+        Note:
+            These counters are monotonically increasing and are not reset.
+            For rate calculations, take snapshots at intervals and compute
+            the delta.
+
+        Returns:
+            Dictionary with all metric counters.
+
+        Example:
+            >>> metrics = aggregator.get_metrics()
+            >>> print(f"Processed: {metrics['events_processed']}")
+            >>> print(f"Rejected: {metrics['events_rejected']}")
+            >>> rejection_rate = metrics['events_rejected'] / max(1, metrics['events_processed'])
+        """
+        return {
+            "events_processed": self._events_processed,
+            "events_rejected": self._events_rejected,
+            "sessions_created": self._sessions_created,
+            "sessions_finalized": self._sessions_finalized,
+        }
+
+    # =========================================================================
     # Private: Event Handlers
     # =========================================================================
 
@@ -691,6 +832,7 @@ class SessionAggregator:
                     event_count=1,
                 )
                 self._sessions[session_id] = session
+                self._sessions_created += 1
                 logger.info(
                     "New session started",
                     extra={
@@ -770,6 +912,9 @@ class SessionAggregator:
                     event_count=1,
                 )
                 self._sessions[session_id] = session
+                # Both created and immediately finalized
+                self._sessions_created += 1
+                self._sessions_finalized += 1
                 logger.warning(
                     "Session ended without start (orphan end)",
                     extra={
@@ -808,6 +953,7 @@ class SessionAggregator:
                 session.duration_seconds = delta.total_seconds()
 
             self._update_activity(session, payload.emitted_at)
+            self._sessions_finalized += 1
 
             logger.info(
                 "Session ended",
@@ -1185,6 +1331,7 @@ class SessionAggregator:
             event_count=0,  # Will be incremented by _update_activity
         )
         self._sessions[session_id] = session
+        self._sessions_created += 1
 
         # Clean up excess orphan sessions to prevent memory exhaustion
         await self._cleanup_orphan_sessions(correlation_id)
@@ -1327,6 +1474,7 @@ class SessionAggregator:
 
 
 __all__ = [
+    "AggregatorMetricsDict",
     "PromptRecord",
     "ToolRecord",
     "SessionState",
