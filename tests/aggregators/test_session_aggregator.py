@@ -1392,6 +1392,203 @@ class TestProtocolConformance:
 # =============================================================================
 
 
+# =============================================================================
+# Orphan Session Eviction Tests
+# =============================================================================
+
+
+class TestOrphanSessionEviction:
+    """Tests for orphan session eviction when max_orphan_sessions exceeded.
+
+    Note: ConfigSessionAggregator enforces max_orphan_sessions >= 100,
+    so tests use the minimum value of 100 and create sessions above that.
+    """
+
+    @pytest.mark.asyncio
+    async def test_orphan_eviction_when_over_limit(self, correlation_id: UUID) -> None:
+        """Oldest orphans are evicted when max_orphan_sessions exceeded."""
+        # Use minimum allowed limit (100)
+        limit = 100
+        config = ConfigSessionAggregator(max_orphan_sessions=limit)
+        aggregator = SessionAggregator(config)
+
+        base_time = make_timestamp()
+
+        # Create limit + 5 orphan sessions (exceeds limit by 5)
+        total_sessions = limit + 5
+        for i in range(total_sessions):
+            session_id = f"orphan-eviction-{i}"
+            prompt_event = make_prompt_submitted(
+                session_id,
+                emitted_at=base_time + timedelta(seconds=i),
+                prompt_preview=f"Orphan prompt {i}",
+            )
+            await aggregator.process_event(prompt_event, correlation_id)
+
+        # Verify only 'limit' orphan sessions remain
+        active_sessions = await aggregator.get_active_sessions(correlation_id)
+        orphan_sessions = [
+            sid for sid in active_sessions if sid.startswith("orphan-eviction-")
+        ]
+        assert len(orphan_sessions) == limit
+
+        # The oldest sessions (0 through 4) should have been evicted
+        # The newest sessions (5 through total-1) should remain
+        for i in range(5):
+            assert f"orphan-eviction-{i}" not in orphan_sessions
+        for i in range(5, total_sessions):
+            assert f"orphan-eviction-{i}" in orphan_sessions
+
+    @pytest.mark.asyncio
+    async def test_orphan_eviction_preserves_newest(self, correlation_id: UUID) -> None:
+        """Verify the newest orphan sessions are kept when eviction occurs."""
+        # Use minimum allowed limit (100)
+        limit = 100
+        config = ConfigSessionAggregator(max_orphan_sessions=limit)
+        aggregator = SessionAggregator(config)
+
+        base_time = make_timestamp()
+
+        # Create limit orphan sessions first (fills up to limit)
+        for i in range(limit):
+            prompt_event = make_prompt_submitted(
+                f"filler-orphan-{i}",
+                emitted_at=base_time + timedelta(seconds=i),
+                prompt_preview=f"Filler {i}",
+            )
+            await aggregator.process_event(prompt_event, correlation_id)
+
+        # Now create one more orphan - this should evict the oldest (filler-orphan-0)
+        newest_prompt = make_prompt_submitted(
+            "newest-orphan",
+            emitted_at=base_time + timedelta(seconds=limit + 100),
+            prompt_preview="Newest orphan",
+        )
+        await aggregator.process_event(newest_prompt, correlation_id)
+
+        # Verify oldest was evicted, newest is preserved
+        oldest_snapshot = await aggregator.get_snapshot(
+            "filler-orphan-0", correlation_id
+        )
+        newest_snapshot = await aggregator.get_snapshot("newest-orphan", correlation_id)
+
+        assert oldest_snapshot is None, "Oldest orphan should have been evicted"
+        assert newest_snapshot is not None, "Newest orphan should be preserved"
+
+        # Verify the newest session has correct data
+        assert newest_snapshot["status"] == EnumSessionStatus.ORPHAN.value
+        assert newest_snapshot["prompts"][0]["prompt_preview"] == "Newest orphan"
+
+    @pytest.mark.asyncio
+    async def test_orphan_eviction_does_not_affect_active_sessions(
+        self, correlation_id: UUID
+    ) -> None:
+        """Orphan eviction does not affect ACTIVE sessions, only ORPHAN sessions."""
+        limit = 100
+        config = ConfigSessionAggregator(max_orphan_sessions=limit)
+        aggregator = SessionAggregator(config)
+
+        base_time = make_timestamp()
+
+        # Create an ACTIVE session (has SessionStarted)
+        start_event = make_session_started(
+            "active-session",
+            emitted_at=base_time,
+            working_directory="/workspace/active",
+        )
+        await aggregator.process_event(start_event, correlation_id)
+
+        # Create orphan sessions that exceed the limit by 2
+        for i in range(limit + 2):
+            orphan_prompt = make_prompt_submitted(
+                f"orphan-{i}",
+                emitted_at=base_time + timedelta(seconds=i + 1),
+                prompt_preview=f"Orphan {i}",
+            )
+            await aggregator.process_event(orphan_prompt, correlation_id)
+
+        # Verify ACTIVE session is preserved (not affected by orphan eviction)
+        active_snapshot = await aggregator.get_snapshot(
+            "active-session", correlation_id
+        )
+        assert active_snapshot is not None
+        assert active_snapshot["status"] == EnumSessionStatus.ACTIVE.value
+        assert active_snapshot["working_directory"] == "/workspace/active"
+
+        # Verify orphan eviction occurred (only 'limit' orphans should remain)
+        active_sessions = await aggregator.get_active_sessions(correlation_id)
+        orphan_sessions = [sid for sid in active_sessions if sid.startswith("orphan-")]
+        assert len(orphan_sessions) == limit
+
+    @pytest.mark.asyncio
+    async def test_orphan_eviction_at_exact_limit(self, correlation_id: UUID) -> None:
+        """No eviction occurs when exactly at max_orphan_sessions limit."""
+        limit = 100
+        config = ConfigSessionAggregator(max_orphan_sessions=limit)
+        aggregator = SessionAggregator(config)
+
+        base_time = make_timestamp()
+
+        # Create exactly 'limit' orphan sessions (at the limit)
+        for i in range(limit):
+            prompt_event = make_prompt_submitted(
+                f"orphan-at-limit-{i}",
+                emitted_at=base_time + timedelta(seconds=i),
+                prompt_preview=f"Orphan {i}",
+            )
+            await aggregator.process_event(prompt_event, correlation_id)
+
+        # All sessions should exist (no eviction at exact limit)
+        active_sessions = await aggregator.get_active_sessions(correlation_id)
+        orphan_sessions = [
+            sid for sid in active_sessions if sid.startswith("orphan-at-limit-")
+        ]
+        assert len(orphan_sessions) == limit
+
+        # Spot check first and last
+        first_snapshot = await aggregator.get_snapshot(
+            "orphan-at-limit-0", correlation_id
+        )
+        last_snapshot = await aggregator.get_snapshot(
+            f"orphan-at-limit-{limit - 1}", correlation_id
+        )
+        assert first_snapshot is not None, "First session should exist"
+        assert last_snapshot is not None, "Last session should exist"
+        assert first_snapshot["status"] == EnumSessionStatus.ORPHAN.value
+        assert last_snapshot["status"] == EnumSessionStatus.ORPHAN.value
+
+    @pytest.mark.asyncio
+    async def test_orphan_eviction_cleans_up_locks(self, correlation_id: UUID) -> None:
+        """Verify that evicted orphan sessions have their locks cleaned up."""
+        limit = 100
+        config = ConfigSessionAggregator(max_orphan_sessions=limit)
+        aggregator = SessionAggregator(config)
+
+        base_time = make_timestamp()
+
+        # Create limit + 3 orphan sessions (exceeds limit by 3)
+        total_sessions = limit + 3
+        for i in range(total_sessions):
+            prompt_event = make_prompt_submitted(
+                f"lock-cleanup-{i}",
+                emitted_at=base_time + timedelta(seconds=i),
+            )
+            await aggregator.process_event(prompt_event, correlation_id)
+
+        # The evicted sessions (0, 1, 2) should not have locks or state
+        for i in range(3):
+            session_id = f"lock-cleanup-{i}"
+            assert session_id not in aggregator._sessions, (
+                f"Evicted session {session_id} should not be in _sessions"
+            )
+            assert session_id not in aggregator._session_locks, (
+                f"Evicted session {session_id} should not have a lock"
+            )
+
+        # Verify total session count is at limit
+        assert len(aggregator._sessions) == limit
+
+
 class TestMetrics:
     """Tests for aggregator metrics/counters."""
 
@@ -1639,3 +1836,290 @@ class TestMetrics:
         assert metrics["events_processed"] == 9  # 3 sessions * 3 events each
         assert metrics["sessions_created"] == 3
         assert metrics["sessions_finalized"] == 3
+
+
+# =============================================================================
+# Cleanup Finalized Sessions Tests
+# =============================================================================
+
+
+class TestCleanupFinalizedSessions:
+    """Tests for cleanup_finalized_sessions memory management method.
+
+    This test class validates the critical memory management functionality
+    that prevents unbounded memory growth in long-running consumers.
+    """
+
+    @pytest.mark.asyncio
+    async def test_cleanup_removes_finalized_sessions(
+        self, aggregator: SessionAggregator, correlation_id: UUID
+    ) -> None:
+        """Cleanup removes sessions in ENDED and TIMED_OUT states."""
+        # Create and finalize an ENDED session
+        ended_session_id = "cleanup-ended-session"
+        start_event = make_session_started(ended_session_id)
+        await aggregator.process_event(start_event, correlation_id)
+        end_event = make_session_ended(ended_session_id)
+        await aggregator.process_event(end_event, correlation_id)
+
+        # Create and finalize a TIMED_OUT session
+        timed_out_session_id = "cleanup-timed-out-session"
+        start_event2 = make_session_started(timed_out_session_id)
+        await aggregator.process_event(start_event2, correlation_id)
+        await aggregator.finalize_session(
+            timed_out_session_id, correlation_id, reason="timeout"
+        )
+
+        # Verify both sessions exist before cleanup
+        snapshot1 = await aggregator.get_snapshot(ended_session_id, correlation_id)
+        snapshot2 = await aggregator.get_snapshot(timed_out_session_id, correlation_id)
+        assert snapshot1 is not None
+        assert snapshot1["status"] == EnumSessionStatus.ENDED.value
+        assert snapshot2 is not None
+        assert snapshot2["status"] == EnumSessionStatus.TIMED_OUT.value
+
+        # Perform cleanup
+        cleaned_count = await aggregator.cleanup_finalized_sessions(correlation_id)
+
+        # Verify sessions are removed
+        assert cleaned_count == 2
+        snapshot1_after = await aggregator.get_snapshot(
+            ended_session_id, correlation_id
+        )
+        snapshot2_after = await aggregator.get_snapshot(
+            timed_out_session_id, correlation_id
+        )
+        assert snapshot1_after is None
+        assert snapshot2_after is None
+
+    @pytest.mark.asyncio
+    async def test_cleanup_respects_older_than_filter(
+        self, aggregator: SessionAggregator, correlation_id: UUID
+    ) -> None:
+        """Cleanup only removes sessions older than the specified threshold."""
+        base_time = make_timestamp()
+
+        # Create an "old" session (60 seconds ago)
+        old_session_id = "cleanup-old-session"
+        old_time = base_time - timedelta(seconds=60)
+        old_start = make_session_started(old_session_id, emitted_at=old_time)
+        await aggregator.process_event(old_start, correlation_id)
+        old_end = make_session_ended(
+            old_session_id, emitted_at=old_time + timedelta(seconds=1)
+        )
+        await aggregator.process_event(old_end, correlation_id)
+
+        # Create a "recent" session (just now)
+        recent_session_id = "cleanup-recent-session"
+        recent_start = make_session_started(recent_session_id, emitted_at=base_time)
+        await aggregator.process_event(recent_start, correlation_id)
+        recent_end = make_session_ended(
+            recent_session_id, emitted_at=base_time + timedelta(seconds=1)
+        )
+        await aggregator.process_event(recent_end, correlation_id)
+
+        # Cleanup sessions older than 30 seconds
+        # The old session (60s ago) should be cleaned up
+        # The recent session (just now) should be preserved
+        cleaned_count = await aggregator.cleanup_finalized_sessions(
+            correlation_id, older_than_seconds=30.0
+        )
+
+        # Verify only old session was cleaned up
+        assert cleaned_count == 1
+        old_snapshot = await aggregator.get_snapshot(old_session_id, correlation_id)
+        recent_snapshot = await aggregator.get_snapshot(
+            recent_session_id, correlation_id
+        )
+        assert old_snapshot is None  # Cleaned up
+        assert recent_snapshot is not None  # Still present
+        assert recent_snapshot["status"] == EnumSessionStatus.ENDED.value
+
+    @pytest.mark.asyncio
+    async def test_cleanup_preserves_active_sessions(
+        self, aggregator: SessionAggregator, correlation_id: UUID
+    ) -> None:
+        """Cleanup preserves ACTIVE and ORPHAN sessions."""
+        # Create an ACTIVE session
+        active_session_id = "cleanup-active-session"
+        start_event = make_session_started(active_session_id)
+        await aggregator.process_event(start_event, correlation_id)
+
+        # Create an ORPHAN session
+        orphan_session_id = "cleanup-orphan-session"
+        prompt_event = make_prompt_submitted(orphan_session_id)
+        await aggregator.process_event(prompt_event, correlation_id)
+
+        # Create and finalize an ENDED session (this one should be cleaned)
+        ended_session_id = "cleanup-ended-session-2"
+        start_ended = make_session_started(ended_session_id)
+        await aggregator.process_event(start_ended, correlation_id)
+        end_event = make_session_ended(ended_session_id)
+        await aggregator.process_event(end_event, correlation_id)
+
+        # Verify initial states
+        active_snap = await aggregator.get_snapshot(active_session_id, correlation_id)
+        orphan_snap = await aggregator.get_snapshot(orphan_session_id, correlation_id)
+        ended_snap = await aggregator.get_snapshot(ended_session_id, correlation_id)
+        assert active_snap["status"] == EnumSessionStatus.ACTIVE.value
+        assert orphan_snap["status"] == EnumSessionStatus.ORPHAN.value
+        assert ended_snap["status"] == EnumSessionStatus.ENDED.value
+
+        # Perform cleanup
+        cleaned_count = await aggregator.cleanup_finalized_sessions(correlation_id)
+
+        # Verify only ended session was cleaned
+        assert cleaned_count == 1
+        active_snap_after = await aggregator.get_snapshot(
+            active_session_id, correlation_id
+        )
+        orphan_snap_after = await aggregator.get_snapshot(
+            orphan_session_id, correlation_id
+        )
+        ended_snap_after = await aggregator.get_snapshot(
+            ended_session_id, correlation_id
+        )
+
+        assert active_snap_after is not None  # Preserved
+        assert active_snap_after["status"] == EnumSessionStatus.ACTIVE.value
+        assert orphan_snap_after is not None  # Preserved
+        assert orphan_snap_after["status"] == EnumSessionStatus.ORPHAN.value
+        assert ended_snap_after is None  # Cleaned up
+
+    @pytest.mark.asyncio
+    async def test_cleanup_returns_count(
+        self, aggregator: SessionAggregator, correlation_id: UUID
+    ) -> None:
+        """Cleanup returns the correct count of removed sessions."""
+        # Create multiple finalized sessions
+        for i in range(5):
+            session_id = f"cleanup-count-session-{i}"
+            start_event = make_session_started(session_id)
+            await aggregator.process_event(start_event, correlation_id)
+            end_event = make_session_ended(session_id)
+            await aggregator.process_event(end_event, correlation_id)
+
+        # First cleanup should remove all 5
+        cleaned_count = await aggregator.cleanup_finalized_sessions(correlation_id)
+        assert cleaned_count == 5
+
+        # Second cleanup should remove 0 (nothing left)
+        cleaned_count_2 = await aggregator.cleanup_finalized_sessions(correlation_id)
+        assert cleaned_count_2 == 0
+
+    @pytest.mark.asyncio
+    async def test_cleanup_allows_new_orphan_after_removal(
+        self, aggregator: SessionAggregator, correlation_id: UUID
+    ) -> None:
+        """After cleanup, new events for the same session_id create new orphans."""
+        session_id = "cleanup-then-reuse-session"
+
+        # Create and finalize a session
+        start_event = make_session_started(session_id)
+        await aggregator.process_event(start_event, correlation_id)
+
+        prompt_event = make_prompt_submitted(session_id)
+        await aggregator.process_event(prompt_event, correlation_id)
+
+        end_event = make_session_ended(session_id)
+        await aggregator.process_event(end_event, correlation_id)
+
+        # Verify session is ENDED
+        snapshot_before = await aggregator.get_snapshot(session_id, correlation_id)
+        assert snapshot_before["status"] == EnumSessionStatus.ENDED.value
+        assert snapshot_before["prompt_count"] == 1
+
+        # Before cleanup, new events for ended session should be rejected
+        new_prompt = make_prompt_submitted(session_id, prompt_preview="After end")
+        result = await aggregator.process_event(new_prompt, correlation_id)
+        assert result is False  # Rejected because session is finalized
+
+        # Cleanup the session
+        cleaned_count = await aggregator.cleanup_finalized_sessions(correlation_id)
+        assert cleaned_count == 1
+
+        # Verify session is gone
+        snapshot_after_cleanup = await aggregator.get_snapshot(
+            session_id, correlation_id
+        )
+        assert snapshot_after_cleanup is None
+
+        # Now a new event should create a new orphan session
+        new_prompt_2 = make_prompt_submitted(
+            session_id, prompt_preview="Creates new orphan"
+        )
+        result_2 = await aggregator.process_event(new_prompt_2, correlation_id)
+        assert result_2 is True  # Accepted - creates new orphan
+
+        # Verify new orphan session was created
+        snapshot_new = await aggregator.get_snapshot(session_id, correlation_id)
+        assert snapshot_new is not None
+        assert snapshot_new["status"] == EnumSessionStatus.ORPHAN.value
+        assert snapshot_new["prompt_count"] == 1
+        assert snapshot_new["prompts"][0]["prompt_preview"] == "Creates new orphan"
+
+    @pytest.mark.asyncio
+    async def test_cleanup_with_large_older_than_preserves_recent(
+        self, aggregator: SessionAggregator, correlation_id: UUID
+    ) -> None:
+        """Cleanup with large older_than_seconds preserves recent sessions."""
+        # Create a finalized session (just now)
+        session_id = "cleanup-large-threshold-session"
+        start_event = make_session_started(session_id)
+        await aggregator.process_event(start_event, correlation_id)
+        end_event = make_session_ended(session_id)
+        await aggregator.process_event(end_event, correlation_id)
+
+        # Cleanup with older_than_seconds=3600 (1 hour) should preserve
+        # this session because it was just created (age < 1 hour)
+        cleaned_count = await aggregator.cleanup_finalized_sessions(
+            correlation_id, older_than_seconds=3600.0
+        )
+        assert cleaned_count == 0
+
+        # Verify session still exists
+        snapshot = await aggregator.get_snapshot(session_id, correlation_id)
+        assert snapshot is not None
+        assert snapshot["status"] == EnumSessionStatus.ENDED.value
+
+    @pytest.mark.asyncio
+    async def test_cleanup_empty_aggregator_returns_zero(
+        self, aggregator: SessionAggregator, correlation_id: UUID
+    ) -> None:
+        """Cleanup on empty aggregator returns 0."""
+        cleaned_count = await aggregator.cleanup_finalized_sessions(correlation_id)
+        assert cleaned_count == 0
+
+    @pytest.mark.asyncio
+    async def test_cleanup_mixed_terminal_states(
+        self, aggregator: SessionAggregator, correlation_id: UUID
+    ) -> None:
+        """Cleanup correctly handles a mix of ENDED and TIMED_OUT sessions."""
+        # Create multiple ENDED sessions
+        for i in range(3):
+            session_id = f"cleanup-ended-{i}"
+            start_event = make_session_started(session_id)
+            await aggregator.process_event(start_event, correlation_id)
+            end_event = make_session_ended(session_id)
+            await aggregator.process_event(end_event, correlation_id)
+
+        # Create multiple TIMED_OUT sessions
+        for i in range(2):
+            session_id = f"cleanup-timeout-{i}"
+            start_event = make_session_started(session_id)
+            await aggregator.process_event(start_event, correlation_id)
+            await aggregator.finalize_session(
+                session_id, correlation_id, reason="timeout"
+            )
+
+        # Cleanup should remove all 5
+        cleaned_count = await aggregator.cleanup_finalized_sessions(correlation_id)
+        assert cleaned_count == 5
+
+        # Verify all are gone
+        for i in range(3):
+            snap = await aggregator.get_snapshot(f"cleanup-ended-{i}", correlation_id)
+            assert snap is None
+        for i in range(2):
+            snap = await aggregator.get_snapshot(f"cleanup-timeout-{i}", correlation_id)
+            assert snap is None

@@ -27,15 +27,15 @@ class ConfigSessionAggregator(BaseSettings):
 
     # Session timeouts (from aggregation contract)
     session_inactivity_timeout_seconds: int = Field(
-        default=3600,  # 1 hour
+        default=3600,  # 1 hour - typical Claude Code sessions are interactive bursts
         ge=60,
-        le=86400,
+        le=86400,  # 24h max - longer gaps indicate new logical session
         description="Timeout for session inactivity before auto-finalization",
     )
     session_max_duration_seconds: int = Field(
         default=2592000,  # 30 days
         ge=3600,
-        le=7776000,  # 90 days max - gives headroom for customization
+        le=7776000,  # 90 days max - beyond this, treat as abandoned or data corruption
         description="Maximum session duration",
     )
     orphan_buffer_duration_seconds: int = Field(
@@ -65,7 +65,7 @@ class ConfigSessionAggregator(BaseSettings):
         description="Delay after finalization before sealing",
     )
 
-    # Capacity
+    # Capacity limits - balance memory usage vs operational flexibility
     tool_count_streaming_threshold: int = Field(
         default=1000,
         ge=100,
@@ -73,17 +73,17 @@ class ConfigSessionAggregator(BaseSettings):
         description="Tool count threshold for streaming mode",
     )
     max_orphan_sessions: int = Field(
-        default=10000,
+        default=10000,  # ~40MB at 4KB/session - reasonable for most deployments
         ge=100,
-        le=1000000,
+        le=1000000,  # 1M cap prevents runaway memory in pathological cases
         description="Maximum orphan sessions to prevent memory exhaustion",
     )
 
-    # Idempotency
+    # Idempotency - retain event IDs long enough for retry storms to settle
     duplicate_detection_window_seconds: int = Field(
-        default=86400,  # 24 hours
+        default=86400,  # 24h covers overnight retries and timezone edge cases
         ge=3600,
-        le=604800,
+        le=604800,  # 7 days max - longer retention has diminishing returns vs memory
         description="How long to remember seen event IDs",
     )
 
