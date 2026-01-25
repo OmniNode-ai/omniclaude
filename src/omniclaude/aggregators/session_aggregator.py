@@ -49,7 +49,7 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TypedDict
 from uuid import UUID, uuid4
 
 from omniclaude.aggregators.config import ConfigSessionAggregator
@@ -64,6 +64,60 @@ from omniclaude.hooks.schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Snapshot TypedDicts (temporary until ModelClaudeCodeSessionSnapshot - OMN-1489)
+# =============================================================================
+
+
+class PromptSnapshotDict(TypedDict):
+    """TypedDict for prompt snapshot serialization."""
+
+    prompt_id: str | None
+    emitted_at: str
+    prompt_preview: str
+    prompt_length: int
+    detected_intent: str | None
+    causation_id: str | None
+
+
+class ToolSnapshotDict(TypedDict):
+    """TypedDict for tool snapshot serialization."""
+
+    tool_execution_id: str | None
+    emitted_at: str
+    tool_name: str
+    success: bool
+    duration_ms: int | None
+    summary: str | None
+    causation_id: str | None
+
+
+class SessionSnapshotDict(TypedDict):
+    """TypedDict for session snapshot serialization.
+
+    This is a temporary type until the concrete ModelClaudeCodeSessionSnapshot
+    is available from omnibase_core (OMN-1489).
+    """
+
+    session_id: str
+    status: str
+    correlation_id: str | None
+    started_at: str | None
+    ended_at: str | None
+    duration_seconds: float | None
+    working_directory: str | None
+    git_branch: str | None
+    hook_source: str | None
+    end_reason: str | None
+    prompt_count: int
+    tool_count: int
+    tools_used_count: int
+    event_count: int
+    last_event_at: str
+    prompts: list[PromptSnapshotDict]
+    tools: list[ToolSnapshotDict]
 
 
 # =============================================================================
@@ -314,7 +368,7 @@ class SessionAggregator:
         self,
         session_id: str,
         correlation_id: UUID,
-    ) -> dict[str, Any] | None:
+    ) -> SessionSnapshotDict | None:
         """Get current snapshot for a session.
 
         Returns the current state of a session as a dictionary.
@@ -353,7 +407,7 @@ class SessionAggregator:
         session_id: str,
         correlation_id: UUID,
         reason: str | None = None,
-    ) -> dict[str, Any] | None:
+    ) -> SessionSnapshotDict | None:
         """Finalize and seal a session snapshot.
 
         Called when SessionEnded is received or timeout expires.
@@ -594,7 +648,6 @@ class SessionAggregator:
         session_id = payload.session_id
         lock = await self._get_session_lock(session_id)
         async with lock:
-
             session = self._sessions.get(session_id)
 
             # Check if session exists and is finalized
@@ -701,7 +754,6 @@ class SessionAggregator:
         session_id = payload.session_id
         lock = await self._get_session_lock(session_id)
         async with lock:
-
             session = self._sessions.get(session_id)
 
             # Check if session exists
@@ -793,7 +845,6 @@ class SessionAggregator:
         prompt_id = payload.prompt_id
         lock = await self._get_session_lock(session_id)
         async with lock:
-
             session = self._sessions.get(session_id)
 
             # Create orphan session if none exists
@@ -898,7 +949,6 @@ class SessionAggregator:
         tool_execution_id = payload.tool_execution_id
         lock = await self._get_session_lock(session_id)
         async with lock:
-
             session = self._sessions.get(session_id)
 
             # Create orphan session if none exists
@@ -1229,7 +1279,7 @@ class SessionAggregator:
 
         return removed
 
-    def _session_to_dict(self, session: SessionState) -> dict[str, Any]:
+    def _session_to_dict(self, session: SessionState) -> SessionSnapshotDict:
         """Convert session state to dictionary representation.
 
         This is a temporary conversion until the concrete
@@ -1244,8 +1294,12 @@ class SessionAggregator:
         return {
             "session_id": session.session_id,
             "status": session.status.value,
-            "correlation_id": str(session.correlation_id) if session.correlation_id else None,
-            "started_at": session.started_at.isoformat() if session.started_at else None,
+            "correlation_id": str(session.correlation_id)
+            if session.correlation_id
+            else None,
+            "started_at": session.started_at.isoformat()
+            if session.started_at
+            else None,
             "ended_at": session.ended_at.isoformat() if session.ended_at else None,
             "duration_seconds": session.duration_seconds,
             "working_directory": session.working_directory,
@@ -1270,7 +1324,9 @@ class SessionAggregator:
             ],
             "tools": [
                 {
-                    "tool_execution_id": str(t.tool_execution_id) if t.tool_execution_id else None,
+                    "tool_execution_id": str(t.tool_execution_id)
+                    if t.tool_execution_id
+                    else None,
                     "emitted_at": t.emitted_at.isoformat(),
                     "tool_name": t.tool_name,
                     "success": t.success,
