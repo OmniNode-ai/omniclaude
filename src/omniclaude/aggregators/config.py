@@ -15,6 +15,21 @@ class ConfigSessionAggregator(BaseSettings):
 
     Environment variables use the OMNICLAUDE_AGGREGATOR_ prefix.
     Example: OMNICLAUDE_AGGREGATOR_SESSION_INACTIVITY_TIMEOUT_SECONDS=3600
+
+    Currently Implemented Fields:
+        - session_inactivity_timeout_seconds: Used by timeout sweep to finalize inactive sessions
+        - orphan_buffer_duration_seconds: Used for orphan event buffering before synthetic start
+        - out_of_order_buffer_seconds: Used for accepting late-arriving events
+        - max_orphan_sessions: Used to cap memory usage from orphan sessions
+        - timeout_sweep_interval_seconds: Used to configure sweep frequency
+
+    Reserved for Future Implementation:
+        - session_max_duration_seconds: Max duration enforcement not yet implemented
+        - clock_skew_tolerance_seconds: Future timestamp handling not yet implemented
+        - seal_delay_seconds: Session sealing logic not yet implemented
+        - tool_count_streaming_threshold: Streaming mode not yet implemented
+        - duplicate_detection_window_seconds: Time-windowed dedup not yet implemented
+          (current dedup uses natural key only)
     """
 
     model_config = SettingsConfigDict(
@@ -36,7 +51,7 @@ class ConfigSessionAggregator(BaseSettings):
         default=2592000,  # 30 days
         ge=3600,
         le=7776000,  # 90 days max - beyond this, treat as abandoned or data corruption
-        description="Maximum session duration",
+        description="RESERVED FOR FUTURE USE: Maximum session duration enforcement",
     )
     orphan_buffer_duration_seconds: int = Field(
         default=300,  # 5 minutes
@@ -56,13 +71,13 @@ class ConfigSessionAggregator(BaseSettings):
         default=30,
         ge=5,
         le=300,
-        description="Tolerance for future timestamps due to clock skew",
+        description="RESERVED FOR FUTURE USE: Tolerance for future timestamps due to clock skew",
     )
     seal_delay_seconds: int = Field(
         default=60,
         ge=10,
         le=600,
-        description="Delay after finalization before sealing",
+        description="RESERVED FOR FUTURE USE: Delay after finalization before sealing",
     )
 
     # Capacity limits - balance memory usage vs operational flexibility
@@ -70,7 +85,7 @@ class ConfigSessionAggregator(BaseSettings):
         default=1000,
         ge=100,
         le=100000,
-        description="Tool count threshold for streaming mode",
+        description="RESERVED FOR FUTURE USE: Tool count threshold for streaming mode",
     )
     max_orphan_sessions: int = Field(
         default=10000,  # ~40MB at 4KB/session - reasonable for most deployments
@@ -84,7 +99,7 @@ class ConfigSessionAggregator(BaseSettings):
         default=86400,  # 24h covers overnight retries and timezone edge cases
         ge=3600,
         le=604800,  # 7 days max - longer retention has diminishing returns vs memory
-        description="How long to remember seen event IDs",
+        description="RESERVED FOR FUTURE USE: Time-windowed dedup (current dedup uses natural key only)",
     )
 
     # Sweep interval

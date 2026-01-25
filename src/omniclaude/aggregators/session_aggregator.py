@@ -39,9 +39,19 @@ Thread Safety:
     Concurrent calls for different sessions proceed in parallel without
     blocking each other; calls for the same session are serialized.
 
+    A two-level locking scheme ensures deadlock-free operation:
+    - ``_locks_lock``: Global lock for the session locks dictionary
+    - ``_session_locks[session_id]``: Per-session locks for state modification
+
+    See ``SessionAggregator`` class docstring "Lock Ordering" section for
+    detailed analysis of why the locking pattern is deadlock-free.
+
 Related Tickets:
     - OMN-1401: Session storage in OmniMemory (current)
     - OMN-1489: Core models in omnibase_core (snapshot model)
+
+TODO(OMN-1489): When core models are available, replace all temporary TypedDicts
+in this module with ModelClaudeCodeSessionSnapshot and related models from omnibase_core.
 
 Example:
     >>> from uuid import uuid4
@@ -81,6 +91,8 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
+# TODO(OMN-1489): Replace with ModelAggregatorMetrics from omnibase_core
+# This TypedDict is temporary until core models are available.
 class AggregatorMetricsDict(TypedDict):
     """TypedDict for aggregator metrics.
 
@@ -99,6 +111,8 @@ class AggregatorMetricsDict(TypedDict):
     sessions_finalized: int
 
 
+# TODO(OMN-1489): Replace with ModelPromptSnapshot from omnibase_core
+# This TypedDict is temporary until core models are available.
 class PromptSnapshotDict(TypedDict):
     """TypedDict for prompt snapshot serialization."""
 
@@ -110,6 +124,8 @@ class PromptSnapshotDict(TypedDict):
     causation_id: str | None
 
 
+# TODO(OMN-1489): Replace with ModelToolSnapshot from omnibase_core
+# This TypedDict is temporary until core models are available.
 class ToolSnapshotDict(TypedDict):
     """TypedDict for tool snapshot serialization."""
 
@@ -122,6 +138,8 @@ class ToolSnapshotDict(TypedDict):
     causation_id: str | None
 
 
+# TODO(OMN-1489): Replace with ModelClaudeCodeSessionSnapshot from omnibase_core
+# This TypedDict is temporary until core models are available.
 class SessionSnapshotDict(TypedDict):
     """TypedDict for session snapshot serialization.
 
@@ -205,6 +223,11 @@ class SessionState:
         - PromptSubmitted: Natural key is prompt_id (dict key deduplication)
         - ToolExecuted: Natural key is tool_execution_id (dict key deduplication)
 
+    Sorted List Caching:
+        _prompts_sorted and _tools_sorted cache the sorted lists for snapshot
+        generation. These are invalidated (set to None) when new items are added.
+        This avoids re-sorting on every get_snapshot() call.
+
     Attributes:
         session_id: The Claude Code session identifier.
         status: Current session status in the state machine.
@@ -221,6 +244,8 @@ class SessionState:
         tools: Tool records keyed by tool_execution_id (append-only).
         last_event_at: Timestamp of most recent event (for timeout).
         event_count: Total events processed for this session.
+        _prompts_sorted: Cached sorted list of prompts (None = needs rebuild).
+        _tools_sorted: Cached sorted list of tools (None = needs rebuild).
     """
 
     session_id: str
@@ -238,6 +263,9 @@ class SessionState:
     tools: dict[UUID, ToolRecord] = field(default_factory=dict)
     last_event_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     event_count: int = 0
+    # Cached sorted lists for snapshot generation (None = needs rebuild)
+    _prompts_sorted: list[PromptRecord] | None = field(default=None, repr=False)
+    _tools_sorted: list[ToolRecord] | None = field(default=None, repr=False)
 
 
 # =============================================================================
@@ -326,6 +354,49 @@ class SessionAggregator:
         ...         correlation_id,
         ...         older_than_seconds=1800,
         ...     )
+
+    Lock Ordering (Deadlock Prevention):
+        This class uses a two-level locking scheme for thread safety:
+
+        1. ``_locks_lock`` (asyncio.Lock): Global lock protecting access to
+           the ``_session_locks`` dictionary. Held only briefly during lock
+           creation/lookup/removal.
+
+        2. ``_session_locks[session_id]`` (dict of asyncio.Lock): Per-session
+           locks protecting individual session state modifications.
+
+        **Consistent Lock Order**: session_lock -> _locks_lock
+
+        This ordering is deadlock-free because ``_get_session_lock()`` acquires
+        ``_locks_lock`` briefly to retrieve/create the session lock, then
+        **releases** ``_locks_lock`` before returning. The caller then acquires
+        the session lock separately. This means:
+
+        - When code holds a session lock and calls ``_cleanup_orphan_sessions()``
+          (which acquires ``_locks_lock``), there is no deadlock because
+          ``_locks_lock`` was not held when the session lock was acquired.
+
+        - The lock acquisition sequence is always:
+          1. ``_locks_lock`` acquired (briefly, inside ``_get_session_lock``)
+          2. ``_locks_lock`` released (still inside ``_get_session_lock``)
+          3. session_lock acquired (by caller, outside ``_get_session_lock``)
+          4. ``_locks_lock`` may be acquired again (e.g., in ``_cleanup_orphan_sessions``)
+
+        **Methods that acquire _locks_lock**:
+            - ``_get_session_lock()`` - brief acquisition to get/create lock
+            - ``_cleanup_session_lock_only()`` - removes session lock entry
+            - ``_cleanup_session_fully()`` - removes lock and state entries
+            - ``_cleanup_orphan_sessions()`` - cleans excess orphan sessions
+            - ``cleanup_finalized_sessions()`` - bulk cleanup of finalized sessions
+            - ``get_active_sessions()`` - iterates sessions dict
+
+        **Methods that hold session locks and may call _locks_lock methods**:
+            - Event handlers (``_handle_*``) may call ``_create_orphan_session()``
+              which calls ``_cleanup_orphan_sessions()`` - this is safe because
+              the session lock was acquired after ``_locks_lock`` was released.
+
+        **Key Invariant**: ``_locks_lock`` is never held when acquiring a session
+        lock, ensuring the consistent ordering that prevents deadlock.
     """
 
     def __init__(
@@ -1059,6 +1130,8 @@ class SessionAggregator:
                 causation_id=payload.causation_id,
             )
             session.prompts[prompt_id] = prompt_record
+            # Invalidate sorted cache since we added a new prompt
+            session._prompts_sorted = None
             self._update_activity(session, payload.emitted_at)
 
             logger.debug(
@@ -1165,6 +1238,8 @@ class SessionAggregator:
                 causation_id=payload.causation_id,
             )
             session.tools[tool_execution_id] = tool_record
+            # Invalidate sorted cache since we added a new tool
+            session._tools_sorted = None
             self._update_activity(session, payload.emitted_at)
 
             logger.debug(
@@ -1413,11 +1488,18 @@ class SessionAggregator:
 
         return removed
 
+    # TODO(OMN-1489): Replace with proper model serialization when core models available
+    # This method creates a dict representation; should return ModelClaudeCodeSessionSnapshot.
     def _session_to_dict(self, session: SessionState) -> SessionSnapshotDict:
         """Convert session state to dictionary representation.
 
         This is a temporary conversion until the concrete
         ModelClaudeCodeSessionSnapshot is available from omnibase_core (OMN-1489).
+
+        Performance Optimization:
+            Uses cached sorted lists (_prompts_sorted, _tools_sorted) to avoid
+            re-sorting on every call to get_snapshot(). The caches are invalidated
+            when new prompts/tools are added, so sorting only happens when needed.
 
         Args:
             session: The session state to convert.
@@ -1425,6 +1507,18 @@ class SessionAggregator:
         Returns:
             Dictionary representation of the session snapshot.
         """
+        # Build or use cached sorted prompts list
+        if session._prompts_sorted is None:
+            session._prompts_sorted = sorted(
+                session.prompts.values(), key=lambda x: x.emitted_at
+            )
+
+        # Build or use cached sorted tools list
+        if session._tools_sorted is None:
+            session._tools_sorted = sorted(
+                session.tools.values(), key=lambda x: x.emitted_at
+            )
+
         return {
             "session_id": session.session_id,
             "status": session.status.value,
@@ -1442,6 +1536,10 @@ class SessionAggregator:
             "end_reason": session.end_reason,
             "prompt_count": len(session.prompts),
             "tool_count": len(session.tools),
+            # NOTE: Computed from aggregated tools rather than SessionEnded.tools_used_count
+            # because the aggregated state is authoritative for observed tool usage.
+            # The event value may be stale or incorrect if events arrived out of order,
+            # whereas this computation reflects actual unique tools observed during aggregation.
             "tools_used_count": len({t.tool_name for t in session.tools.values()}),
             "event_count": session.event_count,
             "last_event_at": session.last_event_at.isoformat(),
@@ -1454,7 +1552,7 @@ class SessionAggregator:
                     "detected_intent": p.detected_intent,
                     "causation_id": str(p.causation_id) if p.causation_id else None,
                 }
-                for p in sorted(session.prompts.values(), key=lambda x: x.emitted_at)
+                for p in session._prompts_sorted
             ],
             "tools": [
                 {
@@ -1468,7 +1566,7 @@ class SessionAggregator:
                     "summary": t.summary,
                     "causation_id": str(t.causation_id) if t.causation_id else None,
                 }
-                for t in sorted(session.tools.values(), key=lambda x: x.emitted_at)
+                for t in session._tools_sorted
             ],
         }
 
