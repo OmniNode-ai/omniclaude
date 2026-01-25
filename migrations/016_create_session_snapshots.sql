@@ -103,7 +103,7 @@ CREATE TABLE IF NOT EXISTS claude_session_event_idempotency (
 CREATE INDEX IF NOT EXISTS idx_idempotency_expires_at ON claude_session_event_idempotency(expires_at);
 
 -- Trigger to update updated_at timestamp
-CREATE OR REPLACE FUNCTION update_updated_at_column()
+CREATE OR REPLACE FUNCTION update_claude_session_snapshots_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
     NEW.updated_at = NOW();
@@ -114,7 +114,7 @@ $$ language 'plpgsql';
 CREATE TRIGGER update_session_snapshots_updated_at
     BEFORE UPDATE ON claude_session_snapshots
     FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
+    EXECUTE FUNCTION update_claude_session_snapshots_updated_at();
 
 -- Comment on tables
 COMMENT ON TABLE claude_session_snapshots IS 'Claude Code session snapshots for OmniMemory (OMN-1401)';

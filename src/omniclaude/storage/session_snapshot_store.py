@@ -52,6 +52,30 @@ def _ensure_uuid(value: str | UUID | None) -> UUID | None:
     return UUID(value)
 
 
+def _ensure_datetime(value: str | datetime | None) -> datetime | None:
+    """Convert string to datetime if needed.
+
+    Handles values that may be either ISO format string (from JSON deserialization)
+    or datetime objects, converting strings to proper datetime type for database.
+
+    Supports ISO 8601 format with timezone designators:
+    - "2024-01-15T10:30:00+00:00"
+    - "2024-01-15T10:30:00Z" (UTC shorthand)
+
+    Args:
+        value: An ISO format string, datetime, or None.
+
+    Returns:
+        datetime object or None if input was None.
+    """
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    # Parse ISO format string, handling 'Z' suffix for UTC
+    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+
+
 class SessionSnapshotStore:
     """PostgreSQL storage for session snapshots.
 
@@ -633,12 +657,14 @@ class SessionSnapshotStore:
         status = snapshot.get("status", "active")
         working_directory = snapshot["working_directory"]
         hook_source = snapshot["hook_source"]
-        last_event_at = snapshot.get("last_event_at", datetime.now(UTC))
+        last_event_at = (
+            _ensure_datetime(snapshot.get("last_event_at")) or datetime.now(UTC)
+        )
 
-        # Extract optional fields
+        # Extract optional fields with datetime coercion
         correlation_id = snapshot.get("correlation_id")
-        started_at = snapshot.get("started_at")
-        ended_at = snapshot.get("ended_at")
+        started_at = _ensure_datetime(snapshot.get("started_at"))
+        ended_at = _ensure_datetime(snapshot.get("ended_at"))
         duration_seconds = snapshot.get("duration_seconds")
         git_branch = snapshot.get("git_branch")
         end_reason = snapshot.get("end_reason")
@@ -722,7 +748,7 @@ class SessionSnapshotStore:
                 (
                     snapshot_id,
                     _ensure_uuid(p["prompt_id"]),
-                    p["emitted_at"],
+                    _ensure_datetime(p["emitted_at"]),
                     p.get("prompt_preview"),
                     p["prompt_length"],
                     p.get("detected_intent"),
@@ -763,7 +789,7 @@ class SessionSnapshotStore:
                 (
                     snapshot_id,
                     _ensure_uuid(t["tool_execution_id"]),
-                    t["emitted_at"],
+                    _ensure_datetime(t["emitted_at"]),
                     t["tool_name"],
                     t["success"],
                     t["duration_ms"],

@@ -49,7 +49,7 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from uuid import UUID, uuid4
 
 from omniclaude.aggregators.config import ConfigSessionAggregator
@@ -62,9 +62,6 @@ from omniclaude.hooks.schemas import (
     ModelHookSessionStartedPayload,
     ModelHookToolExecutedPayload,
 )
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 
@@ -1170,7 +1167,29 @@ class SessionAggregator:
         Removes both session state and associated locks to prevent
         memory leaks.
 
-        Note: This method must be called while holding the appropriate lock.
+        Threading Model:
+            This method is called while holding a session lock (via
+            _get_session_lock) but NOT while holding _locks_lock. This
+            creates a benign race condition when accessing _session_locks:
+
+            - _get_session_lock: Holds _locks_lock when reading/creating locks
+            - This method: Does NOT hold _locks_lock when popping locks
+
+            The race is benign because the worst case is:
+            1. This method pops a lock for session X
+            2. Concurrently, _get_session_lock creates a new lock for session X
+            3. Result: Redundant lock creation, which is safe (just allocates
+               a new asyncio.Lock that will eventually be cleaned up)
+
+            We accept this small race window for simplicity rather than:
+            - Acquiring _locks_lock here (would require careful lock ordering
+              to avoid deadlocks since we already hold a session lock)
+            - Deferring lock cleanup to a separate async method (adds complexity)
+
+            The session state removal (del self._sessions[session_id]) is also
+            not protected by _locks_lock here, but callers are expected to hold
+            the session lock which serializes access to that specific session's
+            state.
 
         Args:
             correlation_id: Correlation ID for distributed tracing.
