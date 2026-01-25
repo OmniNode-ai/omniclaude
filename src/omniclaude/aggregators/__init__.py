@@ -12,7 +12,7 @@ Key Components:
     - SessionAggregator: In-memory implementation of the protocol
     - EnumSessionStatus: Session lifecycle states
     - ConfigSessionAggregator: Configuration for aggregation behavior
-    - TSnapshot, TEvent: Generic type variables for concrete implementations
+    - TSnapshot_co, TEvent_contra: Variance-annotated type variables for Protocol
     - PromptRecord, ToolRecord, SessionState: Internal state models
 
 Architecture:
@@ -53,8 +53,8 @@ from omniclaude.aggregators.config import ConfigSessionAggregator
 from omniclaude.aggregators.enums import EnumSessionStatus
 from omniclaude.aggregators.protocol_session_aggregator import (
     ProtocolSessionAggregator,
-    TEvent,
-    TSnapshot,
+    TEvent_contra,
+    TSnapshot_co,
 )
 from omniclaude.aggregators.session_aggregator import (
     PromptRecord,
@@ -71,9 +71,9 @@ __all__ = [
     "ProtocolSessionAggregator",
     # Implementation
     "SessionAggregator",
-    # Type variables
-    "TSnapshot",
-    "TEvent",
+    # Type variables (variance-annotated for proper Protocol usage)
+    "TSnapshot_co",  # Covariant: used in return types only
+    "TEvent_contra",  # Contravariant: used in argument types only
     # Enums
     "EnumSessionStatus",
     # Configuration

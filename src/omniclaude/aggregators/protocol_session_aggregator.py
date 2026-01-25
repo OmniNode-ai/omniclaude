@@ -74,13 +74,26 @@ if TYPE_CHECKING:
 # Generic Type Variables
 # =============================================================================
 
-# Generic type for session snapshot model.
+# Generic type for session snapshot model (covariant - only used in return positions).
 # Will be bound to ModelClaudeCodeSessionSnapshot from omnibase_core (OMN-1489).
-TSnapshot = TypeVar("TSnapshot")
+#
+# Covariant because TSnapshot only appears in return types:
+#   - get_snapshot() -> TSnapshot | None
+#   - finalize_session() -> TSnapshot | None
+#
+# This allows: ProtocolSessionAggregator[ChildSnapshot, Event] to be used where
+# ProtocolSessionAggregator[ParentSnapshot, Event] is expected.
+TSnapshot_co = TypeVar("TSnapshot_co", covariant=True)
 
-# Generic type for hook event union.
+# Generic type for hook event union (contravariant - only used in argument positions).
 # Will be bound to ModelHookPayload union type from omniclaude.hooks.schemas.
-TEvent = TypeVar("TEvent")
+#
+# Contravariant because TEvent only appears in argument types:
+#   - process_event(event: TEvent, ...) -> bool
+#
+# This allows: ProtocolSessionAggregator[Snapshot, ParentEvent] to be used where
+# ProtocolSessionAggregator[Snapshot, ChildEvent] is expected.
+TEvent_contra = TypeVar("TEvent_contra", contravariant=True)
 
 
 # =============================================================================
@@ -89,7 +102,7 @@ TEvent = TypeVar("TEvent")
 
 
 @runtime_checkable
-class ProtocolSessionAggregator(Protocol[TSnapshot, TEvent]):
+class ProtocolSessionAggregator(Protocol[TSnapshot_co, TEvent_contra]):
     """Contract for aggregating session events into snapshots.
 
     This protocol defines the interface for session event aggregation,
@@ -179,7 +192,7 @@ class ProtocolSessionAggregator(Protocol[TSnapshot, TEvent]):
         """
         ...
 
-    async def process_event(self, event: TEvent, correlation_id: UUID) -> bool:
+    async def process_event(self, event: TEvent_contra, correlation_id: UUID) -> bool:
         """Process a single event into session state.
 
         This method handles all event types (SessionStarted, SessionEnded,
@@ -237,7 +250,7 @@ class ProtocolSessionAggregator(Protocol[TSnapshot, TEvent]):
 
     async def get_snapshot(
         self, session_id: str, correlation_id: UUID
-    ) -> TSnapshot | None:
+    ) -> TSnapshot_co | None:
         """Get current snapshot for a session.
 
         Returns the current state of a session as a snapshot object.
@@ -273,7 +286,7 @@ class ProtocolSessionAggregator(Protocol[TSnapshot, TEvent]):
         session_id: str,
         correlation_id: UUID,
         reason: str | None = None,
-    ) -> TSnapshot | None:
+    ) -> TSnapshot_co | None:
         """Finalize and seal a session snapshot.
 
         Called when SessionEnded is received or timeout expires.
@@ -385,6 +398,6 @@ class ProtocolSessionAggregator(Protocol[TSnapshot, TEvent]):
 
 __all__ = [
     "ProtocolSessionAggregator",
-    "TSnapshot",
-    "TEvent",
+    "TSnapshot_co",
+    "TEvent_contra",
 ]
