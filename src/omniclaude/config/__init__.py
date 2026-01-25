@@ -6,8 +6,6 @@ from .settings import Settings, clear_settings_cache, get_settings, settings
 
 # Re-export component configs for convenient access
 from omniclaude.aggregators.config import ConfigSessionAggregator
-from omniclaude.consumers.config import ConfigSessionConsumer
-from omniclaude.storage.config import ConfigSessionStorage
 
 __all__ = [
     # Core settings
@@ -17,6 +15,4 @@ __all__ = [
     "settings",
     # Component configs
     "ConfigSessionAggregator",
-    "ConfigSessionConsumer",
-    "ConfigSessionStorage",
 ]
