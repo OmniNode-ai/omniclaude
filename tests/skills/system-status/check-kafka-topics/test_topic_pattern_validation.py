@@ -63,7 +63,9 @@ def run_check_kafka_topics(topics_arg=None):
     if topics_arg is not None:
         cmd.extend(["--topics", topics_arg])
 
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=10, check=False)
+    result = subprocess.run(
+        cmd, capture_output=True, text=True, timeout=10, check=False
+    )
 
     # Parse JSON output
     try:

@@ -21,7 +21,6 @@ import json
 import sys
 from pathlib import Path
 
-
 # Add agents/lib to path for transformation_event_publisher
 # Path resolution: execute_unified.py (in log-transformation/)
 #   -> .parent (log-transformation/)
@@ -34,7 +33,6 @@ sys.path.insert(
     0, str(Path(__file__).parent.parent.parent.parent.parent / "agents" / "lib")
 )
 from transformation_event_publisher import publish_transformation_event_sync
-
 
 # Add claude/skills/_shared to path for shared utilities
 # Path resolution: .parent.parent.parent (claude/skills/) + _shared/

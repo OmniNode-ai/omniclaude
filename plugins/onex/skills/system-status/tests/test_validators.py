@@ -12,11 +12,9 @@ Created: 2025-11-20
 
 import argparse
 import importlib.util
-import sys
 from pathlib import Path
 
 import pytest
-
 
 # Import validators from specific skills using importlib
 # This avoids ambiguity since all skills have execute.py

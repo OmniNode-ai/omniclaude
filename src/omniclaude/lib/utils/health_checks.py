@@ -23,28 +23,75 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-# Use httpx for async requests (fallback to requests for sync)
+# Always import requests for sync methods
+import requests
+
+# Use httpx for async requests if available
+# This pattern provides graceful degradation when httpx is not installed:
+# - When available: exception aliases point to real httpx exception types
+# - When unavailable: placeholder exception classes are created that will never
+#   be raised by any code, making the except blocks effectively unreachable
+#   (which is the desired behavior for graceful degradation)
+HAS_HTTPX = False
+httpx: Any = None  # Module placeholder for when httpx is unavailable
+
+
+class _HttpxPlaceholderException(Exception):
+    """
+    Base class for placeholder exceptions when httpx is not installed.
+
+    These placeholders exist so that except clauses referencing httpx exception
+    types don't cause NameError when httpx is unavailable. Since nothing raises
+    these placeholder types, the except blocks become unreachable - providing
+    graceful degradation without runtime errors.
+    """
+
+    pass
+
+
+# Default to placeholder types - overwritten if httpx import succeeds
+HttpxTimeoutException: type[Exception] = type(
+    "HttpxTimeoutException", (_HttpxPlaceholderException,), {}
+)
+HttpxConnectError: type[Exception] = type(
+    "HttpxConnectError", (_HttpxPlaceholderException,), {}
+)
+HttpxRequestError: type[Exception] = type(
+    "HttpxRequestError", (_HttpxPlaceholderException,), {}
+)
+
 try:
-    import httpx
+    import httpx as _httpx_module
 
+    # Import succeeded - update module reference and exception aliases
+    httpx = _httpx_module
     HAS_HTTPX = True
+    # Point to actual httpx exception types for proper exception handling
+    HttpxTimeoutException = _httpx_module.TimeoutException
+    HttpxConnectError = _httpx_module.ConnectError
+    HttpxRequestError = _httpx_module.RequestError
 except ImportError:
-    import requests
-
-    HAS_HTTPX = False
+    # httpx not available - placeholders already set above
+    pass  # nosec B110 - Optional dependency, graceful degradation
 
 # Import pattern tracker for configuration
+HAS_PATTERN_TRACKER = False
+get_tracker: Any = None
 try:
     from .pattern_tracker import PatternTrackerConfig, get_tracker
 
     HAS_PATTERN_TRACKER = True
 except ImportError:
-    HAS_PATTERN_TRACKER = False
+    pass  # nosec B110 - Optional dependency, graceful degradation
+
+# Import for type checking only
+if TYPE_CHECKING:
+    from .pattern_tracker import PatternTrackerConfig
 
 # Import settings for configuration
-from config import settings
+from omniclaude.config import settings
 
 
 class HealthStatus(Enum):
@@ -68,7 +115,7 @@ class HealthCheckResult:
     details: dict[str, Any] | None = None
     suggestion: str | None = None
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API serialization."""
         return asdict(self)
 
@@ -84,16 +131,16 @@ class Phase4HealthChecker:
     def __init__(
         self,
         base_url: str | None = None,
-        config: PatternTrackerConfig | None = None,
+        config: "PatternTrackerConfig | None" = None,
     ):
         """
         Initialize Phase 4 health checker.
 
         Args:
-            base_url: Base URL for Phase 4 intelligence service (defaults to settings.archon_intelligence_url)
+            base_url: Base URL for Phase 4 intelligence service (defaults to settings.intelligence_service_url)
             config: Optional pattern tracker configuration
         """
-        self.base_url = base_url or str(settings.archon_intelligence_url)
+        self.base_url = base_url or str(settings.intelligence_service_url)
         self.config = config or (get_tracker().config if HAS_PATTERN_TRACKER else None)
         self._health_cache: dict[str, tuple[dict[str, Any], float]] = {}
         self.cache_duration = 30.0  # Cache results for 30 seconds
@@ -102,7 +149,7 @@ class Phase4HealthChecker:
         self.log_file = Path.home() / ".claude" / "hooks" / "logs" / "health-checks.log"
         self.log_file.parent.mkdir(parents=True, exist_ok=True)
 
-    def _log(self, level: str, message: str, **kwargs):
+    def _log(self, level: str, message: str, **kwargs: Any) -> None:
         """Internal logging method for health check events."""
         timestamp = datetime.now(UTC).isoformat()
         log_entry = {
@@ -117,7 +164,7 @@ class Phase4HealthChecker:
                 f.write(json.dumps(log_entry) + "\n")
         except Exception:
             # Fail silently - don't disrupt health checks
-            pass
+            pass  # nosec B110 - Intentional silent failure for non-critical logging
 
     def _is_cache_valid(self, cache_key: str) -> bool:
         """Check if cached health results are still valid."""
@@ -134,7 +181,7 @@ class Phase4HealthChecker:
             return self._health_cache[cache_key][0]
         return None
 
-    def _cache_result(self, cache_key: str, result: dict[str, Any]):
+    def _cache_result(self, cache_key: str, result: dict[str, Any]) -> None:
         """Cache health results."""
         self._health_cache[cache_key] = (result, time.time())
 
@@ -202,7 +249,7 @@ class Phase4HealthChecker:
                 self._cache_result(cache_key, result.to_dict())
                 return result
 
-        except httpx.TimeoutException:
+        except HttpxTimeoutException:
             response_time_ms = (time.time() - start_time) * 1000
             result = HealthCheckResult(
                 component="intelligence_service",
@@ -215,7 +262,7 @@ class Phase4HealthChecker:
             self._cache_result(cache_key, result.to_dict())
             return result
 
-        except httpx.ConnectError:
+        except HttpxConnectError:
             response_time_ms = (time.time() - start_time) * 1000
             result = HealthCheckResult(
                 component="intelligence_service",
@@ -256,7 +303,9 @@ class Phase4HealthChecker:
 
             # Parse response if JSON
             try:
-                if response.headers.get("content-type", "").startswith("application/json"):
+                if response.headers.get("content-type", "").startswith(
+                    "application/json"
+                ):
                     result["details"] = response.json()
                 else:
                     result["details"] = response.text[:500]  # Limit text length
@@ -288,7 +337,9 @@ class Phase4HealthChecker:
         """Check if we can reach the database through Phase 4 API"""
         start_time = time.time()
         try:
-            response = requests.get(f"{self.base_url}/api/pattern-traceability/health", timeout=5)
+            response = requests.get(
+                f"{self.base_url}/api/pattern-traceability/health", timeout=5
+            )
             response_time_ms = (time.time() - start_time) * 1000
 
             if response.status_code == 200:
@@ -473,7 +524,9 @@ class Phase4HealthChecker:
 
         # Print summary
         status_emoji = (
-            "✅" if overall_status == "healthy" else ("⚠️" if overall_status == "degraded" else "❌")
+            "✅"
+            if overall_status == "healthy"
+            else ("⚠️" if overall_status == "degraded" else "❌")
         )
         print(
             f"{status_emoji} Overall Phase 4 Status: {overall_status.upper()}",
@@ -490,7 +543,7 @@ class Phase4HealthChecker:
         return results
 
 
-def main():
+def main() -> None:
     """Run health check when script is executed directly"""
     checker = Phase4HealthChecker()
     results = checker.run_comprehensive_health_check()

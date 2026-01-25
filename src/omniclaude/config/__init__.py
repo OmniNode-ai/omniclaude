@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .settings import Settings, get_settings, settings
+from .settings import Settings, clear_settings_cache, get_settings, settings
 
 # Re-export component configs for convenient access
 from omniclaude.aggregators.config import ConfigSessionAggregator
@@ -12,6 +12,7 @@ from omniclaude.storage.config import ConfigSessionStorage
 __all__ = [
     # Core settings
     "Settings",
+    "clear_settings_cache",
     "get_settings",
     "settings",
     # Component configs

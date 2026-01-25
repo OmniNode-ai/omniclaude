@@ -158,8 +158,8 @@ if [[ -f "${HOOKS_LIB}/correlation_manager.py" ]]; then
     $PYTHON_CMD -c "
 import sys
 sys.path.insert(0, '${HOOKS_LIB}')
-from correlation_manager import get_manager
-get_manager().clear()
+from correlation_manager import get_registry
+get_registry().clear()
 " 2>/dev/null
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Correlation state cleared" >> "$LOG_FILE"
 fi

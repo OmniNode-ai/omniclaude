@@ -37,45 +37,100 @@ import logging
 import os
 import threading
 import time
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-# Import Pydantic Settings for type-safe configuration
-try:
-    from config import settings as _settings_instance
+# FAIL FAST: Required configuration
+from omniclaude.config import settings
 
-    settings: Any = _settings_instance
-except ImportError:
-    settings = None
-
-# Import Prometheus metrics
+# Import Prometheus metrics (optional integration)
 try:
     from omniclaude.lib.prometheus_metrics import (
-        event_publish_bytes,
         event_publish_counter,
-        event_publish_duration,
         event_publish_errors_counter,
         record_event_publish,
     )
 
     PROMETHEUS_AVAILABLE = True
-except ImportError:
-    try:
-        from agents.lib.prometheus_metrics import (
-            event_publish_bytes,
-            event_publish_counter,
-            event_publish_duration,
-            event_publish_errors_counter,
-            record_event_publish,
-        )
-
-        PROMETHEUS_AVAILABLE = True
-    except ImportError:
-        PROMETHEUS_AVAILABLE = False
-        logging.debug("Prometheus metrics not available - metrics disabled")
+except ImportError:  # nosec B110 - Optional dependency, graceful degradation
+    PROMETHEUS_AVAILABLE = False
+    logging.debug("Prometheus metrics not available - metrics disabled")
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Event Config Models (ONEX: Parameter reduction pattern)
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class ModelActionEventConfig:
+    """Configuration for action event publishing.
+
+    Groups related parameters for publish_action_event() to reduce
+    function signature complexity per ONEX parameter guidelines.
+
+    Attributes:
+        agent_name: Agent executing the action.
+        action_type: Type of action ('tool_call', 'decision', 'error', 'success').
+        action_name: Specific action name.
+        action_details: Full details of action.
+        correlation_id: Request correlation ID for distributed tracing.
+        duration_ms: How long the action took in milliseconds.
+        debug_mode: Whether this was logged in debug mode.
+        project_path: Path to project directory.
+        project_name: Name of project.
+        working_directory: Current working directory.
+    """
+
+    agent_name: str
+    action_type: str
+    action_name: str
+    action_details: dict[str, Any] | None = None
+    correlation_id: str | UUID | None = None
+    duration_ms: int | None = None
+    debug_mode: bool = True
+    project_path: str | None = None
+    project_name: str | None = None
+    working_directory: str | None = None
+
+
+@dataclass(frozen=True)
+class ModelToolCallConfig:
+    """Configuration for tool call event publishing.
+
+    Groups related parameters for publish_tool_call() to reduce
+    function signature complexity per ONEX parameter guidelines.
+
+    Attributes:
+        agent_name: Agent executing the tool.
+        tool_name: Tool name (e.g., 'Read', 'Write', 'Bash').
+        tool_parameters: Tool input parameters.
+        tool_result: Tool execution result.
+        correlation_id: Correlation ID.
+        duration_ms: Execution time.
+        success: Whether tool succeeded.
+        error_message: Error message if failed.
+        project_path: Path to project directory.
+        project_name: Name of project.
+        working_directory: Current working directory.
+    """
+
+    agent_name: str
+    tool_name: str
+    tool_parameters: dict[str, Any] | None = None
+    tool_result: dict[str, Any] | None = None
+    correlation_id: str | UUID | None = None
+    duration_ms: int | None = None
+    success: bool = True
+    error_message: str | None = None
+    project_path: str | None = None
+    project_name: str | None = None
+    working_directory: str | None = None
+
 
 # Kafka publish timeout (10 seconds)
 # Prevents indefinite blocking if broker is slow/unresponsive
@@ -89,7 +144,7 @@ _producer_lock: asyncio.Lock | None = None
 _lock_creation_lock = threading.Lock()
 
 
-async def get_producer_lock():
+async def get_producer_lock() -> asyncio.Lock:
     """
     Get or create the producer lock lazily under a running event loop.
 
@@ -117,14 +172,13 @@ async def get_producer_lock():
 
 
 def _get_kafka_bootstrap_servers() -> str:
-    """Get Kafka bootstrap servers from environment or settings."""
-    # Try Pydantic settings first (if available)
-    if settings is not None:
-        try:
-            servers: str = settings.get_effective_kafka_bootstrap_servers()
-            return servers
-        except Exception as e:
-            logger.debug(f"Failed to get Kafka servers from settings: {e}")
+    """Get Kafka bootstrap servers from settings."""
+    # Use Pydantic settings (fail fast if not configured properly)
+    try:
+        servers: str = settings.get_effective_kafka_bootstrap_servers()
+        return servers
+    except Exception as e:
+        logger.debug(f"Failed to get Kafka servers from settings: {e}")
 
     # Fall back to environment variable
     env_servers: str | None = os.getenv("KAFKA_BOOTSTRAP_SERVERS")
@@ -141,6 +195,28 @@ def _get_kafka_bootstrap_servers() -> str:
         f"Set KAFKA_BOOTSTRAP_SERVERS environment variable for production use."
     )
     return default_servers
+
+
+def _get_kafka_topic_prefix() -> str:
+    """Get Kafka topic prefix (environment) from settings or environment.
+
+    Returns:
+        Topic prefix (e.g., "dev", "staging", "prod"). Defaults to "dev".
+    """
+    # Try Pydantic settings first (if available)
+    if settings is not None:
+        try:
+            prefix: str | None = getattr(settings, "kafka_topic_prefix", None)
+            if prefix:
+                return prefix
+        except Exception as e:
+            logger.debug(f"Failed to get Kafka topic prefix from settings: {e}")
+
+    # Fall back to environment variables
+    # Check KAFKA_TOPIC_PREFIX first (documented in CLAUDE.md)
+    # Then KAFKA_ENVIRONMENT for compatibility with handler_event_emitter.py
+    env_prefix = os.getenv("KAFKA_TOPIC_PREFIX") or os.getenv("KAFKA_ENVIRONMENT")
+    return env_prefix if env_prefix else "dev"
 
 
 async def _get_kafka_producer() -> Any:
@@ -193,6 +269,31 @@ async def _get_kafka_producer() -> Any:
             return None
 
 
+async def publish_action_event_from_config(
+    config: ModelActionEventConfig,
+) -> bool:
+    """Publish agent action event to Kafka from config object.
+
+    Args:
+        config: Action event configuration containing all event data.
+
+    Returns:
+        bool: True if published successfully, False otherwise.
+    """
+    return await publish_action_event(
+        agent_name=config.agent_name,
+        action_type=config.action_type,
+        action_name=config.action_name,
+        action_details=config.action_details,
+        correlation_id=config.correlation_id,
+        duration_ms=config.duration_ms,
+        debug_mode=config.debug_mode,
+        project_path=config.project_path,
+        project_name=config.project_name,
+        working_directory=config.working_directory,
+    )
+
+
 async def publish_action_event(
     agent_name: str,
     action_type: str,
@@ -205,8 +306,11 @@ async def publish_action_event(
     project_name: str | None = None,
     working_directory: str | None = None,
 ) -> bool:
-    """
-    Publish agent action event to Kafka.
+    """Publish agent action event to Kafka.
+
+    Note:
+        Consider using publish_action_event_from_config() with
+        ModelActionEventConfig for better parameter organization.
 
     Args:
         agent_name: Agent executing the action (e.g., "agent-researcher")
@@ -223,12 +327,10 @@ async def publish_action_event(
     Returns:
         bool: True if published successfully, False otherwise
     """
+    # ONEX: exempt - core implementation (config-based wrapper available)
     try:
         # Generate correlation ID if not provided
-        if correlation_id is None:
-            correlation_id = str(uuid4())
-        else:
-            correlation_id = str(correlation_id)
+        correlation_id = str(uuid4()) if correlation_id is None else str(correlation_id)
 
         # Validate action_type
         valid_types = ["tool_call", "decision", "error", "success"]
@@ -257,16 +359,19 @@ async def publish_action_event(
         # Remove None values to keep payload compact
         event = {k: v for k, v in event.items() if v is not None}
 
+        # Build ONEX-compliant topic name
+        topic_prefix = _get_kafka_topic_prefix()
+        topic = build_topic(topic_prefix, TopicBase.AGENT_ACTION)
+
         # Get producer
         producer = await _get_kafka_producer()
         if producer is None:
             logger.warning("Kafka producer unavailable, action event not published")
             if PROMETHEUS_AVAILABLE:
-                event_publish_counter.labels(topic="agent-actions", status="unavailable").inc()
+                event_publish_counter.labels(topic=topic, status="unavailable").inc()
             return False
 
         # Publish to Kafka
-        topic = "agent-actions"
         partition_key = correlation_id.encode("utf-8")
 
         # Track timing for Prometheus
@@ -299,6 +404,12 @@ async def publish_action_event(
 
     except TimeoutError:
         # Handle timeout specifically for better observability
+        # Build topic name for error reporting (may fail if topic construction failed earlier)
+        try:
+            error_topic = build_topic(_get_kafka_topic_prefix(), TopicBase.AGENT_ACTION)
+        except Exception:
+            error_topic = TopicBase.AGENT_ACTION  # Fall back to base name
+
         logger.error(
             f"Timeout publishing action event to Kafka "
             f"(action_type={action_type}, action_name={action_name}, "
@@ -308,25 +419,64 @@ async def publish_action_event(
 
         # Record failure in Prometheus
         if PROMETHEUS_AVAILABLE:
-            event_publish_counter.labels(topic="agent-actions", status="timeout").inc()
+            event_publish_counter.labels(topic=error_topic, status="timeout").inc()
             event_publish_errors_counter.labels(
-                topic="agent-actions", error_type="TimeoutError"
+                topic=error_topic, error_type="TimeoutError"
             ).inc()
 
         return False
 
     except Exception as e:
         # Log error but don't fail - observability shouldn't break execution
+        # Build topic name for error reporting (may fail if topic construction failed earlier)
+        try:
+            error_topic = build_topic(_get_kafka_topic_prefix(), TopicBase.AGENT_ACTION)
+        except Exception:
+            error_topic = TopicBase.AGENT_ACTION  # Fall back to base name
+
         logger.error(f"Failed to publish action event: {e}", exc_info=True)
 
         # Record failure in Prometheus
         if PROMETHEUS_AVAILABLE:
-            event_publish_counter.labels(topic="agent-actions", status="failure").inc()
+            event_publish_counter.labels(topic=error_topic, status="failure").inc()
             event_publish_errors_counter.labels(
-                topic="agent-actions", error_type=type(e).__name__
+                topic=error_topic, error_type=type(e).__name__
             ).inc()
 
         return False
+
+
+async def publish_tool_call_from_config(
+    config: ModelToolCallConfig,
+) -> bool:
+    """Publish tool call action event from config object.
+
+    Args:
+        config: Tool call configuration containing all event data.
+
+    Returns:
+        bool: True if published successfully.
+    """
+    action_details = {
+        "tool_parameters": config.tool_parameters or {},
+        "tool_result": config.tool_result or {},
+        "success": config.success,
+    }
+
+    if config.error_message:
+        action_details["error_message"] = config.error_message
+
+    return await publish_action_event(
+        agent_name=config.agent_name,
+        action_type="tool_call",
+        action_name=config.tool_name,
+        action_details=action_details,
+        correlation_id=config.correlation_id,
+        duration_ms=config.duration_ms,
+        project_path=config.project_path,
+        project_name=config.project_name,
+        working_directory=config.working_directory,
+    )
 
 
 async def publish_tool_call(
@@ -338,12 +488,13 @@ async def publish_tool_call(
     duration_ms: int | None = None,
     success: bool = True,
     error_message: str | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> bool:
-    """
-    Publish tool call action event.
+    """Publish tool call action event.
 
-    Convenience method for publishing tool executions (Read, Write, Edit, Bash, etc.).
+    Note:
+        Consider using publish_tool_call_from_config() with
+        ModelToolCallConfig for better parameter organization.
 
     Args:
         agent_name: Agent executing the tool
@@ -359,6 +510,7 @@ async def publish_tool_call(
     Returns:
         bool: True if published successfully
     """
+    # ONEX: exempt - convenience wrapper (config-based method available)
     action_details = {
         "tool_parameters": tool_parameters or {},
         "tool_result": tool_result or {},
@@ -386,7 +538,7 @@ async def publish_decision(
     decision_result: dict[str, Any] | None = None,
     correlation_id: str | UUID | None = None,
     duration_ms: int | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> bool:
     """
     Publish decision action event.
@@ -427,7 +579,7 @@ async def publish_error(
     error_message: str,
     error_context: dict[str, Any] | None = None,
     correlation_id: str | UUID | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> bool:
     """
     Publish error action event.
@@ -467,7 +619,7 @@ async def publish_success(
     success_details: dict[str, Any] | None = None,
     correlation_id: str | UUID | None = None,
     duration_ms: int | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> bool:
     """
     Publish success action event.
@@ -498,7 +650,7 @@ async def publish_success(
     )
 
 
-async def close_producer():
+async def close_producer() -> None:
     """Close Kafka producer on shutdown."""
     global _kafka_producer
     if _kafka_producer is not None:
@@ -511,7 +663,7 @@ async def close_producer():
             _kafka_producer = None
 
 
-def _cleanup_producer_sync():
+def _cleanup_producer_sync() -> None:
     """
     Synchronous wrapper for close_producer() to be called by atexit.
 
@@ -533,16 +685,22 @@ def _cleanup_producer_sync():
                 return
             except RuntimeError:
                 # No running loop, try to get the main event loop
-                pass
+                pass  # nosec B110 - Expected when no event loop running
 
             # Try to use existing event loop if available and not closed
+            # Note: asyncio.get_event_loop() is deprecated since Python 3.10.
+            # We can't use get_running_loop() here because this is sync code.
+            # If no running loop exists, create a new one for cleanup.
             try:
-                loop = asyncio.get_event_loop()
-                if not loop.is_closed():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
                     loop.run_until_complete(close_producer())
-                    return
+                finally:
+                    loop.close()
+                return
             except RuntimeError:
-                pass
+                pass  # nosec B110 - Expected when event loop unavailable
 
             # Event loop is closed. The producer was created on a closed loop.
             # We can't use async cleanup properly.
@@ -584,16 +742,19 @@ atexit.register(_cleanup_producer_sync)
 
 # Synchronous wrapper for backward compatibility
 def publish_action_event_sync(
-    agent_name: str, action_type: str, action_name: str, **kwargs
+    agent_name: str, action_type: str, action_name: str, **kwargs: Any
 ) -> bool:
     """
     Synchronous wrapper for publish_action_event.
 
     Creates new event loop if needed. Use async version when possible.
     """
+    # Note: asyncio.get_event_loop() is deprecated since Python 3.10.
+    # Use get_running_loop() to check for existing loop, then create new if needed.
     try:
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
     except RuntimeError:
+        # No running loop - create a new one for sync execution
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
 
@@ -609,7 +770,7 @@ def publish_action_event_sync(
 
 if __name__ == "__main__":
     # Test action event publishing
-    async def test():
+    async def test() -> None:
         logging.basicConfig(level=logging.DEBUG)
 
         # Test tool call

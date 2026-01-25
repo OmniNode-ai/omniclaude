@@ -33,7 +33,7 @@ Usage:
     await logger.log_error(
         error_type="DatabaseConnectionError",
         error_message="Failed to connect to PostgreSQL",
-        error_context={"host": "192.168.86.200", "port": 5436},
+        error_context={"host": "db.example.com", "port": 5432},
         severity="critical"  # 'error' or 'critical' triggers Slack notification
     )
 
@@ -50,7 +50,9 @@ import asyncio
 import logging
 import os
 import time
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from types import TracebackType
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -62,43 +64,26 @@ from .action_event_publisher import (
     publish_tool_call,
 )
 
-# Import Slack notifier for error notifications
+# Import Slack notifier for error notifications (optional integration)
 try:
     from omniclaude.lib.slack_notifier import get_slack_notifier
 
     SLACK_NOTIFIER_AVAILABLE = True
-except ImportError:
-    try:
-        from agents.lib.slack_notifier import get_slack_notifier
+except ImportError:  # nosec B110 - Optional dependency, graceful degradation
+    SLACK_NOTIFIER_AVAILABLE = False
+    logging.warning("SlackNotifier not available - error notifications disabled")
 
-        SLACK_NOTIFIER_AVAILABLE = True
-    except ImportError:
-        SLACK_NOTIFIER_AVAILABLE = False
-        logging.warning("SlackNotifier not available - error notifications disabled")
-
-# Import Prometheus metrics
+# Import Prometheus metrics (optional integration)
 try:
     from omniclaude.lib.prometheus_metrics import (
-        action_log_counter,
-        action_log_duration,
         action_log_errors_counter,
         record_action_log,
     )
 
     PROMETHEUS_AVAILABLE = True
-except ImportError:
-    try:
-        from agents.lib.prometheus_metrics import (
-            action_log_counter,
-            action_log_duration,
-            action_log_errors_counter,
-            record_action_log,
-        )
-
-        PROMETHEUS_AVAILABLE = True
-    except ImportError:
-        PROMETHEUS_AVAILABLE = False
-        logging.debug("Prometheus metrics not available - metrics disabled")
+except ImportError:  # nosec B110 - Optional dependency, graceful degradation
+    PROMETHEUS_AVAILABLE = False
+    logging.debug("Prometheus metrics not available - metrics disabled")
 
 logger = logging.getLogger(__name__)
 
@@ -120,12 +105,17 @@ class ToolCallContext:
         self.success = True
         self.error_message: str | None = None
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "ToolCallContext":
         """Start timing when entering context."""
         self.start_time = time.time()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool:
         """Log action when exiting context."""
         duration_ms = int((time.time() - (self.start_time or time.time())) * 1000)
 
@@ -147,7 +137,7 @@ class ToolCallContext:
         # Don't suppress exception
         return False
 
-    def set_result(self, result: dict[str, Any]):
+    def set_result(self, result: dict[str, Any]) -> None:
         """Set tool result (call this from within the context)."""
         self.tool_result = result
 
@@ -244,7 +234,7 @@ class ActionLogger:
         self,
         tool_name: str,
         tool_parameters: dict[str, Any] | None = None,
-    ):
+    ) -> AsyncIterator[ToolCallContext]:
         """
         Context manager for logging tool call with automatic timing.
 
@@ -469,7 +459,7 @@ async def log_action(
     action_details: dict[str, Any] | None = None,
     correlation_id: str | UUID | None = None,
     duration_ms: int | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> bool:
     """
     Convenience function for logging a single action without creating a logger instance.
@@ -499,7 +489,7 @@ async def log_action(
 
 if __name__ == "__main__":
     # Test action logger
-    async def test():
+    async def test() -> None:
         logging.basicConfig(level=logging.DEBUG)
 
         # Test with logger instance
@@ -510,7 +500,9 @@ if __name__ == "__main__":
         )
 
         # Test tool call with context manager
-        async with logger.tool_call("Read", {"file_path": "/path/to/file.py"}) as action:
+        async with logger.tool_call(
+            "Read", {"file_path": "/path/to/file.py"}
+        ) as action:
             # Simulate file reading
             await asyncio.sleep(0.05)  # 50ms
             action.set_result({"line_count": 100, "file_size_bytes": 5432})
@@ -551,11 +543,11 @@ if __name__ == "__main__":
         # Test critical error logging (with Slack notification if configured)
         await logger.log_error(
             error_type="DatabaseConnectionError",
-            error_message="Failed to connect to PostgreSQL at 192.168.86.200:5436",
+            error_message="Failed to connect to PostgreSQL at db.example.com:5432",
             error_context={
-                "host": "192.168.86.200",
-                "port": 5436,
-                "database": "omninode_bridge",
+                "host": "db.example.com",
+                "port": 5432,
+                "database": "mydb",
                 "retry_count": 3,
             },
             severity="critical",  # Will trigger Slack if SLACK_WEBHOOK_URL is set

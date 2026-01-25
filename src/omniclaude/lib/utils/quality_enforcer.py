@@ -16,6 +16,7 @@ Performance Budget: <2000ms total
 import asyncio
 import json
 import os
+import re
 import sys
 import time
 from datetime import UTC, datetime
@@ -24,14 +25,87 @@ from typing import Any
 
 import yaml
 
+# =============================================================================
+# Secret Sanitization (mirrors omniclaude.hooks.schemas patterns)
+# =============================================================================
+
+# Privacy: Patterns that may indicate secrets (compiled for performance)
+# These patterns mirror those in omniclaude.hooks.schemas for consistency
+_SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    # API keys with common prefixes
+    (re.compile(r"\b(sk-[a-zA-Z0-9]{20,})", re.IGNORECASE), "sk-***REDACTED***"),
+    (re.compile(r"\b(AKIA[A-Z0-9]{16})", re.IGNORECASE), "AKIA***REDACTED***"),
+    (re.compile(r"\b(ghp_[a-zA-Z0-9]{36})", re.IGNORECASE), "ghp_***REDACTED***"),
+    (re.compile(r"\b(gho_[a-zA-Z0-9]{36})", re.IGNORECASE), "gho_***REDACTED***"),
+    (
+        re.compile(r"\b(xox[baprs]-[a-zA-Z0-9-]{10,})", re.IGNORECASE),
+        "xox*-***REDACTED***",
+    ),
+    # Stripe API keys
+    (
+        re.compile(r"\b((?:sk|pk|rk)_(?:live|test)_[a-zA-Z0-9]{24,})", re.IGNORECASE),
+        "stripe_***REDACTED***",
+    ),
+    # Google Cloud Platform API keys
+    (re.compile(r"\b(AIza[0-9A-Za-z\-_]{35})"), "AIza***REDACTED***"),
+    # JWT tokens
+    (
+        re.compile(r"\b(eyJ[a-zA-Z0-9_-]*\.eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*)"),
+        "jwt_***REDACTED***",
+    ),
+    # Private keys (PEM format)
+    (
+        re.compile(
+            r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----"
+        ),
+        "-----BEGIN ***REDACTED*** PRIVATE KEY-----",
+    ),
+    # Bearer tokens
+    (re.compile(r"(Bearer\s+)[a-zA-Z0-9._-]{20,}", re.IGNORECASE), r"\1***REDACTED***"),
+    # Password in URLs
+    (re.compile(r"(://[^:]+:)[^@]+(@)"), r"\1***REDACTED***\2"),
+    # Generic secret patterns in key=value format
+    (
+        re.compile(
+            r"(\b(?:password|passwd|secret|token|api_key|apikey|auth)\s*[=:]\s*)"
+            r"['\"]?[^\s'\"]{8,}['\"]?",
+            re.IGNORECASE,
+        ),
+        r"\1***REDACTED***",
+    ),
+]
+
+
+def _sanitize_for_logging(text: str) -> str:
+    """Sanitize text by redacting common secret patterns before logging.
+
+    This function applies pattern-based redaction for common secret formats
+    (API keys, passwords, tokens, etc.) to prevent accidental exposure in logs.
+
+    Args:
+        text: The text to sanitize.
+
+    Returns:
+        Text with secrets redacted.
+    """
+    if not text:
+        return text
+    sanitized = text
+    for pattern, replacement in _SECRET_PATTERNS:
+        sanitized = pattern.sub(replacement, sanitized)
+    return sanitized
+
+
 # Add project root to path for config import
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
-from config import settings
+from omniclaude.config import settings
 
-# Add lib directory to path
-sys.path.insert(0, str(Path(__file__).parent / "lib"))
+# Import internal modules (fail fast - no fallbacks for required internal dependencies)
+from .consensus.quorum import AIQuorum
+from .correction.generator import CorrectionGenerator
+from .naming_validator import NamingValidator, Violation
 
 
 def load_config() -> dict[str, Any]:
@@ -42,12 +116,111 @@ def load_config() -> dict[str, Any]:
     # Load from YAML if exists
     if config_path.exists():
         try:
-            with open(config_path) as f:
+            with open(config_path, encoding="utf-8") as f:
                 config = yaml.safe_load(f) or {}
         except Exception as e:
-            print(f"Warning: Could not load config.yaml: {e}", file=sys.stderr)
+            # Sanitize exception message before logging
+            safe_error = _sanitize_for_logging(str(e))
+            print(f"Warning: Could not load config.yaml: {safe_error}", file=sys.stderr)
 
     return config
+
+
+def _get_safe_tool_metadata(tool_call: dict[str, Any]) -> dict[str, Any]:
+    """Extract safe metadata from tool_call without exposing sensitive data.
+
+    This function extracts only non-sensitive metadata from tool calls for logging,
+    avoiding exposure of file contents, code snippets, commands with credentials,
+    or other potentially sensitive user input.
+
+    IMPORTANT: All logging of tool_call data MUST use this function.
+    Never log raw tool_call payloads directly as they may contain:
+    - File contents (Write tool)
+    - Code snippets (Edit tool)
+    - Shell commands with credentials (Bash tool)
+    - User queries (Search/WebFetch tools)
+    - API request bodies
+
+    Args:
+        tool_call: The raw tool call dictionary from Claude Code.
+
+    Returns:
+        A dictionary containing only safe metadata fields.
+    """
+    # Sensitive fields that should never be logged (may contain secrets/PII)
+    sensitive_fields = {
+        "content",  # Write tool - file contents
+        "new_string",  # Edit tool - code to insert
+        "old_string",  # Edit tool - code to replace
+        "command",  # Bash tool - may contain credentials
+        "prompt",  # WebFetch - user queries
+        "query",  # Search tools - user queries
+        "body",  # API calls - request bodies
+        "message",  # Message content
+        "text",  # Text content
+        "data",  # Generic data field
+        "input",  # Generic input field
+    }
+
+    tool_name = tool_call.get("tool_name", "unknown")
+    params = tool_call.get("tool_input", tool_call.get("parameters", {}))
+
+    # Build safe metadata
+    safe_metadata: dict[str, Any] = {
+        "tool_name": tool_name,
+        "has_tool_input": "tool_input" in tool_call,
+        "param_count": len(params) if isinstance(params, dict) else 0,
+    }
+
+    # Extract specific safe fields based on tool type
+    if isinstance(params, dict):
+        # File path is generally safe (already logged separately)
+        if "file_path" in params:
+            safe_metadata["file_path"] = params["file_path"]
+        if "notebook_path" in params:
+            safe_metadata["notebook_path"] = params["notebook_path"]
+
+        # For Edit tool, log operation type without content
+        if tool_name == "Edit":
+            safe_metadata["has_old_string"] = "old_string" in params
+            safe_metadata["has_new_string"] = "new_string" in params
+            safe_metadata["replace_all"] = params.get("replace_all", False)
+
+        # For Write tool, log content length without content
+        if tool_name == "Write" and "content" in params:
+            # Robust content_length calculation for non-sized payloads
+            try:
+                content = params["content"]
+                if isinstance(content, (str, bytes, bytearray)) or hasattr(
+                    content, "__len__"
+                ):
+                    safe_metadata["content_length"] = len(content)
+                else:
+                    # Non-sized content (e.g., int, float) - log type instead
+                    safe_metadata["content_type"] = type(content).__name__
+            except (TypeError, AttributeError):
+                # Fallback if len() fails unexpectedly
+                safe_metadata["content_type"] = type(params["content"]).__name__
+
+        # For Bash tool, log command presence without the command itself
+        if tool_name == "Bash":
+            safe_metadata["has_command"] = "command" in params
+            if "timeout" in params:
+                safe_metadata["timeout"] = params["timeout"]
+
+        # For Read tool, log offset/limit if present
+        if tool_name == "Read":
+            if "offset" in params:
+                safe_metadata["offset"] = params["offset"]
+            if "limit" in params:
+                safe_metadata["limit"] = params["limit"]
+
+        # Log param keys (excluding sensitive ones) for debugging
+        safe_param_keys = [k for k in params.keys() if k not in sensitive_fields]
+        if safe_param_keys:
+            safe_metadata["param_keys"] = safe_param_keys
+
+    return safe_metadata
 
 
 # Load configuration
@@ -69,7 +242,7 @@ ENFORCEMENT_MODE = settings.enforcement_mode
 class ViolationsLogger:
     """Dedicated logger for tracking naming convention violations."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize violations logger with configured paths."""
         log_config = CONFIG.get("logging", {})
 
@@ -81,7 +254,9 @@ class ViolationsLogger:
         )
         self.violations_summary = Path(
             os.path.expanduser(
-                log_config.get("violations_summary", "~/.claude/hooks/logs/violations_summary.json")
+                log_config.get(
+                    "violations_summary", "~/.claude/hooks/logs/violations_summary.json"
+                )
             )
         )
         self.max_violations_history = log_config.get("max_violations_history", 100)
@@ -90,7 +265,7 @@ class ViolationsLogger:
         self.violations_log.parent.mkdir(parents=True, exist_ok=True)
         self.violations_summary.parent.mkdir(parents=True, exist_ok=True)
 
-    def log_violations(self, file_path: str, violations: list) -> None:
+    def log_violations(self, file_path: str, violations: list[Violation]) -> None:
         """
         Log violations to dedicated violations.log file.
 
@@ -113,7 +288,9 @@ class ViolationsLogger:
                 display_path = file_path
 
             # Format violation summary (show names and line numbers)
-            violation_details = ", ".join([f"{v.name} (line {v.line})" for v in violations[:5]])
+            violation_details = ", ".join(
+                [f"{v.name} (line {v.line})" for v in violations[:5]]
+            )
             if len(violations) > 5:
                 violation_details += f", ... and {len(violations) - 5} more"
 
@@ -134,9 +311,11 @@ class ViolationsLogger:
 
         except Exception as e:
             # Don't fail enforcement if logging fails
-            print(f"[Warning] Failed to log violations: {e}", file=sys.stderr)
+            # Sanitize exception message before logging
+            safe_error = _sanitize_for_logging(str(e))
+            print(f"[Warning] Failed to log violations: {safe_error}", file=sys.stderr)
 
-    def _update_summary(self, file_path: str, violations: list, timestamp: str) -> None:
+    def _update_summary(self, file_path: str, violations: list[Violation], timestamp: str) -> None:
         """Update violations_summary.json with new violation data."""
         try:
             # Load existing summary
@@ -154,7 +333,7 @@ class ViolationsLogger:
                             summary = loaded
                 except (json.JSONDecodeError, ValueError):
                     # Start fresh if corrupted
-                    pass
+                    pass  # nosec B110 - Expected when config corrupted, reset to clean state
 
             # Check if this is today's data (reset counter at midnight UTC)
             today = datetime.now(UTC).strftime("%Y-%m-%d")
@@ -199,7 +378,12 @@ class ViolationsLogger:
                 f.write("\n")  # Add trailing newline
 
         except Exception as e:
-            print(f"[Warning] Failed to update violations summary: {e}", file=sys.stderr)
+            # Sanitize exception message before logging
+            safe_error = _sanitize_for_logging(str(e))
+            print(
+                f"[Warning] Failed to update violations summary: {safe_error}",
+                file=sys.stderr,
+            )
 
     def _rotate_log_if_needed(self) -> None:
         """Rotate violations.log if it exceeds size limit."""
@@ -227,17 +411,28 @@ class ViolationsLogger:
                     )
 
         except Exception as e:
-            print(f"[Warning] Failed to rotate violations log: {e}", file=sys.stderr)
+            # Sanitize exception message before logging
+            safe_error = _sanitize_for_logging(str(e))
+            print(
+                f"[Warning] Failed to rotate violations log: {safe_error}",
+                file=sys.stderr,
+            )
 
 
+# ONEX: exempt - pipeline orchestrator
+# Rationale: QualityEnforcer has 19 methods because it orchestrates a 5-phase
+# validation pipeline (validation, RAG, correction, AI quorum, decision).
+# The methods are private helpers for the main enforce() workflow and splitting
+# them would create unnecessary indirection without improving cohesion.
+# Phases: Phase 1 (<100ms), Phase 2 (<500ms), Phase 3, Phase 4 (<1000ms), Phase 5
 class QualityEnforcer:
     """Main orchestrator for quality enforcement."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.start_time = time.time()
         self.performance_budget = PERFORMANCE_BUDGET_SECONDS
         self.violations_logger = ViolationsLogger()
-        self.system_message = None  # For Claude Code systemMessage field
+        self.system_message: str | None = None  # For Claude Code systemMessage field
         self.stats: dict[str, float] = {
             "phase_1_time": 0.0,
             "phase_2_time": 0.0,
@@ -251,10 +446,10 @@ class QualityEnforcer:
         }
 
         # Enhanced metadata for decision intelligence
-        self.tool_selection_metadata: dict | None = None
-        self.quality_check_metadata: dict | None = None
+        self.tool_selection_metadata: dict[str, Any] | None = None
+        self.quality_check_metadata: dict[str, Any] | None = None
 
-    async def enforce(self, tool_call: dict) -> dict:
+    async def enforce(self, tool_call: dict[str, Any]) -> dict[str, Any]:
         """
         Main enforcement workflow with decision intelligence capture.
 
@@ -292,7 +487,9 @@ class QualityEnforcer:
             phase_start = time.time()
             self._log("[Phase 1] Running fast validation...")
 
-            violations = await self._run_phase_1_validation(content, file_path, language)
+            violations = await self._run_phase_1_validation(
+                content, file_path, language
+            )
 
             self.stats["phase_1_time"] = time.time() - phase_start
             self.stats["violations_found"] = len(violations)
@@ -304,7 +501,9 @@ class QualityEnforcer:
                 self._log(f"[Phase 1] No violations found - {self._elapsed():.3f}s")
                 return tool_call
 
-            self._log(f"[Phase 1] Found {len(violations)} violations - {self._elapsed():.3f}s")
+            self._log(
+                f"[Phase 1] Found {len(violations)} violations - {self._elapsed():.3f}s"
+            )
 
             # Log violations to dedicated log files
             self.violations_logger.log_violations(file_path, violations)
@@ -319,7 +518,11 @@ class QualityEnforcer:
                 return tool_call
 
             # Phase 2-5: Intelligent correction pipeline (if enabled)
-            if ENABLE_PHASE_2_RAG or ENABLE_PHASE_3_CORRECTION or ENABLE_PHASE_4_AI_QUORUM:
+            if (
+                ENABLE_PHASE_2_RAG
+                or ENABLE_PHASE_3_CORRECTION
+                or ENABLE_PHASE_4_AI_QUORUM
+            ):
                 try:
                     corrected_tool_call = await self._intelligent_correction_pipeline(
                         tool_call, violations, content, file_path, language
@@ -334,14 +537,20 @@ class QualityEnforcer:
                         self.system_message = None  # Clear - all violations fixed
                     else:
                         # No auto-apply, violations remain - build system message to block
-                        self._log("[Phase 5] No auto-apply, violations remain - blocking")
+                        self._log(
+                            "[Phase 5] No auto-apply, violations remain - blocking"
+                        )
                         self.system_message = self._build_violations_system_message(
                             violations, file_path, mode=ENFORCEMENT_MODE
                         )
 
                     return corrected_tool_call
                 except Exception as e:
-                    self._log(f"[Error] Pipeline failed: {e} - {self._elapsed():.3f}s")
+                    # Sanitize exception message before logging
+                    safe_error = _sanitize_for_logging(str(e))
+                    self._log(
+                        f"[Error] Pipeline failed: {safe_error} - {self._elapsed():.3f}s"
+                    )
                     # Build system message and block on error
                     self.system_message = self._build_violations_system_message(
                         violations, file_path, mode=ENFORCEMENT_MODE
@@ -349,17 +558,23 @@ class QualityEnforcer:
                     return tool_call  # Fallback to original
             else:
                 # Phase 1 only mode - just report violations and block
-                self._log("[Phase 1 Only] Violations detected but correction phases disabled")
+                self._log(
+                    "[Phase 1 Only] Violations detected but correction phases disabled"
+                )
                 self.system_message = self._build_violations_system_message(
                     violations, file_path, mode=ENFORCEMENT_MODE
                 )
                 return tool_call
 
         except Exception as e:
-            self._log(f"[Fatal Error] Enforcement failed: {e}")
+            # Sanitize exception message before logging
+            safe_error = _sanitize_for_logging(str(e))
+            self._log(f"[Fatal Error] Enforcement failed: {safe_error}")
             return tool_call  # Always return original on error
 
-    async def _run_phase_1_validation(self, content: str, file_path: str, language: str) -> list:
+    async def _run_phase_1_validation(
+        self, content: str, file_path: str, language: str
+    ) -> list[Violation]:
         """
         Run Phase 1: Fast local validation.
 
@@ -367,8 +582,6 @@ class QualityEnforcer:
             List of Violation objects
         """
         try:
-            from .lib.validators.naming_validator import NamingValidator
-
             # Use auto-detection mode to apply appropriate conventions
             validator = NamingValidator(language=language, validation_mode="auto")
             violations = validator.validate_content(content, file_path)
@@ -378,23 +591,22 @@ class QualityEnforcer:
             repo_type = "Omninode" if is_omninode else "Standard PEP 8"
             self._log(f"[Phase 1] Detected repository type: {repo_type}")
 
-            return violations
+            return list(violations)
 
-        except ImportError as e:
-            self._log(f"[Phase 1] Validator not available: {e}")
-            return []
         except Exception as e:
-            self._log(f"[Phase 1] Validation failed: {e}")
+            # Sanitize exception message before logging
+            safe_error = _sanitize_for_logging(str(e))
+            self._log(f"[Phase 1] Validation failed: {safe_error}")
             return []
 
     async def _intelligent_correction_pipeline(
         self,
-        tool_call: dict,
-        violations: list,
+        tool_call: dict[str, Any],
+        violations: list[Violation],
         content: str,
         file_path: str,
         language: str,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """
         Run the intelligent correction pipeline (Phases 2-5).
 
@@ -411,14 +623,12 @@ class QualityEnforcer:
             self._log("[Phase 2] Querying RAG intelligence...")
 
             try:
-                from .lib.correction.generator import CorrectionGenerator
-
                 # Get RAG config from CONFIG
                 rag_config = CONFIG.get("rag", {})
-                archon_url = rag_config.get("base_url", "http://localhost:8181")
+                intelligence_url = rag_config.get("base_url", "http://localhost:8181")
                 timeout = rag_config.get("timeout_seconds", 0.5)
 
-                generator = CorrectionGenerator(archon_url=archon_url, timeout=timeout)
+                generator = CorrectionGenerator(intelligence_url=intelligence_url, timeout=timeout)
                 corrections = await generator.generate_corrections(
                     violations, content, file_path, language
                 )
@@ -430,12 +640,10 @@ class QualityEnforcer:
                     f"[Phase 2] Generated {len(corrections)} corrections - {self._elapsed():.3f}s"
                 )
 
-            except ImportError as e:
-                self._log(f"[Phase 2] RAG client not available: {e}")
-                # Fallback to simple corrections
-                corrections = self._generate_simple_corrections(violations)
             except Exception as e:
-                self._log(f"[Phase 2] RAG query failed: {e}")
+                # Sanitize exception message before logging
+                safe_error = _sanitize_for_logging(str(e))
+                self._log(f"[Phase 2] RAG query failed: {safe_error}")
                 corrections = self._generate_simple_corrections(violations)
         else:
             # Phase 2 disabled, use simple corrections
@@ -453,8 +661,6 @@ class QualityEnforcer:
             self._log("[Phase 4] Running AI quorum...")
 
             try:
-                from .lib.consensus.quorum import AIQuorum
-
                 quorum = AIQuorum()
 
                 for correction in corrections:
@@ -465,24 +671,30 @@ class QualityEnforcer:
                         )
                         break
 
-                    score = await quorum.score_correction(
-                        correction,
-                        content,
-                        file_path,  # type: ignore[arg-type]
+                    # Extract string values for quorum scoring
+                    old_name = str(correction.get("old_name", ""))
+                    new_name = str(correction.get("new_name", ""))
+                    violation = correction.get("violation")
+                    correction_type = (
+                        getattr(violation, "type", "unknown") if violation else "unknown"
                     )
-                    scored_corrections.append({"correction": correction, "score": score})
+
+                    score = await quorum.score_correction(
+                        original_prompt=old_name,
+                        corrected_prompt=new_name,
+                        correction_type=correction_type,
+                        correction_metadata=correction,
+                    )
 
                 self.stats["phase_4_time"] = time.time() - phase_start
                 self._log(
                     f"[Phase 4] Scored {len(scored_corrections)} corrections - {self._elapsed():.3f}s"
                 )
 
-            except ImportError as e:
-                self._log(f"[Phase 4] AI Quorum not available: {e}")
-                # Fallback to accepting all corrections with medium confidence
-                scored_corrections = self._create_fallback_scores(corrections)
             except Exception as e:
-                self._log(f"[Phase 4] AI Quorum failed: {e}")
+                # Sanitize exception message before logging
+                safe_error = _sanitize_for_logging(str(e))
+                self._log(f"[Phase 4] AI Quorum failed: {safe_error}")
                 scored_corrections = self._create_fallback_scores(corrections)
         else:
             # Phase 4 disabled, use fallback scores
@@ -495,7 +707,7 @@ class QualityEnforcer:
 
         return result
 
-    def _generate_simple_corrections(self, violations: list) -> list[dict]:
+    def _generate_simple_corrections(self, violations: list[Violation]) -> list[dict[str, Any]]:
         """
         Generate simple corrections without RAG intelligence.
         Fallback when Phase 2 is disabled or fails.
@@ -516,7 +728,7 @@ class QualityEnforcer:
 
         return corrections
 
-    def _create_fallback_scores(self, corrections: list[dict]) -> list[dict]:
+    def _create_fallback_scores(self, corrections: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """
         Create fallback scores when AI Quorum is disabled or fails.
         Use medium confidence scores that won't trigger auto-apply.
@@ -538,8 +750,8 @@ class QualityEnforcer:
         return scored
 
     def _apply_decisions(
-        self, tool_call: dict, scored_corrections: list[dict], content: str
-    ) -> dict:
+        self, tool_call: dict[str, Any], scored_corrections: list[dict[str, Any]], content: str
+    ) -> dict[str, Any]:
         """
         Apply corrections based on AI consensus scores.
 
@@ -568,7 +780,9 @@ class QualityEnforcer:
             score = item["score"]
 
             # Auto-apply threshold
-            if score.should_apply or (score.consensus_score >= 0.80 and score.confidence >= 0.70):
+            if score.should_apply or (
+                score.consensus_score >= 0.80 and score.confidence >= 0.70
+            ):
                 # Auto-apply
                 modified_content = self._apply_correction(modified_content, correction)
                 auto_applied += 1
@@ -608,7 +822,7 @@ class QualityEnforcer:
 
         return tool_call
 
-    def _apply_correction(self, content: str, correction: dict) -> str:
+    def _apply_correction(self, content: str, correction: dict[str, Any]) -> str:
         """
         Apply a single correction to content using word boundary regex.
         """
@@ -623,7 +837,7 @@ class QualityEnforcer:
 
         return modified
 
-    def _extract_content(self, tool_call: dict) -> str:
+    def _extract_content(self, tool_call: dict[str, Any]) -> str:
         """Extract content from tool call (Claude Code uses 'tool_input')."""
         params = tool_call.get("tool_input", tool_call.get("parameters", {}))
 
@@ -634,11 +848,13 @@ class QualityEnforcer:
             return str(params["new_string"])
         elif "edits" in params:
             # MultiEdit case
-            return "\n".join(str(edit.get("new_string", "")) for edit in params["edits"])
+            return "\n".join(
+                str(edit.get("new_string", "")) for edit in params["edits"]
+            )
 
         return ""
 
-    def _update_tool_content(self, tool_call: dict, new_content: str) -> dict:
+    def _update_tool_content(self, tool_call: dict[str, Any], new_content: str) -> dict[str, Any]:
         """Update tool call with corrected content (Claude Code uses 'tool_input')."""
         params_key = "tool_input" if "tool_input" in tool_call else "parameters"
         params = tool_call.get(params_key, {})
@@ -650,7 +866,7 @@ class QualityEnforcer:
 
         return tool_call
 
-    def _append_comment(self, tool_call: dict, comment: str) -> dict:
+    def _append_comment(self, tool_call: dict[str, Any], comment: str) -> dict[str, Any]:
         """Append a comment to the content (Claude Code uses 'tool_input')."""
         params_key = "tool_input" if "tool_input" in tool_call else "parameters"
         params = tool_call.get(params_key, {})
@@ -677,7 +893,7 @@ class QualityEnforcer:
         return mapping.get(ext)
 
     def _build_violations_system_message(
-        self, violations: list, file_path: str, mode: str = "warn"
+        self, violations: list[Violation], file_path: str, mode: str = "warn"
     ) -> str:
         """
         Build system message for Claude Code with violation warnings.
@@ -685,7 +901,9 @@ class QualityEnforcer:
         Args:
             violations: List of violations found
             file_path: Path to the file being checked
-            mode: "warn" for warnings only, "block" for blocking mode
+            mode: Enforcement mode. Valid values:
+                - "warn": Warnings only, write proceeds
+                - "block" or "blocking": Write blocked until violations fixed
 
         Returns a formatted string that will be displayed to the user via
         the systemMessage field in the hook's JSON output.
@@ -693,7 +911,7 @@ class QualityEnforcer:
         lines = []
         lines.append("=" * 70)
 
-        if mode == "block":
+        if mode in {"block", "blocking"}:
             lines.append("🚫 NAMING CONVENTION VIOLATIONS - WRITE BLOCKED")
         else:
             lines.append("⚠️  NAMING CONVENTION WARNINGS")
@@ -704,7 +922,7 @@ class QualityEnforcer:
         lines.append("")
 
         # Group violations by type for better readability
-        violations_by_type: dict[str, list[Any]] = {}
+        violations_by_type: dict[str, list[Violation]] = {}
         for v in violations:
             vtype = v.violation_type
             if vtype not in violations_by_type:
@@ -715,17 +933,21 @@ class QualityEnforcer:
         for vtype, violations_list in violations_by_type.items():
             lines.append(f"{vtype.upper()} VIOLATIONS ({len(violations_list)}):")
             for v in violations_list[:5]:  # Limit to 5 per type to avoid spam
-                lines.append(f"  • Line {v.line}: '{v.name}' should be '{v.expected_format}'")
+                lines.append(
+                    f"  • Line {v.line}: '{v.name}' should be '{v.expected_format}'"
+                )
                 if v.suggestion and v.suggestion != v.expected_format:
                     lines.append(f"    Suggestion: {v.suggestion}")
 
             if len(violations_list) > 5:
-                lines.append(f"  ... and {len(violations_list) - 5} more {vtype} violation(s)")
+                lines.append(
+                    f"  ... and {len(violations_list) - 5} more {vtype} violation(s)"
+                )
             lines.append("")
 
         # Footer with guidance based on mode
         lines.append("─" * 70)
-        if mode == "block":
+        if mode in {"block", "blocking"}:
             lines.append("🚫 WRITE BLOCKED: Please fix violations before saving")
             lines.append("   Fix the violations above and try again.")
         else:
@@ -740,11 +962,11 @@ class QualityEnforcer:
         """Get elapsed time in seconds."""
         return time.time() - self.start_time
 
-    def _log(self, message: str):
+    def _log(self, message: str) -> None:
         """Log message to stderr."""
         print(message, file=sys.stderr)
 
-    def _capture_tool_selection_metadata(self, tool_name: str, tool_input: dict) -> None:
+    def _capture_tool_selection_metadata(self, tool_name: str, tool_input: dict[str, Any]) -> None:
         """
         Capture tool selection intelligence metadata.
 
@@ -767,18 +989,27 @@ class QualityEnforcer:
                 quality_checks=None,  # Will be updated after validation
             )
 
+            # Sanitize selection_reason before logging (may contain user intent/secrets)
+            raw_reason = self.tool_selection_metadata["tool_selection"][
+                "selection_reason"
+            ]
+            safe_reason = _sanitize_for_logging(str(raw_reason))
             self._log(
                 f"[Intelligence] Tool selection captured: {tool_name} "
-                f"(reason: {self.tool_selection_metadata['tool_selection']['selection_reason']}, "
+                f"(reason: {safe_reason}, "
                 f"analysis: {self.tool_selection_metadata['performance']['analysis_time_ms']:.2f}ms)"
             )
 
         except Exception as e:
             # Don't fail enforcement if metadata capture fails
-            self._log(f"[Warning] Failed to capture tool selection metadata: {e}")
+            # Sanitize exception message before logging
+            safe_error = _sanitize_for_logging(str(e))
+            self._log(
+                f"[Warning] Failed to capture tool selection metadata: {safe_error}"
+            )
             self.tool_selection_metadata = None
 
-    def _update_quality_check_metadata(self, violations: list) -> None:
+    def _update_quality_check_metadata(self, violations: list[Violation]) -> None:
         """
         Update quality check metadata after validation.
 
@@ -796,7 +1027,9 @@ class QualityEnforcer:
             # Analyze violations
             if violations:
                 violation_types = {v.violation_type for v in violations}
-                checks_failed.extend([f"{vtype}_convention" for vtype in violation_types])
+                checks_failed.extend(
+                    [f"{vtype}_convention" for vtype in violation_types]
+                )
 
             # Create quality check metadata
             quality_metadata = QualityCheckMetadata(
@@ -829,9 +1062,13 @@ class QualityEnforcer:
 
         except Exception as e:
             # Don't fail enforcement if metadata update fails
-            self._log(f"[Warning] Failed to update quality check metadata: {e}")
+            # Sanitize exception message before logging
+            safe_error = _sanitize_for_logging(str(e))
+            self._log(
+                f"[Warning] Failed to update quality check metadata: {safe_error}"
+            )
 
-    def get_enhanced_metadata(self) -> dict:
+    def get_enhanced_metadata(self) -> dict[str, Any]:
         """
         Get complete enhanced metadata for logging.
 
@@ -840,12 +1077,14 @@ class QualityEnforcer:
         """
         return self.tool_selection_metadata or {}
 
-    def print_stats(self):
+    def print_stats(self) -> None:
         """Print performance statistics."""
         self._log("\n" + "=" * 60)
         self._log("Quality Enforcer Statistics")
         self._log("=" * 60)
-        self._log(f"Total Time: {self._elapsed():.3f}s (budget: {self.performance_budget}s)")
+        self._log(
+            f"Total Time: {self._elapsed():.3f}s (budget: {self.performance_budget}s)"
+        )
         self._log(f"Phase 1 (Validation): {self.stats['phase_1_time']:.3f}s")
         self._log(f"Phase 2 (RAG): {self.stats['phase_2_time']:.3f}s")
         self._log("Phase 3 (Correction): Included in Phase 2")
@@ -859,7 +1098,7 @@ class QualityEnforcer:
         self._log("=" * 60)
 
 
-async def main():
+async def main() -> int:
     """
     Main entry point.
 
@@ -899,9 +1138,9 @@ async def main():
         file_path = params.get("file_path", "unknown")
         with open(hook_exec_log, "a") as f:
             f.write(f"[{timestamp}] Tool: {tool_name}, File: {file_path}\n")
-            # Debug: log full tool call structure (first 500 chars)
-            tool_call_str = json.dumps(tool_call, indent=2)
-            f.write(f"[{timestamp}] Tool call structure (first 500 chars): {tool_call_str[:500]}\n")
+            # Log safe metadata only (avoid exposing secrets/PII in raw payloads)
+            safe_metadata = _get_safe_tool_metadata(tool_call)
+            f.write(f"[{timestamp}] Tool metadata: {json.dumps(safe_metadata)}\n")
 
         # Run enforcement
         enforcer = QualityEnforcer()
@@ -916,7 +1155,8 @@ async def main():
         # Check if we have violations
         if enforcer.system_message:
             # Choose permission decision based on enforcement mode
-            if ENFORCEMENT_MODE == "block":
+            # Valid blocking modes: "block" or "blocking" (both accepted for consistency)
+            if ENFORCEMENT_MODE in {"block", "blocking"}:
                 # Block mode: prevent write execution
                 permission_decision = "deny"
                 exit_code = 1  # Bash wrapper converts to exit 2
@@ -955,15 +1195,24 @@ async def main():
             return 0
 
     except json.JSONDecodeError as e:
-        print(f"[Fatal Error] Invalid JSON input: {e}", file=sys.stderr)
-        # Try to pass through original input
+        # Sanitize error message before logging (may contain input fragments)
+        safe_error = _sanitize_for_logging(str(e))
+        print(f"[Fatal Error] Invalid JSON input: {safe_error}", file=sys.stderr)
+        # Try to pass through original input (to stdout for hook mechanism, not logged)
         print(input_data if "input_data" in locals() else "{}", file=sys.stdout)
         return 1
     except Exception as e:
-        print(f"[Fatal Error] {e}", file=sys.stderr)
+        # Sanitize error message before logging (may contain sensitive data)
+        safe_error = _sanitize_for_logging(str(e))
+        print(f"[Fatal Error] {safe_error}", file=sys.stderr)
+        # Note: Traceback may contain sensitive data in variable values
+        # Log only to stderr (not to persistent files) and only in debug mode
         import traceback
 
-        traceback.print_exc(file=sys.stderr)
+        # Sanitize traceback output
+        tb_str = traceback.format_exc()
+        safe_tb = _sanitize_for_logging(tb_str)
+        print(safe_tb, file=sys.stderr)
 
         # On error, pass through original
         if "tool_call" in locals():

@@ -11,17 +11,14 @@ Tests:
 Created: 2025-11-20
 """
 
-import sys
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-
 # Import load_skill_module from conftest
 conftest_path = Path(__file__).parent / "conftest.py"
 import importlib.util
-
 
 spec = importlib.util.spec_from_file_location("conftest", conftest_path)
 conftest = importlib.util.module_from_spec(spec)
@@ -45,7 +42,6 @@ class TestCheckRecentActivity:
             patch.object(execute, "execute_query") as mock_query,
             patch("sys.argv", ["execute.py", "--since", "5m"]),
         ):
-
             # Mock manifest injection results
             mock_query.side_effect = [
                 {
@@ -95,7 +91,6 @@ class TestCheckRecentActivity:
             patch.object(execute, "execute_query") as mock_query,
             patch("sys.argv", ["execute.py", "--since", "1h"]),
         ):
-
             mock_query.side_effect = [
                 {"success": True, "rows": [{"count": 0}]},  # manifests
                 {
@@ -124,7 +119,6 @@ class TestCheckRecentActivity:
             patch.object(execute, "execute_query") as mock_query,
             patch("sys.argv", ["execute.py", "--since", "24h"]),
         ):
-
             mock_query.side_effect = [
                 {"success": True, "rows": [{"count": 0}]},  # manifests
                 {"success": True, "rows": [{"count": 0}]},  # routing
@@ -155,7 +149,6 @@ class TestCheckRecentActivity:
                 ["execute.py", "--since", "5m", "--include-errors", "--limit", "5"],
             ),
         ):
-
             mock_query.side_effect = [
                 {"success": True, "rows": [{"count": 0}]},  # manifests
                 {"success": True, "rows": [{"count": 0}]},  # routing
@@ -190,7 +183,6 @@ class TestCheckRecentActivity:
             patch.object(execute, "execute_query") as mock_query,
             patch("sys.argv", ["execute.py", "--limit", "50", "--include-errors"]),
         ):
-
             mock_query.side_effect = [
                 {"success": True, "rows": [{"count": 0}]},
                 {"success": True, "rows": [{"count": 0}]},
@@ -218,7 +210,6 @@ class TestCheckRecentActivity:
             patch.object(execute, "execute_query") as mock_query,
             patch("sys.argv", ["execute.py"]),
         ):
-
             # All queries return empty
             mock_query.return_value = {"success": True, "rows": []}
 
@@ -233,7 +224,6 @@ class TestCheckRecentActivity:
             patch.object(execute, "execute_query") as mock_query,
             patch("sys.argv", ["execute.py"]),
         ):
-
             mock_query.return_value = {
                 "success": False,
                 "error": "Connection timeout",
@@ -251,7 +241,6 @@ class TestCheckRecentActivity:
             patch.object(execute, "execute_query") as mock_query,
             patch("sys.argv", ["execute.py"]),
         ):
-
             mock_query.side_effect = [
                 {
                     "success": True,

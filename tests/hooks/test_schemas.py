@@ -36,6 +36,9 @@ from omniclaude.hooks.schemas import (
 )
 from omniclaude.hooks.topics import TopicBase, build_topic
 
+# All tests in this module are unit tests
+pytestmark = pytest.mark.unit
+
 # =============================================================================
 # Helper Factories
 # =============================================================================
@@ -1616,7 +1619,9 @@ class TestEventTypePayloadValidation:
                 event_type=HookEventType.SESSION_STARTED,  # Wrong type!
                 payload=ended_payload,
             )
-        assert "requires payload type ModelHookSessionStartedPayload" in str(exc_info.value)
+        assert "requires payload type ModelHookSessionStartedPayload" in str(
+            exc_info.value
+        )
 
     def test_all_valid_combinations(self) -> None:
         """All valid event_type + payload combinations work."""

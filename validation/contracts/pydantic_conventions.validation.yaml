@@ -1,0 +1,140 @@
+---
+contract_kind: validation_subcontract
+validation:
+  version:
+    major: 1
+    minor: 0
+    patch: 0
+
+  validator_id: pydantic_conventions
+  validator_name: Pydantic Conventions Validator
+  validator_description: |
+    Enforces Pydantic model configuration standards for omniclaude2.
+    Uses AST-based analysis to ensure models have explicit ConfigDict,
+    proper frozen/from_attributes pairing, and follow field definition patterns.
+
+    Checks for:
+    - Missing model_config in Pydantic models (including legacy class Config:)
+    - Empty ConfigDict() with no arguments
+    - frozen=True without from_attributes=True (pytest-xdist compatibility)
+    - Models missing explicit extra= policy (context-dependent: see rule)
+    - Model prefix naming convention enforcement
+
+  target_patterns:
+    - "src/**/*.py"
+
+  exclude_patterns:
+    - "**/node_modules/**"
+    - "**/.git/**"
+    - "**/venv/**"
+    - "**/.venv/**"
+    - "**/__pycache__/**"
+    - "**/tests/**"
+    - "**/*_test.py"
+    - "**/test_*.py"
+    - "**/conftest.py"
+    - "_archive/**"
+    - "**/scripts/**"
+
+  rules:
+    - rule_id: missing-config
+      description: |
+        Every Pydantic model needs explicit model_config. Also flags legacy
+        class Config: style which should be migrated to model_config = ConfigDict(...).
+      severity: error
+      enabled: true
+
+    - rule_id: empty-config
+      description: |
+        ConfigDict() with no arguments is forbidden - must have at least one option.
+        Empty ConfigDict has ambiguous intent and provides no explicit policy for
+        model behavior (extra fields, mutability, etc.).
+      severity: error
+      enabled: true
+
+    - rule_id: frozen-without-from-attributes
+      description: |
+        frozen=True requires from_attributes=True for pytest-xdist compatibility.
+        Without from_attributes=True, pytest-xdist workers that import classes
+        independently may have Pydantic reject valid instances due to class
+        identity differences.
+      severity: error
+      enabled: true
+
+    - rule_id: missing-extra-policy
+      description: |
+        Pydantic models should explicitly declare extra= policy. The choice depends
+        on the model's role in ONEX event schema evolution:
+
+        - PRODUCER/SCHEMA MODELS (extra="forbid"): Use for event envelope definitions,
+          API schemas, and contract models. Strict validation catches typos and ensures
+          producers emit only the documented fields.
+
+        - CONSUMER MODELS (extra="ignore"): Use for models that deserialize events from
+          Kafka or external APIs. Allows forward compatibility when producers add new
+          optional fields - consumers can continue processing without breaking.
+
+        - DOMAIN MODELS (extra="allow"): Rarely needed. Use only when unknown fields
+          must be preserved for round-trip serialization.
+
+        Default recommendation: extra="forbid" unless building event consumers.
+      severity: error
+      enabled: true
+
+    - rule_id: model-prefix-naming
+      description: |
+        Pydantic model classes should follow the Model prefix naming convention.
+        Example: ModelSessionStarted, ModelPromptSubmitted, not SessionStarted.
+      severity: warning
+      enabled: true
+
+    - rule_id: unnecessary-field-default-none
+      description: |
+        Field(default=None) without other kwargs should be simplified to = None.
+        Using Field() without metadata (description, alias, validators, etc.) adds
+        unnecessary verbosity without providing value.
+      severity: warning
+      enabled: true
+
+  # ============================================================================
+  # LINE-BASED SUPPRESSION (NOT rule-specific!)
+  # ============================================================================
+  # IMPORTANT: Suppression operates on WHOLE LINES, not individual rules.
+  #
+  # Example - suppress missing-config violation:
+  #   class MyModel(BaseModel):  # pydantic-ok: third-party base class handles config
+  #
+  # Matching: Case-sensitive substring search (no regex).
+  # ============================================================================
+  suppression_comments:
+    # Legacy ONEX exclusion pattern
+    - "# ONEX_EXCLUDE: pydantic"
+
+    # Preferred pattern with reason (e.g., "# pydantic-ok: third-party compatibility")
+    - "# pydantic-ok:"
+
+    # Standard noqa pattern
+    - "# noqa: pydantic"
+
+    # Alternative pattern matching validator name
+    - "# onex: ignore-pydantic-conventions"
+
+  severity_default: error
+  fail_on_error: true
+  fail_on_warning: false
+  # max_violations: 0 means "unlimited/no limit" - all violations will be
+  # reported without early termination. Set to a positive integer (e.g., 100)
+  # to stop validation after that many violations are found.
+  max_violations: 0
+
+  # ============================================================================
+  # PARALLEL EXECUTION SEMANTICS
+  # ============================================================================
+  # This flag indicates that the validator SUPPORTS parallel file processing,
+  # meaning files can be validated concurrently by separate worker processes.
+  #
+  # CRITICAL THREAD SAFETY CONSTRAINT:
+  #   Parallel execution is PROCESS-safe, NOT THREAD-safe within a single process.
+  #   Each worker process MUST create its own validator instance.
+  # ============================================================================
+  parallel_execution: true

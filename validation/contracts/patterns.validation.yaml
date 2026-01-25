@@ -1,0 +1,139 @@
+---
+contract_kind: validation_subcontract
+validation:
+  version:
+    major: 1
+    minor: 0
+    patch: 0
+
+  validator_id: patterns
+  validator_name: ONEX Pattern Validator
+  validator_description: |
+    Validates code patterns for ONEX compliance in omniclaude2 including
+    complexity limits and generic anti-patterns.
+
+    Checks performed:
+    - Functions should not have too many parameters (max 5)
+    - Classes should not have too many methods (god class, max 10)
+    - Avoid overly generic function names (process, handle, execute)
+    - Avoid generic class name terms (Manager, Handler, Helper)
+    - Functions should not be excessively long
+
+    This validator focuses on code quality patterns that improve maintainability
+    and readability across the omniclaude2 codebase.
+
+  target_patterns:
+    - "src/**/*.py"
+    - "plugins/**/*.py"
+
+  exclude_patterns:
+    - "**/node_modules/**"
+    - "**/.git/**"
+    - "**/venv/**"
+    - "**/.venv/**"
+    - "**/__pycache__/**"
+    - "_archive/**"
+    - "**/tests/**"
+    - "**/*_test.py"
+    - "**/test_*.py"
+    - "**/conftest.py"
+    - "**/examples/**"
+    - "**/tests/fixtures/**"
+
+  rules:
+    - rule_id: max_parameters
+      description: |
+        Functions should not have more than 5 parameters. Too many parameters
+        indicate the function may be doing too much or needs a configuration object.
+      severity: warning
+      enabled: true
+      parameters:
+        max_params: 5
+
+    - rule_id: god_class
+      description: |
+        Classes should not have more than 10 methods. Large classes are harder
+        to maintain and often violate the single responsibility principle.
+      severity: warning
+      enabled: true
+      parameters:
+        max_methods: 10
+
+    - rule_id: long_function
+      description: |
+        Functions should not exceed 50 lines of code (excluding comments and
+        docstrings). Long functions are harder to understand and test.
+      severity: warning
+      enabled: true
+      parameters:
+        max_lines: 50
+
+    - rule_id: generic_function_name
+      description: |
+        Avoid overly generic function names like process, handle, execute, run.
+        Function names should clearly describe their specific purpose.
+      severity: warning
+      enabled: true
+
+    - rule_id: class_anti_pattern
+      description: |
+        Avoid generic class name terms like Manager, Handler, Helper, Util.
+        These suffixes often indicate poor abstraction or unclear responsibility.
+      severity: warning
+      enabled: true
+
+    - rule_id: high_complexity
+      description: |
+        Functions with high cyclomatic complexity (many branches/conditions) are
+        harder to test and maintain. Consider refactoring into smaller functions.
+      severity: warning
+      enabled: true
+      parameters:
+        max_complexity: 10
+
+    # NOTE: Naming convention checks disabled to avoid overlap with naming_convention validator
+    - rule_id: class_pascal_case
+      description: Class names should use PascalCase
+      severity: warning
+      enabled: false
+
+    - rule_id: function_snake_case
+      description: Function names should use snake_case
+      severity: warning
+      enabled: false
+
+  # ============================================================================
+  # LINE-BASED SUPPRESSION (NOT rule-specific!)
+  # ============================================================================
+  # IMPORTANT: Suppression operates on WHOLE LINES, not individual rules.
+  #
+  # Example - suppress god_class violation:
+  #   class LargeButNecessaryClass:  # pattern-ok: aggregates external API interface
+  #
+  # Matching: Case-sensitive substring search (no regex).
+  # ============================================================================
+  suppression_comments:
+    - "# ONEX_EXCLUDE:"
+    - "# noqa: pattern"
+    - "# pattern-ok:"
+    - "# type: ignore"
+
+  severity_default: warning
+  fail_on_error: true
+  fail_on_warning: false
+  # max_violations: 0 means "unlimited/no limit" - all violations will be
+  # reported without early termination. Set to a positive integer (e.g., 100)
+  # to stop validation after that many violations are found.
+  max_violations: 0
+
+  # ============================================================================
+  # PARALLEL EXECUTION SEMANTICS
+  # ============================================================================
+  # This flag indicates that the validator SUPPORTS parallel file processing,
+  # meaning files can be validated concurrently by separate worker processes.
+  #
+  # CRITICAL THREAD SAFETY CONSTRAINT:
+  #   Parallel execution is PROCESS-safe, NOT THREAD-safe within a single process.
+  #   Each worker process MUST create its own validator instance.
+  # ============================================================================
+  parallel_execution: true

@@ -11,18 +11,15 @@ Usage:
 """
 
 import argparse
-import json
 import sys
-from datetime import datetime
 from pathlib import Path
-
 
 # Add current directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
 from analyzer import PRAnalyzer, generate_markdown_report
 from fetcher import PRFetcher
-from models import BotType, CommentSeverity, PRAnalysis, PRData
+from models import BotType, CommentSeverity, ModelPRAnalysis
 
 
 def main():
@@ -88,6 +85,7 @@ Examples:
             ["gh", "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"],
             capture_output=True,
             text=True,
+            check=False,
         )
         repo = result.stdout.strip()
         if not repo:
@@ -147,19 +145,19 @@ Examples:
 
 
 def format_summary(
-    analysis: PRAnalysis, include_details: bool = False, no_nitpicks: bool = False
+    analysis: ModelPRAnalysis, include_details: bool = False, no_nitpicks: bool = False
 ) -> str:
     """Format analysis as summary text."""
     lines = [
-        f"======================================================================",
+        "======================================================================",
         f"  PR #{analysis.pr_data.pr_number} Review Summary",
-        f"======================================================================",
+        "======================================================================",
         "",
         f"Repository: {analysis.pr_data.repository}",
         f"Title: {analysis.pr_data.title}",
         f"Analyzed: {analysis.analyzed_at.strftime('%Y-%m-%d %H:%M:%S')}",
         "",
-        f"--- Comment Statistics ---",
+        "--- Comment Statistics ---",
         f"Total comments: {analysis.total_comments}",
     ]
 
@@ -180,7 +178,7 @@ def format_summary(
     # Claude bot comments (ALWAYS show)
     claude_count = analysis.by_author_type.get(BotType.CLAUDE_CODE.value, 0)
     lines.append("")
-    lines.append(f"--- Claude Bot Comments ---")
+    lines.append("--- Claude Bot Comments ---")
     lines.append(f"[BOT] Claude comments: {claude_count}")
 
     if claude_count > 0 and include_details:
@@ -189,9 +187,9 @@ def format_summary(
 
     # Merge readiness
     lines.append("")
-    lines.append(f"--- Merge Readiness ---")
+    lines.append("--- Merge Readiness ---")
     if analysis.merge_blockers:
-        lines.append(f"[X] NOT READY TO MERGE")
+        lines.append("[X] NOT READY TO MERGE")
         lines.append(f"   {len(analysis.merge_blockers)} blocking issues:")
         for c in analysis.merge_blockers[:5]:  # Show first 5
             lines.append(
@@ -200,17 +198,17 @@ def format_summary(
         if len(analysis.merge_blockers) > 5:
             lines.append(f"   ... and {len(analysis.merge_blockers) - 5} more")
     else:
-        lines.append(f"[OK] Ready to merge (no blocking issues)")
+        lines.append("[OK] Ready to merge (no blocking issues)")
 
     return "\n".join(lines)
 
 
-def format_claude_only(analysis: PRAnalysis) -> str:
+def format_claude_only(analysis: ModelPRAnalysis) -> str:
     """Format only Claude bot comments."""
     lines = [
-        f"======================================================================",
+        "======================================================================",
         f"  Claude Bot Comments - PR #{analysis.pr_data.pr_number}",
-        f"======================================================================",
+        "======================================================================",
         "",
         f"Found: {len(analysis.claude_issues)} Claude bot comments",
         "",
@@ -234,12 +232,12 @@ def format_claude_only(analysis: PRAnalysis) -> str:
     return "\n".join(lines)
 
 
-def format_blockers(analysis: PRAnalysis) -> str:
+def format_blockers(analysis: ModelPRAnalysis) -> str:
     """Format only merge blockers."""
     lines = [
-        f"======================================================================",
+        "======================================================================",
         f"  Merge Blockers - PR #{analysis.pr_data.pr_number}",
-        f"======================================================================",
+        "======================================================================",
         "",
     ]
 
@@ -260,12 +258,12 @@ def format_blockers(analysis: PRAnalysis) -> str:
     return "\n".join(lines)
 
 
-def format_critical(analysis: PRAnalysis) -> str:
+def format_critical(analysis: ModelPRAnalysis) -> str:
     """Format only critical issues."""
     lines = [
-        f"======================================================================",
+        "======================================================================",
         f"  Critical Issues - PR #{analysis.pr_data.pr_number}",
-        f"======================================================================",
+        "======================================================================",
         "",
     ]
 

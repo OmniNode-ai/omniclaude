@@ -13,6 +13,7 @@ import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 import yaml
@@ -20,7 +21,7 @@ import yaml
 # Set up logging
 logger = logging.getLogger(__name__)
 
-# Import transformation event publisher
+# Import transformation event publisher (optional integration)
 try:
     from omniclaude.lib.transformation_event_publisher import (
         TransformationEventType,
@@ -28,19 +29,11 @@ try:
     )
 
     KAFKA_AVAILABLE = True
-except ImportError:
-    try:
-        from agents.lib.transformation_event_publisher import (
-            TransformationEventType,
-            publish_transformation_event,
-        )
-
-        KAFKA_AVAILABLE = True
-    except ImportError:
-        logger.warning(
-            "transformation_event_publisher not available, transformation events will not be logged"
-        )
-        KAFKA_AVAILABLE = False
+except ImportError:  # nosec B110 - Optional dependency, graceful degradation
+    logger.warning(
+        "transformation_event_publisher not available, transformation events will not be logged"
+    )
+    KAFKA_AVAILABLE = False
 
 
 @dataclass
@@ -51,10 +44,10 @@ class AgentIdentity:
     purpose: str
     domain: str
     description: str
-    capabilities: list
-    triggers: list
+    capabilities: list[str]
+    triggers: list[str]
     intelligence_integration: str | None = None
-    success_criteria: list | None = None
+    success_criteria: list[str] | None = None
 
     def format_assumption_prompt(self) -> str:
         """Format identity for assumption by coordinator."""
@@ -63,7 +56,9 @@ class AgentIdentity:
         caps_formatted = "\n".join(f"  - {cap}" for cap in self.capabilities)
 
         # Format triggers
-        triggers_formatted = "\n".join(f"  - {trig}" for trig in self.triggers[:5])  # Top 5
+        triggers_formatted = "\n".join(
+            f"  - {trig}" for trig in self.triggers[:5]
+        )  # Top 5
 
         # Format success criteria if available
         success_formatted = ""
@@ -75,9 +70,7 @@ class AgentIdentity:
         # Format intelligence integration if available
         intelligence_formatted = ""
         if self.intelligence_integration:
-            intelligence_formatted = (
-                f"\n\n**INTELLIGENCE WORKFLOWS**:\n{self.intelligence_integration[:1000]}..."
-            )
+            intelligence_formatted = f"\n\n**INTELLIGENCE WORKFLOWS**:\n{self.intelligence_integration[:1000]}..."
 
         prompt = f"""
 ========================================================================
@@ -166,7 +159,7 @@ class AgentTransformer:
             )
 
         # Load YAML
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8") as f:
             config = yaml.safe_load(f)
 
         # Parse capabilities (handle dict or list format)
@@ -201,7 +194,9 @@ class AgentTransformer:
             name=agent_name,
             purpose=config.get("agent_purpose", "No purpose defined"),
             domain=config.get("agent_domain", "general"),
-            description=config.get("agent_description", config.get("agent_purpose", "")),
+            description=config.get(
+                "agent_description", config.get("agent_purpose", "")
+            ),
             capabilities=capabilities,
             triggers=config.get("triggers", []),
             intelligence_integration=intelligence,
@@ -335,9 +330,12 @@ class AgentTransformer:
         Returns:
             Formatted prompt for identity assumption
         """
+        # Note: asyncio.get_event_loop() is deprecated since Python 3.10.
+        # Use get_running_loop() to check for existing loop, then create new if needed.
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
         except RuntimeError:
+            # No running loop - create a new one for sync execution
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
 
@@ -354,7 +352,7 @@ class AgentTransformer:
         )
 
 
-def main():
+def main() -> None:
     """CLI interface for testing transformations."""
     import argparse
     import sys

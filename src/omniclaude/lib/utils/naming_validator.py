@@ -65,7 +65,7 @@ class Violation:
     message: str
     suggestion: str | None = None  # Suggested correction
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Set default suggestion from expected_format if not provided."""
         if self.suggestion is None:
             self.suggestion = self.expected_format
@@ -165,7 +165,9 @@ class NamingValidator:
     TS_CLASS_PATTERN = re.compile(
         r"^\s*(?:export\s+)?(?:abstract\s+)?class\s+([A-Za-z_][A-Za-z0-9_]*)"
     )
-    TS_INTERFACE_PATTERN = re.compile(r"^\s*(?:export\s+)?interface\s+([A-Za-z_][A-Za-z0-9_]*)")
+    TS_INTERFACE_PATTERN = re.compile(
+        r"^\s*(?:export\s+)?interface\s+([A-Za-z_][A-Za-z0-9_]*)"
+    )
     TS_FUNCTION_PATTERN = re.compile(
         r"^\s*(?:export\s+)?(?:async\s+)?function\s+([A-Za-z_][A-Za-z0-9_]*)"
     )
@@ -174,7 +176,9 @@ class NamingValidator:
         r"^\s*(?:export\s+)?(?:const|let|var)\s+([A-Za-z_][A-Za-z0-9_]*)\s*[=:]"
     )
 
-    def __init__(self, language: str | None = None, validation_mode: str = "auto"):
+    def __init__(
+        self, language: str | None = None, validation_mode: str = "auto"
+    ) -> None:
         """
         Initialize the naming validator.
 
@@ -226,10 +230,7 @@ class NamingValidator:
 
         # Check for /omni followed by lowercase letter (omniauth, omnitools, etc.)
         # This pattern avoids false positives like "omni" in the middle of words
-        if re.search(r"/omni[a-z]", file_path):
-            return True
-
-        return False
+        return bool(re.search(r"/omni[a-z]", file_path))
 
     def validate_content(self, content: str, file_path: str) -> list[Violation]:
         """
@@ -278,7 +279,7 @@ class NamingValidator:
                 self._validate_typescript_javascript(file_path, content)
         except Exception:
             # Gracefully handle syntax errors and other issues
-            pass
+            pass  # nosec B110 - Intentional graceful degradation for malformed input
 
         return self.violations
 
@@ -311,7 +312,7 @@ class NamingValidator:
         except Exception:
             # Gracefully handle syntax errors and other issues
             # Invalid code should pass through without failing the validator
-            pass
+            pass  # nosec B110 - Intentional graceful degradation for malformed input
 
         return self.violations
 
@@ -388,7 +389,9 @@ class NamingValidator:
                                 )
                         else:
                             # Regular variable - must be snake_case (100% in Omninode)
-                            if not self._is_snake_case(name) and not name.startswith("_"):
+                            if not self._is_snake_case(name) and not name.startswith(
+                                "_"
+                            ):
                                 self.violations.append(
                                     Violation(
                                         file=file_path,
@@ -481,7 +484,9 @@ class NamingValidator:
                                 )
                         else:
                             # Regular variable - must be snake_case
-                            if not self._is_snake_case(name) and not name.startswith("_"):
+                            if not self._is_snake_case(name) and not name.startswith(
+                                "_"
+                            ):
                                 self.violations.append(
                                     Violation(
                                         file=file_path,
@@ -746,7 +751,9 @@ class NamingValidator:
         if "BaseModel" in base_names:
             if not self.MODEL_PREFIX_PATTERN.match(class_name):
                 suggestion = (
-                    f"Model{class_name}" if not class_name.startswith("Model") else class_name
+                    f"Model{class_name}"
+                    if not class_name.startswith("Model")
+                    else class_name
                 )
                 self.violations.append(
                     Violation(
@@ -765,7 +772,9 @@ class NamingValidator:
         if "Enum" in base_names or "str, Enum" in str(base_names):
             if not self.ENUM_PREFIX_PATTERN.match(class_name):
                 suggestion = (
-                    f"Enum{class_name}" if not class_name.startswith("Enum") else class_name
+                    f"Enum{class_name}"
+                    if not class_name.startswith("Enum")
+                    else class_name
                 )
                 self.violations.append(
                     Violation(
@@ -874,10 +883,14 @@ class NamingValidator:
             )
 
         # Exception classes should end with "Error"
-        if any(base in ["Exception", "BaseException", "OnexError"] for base in base_names):
+        if any(
+            base in ["Exception", "BaseException", "OnexError"] for base in base_names
+        ):
             if not self.ERROR_SUFFIX_PATTERN.match(class_name):
                 suggestion = (
-                    f"{class_name}Error" if not class_name.endswith("Error") else class_name
+                    f"{class_name}Error"
+                    if not class_name.endswith("Error")
+                    else class_name
                 )
                 self.violations.append(
                     Violation(
@@ -922,9 +935,8 @@ class NamingValidator:
             if body_node == node:
                 # Check if any target is all uppercase
                 for target in node.targets:
-                    if isinstance(target, ast.Name):
-                        if target.id.isupper():
-                            return True
+                    if isinstance(target, ast.Name) and target.id.isupper():
+                        return True
                 return False
         return False
 

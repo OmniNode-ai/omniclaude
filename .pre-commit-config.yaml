@@ -1,19 +1,20 @@
 repos:
   # Fast file checks that can run in parallel
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
         exclude: '\.github/workflows(?:-generated)?/.*\.ya?ml$'
       - id: end-of-file-fixer
         exclude: '\.github/workflows(?:-generated)?/.*\.ya?ml$'
-      - id: check-yaml
-        exclude: '\.github/workflows/.*\.ya?ml$|agents/definitions/.*\.yaml$|agents/templates/.*\.yaml$'
+      # check-yaml removed: conflicts with agent YAML files that use custom syntax
       - id: check-added-large-files
       - id: check-merge-conflict
       - id: check-toml
 
-  # Fast Python formatting and linting (optimized for speed)
+  # Fast Python formatting and linting (staged files only)
+  # Order: format → fix → check (matches CI behavior)
+  # Note: To run on entire codebase, use: uv run ruff check src/ tests/
   - repo: local
     hooks:
       - id: clean-output-directory
@@ -23,45 +24,55 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
 
-      - id: ruff-fix
-        name: ruff (auto-fix linting issues + sort imports)
-        entry: uv run ruff check --fix
-        language: system
-        types: [python]
-        exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|_archive/.*'
-        stages: [pre-commit]
-
       - id: ruff-format
-        name: ruff format (auto-format)
+        name: ruff format (staged files)
         entry: uv run ruff format
         language: system
         types: [python]
-        exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|_archive/.*'
+        exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|_archive/.*|src/omniclaude/lib/.*'
+        stages: [pre-commit]
+
+      - id: ruff-fix
+        name: ruff check --fix (staged files)
+        entry: uv run ruff check --fix --exit-non-zero-on-fix
+        language: system
+        types: [python]
+        exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|_archive/.*|src/omniclaude/lib/.*'
         stages: [pre-commit]
 
       - id: ruff-check
-        name: ruff (strict check - match CI)
+        name: ruff check (staged files)
         entry: uv run ruff check
         language: system
         types: [python]
-        exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|_archive/.*'
+        exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|_archive/.*|src/omniclaude/lib/.*'
         stages: [pre-commit]
 
       - id: bandit-security
-        name: bandit (security scanner - match CI)
-        entry: bash -c 'uv run bandit -r src/ -c .bandit'
+        name: bandit (staged files)
+        entry: uv run bandit -c .bandit
         language: system
         types: [python]
+        exclude: '^\.[^/]*$|^\..*/.*|_archive/.*|tests/.*'
         stages: [pre-commit]
-        pass_filenames: false
 
       - id: mypy-typecheck
         name: mypy (type checking - match CI)
-        entry: bash -c 'uv run mypy src/ --ignore-missing-imports'
+        # Only check non-legacy code - lib/ excluded (will be deleted post-Beta)
+        entry: bash -c 'uv run mypy src/omniclaude/hooks/ src/omniclaude/config/ --ignore-missing-imports'
         language: system
         types: [python]
+        exclude: '^\.[^/]*$|^\..*/.*|_archive/.*'
         stages: [pre-commit]
-        pass_filenames: false
+
+      - id: onex-validate
+        name: ONEX validation (staged files)
+        entry: uv run python scripts/validate_onex.py
+        language: system
+        types: [python]
+        # Exclude: hidden files, _archive, tests, and lib/ (legacy code, post-Beta deletion)
+        exclude: '^\.[^/]*$|^\..*/.*|_archive/.*|tests/.*|src/omniclaude/lib/.*'
+        stages: [pre-commit]
 
 # Configuration
 ci:

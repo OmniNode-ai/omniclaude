@@ -13,6 +13,7 @@ Graceful Degradation:
 
 import sys
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -72,6 +73,31 @@ def _get_settings():
         _settings_error = f"failed to load config.settings: {e}"
         print(f"Warning: {_settings_error}", file=sys.stderr)
         return None
+
+
+# =============================================================================
+# Event Config Models (ONEX: Parameter reduction pattern)
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class ModelUserPromptLogConfig:
+    """Configuration for user prompt log events.
+
+    Groups related parameters for log_userprompt() to reduce
+    function signature complexity per ONEX parameter guidelines.
+    """
+
+    prompt: str
+    agent_detected: str | None = None
+    agent_domain: str | None = None
+    correlation_id: str | None = None
+    intelligence_queries: dict[str, str] | None = None
+    metadata: dict[str, Any] | None = None
+    detection_method: str | None = None
+    confidence: float | None = None
+    latency_ms: float | None = None
+    reasoning: str | None = None
 
 
 class HookEventLogger:
@@ -323,6 +349,50 @@ class HookEventLogger:
             metadata=metadata,
         )
 
+    def log_userprompt_from_config(
+        self,
+        config: ModelUserPromptLogConfig,
+    ) -> str | None:
+        """Log UserPromptSubmit hook event from config object.
+
+        Args:
+            config: User prompt log configuration containing all event data.
+
+        Returns:
+            Event ID if successful, None if failed.
+        """
+        event_metadata = {
+            "hook_type": "UserPromptSubmit",
+            "correlation_id": config.correlation_id,
+            "agent_detected": config.agent_detected is not None,
+            "detection_method": config.detection_method,
+            "detection_latency_ms": config.latency_ms,
+        }
+
+        # Merge enhanced metadata if provided
+        if config.metadata:
+            event_metadata.update(config.metadata)
+
+        payload = {
+            "prompt_preview": config.prompt[:500],  # Truncate for storage
+            "agent_detected": config.agent_detected,
+            "agent_domain": config.agent_domain,
+            "intelligence_queries": config.intelligence_queries,
+            "detection_method": config.detection_method,
+            "confidence": config.confidence,
+            "latency_ms": config.latency_ms,
+            "reasoning": config.reasoning[:200] if config.reasoning else None,
+        }
+
+        return self.log_event(
+            source="UserPromptSubmit",
+            action="prompt_submitted",
+            resource="prompt",
+            resource_id=config.agent_detected or "no_agent",
+            payload=payload,
+            metadata=event_metadata,
+        )
+
     def log_userprompt(
         self,
         prompt: str,
@@ -337,6 +407,10 @@ class HookEventLogger:
         reasoning: str | None = None,
     ) -> str | None:
         """Log UserPromptSubmit hook event.
+
+        Note:
+            Consider using log_userprompt_from_config() with
+            ModelUserPromptLogConfig for better parameter organization.
 
         Args:
             prompt: User's prompt text (truncated to 500 chars)
@@ -353,37 +427,20 @@ class HookEventLogger:
         Returns:
             Event ID if successful, None if failed
         """
-        event_metadata = {
-            "hook_type": "UserPromptSubmit",
-            "correlation_id": correlation_id,
-            "agent_detected": agent_detected is not None,
-            "detection_method": detection_method,
-            "detection_latency_ms": latency_ms,
-        }
-
-        # Merge enhanced metadata if provided
-        if metadata:
-            event_metadata.update(metadata)
-
-        payload = {
-            "prompt_preview": prompt[:500],  # Truncate for storage
-            "agent_detected": agent_detected,
-            "agent_domain": agent_domain,
-            "intelligence_queries": intelligence_queries,
-            "detection_method": detection_method,
-            "confidence": confidence,
-            "latency_ms": latency_ms,
-            "reasoning": reasoning[:200] if reasoning else None,  # Truncate reasoning
-        }
-
-        return self.log_event(
-            source="UserPromptSubmit",
-            action="prompt_submitted",
-            resource="prompt",
-            resource_id=agent_detected or "no_agent",
-            payload=payload,
-            metadata=event_metadata,
+        # ONEX: exempt - backwards compatibility wrapper for config-based method
+        config = ModelUserPromptLogConfig(
+            prompt=prompt,
+            agent_detected=agent_detected,
+            agent_domain=agent_domain,
+            correlation_id=correlation_id,
+            intelligence_queries=intelligence_queries,
+            metadata=metadata,
+            detection_method=detection_method,
+            confidence=confidence,
+            latency_ms=latency_ms,
+            reasoning=reasoning,
         )
+        return self.log_userprompt_from_config(config)
 
     def close(self) -> None:
         """Close database connection."""

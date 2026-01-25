@@ -25,8 +25,24 @@ class TopicBase(StrEnum):
     PROMPT_SUBMITTED = "omniclaude.prompt.submitted.v1"
     TOOL_EXECUTED = "omniclaude.tool.executed.v1"
 
+    # Agent action events (tool calls, decisions, errors, successes)
+    AGENT_ACTION = "omniclaude.agent.action.v1"
+
+    # Agent observability events (used by HookEventAdapter)
+    # Note: These use legacy naming for backward compatibility with existing consumers
+    ROUTING_DECISIONS = "agent-routing-decisions"
+    AGENT_ACTIONS = "agent-actions"
+    PERFORMANCE_METRICS = "router-performance-metrics"
+    TRANSFORMATIONS = "agent-transformation-events"
+    DETECTION_FAILURES = "agent-detection-failures"
+
     # Future (OMN-1402)
     LEARNING_PATTERN = "omniclaude.learning.pattern.v1"
+
+    # Agent routing topics (omninode domain, following EVENT_BUS_INTEGRATION_GUIDE)
+    ROUTING_REQUESTED = "omninode.agent.routing.requested.v1"
+    ROUTING_COMPLETED = "omninode.agent.routing.completed.v1"
+    ROUTING_FAILED = "omninode.agent.routing.failed.v1"
 
 
 def _validate_topic_segment(segment: str, name: str) -> str:

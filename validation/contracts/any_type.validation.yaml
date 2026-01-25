@@ -1,0 +1,109 @@
+---
+contract_kind: validation_subcontract
+validation:
+  version:
+    major: 1
+    minor: 0
+    patch: 0
+
+  validator_id: any_type
+  validator_name: Any Type Policy Validator
+  validator_description: |
+    Enforces strict typing policy by detecting use of Any type in omniclaude2.
+    Checks for Any imports, annotations, dict[str, Any], and Union[..., Any].
+    Supports exemptions via decorators and inline comments.
+
+    This validator is initially set to warning severity (non-blocking) to allow
+    gradual adoption. Once technical debt is addressed, severity can be raised.
+
+  target_patterns:
+    - "src/**/*.py"
+
+  exclude_patterns:
+    - "**/node_modules/**"
+    - "**/.git/**"
+    - "**/venv/**"
+    - "**/.venv/**"
+    - "**/__pycache__/**"
+    - "**/tests/**"
+    - "**/*_test.py"
+    - "**/test_*.py"
+    - "**/conftest.py"
+    - "_archive/**"
+
+  rules:
+    - rule_id: any_import
+      description: Detects 'from typing import Any' statements
+      severity: warning
+      enabled: true
+
+    - rule_id: any_annotation
+      description: "Detects Any in type annotations (param: Any, -> Any)"
+      severity: warning
+      enabled: true
+
+    - rule_id: dict_str_any
+      description: Detects dict[str, Any] usage
+      severity: warning
+      enabled: true
+      parameters:
+        # allow_in_tests: When true, suppresses violations in test files
+        # (files matching **/tests/**, **/*_test.py, **/test_*.py, **/conftest.py).
+        # This is useful because test fixtures often need dict[str, Any] for
+        # dynamic mock data and parametrized test inputs.
+        allow_in_tests: true
+
+    - rule_id: list_any
+      description: Detects list[Any] usage
+      severity: warning
+      enabled: true
+
+    - rule_id: union_with_any
+      description: Detects Union[..., Any] or ... | Any
+      severity: warning
+      enabled: true
+
+  # ============================================================================
+  # LINE-BASED SUPPRESSION (NOT rule-specific!)
+  # ============================================================================
+  # IMPORTANT: Suppression operates on WHOLE LINES, not individual rules.
+  #
+  # How it works:
+  #   - If ANY pattern below appears anywhere on a source line, ALL Any-type
+  #     violations on that line are suppressed (regardless of which rule triggered).
+  #   - The validator performs a simple substring match against the entire line.
+  #
+  # Best practice - use "any-ok:" with a reason explaining why Any is acceptable:
+  #   def handle_json(payload: Any) -> None:  # any-ok: external API returns untyped JSON
+  #
+  # Matching: Case-sensitive substring search (no regex).
+  # ============================================================================
+  suppression_comments:
+    # Legacy patterns (suffix is documentation hint only - suppresses ALL violations on line)
+    - "# ONEX_EXCLUDE: any_type"
+    - "# ONEX_EXCLUDE: dict_str_any"
+
+    # Standard patterns
+    - "# type: ignore"
+    - "# any-ok:"
+
+  severity_default: warning
+  # NOTE: fail_on_error is false initially for gradual adoption
+  fail_on_error: false
+  fail_on_warning: false
+  # max_violations: 0 means "unlimited/no limit" - all violations will be
+  # reported without early termination. Set to a positive integer (e.g., 100)
+  # to stop validation after that many violations are found.
+  max_violations: 0
+
+  # ============================================================================
+  # PARALLEL EXECUTION SEMANTICS
+  # ============================================================================
+  # This flag indicates that the validator SUPPORTS parallel file processing,
+  # meaning files can be validated concurrently by separate worker processes.
+  #
+  # CRITICAL THREAD SAFETY CONSTRAINT:
+  #   Parallel execution is PROCESS-safe, NOT THREAD-safe within a single process.
+  #   Each worker process MUST create its own validator instance.
+  # ============================================================================
+  parallel_execution: true

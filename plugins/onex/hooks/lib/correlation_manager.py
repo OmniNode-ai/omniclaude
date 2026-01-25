@@ -12,8 +12,8 @@ from pathlib import Path
 from typing import Any
 
 
-class CorrelationManager:
-    """Manage correlation IDs across hook invocations."""
+class CorrelationRegistry:
+    """Registry for correlation IDs across hook invocations."""
 
     def __init__(self, state_dir: Path | None = None):
         """Initialize correlation manager.
@@ -65,7 +65,7 @@ class CorrelationManager:
         existing_state = {}
         if self.correlation_file.exists():
             try:
-                with open(self.correlation_file) as f:
+                with open(self.correlation_file, encoding="utf-8") as f:
                     existing_state = json.load(f)
             except Exception:
                 pass
@@ -79,7 +79,8 @@ class CorrelationManager:
             "agent_domain": agent_domain,
             "prompt_preview": prompt_preview,
             "prompt_count": prompt_count,
-            "created_at": existing_state.get("created_at") or datetime.now(UTC).isoformat(),
+            "created_at": existing_state.get("created_at")
+            or datetime.now(UTC).isoformat(),
             "last_accessed": datetime.now(UTC).isoformat(),
         }
 
@@ -107,7 +108,7 @@ class CorrelationManager:
             if age_seconds > 3600:
                 return None
 
-            with open(self.correlation_file) as f:
+            with open(self.correlation_file, encoding="utf-8") as f:
                 state = json.load(f)
 
             # Update last accessed time
@@ -140,41 +141,41 @@ class CorrelationManager:
 
 
 # Singleton instance
-_manager = None
+_registry = None
 
 
-def get_manager() -> CorrelationManager:
-    """Get singleton manager instance."""
-    global _manager
-    if _manager is None:
-        _manager = CorrelationManager()
-    return _manager
+def get_registry() -> CorrelationRegistry:
+    """Get singleton registry instance."""
+    global _registry
+    if _registry is None:
+        _registry = CorrelationRegistry()
+    return _registry
 
 
 # Convenience functions
 def set_correlation_id(correlation_id: str, **kwargs):
     """Store correlation ID for current session."""
-    get_manager().set_correlation_id(correlation_id, **kwargs)
+    get_registry().set_correlation_id(correlation_id, **kwargs)
 
 
 def get_correlation_id() -> str | None:
     """Get current correlation ID."""
-    return get_manager().get_correlation_id()
+    return get_registry().get_correlation_id()
 
 
 def get_correlation_context() -> dict[str, Any] | None:
     """Get full correlation context."""
-    return get_manager().get_correlation_context()
+    return get_registry().get_correlation_context()
 
 
 def clear_correlation_context():
     """Clear stored correlation context."""
-    get_manager().clear()
+    get_registry().clear()
 
 
 if __name__ == "__main__":
-    # Test correlation manager
-    print("Testing correlation manager...")
+    # Test correlation registry
+    print("Testing correlation registry...")
 
     # Set correlation ID
     set_correlation_id(
@@ -194,7 +195,7 @@ if __name__ == "__main__":
     print(f"✓ Full context: {json.dumps(context, indent=2)}")
 
     # Clear
-    get_manager().clear()
+    get_registry().clear()
     print("✓ Cleared correlation state")
 
     print("\n✅ All tests passed!")

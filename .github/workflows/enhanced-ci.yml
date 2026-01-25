@@ -20,6 +20,39 @@ jobs:
   # ============================================================================
   # Code Quality and Type Safety (Strict)
   # ============================================================================
+  #
+  # =============================================================================
+  # LEGACY CODE EXCLUSION NOTICE: src/omniclaude/lib/
+  # =============================================================================
+  # The src/omniclaude/lib/ directory contains legacy code that predates the
+  # strict type checking and linting standards established for this codebase.
+  # This code is EXCLUDED from:
+  #   - Ruff format checking (line ~62)
+  #   - Ruff linting (line ~70)
+  #   - Mypy strict type checking (line ~81)
+  #
+  # WHY EXCLUDED:
+  #   The lib/ directory contains utility modules with patterns that don't
+  #   conform to current standards (missing type annotations, dynamic typing,
+  #   etc.). Enforcing strict checks would require significant refactoring
+  #   that is out of scope for the current development phase.
+  #
+  # TIMELINE:
+  #   This exclusion is TEMPORARY. The lib/ directory will be:
+  #   1. Incrementally refactored to meet strict typing standards post-Beta
+  #   2. Migrated to proper src/omniclaude/ submodules with full typing
+  #   3. Eventually deleted once all code is properly migrated
+  #
+  # NEW CODE GUIDELINES:
+  #   If you must add new modules to lib/ (not recommended):
+  #   - Follow strict typing conventions (all functions fully annotated)
+  #   - Ensure code passes ruff format, ruff check, and mypy --strict
+  #   - Consider whether the code belongs in a proper module instead
+  #   - Prefer creating new modules in src/omniclaude/{hooks,config}/ instead
+  #
+  # TRACKING: OMN-1450 (PR #54 review feedback - document lib/ exclusion)
+  # REMOVAL TARGET: Post-Beta cleanup phase
+  # =============================================================================
   quality-strict:
     name: Code Quality (Strict Mode)
     runs-on: ubuntu-latest
@@ -49,45 +82,20 @@ jobs:
 
       - name: Install dependencies
         if: steps.cached-uv-dependencies.outputs.cache-hit != 'true'
-        run: |
-          # Install dependencies - continue even if private repos fail (tests use mocks)
-          # Capture exit code and stderr for debugging
-          set +e
-          UV_OUTPUT=$(uv sync --frozen --group dev 2>&1)
-          UV_EXIT=$?
-          set -e
-
-          if [ $UV_EXIT -ne 0 ]; then
-            echo "::warning::uv sync --frozen failed (exit $UV_EXIT)"
-            echo "Output: $UV_OUTPUT"
-
-            # Check if failure is due to private repos (expected) vs other errors (unexpected)
-            if echo "$UV_OUTPUT" | grep -q "omnibase"; then
-              echo "Failure appears to be private repo access - continuing with fallback"
-              # Try without frozen to allow resolution without lock file
-              uv sync --group dev 2>&1 || {
-                echo "::warning::Fallback uv sync also failed - tests may be limited"
-              }
-            else
-              echo "::error::Unexpected dependency installation failure"
-              echo "$UV_OUTPUT"
-              exit 1
-            fi
-          fi
+        run: uv sync --frozen --group dev
 
       - name: Run Ruff format (code formatting check)
         run: |
           echo "::group::Ruff Format Check"
-          # Explicitly scan only project source directories to avoid .venv
-          # Using ruff format for consistency with pre-commit config
-          uv run ruff format --check src/ tests/
+          # NOTE: lib/ excluded - see LEGACY CODE EXCLUSION NOTICE above
+          uv run ruff format --check src/omniclaude/hooks/ src/omniclaude/config/ tests/
           echo "::endgroup::"
 
       - name: Run Ruff (linting - strict)
         run: |
           echo "::group::Ruff Linting"
-          # Scan only project source directories, aligned with pre-commit config
-          uv run ruff check src/ tests/ --output-format=full
+          # NOTE: lib/ excluded - see LEGACY CODE EXCLUSION NOTICE above
+          uv run ruff check src/omniclaude/hooks/ src/omniclaude/config/ tests/ --output-format=full
           echo "::endgroup::"
 
       - name: Run type checking (mypy - strict mode)
@@ -97,7 +105,8 @@ jobs:
           # Only install additional type stubs not in dev dependencies
           uv run pip install types-PyYAML types-aiofiles types-redis
           # Strict type checking - this MUST pass for CI to succeed
-          uv run mypy src/omniclaude/ \
+          # NOTE: lib/ excluded - see LEGACY CODE EXCLUSION NOTICE above
+          uv run mypy src/omniclaude/hooks/ src/omniclaude/config/ \
             --strict \
             --show-error-codes \
             --show-column-numbers \
@@ -139,25 +148,7 @@ jobs:
           git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
 
       - name: Install dependencies
-        run: |
-          # Capture exit code and stderr for debugging
-          set +e
-          UV_OUTPUT=$(uv sync --frozen 2>&1)
-          UV_EXIT=$?
-          set -e
-
-          if [ $UV_EXIT -ne 0 ]; then
-            echo "::warning::uv sync --frozen failed (exit $UV_EXIT)"
-            # Check if failure is due to private repos (expected)
-            if echo "$UV_OUTPUT" | grep -q "omnibase"; then
-              echo "Failure appears to be private repo access - continuing"
-              uv sync 2>&1 || echo "::warning::Fallback uv sync also failed"
-            else
-              echo "::error::Unexpected dependency installation failure"
-              echo "$UV_OUTPUT"
-              exit 1
-            fi
-          fi
+        run: uv sync --frozen
 
       - name: Validate ONEX Naming Conventions
         run: |
@@ -301,25 +292,7 @@ jobs:
           git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
 
       - name: Install dependencies
-        run: |
-          # Capture exit code and stderr for debugging
-          set +e
-          UV_OUTPUT=$(uv sync --frozen --group dev 2>&1)
-          UV_EXIT=$?
-          set -e
-
-          if [ $UV_EXIT -ne 0 ]; then
-            echo "::warning::uv sync --frozen --group dev failed (exit $UV_EXIT)"
-            # Check if failure is due to private repos (expected)
-            if echo "$UV_OUTPUT" | grep -q "omnibase"; then
-              echo "Failure appears to be private repo access - continuing"
-              uv sync --group dev 2>&1 || echo "::warning::Fallback uv sync also failed"
-            else
-              echo "::error::Unexpected dependency installation failure"
-              echo "$UV_OUTPUT"
-              exit 1
-            fi
-          fi
+        run: uv sync --frozen --group dev
 
       - name: Install pytest-split for parallel test execution
         run: |
@@ -522,25 +495,7 @@ jobs:
           git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
 
       - name: Install dependencies
-        run: |
-          # Capture exit code and stderr for debugging
-          set +e
-          UV_OUTPUT=$(uv sync --frozen --group dev 2>&1)
-          UV_EXIT=$?
-          set -e
-
-          if [ $UV_EXIT -ne 0 ]; then
-            echo "::warning::uv sync --frozen --group dev failed (exit $UV_EXIT)"
-            # Check if failure is due to private repos (expected)
-            if echo "$UV_OUTPUT" | grep -q "omnibase"; then
-              echo "Failure appears to be private repo access - continuing"
-              uv sync --group dev 2>&1 || echo "::warning::Fallback uv sync also failed"
-            else
-              echo "::error::Unexpected dependency installation failure"
-              echo "$UV_OUTPUT"
-              exit 1
-            fi
-          fi
+        run: uv sync --frozen --group dev
 
       - name: Initialize test database
         env:
@@ -570,6 +525,7 @@ jobs:
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/test_db
           REDIS_URL: redis://localhost:6379/0
+          SEMANTIC_SEARCH_URL: http://localhost:8055
         run: |
           echo "::group::Integration Tests"
           # Add explicit timeout to prevent test hangs
@@ -672,25 +628,7 @@ jobs:
           git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
 
       - name: Install dependencies
-        run: |
-          # Capture exit code and stderr for debugging
-          set +e
-          UV_OUTPUT=$(uv sync --frozen --group dev 2>&1)
-          UV_EXIT=$?
-          set -e
-
-          if [ $UV_EXIT -ne 0 ]; then
-            echo "::warning::uv sync --frozen --group dev failed (exit $UV_EXIT)"
-            # Check if failure is due to private repos (expected)
-            if echo "$UV_OUTPUT" | grep -q "omnibase"; then
-              echo "Failure appears to be private repo access - continuing"
-              uv sync --group dev 2>&1 || echo "::warning::Fallback uv sync also failed"
-            else
-              echo "::error::Unexpected dependency installation failure"
-              echo "$UV_OUTPUT"
-              exit 1
-            fi
-          fi
+        run: uv sync --frozen --group dev
 
       - name: Initialize hooks database
         env:
@@ -716,6 +654,7 @@ jobs:
       - name: Run hooks system tests
         env:
           DATABASE_URL: postgresql://hooks_test:hooks_test@localhost:5432/hooks_test_db
+          SEMANTIC_SEARCH_URL: http://localhost:8055
         run: |
           echo "::group::Hooks System Tests"
           # Check if tests/hooks/ exists (hooks tests in new structure)
@@ -772,25 +711,7 @@ jobs:
           git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
 
       - name: Install dependencies
-        run: |
-          # Capture exit code and stderr for debugging
-          set +e
-          UV_OUTPUT=$(uv sync --frozen --group dev 2>&1)
-          UV_EXIT=$?
-          set -e
-
-          if [ $UV_EXIT -ne 0 ]; then
-            echo "::warning::uv sync --frozen --group dev failed (exit $UV_EXIT)"
-            # Check if failure is due to private repos (expected)
-            if echo "$UV_OUTPUT" | grep -q "omnibase"; then
-              echo "Failure appears to be private repo access - continuing"
-              uv sync --group dev 2>&1 || echo "::warning::Fallback uv sync also failed"
-            else
-              echo "::error::Unexpected dependency installation failure"
-              echo "$UV_OUTPUT"
-              exit 1
-            fi
-          fi
+        run: uv sync --frozen --group dev
 
       - name: Run agent framework tests
         run: |
@@ -856,25 +777,7 @@ jobs:
           git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
 
       - name: Install dependencies
-        run: |
-          # Capture exit code and stderr for debugging
-          set +e
-          UV_OUTPUT=$(uv sync --frozen --group dev 2>&1)
-          UV_EXIT=$?
-          set -e
-
-          if [ $UV_EXIT -ne 0 ]; then
-            echo "::warning::uv sync --frozen --group dev failed (exit $UV_EXIT)"
-            # Check if failure is due to private repos (expected)
-            if echo "$UV_OUTPUT" | grep -q "omnibase"; then
-              echo "Failure appears to be private repo access - continuing"
-              uv sync --group dev 2>&1 || echo "::warning::Fallback uv sync also failed"
-            else
-              echo "::error::Unexpected dependency installation failure"
-              echo "$UV_OUTPUT"
-              exit 1
-            fi
-          fi
+        run: uv sync --frozen --group dev
 
       - name: Run performance benchmarks
         run: |

@@ -37,6 +37,9 @@ from omniclaude.hooks.schemas import (
     ModelHookToolExecutedPayload,
 )
 
+# All tests in this module are unit tests
+pytestmark = pytest.mark.unit
+
 # =============================================================================
 # Contract Loading Helpers
 # =============================================================================
@@ -55,7 +58,7 @@ def load_contract(path: Path) -> dict[str, Any]:
         FileNotFoundError: If the contract file does not exist.
         yaml.YAMLError: If the YAML is invalid.
     """
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
@@ -161,7 +164,9 @@ class TestContractCodeSync:
         privacy_config = contract.get("privacy", {})
         contract_max_length = privacy_config.get("preview_max_length")
 
-        assert contract_max_length is not None, "Contract missing privacy.preview_max_length"
+        assert contract_max_length is not None, (
+            "Contract missing privacy.preview_max_length"
+        )
         assert contract_max_length == PROMPT_PREVIEW_MAX_LENGTH, (
             f"Contract preview_max_length ({contract_max_length}) does not match "
             f"code PROMPT_PREVIEW_MAX_LENGTH ({PROMPT_PREVIEW_MAX_LENGTH}). "
@@ -280,7 +285,9 @@ class TestRequiredFieldsSync:
 
         # Get model required fields (fields without defaults)
         model_fields = ModelHookSessionStartedPayload.model_fields
-        model_required = {name for name, field in model_fields.items() if field.is_required()}
+        model_required = {
+            name for name, field in model_fields.items() if field.is_required()
+        }
 
         assert contract_required == model_required, (
             f"Required fields mismatch for ModelHookSessionStartedPayload.\n"
@@ -296,7 +303,9 @@ class TestRequiredFieldsSync:
         contract_required = set(payload_def.get("required", []))
 
         model_fields = ModelHookSessionEndedPayload.model_fields
-        model_required = {name for name, field in model_fields.items() if field.is_required()}
+        model_required = {
+            name for name, field in model_fields.items() if field.is_required()
+        }
 
         assert contract_required == model_required, (
             f"Required fields mismatch for ModelHookSessionEndedPayload.\n"
@@ -312,7 +321,9 @@ class TestRequiredFieldsSync:
         contract_required = set(payload_def.get("required", []))
 
         model_fields = ModelHookPromptSubmittedPayload.model_fields
-        model_required = {name for name, field in model_fields.items() if field.is_required()}
+        model_required = {
+            name for name, field in model_fields.items() if field.is_required()
+        }
 
         assert contract_required == model_required, (
             f"Required fields mismatch for ModelHookPromptSubmittedPayload.\n"
@@ -328,7 +339,9 @@ class TestRequiredFieldsSync:
         contract_required = set(payload_def.get("required", []))
 
         model_fields = ModelHookToolExecutedPayload.model_fields
-        model_required = {name for name, field in model_fields.items() if field.is_required()}
+        model_required = {
+            name for name, field in model_fields.items() if field.is_required()
+        }
 
         assert contract_required == model_required, (
             f"Required fields mismatch for ModelHookToolExecutedPayload.\n"

@@ -10,17 +10,12 @@ Tests:
 Created: 2025-11-20
 """
 
-import sys
 from pathlib import Path
 from unittest.mock import patch
-
-import pytest
-
 
 # Import load_skill_module from conftest
 conftest_path = Path(__file__).parent / "conftest.py"
 import importlib.util
-
 
 spec = importlib.util.spec_from_file_location("conftest", conftest_path)
 conftest = importlib.util.module_from_spec(spec)
@@ -44,7 +39,6 @@ class TestCheckServiceStatus:
             patch.object(execute, "get_container_status") as mock_status,
             patch("sys.argv", ["execute.py", "--service", "archon-intelligence"]),
         ):
-
             mock_status.return_value = {
                 "success": True,
                 "status": "running",
@@ -70,7 +64,6 @@ class TestCheckServiceStatus:
                 ["execute.py", "--service", "archon-qdrant", "--include-logs"],
             ),
         ):
-
             mock_status.return_value = {
                 "success": True,
                 "status": "running",
@@ -104,7 +97,6 @@ class TestCheckServiceStatus:
                 ["execute.py", "--service", "archon-bridge", "--include-stats"],
             ),
         ):
-
             mock_status.return_value = {
                 "success": True,
                 "status": "running",
@@ -134,7 +126,6 @@ class TestCheckServiceStatus:
             patch.object(execute, "get_container_status") as mock_status,
             patch("sys.argv", ["execute.py", "--service", "nonexistent-service"]),
         ):
-
             mock_status.return_value = {
                 "success": False,
                 "error": "Container not found: nonexistent-service",
@@ -150,7 +141,6 @@ class TestCheckServiceStatus:
             patch.object(execute, "get_container_status") as mock_status,
             patch("sys.argv", ["execute.py", "--service", "archon-search"]),
         ):
-
             mock_status.return_value = {
                 "success": True,
                 "status": "running",
@@ -171,7 +161,6 @@ class TestCheckServiceStatus:
             patch.object(execute, "get_container_status") as mock_status,
             patch("sys.argv", ["execute.py", "--service", "archon-memgraph"]),
         ):
-
             mock_status.return_value = {
                 "success": True,
                 "status": "exited",

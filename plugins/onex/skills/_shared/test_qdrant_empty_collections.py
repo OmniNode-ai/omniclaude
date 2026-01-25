@@ -11,21 +11,19 @@ import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any, Dict
-from unittest.mock import MagicMock, patch
-from urllib.error import URLError
-
+from typing import Any
+from unittest.mock import patch
 
 # Add _shared to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from qdrant_helper import get_collection_health, get_collection_stats
+from qdrant_helper import get_collection_health
 
 
 class MockResponse:
     """Mock HTTP response for testing."""
 
-    def __init__(self, status: int, data: Dict[str, Any]):
+    def __init__(self, status: int, data: dict[str, Any]):
         self.status = status
         self._data = data
 
@@ -60,14 +58,17 @@ def test_empty_collection_is_healthy():
         },
     )
 
-    with patch("urllib.request.urlopen", return_value=mock_response):
+    with (
+        patch("qdrant_helper.get_qdrant_url", return_value="http://localhost:6333"),
+        patch("urllib.request.urlopen", return_value=mock_response),
+    ):
         result = get_collection_health("test_empty_collection")
 
     # Assertions
     assert result["success"] is True, "Should succeed"
-    assert (
-        result["healthy"] is True
-    ), "Empty collection with green status should be HEALTHY"
+    assert result["healthy"] is True, (
+        "Empty collection with green status should be HEALTHY"
+    )
     assert result["status"] == "green", "Status should be green"
     assert result["vectors_count"] == 0, "Should report 0 vectors"
     assert result["error"] is None, "Should have no error"
@@ -93,7 +94,10 @@ def test_empty_collection_yellow_status():
         },
     )
 
-    with patch("urllib.request.urlopen", return_value=mock_response):
+    with (
+        patch("qdrant_helper.get_qdrant_url", return_value="http://localhost:6333"),
+        patch("urllib.request.urlopen", return_value=mock_response),
+    ):
         result = get_collection_health("test_yellow_collection")
 
     assert result["success"] is True
@@ -121,7 +125,10 @@ def test_populated_collection_is_healthy():
         },
     )
 
-    with patch("urllib.request.urlopen", return_value=mock_response):
+    with (
+        patch("qdrant_helper.get_qdrant_url", return_value="http://localhost:6333"),
+        patch("urllib.request.urlopen", return_value=mock_response),
+    ):
         result = get_collection_health("test_populated_collection")
 
     assert result["success"] is True
@@ -149,7 +156,10 @@ def test_collection_with_red_status_is_unhealthy():
         },
     )
 
-    with patch("urllib.request.urlopen", return_value=mock_response):
+    with (
+        patch("qdrant_helper.get_qdrant_url", return_value="http://localhost:6333"),
+        patch("urllib.request.urlopen", return_value=mock_response),
+    ):
         result = get_collection_health("test_red_collection")
 
     assert result["success"] is True
@@ -168,7 +178,10 @@ def test_missing_collection_is_unhealthy():
     # Mock HTTP 404 error
     mock_error = urllib.error.URLError("Collection not found")
 
-    with patch("urllib.request.urlopen", side_effect=mock_error):
+    with (
+        patch("qdrant_helper.get_qdrant_url", return_value="http://localhost:6333"),
+        patch("urllib.request.urlopen", side_effect=mock_error),
+    ):
         result = get_collection_health("test_missing_collection")
 
     assert result["success"] is False, "Should fail"
@@ -187,7 +200,10 @@ def test_connection_error_is_unhealthy():
     # Mock connection error
     mock_error = urllib.error.URLError("Connection refused")
 
-    with patch("urllib.request.urlopen", side_effect=mock_error):
+    with (
+        patch("qdrant_helper.get_qdrant_url", return_value="http://localhost:6333"),
+        patch("urllib.request.urlopen", side_effect=mock_error),
+    ):
         result = get_collection_health("test_unreachable")
 
     assert result["success"] is False
@@ -199,9 +215,13 @@ def test_connection_error_is_unhealthy():
 
 def test_empty_collection_unknown_status():
     """
-    Test that an empty collection with unknown status is unhealthy.
+    Test that an empty collection with unknown status is still healthy.
+
+    Per get_collection_health contract: "unknown" status is treated as HEALTHY
+    because if we can successfully query the collection, it exists and is
+    accessible. Only an explicit "red" status indicates an actual problem.
     """
-    print("Test 7: Empty collection with unknown status should be unhealthy...")
+    print("Test 7: Empty collection with unknown status should be healthy...")
 
     mock_response = MockResponse(
         status=200,
@@ -209,20 +229,27 @@ def test_empty_collection_unknown_status():
             "result": {
                 "points_count": 0,
                 "indexed_vectors_count": 0,
-                "status": "unknown",  # Unknown status
+                "status": "unknown",  # Unknown status - still healthy per contract
                 "optimizer_status": {},
             }
         },
     )
 
-    with patch("urllib.request.urlopen", return_value=mock_response):
+    with (
+        patch("qdrant_helper.get_qdrant_url", return_value="http://localhost:6333"),
+        patch("urllib.request.urlopen", return_value=mock_response),
+    ):
         result = get_collection_health("test_unknown_status")
 
     assert result["success"] is True
-    assert result["healthy"] is False, "Unknown status should be unhealthy"
+    # Per contract: "unknown" status is HEALTHY (collection is accessible)
+    # Only explicit "red" status indicates unhealthy
+    assert result["healthy"] is True, (
+        "Unknown status should be healthy (collection accessible)"
+    )
     assert result["status"] == "unknown"
 
-    print("  ✅ PASSED: Unknown status correctly marked as unhealthy")
+    print("  ✅ PASSED: Unknown status correctly marked as healthy")
 
 
 def main():

@@ -40,7 +40,7 @@ except ImportError:
 def load_config():
     """Load configuration from config.yaml."""
     config_path = _SCRIPT_DIR / "config.yaml"
-    with open(config_path) as f:
+    with open(config_path, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
@@ -105,14 +105,16 @@ def track_pattern_for_file(file_path_str: str, config: dict) -> bool:
 
     # Read content
     try:
-        with open(file_path) as f:
+        with open(file_path, encoding="utf-8") as f:
             content = f.read()
         print(
             f"[PostToolUse] Pattern tracking: Read {len(content)} chars",
             file=sys.stderr,
         )
     except Exception as e:
-        print(f"[PostToolUse] Pattern tracking: Error reading file: {e}", file=sys.stderr)
+        print(
+            f"[PostToolUse] Pattern tracking: Error reading file: {e}", file=sys.stderr
+        )
         return False
 
     # Track pattern creation
@@ -172,7 +174,9 @@ def apply_correction(content: str, correction: dict) -> str:
         Modified content with correction applied, or original on error
     """
     try:
-        from omniclaude.lib.utils.correction.ast_corrector import apply_single_correction
+        from omniclaude.lib.utils.correction.ast_corrector import (
+            apply_single_correction,
+        )
         from omniclaude.lib.utils.correction.framework_detector import (
             FrameworkMethodDetector,
         )
@@ -239,7 +243,7 @@ async def apply_fixes_to_file_async(file_path_str: str, config: dict) -> bool:
 
     # Read current content
     try:
-        with open(file_path) as f:
+        with open(file_path, encoding="utf-8") as f:
             original_content = f.read()
         print(
             f"[PostToolUse] Read {len(original_content)} chars from {file_path}",
@@ -251,7 +255,9 @@ async def apply_fixes_to_file_async(file_path_str: str, config: dict) -> bool:
 
     # Track original pattern creation (synchronous, blocking)
     if pattern_tracker:
-        print("[PostToolUse] Attempting pattern tracking (original)...", file=sys.stderr)
+        print(
+            "[PostToolUse] Attempting pattern tracking (original)...", file=sys.stderr
+        )
         try:
             pattern_id = pattern_tracker.track_pattern_creation(
                 code=original_content,
@@ -286,7 +292,9 @@ async def apply_fixes_to_file_async(file_path_str: str, config: dict) -> bool:
     if not violations:
         print("[PostToolUse] No violations found ✓", file=sys.stderr)
         elapsed_ms = (time.time() - start_time) * 1000
-        print(f"[PostToolUse] Total processing time: {elapsed_ms:.1f}ms", file=sys.stderr)
+        print(
+            f"[PostToolUse] Total processing time: {elapsed_ms:.1f}ms", file=sys.stderr
+        )
         print(
             f"[PostToolUse] ===== END processing {file_path} (clean) =====",
             file=sys.stderr,
@@ -307,7 +315,9 @@ async def apply_fixes_to_file_async(file_path_str: str, config: dict) -> bool:
 
     # Track pattern with violations context (synchronous)
     if pattern_tracker:
-        print("[PostToolUse] Attempting pattern tracking (violations)...", file=sys.stderr)
+        print(
+            "[PostToolUse] Attempting pattern tracking (violations)...", file=sys.stderr
+        )
         try:
             quality_score = pattern_tracker.calculate_quality_score(violations)
             pattern_id = pattern_tracker.track_pattern_creation(
@@ -348,7 +358,9 @@ async def apply_fixes_to_file_async(file_path_str: str, config: dict) -> bool:
     if not corrections:
         print("[PostToolUse] No corrections generated", file=sys.stderr)
         elapsed_ms = (time.time() - start_time) * 1000
-        print(f"[PostToolUse] Total processing time: {elapsed_ms:.1f}ms", file=sys.stderr)
+        print(
+            f"[PostToolUse] Total processing time: {elapsed_ms:.1f}ms", file=sys.stderr
+        )
         print(
             f"[PostToolUse] ===== END processing {file_path} (no corrections) =====",
             file=sys.stderr,
@@ -373,7 +385,9 @@ async def apply_fixes_to_file_async(file_path_str: str, config: dict) -> bool:
             correction_desc = (
                 f"{correction.get('old_name', '')} -> {correction.get('new_name', '')}"
             )
-            score = await quorum.score_correction(correction_desc, original_content, str(file_path))
+            score = await quorum.score_correction(
+                correction_desc, original_content, str(file_path)
+            )
             if score.should_apply:
                 scored_corrections.append((correction, score))
                 print(
@@ -389,7 +403,9 @@ async def apply_fixes_to_file_async(file_path_str: str, config: dict) -> bool:
     if not corrections:
         print("[PostToolUse] No corrections passed threshold", file=sys.stderr)
         elapsed_ms = (time.time() - start_time) * 1000
-        print(f"[PostToolUse] Total processing time: {elapsed_ms:.1f}ms", file=sys.stderr)
+        print(
+            f"[PostToolUse] Total processing time: {elapsed_ms:.1f}ms", file=sys.stderr
+        )
         print(
             f"[PostToolUse] ===== END processing {file_path} (no passing corrections) =====",
             file=sys.stderr,
@@ -397,7 +413,9 @@ async def apply_fixes_to_file_async(file_path_str: str, config: dict) -> bool:
         return False
 
     # Phase 5: Apply corrections
-    print(f"[PostToolUse] Applying {len(corrections)} correction(s)...", file=sys.stderr)
+    print(
+        f"[PostToolUse] Applying {len(corrections)} correction(s)...", file=sys.stderr
+    )
     corrected_content = original_content
     for correction in corrections:
         corrected_content = apply_correction(corrected_content, correction)
@@ -405,7 +423,9 @@ async def apply_fixes_to_file_async(file_path_str: str, config: dict) -> bool:
     if corrected_content == original_content:
         print("[PostToolUse] No changes after correction attempt", file=sys.stderr)
         elapsed_ms = (time.time() - start_time) * 1000
-        print(f"[PostToolUse] Total processing time: {elapsed_ms:.1f}ms", file=sys.stderr)
+        print(
+            f"[PostToolUse] Total processing time: {elapsed_ms:.1f}ms", file=sys.stderr
+        )
         print(
             f"[PostToolUse] ===== END processing {file_path} (no changes) =====",
             file=sys.stderr,
@@ -421,7 +441,9 @@ async def apply_fixes_to_file_async(file_path_str: str, config: dict) -> bool:
     try:
         with open(file_path, "w") as f:
             f.write(corrected_content)
-        print(f"[PostToolUse] ✓ Applied {len(corrections)} correction(s) to {file_path}")
+        print(
+            f"[PostToolUse] ✓ Applied {len(corrections)} correction(s) to {file_path}"
+        )
 
         # Track corrected pattern as modified version (synchronous)
         if pattern_tracker:
@@ -430,7 +452,9 @@ async def apply_fixes_to_file_async(file_path_str: str, config: dict) -> bool:
                 file=sys.stderr,
             )
             try:
-                corrected_quality_score = 1.0  # After corrections, quality should be perfect
+                corrected_quality_score = (
+                    1.0  # After corrections, quality should be perfect
+                )
                 corrected_pattern_id = pattern_tracker.track_pattern_creation(
                     code=corrected_content,
                     context={
@@ -458,7 +482,9 @@ async def apply_fixes_to_file_async(file_path_str: str, config: dict) -> bool:
                 )
 
         elapsed_ms = (time.time() - start_time) * 1000
-        print(f"[PostToolUse] Total processing time: {elapsed_ms:.1f}ms", file=sys.stderr)
+        print(
+            f"[PostToolUse] Total processing time: {elapsed_ms:.1f}ms", file=sys.stderr
+        )
         print(
             f"[PostToolUse] ===== END processing {file_path} (success) =====",
             file=sys.stderr,

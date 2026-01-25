@@ -10,7 +10,7 @@ Supported Frameworks:
 - Testing Frameworks (pytest, unittest)
 - Python Magic Methods (__init__, __str__, etc.)
 
-Author: Claude Code + Archon AI Quality Enforcer
+Author: Claude Code + ONEX AI Quality Enforcer
 Date: 2025-09-30
 """
 
@@ -140,7 +140,7 @@ class FrameworkMethodDetector:
         },
     }
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the framework detector."""
         self.detected_patterns: list[FrameworkPattern] = []
 
@@ -193,14 +193,18 @@ class FrameworkMethodDetector:
         # 4. Check for framework method via inheritance
         parent_class = self._get_parent_class(func_node, tree)
         if parent_class:
-            inheritance_pattern = self._check_framework_inheritance(func_node, parent_class, tree)
+            inheritance_pattern = self._check_framework_inheritance(
+                func_node, parent_class, tree
+            )
             if inheritance_pattern:
                 self.detected_patterns.append(inheritance_pattern)
                 return inheritance_pattern
 
         return None
 
-    def _check_framework_decorators(self, func_node: ast.FunctionDef) -> FrameworkPattern | None:
+    def _check_framework_decorators(
+        self, func_node: ast.FunctionDef
+    ) -> FrameworkPattern | None:
         """Check if function has framework decorators."""
         for decorator in func_node.decorator_list:
             decorator_name = self._get_decorator_name(decorator)
@@ -259,9 +263,8 @@ class FrameworkMethodDetector:
     ) -> ast.ClassDef | None:
         """Find the parent class of a function definition."""
         for node in ast.walk(tree):
-            if isinstance(node, ast.ClassDef):
-                if func_node in node.body:
-                    return node
+            if isinstance(node, ast.ClassDef) and func_node in node.body:
+                return node
         return None
 
     def _get_base_class_names(self, class_node: ast.ClassDef) -> list[str]:
@@ -327,7 +330,7 @@ class FrameworkMethodDetector:
         """Get all detected framework patterns."""
         return self.detected_patterns
 
-    def clear_patterns(self):
+    def clear_patterns(self) -> None:
         """Clear detected patterns (for reuse)."""
         self.detected_patterns = []
 
@@ -335,7 +338,9 @@ class FrameworkMethodDetector:
 # Convenience functions
 
 
-def is_framework_method(func_node: ast.FunctionDef, tree: ast.Module, file_path: str = "") -> bool:
+def is_framework_method(
+    func_node: ast.FunctionDef, tree: ast.Module, file_path: str = ""
+) -> bool:
     """
     Convenience function to check if a method is a framework method.
 

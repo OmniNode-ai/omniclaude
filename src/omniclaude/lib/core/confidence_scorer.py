@@ -54,11 +54,11 @@ class ConfidenceScorer:
     WEIGHT_CAPABILITY = 0.2
     WEIGHT_HISTORICAL = 0.1
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize confidence scorer."""
         # Historical success rates (loaded from tracking data)
         # In Phase 2+, this would come from actual usage tracking
-        self.historical_success = {}
+        self.historical_success: dict[str, dict[str, Any]] = {}
 
     def score(
         self,
@@ -98,7 +98,12 @@ class ConfidenceScorer:
         weighted_historical = historical_score * self.WEIGHT_HISTORICAL
 
         # Total score
-        total = weighted_trigger + weighted_context + weighted_capability + weighted_historical
+        total = (
+            weighted_trigger
+            + weighted_context
+            + weighted_capability
+            + weighted_historical
+        )
 
         # Generate explanation
         explanation = self._generate_explanation(
@@ -114,7 +119,9 @@ class ConfidenceScorer:
             explanation=explanation,
         )
 
-    def _calculate_context_score(self, agent_data: dict, context: dict) -> float:
+    def _calculate_context_score(
+        self, agent_data: dict[str, Any], context: dict[str, Any]
+    ) -> float:
         """
         Score based on context alignment.
 
@@ -142,7 +149,7 @@ class ConfidenceScorer:
             # Domain mismatch
             return 0.4
 
-    def _calculate_capability_score(self, agent_data: dict, request: str) -> float:
+    def _calculate_capability_score(self, agent_data: dict[str, Any], request: str) -> float:
         """
         Score based on capability match.
 
@@ -247,7 +254,7 @@ class ConfidenceScorer:
 
         return f"{agent_name}: {', '.join(parts)}"
 
-    def update_historical_data(self, agent_name: str, success_rate: float):
+    def update_historical_data(self, agent_name: str, success_rate: float) -> None:
         """
         Update historical success rate for an agent.
 

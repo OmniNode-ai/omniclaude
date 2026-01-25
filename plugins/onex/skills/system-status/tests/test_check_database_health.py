@@ -10,17 +10,14 @@ Tests:
 Created: 2025-11-20
 """
 
-import sys
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-
 # Import load_skill_module from conftest
 conftest_path = Path(__file__).parent / "conftest.py"
 import importlib.util
-
 
 spec = importlib.util.spec_from_file_location("conftest", conftest_path)
 conftest = importlib.util.module_from_spec(spec)
@@ -46,7 +43,6 @@ class TestCheckDatabaseHealth:
             patch.object(execute, "execute_query") as mock_query,
             patch("sys.argv", ["execute.py"]),
         ):
-
             mock_query.side_effect = [
                 {
                     "success": True,
@@ -77,7 +73,6 @@ class TestCheckDatabaseHealth:
             patch.object(execute, "execute_query") as mock_query,
             patch("sys.argv", ["execute.py"]),
         ):
-
             mock_query.side_effect = [
                 {"success": True, "rows": []},  # connection pool
                 {
@@ -106,7 +101,6 @@ class TestCheckDatabaseHealth:
             patch.object(execute, "execute_query") as mock_query,
             patch("sys.argv", ["execute.py", "--log-lines", "50"]),
         ):
-
             mock_query.side_effect = [
                 {"success": True, "rows": []},  # connection pool
                 {"success": True, "rows": []},  # query performance
@@ -138,12 +132,12 @@ class TestCheckDatabaseHealth:
             else:
                 call_params = None
 
-            assert (
-                call_params is not None
-            ), "Expected 'params' parameter not found in call (checked both positional and keyword arguments)"
-            assert (
-                50 in call_params
-            ), "Expected log_lines value (50) not found in params"
+            assert call_params is not None, (
+                "Expected 'params' parameter not found in call (checked both positional and keyword arguments)"
+            )
+            assert 50 in call_params, (
+                "Expected log_lines value (50) not found in params"
+            )
 
     def test_validate_log_lines(self):
         """Test log_lines parameter validation."""
@@ -158,7 +152,6 @@ class TestCheckDatabaseHealth:
             patch.object(execute, "execute_query") as mock_query,
             patch("sys.argv", ["execute.py"]),
         ):
-
             mock_query.return_value = {
                 "success": False,
                 "error": "Connection refused",
@@ -168,6 +161,6 @@ class TestCheckDatabaseHealth:
             exit_code = main()
 
             # Should handle error gracefully and return non-zero exit code
-            assert (
-                exit_code == 1
-            ), "Expected exit code 1 for database connection failure"
+            assert exit_code == 1, (
+                "Expected exit code 1 for database connection failure"
+            )

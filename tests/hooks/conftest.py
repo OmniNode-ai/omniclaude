@@ -85,7 +85,9 @@ def _restore_real_kafka_producer():
             aiokafka.AIOKafkaProducer = producer_module.AIOKafkaProducer
 
             if "aiokafka" in sys.modules:
-                sys.modules["aiokafka"].AIOKafkaProducer = producer_module.AIOKafkaProducer
+                sys.modules[
+                    "aiokafka"
+                ].AIOKafkaProducer = producer_module.AIOKafkaProducer
 
             # Also reload the EventBusKafka module to pick up the real producer
             # This is necessary because EventBusKafka imports AIOKafkaProducer at import time
