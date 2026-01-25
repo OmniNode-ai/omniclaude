@@ -1055,19 +1055,6 @@ class SessionAggregator:
                 self._session_locks[session_id] = asyncio.Lock()
             return self._session_locks[session_id]
 
-    def _cleanup_session_lock(self, session_id: str) -> None:
-        """Remove the lock for a finalized session.
-
-        Called during session finalization to prevent memory leaks
-        from accumulating locks for completed sessions.
-
-        Note: This should only be called when already holding _locks_lock.
-
-        Args:
-            session_id: The session identifier to clean up.
-        """
-        self._session_locks.pop(session_id, None)
-
     async def _cleanup_session_lock_only(self, session_id: str) -> None:
         """Clean up the lock for a finalized session.
 

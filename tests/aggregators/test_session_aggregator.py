@@ -24,6 +24,7 @@ import pytest
 from omniclaude.aggregators import (
     ConfigSessionAggregator,
     EnumSessionStatus,
+    ProtocolSessionAggregator,
     SessionAggregator,
 )
 from omniclaude.hooks.schemas import (
@@ -1368,3 +1369,19 @@ class TestEventCount:
         # Count should not have increased
         snapshot = await aggregator.get_snapshot(session_id, correlation_id)
         assert snapshot["event_count"] == 2
+
+
+# =============================================================================
+# Protocol Conformance Tests
+# =============================================================================
+
+
+class TestProtocolConformance:
+    """Tests for protocol conformance."""
+
+    def test_session_aggregator_implements_protocol(
+        self, config: ConfigSessionAggregator
+    ) -> None:
+        """Verify SessionAggregator implements ProtocolSessionAggregator."""
+        aggregator = SessionAggregator(config)
+        assert isinstance(aggregator, ProtocolSessionAggregator)
