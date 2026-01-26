@@ -1,34 +1,68 @@
-"""Handler for context injection - orchestration layer.
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 OmniNode Team
+"""Handler for context injection - all business logic lives here.
 
-This handler:
-1. Calls the effect node (I/O) - returns raw patterns
-2. Applies filtering/sorting/limiting (post-I/O processing)
-3. Formats results (pure helper)
-4. Emits events (omniclaude publish helper)
+This handler performs:
+1. File I/O to load patterns from disk
+2. Filtering/sorting/limiting of patterns
+3. Markdown formatting
+4. Event emission to Kafka
 
-NOTE: emit_hook_event() is omniclaude's handler-layer plumbing for
-publishing to Kafka. It is NOT a true ONEX runtime primitive.
+Following ONEX patterns from omnibase_infra: handlers own all business logic.
+No separate node is needed for simple file-read operations.
+
+Part of OMN-1403: Context injection for session enrichment.
 """
 
 from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
+import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import UUID, uuid4
 
 from omniclaude.hooks.context_config import ContextInjectionConfig
 from omniclaude.hooks.handler_event_emitter import emit_hook_event
-from omniclaude.hooks.node_context_injection_effect import (
-    ModelContextRetrievalContract,
-    ModelPatternRecord,
-    NodeContextInjectionEffect,
-)
 from omniclaude.hooks.schemas import ContextSource, ModelHookContextInjectedPayload
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Data Models
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class ModelPatternRecord:
+    """A single learned pattern from persistence.
+
+    Frozen dataclass to ensure immutability after loading.
+
+    Attributes:
+        pattern_id: Unique identifier for the pattern.
+        domain: Domain/category of the pattern (e.g., "code_review", "testing").
+        title: Human-readable title for the pattern.
+        description: Detailed description of what the pattern represents.
+        confidence: Confidence score from 0.0 to 1.0.
+        usage_count: Number of times this pattern has been applied.
+        success_rate: Success rate from 0.0 to 1.0.
+        example_reference: Optional reference to an example (e.g., "path/to/file.py:42").
+    """
+
+    pattern_id: str
+    domain: str
+    title: str
+    description: str
+    confidence: float
+    usage_count: int
+    success_rate: float
+    example_reference: str | None = None
 
 
 @dataclass(frozen=True)
@@ -43,63 +77,380 @@ class ModelInjectionResult:
     retrieval_ms: int
 
 
-def _format_patterns_markdown(
-    patterns: list[ModelPatternRecord],
-    max_patterns: int,
-) -> str:
+# =============================================================================
+# Handler Implementation
+# =============================================================================
+
+
+class HandlerContextInjection:
+    """Handler for context injection from learned patterns.
+
+    This handler implements the full context injection workflow:
+    1. Load patterns from persistence files (I/O)
+    2. Filter by domain and confidence threshold
+    3. Sort by confidence descending
+    4. Limit to max patterns
+    5. Format as markdown
+    6. Emit event to Kafka
+
+    Following ONEX patterns from omnibase_infra:
+    - Handlers own all business logic
+    - No separate node needed for simple file-read operations
+    - Stateless and async-safe
+
+    Usage:
+        >>> handler = HandlerContextInjection()
+        >>> result = await handler.handle(project_root="/workspace/project")
+        >>> if result.success:
+        ...     print(result.context_markdown)
     """
-    Pure function: Format patterns as markdown.
-    NOT a node operation - just a helper function.
-    """
-    if not patterns:
-        return ""
 
-    patterns_to_format = patterns[:max_patterns]
+    def __init__(
+        self,
+        config: ContextInjectionConfig | None = None,
+    ) -> None:
+        """Initialize the handler.
 
-    lines: list[str] = [
-        "## Learned Patterns (Auto-Injected)",
-        "",
-        "The following patterns have been learned from previous sessions:",
-        "",
-    ]
+        Args:
+            config: Optional configuration. If None, loads from environment.
+        """
+        self._config = config
 
-    for pattern in patterns_to_format:
-        confidence_pct = f"{pattern.confidence * 100:.0f}%"
-        success_pct = f"{pattern.success_rate * 100:.0f}%"
+    @property
+    def handler_id(self) -> str:
+        """Return the handler identifier."""
+        return "handler-context-injection"
 
-        lines.append(f"### {pattern.title}")
-        lines.append("")
-        lines.append(f"- **Domain**: {pattern.domain}")
-        lines.append(f"- **Confidence**: {confidence_pct}")
-        lines.append(f"- **Success Rate**: {success_pct} ({pattern.usage_count} uses)")
-        lines.append("")
-        lines.append(pattern.description)
-        lines.append("")
+    async def handle(
+        self,
+        *,
+        project_root: str | None = None,
+        agent_domain: str = "",
+        session_id: str = "",
+        correlation_id: str = "",
+        emit_event: bool = True,
+    ) -> ModelInjectionResult:
+        """Execute context injection workflow.
 
-        if pattern.example_reference:
-            lines.append(f"*Example: `{pattern.example_reference}`*")
+        Args:
+            project_root: Optional project root path for pattern files.
+            agent_domain: Domain to filter patterns by (empty = all).
+            session_id: Session identifier for event emission.
+            correlation_id: Correlation ID for distributed tracing.
+            emit_event: Whether to emit Kafka event.
+
+        Returns:
+            ModelInjectionResult with formatted context markdown.
+        """
+        cfg = self._config or ContextInjectionConfig.from_env()
+
+        if not cfg.enabled:
+            return ModelInjectionResult(
+                success=True,
+                context_markdown="",
+                pattern_count=0,
+                context_size_bytes=0,
+                source="disabled",
+                retrieval_ms=0,
+            )
+
+        # Step 1: Load patterns from files (I/O)
+        start_time = time.monotonic()
+        try:
+            patterns = await asyncio.to_thread(
+                self._load_patterns_from_files,
+                project_root,
+            )
+            retrieval_ms = int((time.monotonic() - start_time) * 1000)
+            source = self._get_source_path(project_root)
+        except Exception as e:
+            retrieval_ms = int((time.monotonic() - start_time) * 1000)
+            logger.warning(f"Pattern loading failed: {e}")
+            return ModelInjectionResult(
+                success=True,  # Graceful degradation
+                context_markdown="",
+                pattern_count=0,
+                context_size_bytes=0,
+                source="error",
+                retrieval_ms=retrieval_ms,
+            )
+
+        # Step 2: Filter by domain
+        if agent_domain:
+            patterns = [
+                p for p in patterns if p.domain == agent_domain or p.domain == "general"
+            ]
+
+        # Step 3: Filter by confidence threshold
+        patterns = [p for p in patterns if p.confidence >= cfg.min_confidence]
+
+        # Step 4: Sort by confidence descending
+        patterns = sorted(patterns, key=lambda p: p.confidence, reverse=True)
+
+        # Step 5: Limit to max patterns
+        patterns = patterns[: cfg.max_patterns]
+
+        # Step 6: Format as markdown
+        context_markdown = self._format_patterns_markdown(patterns, cfg.max_patterns)
+        context_size_bytes = len(context_markdown.encode("utf-8"))
+
+        # Step 7: Emit event
+        if emit_event and patterns:
+            await self._emit_event(
+                patterns=patterns,
+                context_size_bytes=context_size_bytes,
+                retrieval_ms=retrieval_ms,
+                session_id=session_id,
+                correlation_id=correlation_id,
+                project_root=project_root,
+                agent_domain=agent_domain,
+                min_confidence=cfg.min_confidence,
+            )
+
+        return ModelInjectionResult(
+            success=True,
+            context_markdown=context_markdown,
+            pattern_count=len(patterns),
+            context_size_bytes=context_size_bytes,
+            source=source,
+            retrieval_ms=retrieval_ms,
+        )
+
+    # =========================================================================
+    # File I/O Methods
+    # =========================================================================
+
+    def _load_patterns_from_files(
+        self,
+        project_root: str | None,
+    ) -> list[ModelPatternRecord]:
+        """Load patterns from persistence files.
+
+        Finds and parses all pattern files, deduplicating by pattern_id.
+
+        Args:
+            project_root: Optional project root path.
+
+        Returns:
+            List of unique pattern records.
+        """
+        all_patterns: list[ModelPatternRecord] = []
+
+        # Find pattern files
+        pattern_files = self._find_pattern_files(
+            Path(project_root) if project_root else None
+        )
+
+        if not pattern_files:
+            logger.debug("No pattern files found")
+            return []
+
+        # Parse each file
+        for file_path in pattern_files:
+            try:
+                patterns = self._parse_pattern_file(file_path)
+                all_patterns.extend(patterns)
+                logger.debug(f"Loaded {len(patterns)} patterns from {file_path}")
+            except Exception as e:
+                logger.warning(f"Failed to parse {file_path}: {e}")
+                continue
+
+        # Deduplicate by pattern_id (keep first occurrence)
+        seen_ids: set[str] = set()
+        unique_patterns: list[ModelPatternRecord] = []
+        for pattern in all_patterns:
+            if pattern.pattern_id not in seen_ids:
+                seen_ids.add(pattern.pattern_id)
+                unique_patterns.append(pattern)
+
+        return unique_patterns
+
+    def _find_pattern_files(self, project_root: Path | None) -> list[Path]:
+        """Find learned pattern files in standard locations.
+
+        Searches:
+        1. Project-specific: {project_root}/.claude/learned_patterns.json
+        2. User-level: ~/.claude/learned_patterns.json
+        """
+        candidates: list[Path] = []
+
+        # Project-specific patterns
+        if project_root and project_root.is_dir():
+            project_file = project_root / ".claude" / "learned_patterns.json"
+            if project_file.exists():
+                candidates.append(project_file)
+
+        # User-level patterns
+        user_file = Path.home() / ".claude" / "learned_patterns.json"
+        if user_file.exists():
+            candidates.append(user_file)
+
+        return candidates
+
+    def _parse_pattern_file(self, file_path: Path) -> list[ModelPatternRecord]:
+        """Parse a learned_patterns.json file."""
+        with file_path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        if not isinstance(data, dict):
+            raise ValueError("Pattern file must be a JSON object")
+
+        patterns_data = data.get("patterns", [])
+        if not isinstance(patterns_data, list):
+            raise ValueError("'patterns' must be a list")
+
+        records: list[ModelPatternRecord] = []
+        for idx, item in enumerate(patterns_data):
+            try:
+                record = ModelPatternRecord(
+                    pattern_id=item["pattern_id"],
+                    domain=item["domain"],
+                    title=item["title"],
+                    description=item["description"],
+                    confidence=float(item["confidence"]),
+                    usage_count=int(item["usage_count"]),
+                    success_rate=float(item["success_rate"]),
+                    example_reference=item.get("example_reference"),
+                )
+                records.append(record)
+            except (KeyError, TypeError, ValueError) as e:
+                logger.debug(f"Skipping invalid pattern at index {idx}: {e}")
+                continue
+
+        return records
+
+    def _get_source_path(self, project_root: str | None) -> str:
+        """Return primary source file path."""
+        pattern_files = self._find_pattern_files(
+            Path(project_root) if project_root else None
+        )
+        return str(pattern_files[0]) if pattern_files else "none"
+
+    # =========================================================================
+    # Formatting Methods
+    # =========================================================================
+
+    def _format_patterns_markdown(
+        self,
+        patterns: list[ModelPatternRecord],
+        max_patterns: int,
+    ) -> str:
+        """Format patterns as markdown for context injection."""
+        if not patterns:
+            return ""
+
+        patterns_to_format = patterns[:max_patterns]
+
+        lines: list[str] = [
+            "## Learned Patterns (Auto-Injected)",
+            "",
+            "The following patterns have been learned from previous sessions:",
+            "",
+        ]
+
+        for pattern in patterns_to_format:
+            confidence_pct = f"{pattern.confidence * 100:.0f}%"
+            success_pct = f"{pattern.success_rate * 100:.0f}%"
+
+            lines.append(f"### {pattern.title}")
+            lines.append("")
+            lines.append(f"- **Domain**: {pattern.domain}")
+            lines.append(f"- **Confidence**: {confidence_pct}")
+            lines.append(
+                f"- **Success Rate**: {success_pct} ({pattern.usage_count} uses)"
+            )
+            lines.append("")
+            lines.append(pattern.description)
             lines.append("")
 
-        lines.append("---")
-        lines.append("")
+            if pattern.example_reference:
+                lines.append(f"*Example: `{pattern.example_reference}`*")
+                lines.append("")
 
-    # Remove trailing separator
-    if lines[-2:] == ["---", ""]:
-        lines = lines[:-2]
+            lines.append("---")
+            lines.append("")
 
-    return "\n".join(lines)
+        # Remove trailing separator
+        if lines[-2:] == ["---", ""]:
+            lines = lines[:-2]
+
+        return "\n".join(lines)
+
+    # =========================================================================
+    # Event Emission
+    # =========================================================================
+
+    async def _emit_event(
+        self,
+        *,
+        patterns: list[ModelPatternRecord],
+        context_size_bytes: int,
+        retrieval_ms: int,
+        session_id: str,
+        correlation_id: str,
+        project_root: str | None,
+        agent_domain: str,
+        min_confidence: float,
+    ) -> None:
+        """Emit context injection event to Kafka."""
+        # Derive entity_id
+        if session_id:
+            try:
+                entity_id = UUID(session_id)
+            except ValueError:
+                entity_id = self._derive_deterministic_id(
+                    correlation_id or str(uuid4()), project_root
+                )
+        elif correlation_id:
+            entity_id = self._derive_deterministic_id(correlation_id, project_root)
+        else:
+            # Cannot derive meaningful entity_id - skip
+            return
+
+        try:
+            payload = ModelHookContextInjectedPayload(
+                entity_id=entity_id,
+                session_id=session_id or str(entity_id),
+                correlation_id=UUID(correlation_id) if correlation_id else entity_id,
+                causation_id=uuid4(),
+                emitted_at=datetime.now(UTC),
+                context_source=ContextSource.PERSISTENCE_FILE,
+                pattern_count=len(patterns),
+                context_size_bytes=context_size_bytes,
+                agent_domain=agent_domain or None,
+                min_confidence_threshold=min_confidence,
+                retrieval_duration_ms=retrieval_ms,
+            )
+            await emit_hook_event(payload)
+            logger.debug(f"Context injection event emitted: {len(patterns)} patterns")
+        except Exception as e:
+            logger.warning(f"Failed to emit context injection event: {e}")
+
+    def _derive_deterministic_id(
+        self,
+        correlation_id: str,
+        project_root: str | None,
+    ) -> UUID:
+        """Derive a deterministic UUID from correlation_id and project."""
+        seed = f"{correlation_id}:{project_root or 'global'}"
+        hash_bytes = hashlib.sha256(seed.encode()).hexdigest()[:32]
+        return UUID(hash_bytes)
 
 
-def _derive_deterministic_session_id(
-    correlation_id: str,
-    project_root: str | None,
-) -> UUID:
-    """
-    Derive a deterministic UUID when session_id is missing.
-    """
-    seed = f"{correlation_id}:{project_root or 'global'}"
-    hash_bytes = hashlib.sha256(seed.encode()).hexdigest()[:32]
-    return UUID(hash_bytes)
+# =============================================================================
+# Convenience Functions (for backward compatibility)
+# =============================================================================
+
+# Global handler instance for simple usage
+_default_handler: HandlerContextInjection | None = None
+
+
+def _get_default_handler() -> HandlerContextInjection:
+    """Get or create default handler instance."""
+    global _default_handler
+    if _default_handler is None:
+        _default_handler = HandlerContextInjection()
+    return _default_handler
 
 
 async def inject_patterns(
@@ -111,128 +462,31 @@ async def inject_patterns(
     config: ContextInjectionConfig | None = None,
     emit_event: bool = True,
 ) -> ModelInjectionResult:
+    """Convenience function for context injection.
+
+    Creates a handler and invokes it. For repeated calls, consider
+    creating a HandlerContextInjection instance directly.
     """
-    Orchestrate context injection.
-
-    1. Call effect node (I/O) - returns raw patterns
-    2. Apply filtering/sorting/limiting (handler's job)
-    3. Format result (pure)
-    4. Emit event (omniclaude publish helper)
-    """
-    cfg = config or ContextInjectionConfig.from_env()
-
-    if not cfg.enabled:
-        return ModelInjectionResult(
-            success=True,
-            context_markdown="",
-            pattern_count=0,
-            context_size_bytes=0,
-            source="disabled",
-            retrieval_ms=0,
-        )
-
-    # Step 1: Effect node (I/O) - returns RAW patterns
-    node = NodeContextInjectionEffect()
-    result = await node.execute_effect(
-        ModelContextRetrievalContract(
-            project_root=project_root,
-            domain=agent_domain,
-        )
+    handler = (
+        HandlerContextInjection(config=config) if config else _get_default_handler()
     )
-
-    if not result.success:
-        return ModelInjectionResult(
-            success=True,  # Graceful degradation
-            context_markdown="",
-            pattern_count=0,
-            context_size_bytes=0,
-            source="error",
-            retrieval_ms=result.retrieval_ms,
-        )
-
-    # Step 2: Filtering/sorting/limiting (handler's job, not node's)
-    patterns = list(result.patterns)
-
-    # Filter by domain if specified
-    if agent_domain:
-        patterns = [
-            p for p in patterns if p.domain == agent_domain or p.domain == "general"
-        ]
-
-    # Filter by confidence threshold
-    patterns = [p for p in patterns if p.confidence >= cfg.min_confidence]
-
-    # Sort by confidence (descending)
-    patterns = sorted(patterns, key=lambda p: p.confidence, reverse=True)
-
-    # Limit to max_patterns
-    patterns = patterns[: cfg.max_patterns]
-
-    # Step 3: Pure formatting (helper function, not node)
-    context_markdown = _format_patterns_markdown(patterns, cfg.max_patterns)
-    context_size_bytes = len(context_markdown.encode("utf-8"))
-
-    # Step 4: Event emission (omniclaude publish helper)
-    if emit_event and patterns:
-        # Derive deterministic entity_id if session_id missing
-        if session_id:
-            try:
-                entity_id = UUID(session_id)
-            except ValueError:
-                entity_id = _derive_deterministic_session_id(
-                    correlation_id or str(uuid4()), project_root
-                )
-        elif correlation_id:
-            entity_id = _derive_deterministic_session_id(correlation_id, project_root)
-        else:
-            # Cannot derive meaningful entity_id - skip emission
-            emit_event = False
-
-        if emit_event:
-            try:
-                payload = ModelHookContextInjectedPayload(
-                    entity_id=entity_id,
-                    session_id=session_id or str(entity_id),
-                    correlation_id=UUID(correlation_id)
-                    if correlation_id
-                    else entity_id,
-                    causation_id=uuid4(),
-                    emitted_at=datetime.now(UTC),
-                    context_source=ContextSource.PERSISTENCE_FILE,
-                    pattern_count=len(patterns),
-                    context_size_bytes=context_size_bytes,
-                    agent_domain=agent_domain or None,
-                    min_confidence_threshold=cfg.min_confidence,
-                    retrieval_duration_ms=result.retrieval_ms,
-                )
-                await emit_hook_event(payload)
-                logger.debug(
-                    f"Context injection event emitted: {len(patterns)} patterns"
-                )
-            except Exception as e:
-                # Log but don't fail - event emission is observability
-                logger.warning(f"Failed to emit context injection event: {e}")
-
-    return ModelInjectionResult(
-        success=True,
-        context_markdown=context_markdown,
-        pattern_count=len(patterns),
-        context_size_bytes=context_size_bytes,
-        source=result.source,
-        retrieval_ms=result.retrieval_ms,
+    return await handler.handle(
+        project_root=project_root,
+        agent_domain=agent_domain,
+        session_id=session_id,
+        correlation_id=correlation_id,
+        emit_event=emit_event,
     )
 
 
 def inject_patterns_sync(**kwargs) -> ModelInjectionResult:
-    """
-    Synchronous wrapper for shell scripts.
+    """Synchronous wrapper for shell scripts.
 
-    Handles nested event loop detection to avoid RuntimeError when
-    called from contexts that already have a running loop.
+    Handles nested event loop detection to avoid RuntimeError.
     """
     try:
         asyncio.get_running_loop()
-        # Already in async context - use thread pool to run async function
+        # Already in async context - use thread pool
         logger.warning("inject_patterns_sync called from async context")
         import concurrent.futures
 
@@ -245,7 +499,12 @@ def inject_patterns_sync(**kwargs) -> ModelInjectionResult:
 
 
 __all__ = [
+    # Models
+    "ModelPatternRecord",
     "ModelInjectionResult",
+    # Handler class
+    "HandlerContextInjection",
+    # Convenience functions
     "inject_patterns",
     "inject_patterns_sync",
 ]

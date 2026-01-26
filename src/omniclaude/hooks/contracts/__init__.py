@@ -21,14 +21,10 @@ CONTRACT_SESSION_ENDED = CONTRACTS_DIR / "contract_hook_session_ended.yaml"
 CONTRACT_PROMPT_SUBMITTED = CONTRACTS_DIR / "contract_hook_prompt_submitted.yaml"
 CONTRACT_TOOL_EXECUTED = CONTRACTS_DIR / "contract_hook_tool_executed.yaml"
 
-# Context injection contract (OMN-1403)
-CONTRACT_CONTEXT_INJECTION = CONTRACTS_DIR / "contract_context_injection.yaml"
-
 __all__ = [
     "CONTRACTS_DIR",
     "CONTRACT_SESSION_STARTED",
     "CONTRACT_SESSION_ENDED",
     "CONTRACT_PROMPT_SUBMITTED",
     "CONTRACT_TOOL_EXECUTED",
-    "CONTRACT_CONTEXT_INJECTION",
 ]

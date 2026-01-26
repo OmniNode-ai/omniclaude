@@ -42,7 +42,6 @@ from __future__ import annotations
 
 from omniclaude.hooks.context_config import ContextInjectionConfig
 from omniclaude.hooks.contracts import (
-    CONTRACT_CONTEXT_INJECTION,
     CONTRACT_PROMPT_SUBMITTED,
     CONTRACT_SESSION_ENDED,
     CONTRACT_SESSION_STARTED,
@@ -50,7 +49,9 @@ from omniclaude.hooks.contracts import (
     CONTRACTS_DIR,
 )
 from omniclaude.hooks.handler_context_injection import (
+    HandlerContextInjection,
     ModelInjectionResult,
+    ModelPatternRecord,
     inject_patterns,
     inject_patterns_sync,
 )
@@ -62,14 +63,6 @@ from omniclaude.hooks.handler_event_emitter import (
     emit_tool_executed,
 )
 from omniclaude.hooks.models import ModelEventPublishResult
-
-# Context injection (OMN-1403)
-from omniclaude.hooks.node_context_injection_effect import (
-    ModelContextRetrievalContract,
-    ModelContextRetrievalResult,
-    ModelPatternRecord,
-    NodeContextInjectionEffect,
-)
 from omniclaude.hooks.schemas import (
     ContextSource,
     HookEventType,
@@ -119,12 +112,9 @@ __all__ = [
     "CONTRACT_SESSION_ENDED",
     "CONTRACT_PROMPT_SUBMITTED",
     "CONTRACT_TOOL_EXECUTED",
-    "CONTRACT_CONTEXT_INJECTION",
-    # Context injection (OMN-1403)
+    # Context injection handler (OMN-1403)
+    "HandlerContextInjection",
     "ModelPatternRecord",
-    "ModelContextRetrievalContract",
-    "ModelContextRetrievalResult",
-    "NodeContextInjectionEffect",
     "ModelInjectionResult",
     "inject_patterns",
     "inject_patterns_sync",

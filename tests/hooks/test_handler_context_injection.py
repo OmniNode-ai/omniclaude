@@ -1,14 +1,17 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 OmniNode Team
-"""Unit tests for NodeContextInjectionEffect.
+"""Unit tests for HandlerContextInjection.
 
-Tests verify the effect node:
-1. Only performs file I/O (no filtering/sorting)
-2. Returns raw patterns from disk
-3. Handles missing files gracefully
-4. Handles malformed JSON gracefully
-5. Deduplicates patterns by ID
-6. Uses async properly
+Tests verify the handler:
+1. Loads patterns from disk (I/O)
+2. Filters by domain when specified
+3. Filters by confidence threshold (default 0.7)
+4. Sorts by confidence descending
+5. Limits to max_patterns (default 5)
+6. Handles missing files gracefully
+7. Handles malformed JSON gracefully
+8. Deduplicates patterns by ID
+9. Uses async properly
 
 Part of OMN-1403: Context injection for session enrichment.
 """
@@ -21,11 +24,12 @@ from typing import Any
 
 import pytest
 
-from omniclaude.hooks.node_context_injection_effect import (
-    ModelContextRetrievalContract,
-    ModelContextRetrievalResult,
+from omniclaude.hooks.context_config import ContextInjectionConfig
+from omniclaude.hooks.handler_context_injection import (
+    HandlerContextInjection,
+    ModelInjectionResult,
     ModelPatternRecord,
-    NodeContextInjectionEffect,
+    inject_patterns,
 )
 
 # All tests in this module are unit tests
@@ -52,7 +56,7 @@ SAMPLE_PATTERN_2: dict[str, Any] = {
     "domain": "code_review",
     "title": "Test Pattern 2",
     "description": "Description for pattern 2",
-    "confidence": 0.7,
+    "confidence": 0.8,
     "usage_count": 5,
     "success_rate": 0.80,
 }
@@ -87,117 +91,42 @@ def pattern_file(temp_project_dir: Path) -> Path:
 
 
 @pytest.fixture
-def node() -> NodeContextInjectionEffect:
-    """Create a fresh node instance."""
-    return NodeContextInjectionEffect()
+def permissive_config() -> ContextInjectionConfig:
+    """Config with low threshold to allow all patterns through."""
+    return ContextInjectionConfig(
+        enabled=True,
+        min_confidence=0.0,  # Allow all
+        max_patterns=20,  # High limit (max allowed is 20)
+    )
+
+
+@pytest.fixture
+def handler(permissive_config: ContextInjectionConfig) -> HandlerContextInjection:
+    """Create a fresh handler instance with permissive config."""
+    return HandlerContextInjection(config=permissive_config)
+
+
+@pytest.fixture
+def default_handler() -> HandlerContextInjection:
+    """Create a handler with default config (min_confidence=0.7)."""
+    return HandlerContextInjection(config=ContextInjectionConfig(enabled=True))
 
 
 # =============================================================================
-# Node Properties Tests
+# Handler Properties Tests
 # =============================================================================
 
 
-class TestNodeProperties:
-    """Test node properties and identity."""
+class TestHandlerProperties:
+    """Test handler properties and identity."""
 
-    def test_default_node_id(self, node: NodeContextInjectionEffect) -> None:
-        """Test default node ID is set."""
-        assert node.node_id == "context-injection-effect-bootstrap"
+    def test_handler_id(self, handler: HandlerContextInjection) -> None:
+        """Test handler ID is set."""
+        assert handler.handler_id == "handler-context-injection"
 
-    def test_custom_node_id(self) -> None:
-        """Test custom node ID can be set."""
-        custom_node = NodeContextInjectionEffect(node_id="custom-id")
-        assert custom_node.node_id == "custom-id"
-
-    def test_node_type(self, node: NodeContextInjectionEffect) -> None:
-        """Test node type is 'effect'."""
-        assert node.node_type == "effect"
-
-    def test_node_type_is_string(self, node: NodeContextInjectionEffect) -> None:
-        """Test node type returns a string."""
-        assert isinstance(node.node_type, str)
-
-    def test_node_id_is_string(self, node: NodeContextInjectionEffect) -> None:
-        """Test node id returns a string."""
-        assert isinstance(node.node_id, str)
-
-
-# =============================================================================
-# Contract Model Tests
-# =============================================================================
-
-
-class TestContractModels:
-    """Test input/output contract models."""
-
-    def test_contract_default_values(self) -> None:
-        """Test contract has correct defaults."""
-        contract = ModelContextRetrievalContract()
-        assert contract.project_root is None
-        assert contract.domain == ""
-
-    def test_contract_with_values(self) -> None:
-        """Test contract accepts values."""
-        contract = ModelContextRetrievalContract(
-            project_root="/path/to/project",
-            domain="testing",
-        )
-        assert contract.project_root == "/path/to/project"
-        assert contract.domain == "testing"
-
-    def test_contract_is_frozen(self) -> None:
-        """Test contract is immutable (frozen)."""
-        contract = ModelContextRetrievalContract(project_root="/test")
-        with pytest.raises(Exception):  # Pydantic raises ValidationError for frozen
-            contract.project_root = "/other"  # type: ignore[misc]
-
-    def test_contract_forbids_extra_fields(self) -> None:
-        """Test contract rejects extra fields."""
-        with pytest.raises(Exception):  # Pydantic raises ValidationError
-            ModelContextRetrievalContract(
-                project_root="/test",
-                extra_field="not allowed",  # type: ignore[call-arg]
-            )
-
-    def test_result_model(self) -> None:
-        """Test result model."""
-        result = ModelContextRetrievalResult(
-            success=True,
-            patterns=[],
-            source="test",
-            retrieval_ms=42,
-        )
-        assert result.success is True
-        assert result.patterns == []
-        assert result.source == "test"
-        assert result.retrieval_ms == 42
-
-    def test_result_model_default_values(self) -> None:
-        """Test result model default values."""
-        result = ModelContextRetrievalResult(success=True)
-        assert result.patterns == []
-        assert result.source == "none"
-        assert result.retrieval_ms == 0
-        assert result.error_message is None
-
-    def test_result_model_with_error(self) -> None:
-        """Test result model with error message."""
-        result = ModelContextRetrievalResult(
-            success=False,
-            source="error",
-            error_message="Something went wrong",
-        )
-        assert result.success is False
-        assert result.source == "error"
-        assert result.error_message == "Something went wrong"
-
-    def test_result_retrieval_ms_non_negative(self) -> None:
-        """Test retrieval_ms must be non-negative."""
-        with pytest.raises(Exception):  # Pydantic raises ValidationError
-            ModelContextRetrievalResult(
-                success=True,
-                retrieval_ms=-1,
-            )
+    def test_handler_id_is_string(self, handler: HandlerContextInjection) -> None:
+        """Test handler ID returns a string."""
+        assert isinstance(handler.handler_id, str)
 
 
 # =============================================================================
@@ -278,44 +207,84 @@ class TestPatternRecord:
 
 
 # =============================================================================
-# Execute Effect Tests
+# Result Model Tests
 # =============================================================================
 
 
-class TestExecuteEffect:
-    """Test the main execute_effect method."""
+class TestInjectionResult:
+    """Test ModelInjectionResult dataclass."""
+
+    def test_create_result(self) -> None:
+        """Test creating a result."""
+        result = ModelInjectionResult(
+            success=True,
+            context_markdown="## Patterns",
+            pattern_count=2,
+            context_size_bytes=100,
+            source="/path/to/file",
+            retrieval_ms=42,
+        )
+        assert result.success is True
+        assert result.context_markdown == "## Patterns"
+        assert result.pattern_count == 2
+        assert result.context_size_bytes == 100
+        assert result.source == "/path/to/file"
+        assert result.retrieval_ms == 42
+
+    def test_result_is_frozen(self) -> None:
+        """Test result is immutable (frozen dataclass)."""
+        result = ModelInjectionResult(
+            success=True,
+            context_markdown="",
+            pattern_count=0,
+            context_size_bytes=0,
+            source="none",
+            retrieval_ms=0,
+        )
+        with pytest.raises(Exception):  # Frozen dataclass raises FrozenInstanceError
+            result.success = False  # type: ignore[misc]
+
+
+# =============================================================================
+# Handler Handle Tests
+# =============================================================================
+
+
+class TestHandlerHandle:
+    """Test the main handle method."""
 
     @pytest.mark.asyncio
     async def test_load_patterns_from_project(
         self,
-        node: NodeContextInjectionEffect,
+        handler: HandlerContextInjection,
         temp_project_dir: Path,
         pattern_file: Path,
     ) -> None:
         """Test loading patterns from project directory."""
-        contract = ModelContextRetrievalContract(
+        result = await handler.handle(
             project_root=str(temp_project_dir),
+            emit_event=False,
         )
-        result = await node.execute_effect(contract)
 
         assert result.success is True
-        assert len(result.patterns) == 2
+        assert result.pattern_count == 2
         assert result.retrieval_ms >= 0
         assert str(pattern_file) in result.source
 
     @pytest.mark.asyncio
-    async def test_returns_raw_patterns_no_filtering(
+    async def test_filters_by_confidence_threshold(
         self,
-        node: NodeContextInjectionEffect,
+        default_handler: HandlerContextInjection,
         temp_project_dir: Path,
         pattern_file: Path,
     ) -> None:
-        """Test that node returns raw patterns without filtering."""
+        """Test that handler filters patterns by confidence threshold."""
+        # Default config has min_confidence=0.7
         # Add a low-confidence pattern
         low_confidence_pattern = {
             **SAMPLE_PATTERN_1,
             "pattern_id": "pat-low",
-            "confidence": 0.1,
+            "confidence": 0.5,  # Below threshold
         }
         patterns_data = {
             **SAMPLE_PATTERN_FILE,
@@ -324,65 +293,168 @@ class TestExecuteEffect:
         with pattern_file.open("w") as f:
             json.dump(patterns_data, f)
 
-        contract = ModelContextRetrievalContract(
+        result = await default_handler.handle(
             project_root=str(temp_project_dir),
+            emit_event=False,
         )
-        result = await node.execute_effect(contract)
 
-        # Node should return ALL patterns (no filtering)
-        assert len(result.patterns) == 2
-        # Verify low confidence pattern is included
-        confidences = [p.confidence for p in result.patterns]
-        assert 0.1 in confidences
+        # Handler should filter out low confidence pattern (0.5 < 0.7)
+        assert result.pattern_count == 1
+        # High confidence pattern (0.9) should be included
+        assert "Test Pattern 1" in result.context_markdown
 
     @pytest.mark.asyncio
-    async def test_returns_raw_patterns_no_sorting(
+    async def test_sorts_by_confidence_descending(
         self,
-        node: NodeContextInjectionEffect,
+        handler: HandlerContextInjection,
         temp_project_dir: Path,
         pattern_file: Path,
     ) -> None:
-        """Test that node returns patterns in file order (no sorting)."""
-        # Create patterns in reverse confidence order
+        """Test that handler sorts patterns by confidence descending."""
+        # Create patterns in reverse confidence order (low first)
         patterns_data = {
             **SAMPLE_PATTERN_FILE,
             "patterns": [
-                {**SAMPLE_PATTERN_1, "pattern_id": "low", "confidence": 0.3},
-                {**SAMPLE_PATTERN_1, "pattern_id": "high", "confidence": 0.9},
+                {
+                    **SAMPLE_PATTERN_1,
+                    "pattern_id": "low",
+                    "title": "Low",
+                    "confidence": 0.3,
+                },
+                {
+                    **SAMPLE_PATTERN_1,
+                    "pattern_id": "high",
+                    "title": "High",
+                    "confidence": 0.9,
+                },
+                {
+                    **SAMPLE_PATTERN_1,
+                    "pattern_id": "mid",
+                    "title": "Mid",
+                    "confidence": 0.6,
+                },
             ],
         }
         with pattern_file.open("w") as f:
             json.dump(patterns_data, f)
 
-        contract = ModelContextRetrievalContract(
+        result = await handler.handle(
             project_root=str(temp_project_dir),
+            emit_event=False,
         )
-        result = await node.execute_effect(contract)
 
-        # Node should NOT sort - first pattern should still be low confidence
-        assert result.patterns[0].confidence == 0.3
-        assert result.patterns[1].confidence == 0.9
+        # Handler sorts by confidence descending
+        # High (0.9) should appear before Mid (0.6) before Low (0.3)
+        high_pos = result.context_markdown.find("High")
+        mid_pos = result.context_markdown.find("Mid")
+        low_pos = result.context_markdown.find("Low")
+        assert high_pos < mid_pos < low_pos
+
+    @pytest.mark.asyncio
+    async def test_limits_to_max_patterns(
+        self,
+        temp_project_dir: Path,
+        pattern_file: Path,
+    ) -> None:
+        """Test that handler limits to max_patterns from config."""
+        # Create many patterns
+        patterns = [
+            {**SAMPLE_PATTERN_1, "pattern_id": f"pat-{i}", "title": f"Pattern {i}"}
+            for i in range(10)
+        ]
+        patterns_data = {**SAMPLE_PATTERN_FILE, "patterns": patterns}
+        with pattern_file.open("w") as f:
+            json.dump(patterns_data, f)
+
+        # Config with max_patterns=3
+        config = ContextInjectionConfig(
+            enabled=True,
+            min_confidence=0.0,
+            max_patterns=3,
+        )
+        handler = HandlerContextInjection(config=config)
+
+        result = await handler.handle(
+            project_root=str(temp_project_dir),
+            emit_event=False,
+        )
+
+        # Should only have 3 patterns
+        assert result.pattern_count == 3
+
+    @pytest.mark.asyncio
+    async def test_filters_by_domain(
+        self,
+        handler: HandlerContextInjection,
+        temp_project_dir: Path,
+        pattern_file: Path,
+    ) -> None:
+        """Test that handler filters by domain when specified."""
+        # SAMPLE_PATTERN_1 has domain="testing"
+        # SAMPLE_PATTERN_2 has domain="code_review"
+        result = await handler.handle(
+            project_root=str(temp_project_dir),
+            agent_domain="testing",
+            emit_event=False,
+        )
+
+        # Should only include testing domain
+        assert result.pattern_count == 1
+        assert "Test Pattern 1" in result.context_markdown
+        assert "Test Pattern 2" not in result.context_markdown
+
+    @pytest.mark.asyncio
+    async def test_domain_filter_includes_general(
+        self,
+        handler: HandlerContextInjection,
+        temp_project_dir: Path,
+        pattern_file: Path,
+    ) -> None:
+        """Test that domain filter includes 'general' domain patterns."""
+        general_pattern = {
+            **SAMPLE_PATTERN_1,
+            "pattern_id": "pat-general",
+            "domain": "general",
+            "title": "General Pattern",
+        }
+        patterns_data = {
+            **SAMPLE_PATTERN_FILE,
+            "patterns": [SAMPLE_PATTERN_1, general_pattern],
+        }
+        with pattern_file.open("w") as f:
+            json.dump(patterns_data, f)
+
+        result = await handler.handle(
+            project_root=str(temp_project_dir),
+            agent_domain="testing",
+            emit_event=False,
+        )
+
+        # Should include both testing and general domain
+        assert result.pattern_count == 2
+        assert "Test Pattern 1" in result.context_markdown
+        assert "General Pattern" in result.context_markdown
 
     @pytest.mark.asyncio
     async def test_no_pattern_file(
         self,
-        node: NodeContextInjectionEffect,
+        handler: HandlerContextInjection,
         tmp_path: Path,
     ) -> None:
         """Test handling when no pattern file exists."""
-        contract = ModelContextRetrievalContract(
+        result = await handler.handle(
             project_root=str(tmp_path),
+            emit_event=False,
         )
-        result = await node.execute_effect(contract)
 
         assert result.success is True
-        assert len(result.patterns) == 0
+        assert result.pattern_count == 0
         assert result.source == "none"
 
     @pytest.mark.asyncio
     async def test_malformed_json(
         self,
-        node: NodeContextInjectionEffect,
+        handler: HandlerContextInjection,
         temp_project_dir: Path,
     ) -> None:
         """Test handling malformed JSON file."""
@@ -390,19 +462,19 @@ class TestExecuteEffect:
         with pattern_path.open("w") as f:
             f.write("{ invalid json }")
 
-        contract = ModelContextRetrievalContract(
+        result = await handler.handle(
             project_root=str(temp_project_dir),
+            emit_event=False,
         )
-        result = await node.execute_effect(contract)
 
         # Should succeed with empty patterns (graceful degradation)
         assert result.success is True
-        assert len(result.patterns) == 0
+        assert result.pattern_count == 0
 
     @pytest.mark.asyncio
     async def test_deduplication_by_pattern_id(
         self,
-        node: NodeContextInjectionEffect,
+        handler: HandlerContextInjection,
         temp_project_dir: Path,
     ) -> None:
         """Test that duplicate pattern IDs are deduplicated."""
@@ -417,66 +489,73 @@ class TestExecuteEffect:
         with pattern_path.open("w") as f:
             json.dump(duplicate_patterns, f)
 
-        contract = ModelContextRetrievalContract(
+        result = await handler.handle(
             project_root=str(temp_project_dir),
+            emit_event=False,
         )
-        result = await node.execute_effect(contract)
 
         # Should deduplicate - only 1 pattern with pat-001 ID
-        assert len(result.patterns) == 1
-        assert result.patterns[0].pattern_id == "pat-001"
+        assert result.pattern_count == 1
         # Keeps first occurrence, not the duplicate
-        assert result.patterns[0].title == "Test Pattern 1"
-
-    @pytest.mark.asyncio
-    async def test_domain_hint_not_filtered(
-        self,
-        node: NodeContextInjectionEffect,
-        temp_project_dir: Path,
-        pattern_file: Path,
-    ) -> None:
-        """Test that domain is just a hint, not filtered by node."""
-        contract = ModelContextRetrievalContract(
-            project_root=str(temp_project_dir),
-            domain="testing",  # Only one pattern has this domain
-        )
-        result = await node.execute_effect(contract)
-
-        # Node should NOT filter by domain - return all patterns
-        assert len(result.patterns) == 2
+        assert "Test Pattern 1" in result.context_markdown
 
     @pytest.mark.asyncio
     async def test_retrieval_ms_is_measured(
         self,
-        node: NodeContextInjectionEffect,
+        handler: HandlerContextInjection,
         temp_project_dir: Path,
         pattern_file: Path,
     ) -> None:
         """Test that retrieval_ms is populated."""
-        contract = ModelContextRetrievalContract(
+        result = await handler.handle(
             project_root=str(temp_project_dir),
+            emit_event=False,
         )
-        result = await node.execute_effect(contract)
 
         # retrieval_ms should be set (usually 0-5ms for local file)
         assert result.retrieval_ms >= 0
 
     @pytest.mark.asyncio
-    async def test_patterns_have_correct_types(
+    async def test_context_markdown_format(
         self,
-        node: NodeContextInjectionEffect,
+        handler: HandlerContextInjection,
         temp_project_dir: Path,
         pattern_file: Path,
     ) -> None:
-        """Test that returned patterns are ModelPatternRecord instances."""
-        contract = ModelContextRetrievalContract(
+        """Test that context_markdown has expected format."""
+        result = await handler.handle(
             project_root=str(temp_project_dir),
+            emit_event=False,
         )
-        result = await node.execute_effect(contract)
 
-        assert len(result.patterns) == 2
-        for pattern in result.patterns:
-            assert isinstance(pattern, ModelPatternRecord)
+        # Should have markdown header
+        assert "## Learned Patterns (Auto-Injected)" in result.context_markdown
+        # Should have pattern title
+        assert "### Test Pattern 1" in result.context_markdown
+        # Should have domain info
+        assert "**Domain**: testing" in result.context_markdown
+        # Should have confidence percentage
+        assert "**Confidence**: 90%" in result.context_markdown
+
+    @pytest.mark.asyncio
+    async def test_disabled_config_returns_empty(
+        self,
+        temp_project_dir: Path,
+        pattern_file: Path,
+    ) -> None:
+        """Test that disabled config returns empty result."""
+        config = ContextInjectionConfig(enabled=False)
+        handler = HandlerContextInjection(config=config)
+
+        result = await handler.handle(
+            project_root=str(temp_project_dir),
+            emit_event=False,
+        )
+
+        assert result.success is True
+        assert result.pattern_count == 0
+        assert result.context_markdown == ""
+        assert result.source == "disabled"
 
 
 # =============================================================================
@@ -490,7 +569,7 @@ class TestEdgeCases:
     @pytest.mark.asyncio
     async def test_empty_patterns_array(
         self,
-        node: NodeContextInjectionEffect,
+        handler: HandlerContextInjection,
         temp_project_dir: Path,
     ) -> None:
         """Test handling empty patterns array."""
@@ -498,18 +577,18 @@ class TestEdgeCases:
         with pattern_path.open("w") as f:
             json.dump({"version": "1.0.0", "patterns": []}, f)
 
-        contract = ModelContextRetrievalContract(
+        result = await handler.handle(
             project_root=str(temp_project_dir),
+            emit_event=False,
         )
-        result = await node.execute_effect(contract)
 
         assert result.success is True
-        assert len(result.patterns) == 0
+        assert result.pattern_count == 0
 
     @pytest.mark.asyncio
     async def test_invalid_pattern_skipped(
         self,
-        node: NodeContextInjectionEffect,
+        handler: HandlerContextInjection,
         temp_project_dir: Path,
     ) -> None:
         """Test that invalid patterns are skipped."""
@@ -524,23 +603,25 @@ class TestEdgeCases:
         with pattern_path.open("w") as f:
             json.dump(patterns_data, f)
 
-        contract = ModelContextRetrievalContract(
+        result = await handler.handle(
             project_root=str(temp_project_dir),
+            emit_event=False,
         )
-        result = await node.execute_effect(contract)
 
         # Should succeed with only valid pattern
         assert result.success is True
-        assert len(result.patterns) == 1
+        assert result.pattern_count == 1
 
     @pytest.mark.asyncio
     async def test_none_project_root(
         self,
-        node: NodeContextInjectionEffect,
+        handler: HandlerContextInjection,
     ) -> None:
         """Test with None project root."""
-        contract = ModelContextRetrievalContract(project_root=None)
-        result = await node.execute_effect(contract)
+        result = await handler.handle(
+            project_root=None,
+            emit_event=False,
+        )
 
         # Should succeed (may or may not find user-level patterns)
         assert result.success is True
@@ -549,22 +630,22 @@ class TestEdgeCases:
     @pytest.mark.asyncio
     async def test_nonexistent_project_path(
         self,
-        node: NodeContextInjectionEffect,
+        handler: HandlerContextInjection,
     ) -> None:
         """Test with nonexistent project path."""
-        contract = ModelContextRetrievalContract(
-            project_root="/nonexistent/path/that/does/not/exist"
+        result = await handler.handle(
+            project_root="/nonexistent/path/that/does/not/exist",
+            emit_event=False,
         )
-        result = await node.execute_effect(contract)
 
         # Should succeed with empty patterns (graceful degradation)
         assert result.success is True
-        assert len(result.patterns) == 0
+        assert result.pattern_count == 0
 
     @pytest.mark.asyncio
     async def test_patterns_not_a_list(
         self,
-        node: NodeContextInjectionEffect,
+        handler: HandlerContextInjection,
         temp_project_dir: Path,
     ) -> None:
         """Test handling when patterns is not a list."""
@@ -572,19 +653,19 @@ class TestEdgeCases:
         with pattern_path.open("w") as f:
             json.dump({"version": "1.0.0", "patterns": "not a list"}, f)
 
-        contract = ModelContextRetrievalContract(
+        result = await handler.handle(
             project_root=str(temp_project_dir),
+            emit_event=False,
         )
-        result = await node.execute_effect(contract)
 
         # Should succeed with empty patterns (graceful degradation)
         assert result.success is True
-        assert len(result.patterns) == 0
+        assert result.pattern_count == 0
 
     @pytest.mark.asyncio
     async def test_file_not_json_object(
         self,
-        node: NodeContextInjectionEffect,
+        handler: HandlerContextInjection,
         temp_project_dir: Path,
     ) -> None:
         """Test handling when file is not a JSON object."""
@@ -592,38 +673,38 @@ class TestEdgeCases:
         with pattern_path.open("w") as f:
             json.dump(["not", "an", "object"], f)
 
-        contract = ModelContextRetrievalContract(
+        result = await handler.handle(
             project_root=str(temp_project_dir),
+            emit_event=False,
         )
-        result = await node.execute_effect(contract)
 
         # Should succeed with empty patterns (graceful degradation)
         assert result.success is True
-        assert len(result.patterns) == 0
+        assert result.pattern_count == 0
 
     @pytest.mark.asyncio
     async def test_empty_file(
         self,
-        node: NodeContextInjectionEffect,
+        handler: HandlerContextInjection,
         temp_project_dir: Path,
     ) -> None:
         """Test handling empty file."""
         pattern_path = temp_project_dir / ".claude" / "learned_patterns.json"
         pattern_path.write_text("")
 
-        contract = ModelContextRetrievalContract(
+        result = await handler.handle(
             project_root=str(temp_project_dir),
+            emit_event=False,
         )
-        result = await node.execute_effect(contract)
 
         # Should succeed with empty patterns (graceful degradation)
         assert result.success is True
-        assert len(result.patterns) == 0
+        assert result.pattern_count == 0
 
     @pytest.mark.asyncio
     async def test_pattern_with_missing_optional_field(
         self,
-        node: NodeContextInjectionEffect,
+        handler: HandlerContextInjection,
         temp_project_dir: Path,
     ) -> None:
         """Test pattern without optional example_reference field."""
@@ -641,19 +722,20 @@ class TestEdgeCases:
         with pattern_path.open("w") as f:
             json.dump({"version": "1.0.0", "patterns": [pattern_without_ref]}, f)
 
-        contract = ModelContextRetrievalContract(
+        result = await handler.handle(
             project_root=str(temp_project_dir),
+            emit_event=False,
         )
-        result = await node.execute_effect(contract)
 
         assert result.success is True
-        assert len(result.patterns) == 1
-        assert result.patterns[0].example_reference is None
+        assert result.pattern_count == 1
+        # No example reference means no "Example:" line in markdown
+        assert "*Example:" not in result.context_markdown
 
     @pytest.mark.asyncio
     async def test_pattern_with_wrong_type_confidence(
         self,
-        node: NodeContextInjectionEffect,
+        handler: HandlerContextInjection,
         temp_project_dir: Path,
     ) -> None:
         """Test pattern with invalid confidence type is skipped."""
@@ -672,15 +754,15 @@ class TestEdgeCases:
         with pattern_path.open("w") as f:
             json.dump(patterns_data, f)
 
-        contract = ModelContextRetrievalContract(
+        result = await handler.handle(
             project_root=str(temp_project_dir),
+            emit_event=False,
         )
-        result = await node.execute_effect(contract)
 
         # Should succeed with only valid pattern
         assert result.success is True
-        assert len(result.patterns) == 1
-        assert result.patterns[0].pattern_id == "pat-001"
+        assert result.pattern_count == 1
+        assert "Test Pattern 1" in result.context_markdown
 
 
 # =============================================================================
@@ -694,16 +776,15 @@ class TestMultiplePatternFiles:
     @pytest.mark.asyncio
     async def test_deduplication_across_files(
         self,
-        node: NodeContextInjectionEffect,
+        handler: HandlerContextInjection,
         temp_project_dir: Path,
-        tmp_path: Path,
     ) -> None:
         """Test patterns are deduplicated when same ID appears in multiple files.
 
         Note: This test only checks project-level patterns since user-level
         patterns depend on the actual ~/.claude directory which we don't control.
         """
-        # Create project pattern file with a pattern
+        # Create project pattern file with two patterns
         pattern_path = temp_project_dir / ".claude" / "learned_patterns.json"
         with pattern_path.open("w") as f:
             json.dump(
@@ -717,16 +798,14 @@ class TestMultiplePatternFiles:
                 f,
             )
 
-        contract = ModelContextRetrievalContract(
+        result = await handler.handle(
             project_root=str(temp_project_dir),
+            emit_event=False,
         )
-        result = await node.execute_effect(contract)
 
         # Should have both patterns (different IDs)
         assert result.success is True
-        pattern_ids = {p.pattern_id for p in result.patterns}
-        assert "pat-001" in pattern_ids
-        assert "unique-project" in pattern_ids
+        assert result.pattern_count == 2
 
 
 # =============================================================================
@@ -740,29 +819,29 @@ class TestSourcePath:
     @pytest.mark.asyncio
     async def test_source_contains_pattern_file_path(
         self,
-        node: NodeContextInjectionEffect,
+        handler: HandlerContextInjection,
         temp_project_dir: Path,
         pattern_file: Path,
     ) -> None:
         """Test source field contains the pattern file path."""
-        contract = ModelContextRetrievalContract(
+        result = await handler.handle(
             project_root=str(temp_project_dir),
+            emit_event=False,
         )
-        result = await node.execute_effect(contract)
 
         assert result.source == str(pattern_file)
 
     @pytest.mark.asyncio
     async def test_source_is_none_when_no_files(
         self,
-        node: NodeContextInjectionEffect,
+        handler: HandlerContextInjection,
         tmp_path: Path,
     ) -> None:
         """Test source is 'none' when no pattern files exist."""
-        contract = ModelContextRetrievalContract(
+        result = await handler.handle(
             project_root=str(tmp_path),
+            emit_event=False,
         )
-        result = await node.execute_effect(contract)
 
         assert result.source == "none"
 
@@ -776,40 +855,36 @@ class TestAsyncBehavior:
     """Test async execution behavior."""
 
     @pytest.mark.asyncio
-    async def test_execute_effect_is_async(
+    async def test_handle_is_async(
         self,
-        node: NodeContextInjectionEffect,
+        handler: HandlerContextInjection,
     ) -> None:
-        """Test execute_effect is an async coroutine."""
+        """Test handle is an async coroutine."""
         import inspect
 
-        assert inspect.iscoroutinefunction(node.execute_effect)
+        assert inspect.iscoroutinefunction(handler.handle)
 
     @pytest.mark.asyncio
     async def test_multiple_concurrent_calls(
         self,
-        node: NodeContextInjectionEffect,
+        handler: HandlerContextInjection,
         temp_project_dir: Path,
         pattern_file: Path,
     ) -> None:
-        """Test multiple concurrent execute_effect calls work correctly."""
+        """Test multiple concurrent handle calls work correctly."""
         import asyncio
-
-        contract = ModelContextRetrievalContract(
-            project_root=str(temp_project_dir),
-        )
 
         # Execute multiple concurrent calls
         results = await asyncio.gather(
-            node.execute_effect(contract),
-            node.execute_effect(contract),
-            node.execute_effect(contract),
+            handler.handle(project_root=str(temp_project_dir), emit_event=False),
+            handler.handle(project_root=str(temp_project_dir), emit_event=False),
+            handler.handle(project_root=str(temp_project_dir), emit_event=False),
         )
 
         # All should succeed with same patterns
         for result in results:
             assert result.success is True
-            assert len(result.patterns) == 2
+            assert result.pattern_count == 2
 
 
 # =============================================================================
@@ -823,7 +898,7 @@ class TestPatternFileStructure:
     @pytest.mark.asyncio
     async def test_extra_fields_in_pattern_file_ignored(
         self,
-        node: NodeContextInjectionEffect,
+        handler: HandlerContextInjection,
         temp_project_dir: Path,
     ) -> None:
         """Test extra fields at top level of pattern file are ignored."""
@@ -839,18 +914,18 @@ class TestPatternFileStructure:
                 f,
             )
 
-        contract = ModelContextRetrievalContract(
+        result = await handler.handle(
             project_root=str(temp_project_dir),
+            emit_event=False,
         )
-        result = await node.execute_effect(contract)
 
         assert result.success is True
-        assert len(result.patterns) == 1
+        assert result.pattern_count == 1
 
     @pytest.mark.asyncio
     async def test_extra_fields_in_pattern_record_preserved(
         self,
-        node: NodeContextInjectionEffect,
+        handler: HandlerContextInjection,
         temp_project_dir: Path,
     ) -> None:
         """Test extra fields in pattern records don't cause errors."""
@@ -863,20 +938,20 @@ class TestPatternFileStructure:
         with pattern_path.open("w") as f:
             json.dump({"version": "1.0.0", "patterns": [pattern_with_extras]}, f)
 
-        contract = ModelContextRetrievalContract(
+        result = await handler.handle(
             project_root=str(temp_project_dir),
+            emit_event=False,
         )
-        result = await node.execute_effect(contract)
 
         # Should succeed - extra fields are simply not included in the record
         assert result.success is True
-        assert len(result.patterns) == 1
-        assert result.patterns[0].pattern_id == "pat-001"
+        assert result.pattern_count == 1
+        assert "Test Pattern 1" in result.context_markdown
 
     @pytest.mark.asyncio
     async def test_pattern_with_numeric_string_confidence(
         self,
-        node: NodeContextInjectionEffect,
+        handler: HandlerContextInjection,
         temp_project_dir: Path,
     ) -> None:
         """Test pattern with numeric string confidence is converted."""
@@ -889,57 +964,99 @@ class TestPatternFileStructure:
         with pattern_path.open("w") as f:
             json.dump({"version": "1.0.0", "patterns": [pattern_with_string_conf]}, f)
 
-        contract = ModelContextRetrievalContract(
+        result = await handler.handle(
             project_root=str(temp_project_dir),
+            emit_event=False,
         )
-        result = await node.execute_effect(contract)
 
         # Should succeed - float() handles string conversion
         assert result.success is True
-        assert len(result.patterns) == 1
-        assert result.patterns[0].confidence == 0.85
+        assert result.pattern_count == 1
+        # 85% confidence
+        assert "**Confidence**: 85%" in result.context_markdown
 
 
 # =============================================================================
-# Error Message Tests
+# Convenience Function Tests
 # =============================================================================
 
 
-class TestErrorMessages:
-    """Test error message handling in results."""
+class TestConvenienceFunctions:
+    """Test inject_patterns convenience function."""
 
     @pytest.mark.asyncio
-    async def test_success_has_no_error_message(
+    async def test_inject_patterns_function(
         self,
-        node: NodeContextInjectionEffect,
+        temp_project_dir: Path,
+        pattern_file: Path,
+        permissive_config: ContextInjectionConfig,
+    ) -> None:
+        """Test inject_patterns convenience function."""
+        result = await inject_patterns(
+            project_root=str(temp_project_dir),
+            config=permissive_config,
+            emit_event=False,
+        )
+
+        assert result.success is True
+        assert result.pattern_count == 2
+
+    @pytest.mark.asyncio
+    async def test_inject_patterns_with_domain(
+        self,
+        temp_project_dir: Path,
+        pattern_file: Path,
+        permissive_config: ContextInjectionConfig,
+    ) -> None:
+        """Test inject_patterns with domain filter."""
+        result = await inject_patterns(
+            project_root=str(temp_project_dir),
+            agent_domain="testing",
+            config=permissive_config,
+            emit_event=False,
+        )
+
+        # Should only include testing domain
+        assert result.pattern_count == 1
+        assert "Test Pattern 1" in result.context_markdown
+
+
+# =============================================================================
+# Context Size Tests
+# =============================================================================
+
+
+class TestContextSize:
+    """Test context size calculation."""
+
+    @pytest.mark.asyncio
+    async def test_context_size_bytes_calculated(
+        self,
+        handler: HandlerContextInjection,
         temp_project_dir: Path,
         pattern_file: Path,
     ) -> None:
-        """Test successful retrieval has no error message."""
-        contract = ModelContextRetrievalContract(
+        """Test context_size_bytes is calculated correctly."""
+        result = await handler.handle(
             project_root=str(temp_project_dir),
+            emit_event=False,
         )
-        result = await node.execute_effect(contract)
 
-        assert result.success is True
-        assert result.error_message is None
+        # Size should match the UTF-8 encoded length of the markdown
+        expected_size = len(result.context_markdown.encode("utf-8"))
+        assert result.context_size_bytes == expected_size
 
     @pytest.mark.asyncio
-    async def test_graceful_degradation_still_success(
+    async def test_empty_result_has_zero_size(
         self,
-        node: NodeContextInjectionEffect,
-        temp_project_dir: Path,
+        handler: HandlerContextInjection,
+        tmp_path: Path,
     ) -> None:
-        """Test graceful degradation (malformed file) still returns success."""
-        pattern_path = temp_project_dir / ".claude" / "learned_patterns.json"
-        with pattern_path.open("w") as f:
-            f.write("not valid json")
-
-        contract = ModelContextRetrievalContract(
-            project_root=str(temp_project_dir),
+        """Test empty result has zero context size."""
+        result = await handler.handle(
+            project_root=str(tmp_path),
+            emit_event=False,
         )
-        result = await node.execute_effect(contract)
 
-        # Graceful degradation - success with empty patterns
-        assert result.success is True
-        assert len(result.patterns) == 0
+        assert result.context_size_bytes == 0
+        assert result.context_markdown == ""
