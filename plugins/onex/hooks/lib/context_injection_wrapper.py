@@ -37,7 +37,14 @@ import json
 import logging
 import sys
 import time
-from typing import TypedDict, cast
+from typing import cast
+
+from learned_pattern_injector import (
+    InjectorInput,
+    InjectorOutput,
+    _create_empty_output,
+    _create_error_output,
+)
 
 # Configure logging to stderr (stdout reserved for JSON output)
 logging.basicConfig(
@@ -47,50 +54,6 @@ logging.basicConfig(
     stream=sys.stderr,
 )
 logger = logging.getLogger(__name__)
-
-
-class InjectorInput(TypedDict, total=False):
-    """Input schema from shell scripts."""
-
-    agent_name: str
-    domain: str
-    session_id: str
-    project: str
-    correlation_id: str
-    max_patterns: int
-    min_confidence: float
-
-
-class InjectorOutput(TypedDict):
-    """Output schema for shell scripts."""
-
-    success: bool
-    patterns_context: str
-    pattern_count: int
-    source: str
-    retrieval_ms: int
-
-
-def _create_empty_output(source: str = "none", retrieval_ms: int = 0) -> InjectorOutput:
-    """Create an empty output for cases with no patterns."""
-    return InjectorOutput(
-        success=True,
-        patterns_context="",
-        pattern_count=0,
-        source=source,
-        retrieval_ms=retrieval_ms,
-    )
-
-
-def _create_error_output(retrieval_ms: int = 0) -> InjectorOutput:
-    """Create an output for error cases (still returns success for hook compatibility)."""
-    return InjectorOutput(
-        success=True,  # Always success for hook compatibility
-        patterns_context="",
-        pattern_count=0,
-        source="error",
-        retrieval_ms=retrieval_ms,
-    )
 
 
 def main() -> None:

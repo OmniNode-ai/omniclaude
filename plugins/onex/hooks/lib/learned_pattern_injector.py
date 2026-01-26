@@ -97,9 +97,11 @@ class PatternFile:
 # =============================================================================
 
 
-class InjectorInput(TypedDict):
+class InjectorInput(TypedDict, total=False):
     """
     Input schema for the pattern injector.
+
+    All fields are optional with defaults applied at runtime via .get().
 
     Attributes:
         agent_name: Name of the agent requesting patterns.

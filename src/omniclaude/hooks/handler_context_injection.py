@@ -114,7 +114,9 @@ class HandlerContextInjection:
         Args:
             config: Optional configuration. If None, loads from environment at init time.
         """
-        self._config = config if config is not None else ContextInjectionConfig.from_env()
+        self._config = (
+            config if config is not None else ContextInjectionConfig.from_env()
+        )
 
     @property
     def handler_id(self) -> str:
