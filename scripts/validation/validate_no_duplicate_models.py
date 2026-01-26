@@ -23,7 +23,28 @@ Exit Codes:
     0 - No duplicate filenames found
     1 - Duplicate filenames detected
 
-Adapted from omnibase_core validation patterns for OMN-1558.
+STANDALONE JUSTIFICATION (OMN-1558):
+====================================
+This script is intentionally standalone and does NOT import from omnibase_core.
+
+omnibase_core.validation does NOT provide an equivalent validator for:
+- Detecting duplicate filenames across directories
+- Cross-directory naming conflict detection
+
+This validation is OmniClaude-specific because:
+1. It prevents import ambiguity when multiple files have the same name
+2. It enforces unique filenames within the src/omniclaude/ namespace
+3. omnibase_core validators focus on per-file analysis, not cross-file name collisions
+
+Available omnibase_core validators (none match this functionality):
+- ValidatorArchitecture: One model/enum/protocol per file
+- ValidatorAnyType: Any type usage detection
+- ValidatorPatterns: Code pattern validation
+- ValidatorNamingConvention: File/class/function naming conventions
+- ValidatorUnionUsage: Union type validation
+
+If omnibase_core adds a duplicate filename validator in the future,
+this script should be refactored to import from there.
 """
 
 from __future__ import annotations

@@ -17,7 +17,33 @@ Common secret patterns detected:
 
 Uses AST parsing for reliable detection of secret patterns and their values.
 
-Adapted from omnibase_core secret detection patterns.
+STANDALONE JUSTIFICATION (OMN-1558):
+====================================
+This script is intentionally standalone and does NOT import from omnibase_core.
+
+omnibase_core.validation does NOT provide a secret detection validator.
+Security-focused validation is outside omnibase_core's scope, which focuses on:
+- Code architecture (one model per file)
+- Type safety (Any type, Union usage)
+- Naming conventions
+- Code patterns
+
+This secret validator is OmniClaude-specific because:
+1. Security requirements vary by repository and deployment context
+2. Secret patterns (API keys, AWS credentials, etc.) are application-specific
+3. Bypass patterns (# secret-ok:, # nosec) may differ across projects
+4. False positive handling requires repository-specific exceptions
+
+Features unique to this validator:
+- AST-based detection (not just regex on raw text)
+- Metadata assignment detection (e.g., password_strength = "weak" is OK)
+- Enum context awareness (enum values are not secrets)
+- Binary operation detection (string concatenation obfuscation)
+- Comprehensive bypass comment support
+- OmniClaude-specific exception patterns
+
+If omnibase_core adds a security validation module in the future,
+this script should be evaluated for potential integration.
 """
 
 from __future__ import annotations

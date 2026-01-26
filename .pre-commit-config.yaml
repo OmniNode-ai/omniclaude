@@ -109,6 +109,16 @@ repos:
         always_run: true
         stages: [pre-push]
 
+      - id: pyright-typecheck
+        name: pyright (type checking - complements mypy)
+        # Pyright provides complementary type checking to mypy, catching different error categories.
+        # Uses pyrightconfig.json for configuration (basic mode with incremental strictness).
+        entry: bash -c 'uv run pyright src/omniclaude'
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
       - id: onex-validate
         name: ONEX validation
         entry: uv run python scripts/validate_onex.py
@@ -154,6 +164,22 @@ repos:
       - id: validate-single-class-per-file
         name: Single class per file
         entry: uv run python scripts/validation/validate_single_class_per_file.py --quiet
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: validate-enum-governance
+        name: ONEX Enum Governance Validation
+        entry: uv run python scripts/validation/validate_enum_governance.py --quiet
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: validate-exports
+        name: Validate __all__ exports
+        entry: uv run python scripts/validation/validate_exports.py
         language: system
         pass_filenames: false
         always_run: true

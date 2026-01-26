@@ -11,7 +11,30 @@ Validates that Pydantic models follow established conventions:
 
 Uses AST parsing for reliable detection without importing modules.
 
-Adapted from omnibase_core validation patterns.
+STANDALONE JUSTIFICATION (OMN-1558):
+====================================
+This script is intentionally standalone and does NOT import from omnibase_core.
+
+omnibase_core provides `checker_pydantic_pattern.py` which validates:
+- Model naming conventions (must start with "Model")
+- Field type recommendations (UUID instead of str for _id fields)
+- Enum usage for category/type/status fields
+
+This script validates DIFFERENT concerns:
+- frozen=True configuration (immutability enforcement)
+- extra="forbid"/"ignore" configuration (strict validation)
+- Explicit type annotations on all fields
+- Docstring presence on model classes
+- Any type usage detection
+
+These are complementary validations, not duplicates. omnibase_core's checker
+focuses on NAMING and TYPE RECOMMENDATIONS, while this script focuses on
+CONFIGURATION and DOCUMENTATION requirements specific to OmniClaude's
+stricter Pydantic model standards.
+
+To use both:
+- Run this script for frozen/extra/docstring validation
+- Use `ValidatorPatterns` from omnibase_core for naming conventions
 """
 
 from __future__ import annotations

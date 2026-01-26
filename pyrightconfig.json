@@ -1,0 +1,47 @@
+{
+  "include": ["src/omniclaude"],
+  "exclude": [
+    "**/__pycache__",
+    "**/.venv",
+    "**/node_modules",
+    "_archive/**",
+    "src/omniclaude/lib/**",
+    "**/tests/**"
+  ],
+
+  "typeCheckingMode": "basic",
+  "pythonVersion": "3.12",
+  "pythonPlatform": "Linux",
+
+  "reportUnusedVariable": "warning",
+  "reportIncompatibleMethodOverride": "warning",
+
+  "reportReturnType": false,
+  "reportArgumentType": false,
+  "reportAssignmentType": false,
+  "reportGeneralTypeIssues": false,
+  "reportCallIssue": false,
+  "reportIndexIssue": false,
+  "reportOperatorIssue": false,
+  "reportRedeclaration": false,
+  "reportInvalidTypeForm": false,
+
+  "reportUnknownParameterType": false,
+  "reportUnknownArgumentType": false,
+  "reportUnknownMemberType": false,
+  "reportUnknownVariableType": false,
+  "reportUnknownLambdaType": false,
+
+  "reportMissingImports": false,
+  "reportMissingTypeStubs": false,
+  "reportUnusedImport": false,
+  "reportUnsupportedDunderAll": false,
+
+  "reportAttributeAccessIssue": false,
+  "reportUnnecessaryComparison": false,
+  "reportUnnecessaryIsInstance": false,
+  "reportConstantRedefinition": false,
+  "reportUntypedFunctionDecorator": false,
+  "reportPrivateUsage": false,
+  "reportTypedDictNotRequiredAccess": false
+}

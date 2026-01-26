@@ -19,7 +19,34 @@ Exclusions:
 - Test files (test_*.py, *_test.py)
 - Files in lib/, _archive/ directories
 
-Adapted from omnibase_core architecture validation patterns.
+STANDALONE JUSTIFICATION (OMN-1558):
+====================================
+This script is intentionally standalone and does NOT import from omnibase_core.
+
+omnibase_core provides `ValidatorArchitecture` which enforces STRICT rules:
+- Single model per file (no multiple BaseModel subclasses)
+- Single enum per file (no multiple Enum subclasses)
+- Single protocol per file
+- NO mixing of models, enums, and protocols
+
+This script provides FLEXIBLE rules with companion type support:
+- Allows private classes alongside one public class
+- Allows enums as companion types (related constants)
+- Allows exceptions as companion types
+- Allows dataclasses as data transfer objects
+- Allows Pydantic models together (schemas/DTOs)
+- Allows NamedTuples and TypedDicts as companions
+- Allows Protocols as companions
+
+OmniClaude uses this more flexible validation because:
+1. Hook schemas may have companion enums (e.g., ViolationSeverity with Violation)
+2. Event models may have related TypedDicts or NamedTuples
+3. Strict one-model-per-file would require excessive file splitting
+
+For strict ONEX architecture validation, use:
+    from omnibase_core.validation import ValidatorArchitecture
+    validator = ValidatorArchitecture()
+    result = validator.validate(Path("src/"))
 """
 
 from __future__ import annotations

@@ -21,6 +21,7 @@ dev = [
     "pytest-split>=0.8.0",
     "ruff>=0.14.0",
     "mypy>=1.17.0",
+    "pyright>=1.1.0",
     "black>=24.0.0",
     "coverage[toml]>=7.4.0",
     "psutil>=5.9.0",
