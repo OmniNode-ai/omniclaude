@@ -17,9 +17,11 @@ Part of OMN-1403: Context injection for session enrichment.
 from __future__ import annotations
 
 import asyncio
+import functools
 import hashlib
 import json
 import logging
+import sys
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -30,6 +32,15 @@ from omniclaude.hooks.context_config import ContextInjectionConfig
 from omniclaude.hooks.handler_event_emitter import emit_hook_event
 from omniclaude.hooks.schemas import ContextSource, ModelHookContextInjectedPayload
 
+# Add plugins lib to path for shared types (CLI independence maintained)
+_plugins_lib = (
+    Path(__file__).parent.parent.parent.parent / "plugins" / "onex" / "hooks" / "lib"
+)
+if str(_plugins_lib) not in sys.path:
+    sys.path.insert(0, str(_plugins_lib))
+
+from pattern_types import PatternRecord
+
 logger = logging.getLogger(__name__)
 
 
@@ -37,40 +48,8 @@ logger = logging.getLogger(__name__)
 # Data Models
 # =============================================================================
 
-# NOTE: ModelPatternRecord is the canonical definition. A standalone copy (PatternRecord)
-# exists in plugins/onex/hooks/lib/learned_pattern_injector.py for CLI independence.
-# If the schema changes, update BOTH files.
-
-
-@dataclass(frozen=True)
-class ModelPatternRecord:
-    """A single learned pattern from persistence.
-
-    Frozen dataclass to ensure immutability after loading.
-
-    Note: This is the canonical definition. A standalone copy (PatternRecord with
-    validation) exists in plugins/onex/hooks/lib/learned_pattern_injector.py
-    for CLI independence. Keep both in sync if schema changes.
-
-    Attributes:
-        pattern_id: Unique identifier for the pattern.
-        domain: Domain/category of the pattern (e.g., "code_review", "testing").
-        title: Human-readable title for the pattern.
-        description: Detailed description of what the pattern represents.
-        confidence: Confidence score from 0.0 to 1.0.
-        usage_count: Number of times this pattern has been applied.
-        success_rate: Success rate from 0.0 to 1.0.
-        example_reference: Optional reference to an example (e.g., "path/to/file.py:42").
-    """
-
-    pattern_id: str
-    domain: str
-    title: str
-    description: str
-    confidence: float
-    usage_count: int
-    success_rate: float
-    example_reference: str | None = None
+# Type alias for backward compatibility - canonical definition is in pattern_types.py
+type ModelPatternRecord = PatternRecord
 
 
 @dataclass(frozen=True)
@@ -357,7 +336,7 @@ class HandlerContextInjection:
         records: list[ModelPatternRecord] = []
         for idx, item in enumerate(patterns_data):
             try:
-                record = ModelPatternRecord(
+                record = PatternRecord(
                     pattern_id=item["pattern_id"],
                     domain=item["domain"],
                     title=item["title"],
@@ -472,6 +451,9 @@ class HandlerContextInjection:
             entity_id = self._derive_deterministic_id(correlation_id, project_root)
         else:
             # Cannot derive meaningful entity_id - skip
+            logger.debug(
+                "Skipping event emission: no session_id or correlation_id provided"
+            )
             return
 
         # Resolve correlation_id to UUID, handling non-UUID values gracefully
@@ -524,16 +506,14 @@ class HandlerContextInjection:
 # Convenience Functions (for backward compatibility)
 # =============================================================================
 
-# Global handler instance for simple usage
-_default_handler: HandlerContextInjection | None = None
 
-
+@functools.lru_cache(maxsize=1)
 def _get_default_handler() -> HandlerContextInjection:
-    """Get or create default handler instance."""
-    global _default_handler
-    if _default_handler is None:
-        _default_handler = HandlerContextInjection()
-    return _default_handler
+    """Get or create default handler instance.
+
+    Uses lru_cache for thread-safe lazy initialization.
+    """
+    return HandlerContextInjection()
 
 
 async def inject_patterns(

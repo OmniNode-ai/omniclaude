@@ -16,9 +16,16 @@ import json
 import logging
 import sys
 import time
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import cast
+
+# Import shared types from pattern_types module (same directory)
+from pattern_types import (
+    InjectorInput,
+    InjectorOutput,
+    LoadPatternsResult,
+    PatternRecord,
+)
 
 # Configure logging to stderr (stdout reserved for JSON output)
 logging.basicConfig(
@@ -28,133 +35,6 @@ logging.basicConfig(
     stream=sys.stderr,
 )
 logger = logging.getLogger(__name__)
-
-
-# =============================================================================
-# Data Classes
-# =============================================================================
-
-# NOTE: PatternRecord is intentionally duplicated here (canonical: ModelPatternRecord
-# in src/omniclaude/hooks/handler_context_injection.py).
-#
-# Rationale for duplication:
-# 1. This CLI module is designed to run standalone without the full omniclaude package
-# 2. The plugin directory (plugins/onex/hooks/lib/) should not import from src/omniclaude/
-#    to avoid circular dependencies and maintain CLI independence
-# 3. Claude Code hooks execute this as a subprocess - it must be self-contained
-#
-# If the schema changes, update BOTH:
-# - plugins/onex/hooks/lib/learned_pattern_injector.py (this file, with validation)
-# - src/omniclaude/hooks/handler_context_injection.py (canonical, frozen dataclass)
-
-
-@dataclass
-class PatternRecord:
-    """
-    Represents a single learned pattern from the persistence store.
-
-    Note: This is a standalone copy of ModelPatternRecord for CLI independence.
-    See module docstring for rationale. This version includes validation.
-
-    Attributes:
-        pattern_id: Unique identifier for the pattern.
-        domain: Domain/category of the pattern (e.g., "code_review", "testing").
-        title: Human-readable title for the pattern.
-        description: Detailed description of what the pattern represents.
-        confidence: Confidence score from 0.0 to 1.0.
-        usage_count: Number of times this pattern has been applied.
-        success_rate: Success rate from 0.0 to 1.0.
-        example_reference: Optional reference to an example (e.g., "path/to/file.py:42").
-    """
-
-    pattern_id: str
-    domain: str
-    title: str
-    description: str
-    confidence: float
-    usage_count: int
-    success_rate: float
-    example_reference: str | None = None
-
-    def __post_init__(self) -> None:
-        """Validate fields after initialization."""
-        if not 0.0 <= self.confidence <= 1.0:
-            raise ValueError(
-                f"confidence must be between 0.0 and 1.0, got {self.confidence}"
-            )
-        if not 0.0 <= self.success_rate <= 1.0:
-            raise ValueError(
-                f"success_rate must be between 0.0 and 1.0, got {self.success_rate}"
-            )
-        if self.usage_count < 0:
-            raise ValueError(
-                f"usage_count must be non-negative, got {self.usage_count}"
-            )
-
-
-@dataclass
-class PatternFile:
-    """
-    Represents the structure of a learned_patterns.json file.
-
-    Attributes:
-        version: Schema version of the pattern file.
-        last_updated: ISO-8601 timestamp of last update.
-        patterns: List of pattern records.
-    """
-
-    version: str
-    last_updated: str
-    patterns: list[PatternRecord] = field(default_factory=list)
-
-
-# =============================================================================
-# TypedDicts for JSON Interface
-# =============================================================================
-
-
-class InjectorInput(TypedDict, total=False):
-    """
-    Input schema for the pattern injector.
-
-    All fields are optional with defaults applied at runtime via .get().
-
-    Attributes:
-        agent_name: Name of the agent requesting patterns.
-        domain: Domain to filter patterns by (empty string for all domains).
-        session_id: Current session identifier.
-        project: Project root path.
-        correlation_id: Correlation ID for tracing.
-        max_patterns: Maximum number of patterns to include.
-        min_confidence: Minimum confidence threshold for pattern inclusion.
-    """
-
-    agent_name: str
-    domain: str
-    session_id: str
-    project: str
-    correlation_id: str
-    max_patterns: int
-    min_confidence: float
-
-
-class InjectorOutput(TypedDict):
-    """
-    Output schema for the pattern injector.
-
-    Attributes:
-        success: Whether pattern loading succeeded.
-        patterns_context: Formatted markdown context for injection.
-        pattern_count: Number of patterns included.
-        source: Source of patterns (file path or "none").
-        retrieval_ms: Time taken to retrieve and format patterns.
-    """
-
-    success: bool
-    patterns_context: str
-    pattern_count: int
-    source: str
-    retrieval_ms: int
 
 
 # =============================================================================
@@ -242,20 +122,6 @@ def _parse_pattern_file(file_path: Path) -> list[PatternRecord]:
             continue
 
     return records
-
-
-@dataclass
-class LoadPatternsResult:
-    """
-    Result from loading patterns including source attribution.
-
-    Attributes:
-        patterns: List of filtered and sorted pattern records.
-        source_files: List of files that contributed at least one pattern.
-    """
-
-    patterns: list[PatternRecord]
-    source_files: list[Path]
 
 
 def load_patterns(

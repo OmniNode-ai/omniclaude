@@ -18,7 +18,8 @@ Input JSON:
         "project": "/path/to/project",
         "correlation_id": "xyz-456",
         "max_patterns": 5,
-        "min_confidence": 0.7
+        "min_confidence": 0.7,
+        "emit_event": true
     }
 
 Output JSON:
@@ -93,6 +94,7 @@ def main() -> None:
         correlation_id = input_json.get("correlation_id", "")
         max_patterns = int(input_json.get("max_patterns", 5))
         min_confidence = float(input_json.get("min_confidence", 0.7))
+        emit_event = bool(input_json.get("emit_event", True))
 
         # Import handler here to avoid import errors if dependencies missing
         try:
@@ -100,7 +102,7 @@ def main() -> None:
             from omniclaude.hooks.handler_context_injection import inject_patterns_sync
         except ImportError as e:
             logger.warning(f"Failed to import handler: {e}")
-            # Fall back to legacy injector if new handler not available
+            # Handler import failed - return empty output for graceful degradation
             elapsed_ms = int((time.monotonic() - start_time) * 1000)
             output = _create_error_output(retrieval_ms=elapsed_ms)
             print(json.dumps(output))
@@ -119,7 +121,7 @@ def main() -> None:
             session_id=session_id,
             correlation_id=correlation_id,
             config=config,
-            emit_event=True,  # Emit Kafka events
+            emit_event=emit_event,
         )
 
         # Calculate elapsed time
