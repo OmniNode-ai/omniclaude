@@ -44,7 +44,7 @@ async def pattern_examples():
 
     await logger.log_tool_call(
         tool_name="Write",
-        tool_parameters={"file_path": "/tmp/output.txt"},
+        tool_parameters={"file_path": "/tmp/output.txt"},  # noqa: S108
         tool_result={"success": True, "bytes_written": len(result)},
         duration_ms=duration_ms,
     )

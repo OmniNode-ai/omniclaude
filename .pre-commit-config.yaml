@@ -1,3 +1,29 @@
+---
+# OmniClaude Pre-commit Configuration
+# Two-stage validation strategy for optimal developer experience
+#
+# PERFORMANCE OPTIMIZATION (2026-01):
+# ====================================
+# Two-stage validation strategy matching omnibase_core patterns:
+#
+# PRE-COMMIT (target: <15 seconds):
+#   - Formatting (ruff format/fix)
+#   - Basic file checks (whitespace, large files, merge conflicts)
+#   - Quick structural validations
+#   - Clean output directory
+#
+# PRE-PUSH (thorough checks before sharing):
+#   - Security checks (bandit, secret detection)
+#   - mypy type checking
+#   - ONEX validation
+#   - Clean root validation
+#
+# USAGE:
+#   pre-commit install                         # Install pre-commit hooks
+#   pre-commit install --hook-type pre-push    # Install pre-push hooks
+#   pre-commit run --all-files                 # Run all pre-commit hooks
+#   pre-commit run --all-files --hook-stage pre-push  # Run pre-push hooks
+
 repos:
   # Fast file checks that can run in parallel
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -5,23 +31,33 @@ repos:
     hooks:
       - id: trailing-whitespace
         exclude: '\.github/workflows(?:-generated)?/.*\.ya?ml$'
+        stages: [pre-commit]
       - id: end-of-file-fixer
         exclude: '\.github/workflows(?:-generated)?/.*\.ya?ml$'
+        stages: [pre-commit]
       # check-yaml removed: conflicts with agent YAML files that use custom syntax
       - id: check-added-large-files
+        stages: [pre-commit]
       - id: check-merge-conflict
+        stages: [pre-commit]
       - id: check-toml
+        stages: [pre-commit]
 
   # Fast Python formatting and linting (staged files only)
-  # Order: format → fix → check (matches CI behavior)
+  # Order: format -> fix -> check (matches CI behavior)
   # Note: To run on entire codebase, use: uv run ruff check src/ tests/
   - repo: local
     hooks:
+      # ============================================================
+      # STAGE 1: PRE-COMMIT (fast, target <15 seconds)
+      # ============================================================
+
       - id: clean-output-directory
         name: clean output directory (prevent test artifacts)
         entry: bash -c 'rm -rf output/ && exit 0'
         language: system
         pass_filenames: false
+        always_run: true
         stages: [pre-commit]
 
       - id: ruff-format
@@ -48,33 +84,86 @@ repos:
         exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|_archive/.*|src/omniclaude/lib/.*'
         stages: [pre-commit]
 
+      # ============================================================
+      # STAGE 2: PRE-PUSH (thorough checks before sharing)
+      # ============================================================
+
       - id: bandit-security
-        name: bandit (staged files)
-        entry: uv run bandit -c .bandit
+        name: bandit security scan
+        entry: uv run bandit -r -c .bandit
         language: system
         types: [python]
-        exclude: '^\.[^/]*$|^\..*/.*|_archive/.*|tests/.*'
-        stages: [pre-commit]
+        exclude: '^\.[^/]*$|^\..*/.*|_archive/.*|tests/.*|lib/.*'
+        pass_filenames: true
+        stages: [pre-push]
 
       - id: mypy-typecheck
         name: mypy (type checking - match CI)
-        # Only check non-legacy code - lib/ excluded (will be deleted post-Beta)
+        # SCOPE: Currently limited to hooks/ and config/ (strict, well-typed modules)
+        # TODO(post-Beta): After lib/ deletion, expand to full src/omniclaude/:
+        #   entry: bash -c 'uv run mypy src/omniclaude/ --ignore-missing-imports'
+        # Exclusion: lib/ contains legacy code that will be deleted post-Beta
         entry: bash -c 'uv run mypy src/omniclaude/hooks/ src/omniclaude/config/ --ignore-missing-imports'
         language: system
-        types: [python]
-        exclude: '^\.[^/]*$|^\..*/.*|_archive/.*'
-        stages: [pre-commit]
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
 
       - id: onex-validate
-        name: ONEX validation (staged files)
+        name: ONEX validation
         entry: uv run python scripts/validate_onex.py
         language: system
-        types: [python]
+        pass_filenames: false
+        always_run: true
         # Exclude: hidden files, _archive, tests, and lib/ (legacy code, post-Beta deletion)
-        exclude: '^\.[^/]*$|^\..*/.*|_archive/.*|tests/.*|src/omniclaude/lib/.*'
-        stages: [pre-commit]
+        stages: [pre-push]
+
+      - id: validate-clean-root
+        name: Validate clean root directory
+        entry: bash scripts/validate-clean-root.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: validate-secrets
+        name: ONEX Secret Detection
+        entry: uv run python scripts/validation/validate_secrets.py
+        language: system
+        pass_filenames: true
+        types: [python]
+        exclude: '^\.[^/]*$|^\..*/.*|_archive/.*|tests/.*'
+        stages: [pre-push]
+
+      - id: validate-no-duplicate-models
+        name: No duplicate model filenames
+        entry: uv run python scripts/validation/validate_no_duplicate_models.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: validate-pydantic-patterns
+        name: Pydantic pattern validation
+        entry: uv run python scripts/validation/validate_pydantic_patterns.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: validate-single-class-per-file
+        name: Single class per file
+        entry: uv run python scripts/validation/validate_single_class_per_file.py --quiet
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
 
 # Configuration
+default_install_hook_types: [pre-commit, pre-push]
+default_stages: [pre-commit]
+fail_fast: false
+
 ci:
   autofix_commit_msg: |
     [pre-commit.ci] auto fixes from pre-commit.com hooks

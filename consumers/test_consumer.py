@@ -16,18 +16,16 @@ import json
 import sys
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import psycopg2
 import requests
 from kafka import KafkaProducer
 
-
 # Add config for type-safe settings
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import settings
-
 
 # Add _shared to path
 SCRIPT_DIR = Path(__file__).parent
@@ -53,11 +51,11 @@ def create_test_event(agent_name: str, action_type: str = "tool_call") -> dict:
         "action_name": f"Test{action_type.title()}",
         "action_details": {
             "test": True,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         },
         "debug_mode": True,
         "duration_ms": 42,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
 
@@ -216,7 +214,7 @@ def query_recent_traces():
     if rows:
         print("✅ Recent traces:")
         for row in rows:
-            corr_id, agent, actions, errors, successes, duration = row
+            _corr_id, agent, actions, errors, successes, duration = row
             print(
                 f"  - {agent}: {actions} actions, {errors} errors, {successes} successes ({duration:.1f}ms)"
             )

@@ -22,7 +22,6 @@ import asyncio
 import hashlib
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional
 from uuid import uuid4
 
 import click
@@ -32,7 +31,6 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.syntax import Syntax
 from rich.table import Table
-
 
 try:
     import asyncpg
@@ -69,7 +67,6 @@ console = Console()
 
 # Import environment validation
 from env_validation import validate_required_env_vars
-
 
 # Validate environment configuration in production
 validate_required_env_vars(
@@ -159,7 +156,7 @@ def stf():
 @click.option(
     "--min-quality", default=0.0, type=float, help="Minimum quality score (0.0-1.0)"
 )
-def list_stfs(limit: int, category: Optional[str], min_quality: float):
+def list_stfs(limit: int, category: str | None, min_quality: float):
     """List all STFs with quality scores"""
 
     async def run():
@@ -198,7 +195,7 @@ def list_stfs(limit: int, category: Optional[str], min_quality: float):
                     WHERE {where_clause}
                     ORDER BY quality_score DESC, usage_count DESC
                     LIMIT {limit_placeholder}
-                    """
+                    """  # nosec B608 - parameterized query with $N placeholders
 
                     results = await conn.fetch(query, *params)
 
@@ -271,7 +268,7 @@ def list_stfs(limit: int, category: Optional[str], min_quality: float):
 [cyan]Total STFs:[/cyan] {len(results)}
 [cyan]Average Quality:[/cyan] {avg_quality:.2f}
 [cyan]Total Usage:[/cyan] {total_usage}
-[cyan]Approved:[/cyan] {approved_count} ({approved_count/len(results):.1%})
+[cyan]Approved:[/cyan] {approved_count} ({approved_count / len(results):.1%})
         """
         console.print(Panel(summary.strip(), title="Summary", border_style="cyan"))
 
@@ -370,7 +367,7 @@ def show_stf(stf_id: str):
 @click.option("--category", help="Problem category")
 @click.option("--min-quality", default=0.7, type=float, help="Minimum quality score")
 @click.option("--limit", default=10, type=int, help="Maximum results")
-def search(category: Optional[str], min_quality: float, limit: int):
+def search(category: str | None, min_quality: float, limit: int):
     """Search STFs by criteria"""
 
     async def run():
@@ -412,7 +409,7 @@ def search(category: Optional[str], min_quality: float, limit: int):
                     WHERE {where_clause}
                     ORDER BY quality_score DESC, usage_count DESC
                     LIMIT {limit_placeholder}
-                    """
+                    """  # nosec B608 - parameterized query with $N placeholders
 
                     results = await conn.fetch(query, *params)
 
@@ -461,9 +458,7 @@ def search(category: Optional[str], min_quality: float, limit: int):
 @click.option("--description", required=True, help="STF description")
 @click.option("--category", help="Problem category")
 @click.option("--quality", default=0.8, type=float, help="Quality score (0.0-1.0)")
-def store(
-    code: str, name: str, description: str, category: Optional[str], quality: float
-):
+def store(code: str, name: str, description: str, category: str | None, quality: float):
     """Store new STF from code file"""
 
     async def run():
@@ -548,7 +543,7 @@ def model():
     "--provider", help="Filter by provider (anthropic, openai, google, zai, together)"
 )
 @click.option("--active-only/--all", default=True, help="Show only active models")
-def list_models(provider: Optional[str], active_only: bool):
+def list_models(provider: str | None, active_only: bool):
     """List all models in price catalog"""
 
     async def run():
@@ -582,7 +577,7 @@ def list_models(provider: Optional[str], active_only: bool):
                     FROM model_price_catalog
                     WHERE {where_clause}
                     ORDER BY provider, model_name
-                    """
+                    """  # nosec B608 - parameterized query with $N placeholders
 
                     results = await conn.fetch(query, *params)
 
@@ -634,7 +629,7 @@ def list_models(provider: Optional[str], active_only: bool):
         console.print(table)
 
         # Summary
-        total_providers = len(set(m["provider"] for m in results))
+        total_providers = len({m["provider"] for m in results})
         avg_input = sum(m["input_price_per_million"] for m in results) / len(results)
         avg_output = sum(m["output_price_per_million"] for m in results) / len(results)
 

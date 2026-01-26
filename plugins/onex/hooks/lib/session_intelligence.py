@@ -183,7 +183,9 @@ def log_session_end(
                 f"{conflicting_keys}. These fields are protected: {_RESERVED_PAYLOAD_FIELDS}"
             )
 
-        safe_metadata = {k: v for k, v in raw_metadata.items() if k not in _RESERVED_PAYLOAD_FIELDS}
+        safe_metadata = {
+            k: v for k, v in raw_metadata.items() if k not in _RESERVED_PAYLOAD_FIELDS
+        }
 
         event_id: str | None = logger_instance.log_event(
             source="SessionEnd",
@@ -299,7 +301,9 @@ def main():
     # Always exit with 0 - don't block hook execution
     # Log if we failed to record the event
     if event_id is None:
-        logger.info(f"Session {args.mode} event not logged (database may be unavailable)")
+        logger.info(
+            f"Session {args.mode} event not logged (database may be unavailable)"
+        )
     sys.exit(0)
 
 

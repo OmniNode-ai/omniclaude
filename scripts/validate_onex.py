@@ -43,6 +43,28 @@ from omnibase_core.validation import (
     ValidatorPatterns,
 )
 
+# Directories to exclude from validation
+# lib/ contains legacy code marked for deletion post-Beta
+EXCLUDE_PATTERNS = [
+    "lib/",
+    "_archive/",
+    "__pycache__/",
+    ".venv/",
+]
+
+
+def _should_exclude(path: Path) -> bool:
+    """Check if a path should be excluded from validation.
+
+    Args:
+        path: Path to check
+
+    Returns:
+        True if the path matches any exclusion pattern
+    """
+    path_str = str(path)
+    return any(pattern in path_str for pattern in EXCLUDE_PATTERNS)
+
 
 def _is_error_severity(issue: object) -> bool:
     """Check if an issue has error-level severity.
@@ -87,6 +109,7 @@ def validate_paths(paths: list[Path], *, strict: bool = False) -> int:
 
     error_count = 0
     warning_count = 0
+    skipped_count = 0
 
     for path in paths:
         if not path.exists():
@@ -97,6 +120,12 @@ def validate_paths(paths: list[Path], *, strict: bool = False) -> int:
         for validator in validators:
             result = validator.validate(path)
             for issue in result.issues:
+                # Filter out issues from excluded paths
+                issue_path = Path(str(issue.file_path))
+                if _should_exclude(issue_path):
+                    skipped_count += 1
+                    continue
+
                 is_error = _is_error_severity(issue)
                 severity_label = "ERROR" if is_error else "WARNING"
                 print(
@@ -109,6 +138,9 @@ def validate_paths(paths: list[Path], *, strict: bool = False) -> int:
                     warning_count += 1
 
     total_issues = error_count + warning_count
+
+    if skipped_count > 0:
+        print(f"\n(Skipped {skipped_count} issues in excluded paths: lib/, _archive/)")
 
     if total_issues > 0:
         print(f"\nONEX validation found {total_issues} issue(s):")
@@ -123,9 +155,9 @@ def validate_paths(paths: list[Path], *, strict: bool = False) -> int:
             # In non-strict mode, only errors cause failure
             return 1
         else:
-            # Warnings only in non-strict mode
+            # Warnings only in non-strict mode - pass (non-blocking)
             print("\nWarnings found (use --strict to fail on warnings)")
-            return 2
+            return 0  # Warnings don't block pre-commit
 
     if paths:
         print("ONEX validation passed")
@@ -137,7 +169,7 @@ def main(paths: list[str] | None = None, *, strict: bool = False) -> int:
 
     Args:
         paths: List of file or directory paths to validate.
-               If None or empty, defaults to ["src/"].
+               If None or empty, defaults to non-legacy src/ subdirectories.
         strict: If True, fail on any issue (warnings or errors).
                 If False, only errors cause non-zero exit code.
 
@@ -145,10 +177,26 @@ def main(paths: list[str] | None = None, *, strict: bool = False) -> int:
         Exit code (see validate_paths for details).
     """
     if not paths:
-        # Default to src/ when no paths provided
-        paths = ["src/"]
+        # Default to non-legacy src/ subdirectories
+        # Excludes lib/ which contains legacy code marked for deletion post-Beta
+        src_path = Path("src/omniclaude")
+        if src_path.exists():
+            paths = [
+                str(p)
+                for p in src_path.iterdir()
+                if p.is_dir() and not _should_exclude(p)
+            ]
+        else:
+            paths = ["src/"]
 
-    path_objects = [Path(p) for p in paths]
+    # Filter out excluded paths from explicit arguments too
+    filtered_paths = [p for p in paths if not _should_exclude(Path(p))]
+
+    if not filtered_paths:
+        print("No paths to validate after exclusions")
+        return 0
+
+    path_objects = [Path(p) for p in filtered_paths]
     return validate_paths(path_objects, strict=strict)
 
 

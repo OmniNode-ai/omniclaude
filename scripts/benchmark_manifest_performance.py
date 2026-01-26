@@ -36,9 +36,8 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 from uuid import uuid4
-
 
 # Load environment variables from .env file
 try:
@@ -84,15 +83,15 @@ class BenchmarkResult:
     patterns_retrieved: int
     patterns_after_filtering: int
     cache_hit: bool
-    error: Optional[str] = None
+    error: str | None = None
 
 
 @dataclass
 class BenchmarkReport:
     """Aggregated benchmark report."""
 
-    results: List[BenchmarkResult]
-    summary: Dict[str, Any]
+    results: list[BenchmarkResult]
+    summary: dict[str, Any]
 
 
 # Test prompts with different complexities
@@ -114,7 +113,7 @@ class PerformanceBenchmark:
         """Initialize benchmark runner."""
         self.classifier = TaskClassifier()
         self.scorer = RelevanceScorer()
-        self.results: List[BenchmarkResult] = []
+        self.results: list[BenchmarkResult] = []
 
         # Verify environment
         self._verify_environment()
@@ -125,14 +124,14 @@ class PerformanceBenchmark:
         if not os.environ.get("QDRANT_URL"):
             os.environ["QDRANT_URL"] = str(settings.qdrant_url)
             print(
-                f"ℹ️  Using QDRANT_URL from Pydantic settings: {os.environ['QDRANT_URL']}"
+                f"[INFO] Using QDRANT_URL from Pydantic settings: {os.environ['QDRANT_URL']}"
             )
 
         # Validate required settings
         validation_errors = settings.validate_required_services()
 
         if validation_errors:
-            print(f"❌ Configuration validation failed:")
+            print("❌ Configuration validation failed:")
             for error in validation_errors:
                 print(f"   - {error}")
             print("\n   Available configuration:")
@@ -163,7 +162,7 @@ class PerformanceBenchmark:
 
     async def benchmark_relevance_scoring(
         self,
-        patterns: List[Dict[str, Any]],
+        patterns: list[dict[str, Any]],
         task_context: TaskContext,
         user_prompt: str,
     ) -> float:
@@ -314,7 +313,7 @@ class PerformanceBenchmark:
 
         for prompt_type, prompt in TEST_PROMPTS.items():
             print(f"\n📝 Testing: {prompt_type.upper()} prompt")
-            print(f"   Prompt: \"{prompt[:60]}{'...' if len(prompt) > 60 else ''}\"")
+            print(f'   Prompt: "{prompt[:60]}{"..." if len(prompt) > 60 else ""}"')
 
             # First run: Cache miss (force refresh)
             print("\n   Iteration 1 (cache miss)...")
@@ -370,7 +369,7 @@ class PerformanceBenchmark:
         else:
             print("      ❌ ISSUE - Significantly over 2000ms target")
 
-    def _generate_report(self, results: List[BenchmarkResult]) -> BenchmarkReport:
+    def _generate_report(self, results: list[BenchmarkResult]) -> BenchmarkReport:
         """Generate aggregated benchmark report."""
         # Filter out errors
         valid_results = [r for r in results if r.error is None]
@@ -411,7 +410,7 @@ class PerformanceBenchmark:
 
         return BenchmarkReport(results=results, summary=summary)
 
-    def _calculate_stats(self, results: List[BenchmarkResult]) -> Dict[str, Any]:
+    def _calculate_stats(self, results: list[BenchmarkResult]) -> dict[str, Any]:
         """Calculate statistics for a set of results."""
         return {
             "count": len(results),
@@ -458,7 +457,7 @@ class PerformanceBenchmark:
             * 100,
         }
 
-    def _assess_performance(self, results: List[BenchmarkResult]) -> Dict[str, Any]:
+    def _assess_performance(self, results: list[BenchmarkResult]) -> dict[str, Any]:
         """Assess performance against targets."""
         assessment = {
             "targets": {

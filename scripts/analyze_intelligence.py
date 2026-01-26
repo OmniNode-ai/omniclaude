@@ -12,11 +12,10 @@ Usage:
 import asyncio
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List
-
+from typing import Any
 
 # NOTE: sys.path modification required for standalone script execution
 # This script runs from project root and needs to import from agents/lib
@@ -36,8 +35,8 @@ class OperationType(str, Enum):
 
 
 async def analyze_code_quality(
-    client: IntelligenceEventClient, paths: List[str]
-) -> Dict[str, Any]:
+    client: IntelligenceEventClient, paths: list[str]
+) -> dict[str, Any]:
     """
     Analyze code quality for specified paths.
 
@@ -95,7 +94,7 @@ async def analyze_code_quality(
                 for issue in issues[:3]:  # Show first 3
                     print(f"     - {issue.get('message', 'Unknown issue')}")
 
-        except (asyncio.TimeoutError, TimeoutError):
+        except TimeoutError:
             print(f"  ⏱️  Timeout analyzing {path}")
             results[path] = {"error": "timeout"}
         except Exception as e:
@@ -106,8 +105,8 @@ async def analyze_code_quality(
 
 
 async def discover_patterns(
-    client: IntelligenceEventClient, patterns: List[str]
-) -> Dict[str, Any]:
+    client: IntelligenceEventClient, patterns: list[str]
+) -> dict[str, Any]:
     """
     Discover architectural patterns in the codebase.
 
@@ -147,7 +146,7 @@ async def discover_patterns(
                 patterns_found = result.get("patterns", [])
                 print(f"  ✓ Found {len(patterns_found)} patterns")
 
-        except (asyncio.TimeoutError, TimeoutError):
+        except TimeoutError:
             print(f"  ⏱️  Timeout discovering pattern {pattern}")
             results[pattern] = {"error": "timeout"}
         except Exception as e:
@@ -158,8 +157,8 @@ async def discover_patterns(
 
 
 async def extract_insights(
-    client: IntelligenceEventClient, paths: List[str]
-) -> Dict[str, Any]:
+    client: IntelligenceEventClient, paths: list[str]
+) -> dict[str, Any]:
     """
     Extract architectural insights and recommendations.
 
@@ -230,7 +229,7 @@ async def extract_insights(
             if patterns:
                 print(f"  ✓ Patterns found: {len(patterns)}")
 
-        except (asyncio.TimeoutError, TimeoutError):
+        except TimeoutError:
             print(f"  ⏱️  Timeout extracting insights from {path}")
             results[path] = {"error": "timeout"}
         except Exception as e:
@@ -365,7 +364,7 @@ async def main():
         # Save detailed results
         output_file = Path("intelligence_analysis_results.json")
         full_results = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "quality_assessment": quality_results,
             "pattern_discovery": pattern_results,
             "insights": insight_results,

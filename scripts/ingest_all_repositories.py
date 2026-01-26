@@ -13,7 +13,7 @@ import time
 import uuid
 from pathlib import Path
 from threading import Lock
-from typing import Any, Dict, List
+from typing import Any
 
 import requests
 
@@ -23,8 +23,8 @@ from config import settings
 class MultiRepositoryIngester:
     def __init__(
         self,
-        base_url: str = None,
-        search_url: str = None,
+        base_url: str | None = None,
+        search_url: str | None = None,
     ):
         self.base_url = base_url or str(settings.archon_intelligence_url)
         self.search_url = search_url or str(settings.archon_search_url)
@@ -35,7 +35,7 @@ class MultiRepositoryIngester:
         # Try to discover repositories dynamically
         self.repositories = self._discover_repositories()
 
-    def _discover_repositories(self) -> Dict[str, str]:
+    def _discover_repositories(self) -> dict[str, str]:
         """
         Discover repository paths dynamically.
 
@@ -77,7 +77,7 @@ class MultiRepositoryIngester:
 
         return repos
 
-    def find_python_files(self, root_dir: str) -> List[Path]:
+    def find_python_files(self, root_dir: str) -> list[Path]:
         """Find all Python files in a repository."""
         python_files = []
         if not os.path.exists(root_dir):
@@ -105,7 +105,7 @@ class MultiRepositoryIngester:
 
         return python_files
 
-    def analyze_code(self, file_path: Path, project_id: str) -> Dict[str, Any]:
+    def analyze_code(self, file_path: Path, project_id: str) -> dict[str, Any]:
         """Analyze a single Python file for code quality and patterns."""
         try:
             with open(file_path, "r", encoding="utf-8") as f:
@@ -145,7 +145,7 @@ class MultiRepositoryIngester:
                 "error": str(e),
             }
 
-    def index_document(self, file_path: Path, project_id: str) -> Dict[str, Any]:
+    def index_document(self, file_path: Path, project_id: str) -> dict[str, Any]:
         """Index a file for search."""
         try:
             with open(file_path, "r", encoding="utf-8") as f:
@@ -209,7 +209,7 @@ class MultiRepositoryIngester:
                 "error": str(e),
             }
 
-    def process_file(self, file_path: Path, project_id: str) -> Dict[str, Any]:
+    def process_file(self, file_path: Path, project_id: str) -> dict[str, Any]:
         """Process a single file for both analysis and indexing."""
         print(f"Processing: {project_id}/{file_path.name}")
 
@@ -243,7 +243,7 @@ class MultiRepositoryIngester:
         python_files = self.find_python_files(repo_path)
         if not python_files:
             print(f"⚠️  No Python files found in {repo_name}")
-            return
+            return None
 
         print(f"📊 Found {len(python_files)} Python files")
 
@@ -334,10 +334,10 @@ class MultiRepositoryIngester:
 
         print("\n📈 COMPREHENSIVE INGESTION SUMMARY")
         print(
-            f"  Analysis Success: {len(successful_analyses)}/{len(self.results)} ({len(successful_analyses)/len(self.results)*100:.1f}%)"
+            f"  Analysis Success: {len(successful_analyses)}/{len(self.results)} ({len(successful_analyses) / len(self.results) * 100:.1f}%)"
         )
         print(
-            f"  Indexing Success: {len(successful_indexings)}/{len(self.results)} ({len(successful_indexings)/len(self.results)*100:.1f}%)"
+            f"  Indexing Success: {len(successful_indexings)}/{len(self.results)} ({len(successful_indexings) / len(self.results) * 100:.1f}%)"
         )
 
         # Repository breakdown
@@ -370,10 +370,10 @@ class MultiRepositoryIngester:
             print(f"  {repo}:")
             print(f"    Files: {stats['total']}")
             print(
-                f"    Analyzed: {stats['analyzed']} ({stats['analyzed']/stats['total']*100:.1f}%)"
+                f"    Analyzed: {stats['analyzed']} ({stats['analyzed'] / stats['total'] * 100:.1f}%)"
             )
             print(
-                f"    Indexed: {stats['indexed']} ({stats['indexed']/stats['total']*100:.1f}%)"
+                f"    Indexed: {stats['indexed']} ({stats['indexed'] / stats['total'] * 100:.1f}%)"
             )
             print(f"    Avg Quality: {avg_quality:.3f}")
 

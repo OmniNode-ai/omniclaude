@@ -16,7 +16,6 @@ from pathlib import Path
 import requests
 from kafka import KafkaProducer
 
-
 # Add consumers to path
 sys.path.insert(0, str(Path(__file__).parent))
 

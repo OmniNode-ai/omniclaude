@@ -13,7 +13,6 @@ Provides rapid health status of agent execution system:
 import sys
 from pathlib import Path
 
-
 # Add shared utilities to path
 SKILLS_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(SKILLS_DIR / "_shared"))
