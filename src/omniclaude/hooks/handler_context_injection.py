@@ -479,7 +479,15 @@ async def inject_patterns(
     )
 
 
-def inject_patterns_sync(**kwargs) -> ModelInjectionResult:
+def inject_patterns_sync(
+    *,
+    project_root: str | None = None,
+    agent_domain: str = "",
+    session_id: str = "",
+    correlation_id: str = "",
+    config: ContextInjectionConfig | None = None,
+    emit_event: bool = True,
+) -> ModelInjectionResult:
     """Synchronous wrapper for shell scripts.
 
     Handles nested event loop detection to avoid RuntimeError.
@@ -491,11 +499,30 @@ def inject_patterns_sync(**kwargs) -> ModelInjectionResult:
         import concurrent.futures
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            future = executor.submit(asyncio.run, inject_patterns(**kwargs))
+            future = executor.submit(
+                asyncio.run,
+                inject_patterns(
+                    project_root=project_root,
+                    agent_domain=agent_domain,
+                    session_id=session_id,
+                    correlation_id=correlation_id,
+                    config=config,
+                    emit_event=emit_event,
+                ),
+            )
             return future.result()
     except RuntimeError:
         # No running loop - safe to use asyncio.run()
-        return asyncio.run(inject_patterns(**kwargs))
+        return asyncio.run(
+            inject_patterns(
+                project_root=project_root,
+                agent_domain=agent_domain,
+                session_id=session_id,
+                correlation_id=correlation_id,
+                config=config,
+                emit_event=emit_event,
+            )
+        )
 
 
 __all__ = [
