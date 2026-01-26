@@ -96,14 +96,26 @@ PROMPT_LENGTH="${#PROMPT}"
 PROMPT_PREVIEW="${PROMPT:0:100}"
 
 if [[ "$KAFKA_ENABLED" == "true" ]]; then
+    # Emit prompt.submitted event (for omniclaude internal use)
     (
         $PYTHON_CMD -m omniclaude.hooks.cli_emit prompt-submitted \
             --session-id "$SESSION_ID" \
             --preview "$PROMPT_PREVIEW" \
             --length "$PROMPT_LENGTH" \
-            >> "$LOG_FILE" 2>&1 || { rc=$?; log "Kafka emit failed (exit=$rc, non-fatal)"; }
+            >> "$LOG_FILE" 2>&1 || { rc=$?; log "Kafka prompt-submitted emit failed (exit=$rc, non-fatal)"; }
     ) &
-    log "Prompt event emission started"
+
+    # Emit claude-hook-event to omniintelligence topic (for intelligence processing)
+    # This uses the ModelClaudeCodeHookEvent format expected by NodeClaudeHookEventEffect
+    (
+        $PYTHON_CMD -m omniclaude.hooks.cli_emit claude-hook-event \
+            --session-id "$SESSION_ID" \
+            --event-type "UserPromptSubmit" \
+            --prompt "$PROMPT" \
+            --correlation-id "$CORRELATION_ID" \
+            >> "$LOG_FILE" 2>&1 || { rc=$?; log "Kafka claude-hook-event emit failed (exit=$rc, non-fatal)"; }
+    ) &
+    log "Prompt event emission started (both topics)"
 fi
 
 # -----------------------------

@@ -51,7 +51,11 @@ except Exception:
     # Fallback for editable installs or when package metadata unavailable
     __version__ = "0.1.0-dev"
 
+from omnibase_core.enums.hooks.claude_code import EnumClaudeCodeHookEventType
+
 from omniclaude.hooks.handler_event_emitter import (
+    ModelClaudeHookEventConfig,
+    emit_claude_hook_event,
     emit_prompt_submitted,
     emit_session_ended,
     emit_session_started,
@@ -477,6 +481,98 @@ def cmd_tool_executed(
     except Exception as e:
         logger.warning("tool_executed_error", extra={"error": str(e)})
 
+    sys.exit(0)
+
+
+@cli.command("claude-hook-event")
+@click.option("--session-id", required=True, help="Session UUID or string ID.")
+@click.option(
+    "--event-type",
+    required=True,
+    type=click.Choice(
+        [
+            "SessionStart",
+            "SessionEnd",
+            "UserPromptSubmit",
+            "PreToolUse",
+            "PermissionRequest",
+            "PostToolUse",
+            "PostToolUseFailure",
+            "SubagentStart",
+            "SubagentStop",
+            "Notification",
+            "Stop",
+            "PreCompact",
+        ]
+    ),
+    help="The Claude Code hook event type.",
+)
+@click.option(
+    "--prompt", default=None, help="The full prompt text (for UserPromptSubmit)."
+)
+@click.option(
+    "--correlation-id", default=None, help="Correlation UUID for distributed tracing."
+)
+@click.option(
+    "--json", "from_json", is_flag=True, help="Read event data from stdin JSON."
+)
+@click.option("--dry-run", is_flag=True, help="Parse and validate but don't emit.")
+def cmd_claude_hook_event(
+    session_id: str,
+    event_type: str,
+    prompt: str | None,
+    correlation_id: str | None,
+    from_json: bool,
+    dry_run: bool,
+) -> None:
+    """Emit a Claude hook event to the omniintelligence topic.
+
+    This command emits events in the format expected by omniintelligence's
+    NodeClaudeHookEventEffect for intelligence processing and learning.
+    """
+    # ONEX: exempt - CLI command parameters defined by click decorators
+    try:
+        # Parse correlation_id if provided
+        corr_id = _string_to_uuid(correlation_id) if correlation_id else None
+
+        if from_json:
+            # Read additional data from stdin
+            data = json.loads(sys.stdin.read())
+            event_type = data.get("event_type", event_type)
+            prompt = data.get("prompt", data.get("payload", {}).get("prompt", prompt))
+            if data.get("correlation_id"):
+                corr_id = _string_to_uuid(data["correlation_id"])
+
+        # Convert string event type to enum
+        hook_event_type = EnumClaudeCodeHookEventType(event_type)
+
+        if dry_run:
+            click.echo(
+                f"[DRY RUN] Would emit claude-hook-event: "
+                f"session_id={session_id}, event_type={event_type}"
+            )
+            return
+
+        config = ModelClaudeHookEventConfig(
+            event_type=hook_event_type,
+            session_id=session_id,
+            prompt=prompt,
+            correlation_id=corr_id,
+        )
+
+        result = run_with_timeout(emit_claude_hook_event(config))
+
+        if result and result.success:
+            logger.debug("claude_hook_event_emitted", extra={"topic": result.topic})
+        elif result:
+            logger.warning(
+                "claude_hook_event_failed", extra={"error": result.error_message}
+            )
+
+    except Exception as e:
+        logger.warning("claude_hook_event_error", extra={"error": str(e)})
+
+    # Always exit 0 - observability must never break Claude Code
     sys.exit(0)
 
 

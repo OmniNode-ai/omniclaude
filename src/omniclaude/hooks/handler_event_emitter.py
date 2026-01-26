@@ -42,6 +42,10 @@ from uuid import UUID, uuid4
 
 from omnibase_core.enums import EnumCoreErrorCode
 from omnibase_core.models.errors import ModelOnexError
+from omnibase_core.models.hooks.claude_code import (
+    ModelClaudeCodeHookEvent,
+    ModelClaudeCodeHookEventPayload,
+)
 from omnibase_infra.event_bus.event_bus_kafka import EventBusKafka
 from omnibase_infra.event_bus.models.config import ModelKafkaEventBusConfig
 
@@ -59,6 +63,8 @@ from omniclaude.hooks.schemas import (
 from omniclaude.hooks.topics import TopicBase, build_topic
 
 if TYPE_CHECKING:
+    from omnibase_core.enums.hooks.claude_code import EnumClaudeCodeHookEventType
+
     from omniclaude.hooks.schemas import ModelHookPayload
 
 logger = logging.getLogger(__name__)
@@ -180,6 +186,30 @@ class ModelSessionEndedConfig:
     duration_seconds: float | None = None
     tools_used_count: int = 0
     tracing: ModelEventTracingConfig = field(default_factory=ModelEventTracingConfig)
+
+
+@dataclass(frozen=True)
+class ModelClaudeHookEventConfig:
+    """Configuration for Claude hook events consumed by omniintelligence.
+
+    This config is used for emitting raw Claude Code hook events to the
+    omniintelligence topic for intelligence processing and learning.
+
+    Attributes:
+        event_type: The Claude Code hook event type (e.g., UserPromptSubmit).
+        session_id: Claude Code session identifier (string per upstream API).
+        prompt: The full prompt text (for UserPromptSubmit events).
+        correlation_id: Optional correlation ID for distributed tracing.
+        timestamp_utc: Event timestamp (defaults to now UTC if not provided).
+        environment: Kafka environment prefix (e.g., "dev", "staging", "prod").
+    """
+
+    event_type: EnumClaudeCodeHookEventType
+    session_id: str
+    prompt: str | None = None
+    correlation_id: UUID | None = None
+    timestamp_utc: datetime | None = None
+    environment: str | None = None
 
 
 # =============================================================================
@@ -824,6 +854,131 @@ async def emit_tool_executed(
     return await emit_tool_executed_from_config(config)
 
 
+# =============================================================================
+# Claude Hook Event Emission (for omniintelligence)
+# =============================================================================
+
+
+async def emit_claude_hook_event(
+    config: ModelClaudeHookEventConfig,
+) -> ModelEventPublishResult:
+    """Emit a Claude Code hook event to the omniintelligence topic.
+
+    This function emits raw Claude Code hook events in the format expected
+    by omniintelligence's NodeClaudeHookEventEffect. The event is published
+    to the `onex.cmd.omniintelligence.claude-hook-event.v1` topic.
+
+    Args:
+        config: Claude hook event configuration containing event data.
+
+    Returns:
+        ModelEventPublishResult indicating success or failure.
+
+    Example:
+        >>> from datetime import UTC, datetime
+        >>> from uuid import uuid4
+        >>> config = ModelClaudeHookEventConfig(
+        ...     event_type=EnumClaudeCodeHookEventType.USER_PROMPT_SUBMIT,
+        ...     session_id="abc123",
+        ...     prompt="Help me debug this code",
+        ...     correlation_id=uuid4(),
+        ... )
+        >>> result = await emit_claude_hook_event(config)
+        >>> result.success
+        True
+    """
+    bus: EventBusKafka | None = None
+    topic = "unknown"
+
+    try:
+        # Get environment from config, env var, or default
+        env = config.environment or os.environ.get("KAFKA_ENVIRONMENT", "dev")
+        topic = build_topic(env, TopicBase.CLAUDE_HOOK_EVENT)
+
+        # Build the payload with prompt in model_extra (additionalProperties)
+        # ModelClaudeCodeHookEventPayload uses extra="allow" so we can pass any fields
+        payload_data: dict[str, str] = {}
+        if config.prompt is not None:
+            payload_data["prompt"] = config.prompt
+
+        payload = ModelClaudeCodeHookEventPayload.model_validate(payload_data)
+
+        # Build the event using omnibase_core model
+        event = ModelClaudeCodeHookEvent(
+            event_type=config.event_type,
+            session_id=config.session_id,
+            correlation_id=config.correlation_id,
+            timestamp_utc=config.timestamp_utc or datetime.now(UTC),
+            payload=payload,
+        )
+
+        # Create Kafka config and bus
+        kafka_config = _create_kafka_config()
+        bus = EventBusKafka(config=kafka_config)
+
+        # Start producer
+        await bus.start()
+
+        # Publish the event
+        # Use session_id as partition key for ordering within session
+        partition_key = config.session_id.encode("utf-8")
+        message_bytes = event.model_dump_json().encode("utf-8")
+
+        await bus.publish(
+            topic=topic,
+            key=partition_key,
+            value=message_bytes,
+        )
+
+        logger.debug(
+            "claude_hook_event_emitted",
+            extra={
+                "topic": topic,
+                "event_type": config.event_type.value,
+                "session_id": config.session_id,
+            },
+        )
+
+        return ModelEventPublishResult(
+            success=True,
+            topic=topic,
+            partition=None,
+            offset=None,
+        )
+
+    except Exception as e:
+        # Log warning but don't crash - observability must never break UX
+        logger.warning(
+            "claude_hook_event_publish_failed",
+            extra={
+                "topic": topic,
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "session_id": config.session_id,
+            },
+        )
+
+        error_msg = f"{type(e).__name__}: {e!s}"
+        return ModelEventPublishResult(
+            success=False,
+            topic=topic,
+            error_message=(
+                error_msg[:997] + "..." if len(error_msg) > 1000 else error_msg
+            ),
+        )
+
+    finally:
+        # Always close the bus if it was created
+        if bus is not None:
+            try:
+                await bus.close()
+            except Exception as close_error:
+                logger.debug(
+                    "kafka_bus_close_error",
+                    extra={"error": str(close_error)},
+                )
+
+
 __all__ = [
     # Config models
     "ModelEventTracingConfig",
@@ -831,6 +986,7 @@ __all__ = [
     "ModelPromptSubmittedConfig",
     "ModelSessionStartedConfig",
     "ModelSessionEndedConfig",
+    "ModelClaudeHookEventConfig",
     # Core emission function
     "emit_hook_event",
     # Config-based convenience functions
@@ -838,6 +994,8 @@ __all__ = [
     "emit_session_ended_from_config",
     "emit_prompt_submitted_from_config",
     "emit_tool_executed_from_config",
+    # Claude hook event emission (for omniintelligence)
+    "emit_claude_hook_event",
     # Backwards-compatible convenience functions
     "emit_session_started",
     "emit_session_ended",

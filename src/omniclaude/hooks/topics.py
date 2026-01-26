@@ -44,6 +44,10 @@ class TopicBase(StrEnum):
     ROUTING_COMPLETED = "omninode.agent.routing.completed.v1"
     ROUTING_FAILED = "omninode.agent.routing.failed.v1"
 
+    # Claude hook event topic (consumed by omniintelligence.NodeClaudeHookEventEffect)
+    # This topic receives raw Claude Code hook events for intelligence processing
+    CLAUDE_HOOK_EVENT = "onex.cmd.omniintelligence.claude-hook-event.v1"
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).

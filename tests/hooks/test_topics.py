@@ -45,6 +45,12 @@ class TestTopicBase:
         assert TopicBase.TRANSFORMATIONS == "agent-transformation-events"
         assert TopicBase.DETECTION_FAILURES == "agent-detection-failures"
 
+        # Cross-service topics (onex domain, consumed by omniintelligence)
+        assert (
+            TopicBase.CLAUDE_HOOK_EVENT
+            == "onex.cmd.omniintelligence.claude-hook-event.v1"
+        )
+
     def test_topic_base_is_str_enum(self) -> None:
         """TopicBase values are strings (StrEnum)."""
         for topic in TopicBase:
@@ -56,7 +62,8 @@ class TestTopicBase:
         import re
 
         # ONEX naming pattern: domain.seg1.seg2...segN.vX (multiple category segments allowed)
-        onex_pattern = re.compile(r"^(omniclaude|omninode)(?:\.[a-z-]+)+\.v\d+$")
+        # Domains: omniclaude, omninode, or onex (platform-wide cross-service topics)
+        onex_pattern = re.compile(r"^(omniclaude|omninode|onex)(?:\.[a-z-]+)+\.v\d+$")
 
         # Legacy observability topics (backward compatibility with existing consumers)
         # These use simple hyphenated names without the omniclaude prefix
