@@ -309,9 +309,11 @@ def load_patterns(
             seen_ids.add(pattern.pattern_id)
             unique_patterns.append(pattern)
 
-    # Filter by domain
+    # Filter by domain (include "general" patterns that apply to all domains)
     if domain:
-        unique_patterns = [p for p in unique_patterns if p.domain == domain]
+        unique_patterns = [
+            p for p in unique_patterns if p.domain == domain or p.domain == "general"
+        ]
 
     # Filter by minimum confidence
     unique_patterns = [p for p in unique_patterns if p.confidence >= min_confidence]
