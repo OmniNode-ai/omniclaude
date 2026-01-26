@@ -34,11 +34,27 @@ logger = logging.getLogger(__name__)
 # Data Classes
 # =============================================================================
 
+# NOTE: PatternRecord is intentionally duplicated here (canonical: ModelPatternRecord
+# in src/omniclaude/hooks/handler_context_injection.py).
+#
+# Rationale for duplication:
+# 1. This CLI module is designed to run standalone without the full omniclaude package
+# 2. The plugin directory (plugins/onex/hooks/lib/) should not import from src/omniclaude/
+#    to avoid circular dependencies and maintain CLI independence
+# 3. Claude Code hooks execute this as a subprocess - it must be self-contained
+#
+# If the schema changes, update BOTH:
+# - plugins/onex/hooks/lib/learned_pattern_injector.py (this file, with validation)
+# - src/omniclaude/hooks/handler_context_injection.py (canonical, frozen dataclass)
+
 
 @dataclass
 class PatternRecord:
     """
     Represents a single learned pattern from the persistence store.
+
+    Note: This is a standalone copy of ModelPatternRecord for CLI independence.
+    See module docstring for rationale. This version includes validation.
 
     Attributes:
         pattern_id: Unique identifier for the pattern.

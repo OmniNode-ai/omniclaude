@@ -30,6 +30,7 @@ from omniclaude.hooks.handler_context_injection import (
     ModelInjectionResult,
     ModelPatternRecord,
     inject_patterns,
+    inject_patterns_sync,
 )
 
 # All tests in this module are unit tests
@@ -1060,3 +1061,159 @@ class TestContextSize:
 
         assert result.context_size_bytes == 0
         assert result.context_markdown == ""
+
+
+# =============================================================================
+# Sync Wrapper Tests
+# =============================================================================
+
+
+class TestInjectPatternsSync:
+    """Test inject_patterns_sync convenience function.
+
+    This function wraps the async inject_patterns() for use in synchronous
+    contexts (e.g., shell scripts). It handles event loop detection:
+    - If no loop is running: uses asyncio.run() directly
+    - If a loop is running: uses ThreadPoolExecutor to avoid nested loop error
+    """
+
+    def test_sync_from_sync_context(
+        self,
+        temp_project_dir: Path,
+        pattern_file: Path,
+        permissive_config: ContextInjectionConfig,
+    ) -> None:
+        """Test inject_patterns_sync works from synchronous context.
+
+        When called outside any async context, asyncio.get_running_loop()
+        raises RuntimeError, so the function uses asyncio.run() directly.
+        """
+        result = inject_patterns_sync(
+            project_root=str(temp_project_dir),
+            config=permissive_config,
+            emit_event=False,
+        )
+
+        assert isinstance(result, ModelInjectionResult)
+        assert result.success is True
+        assert result.pattern_count == 2
+
+    def test_sync_returns_correct_type(
+        self,
+        temp_project_dir: Path,
+        pattern_file: Path,
+        permissive_config: ContextInjectionConfig,
+    ) -> None:
+        """Test inject_patterns_sync returns ModelInjectionResult."""
+        result = inject_patterns_sync(
+            project_root=str(temp_project_dir),
+            config=permissive_config,
+            emit_event=False,
+        )
+
+        assert isinstance(result, ModelInjectionResult)
+        assert hasattr(result, "success")
+        assert hasattr(result, "context_markdown")
+        assert hasattr(result, "pattern_count")
+        assert hasattr(result, "context_size_bytes")
+        assert hasattr(result, "source")
+        assert hasattr(result, "retrieval_ms")
+
+    def test_sync_no_patterns_graceful(
+        self,
+        tmp_path: Path,
+        permissive_config: ContextInjectionConfig,
+    ) -> None:
+        """Test inject_patterns_sync handles missing patterns gracefully."""
+        result = inject_patterns_sync(
+            project_root=str(tmp_path),
+            config=permissive_config,
+            emit_event=False,
+        )
+
+        assert result.success is True
+        assert result.pattern_count == 0
+        assert result.context_markdown == ""
+
+    def test_sync_with_domain_filter(
+        self,
+        temp_project_dir: Path,
+        pattern_file: Path,
+        permissive_config: ContextInjectionConfig,
+    ) -> None:
+        """Test inject_patterns_sync applies domain filter correctly."""
+        result = inject_patterns_sync(
+            project_root=str(temp_project_dir),
+            agent_domain="testing",
+            config=permissive_config,
+            emit_event=False,
+        )
+
+        # Should only include testing domain pattern
+        assert result.success is True
+        assert result.pattern_count == 1
+        assert "Test Pattern 1" in result.context_markdown
+
+    @pytest.mark.asyncio
+    async def test_sync_from_async_context(
+        self,
+        temp_project_dir: Path,
+        pattern_file: Path,
+        permissive_config: ContextInjectionConfig,
+    ) -> None:
+        """Test inject_patterns_sync works when called from async context.
+
+        When called inside an async context (loop is running),
+        asyncio.get_running_loop() succeeds, so the function uses
+        ThreadPoolExecutor to run asyncio.run() in a separate thread.
+        This avoids the 'This event loop is already running' error.
+        """
+        import asyncio
+
+        # Verify we're in async context
+        loop = asyncio.get_running_loop()
+        assert loop is not None
+
+        # Call sync function from async context
+        result = inject_patterns_sync(
+            project_root=str(temp_project_dir),
+            config=permissive_config,
+            emit_event=False,
+        )
+
+        assert isinstance(result, ModelInjectionResult)
+        assert result.success is True
+        assert result.pattern_count == 2
+
+    @pytest.mark.asyncio
+    async def test_sync_matches_async_result(
+        self,
+        temp_project_dir: Path,
+        pattern_file: Path,
+        permissive_config: ContextInjectionConfig,
+    ) -> None:
+        """Test inject_patterns_sync returns same result as inject_patterns.
+
+        The sync wrapper should produce identical results to the async
+        version (aside from timing which may vary slightly).
+        """
+        # Get async result
+        async_result = await inject_patterns(
+            project_root=str(temp_project_dir),
+            config=permissive_config,
+            emit_event=False,
+        )
+
+        # Get sync result (called from async context uses thread pool)
+        sync_result = inject_patterns_sync(
+            project_root=str(temp_project_dir),
+            config=permissive_config,
+            emit_event=False,
+        )
+
+        # Compare results (exclude retrieval_ms which may vary)
+        assert sync_result.success == async_result.success
+        assert sync_result.pattern_count == async_result.pattern_count
+        assert sync_result.context_markdown == async_result.context_markdown
+        assert sync_result.context_size_bytes == async_result.context_size_bytes
+        assert sync_result.source == async_result.source

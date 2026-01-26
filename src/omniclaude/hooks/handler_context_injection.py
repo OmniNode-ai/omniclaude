@@ -37,12 +37,20 @@ logger = logging.getLogger(__name__)
 # Data Models
 # =============================================================================
 
+# NOTE: ModelPatternRecord is the canonical definition. A standalone copy (PatternRecord)
+# exists in plugins/onex/hooks/lib/learned_pattern_injector.py for CLI independence.
+# If the schema changes, update BOTH files.
+
 
 @dataclass(frozen=True)
 class ModelPatternRecord:
     """A single learned pattern from persistence.
 
     Frozen dataclass to ensure immutability after loading.
+
+    Note: This is the canonical definition. A standalone copy (PatternRecord with
+    validation) exists in plugins/onex/hooks/lib/learned_pattern_injector.py
+    for CLI independence. Keep both in sync if schema changes.
 
     Attributes:
         pattern_id: Unique identifier for the pattern.
