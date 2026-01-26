@@ -265,24 +265,27 @@ if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
         --arg session "${SESSION_ID:-}" \
         --arg project "${PROJECT_NAME:-}" \
         --arg correlation "${CORRELATION_ID:-}" \
+        --argjson max_patterns "${MAX_PATTERNS:-5}" \
+        --argjson min_confidence "${MIN_CONFIDENCE:-0.7}" \
         '{
             agent_name: $agent,
             domain: $domain,
             session_id: $session,
             project: $project,
             correlation_id: $correlation,
-            max_patterns: 5,
-            min_confidence: 0.7
+            max_patterns: $max_patterns,
+            min_confidence: $min_confidence
         }')"
 
     # 2s timeout - patterns should be fast (file-based)
     # Try ONEX-compliant wrapper first, fall back to legacy injector
+    # Use run_with_timeout for portability (works on macOS and Linux)
     if [[ -f "${HOOKS_LIB}/context_injection_wrapper.py" ]]; then
         log "Using ONEX-compliant context_injection_wrapper.py"
-        PATTERN_RESULT="$(echo "$PATTERN_INPUT" | timeout 2 $PYTHON_CMD "${HOOKS_LIB}/context_injection_wrapper.py" 2>>"$LOG_FILE" || echo '{}')"
+        PATTERN_RESULT="$(echo "$PATTERN_INPUT" | run_with_timeout 2 $PYTHON_CMD "${HOOKS_LIB}/context_injection_wrapper.py" 2>>"$LOG_FILE" || echo '{}')"
     elif [[ -f "${HOOKS_LIB}/learned_pattern_injector.py" ]]; then
         log "Falling back to legacy learned_pattern_injector.py"
-        PATTERN_RESULT="$(echo "$PATTERN_INPUT" | timeout 2 $PYTHON_CMD "${HOOKS_LIB}/learned_pattern_injector.py" 2>>"$LOG_FILE" || echo '{}')"
+        PATTERN_RESULT="$(echo "$PATTERN_INPUT" | run_with_timeout 2 $PYTHON_CMD "${HOOKS_LIB}/learned_pattern_injector.py" 2>>"$LOG_FILE" || echo '{}')"
     else
         log "INFO: No pattern injector found, skipping pattern injection"
         PATTERN_RESULT='{}'

@@ -38,7 +38,7 @@ pytestmark = pytest.mark.unit
 
 
 # =============================================================================
-# Test Data
+# Test Data - Module-level constants for reference
 # =============================================================================
 
 SAMPLE_PATTERN_1: dict[str, Any] = {
@@ -68,27 +68,89 @@ SAMPLE_PATTERN_FILE: dict[str, Any] = {
     "patterns": [SAMPLE_PATTERN_1, SAMPLE_PATTERN_2],
 }
 
+# Low confidence pattern (below default 0.7 threshold)
+SAMPLE_LOW_CONFIDENCE_PATTERN: dict[str, Any] = {
+    "pattern_id": "pat-low",
+    "domain": "testing",
+    "title": "Low Confidence Pattern",
+    "description": "Pattern with low confidence",
+    "confidence": 0.5,
+    "usage_count": 2,
+    "success_rate": 0.60,
+}
+
+# General domain pattern (included in all domain filters)
+SAMPLE_GENERAL_DOMAIN_PATTERN: dict[str, Any] = {
+    "pattern_id": "pat-general",
+    "domain": "general",
+    "title": "General Pattern",
+    "description": "Pattern applicable to all domains",
+    "confidence": 0.85,
+    "usage_count": 20,
+    "success_rate": 0.90,
+}
+
 
 # =============================================================================
 # Fixtures
 # =============================================================================
 
 
+@pytest.fixture(autouse=True)
+def isolated_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Isolate tests from user's real ~/.claude/ directory.
+
+    This fixture patches Path.home() to return a temporary directory,
+    preventing tests from being affected by actual user-level pattern files.
+    This ensures test isolation and prevents flaky tests.
+
+    Autouse=True means this applies to ALL tests in this module.
+    """
+    fake_home = tmp_path / "fake_home"
+    fake_home.mkdir()
+
+    # Patch Path.home() to return our fake home directory
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
+
+    return fake_home
+
+
 @pytest.fixture
 def temp_project_dir(tmp_path: Path) -> Path:
     """Create a temporary project directory with .claude folder."""
-    claude_dir = tmp_path / ".claude"
+    # Use a subdirectory of tmp_path distinct from fake_home
+    project_dir = tmp_path / "project"
+    project_dir.mkdir()
+    claude_dir = project_dir / ".claude"
     claude_dir.mkdir()
-    return tmp_path
+    return project_dir
 
 
 @pytest.fixture
 def pattern_file(temp_project_dir: Path) -> Path:
-    """Create a sample pattern file."""
+    """Create a sample pattern file with SAMPLE_PATTERN_FILE content."""
     pattern_path = temp_project_dir / ".claude" / "learned_patterns.json"
     with pattern_path.open("w") as f:
         json.dump(SAMPLE_PATTERN_FILE, f)
     return pattern_path
+
+
+@pytest.fixture
+def sample_patterns() -> dict[str, dict[str, Any]]:
+    """Provide access to all sample patterns as a dictionary.
+
+    Useful for tests that need to reference or modify sample patterns.
+
+    Returns:
+        Dictionary with keys: 'high_confidence', 'code_review',
+        'low_confidence', 'general_domain'
+    """
+    return {
+        "high_confidence": SAMPLE_PATTERN_1,
+        "code_review": SAMPLE_PATTERN_2,
+        "low_confidence": SAMPLE_LOW_CONFIDENCE_PATTERN,
+        "general_domain": SAMPLE_GENERAL_DOMAIN_PATTERN,
+    }
 
 
 @pytest.fixture
@@ -281,15 +343,10 @@ class TestHandlerHandle:
     ) -> None:
         """Test that handler filters patterns by confidence threshold."""
         # Default config has min_confidence=0.7
-        # Add a low-confidence pattern
-        low_confidence_pattern = {
-            **SAMPLE_PATTERN_1,
-            "pattern_id": "pat-low",
-            "confidence": 0.5,  # Below threshold
-        }
+        # Use the predefined low-confidence pattern (0.5 confidence)
         patterns_data = {
             **SAMPLE_PATTERN_FILE,
-            "patterns": [SAMPLE_PATTERN_1, low_confidence_pattern],
+            "patterns": [SAMPLE_PATTERN_1, SAMPLE_LOW_CONFIDENCE_PATTERN],
         }
         with pattern_file.open("w") as f:
             json.dump(patterns_data, f)
@@ -412,15 +469,10 @@ class TestHandlerHandle:
         pattern_file: Path,
     ) -> None:
         """Test that domain filter includes 'general' domain patterns."""
-        general_pattern = {
-            **SAMPLE_PATTERN_1,
-            "pattern_id": "pat-general",
-            "domain": "general",
-            "title": "General Pattern",
-        }
+        # Use predefined general domain pattern constant
         patterns_data = {
             **SAMPLE_PATTERN_FILE,
-            "patterns": [SAMPLE_PATTERN_1, general_pattern],
+            "patterns": [SAMPLE_PATTERN_1, SAMPLE_GENERAL_DOMAIN_PATTERN],
         }
         with pattern_file.open("w") as f:
             json.dump(patterns_data, f)
@@ -618,14 +670,19 @@ class TestEdgeCases:
         self,
         handler: HandlerContextInjection,
     ) -> None:
-        """Test with None project root."""
+        """Test with None project root.
+
+        With isolated_home fixture, user-level patterns are isolated,
+        so this test reliably returns 0 patterns (no user patterns exist).
+        """
         result = await handler.handle(
             project_root=None,
             emit_event=False,
         )
 
-        # Should succeed (may or may not find user-level patterns)
+        # With isolated home directory, no patterns should be found
         assert result.success is True
+        assert result.pattern_count == 0
         assert result.retrieval_ms >= 0
 
     @pytest.mark.asyncio
@@ -779,21 +836,38 @@ class TestMultiplePatternFiles:
         self,
         handler: HandlerContextInjection,
         temp_project_dir: Path,
+        isolated_home: Path,
     ) -> None:
         """Test patterns are deduplicated when same ID appears in multiple files.
 
-        Note: This test only checks project-level patterns since user-level
-        patterns depend on the actual ~/.claude directory which we don't control.
+        With isolated_home fixture, we can safely test both project-level
+        and user-level pattern file deduplication.
         """
-        # Create project pattern file with two patterns
-        pattern_path = temp_project_dir / ".claude" / "learned_patterns.json"
-        with pattern_path.open("w") as f:
+        # Create project pattern file
+        project_pattern_path = temp_project_dir / ".claude" / "learned_patterns.json"
+        with project_pattern_path.open("w") as f:
             json.dump(
                 {
                     "version": "1.0.0",
                     "patterns": [
-                        {**SAMPLE_PATTERN_1},
+                        {**SAMPLE_PATTERN_1},  # pat-001
                         {**SAMPLE_PATTERN_1, "pattern_id": "unique-project"},
+                    ],
+                },
+                f,
+            )
+
+        # Create user-level pattern file with duplicate ID
+        user_claude_dir = isolated_home / ".claude"
+        user_claude_dir.mkdir()
+        user_pattern_path = user_claude_dir / "learned_patterns.json"
+        with user_pattern_path.open("w") as f:
+            json.dump(
+                {
+                    "version": "1.0.0",
+                    "patterns": [
+                        {**SAMPLE_PATTERN_1},  # Same pat-001 (should be deduplicated)
+                        {**SAMPLE_PATTERN_2},  # Different ID (pat-002)
                     ],
                 },
                 f,
@@ -804,9 +878,13 @@ class TestMultiplePatternFiles:
             emit_event=False,
         )
 
-        # Should have both patterns (different IDs)
+        # Should have 3 unique patterns:
+        # - pat-001 (from project, first occurrence)
+        # - unique-project (from project)
+        # - pat-002 (from user-level)
+        # The duplicate pat-001 from user-level should be deduplicated
         assert result.success is True
-        assert result.pattern_count == 2
+        assert result.pattern_count == 3
 
 
 # =============================================================================

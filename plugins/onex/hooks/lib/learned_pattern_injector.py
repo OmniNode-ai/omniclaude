@@ -244,11 +244,25 @@ def _parse_pattern_file(file_path: Path) -> list[PatternRecord]:
     return records
 
 
+@dataclass
+class LoadPatternsResult:
+    """
+    Result from loading patterns including source attribution.
+
+    Attributes:
+        patterns: List of filtered and sorted pattern records.
+        source_files: List of files that contributed at least one pattern.
+    """
+
+    patterns: list[PatternRecord]
+    source_files: list[Path]
+
+
 def load_patterns(
     project_root: Path | None,
     domain: str,
     min_confidence: float,
-) -> list[PatternRecord]:
+) -> LoadPatternsResult:
     """
     Load patterns from persistence files with filtering.
 
@@ -262,22 +276,26 @@ def load_patterns(
         min_confidence: Minimum confidence threshold (0.0 to 1.0).
 
     Returns:
-        List of PatternRecord objects matching criteria, sorted by confidence.
-        Returns empty list if no files found or on parse errors.
+        LoadPatternsResult containing filtered patterns and list of source files
+        that contributed at least one pattern. Returns empty result if no files
+        found or on parse errors.
     """
     all_patterns: list[PatternRecord] = []
+    contributing_files: list[Path] = []
 
     # Find and parse pattern files
     pattern_files = _find_pattern_files(project_root)
 
     if not pattern_files:
         logger.debug("No pattern files found")
-        return []
+        return LoadPatternsResult(patterns=[], source_files=[])
 
     for file_path in pattern_files:
         try:
             patterns = _parse_pattern_file(file_path)
-            all_patterns.extend(patterns)
+            if patterns:  # Only track files that contributed patterns
+                all_patterns.extend(patterns)
+                contributing_files.append(file_path)
             logger.debug(f"Loaded {len(patterns)} patterns from {file_path}")
         except (json.JSONDecodeError, ValueError, FileNotFoundError) as e:
             logger.warning(f"Failed to parse {file_path}: {e}")
@@ -301,7 +319,7 @@ def load_patterns(
     # Sort by confidence descending
     unique_patterns.sort(key=lambda p: p.confidence, reverse=True)
 
-    return unique_patterns
+    return LoadPatternsResult(patterns=unique_patterns, source_files=contributing_files)
 
 
 # =============================================================================
@@ -440,16 +458,20 @@ def main() -> None:
                 project_root = None
 
         # Load patterns
-        patterns = load_patterns(
+        result = load_patterns(
             project_root=project_root,
             domain=domain,
             min_confidence=min_confidence,
         )
+        patterns = result.patterns
 
-        # Determine source
-        if patterns:
-            pattern_files = _find_pattern_files(project_root)
-            source = str(pattern_files[0]) if pattern_files else "memory"
+        # Determine source - accurately reflect all contributing files
+        if result.source_files:
+            if len(result.source_files) == 1:
+                source = str(result.source_files[0])
+            else:
+                # Multiple sources - list all to avoid misleading attribution
+                source = ", ".join(str(f) for f in result.source_files)
         else:
             source = "none"
 

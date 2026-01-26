@@ -181,21 +181,22 @@ class TestModelHookContextInjectedPayload:
             )
         assert "entity_id" in str(exc_info.value)
 
-    def test_correlation_id_is_required(self) -> None:
-        """correlation_id is required, not auto-generated."""
-        with pytest.raises(ValidationError) as exc_info:
-            ModelHookContextInjectedPayload(
-                entity_id=make_entity_id(),
-                session_id="test",
-                # Missing correlation_id
-                causation_id=make_causation_id(),
-                emitted_at=make_timestamp(),
-                context_source=ContextSource.NONE,
-                pattern_count=0,
-                context_size_bytes=0,
-                retrieval_duration_ms=0,
-            )
-        assert "correlation_id" in str(exc_info.value)
+    def test_correlation_id_auto_generated(self) -> None:
+        """correlation_id auto-generates UUID if not provided."""
+        from uuid import UUID
+
+        payload = ModelHookContextInjectedPayload(
+            entity_id=make_entity_id(),
+            session_id="test",
+            # correlation_id not provided - should auto-generate
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            context_source=ContextSource.NONE,
+            pattern_count=0,
+            context_size_bytes=0,
+            retrieval_duration_ms=0,
+        )
+        assert isinstance(payload.correlation_id, UUID)
 
     def test_causation_id_is_required(self) -> None:
         """causation_id is required for event chain tracking."""

@@ -66,7 +66,7 @@ import warnings
 from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from omnibase_infra.utils import ensure_timezone_aware
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -870,7 +870,7 @@ class ModelHookContextInjectedPayload(BaseModel):
 
     # Tracing and causation
     correlation_id: UUID = Field(
-        ...,
+        default_factory=uuid4,
         description="Correlation ID for distributed tracing",
     )
     causation_id: UUID = Field(

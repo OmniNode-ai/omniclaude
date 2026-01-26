@@ -85,6 +85,19 @@ class ModelInjectionResult:
     retrieval_ms: int
 
 
+@dataclass(frozen=True)
+class ModelLoadPatternsResult:
+    """Result from loading patterns including source attribution.
+
+    Attributes:
+        patterns: List of unique pattern records.
+        source_files: List of files that contributed at least one pattern.
+    """
+
+    patterns: list[ModelPatternRecord]
+    source_files: list[Path]
+
+
 # =============================================================================
 # Handler Implementation
 # =============================================================================
@@ -164,15 +177,31 @@ class HandlerContextInjection:
                 retrieval_ms=0,
             )
 
-        # Step 1: Load patterns from files (I/O)
+        # Step 1: Load patterns from files (I/O) with configured timeout
         start_time = time.monotonic()
+        timeout_seconds = cfg.timeout_ms / 1000.0
         try:
-            patterns = await asyncio.to_thread(
-                self._load_patterns_from_files,
-                project_root,
+            load_result = await asyncio.wait_for(
+                asyncio.to_thread(
+                    self._load_patterns_from_files,
+                    project_root,
+                ),
+                timeout=timeout_seconds,
             )
+            patterns = load_result.patterns
             retrieval_ms = int((time.monotonic() - start_time) * 1000)
-            source = self._get_source_path(project_root)
+            source = self._format_source_attribution(load_result.source_files)
+        except TimeoutError:
+            retrieval_ms = int((time.monotonic() - start_time) * 1000)
+            logger.warning(f"Pattern loading timed out after {cfg.timeout_ms}ms")
+            return ModelInjectionResult(
+                success=True,  # Graceful degradation
+                context_markdown="",
+                pattern_count=0,
+                context_size_bytes=0,
+                source="timeout",
+                retrieval_ms=retrieval_ms,
+            )
         except Exception as e:
             retrieval_ms = int((time.monotonic() - start_time) * 1000)
             logger.warning(f"Pattern loading failed: {e}")
@@ -233,18 +262,21 @@ class HandlerContextInjection:
     def _load_patterns_from_files(
         self,
         project_root: str | None,
-    ) -> list[ModelPatternRecord]:
+    ) -> ModelLoadPatternsResult:
         """Load patterns from persistence files.
 
         Finds and parses all pattern files, deduplicating by pattern_id.
+        Tracks which files contributed at least one pattern for accurate
+        source attribution.
 
         Args:
             project_root: Optional project root path.
 
         Returns:
-            List of unique pattern records.
+            ModelLoadPatternsResult with unique patterns and contributing source files.
         """
         all_patterns: list[ModelPatternRecord] = []
+        contributing_files: list[Path] = []
 
         # Find pattern files using config's persistence_file path
         pattern_files = self._find_pattern_files(
@@ -254,13 +286,15 @@ class HandlerContextInjection:
 
         if not pattern_files:
             logger.debug("No pattern files found")
-            return []
+            return ModelLoadPatternsResult(patterns=[], source_files=[])
 
         # Parse each file
         for file_path in pattern_files:
             try:
                 patterns = self._parse_pattern_file(file_path)
-                all_patterns.extend(patterns)
+                if patterns:  # Only track files that contributed patterns
+                    all_patterns.extend(patterns)
+                    contributing_files.append(file_path)
                 logger.debug(f"Loaded {len(patterns)} patterns from {file_path}")
             except Exception as e:
                 logger.warning(f"Failed to parse {file_path}: {e}")
@@ -274,7 +308,9 @@ class HandlerContextInjection:
                 seen_ids.add(pattern.pattern_id)
                 unique_patterns.append(pattern)
 
-        return unique_patterns
+        return ModelLoadPatternsResult(
+            patterns=unique_patterns, source_files=contributing_files
+        )
 
     def _find_pattern_files(
         self, project_root: Path | None, persistence_file: str
@@ -298,8 +334,9 @@ class HandlerContextInjection:
             if project_file.exists():
                 candidates.append(project_file)
 
-        # User-level patterns (standard fallback location)
-        user_file = Path.home() / ".claude" / "learned_patterns.json"
+        # User-level patterns (uses filename from persistence_file config)
+        persistence_filename = Path(persistence_file).name
+        user_file = Path.home() / ".claude" / persistence_filename
         if user_file.exists():
             candidates.append(user_file)
 
@@ -337,13 +374,24 @@ class HandlerContextInjection:
 
         return records
 
-    def _get_source_path(self, project_root: str | None) -> str:
-        """Return primary source file path."""
-        pattern_files = self._find_pattern_files(
-            Path(project_root) if project_root else None,
-            self._config.persistence_file,
-        )
-        return str(pattern_files[0]) if pattern_files else "none"
+    def _format_source_attribution(self, source_files: list[Path]) -> str:
+        """Format source file paths for accurate attribution.
+
+        When patterns come from multiple files, lists all contributing files
+        to avoid misleading attribution.
+
+        Args:
+            source_files: List of files that contributed patterns.
+
+        Returns:
+            Formatted source string (single path or comma-separated list).
+        """
+        if not source_files:
+            return "none"
+        if len(source_files) == 1:
+            return str(source_files[0])
+        # Multiple sources - list all to avoid misleading attribution
+        return ", ".join(str(f) for f in source_files)
 
     # =========================================================================
     # Formatting Methods
@@ -426,11 +474,27 @@ class HandlerContextInjection:
             # Cannot derive meaningful entity_id - skip
             return
 
+        # Resolve correlation_id to UUID, handling non-UUID values gracefully
+        resolved_correlation_id: UUID
+        if correlation_id:
+            try:
+                resolved_correlation_id = UUID(correlation_id)
+            except ValueError:
+                # Non-UUID correlation_id - derive deterministic UUID to preserve traceability
+                logger.warning(
+                    f"Non-UUID correlation_id '{correlation_id[:50]}...' - deriving deterministic UUID"
+                )
+                resolved_correlation_id = self._derive_deterministic_id(
+                    correlation_id, project_root
+                )
+        else:
+            resolved_correlation_id = entity_id
+
         try:
             payload = ModelHookContextInjectedPayload(
                 entity_id=entity_id,
                 session_id=session_id or str(entity_id),
-                correlation_id=UUID(correlation_id) if correlation_id else entity_id,
+                correlation_id=resolved_correlation_id,
                 causation_id=uuid4(),
                 emitted_at=datetime.now(UTC),
                 context_source=ContextSource.PERSISTENCE_FILE,
