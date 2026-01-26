@@ -99,7 +99,10 @@ repos:
 
       - id: mypy-typecheck
         name: mypy (type checking - match CI)
-        # Only check non-legacy code - lib/ excluded (will be deleted post-Beta)
+        # SCOPE: Currently limited to hooks/ and config/ (strict, well-typed modules)
+        # TODO(post-Beta): After lib/ deletion, expand to full src/omniclaude/:
+        #   entry: bash -c 'uv run mypy src/omniclaude/ --ignore-missing-imports'
+        # Exclusion: lib/ contains legacy code that will be deleted post-Beta
         entry: bash -c 'uv run mypy src/omniclaude/hooks/ src/omniclaude/config/ --ignore-missing-imports'
         language: system
         pass_filenames: false

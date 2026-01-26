@@ -215,13 +215,13 @@ class PydanticPatternChecker(ast.NodeVisitor):
         return frozen, extra
 
     def _get_constant_value(self, node: ast.expr) -> object:
-        """Extract constant value from AST node."""
+        """Extract constant value from AST node.
+
+        Note: Requires Python 3.8+ where ast.Constant handles all constant
+        types (bool, str, int, float, None, bytes, ellipsis).
+        """
         if isinstance(node, ast.Constant):
             return node.value
-        if isinstance(node, ast.NameConstant):  # Python 3.7 compatibility
-            return node.value
-        if isinstance(node, ast.Str):  # Python 3.7 compatibility
-            return node.s
         return None
 
     def _check_field_annotations(self, node: ast.ClassDef) -> None:

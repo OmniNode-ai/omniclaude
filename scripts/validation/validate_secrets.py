@@ -349,6 +349,40 @@ class PythonSecretValidator(ast.NodeVisitor):
                 if value_node.value.id == "environ":
                     return False
 
+        # Flag binary operations (often string concatenation like "sk-" + "key")
+        # These are suspicious because they may be attempts to obfuscate secrets
+        if isinstance(value_node, ast.BinOp):
+            # Check if either operand contains a string constant
+            if self._binop_contains_string(value_node):
+                return True
+
+        # Flag function calls that aren't environment variable getters
+        # If we reach here with a Call node, it wasn't whitelisted above
+        # Examples: base64.b64decode("secret"), hashlib.md5("key").hexdigest()
+        if isinstance(value_node, ast.Call):
+            # Already checked for getenv/environ.get above, so this is suspicious
+            return True
+
+        return False
+
+    def _binop_contains_string(self, node: ast.BinOp) -> bool:
+        """Check if a binary operation contains string constants (potential concatenation)."""
+        # Check left operand
+        if isinstance(node.left, ast.Constant) and isinstance(node.left.value, str):
+            if len(node.left.value) >= 2:  # Lower threshold for concatenation parts
+                return True
+        if isinstance(node.left, ast.BinOp) and self._binop_contains_string(node.left):
+            return True
+
+        # Check right operand
+        if isinstance(node.right, ast.Constant) and isinstance(node.right.value, str):
+            if len(node.right.value) >= 2:
+                return True
+        if isinstance(node.right, ast.BinOp) and self._binop_contains_string(
+            node.right
+        ):
+            return True
+
         return False
 
     def _get_call_func_name(self, func_node: ast.AST) -> str:
