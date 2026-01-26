@@ -15,7 +15,6 @@ Part of OMN-1403: Context injection for session enrichment.
 from __future__ import annotations
 
 import ast
-from dataclasses import fields
 from pathlib import Path
 
 import pytest
@@ -312,77 +311,3 @@ class TestPatternRecordValidation:
                 return
 
         pytest.fail("PatternRecord class not found in handler module")
-
-
-class TestDbPatternRecordDifferent:
-    """Verify DbPatternRecord is correctly different from API model."""
-
-    def test_db_record_has_additional_fields(self) -> None:
-        """Verify DbPatternRecord has 12 fields (8 + 4 database fields)."""
-        from omniclaude.hooks.repository_patterns import DbPatternRecord
-
-        db_fields = fields(DbPatternRecord)
-        field_names = [f.name for f in db_fields]
-
-        # Should have 12 fields total
-        assert len(db_fields) == 12, (
-            f"DbPatternRecord has {len(db_fields)} fields, expected 12.\n"
-            f"Fields: {field_names}"
-        )
-
-        # Should have the 4 extra database fields
-        extra_fields = ["id", "project_scope", "created_at", "updated_at"]
-        for extra_field in extra_fields:
-            assert extra_field in field_names, (
-                f"DbPatternRecord missing expected database field: {extra_field}"
-            )
-
-    def test_db_record_has_to_api_dict(self) -> None:
-        """Verify DbPatternRecord has to_api_dict() conversion method."""
-        from omniclaude.hooks.repository_patterns import DbPatternRecord
-
-        assert hasattr(DbPatternRecord, "to_api_dict"), (
-            "DbPatternRecord missing to_api_dict() method for API conversion"
-        )
-
-    def test_to_api_dict_returns_eight_fields(self) -> None:
-        """Verify to_api_dict() returns only the 8 API fields."""
-        from datetime import UTC, datetime
-        from uuid import uuid4
-
-        from omniclaude.hooks.repository_patterns import DbPatternRecord
-
-        now = datetime.now(UTC)
-        db_record = DbPatternRecord(
-            id=uuid4(),
-            pattern_id="test-pattern",
-            domain="testing",
-            title="Test Pattern",
-            description="A test pattern",
-            confidence=0.9,
-            usage_count=5,
-            success_rate=0.8,
-            example_reference="test.py:42",
-            project_scope=None,
-            created_at=now,
-            updated_at=now,
-        )
-
-        api_dict = db_record.to_api_dict()
-
-        # Should have exactly 8 keys
-        assert len(api_dict) == 8, (
-            f"to_api_dict() returned {len(api_dict)} fields, expected 8.\n"
-            f"Fields: {list(api_dict.keys())}"
-        )
-
-        # Should NOT have database fields
-        for db_field in ["id", "project_scope", "created_at", "updated_at"]:
-            assert db_field not in api_dict, (
-                f"to_api_dict() should not include database field: {db_field}"
-            )
-
-        # Should have correct values
-        assert api_dict["pattern_id"] == "test-pattern"
-        assert api_dict["domain"] == "testing"
-        assert api_dict["confidence"] == 0.9

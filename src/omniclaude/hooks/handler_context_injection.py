@@ -72,13 +72,12 @@ class PatternRecord:
     in __post_init__ before the instance is frozen.
 
     Architecture Note:
-        This model is distinct from DbPatternRecord (repository_patterns.py) which
-        has 4 additional database fields (id, project_scope, created_at, updated_at).
-        Use DbPatternRecord.to_api_dict() to convert from database model to this model.
-
         This class is intentionally duplicated in plugins/onex/hooks/lib/pattern_types.py
         for CLI subprocess independence. Both definitions MUST stay in sync.
         See tests/hooks/test_pattern_sync.py for sync verification.
+
+        For database persistence, use NodePatternPersistenceEffect with
+        ProtocolPatternPersistence from omniclaude.nodes.node_pattern_persistence_effect.
 
     Attributes:
         pattern_id: Unique identifier for the pattern.
@@ -393,33 +392,30 @@ class HandlerContextInjection:
 
         cfg = self._config
 
-        # Try to create a PostgreSQL handler implementation
-        try:
-            # Import the handler implementation (will be provided by the node)
-            # For now, we'll try to get it from a handler factory or registry
-            from omniclaude.nodes.node_pattern_persistence_effect.handlers import (
-                HandlerPatternPersistencePostgres,
+        # Check if handler module is available using importlib
+        import importlib.util
+
+        handler_spec = importlib.util.find_spec(
+            "omniclaude.handlers.pattern_storage_postgres"
+        )
+        if handler_spec is None:
+            raise PatternConnectionError(
+                "Pattern persistence handler not available - "
+                "omniclaude.handlers.pattern_storage_postgres module not found"
             )
 
-            handler = HandlerPatternPersistencePostgres(
-                dsn=cfg.get_db_dsn(),
-                timeout_seconds=cfg.timeout_ms / 1000.0,
-            )
-            await handler.initialize()
-            self._persistence = handler
-            self._persistence_owned = True
-            return self._persistence
-
-        except ImportError:
-            # Handler implementation not available yet
-            raise PatternConnectionError(
-                "Pattern persistence handler not implemented - "
-                "HandlerPatternPersistencePostgres not available"
-            )
-        except Exception as e:
-            raise PatternConnectionError(
-                f"Failed to initialize persistence handler: {e}"
-            ) from e
+        # NOTE: HandlerPatternStoragePostgres requires a ModelONEXContainer for
+        # dependency injection (to resolve HandlerDb). For standalone usage without
+        # a container, the caller should provide a pre-configured ProtocolPatternPersistence
+        # via the constructor: HandlerContextInjection(persistence=handler)
+        #
+        # This code path is a placeholder for future container integration.
+        raise PatternConnectionError(
+            "Pattern persistence handler requires container-based initialization. "
+            "HandlerPatternStoragePostgres expects ModelONEXContainer, not DSN/timeout. "
+            "Configure CONTEXT_DB_ENABLED=false or provide a pre-configured "
+            "ProtocolPatternPersistence handler via HandlerContextInjection(persistence=...)."
+        )
 
     async def _load_patterns_from_database(
         self,

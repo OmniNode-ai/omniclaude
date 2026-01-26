@@ -180,6 +180,15 @@ class HandlerPatternStoragePostgres:
             )
             count_envelope = _build_db_query_envelope(count_sql, params.copy(), cid)
             count_output = await db.execute(count_envelope)
+
+            if count_output.result is None:
+                return ModelLearnedPatternQueryResult(
+                    success=False,
+                    error="Database count query returned no result",
+                    duration_ms=(time.perf_counter() - start) * 1000,
+                    correlation_id=cid,
+                )
+
             total_count = int(count_output.result.payload.rows[0]["cnt"])
 
             # Data query: filters -> (union via WHERE) -> sort -> offset -> limit
@@ -196,6 +205,14 @@ class HandlerPatternStoragePostgres:
 
             data_envelope = _build_db_query_envelope(data_sql, params, cid)
             data_output = await db.execute(data_envelope)
+
+            if data_output.result is None:
+                return ModelLearnedPatternQueryResult(
+                    success=False,
+                    error="Database data query returned no result",
+                    duration_ms=(time.perf_counter() - start) * 1000,
+                    correlation_id=cid,
+                )
 
             if data_output.result.status != EnumResponseStatus.SUCCESS:
                 return ModelLearnedPatternQueryResult(
@@ -290,6 +307,14 @@ class HandlerPatternStoragePostgres:
 
             envelope = _build_db_query_envelope(sql, params, cid)
             output = await db.execute(envelope)
+
+            if output.result is None:
+                return ModelLearnedPatternUpsertResult(
+                    success=False,
+                    error="Database upsert returned no result",
+                    duration_ms=(time.perf_counter() - start) * 1000,
+                    correlation_id=cid,
+                )
 
             if output.result.status != EnumResponseStatus.SUCCESS:
                 return ModelLearnedPatternUpsertResult(
