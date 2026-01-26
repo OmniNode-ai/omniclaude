@@ -21,26 +21,15 @@ import functools
 import hashlib
 import json
 import logging
-import sys
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TypeAlias
 from uuid import UUID, uuid4
 
 from omniclaude.hooks.context_config import ContextInjectionConfig
 from omniclaude.hooks.handler_event_emitter import emit_hook_event
 from omniclaude.hooks.schemas import ContextSource, ModelHookContextInjectedPayload
-
-# Add plugins lib to path for shared types (CLI independence maintained)
-_plugins_lib = (
-    Path(__file__).parent.parent.parent.parent / "plugins" / "onex" / "hooks" / "lib"
-)
-if str(_plugins_lib) not in sys.path:
-    sys.path.insert(0, str(_plugins_lib))
-
-from pattern_types import PatternRecord
 
 logger = logging.getLogger(__name__)
 
@@ -49,11 +38,55 @@ logger = logging.getLogger(__name__)
 # Data Models
 # =============================================================================
 
-# Type alias for backward compatibility - canonical definition is in pattern_types.py
-# Note: Using TypeAlias annotation (not `type X = Y` statement) for mypy compatibility
-# while keeping it callable/instantiable. The `type` statement creates a TypeAliasType
-# that is NOT callable, breaking tests that instantiate ModelPatternRecord(...).
-ModelPatternRecord: TypeAlias = PatternRecord  # noqa: UP040
+
+@dataclass(frozen=True)
+class PatternRecord:
+    """Represents a single learned pattern from the persistence store.
+
+    Frozen to ensure immutability after creation. Validation happens
+    in __post_init__ before the instance is frozen.
+
+    Note: This class is duplicated in plugins/onex/hooks/lib/pattern_types.py
+    for CLI independence. Both definitions should stay in sync.
+
+    Attributes:
+        pattern_id: Unique identifier for the pattern.
+        domain: Domain/category of the pattern (e.g., "code_review", "testing").
+        title: Human-readable title for the pattern.
+        description: Detailed description of what the pattern represents.
+        confidence: Confidence score from 0.0 to 1.0.
+        usage_count: Number of times this pattern has been applied.
+        success_rate: Success rate from 0.0 to 1.0.
+        example_reference: Optional reference to an example.
+    """
+
+    pattern_id: str
+    domain: str
+    title: str
+    description: str
+    confidence: float
+    usage_count: int
+    success_rate: float
+    example_reference: str | None = None
+
+    def __post_init__(self) -> None:
+        """Validate fields after initialization (runs before instance is frozen)."""
+        if not 0.0 <= self.confidence <= 1.0:
+            raise ValueError(
+                f"confidence must be between 0.0 and 1.0, got {self.confidence}"
+            )
+        if not 0.0 <= self.success_rate <= 1.0:
+            raise ValueError(
+                f"success_rate must be between 0.0 and 1.0, got {self.success_rate}"
+            )
+        if self.usage_count < 0:
+            raise ValueError(
+                f"usage_count must be non-negative, got {self.usage_count}"
+            )
+
+
+# Alias for backward compatibility with tests and exports
+ModelPatternRecord = PatternRecord
 
 
 @dataclass(frozen=True)
