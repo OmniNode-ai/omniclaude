@@ -257,7 +257,7 @@ fi
 # -----------------------------
 LEARNED_PATTERNS=""
 if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
-    log "Loading learned patterns via learned_pattern_injector.py..."
+    log "Loading learned patterns via context injection..."
 
     PATTERN_INPUT="$(jq -n \
         --arg agent "${AGENT_NAME:-}" \
@@ -276,21 +276,28 @@ if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
         }')"
 
     # 2s timeout - patterns should be fast (file-based)
-    if [[ -f "${HOOKS_LIB}/learned_pattern_injector.py" ]]; then
+    # Try ONEX-compliant wrapper first, fall back to legacy injector
+    if [[ -f "${HOOKS_LIB}/context_injection_wrapper.py" ]]; then
+        log "Using ONEX-compliant context_injection_wrapper.py"
+        PATTERN_RESULT="$(echo "$PATTERN_INPUT" | timeout 2 $PYTHON_CMD "${HOOKS_LIB}/context_injection_wrapper.py" 2>>"$LOG_FILE" || echo '{}')"
+    elif [[ -f "${HOOKS_LIB}/learned_pattern_injector.py" ]]; then
+        log "Falling back to legacy learned_pattern_injector.py"
         PATTERN_RESULT="$(echo "$PATTERN_INPUT" | timeout 2 $PYTHON_CMD "${HOOKS_LIB}/learned_pattern_injector.py" 2>>"$LOG_FILE" || echo '{}')"
-        PATTERN_SUCCESS="$(echo "$PATTERN_RESULT" | jq -r '.success // false')"
+    else
+        log "INFO: No pattern injector found, skipping pattern injection"
+        PATTERN_RESULT='{}'
+    fi
 
-        if [[ "$PATTERN_SUCCESS" == "true" ]]; then
-            LEARNED_PATTERNS="$(echo "$PATTERN_RESULT" | jq -r '.patterns_context // ""')"
-            PATTERN_COUNT="$(echo "$PATTERN_RESULT" | jq -r '.pattern_count // 0')"
-            if [[ -n "$LEARNED_PATTERNS" ]] && [[ "$PATTERN_COUNT" != "0" ]]; then
-                log "Learned patterns loaded: ${PATTERN_COUNT} patterns"
-            fi
-        else
-            log "INFO: No learned patterns available"
+    PATTERN_SUCCESS="$(echo "$PATTERN_RESULT" | jq -r '.success // false')"
+
+    if [[ "$PATTERN_SUCCESS" == "true" ]]; then
+        LEARNED_PATTERNS="$(echo "$PATTERN_RESULT" | jq -r '.patterns_context // ""')"
+        PATTERN_COUNT="$(echo "$PATTERN_RESULT" | jq -r '.pattern_count // 0')"
+        if [[ -n "$LEARNED_PATTERNS" ]] && [[ "$PATTERN_COUNT" != "0" ]]; then
+            log "Learned patterns loaded: ${PATTERN_COUNT} patterns"
         fi
     else
-        log "INFO: learned_pattern_injector.py not found, skipping pattern injection"
+        log "INFO: No learned patterns available"
     fi
 fi
 

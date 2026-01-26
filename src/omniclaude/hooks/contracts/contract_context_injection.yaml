@@ -1,0 +1,194 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 OmniNode Team
+#
+# ONEX Node Contract
+# Node: NodeContextInjectionEffect
+#
+# This contract defines the interface for the context injection effect node,
+# which retrieves learned patterns from persistence files.
+
+# Contract identifiers
+name: "context_injection"
+contract_name: "context_injection"
+node_name: "context_injection"
+
+# Version (semantic versioning)
+version:
+  major: 1
+  minor: 0
+  patch: 0
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+node_version:
+  major: 0
+  minor: 1
+  patch: 0
+
+# Node type - EFFECT because it reads from file system (side effect)
+node_type: "EFFECT"
+
+# Description
+description: >
+  Effect node for retrieving learned patterns from persistence files.
+  Performs file I/O only. Returns raw patterns without filtering/sorting.
+  Formatting, filtering, and event emission are handled by the orchestration
+  layer, not this node.
+
+# Strongly typed I/O models (reference only - constraints in Pydantic)
+input_model:
+  name: "ModelContextRetrievalContract"
+  module: "omniclaude.hooks.node_context_injection_effect"
+  description: "Input specifying project root and domain hint for pattern retrieval."
+output_model:
+  name: "ModelContextRetrievalResult"
+  module: "omniclaude.hooks.node_context_injection_effect"
+  description: "Raw patterns from file system with retrieval timing."
+
+# Side effects declared explicitly
+side_effects:
+  - type: "file_read"
+    description: "Read pattern JSON files from .claude directories"
+    paths:
+      - "~/.claude/learned_patterns.json"
+      - "{project}/.claude/learned_patterns.json"
+
+# Runtime configuration
+runtime:
+  # Can be invoked directly from hooks
+  supports_direct_call: true
+  # Not event-driven (I/O node)
+  supports_event_driven: false
+  # Has file system side effects
+  side_effects: true
+  # Hook must complete quickly
+  timeout_ms: 2000
+  # Same files = same output (deterministic)
+  deterministic: true
+  # Safe to retry
+  idempotent: true
+
+# NO event_bus block - event emission is handler/runtime's job, not node's
+
+# Dependencies
+dependencies:
+  - name: "pathlib"
+    type: "stdlib"
+    description: "Path manipulation for finding pattern files"
+  - name: "json"
+    type: "stdlib"
+    description: "JSON parsing for pattern files"
+  - name: "asyncio"
+    type: "stdlib"
+    description: "Async wrapper for sync file I/O"
+
+# Capabilities provided by this node
+capabilities:
+  - name: "pattern_retrieval"
+    description: "Retrieve learned patterns from persistence files"
+  - name: "multi_source"
+    description: "Load from project and user-level pattern files"
+  - name: "deduplication"
+    description: "Deduplicate patterns by ID across sources"
+
+# Model definitions (reference only - actual constraints in Pydantic models)
+definitions:
+  ModelContextRetrievalContract:
+    type: object
+    description: "Input contract for context retrieval effect node"
+    properties:
+      project_root:
+        type: string
+        nullable: true
+        description: "Project root path for pattern files"
+      domain:
+        type: string
+        description: "Domain hint (NOT filtered by node - for metadata)"
+    required: []
+
+  ModelContextRetrievalResult:
+    type: object
+    description: "Output contract for context retrieval effect node"
+    properties:
+      success:
+        type: boolean
+        description: "Whether retrieval succeeded"
+      patterns:
+        type: array
+        description: "Retrieved patterns (raw, unsorted, unfiltered)"
+        items:
+          $ref: "#/definitions/ModelPatternRecord"
+      source:
+        type: string
+        description: "Path of file patterns were loaded from"
+      retrieval_ms:
+        type: integer
+        minimum: 0
+        description: "Time spent on file I/O in milliseconds"
+      error_message:
+        type: string
+        nullable: true
+        description: "Error details if retrieval failed"
+    required:
+      - success
+      - patterns
+      - source
+      - retrieval_ms
+
+  ModelPatternRecord:
+    type: object
+    description: "A single learned pattern from persistence"
+    properties:
+      pattern_id:
+        type: string
+        description: "Unique pattern identifier"
+      domain:
+        type: string
+        description: "Domain/category of the pattern"
+      title:
+        type: string
+        description: "Human-readable title"
+      description:
+        type: string
+        description: "Detailed description"
+      confidence:
+        type: number
+        minimum: 0.0
+        maximum: 1.0
+        description: "Confidence score"
+      usage_count:
+        type: integer
+        minimum: 0
+        description: "Usage count"
+      success_rate:
+        type: number
+        minimum: 0.0
+        maximum: 1.0
+        description: "Success rate"
+      example_reference:
+        type: string
+        nullable: true
+        description: "Optional example reference"
+    required:
+      - pattern_id
+      - domain
+      - title
+      - description
+      - confidence
+      - usage_count
+      - success_rate
+
+# Metadata
+metadata:
+  author: "OmniNode Team"
+  license: "MIT"
+  created: "2025-01-26"
+  ticket: "OMN-1403"
+  tags:
+    - effect
+    - hook
+    - context
+    - patterns
+    - omniclaude
+    - onex
