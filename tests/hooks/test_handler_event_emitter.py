@@ -1019,3 +1019,62 @@ class TestClaudeHookEventEmission:
 
             # Result should still indicate success (publish succeeded)
             assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_emit_claude_hook_event_truncates_large_prompt(self) -> None:
+        """emit_claude_hook_event truncates prompts exceeding MAX_PROMPT_SIZE."""
+        # Create a 1.5MB prompt (exceeds 1MB MAX_PROMPT_SIZE)
+        large_prompt = "x" * 1_500_000
+        config = make_claude_hook_event_config(
+            event_type=EnumClaudeCodeHookEventType.USER_PROMPT_SUBMIT,
+            prompt=large_prompt,
+        )
+
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus.start.return_value = None
+            mock_bus.publish.return_value = None
+            mock_bus.close.return_value = None
+            mock_bus_class.return_value = mock_bus
+
+            result = await emit_claude_hook_event(config)
+
+            assert result.success is True
+            # Verify the published message is truncated
+            mock_bus.publish.assert_called_once()
+            call_kwargs = mock_bus.publish.call_args.kwargs
+            published_value = call_kwargs["value"]
+            # Should be less than 1.5MB and contain truncation marker
+            # MAX_PROMPT_SIZE is 1MB, JSON overhead is ~200 bytes
+            assert len(published_value) < 1_100_000
+            assert b"[TRUNCATED]" in published_value
+
+    @pytest.mark.asyncio
+    async def test_emit_claude_hook_event_does_not_truncate_small_prompt(self) -> None:
+        """emit_claude_hook_event does not truncate prompts under MAX_PROMPT_SIZE."""
+        small_prompt = "This is a normal sized prompt"
+        config = make_claude_hook_event_config(
+            event_type=EnumClaudeCodeHookEventType.USER_PROMPT_SUBMIT,
+            prompt=small_prompt,
+        )
+
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus.start.return_value = None
+            mock_bus.publish.return_value = None
+            mock_bus.close.return_value = None
+            mock_bus_class.return_value = mock_bus
+
+            result = await emit_claude_hook_event(config)
+
+            assert result.success is True
+            call_kwargs = mock_bus.publish.call_args.kwargs
+            published_value = call_kwargs["value"]
+            # Original prompt should be present in full
+            assert small_prompt.encode("utf-8") in published_value
+            # Should NOT have truncation marker
+            assert b"[TRUNCATED]" not in published_value

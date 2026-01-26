@@ -227,6 +227,12 @@ DEFAULT_KAFKA_TIMEOUT_SECONDS: int = 2  # Short timeout for hooks
 DEFAULT_KAFKA_MAX_RETRY_ATTEMPTS: int = 0  # No retries (latency budget)
 DEFAULT_KAFKA_ACKS: str = "all"  # Using "all" due to aiokafka bug with string "1"
 
+# Prompt size limit for Kafka message safety
+# Kafka default max message size is 1MB. We truncate prompts exceeding this
+# limit to prevent publish failures. The truncation marker "[TRUNCATED]" is
+# appended to indicate the prompt was cut off.
+MAX_PROMPT_SIZE: int = 1_000_000  # 1MB - Kafka message size safety limit
+
 
 # =============================================================================
 # Event Type to Topic Mapping
@@ -868,6 +874,12 @@ async def emit_claude_hook_event(
     by omniintelligence's NodeClaudeHookEventEffect. The event is published
     to the `onex.cmd.omniintelligence.claude-hook-event.v1` topic.
 
+    Note:
+        Prompts exceeding MAX_PROMPT_SIZE (1MB) are truncated with a
+        "[TRUNCATED]" suffix to prevent Kafka message size limit failures.
+        A warning is logged when truncation occurs, including the original
+        prompt size.
+
     Args:
         config: Claude hook event configuration containing event data.
 
@@ -895,11 +907,24 @@ async def emit_claude_hook_event(
         env = config.environment or os.environ.get("KAFKA_ENVIRONMENT", "dev")
         topic = build_topic(env, TopicBase.CLAUDE_HOOK_EVENT)
 
+        # Truncate prompt if it exceeds Kafka message size limit
+        prompt_to_send = config.prompt
+        if prompt_to_send is not None and len(prompt_to_send) > MAX_PROMPT_SIZE:
+            logger.warning(
+                "prompt_truncated_for_kafka",
+                extra={
+                    "original_size": len(prompt_to_send),
+                    "max_size": MAX_PROMPT_SIZE,
+                    "session_id": config.session_id,
+                },
+            )
+            prompt_to_send = prompt_to_send[: MAX_PROMPT_SIZE - 11] + "[TRUNCATED]"
+
         # Build the payload with prompt in model_extra (additionalProperties)
         # ModelClaudeCodeHookEventPayload uses extra="allow" so we can pass any fields
         payload_data: dict[str, str] = {}
-        if config.prompt is not None:
-            payload_data["prompt"] = config.prompt
+        if prompt_to_send is not None:
+            payload_data["prompt"] = prompt_to_send
 
         payload = ModelClaudeCodeHookEventPayload.model_validate(payload_data)
 

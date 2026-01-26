@@ -107,12 +107,13 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
 
     # Emit claude-hook-event to omniintelligence topic (for intelligence processing)
     # This uses the ModelClaudeCodeHookEvent format expected by NodeClaudeHookEventEffect
+    # Using stdin JSON to safely handle special characters in prompts
     (
+        printf '%s' "{\"event_type\": \"UserPromptSubmit\", \"prompt\": $(printf '%s' "$PROMPT" | jq -Rs .), \"correlation_id\": \"$CORRELATION_ID\"}" | \
         $PYTHON_CMD -m omniclaude.hooks.cli_emit claude-hook-event \
             --session-id "$SESSION_ID" \
             --event-type "UserPromptSubmit" \
-            --prompt "$PROMPT" \
-            --correlation-id "$CORRELATION_ID" \
+            --json \
             >> "$LOG_FILE" 2>&1 || { rc=$?; log "Kafka claude-hook-event emit failed (exit=$rc, non-fatal)"; }
     ) &
     log "Prompt event emission started (both topics)"
