@@ -373,7 +373,7 @@ class TestSuccessfulEmission:
             result = await emit_hook_event(payload)
 
             assert result.success is True
-            assert "omniclaude.session.started.v1" in result.topic
+            assert "onex.evt.omniclaude.session-started.v1" in result.topic
 
     @pytest.mark.asyncio
     async def test_emit_uses_entity_id_as_partition_key(self) -> None:
@@ -422,7 +422,7 @@ class TestConvenienceFunctions:
             )
 
             assert result.success is True
-            assert "session.started" in result.topic
+            assert "session-started" in result.topic
 
     @pytest.mark.asyncio
     async def test_emit_session_ended(self) -> None:
@@ -443,7 +443,7 @@ class TestConvenienceFunctions:
             )
 
             assert result.success is True
-            assert "session.ended" in result.topic
+            assert "session-ended" in result.topic
 
     @pytest.mark.asyncio
     async def test_emit_prompt_submitted(self) -> None:
@@ -465,7 +465,7 @@ class TestConvenienceFunctions:
             )
 
             assert result.success is True
-            assert "prompt.submitted" in result.topic
+            assert "prompt-submitted" in result.topic
 
     @pytest.mark.asyncio
     async def test_emit_tool_executed(self) -> None:
@@ -488,7 +488,7 @@ class TestConvenienceFunctions:
             )
 
             assert result.success is True
-            assert "tool.executed" in result.topic
+            assert "tool-executed" in result.topic
 
     @pytest.mark.asyncio
     async def test_convenience_functions_auto_generate_ids(self) -> None:

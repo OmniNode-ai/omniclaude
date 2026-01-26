@@ -361,10 +361,10 @@ class TestEventBusConfiguration:
     @pytest.mark.parametrize(
         ("contract_path", "expected_topic"),
         [
-            (CONTRACT_SESSION_STARTED, "omniclaude.session.started.v1"),
-            (CONTRACT_SESSION_ENDED, "omniclaude.session.ended.v1"),
-            (CONTRACT_PROMPT_SUBMITTED, "omniclaude.prompt.submitted.v1"),
-            (CONTRACT_TOOL_EXECUTED, "omniclaude.tool.executed.v1"),
+            (CONTRACT_SESSION_STARTED, "onex.evt.omniclaude.session-started.v1"),
+            (CONTRACT_SESSION_ENDED, "onex.evt.omniclaude.session-ended.v1"),
+            (CONTRACT_PROMPT_SUBMITTED, "onex.evt.omniclaude.prompt-submitted.v1"),
+            (CONTRACT_TOOL_EXECUTED, "onex.evt.omniclaude.tool-executed.v1"),
         ],
     )
     def test_topic_base_matches_topics_module(

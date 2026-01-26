@@ -49,7 +49,7 @@ output_model:
 
 # Event bus configuration
 event_bus:
-  topic_base: "omniclaude.prompt.submitted.v1"
+  topic_base: "onex.evt.omniclaude.prompt-submitted.v1"
   partition_key_field: "entity_id"
   partition_strategy: "hash"
   # Events use entity_id (session UUID) for ordering guarantees within a session

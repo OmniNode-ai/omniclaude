@@ -18,35 +18,50 @@ _TOPIC_SEGMENT_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
 class TopicBase(StrEnum):
-    """Base topic names (without environment prefix)."""
+    """Base topic names (without environment prefix).
 
-    SESSION_STARTED = "omniclaude.session.started.v1"
-    SESSION_ENDED = "omniclaude.session.ended.v1"
-    PROMPT_SUBMITTED = "omniclaude.prompt.submitted.v1"
-    TOOL_EXECUTED = "omniclaude.tool.executed.v1"
+    All topics follow ONEX canonical format (OMN-1537):
+        onex.{kind}.{producer}.{event-name}.v{n}
 
-    # Agent action events (tool calls, decisions, errors, successes)
-    AGENT_ACTION = "omniclaude.agent.action.v1"
+    Where:
+        - kind: cmd, evt, dlq, intent, snapshot
+        - producer: service name (omniclaude, omninode, omniintelligence)
+        - event-name: kebab-case event name
+        - v{n}: version number
+    """
 
-    # Agent observability events (used by HookEventAdapter)
-    # Note: These use legacy naming for backward compatibility with existing consumers
+    # ==========================================================================
+    # omniclaude event topics (hooks → event bus)
+    # ==========================================================================
+    SESSION_STARTED = "onex.evt.omniclaude.session-started.v1"
+    SESSION_ENDED = "onex.evt.omniclaude.session-ended.v1"
+    PROMPT_SUBMITTED = "onex.evt.omniclaude.prompt-submitted.v1"
+    TOOL_EXECUTED = "onex.evt.omniclaude.tool-executed.v1"
+    AGENT_ACTION = "onex.evt.omniclaude.agent-action.v1"
+    LEARNING_PATTERN = "onex.evt.omniclaude.learning-pattern.v1"
+
+    # ==========================================================================
+    # omninode routing topics (agent routing commands/events)
+    # ==========================================================================
+    ROUTING_REQUESTED = "onex.cmd.omninode.routing-requested.v1"
+    ROUTING_COMPLETED = "onex.evt.omninode.routing-completed.v1"
+    ROUTING_FAILED = "onex.evt.omninode.routing-failed.v1"
+
+    # ==========================================================================
+    # Cross-service topics (omniclaude → omniintelligence)
+    # ==========================================================================
+    # Claude hook event topic (consumed by omniintelligence.NodeClaudeHookEventEffect)
+    CLAUDE_HOOK_EVENT = "onex.cmd.omniintelligence.claude-hook-event.v1"
+
+    # ==========================================================================
+    # Legacy observability topics (to be migrated in future PR)
+    # These use simple hyphenated names for backward compatibility
+    # ==========================================================================
     ROUTING_DECISIONS = "agent-routing-decisions"
     AGENT_ACTIONS = "agent-actions"
     PERFORMANCE_METRICS = "router-performance-metrics"
     TRANSFORMATIONS = "agent-transformation-events"
     DETECTION_FAILURES = "agent-detection-failures"
-
-    # Future (OMN-1402)
-    LEARNING_PATTERN = "omniclaude.learning.pattern.v1"
-
-    # Agent routing topics (omninode domain, following EVENT_BUS_INTEGRATION_GUIDE)
-    ROUTING_REQUESTED = "omninode.agent.routing.requested.v1"
-    ROUTING_COMPLETED = "omninode.agent.routing.completed.v1"
-    ROUTING_FAILED = "omninode.agent.routing.failed.v1"
-
-    # Claude hook event topic (consumed by omniintelligence.NodeClaudeHookEventEffect)
-    # This topic receives raw Claude Code hook events for intelligence processing
-    CLAUDE_HOOK_EVENT = "onex.cmd.omniintelligence.claude-hook-event.v1"
 
 
 def _validate_topic_segment(segment: str, name: str) -> str:
