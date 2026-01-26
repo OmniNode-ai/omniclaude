@@ -25,12 +25,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
+from omnibase_core.enums.hooks.claude_code import EnumClaudeCodeHookEventType
 from omnibase_core.models.errors import ModelOnexError
 
 from omniclaude.hooks.handler_event_emitter import (
+    ModelClaudeHookEventConfig,
     _create_kafka_config,
     _get_event_type,
     _get_topic_base,
+    emit_claude_hook_event,
     emit_hook_event,
     emit_prompt_submitted,
     emit_session_ended,
@@ -816,4 +819,203 @@ class TestEdgeCases:
                 prompt_preview=preview_150_chars,
                 prompt_length=150,
             )
+            assert result.success is True
+
+
+# =============================================================================
+# Claude Hook Event Tests (for omniintelligence)
+# =============================================================================
+
+
+def make_claude_hook_event_config(
+    *,
+    event_type: EnumClaudeCodeHookEventType = EnumClaudeCodeHookEventType.USER_PROMPT_SUBMIT,
+    session_id: str = "test-session-123",
+    prompt: str | None = None,
+    correlation_id: UUID | None = None,
+) -> ModelClaudeHookEventConfig:
+    """Create a valid Claude hook event config for testing."""
+    return ModelClaudeHookEventConfig(
+        event_type=event_type,
+        session_id=session_id,
+        prompt=prompt,
+        correlation_id=correlation_id or uuid4(),
+    )
+
+
+@pytest.mark.usefixtures("kafka_env")
+class TestClaudeHookEventEmission:
+    """Tests for emit_claude_hook_event() function.
+
+    These tests verify the emission of Claude Code hook events to the
+    omniintelligence topic for intelligence processing.
+    """
+
+    @pytest.mark.asyncio
+    async def test_emit_claude_hook_event_success(self) -> None:
+        """emit_claude_hook_event returns success result with mocked Kafka."""
+        config = make_claude_hook_event_config()
+
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus.start.return_value = None
+            mock_bus.publish.return_value = None
+            mock_bus.close.return_value = None
+            mock_bus_class.return_value = mock_bus
+
+            result = await emit_claude_hook_event(config)
+
+            assert result.success is True
+            assert "claude-hook-event" in result.topic
+            mock_bus.publish.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_emit_claude_hook_event_with_prompt(self) -> None:
+        """emit_claude_hook_event includes prompt in payload."""
+        prompt_text = "Help me debug this authentication issue"
+        config = make_claude_hook_event_config(
+            event_type=EnumClaudeCodeHookEventType.USER_PROMPT_SUBMIT,
+            prompt=prompt_text,
+        )
+
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus_class.return_value = mock_bus
+
+            result = await emit_claude_hook_event(config)
+
+            assert result.success is True
+            # Verify the published message contains the prompt
+            mock_bus.publish.assert_called_once()
+            call_kwargs = mock_bus.publish.call_args.kwargs
+            published_value = call_kwargs["value"]
+            assert prompt_text.encode("utf-8") in published_value
+
+    @pytest.mark.asyncio
+    async def test_emit_claude_hook_event_uses_session_id_as_partition_key(
+        self,
+    ) -> None:
+        """emit_claude_hook_event uses session_id bytes as partition key."""
+        session_id = "my-unique-session-abc123"
+        config = make_claude_hook_event_config(session_id=session_id)
+
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus_class.return_value = mock_bus
+
+            await emit_claude_hook_event(config)
+
+            # Verify publish was called with session_id.encode() as key
+            mock_bus.publish.assert_called_once()
+            call_kwargs = mock_bus.publish.call_args.kwargs
+            assert call_kwargs["key"] == session_id.encode("utf-8")
+
+    @pytest.mark.asyncio
+    async def test_emit_claude_hook_event_handles_kafka_failure(self) -> None:
+        """emit_claude_hook_event handles Kafka failure gracefully."""
+        config = make_claude_hook_event_config()
+
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus.start.side_effect = ConnectionError("Kafka unavailable")
+            mock_bus_class.return_value = mock_bus
+
+            # Should NOT raise
+            result = await emit_claude_hook_event(config)
+
+            # Should return failed result
+            assert result.success is False
+            assert result.error_message is not None
+            assert "ConnectionError" in result.error_message
+
+    @pytest.mark.asyncio
+    async def test_emit_claude_hook_event_topic_correct(self) -> None:
+        """emit_claude_hook_event uses correct omniintelligence topic."""
+        config = make_claude_hook_event_config()
+
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus_class.return_value = mock_bus
+
+            result = await emit_claude_hook_event(config)
+
+            # Verify correct topic name
+            assert result.success is True
+            assert result.topic == "dev.onex.cmd.omniintelligence.claude-hook-event.v1"
+            # Verify the topic was passed to publish
+            call_kwargs = mock_bus.publish.call_args.kwargs
+            assert (
+                call_kwargs["topic"]
+                == "dev.onex.cmd.omniintelligence.claude-hook-event.v1"
+            )
+
+    @pytest.mark.asyncio
+    async def test_emit_claude_hook_event_publish_failure(self) -> None:
+        """emit_claude_hook_event handles publish failure gracefully."""
+        config = make_claude_hook_event_config()
+
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus.start.return_value = None
+            mock_bus.publish.side_effect = RuntimeError("Publish failed")
+            mock_bus.close.return_value = None
+            mock_bus_class.return_value = mock_bus
+
+            result = await emit_claude_hook_event(config)
+
+            assert result.success is False
+            assert "RuntimeError" in result.error_message  # type: ignore[operator]
+
+    @pytest.mark.asyncio
+    async def test_emit_claude_hook_event_different_event_types(self) -> None:
+        """emit_claude_hook_event works with different event types."""
+        event_types = [
+            EnumClaudeCodeHookEventType.SESSION_START,
+            EnumClaudeCodeHookEventType.USER_PROMPT_SUBMIT,
+            EnumClaudeCodeHookEventType.PRE_TOOL_USE,
+            EnumClaudeCodeHookEventType.POST_TOOL_USE,
+            EnumClaudeCodeHookEventType.SESSION_END,
+        ]
+
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus_class.return_value = mock_bus
+
+            for event_type in event_types:
+                config = make_claude_hook_event_config(event_type=event_type)
+                result = await emit_claude_hook_event(config)
+                assert result.success is True, f"Failed for event_type: {event_type}"
+
+    @pytest.mark.asyncio
+    async def test_emit_claude_hook_event_bus_close_failure_is_silent(self) -> None:
+        """Bus close failure doesn't affect result for Claude hook events."""
+        config = make_claude_hook_event_config()
+
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus.start.return_value = None
+            mock_bus.publish.return_value = None
+            mock_bus.close.side_effect = RuntimeError("Close failed")
+            mock_bus_class.return_value = mock_bus
+
+            # Should NOT raise despite close failure
+            result = await emit_claude_hook_event(config)
+
+            # Result should still indicate success (publish succeeded)
             assert result.success is True

@@ -122,6 +122,38 @@ event2 = ModelPromptSubmitted(entity_id=session_id, ...)  # partition X (same)
 event3 = ModelToolExecuted(entity_id=session_id, ...)     # partition X (same)
 ```
 
+### Dual-Emission Architecture
+
+The `UserPromptSubmit` hook emits to **two Kafka topics in parallel** to support both internal observability and external intelligence processing:
+
+| Topic | Purpose | Prompt Content | Consumer |
+|-------|---------|----------------|----------|
+| `onex.evt.omniclaude.prompt-submitted.v1` | Internal observability | 100-char preview (truncated, sanitized) | OmniClaude analytics |
+| `onex.cmd.omniintelligence.claude-hook-event.v1` | Intelligence processing | **Full prompt** (unsanitized) | OmniIntelligence |
+
+**Architecture Diagram**:
+```
+UserPromptSubmit Hook
+        │
+        ├──► Background Process 1 ──► onex.evt.omniclaude.prompt-submitted.v1
+        │         (prompt_preview: 100 chars, sanitized)
+        │
+        └──► Background Process 2 ──► onex.cmd.omniintelligence.claude-hook-event.v1
+                  (full prompt for intelligence analysis)
+```
+
+**Design Rationale**:
+- **Non-blocking**: Both emissions run as background processes (`&` in shell)
+- **Decoupled consumers**: Intelligence system evolves independently from observability
+- **Privacy separation**: Internal topic minimizes data; intelligence topic gets full context
+- **Trade-off**: Doubled Kafka connections per prompt submission
+
+**Why Two Topics?**:
+1. **Different retention policies**: Observability events can have short retention; intelligence may need longer
+2. **Access control**: Intelligence topic requires stricter ACLs (contains full prompts)
+3. **Schema evolution**: Topics can evolve independently without breaking consumers
+4. **Replay capability**: Intelligence can replay full prompts for model training
+
 ### Example Usage
 
 ```python
@@ -156,15 +188,20 @@ topic = build_topic("dev", TopicBase.SESSION_STARTED)
 
 Topic base names (without environment prefix):
 
-| Topic | Base Name |
-|-------|-----------|
-| Session Started | `omniclaude.session.started.v1` |
-| Session Ended | `omniclaude.session.ended.v1` |
-| Prompt Submitted | `omniclaude.prompt.submitted.v1` |
-| Tool Executed | `omniclaude.tool.executed.v1` |
-| Learning Pattern | `omniclaude.learning.pattern.v1` (future) |
+| Topic | Base Name | Purpose |
+|-------|-----------|---------|
+| Session Started | `omniclaude.session.started.v1` | Internal observability |
+| Session Ended | `omniclaude.session.ended.v1` | Internal observability |
+| Prompt Submitted | `omniclaude.prompt.submitted.v1` | Internal observability (100-char preview) |
+| Tool Executed | `omniclaude.tool.executed.v1` | Internal observability |
+| Learning Pattern | `omniclaude.learning.pattern.v1` | Future: pattern storage |
+| **Claude Hook Event** | `cmd.omniintelligence.claude-hook-event.v1` | Intelligence (full prompt) |
 
-Topic prefix (e.g., `dev`, `staging`, `prod`) comes from environment configuration.
+**Topic Naming Convention**:
+- `evt.*` topics: Events (observability, analytics)
+- `cmd.*` topics: Commands (triggers processing in another service)
+
+Topic prefix (e.g., `onex`, `dev`, `staging`, `prod`) comes from environment configuration.
 
 ---
 
@@ -212,6 +249,39 @@ The `prompt_preview` field captures a truncated, sanitized preview of user promp
 | `git_branch` | May contain ticket IDs, developer identifiers | Treat as potentially identifying |
 | `summary` (tool events) | May contain file paths, code snippets | Limited to 500 chars, not auto-sanitized |
 | `session_id` / `entity_id` | Tracking identifiers | Apply data retention policies |
+
+### Full Prompt Exposure for Intelligence
+
+The `onex.cmd.omniintelligence.claude-hook-event.v1` topic intentionally receives **full, unsanitized prompts** for intelligence processing. This is a deliberate design decision with specific privacy implications:
+
+| Attribute | Value | Rationale |
+|-----------|-------|-----------|
+| **Content** | Full prompt (no truncation) | Intelligence requires complete context for pattern analysis |
+| **Sanitization** | None applied | Sanitization would remove potentially valuable patterns |
+| **Consumer** | OmniIntelligence only | Restricted to intelligence processing pipeline |
+| **Retention** | Configurable per deployment | Should align with data retention policies |
+
+**Why Full Prompts?**:
+- **Intent classification**: Requires full context to accurately classify user intent
+- **Pattern learning**: Truncated prompts lose valuable workflow patterns
+- **RAG optimization**: Full prompts needed to improve context injection quality
+- **Workflow analysis**: Understanding multi-step workflows requires complete prompts
+
+**Privacy Controls for Intelligence Topic**:
+1. **Topic-level ACLs**: Restrict consumer access to OmniIntelligence service only
+2. **Network isolation**: Intelligence consumers should run in isolated network segment
+3. **Audit logging**: All reads from intelligence topic should be logged
+4. **Data retention**: Configure aggressive retention (7-14 days recommended)
+5. **Encryption at rest**: Enable Kafka log encryption for intelligence topics
+
+**Contrast with Observability Topic**:
+
+| Aspect | `prompt-submitted.v1` | `claude-hook-event.v1` |
+|--------|----------------------|------------------------|
+| Prompt content | 100-char preview | Full prompt |
+| Sanitization | Automatic secret redaction | None |
+| Access scope | Broad (dashboards, metrics) | Restricted (intelligence only) |
+| Retention | 30 days | 7-14 days recommended |
 
 ### Recommendations
 
@@ -394,7 +464,7 @@ See `_archive/README_ARCHIVE.md` for details.
 | OMN-1399 | Define Claude Code hooks schema for ONEX event emission | In Progress |
 | OMN-1400 | Hook handlers emit to Kafka | Pending |
 | OMN-1401 | Session storage in OmniMemory | Pending |
-| OMN-1402 | Learning compute node | Pending |
+| OMN-1402 | Intent capture workflow (dual-emission to intelligence) | In Progress |
 | OMN-1403 | Context injection | Pending |
 | OMN-1404 | E2E integration test | Pending |
 
@@ -424,8 +494,9 @@ ls -la plugins/onex/hooks/scripts/*.sh
 
 ---
 
-**Last Updated**: 2026-01-20
+**Last Updated**: 2026-01-26
 **Version**: 0.1.0
-**Status**: Reset in progress (OMN-1399)
+**Status**: OMN-1402 (Intent capture workflow with dual-emission)
 **Schemas**: ONEX-compatible event envelopes
 **Hooks**: SessionStart, SessionEnd, UserPromptSubmit, PostToolUse
+**Architecture**: Dual-emission (observability + intelligence)
