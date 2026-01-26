@@ -132,6 +132,30 @@ repos:
         exclude: '^\.[^/]*$|^\..*/.*|_archive/.*|tests/.*'
         stages: [pre-push]
 
+      - id: validate-no-duplicate-models
+        name: No duplicate model filenames
+        entry: uv run python scripts/validation/validate_no_duplicate_models.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: validate-pydantic-patterns
+        name: Pydantic pattern validation
+        entry: uv run python scripts/validation/validate_pydantic_patterns.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
+      - id: validate-single-class-per-file
+        name: Single class per file
+        entry: uv run python scripts/validation/validate_single_class_per_file.py --quiet
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+
 # Configuration
 default_install_hook_types: [pre-commit, pre-push]
 default_stages: [pre-commit]
