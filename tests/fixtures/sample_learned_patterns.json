@@ -1,0 +1,36 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2026-01-26T00:00:00Z",
+  "patterns": [
+    {
+      "pattern_id": "test-pattern-high-confidence",
+      "domain": "testing",
+      "title": "High Confidence Test Pattern",
+      "description": "A test pattern with high confidence for filtering tests.",
+      "confidence": 0.95,
+      "usage_count": 10,
+      "success_rate": 0.9,
+      "example_reference": "tests/example.py"
+    },
+    {
+      "pattern_id": "test-pattern-low-confidence",
+      "domain": "testing",
+      "title": "Low Confidence Test Pattern",
+      "description": "A test pattern with low confidence that should be filtered out.",
+      "confidence": 0.5,
+      "usage_count": 5,
+      "success_rate": 0.6,
+      "example_reference": null
+    },
+    {
+      "pattern_id": "test-pattern-different-domain",
+      "domain": "other_domain",
+      "title": "Different Domain Pattern",
+      "description": "A pattern in a different domain for domain filtering tests.",
+      "confidence": 0.85,
+      "usage_count": 8,
+      "success_rate": 0.88,
+      "example_reference": "other/file.py"
+    }
+  ]
+}

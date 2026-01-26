@@ -40,6 +40,7 @@ Example:
 
 from __future__ import annotations
 
+from omniclaude.hooks.context_config import ContextInjectionConfig
 from omniclaude.hooks.contracts import (
     CONTRACT_PROMPT_SUBMITTED,
     CONTRACT_SESSION_ENDED,
@@ -56,7 +57,9 @@ from omniclaude.hooks.handler_event_emitter import (
 )
 from omniclaude.hooks.models import ModelEventPublishResult
 from omniclaude.hooks.schemas import (
+    ContextSource,
     HookEventType,
+    ModelHookContextInjectedPayload,
     ModelHookEventEnvelope,
     ModelHookPayload,
     ModelHookPromptSubmittedPayload,
@@ -68,6 +71,8 @@ from omniclaude.hooks.schemas import (
 from omniclaude.hooks.topics import TopicBase, build_topic
 
 __all__ = [
+    # Configuration
+    "ContextInjectionConfig",
     # Event type enum
     "HookEventType",
     # Payload models (ONEX-compliant)
@@ -75,6 +80,9 @@ __all__ = [
     "ModelHookSessionEndedPayload",
     "ModelHookPromptSubmittedPayload",
     "ModelHookToolExecutedPayload",
+    "ModelHookContextInjectedPayload",
+    # Context source enum
+    "ContextSource",
     # Output models
     "ModelEventPublishResult",
     # Envelope and types

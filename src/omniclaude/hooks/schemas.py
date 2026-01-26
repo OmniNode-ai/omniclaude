@@ -88,6 +88,7 @@ class HookEventType(StrEnum):
     SESSION_ENDED = "hook.session.ended"
     PROMPT_SUBMITTED = "hook.prompt.submitted"
     TOOL_EXECUTED = "hook.tool.executed"
+    CONTEXT_INJECTED = "hook.context.injected"
 
 
 class HookSource(StrEnum):
@@ -126,6 +127,27 @@ class SessionEndReason(StrEnum):
     LOGOUT = "logout"
     PROMPT_INPUT_EXIT = "prompt_input_exit"
     OTHER = "other"
+
+
+class ContextSource(StrEnum):
+    """Sources for context injection during session enrichment.
+
+    Using StrEnum for type safety, IDE autocompletion, and consistent
+    serialization in Kafka events.
+
+    Values:
+        PERSISTENCE_FILE: Context loaded from persistence file storage.
+        SESSION_AGGREGATOR: Context aggregated from session history.
+        RAG_QUERY: Context retrieved via RAG query from vector database.
+        FALLBACK_STATIC: Static fallback context when other sources unavailable.
+        NONE: No context injection performed.
+    """
+
+    PERSISTENCE_FILE = "persistence_file"
+    SESSION_AGGREGATOR = "session_aggregator"
+    RAG_QUERY = "rag_query"
+    FALLBACK_STATIC = "fallback_static"
+    NONE = "none"
 
 
 # =============================================================================
@@ -786,6 +808,119 @@ class ModelHookToolExecutedPayload(BaseModel):
 
 
 # =============================================================================
+# Context Injection Events
+# =============================================================================
+
+
+class ModelHookContextInjectedPayload(BaseModel):
+    """Event payload for context injection during session enrichment.
+
+    Emitted when context is injected into a Claude Code session, typically
+    during UserPromptSubmit to enrich the session with relevant patterns,
+    historical data, or domain-specific context.
+
+    Attributes:
+        entity_id: Session identifier as UUID (partition key for ordering).
+        session_id: Session identifier string.
+        correlation_id: Correlation ID for distributed tracing.
+        causation_id: ID of the prompt event that triggered context injection.
+        emitted_at: Timestamp when the hook emitted this event (UTC).
+        context_source: Source from which context was retrieved.
+        pattern_count: Number of patterns injected (0-100).
+        context_size_bytes: Size of injected context in bytes (0-50000).
+        agent_domain: Domain of the agent if context is domain-specific.
+        min_confidence_threshold: Minimum confidence threshold for pattern inclusion.
+        retrieval_duration_ms: Time taken to retrieve context in milliseconds.
+
+    Example:
+        >>> from datetime import UTC, datetime
+        >>> from uuid import uuid4
+        >>> session_id = uuid4()
+        >>> event = ModelHookContextInjectedPayload(
+        ...     entity_id=session_id,
+        ...     session_id=str(session_id),
+        ...     correlation_id=session_id,
+        ...     causation_id=uuid4(),
+        ...     emitted_at=datetime(2025, 1, 15, 12, 5, 0, tzinfo=UTC),
+        ...     context_source=ContextSource.RAG_QUERY,
+        ...     pattern_count=5,
+        ...     context_size_bytes=2048,
+        ...     agent_domain="api-development",
+        ...     min_confidence_threshold=0.8,
+        ...     retrieval_duration_ms=150,
+        ... )
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        from_attributes=True,
+    )
+
+    # Entity identification (partition key)
+    entity_id: UUID = Field(
+        ...,
+        description="Session identifier as UUID (partition key for ordering)",
+    )
+    session_id: str = Field(
+        ...,
+        min_length=1,
+        description="Session identifier string",
+    )
+
+    # Tracing and causation
+    correlation_id: UUID = Field(
+        ...,
+        description="Correlation ID for distributed tracing",
+    )
+    causation_id: UUID = Field(
+        ...,
+        description="ID of the prompt event that triggered context injection",
+    )
+
+    # Timestamps - MUST be explicitly injected (no default_factory for testability)
+    # Uses TimezoneAwareDatetime for automatic timezone validation
+    emitted_at: TimezoneAwareDatetime = Field(
+        ...,
+        description="Timestamp when the hook emitted this event (UTC)",
+    )
+
+    # Context injection-specific fields
+    context_source: ContextSource = Field(
+        ...,
+        description="Source from which context was retrieved",
+    )
+    pattern_count: int = Field(
+        ...,
+        ge=0,
+        le=100,
+        description="Number of patterns injected (max 100)",
+    )
+    context_size_bytes: int = Field(
+        ...,
+        ge=0,
+        le=50000,
+        description="Size of injected context in bytes (max 50KB)",
+    )
+    agent_domain: str | None = Field(
+        default=None,
+        description="Domain of the agent if context is domain-specific",
+    )
+    min_confidence_threshold: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="Minimum confidence threshold for pattern inclusion",
+    )
+    retrieval_duration_ms: int = Field(
+        ...,
+        ge=0,
+        le=10000,
+        description="Time taken to retrieve context in milliseconds (max 10 seconds)",
+    )
+
+
+# =============================================================================
 # Discriminated Union (for deserialization)
 # =============================================================================
 
@@ -840,6 +975,7 @@ class ModelHookEventEnvelope(BaseModel):
         | ModelHookSessionEndedPayload
         | ModelHookPromptSubmittedPayload
         | ModelHookToolExecutedPayload
+        | ModelHookContextInjectedPayload
     ) = Field(
         ...,
         description="The event payload",
@@ -863,6 +999,7 @@ class ModelHookEventEnvelope(BaseModel):
             HookEventType.SESSION_ENDED: ModelHookSessionEndedPayload,
             HookEventType.PROMPT_SUBMITTED: ModelHookPromptSubmittedPayload,
             HookEventType.TOOL_EXECUTED: ModelHookToolExecutedPayload,
+            HookEventType.CONTEXT_INJECTED: ModelHookContextInjectedPayload,
         }
         expected = expected_types.get(self.event_type)
         if expected and not isinstance(self.payload, expected):
@@ -878,7 +1015,8 @@ ModelHookPayload = Annotated[
     ModelHookSessionStartedPayload
     | ModelHookSessionEndedPayload
     | ModelHookPromptSubmittedPayload
-    | ModelHookToolExecutedPayload,
+    | ModelHookToolExecutedPayload
+    | ModelHookContextInjectedPayload,
     Field(description="Union of all hook event payload types"),
 ]
 
@@ -890,6 +1028,7 @@ __all__ = [
     "HookEventType",
     "HookSource",
     "SessionEndReason",
+    "ContextSource",
     # Annotated types (reusable validators)
     "TimezoneAwareDatetime",
     # Sanitization utilities
@@ -899,6 +1038,7 @@ __all__ = [
     "ModelHookSessionEndedPayload",
     "ModelHookPromptSubmittedPayload",
     "ModelHookToolExecutedPayload",
+    "ModelHookContextInjectedPayload",
     # Envelope and types
     "ModelHookEventEnvelope",
     "ModelHookPayload",

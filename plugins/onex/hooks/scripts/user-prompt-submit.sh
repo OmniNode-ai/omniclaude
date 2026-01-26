@@ -253,12 +253,55 @@ if [[ -n "${IMPL_QUERY:-}" ]]; then
 fi
 
 # -----------------------------
+# Learned Pattern Injection (OMN-1403)
+# -----------------------------
+LEARNED_PATTERNS=""
+if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
+    log "Loading learned patterns via learned_pattern_injector.py..."
+
+    PATTERN_INPUT="$(jq -n \
+        --arg agent "${AGENT_NAME:-}" \
+        --arg domain "${AGENT_DOMAIN:-}" \
+        --arg session "${SESSION_ID:-}" \
+        --arg project "${PROJECT_NAME:-}" \
+        --arg correlation "${CORRELATION_ID:-}" \
+        '{
+            agent_name: $agent,
+            domain: $domain,
+            session_id: $session,
+            project: $project,
+            correlation_id: $correlation,
+            max_patterns: 5,
+            min_confidence: 0.7
+        }')"
+
+    # 2s timeout - patterns should be fast (file-based)
+    if [[ -f "${HOOKS_LIB}/learned_pattern_injector.py" ]]; then
+        PATTERN_RESULT="$(echo "$PATTERN_INPUT" | timeout 2 $PYTHON_CMD "${HOOKS_LIB}/learned_pattern_injector.py" 2>>"$LOG_FILE" || echo '{}')"
+        PATTERN_SUCCESS="$(echo "$PATTERN_RESULT" | jq -r '.success // false')"
+
+        if [[ "$PATTERN_SUCCESS" == "true" ]]; then
+            LEARNED_PATTERNS="$(echo "$PATTERN_RESULT" | jq -r '.patterns_context // ""')"
+            PATTERN_COUNT="$(echo "$PATTERN_RESULT" | jq -r '.pattern_count // 0')"
+            if [[ -n "$LEARNED_PATTERNS" ]] && [[ "$PATTERN_COUNT" != "0" ]]; then
+                log "Learned patterns loaded: ${PATTERN_COUNT} patterns"
+            fi
+        else
+            log "INFO: No learned patterns available"
+        fi
+    else
+        log "INFO: learned_pattern_injector.py not found, skipping pattern injection"
+    fi
+fi
+
+# -----------------------------
 # Agent Context Injection
 # -----------------------------
 AGENT_ROLE="${AGENT_NAME#agent-}"
 
 AGENT_CONTEXT="$(cat <<EOF
 ${AGENT_YAML_INJECTION}
+${LEARNED_PATTERNS}
 
 ========================================================================
 MANDATORY AGENT DISPATCH DIRECTIVE

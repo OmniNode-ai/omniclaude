@@ -39,6 +39,11 @@ class TopicBase(StrEnum):
     # Future (OMN-1402)
     LEARNING_PATTERN = "omniclaude.learning.pattern.v1"
 
+    # Context injection events (OMN-1403)
+    CONTEXT_RETRIEVAL_REQUESTED = "omniclaude.context.retrieval.requested.v1"
+    CONTEXT_RETRIEVAL_COMPLETED = "omniclaude.context.retrieval.completed.v1"
+    CONTEXT_INJECTED = "omniclaude.context.injected.v1"
+
     # Agent routing topics (omninode domain, following EVENT_BUS_INTEGRATION_GUIDE)
     ROUTING_REQUESTED = "omninode.agent.routing.requested.v1"
     ROUTING_COMPLETED = "omninode.agent.routing.completed.v1"
