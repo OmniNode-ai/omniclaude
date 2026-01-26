@@ -9,7 +9,6 @@ import sys
 import uuid
 from pathlib import Path
 
-
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
@@ -66,13 +65,13 @@ async def main():
         print(f"  Query Time: {p.get('query_time_ms', 0)}ms")
 
         collections = p.get("collections_queried", {})
-        print(f"\n  Collections Queried:")
+        print("\n  Collections Queried:")
         for coll, count in collections.items():
             print(f"    - {coll}: {count} patterns")
 
         patterns = p.get("available", [])
         if patterns:
-            print(f"\n  Sample Pattern:")
+            print("\n  Sample Pattern:")
             sample = patterns[0]
             print(f"    File: {sample.get('file', 'N/A')[:70]}...")
             print(f"    Confidence: {sample.get('confidence', 'N/A')}")
@@ -80,7 +79,7 @@ async def main():
             desc = sample.get("description", "")
             if desc:
                 lines = desc.split("\n")[:3]
-                print(f"    Description (first 3 lines):")
+                print("    Description (first 3 lines):")
                 for line in lines:
                     print(f"      {line[:74]}")
     print()
@@ -99,7 +98,7 @@ async def main():
         failures = workflows.get("failures", [])
 
         if successes:
-            print(f"\n  Recent Successful Workflows (first 3):")
+            print("\n  Recent Successful Workflows (first 3):")
             for i, success in enumerate(successes[:3], 1):
                 print(f"    {i}. Agent: {success.get('tool_name', 'N/A')}")
                 prompt_text = success.get("user_prompt", "N/A")[:50]
@@ -108,7 +107,7 @@ async def main():
                 print(f"       Duration: {success.get('duration_ms', 'N/A')}ms")
 
         if failures:
-            print(f"\n  Recent Failed Workflows (first 3):")
+            print("\n  Recent Failed Workflows (first 3):")
             for i, failure in enumerate(failures[:3], 1):
                 print(f"    {i}. Agent: {failure.get('tool_name', 'N/A')}")
                 print(f"       Error: {failure.get('error', 'N/A')[:60]}...")
@@ -137,7 +136,7 @@ async def main():
         # ONEX Models
         onex = m.get("onex_models", {})
         if onex:
-            print(f"\n  ONEX Node Types:")
+            print("\n  ONEX Node Types:")
             for node_type, status in onex.items():
                 print(f"    - {node_type}: {status}")
 
@@ -161,13 +160,13 @@ async def main():
 
         remote = infra.get("remote_services", {})
         if remote:
-            print(f"  Remote Services:")
+            print("  Remote Services:")
             for service, config in remote.items():
                 print(f"    - {service}: {config if config else '(no config)'}")
 
         local = infra.get("local_services", {})
         if local:
-            print(f"\n  Local Services:")
+            print("\n  Local Services:")
             for service, config in local.items():
                 print(f"    - {service}: {config if config else '(no config)'}")
 
@@ -184,7 +183,7 @@ async def main():
         print(f"  Total Tables: {len(tables)}")
 
         if tables:
-            print(f"\n  Sample Tables (first 5):")
+            print("\n  Sample Tables (first 5):")
             for i, table in enumerate(tables[:5], 1):
                 print(f"    {i}. {table.get('name', 'N/A')}")
                 purpose = table.get("purpose", "N/A")[:60]
@@ -245,7 +244,7 @@ async def main():
 
         kafka_config = al.get("kafka_integration", {})
         if kafka_config:
-            print(f"\n  Kafka Integration:")
+            print("\n  Kafka Integration:")
             print(f"    Enabled: {kafka_config.get('enabled', False)}")
             topic = kafka_config.get("topic", "N/A")
             if topic and topic != "N/A":

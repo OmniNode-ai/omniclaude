@@ -26,7 +26,6 @@ AFTER migration:
 # Use absolute path for hooks (location is fixed)
 import sys
 
-
 sys.path.insert(0, "/Volumes/PRO-G40/Code/omniclaude")
 
 # --- OPTION B: Skills (.claude/skills/<name>/scripts/*.py) ---
@@ -45,7 +44,6 @@ sys.path.insert(0, "/Volumes/PRO-G40/Code/omniclaude")
 # =============================================================================
 
 from config import settings
-
 
 # =============================================================================
 # STEP 3: REMOVE LEGACY IMPORTS
@@ -90,9 +88,7 @@ db_dsn = settings.get_postgres_dsn()  # Sync driver
 # ✅ AFTER:
 gemini_key = settings.gemini_api_key
 if not gemini_key:
-    raise ValueError(
-        "GEMINI_API_KEY not configured. " "Set in .env file at project root."
-    )
+    raise ValueError("GEMINI_API_KEY not configured. Set in .env file at project root.")
 
 # --- Kafka Configuration ---
 

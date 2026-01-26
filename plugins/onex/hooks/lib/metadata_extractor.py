@@ -91,6 +91,7 @@ class MetadataExtractor:
                 text=True,
                 cwd=self.working_dir,
                 timeout=2,
+                check=False,
             )
 
             # Get repo root
@@ -100,12 +101,15 @@ class MetadataExtractor:
                 text=True,
                 cwd=self.working_dir,
                 timeout=2,
+                check=False,
             )
 
             if branch.returncode == 0:
                 return {
                     "branch": branch.stdout.strip(),
-                    "repo_root": (repo_root.stdout.strip() if repo_root.returncode == 0 else ""),
+                    "repo_root": (
+                        repo_root.stdout.strip() if repo_root.returncode == 0 else ""
+                    ),
                 }
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
@@ -139,15 +143,23 @@ class MetadataExtractor:
         }
 
         # Check for common intent patterns
-        if any(word in prompt_lower for word in ["fix", "bug", "error", "issue", "broken"]):
+        if any(
+            word in prompt_lower for word in ["fix", "bug", "error", "issue", "broken"]
+        ):
             intent["type"] = "bug_fix"
             intent["signals"].append("contains_fix_keywords")
 
-        elif any(word in prompt_lower for word in ["add", "create", "implement", "new", "feature"]):
+        elif any(
+            word in prompt_lower
+            for word in ["add", "create", "implement", "new", "feature"]
+        ):
             intent["type"] = "feature"
             intent["signals"].append("contains_feature_keywords")
 
-        elif any(word in prompt_lower for word in ["refactor", "improve", "optimize", "clean"]):
+        elif any(
+            word in prompt_lower
+            for word in ["refactor", "improve", "optimize", "clean"]
+        ):
             intent["type"] = "refactor"
             intent["signals"].append("contains_refactor_keywords")
 
@@ -155,7 +167,9 @@ class MetadataExtractor:
             intent["type"] = "testing"
             intent["signals"].append("contains_test_keywords")
 
-        elif any(word in prompt_lower for word in ["document", "docs", "readme", "explain"]):
+        elif any(
+            word in prompt_lower for word in ["document", "docs", "readme", "explain"]
+        ):
             intent["type"] = "documentation"
             intent["signals"].append("contains_doc_keywords")
 

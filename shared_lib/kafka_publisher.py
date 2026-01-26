@@ -36,11 +36,9 @@ Version: 1.0.0
 import json
 import os
 import sys
-from typing import Optional
 
 # Import centralized Kafka configuration
 from kafka_config import get_kafka_bootstrap_servers
-
 
 # Lazy-loaded Kafka types (imported only when needed)
 # Type hints only - actual import happens in get_kafka_producer()
@@ -50,8 +48,8 @@ except ImportError:
     KafkaProducerClass = None  # Type hint placeholder when kafka-python not installed
 
 # Global state for singleton pattern
-KafkaProducer: Optional[type] = None
-_producer_instance: Optional[KafkaProducerClass] = None
+KafkaProducer: type | None = None
+_producer_instance: KafkaProducerClass | None = None
 
 
 def should_log_debug() -> bool:

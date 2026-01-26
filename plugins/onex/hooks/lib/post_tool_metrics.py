@@ -120,7 +120,9 @@ class PostToolMetricsCollector:
         )
 
         # Performance metrics
-        performance = self._extract_performance_metrics(tool_input, tool_output, content)
+        performance = self._extract_performance_metrics(
+            tool_input, tool_output, content
+        )
 
         # Execution analysis
         analysis = self._analyze_execution(tool_output)
@@ -132,7 +134,9 @@ class PostToolMetricsCollector:
             execution_analysis=analysis,
         )
 
-    def _classify_success(self, tool_name: str, tool_output: dict[str, Any] | None) -> str:
+    def _classify_success(
+        self, tool_name: str, tool_output: dict[str, Any] | None
+    ) -> str:
         """
         Classify success level based on tool output.
 
@@ -199,7 +203,10 @@ class PostToolMetricsCollector:
 
         # Calculate weighted total
         total_score = (
-            naming_score * 0.25 + type_score * 0.25 + doc_score * 0.25 + error_score * 0.25
+            naming_score * 0.25
+            + type_score * 0.25
+            + doc_score * 0.25
+            + error_score * 0.25
         )
 
         return QualityMetrics(
@@ -210,7 +217,9 @@ class PostToolMetricsCollector:
             error_handling=error_status,
         )
 
-    def _check_naming_conventions(self, content: str, language: str) -> tuple[float, str]:
+    def _check_naming_conventions(
+        self, content: str, language: str
+    ) -> tuple[float, str]:
         """
         Check naming conventions compliance.
 
@@ -274,7 +283,9 @@ class PostToolMetricsCollector:
                 return 1.0, "pass"  # No functions, N/A
 
             # Count typed function definitions
-            typed_funcs = re.findall(r"^\s*def\s+\w+\s*\([^)]*:\s*\w+", content, re.MULTILINE)
+            typed_funcs = re.findall(
+                r"^\s*def\s+\w+\s*\([^)]*:\s*\w+", content, re.MULTILINE
+            )
             type_ratio = len(typed_funcs) / total_funcs if total_funcs > 0 else 1.0
 
             if type_ratio >= 0.8:
@@ -307,7 +318,9 @@ class PostToolMetricsCollector:
         """
         if language == "python":
             # Count functions/classes
-            func_class_defs = re.findall(r"^\s*(def|class)\s+\w+", content, re.MULTILINE)
+            func_class_defs = re.findall(
+                r"^\s*(def|class)\s+\w+", content, re.MULTILINE
+            )
             total_defs = len(func_class_defs)
 
             if total_defs == 0:
@@ -328,7 +341,9 @@ class PostToolMetricsCollector:
 
         elif language in ["typescript", "javascript"]:
             # Check for JSDoc comments
-            func_defs = re.findall(r"(function|const\s+\w+\s*=\s*\([^)]*\)\s*=>)", content)
+            func_defs = re.findall(
+                r"(function|const\s+\w+\s*=\s*\([^)]*\)\s*=>)", content
+            )
             total_funcs = len(func_defs)
 
             if total_funcs == 0:
@@ -410,7 +425,9 @@ class PostToolMetricsCollector:
             lines = [line for line in content.split("\n") if line.strip()]
             lines_changed = len(lines)
         elif tool_input.get("content"):
-            lines = [line for line in str(tool_input["content"]).split("\n") if line.strip()]
+            lines = [
+                line for line in str(tool_input["content"]).split("\n") if line.strip()
+            ]
             lines_changed = len(lines)
 
         # Files modified (always 1 for Write/Edit, 0 otherwise)
@@ -423,7 +440,9 @@ class PostToolMetricsCollector:
             files_modified=files_modified,
         )
 
-    def _analyze_execution(self, tool_output: dict[str, Any] | None) -> ExecutionAnalysis:
+    def _analyze_execution(
+        self, tool_output: dict[str, Any] | None
+    ) -> ExecutionAnalysis:
         """
         Analyze execution behavior for deviations and retries.
 

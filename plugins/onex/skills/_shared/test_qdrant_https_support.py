@@ -101,9 +101,9 @@ class TestQdrantHttpsSupport(unittest.TestCase):
 
             # Get URL - should auto-select HTTPS
             url = get_qdrant_url()
-            assert url.startswith(
-                "https://"
-            ), f"Expected HTTPS URL in production, got: {url}"
+            assert url.startswith("https://"), (
+                f"Expected HTTPS URL in production, got: {url}"
+            )
 
     def test_auto_http_development(self):
         """Test auto HTTP selection in development."""
@@ -127,9 +127,9 @@ class TestQdrantHttpsSupport(unittest.TestCase):
 
             # Get URL - should auto-select HTTP
             url = get_qdrant_url()
-            assert url.startswith(
-                "http://"
-            ), f"Expected HTTP URL in development, got: {url}"
+            assert url.startswith("http://"), (
+                f"Expected HTTP URL in development, got: {url}"
+            )
 
     def test_https_validation_production(self):
         """Test HTTPS validation is enforced in production."""
@@ -153,9 +153,9 @@ class TestQdrantHttpsSupport(unittest.TestCase):
 
             # Get URL - should construct with HTTPS in production
             url = get_qdrant_url()
-            assert url.startswith(
-                "https://"
-            ), f"Expected HTTPS URL in production, got: {url}"
+            assert url.startswith("https://"), (
+                f"Expected HTTPS URL in production, got: {url}"
+            )
 
     def test_http_rejected_in_production_explicit_url(self):
         """Test that HTTP URL from settings is rejected in production."""
@@ -179,9 +179,9 @@ class TestQdrantHttpsSupport(unittest.TestCase):
 
             # In production, HTTP URLs should fall through to HTTPS construction
             url = get_qdrant_url()
-            assert url.startswith(
-                "https://"
-            ), f"Expected HTTPS URL in production (HTTP should be rejected), got: {url}"
+            assert url.startswith("https://"), (
+                f"Expected HTTPS URL in production (HTTP should be rejected), got: {url}"
+            )
 
 
 def main():

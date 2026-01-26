@@ -14,7 +14,6 @@ Run this to verify the KV-002 integration is working.
 import sys
 from pathlib import Path
 
-
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
@@ -26,7 +25,6 @@ from config import settings
 def test_pattern_library_import():
     """Test PatternLibrary can be imported"""
     try:
-
         print("✅ PatternLibrary import successful")
         return True
     except Exception as e:
@@ -37,7 +35,6 @@ def test_pattern_library_import():
 def test_pattern_storage_import():
     """Test PatternStorage can be imported"""
     try:
-
         print("✅ PatternStorage import successful")
         return True
     except Exception as e:
@@ -48,7 +45,6 @@ def test_pattern_storage_import():
 def test_pattern_extractor_import():
     """Test PatternExtractor can be imported"""
     try:
-
         print("✅ PatternExtractor import successful")
         return True
     except Exception as e:

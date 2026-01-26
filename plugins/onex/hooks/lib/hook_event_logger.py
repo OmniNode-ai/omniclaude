@@ -32,8 +32,8 @@ except ImportError as e:
         file=sys.stderr,
     )
     # Create stub types for type hints
-    psycopg2 = None  # type: ignore
-    Json = dict  # type: ignore
+    psycopg2 = None  # type: ignore[assignment]
+    Json = dict  # type: ignore[assignment]
 
 
 # Type alias for connection - use Any to avoid strict type checking on psycopg2 internals
@@ -41,7 +41,9 @@ Connection = Any  # psycopg2.extensions.connection when available
 
 
 # Add project root to path for config import
-project_root = Path(__file__).resolve().parents[3]  # lib → hooks → claude → omniclaude root
+project_root = (
+    Path(__file__).resolve().parents[3]
+)  # lib → hooks → claude → omniclaude root
 sys.path.insert(0, str(project_root))
 
 # Lazy config import - defer to avoid import-time failures
@@ -171,9 +173,7 @@ class HookEventLogger:
                     port = "5432"
                     db = "postgres"
 
-                connection_string = (
-                    f"host={host} port={port} dbname={db} user={user} password={password}"
-                )
+                connection_string = f"host={host} port={port} dbname={db} user={user} password={password}"  # secret-ok: password var loaded from env
 
         self.connection_string = connection_string
         self._available = True

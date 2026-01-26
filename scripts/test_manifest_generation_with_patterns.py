@@ -18,7 +18,6 @@ import sys
 import uuid
 from pathlib import Path
 
-
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
@@ -40,7 +39,7 @@ async def test_task_classifier(prompt: str) -> tuple[TaskIntent, float]:
     return result.primary_intent, result.confidence
 
 
-async def test_manifest_generation(prompt: str, verbose: bool = False) -> dict:
+async def test_manifest_generation(prompt: str, verbose: bool) -> dict:
     """
     Generate manifest and analyze results.
 
@@ -104,11 +103,11 @@ def print_results(prompt: str, results: dict, verbose: bool = False):
     print("=" * 70)
 
     print(f"\n📝 User Prompt: '{prompt}'")
-    print(f"\n🤖 Task Classification:")
+    print("\n🤖 Task Classification:")
     print(f"   Intent: {results['intent'].value}")
     print(f"   Confidence: {results['confidence']:.2f}")
 
-    print(f"\n📊 Manifest Analysis:")
+    print("\n📊 Manifest Analysis:")
     patterns_status = "✅" if results["patterns_included"] else "❌"
     print(
         f"   {patterns_status} Patterns section included: {results['patterns_included']}"
@@ -116,7 +115,7 @@ def print_results(prompt: str, results: dict, verbose: bool = False):
     print(f"   📈 Pattern references found: {results['pattern_count']}")
 
     if verbose:
-        print(f"\n📄 Full Manifest Preview:")
+        print("\n📄 Full Manifest Preview:")
         print("-" * 70)
         manifest_preview = results["manifest_text"][:2000]
         print(manifest_preview)

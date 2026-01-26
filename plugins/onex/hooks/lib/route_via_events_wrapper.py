@@ -70,7 +70,9 @@ def route_via_events(
     try:
         # Check if adapter is available (pre-imported at module level)
         if _get_hook_event_adapter is None:
-            logger.warning("Event routing not available: hook_event_adapter import failed")
+            logger.warning(
+                "Event routing not available: hook_event_adapter import failed"
+            )
         else:
             adapter = _get_hook_event_adapter()
 

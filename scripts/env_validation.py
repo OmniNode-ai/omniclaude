@@ -7,7 +7,6 @@ validate that required environment variables are set.
 
 import os
 import sys
-from typing import Dict, List
 
 
 def is_production_environment() -> bool:
@@ -36,7 +35,7 @@ def is_production_environment() -> bool:
     )
 
 
-def validate_required_env_vars(console, required_vars: Dict[str, str]) -> None:
+def validate_required_env_vars(console, required_vars: dict[str, str]) -> None:
     """
     Validate that required environment variables are set in production.
 

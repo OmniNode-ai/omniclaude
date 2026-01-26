@@ -14,7 +14,6 @@ import argparse
 import sys
 from pathlib import Path
 
-
 # Add shared utilities to path
 SKILLS_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(SKILLS_DIR / "_shared"))
@@ -156,7 +155,9 @@ def format_output(metrics, agent_name, time_range):
     status = (
         "🟢 HEALTHY"
         if success_rate >= 90
-        else "🟡 WARNING" if success_rate >= 80 else "🔴 NEEDS ATTENTION"
+        else "🟡 WARNING"
+        if success_rate >= 80
+        else "🔴 NEEDS ATTENTION"
     )
 
     output.append(f"## Status: {status}")

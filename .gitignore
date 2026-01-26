@@ -349,3 +349,47 @@ skills/remembering-conversations/
 skills/senior-architect/
 skills/systematic-debugging/
 .fastembed_cache/
+
+# ============================================
+# Root Directory Cleanliness
+# Prevent clutter in the project root
+# See: scripts/validate-clean-root.sh
+# ============================================
+
+# Test artifacts (root only - tests/ has its own patterns)
+/junit-*.xml
+/benchmark_results.json
+/collection_output.txt
+/COVERAGE_SUMMARY.txt
+
+# Coverage artifacts (root-specific)
+/.coverage.json
+
+# Audit reports
+/audit_*.json
+/*_audit_report.json
+/security_audit_*.json
+
+# Temporary verification scripts (should be in scripts/)
+/verify_*.py
+/show_*.py
+/migrate_*.py
+
+# One-off test scripts (should be in tests/)
+/test_*.py
+
+# Handoff documents (should be in docs/)
+/HANDOFF*.md
+/FIX_SUMMARY*.md
+/*_MIGRATION.md
+/*_AUDIT.md
+
+# Editor/OS artifacts (root-specific)
+*.swp
+*.swo
+*~
+Thumbs.db
+
+# Temporary files (root-specific)
+*.tmp
+*.temp

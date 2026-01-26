@@ -37,11 +37,9 @@ Reference: OMN-32
 import argparse
 import json
 import logging
-import os
 import sys
 from pathlib import Path as PathLib
 from uuid import uuid4
-
 
 # Add project root to path
 _project_root = PathLib(__file__).parent.parent
@@ -49,7 +47,6 @@ if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
 from agents.lib.provider_selection_publisher import publish_provider_selection_sync
-
 
 # Configure logging
 logging.basicConfig(
