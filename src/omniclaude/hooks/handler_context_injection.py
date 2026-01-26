@@ -112,9 +112,9 @@ class HandlerContextInjection:
         """Initialize the handler.
 
         Args:
-            config: Optional configuration. If None, loads from environment.
+            config: Optional configuration. If None, loads from environment at init time.
         """
-        self._config = config
+        self._config = config if config is not None else ContextInjectionConfig.from_env()
 
     @property
     def handler_id(self) -> str:
@@ -142,7 +142,7 @@ class HandlerContextInjection:
         Returns:
             ModelInjectionResult with formatted context markdown.
         """
-        cfg = self._config or ContextInjectionConfig.from_env()
+        cfg = self._config
 
         if not cfg.enabled:
             return ModelInjectionResult(
@@ -236,9 +236,10 @@ class HandlerContextInjection:
         """
         all_patterns: list[ModelPatternRecord] = []
 
-        # Find pattern files
+        # Find pattern files using config's persistence_file path
         pattern_files = self._find_pattern_files(
-            Path(project_root) if project_root else None
+            Path(project_root) if project_root else None,
+            self._config.persistence_file,
         )
 
         if not pattern_files:
@@ -265,22 +266,29 @@ class HandlerContextInjection:
 
         return unique_patterns
 
-    def _find_pattern_files(self, project_root: Path | None) -> list[Path]:
+    def _find_pattern_files(
+        self, project_root: Path | None, persistence_file: str
+    ) -> list[Path]:
         """Find learned pattern files in standard locations.
 
         Searches:
-        1. Project-specific: {project_root}/.claude/learned_patterns.json
-        2. User-level: ~/.claude/learned_patterns.json
+        1. Project-specific: {project_root}/{persistence_file}
+        2. User-level: ~/.claude/learned_patterns.json (standard fallback)
+
+        Args:
+            project_root: Optional project root path.
+            persistence_file: Relative path to patterns file from config
+                (e.g., ".claude/learned_patterns.json").
         """
         candidates: list[Path] = []
 
-        # Project-specific patterns
+        # Project-specific patterns (uses configurable persistence_file)
         if project_root and project_root.is_dir():
-            project_file = project_root / ".claude" / "learned_patterns.json"
+            project_file = project_root / persistence_file
             if project_file.exists():
                 candidates.append(project_file)
 
-        # User-level patterns
+        # User-level patterns (standard fallback location)
         user_file = Path.home() / ".claude" / "learned_patterns.json"
         if user_file.exists():
             candidates.append(user_file)
@@ -322,7 +330,8 @@ class HandlerContextInjection:
     def _get_source_path(self, project_root: str | None) -> str:
         """Return primary source file path."""
         pattern_files = self._find_pattern_files(
-            Path(project_root) if project_root else None
+            Path(project_root) if project_root else None,
+            self._config.persistence_file,
         )
         return str(pattern_files[0]) if pattern_files else "none"
 
