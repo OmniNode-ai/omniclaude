@@ -26,6 +26,7 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TypeAlias
 from uuid import UUID, uuid4
 
 from omniclaude.hooks.context_config import ContextInjectionConfig
@@ -49,7 +50,10 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 # Type alias for backward compatibility - canonical definition is in pattern_types.py
-type ModelPatternRecord = PatternRecord
+# Note: Using TypeAlias annotation (not `type X = Y` statement) for mypy compatibility
+# while keeping it callable/instantiable. The `type` statement creates a TypeAliasType
+# that is NOT callable, breaking tests that instantiate ModelPatternRecord(...).
+ModelPatternRecord: TypeAlias = PatternRecord  # noqa: UP040
 
 
 @dataclass(frozen=True)
