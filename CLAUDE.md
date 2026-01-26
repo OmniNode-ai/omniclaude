@@ -320,9 +320,9 @@ This package depends on the omnibase ecosystem:
 
 ```toml
 dependencies = [
-    "omnibase-core>=0.8.0,<0.9.0",
-    "omnibase-spi>=0.5.0,<0.6.0",
-    "omnibase-infra>=0.2.1,<0.3.0",
+    "omnibase-core>=0.9.5,<0.10.0",
+    "omnibase-spi>=0.6.0,<0.7.0",
+    "omnibase-infra>=0.2.4,<0.3.0",
     "pydantic>=2.9.0",
     "pydantic-settings>=2.6.0",
 ]
