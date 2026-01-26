@@ -155,11 +155,15 @@ def sample_patterns() -> dict[str, dict[str, Any]]:
 
 @pytest.fixture
 def permissive_config() -> ContextInjectionConfig:
-    """Config with low threshold to allow all patterns through."""
+    """Config with low threshold to allow all patterns through.
+
+    Note: db_enabled=False ensures file-based tests work without database.
+    """
     return ContextInjectionConfig(
         enabled=True,
         min_confidence=0.0,  # Allow all
         max_patterns=20,  # High limit (max allowed is 20)
+        db_enabled=False,  # Use file-based loading for tests
     )
 
 
@@ -171,8 +175,13 @@ def handler(permissive_config: ContextInjectionConfig) -> HandlerContextInjectio
 
 @pytest.fixture
 def default_handler() -> HandlerContextInjection:
-    """Create a handler with default config (min_confidence=0.7)."""
-    return HandlerContextInjection(config=ContextInjectionConfig(enabled=True))
+    """Create a handler with default config (min_confidence=0.7).
+
+    Note: db_enabled=False ensures file-based tests work without database.
+    """
+    return HandlerContextInjection(
+        config=ContextInjectionConfig(enabled=True, db_enabled=False)
+    )
 
 
 # =============================================================================
@@ -429,6 +438,7 @@ class TestHandlerHandle:
             enabled=True,
             min_confidence=0.0,
             max_patterns=3,
+            db_enabled=False,  # Use file-based loading for tests
         )
         handler = HandlerContextInjection(config=config)
 

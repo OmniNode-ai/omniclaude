@@ -52,6 +52,8 @@ from omniclaude.hooks.handler_context_injection import (
     HandlerContextInjection,
     ModelInjectionResult,
     ModelPatternRecord,
+    PatternConnectionError,
+    PatternPersistenceError,
     inject_patterns,
     inject_patterns_sync,
 )
@@ -114,8 +116,11 @@ __all__ = [
     "CONTRACT_TOOL_EXECUTED",
     # Context injection handler (OMN-1403)
     "HandlerContextInjection",
-    "ModelPatternRecord",
+    "ModelPatternRecord",  # API transfer model (8 fields) - canonical for context injection
     "ModelInjectionResult",
     "inject_patterns",
     "inject_patterns_sync",
+    # Pattern persistence exceptions (OMN-1403)
+    "PatternPersistenceError",  # Base error for persistence operations
+    "PatternConnectionError",  # Connection error (extends PatternPersistenceError)
 ]

@@ -318,4 +318,5 @@ markers = [
     "unit: Unit tests that don't require external services",
     "integration: Integration tests that may require external services",
     "slow: Slow tests that may take significant time to run",
+    "requires_postgres: Tests requiring PostgreSQL connection",
 ]

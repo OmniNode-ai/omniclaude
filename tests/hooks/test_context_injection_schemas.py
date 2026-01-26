@@ -81,6 +81,7 @@ class TestContextSource:
 
     def test_all_values_exist(self) -> None:
         """All expected context source values are defined."""
+        assert ContextSource.DATABASE == "database"
         assert ContextSource.PERSISTENCE_FILE == "persistence_file"
         assert ContextSource.SESSION_AGGREGATOR == "session_aggregator"
         assert ContextSource.RAG_QUERY == "rag_query"
@@ -89,6 +90,7 @@ class TestContextSource:
 
     def test_is_str_enum(self) -> None:
         """ContextSource values are strings (StrEnum)."""
+        assert isinstance(ContextSource.DATABASE, str)
         assert isinstance(ContextSource.PERSISTENCE_FILE, str)
         assert isinstance(ContextSource.SESSION_AGGREGATOR, str)
         assert isinstance(ContextSource.RAG_QUERY, str)
@@ -97,13 +99,14 @@ class TestContextSource:
 
     def test_string_comparison(self) -> None:
         """ContextSource can be compared to strings."""
+        assert ContextSource.DATABASE == "database"
         assert ContextSource.PERSISTENCE_FILE == "persistence_file"
         assert ContextSource.RAG_QUERY == "rag_query"
         assert ContextSource.NONE == "none"
 
-    def test_has_five_values(self) -> None:
-        """ContextSource has exactly 5 defined values."""
-        assert len(ContextSource) == 5
+    def test_has_six_values(self) -> None:
+        """ContextSource has exactly 6 defined values (DATABASE added for db backend)."""
+        assert len(ContextSource) == 6
 
 
 # =============================================================================

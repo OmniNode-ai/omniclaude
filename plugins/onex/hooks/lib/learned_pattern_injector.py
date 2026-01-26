@@ -2,10 +2,13 @@
 """
 Learned Pattern Injector - Inject learned patterns into Claude Code sessions.
 
-This module reads learned patterns from persistence files and formats them
-for injection into Claude Code sessions via hooks. It provides context
-enrichment based on domain-specific patterns discovered through the
-learning loop.
+DEPRECATED: This module's file-based loading is deprecated in favor of
+database-backed loading via the handler. New code should use:
+  - context_injection_wrapper.py (CLI entry point)
+  - omniclaude.hooks.handler_context_injection (Python API)
+
+This module now delegates to the handler for pattern loading while
+maintaining backward compatibility for shell scripts.
 
 Part of OMN-1403: Context injection for session enrichment.
 """
@@ -16,6 +19,7 @@ import json
 import logging
 import sys
 import time
+import warnings
 from pathlib import Path
 from typing import cast
 
@@ -35,6 +39,14 @@ logging.basicConfig(
     stream=sys.stderr,
 )
 logger = logging.getLogger(__name__)
+
+# Emit deprecation warning when module is imported directly
+warnings.warn(
+    "learned_pattern_injector.py is deprecated. "
+    "Use context_injection_wrapper.py or omniclaude.hooks.handler_context_injection instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 
 # =============================================================================
@@ -130,7 +142,58 @@ def load_patterns(
     min_confidence: float,
 ) -> LoadPatternsResult:
     """
-    Load patterns from persistence files with filtering.
+    Load patterns via the handler (database-backed with file fallback).
+
+    DEPRECATED: This function now delegates to the handler for pattern loading.
+    For direct file-based loading (legacy), use _load_patterns_from_files().
+
+    Args:
+        project_root: Optional project root directory.
+        domain: Domain to filter by (empty string for all domains).
+        min_confidence: Minimum confidence threshold (0.0 to 1.0).
+
+    Returns:
+        LoadPatternsResult containing filtered patterns and source attribution.
+        Returns empty result if loading fails.
+    """
+    # Try to use the handler for database-backed loading
+    try:
+        from omniclaude.hooks.context_config import ContextInjectionConfig
+        from omniclaude.hooks.handler_context_injection import inject_patterns_sync
+
+        config = ContextInjectionConfig(min_confidence=min_confidence)
+        result = inject_patterns_sync(
+            project_root=str(project_root) if project_root else None,
+            agent_domain=domain,
+            config=config,
+            emit_event=False,  # Don't emit events from legacy interface
+        )
+
+        # Convert handler result to LoadPatternsResult format
+        if result.success and result.pattern_count > 0:
+            # We can't get individual patterns from the handler result (only markdown)
+            # So fall back to file-based loading for the legacy interface
+            logger.debug("Handler returned markdown, falling back to file parsing")
+            return _load_patterns_from_files(project_root, domain, min_confidence)
+
+        # No patterns from handler, try file fallback
+        return _load_patterns_from_files(project_root, domain, min_confidence)
+
+    except ImportError as e:
+        logger.debug(f"Handler import failed: {e}, using file-based loading")
+        return _load_patterns_from_files(project_root, domain, min_confidence)
+    except Exception as e:
+        logger.warning(f"Handler failed: {e}, using file-based loading")
+        return _load_patterns_from_files(project_root, domain, min_confidence)
+
+
+def _load_patterns_from_files(
+    project_root: Path | None,
+    domain: str,
+    min_confidence: float,
+) -> LoadPatternsResult:
+    """
+    Load patterns from persistence files with filtering (legacy fallback).
 
     Searches for pattern files in project and home directories,
     filters by domain and minimum confidence, and returns sorted

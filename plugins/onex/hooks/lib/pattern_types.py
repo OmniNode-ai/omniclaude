@@ -22,14 +22,27 @@ from typing import TypedDict
 
 @dataclass(frozen=True)
 class PatternRecord:
-    """
-    Represents a single learned pattern from the persistence store.
+    """API transfer model for learned patterns (CLI version).
 
-    This is the canonical definition for pattern records, used by both
-    the CLI injector and the async handler.
+    This is the CLI-independent version of the pattern API model, used by
+    the shell-based pattern injector subprocess.
 
     Frozen to ensure immutability after creation. Validation happens
     in __post_init__ before the instance is frozen.
+
+    Architecture Note:
+        This class is INTENTIONALLY DUPLICATED for subprocess independence.
+        The CLI runs as a shell subprocess and cannot import from the
+        omniclaude package.
+
+        SYNC REQUIREMENTS:
+        - This MUST stay in sync with PatternRecord in:
+          src/omniclaude/hooks/handler_context_injection.py (ModelPatternRecord)
+        - Both have identical 8 fields and validation logic
+        - See tests/hooks/test_pattern_sync.py for automated verification
+
+        The DbPatternRecord in repository_patterns.py is a DIFFERENT model
+        with 4 additional database fields (id, project_scope, created_at, updated_at).
 
     Attributes:
         pattern_id: Unique identifier for the pattern.
@@ -40,6 +53,10 @@ class PatternRecord:
         usage_count: Number of times this pattern has been applied.
         success_rate: Success rate from 0.0 to 1.0.
         example_reference: Optional reference to an example (e.g., "path/to/file.py:42").
+
+    See Also:
+        - ModelPatternRecord: Handler API model in src/omniclaude/hooks/handler_context_injection.py
+        - DbPatternRecord: Database model (12 fields) in src/omniclaude/hooks/repository_patterns.py
     """
 
     pattern_id: str
