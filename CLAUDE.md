@@ -201,7 +201,7 @@ Topic base names (without environment prefix):
 - `evt.*` topics: Events (observability, analytics)
 - `cmd.*` topics: Commands (triggers processing in another service)
 
-Topic prefix (e.g., `onex`, `dev`, `staging`, `prod`) comes from environment configuration.
+Topic prefix (e.g., `dev`, `staging`, `prod`) comes from environment configuration.
 
 ---
 

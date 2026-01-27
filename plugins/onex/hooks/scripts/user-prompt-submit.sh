@@ -136,7 +136,11 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
                 >> "$LOG_FILE" 2>&1 || { rc=$?; log "Kafka claude-hook-event emit failed (exit=$rc, non-fatal)"; }
         ) &
     fi
-    log "Prompt event emission started (both topics)"
+    if [ "${SKIP_CLAUDE_HOOK_EVENT_EMIT:-0}" -ne 1 ]; then
+        log "Prompt event emission started (observability + intelligence topics)"
+    else
+        log "Prompt event emission started (observability topic only, jq unavailable)"
+    fi
 fi
 
 # -----------------------------

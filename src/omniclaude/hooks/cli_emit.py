@@ -527,7 +527,15 @@ def cmd_claude_hook_event(
 
         if from_json:
             # Read additional data from stdin
-            data = json.loads(sys.stdin.read())
+            stdin_content = sys.stdin.read()
+            try:
+                data = json.loads(stdin_content)
+            except json.JSONDecodeError as e:
+                logger.warning(
+                    "invalid_stdin_json",
+                    extra={"error": str(e), "content_length": len(stdin_content)},
+                )
+                sys.exit(0)  # Fail soft - observability must never break Claude Code
             event_type = data.get("event_type", event_type)
             prompt = data.get("prompt", data.get("payload", {}).get("prompt", prompt))
             if data.get("correlation_id"):
