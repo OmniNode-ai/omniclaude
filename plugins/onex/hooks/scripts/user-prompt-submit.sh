@@ -96,10 +96,12 @@ PROMPT_LENGTH="${#PROMPT}"
 PROMPT_PREVIEW="${PROMPT:0:100}"
 
 if [[ "$KAFKA_ENABLED" == "true" ]]; then
-    # Debug: Log environment for troubleshooting
-    log "DEBUG: PYTHON_CMD=$PYTHON_CMD"
-    log "DEBUG: KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-NOT_SET}"
-    log "DEBUG: KAFKA_ENVIRONMENT=${KAFKA_ENVIRONMENT:-NOT_SET}"
+    # Debug: Log environment for troubleshooting (only when OMNICLAUDE_DEBUG=true)
+    if [[ "${OMNICLAUDE_DEBUG:-false}" == "true" ]]; then
+        log "DEBUG: PYTHON_CMD=$PYTHON_CMD"
+        log "DEBUG: KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-NOT_SET}"
+        log "DEBUG: KAFKA_ENVIRONMENT=${KAFKA_ENVIRONMENT:-NOT_SET}"
+    fi
 
     # Emit prompt.submitted event (for omniclaude internal use)
     (
@@ -114,7 +116,7 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
     # This uses the ModelClaudeCodeHookEvent format expected by NodeClaudeHookEventEffect
     # Using stdin JSON to safely handle special characters in prompts
     (
-        printf '%s' "{\"event_type\": \"UserPromptSubmit\", \"prompt\": $(printf '%s' "$PROMPT" | jq -Rs .), \"correlation_id\": \"$CORRELATION_ID\"}" | \
+        printf '%s' "{\"event_type\": \"UserPromptSubmit\", \"prompt\": $(printf '%s' "$PROMPT" | jq -Rs .), \"correlation_id\": $(printf '%s' "$CORRELATION_ID" | jq -Rs .)}" | \
         $PYTHON_CMD -m omniclaude.hooks.cli_emit claude-hook-event \
             --session-id "$SESSION_ID" \
             --event-type "UserPromptSubmit" \

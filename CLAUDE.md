@@ -77,7 +77,7 @@ Event schemas use semantic versioning with strict backwards compatibility rules:
 4. No topic version change required
 
 **Breaking Changes (Major Version)**:
-1. Create new topic version (e.g., `omniclaude.session.started.v2`)
+1. Create new topic version (e.g., `onex.evt.omniclaude.session-started.v2`)
 2. Run old and new topics in parallel during migration
 3. Producers emit to both topics temporarily
 4. Consumers migrate to new topic at their pace
@@ -177,7 +177,7 @@ event_json = event.model_dump_json()
 
 # Get topic name
 topic = build_topic("dev", TopicBase.SESSION_STARTED)
-# → "dev.omniclaude.session.started.v1"
+# → "onex.evt.omniclaude.session-started.v1"
 ```
 
 ---
@@ -190,12 +190,12 @@ Topic base names (without environment prefix):
 
 | Topic | Base Name | Purpose |
 |-------|-----------|---------|
-| Session Started | `omniclaude.session.started.v1` | Internal observability |
-| Session Ended | `omniclaude.session.ended.v1` | Internal observability |
-| Prompt Submitted | `omniclaude.prompt.submitted.v1` | Internal observability (100-char preview) |
-| Tool Executed | `omniclaude.tool.executed.v1` | Internal observability |
-| Learning Pattern | `omniclaude.learning.pattern.v1` | Future: pattern storage |
-| **Claude Hook Event** | `cmd.omniintelligence.claude-hook-event.v1` | Intelligence (full prompt) |
+| Session Started | `onex.evt.omniclaude.session-started.v1` | Internal observability |
+| Session Ended | `onex.evt.omniclaude.session-ended.v1` | Internal observability |
+| Prompt Submitted | `onex.evt.omniclaude.prompt-submitted.v1` | Internal observability (100-char preview) |
+| Tool Executed | `onex.evt.omniclaude.tool-executed.v1` | Internal observability |
+| Learning Pattern | `onex.evt.omniclaude.learning-pattern.v1` | Future: pattern storage |
+| **Claude Hook Event** | `onex.cmd.omniintelligence.claude-hook-event.v1` | Intelligence (full prompt) |
 
 **Topic Naming Convention**:
 - `evt.*` topics: Events (observability, analytics)
