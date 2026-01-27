@@ -25,20 +25,27 @@ class TestTopicBase:
     """Tests for TopicBase enum values."""
 
     def test_topic_base_names(self) -> None:
-        """Topic base names are defined correctly."""
-        # Claude Code session/prompt/tool topics
-        assert TopicBase.SESSION_STARTED == "omniclaude.session.started.v1"
-        assert TopicBase.SESSION_ENDED == "omniclaude.session.ended.v1"
-        assert TopicBase.PROMPT_SUBMITTED == "omniclaude.prompt.submitted.v1"
-        assert TopicBase.TOOL_EXECUTED == "omniclaude.tool.executed.v1"
-        assert TopicBase.AGENT_ACTION == "omniclaude.agent.action.v1"
-        assert TopicBase.LEARNING_PATTERN == "omniclaude.learning.pattern.v1"
-        # Agent routing topics (omninode domain)
-        assert TopicBase.ROUTING_REQUESTED == "omninode.agent.routing.requested.v1"
-        assert TopicBase.ROUTING_COMPLETED == "omninode.agent.routing.completed.v1"
-        assert TopicBase.ROUTING_FAILED == "omninode.agent.routing.failed.v1"
+        """Topic base names follow ONEX canonical format (OMN-1537)."""
+        # omniclaude event topics (onex.evt.omniclaude.{event-name}.v1)
+        assert TopicBase.SESSION_STARTED == "onex.evt.omniclaude.session-started.v1"
+        assert TopicBase.SESSION_ENDED == "onex.evt.omniclaude.session-ended.v1"
+        assert TopicBase.PROMPT_SUBMITTED == "onex.evt.omniclaude.prompt-submitted.v1"
+        assert TopicBase.TOOL_EXECUTED == "onex.evt.omniclaude.tool-executed.v1"
+        assert TopicBase.AGENT_ACTION == "onex.evt.omniclaude.agent-action.v1"
+        assert TopicBase.LEARNING_PATTERN == "onex.evt.omniclaude.learning-pattern.v1"
 
-        # Agent observability topics (legacy naming for backward compatibility)
+        # omninode routing topics (onex.cmd/evt.omninode.{event-name}.v1)
+        assert TopicBase.ROUTING_REQUESTED == "onex.cmd.omninode.routing-requested.v1"
+        assert TopicBase.ROUTING_COMPLETED == "onex.evt.omninode.routing-completed.v1"
+        assert TopicBase.ROUTING_FAILED == "onex.evt.omninode.routing-failed.v1"
+
+        # Cross-service topics (omniclaude → omniintelligence)
+        assert (
+            TopicBase.CLAUDE_HOOK_EVENT
+            == "onex.cmd.omniintelligence.claude-hook-event.v1"
+        )
+
+        # Legacy observability topics (to be migrated)
         assert TopicBase.ROUTING_DECISIONS == "agent-routing-decisions"
         assert TopicBase.AGENT_ACTIONS == "agent-actions"
         assert TopicBase.PERFORMANCE_METRICS == "router-performance-metrics"
@@ -52,14 +59,21 @@ class TestTopicBase:
             assert isinstance(topic.value, str)
 
     def test_all_topics_follow_naming_convention(self) -> None:
-        """Topics follow either ONEX or legacy naming conventions."""
+        """Topics follow ONEX canonical format (OMN-1537) or legacy naming."""
         import re
 
-        # ONEX naming pattern: domain.seg1.seg2...segN.vX (multiple category segments allowed)
-        onex_pattern = re.compile(r"^(omniclaude|omninode)(?:\.[a-z-]+)+\.v\d+$")
+        # ONEX canonical format (OMN-1537): onex.{kind}.{producer}.{event-name}.v{n}
+        # - Exactly 5 dot-separated segments
+        # - kind: cmd, evt, dlq, intent, snapshot
+        # - producer: lowercase service name
+        # - event-name: kebab-case
+        # - version: v + integer
+        onex_pattern = re.compile(
+            r"^onex\.(cmd|evt|dlq|intent|snapshot)\.[a-z]+\.[a-z-]+\.v\d+$"
+        )
 
-        # Legacy observability topics (backward compatibility with existing consumers)
-        # These use simple hyphenated names without the omniclaude prefix
+        # Legacy observability topics (to be migrated in future PR)
+        # These use simple hyphenated names without the onex prefix
         legacy_topics = {
             TopicBase.ROUTING_DECISIONS,
             TopicBase.AGENT_ACTIONS,
@@ -76,9 +90,9 @@ class TestTopicBase:
                     f"Legacy topic {topic.name} does not follow naming convention: {topic.value}"
                 )
             else:
-                # ONEX topics use omniclaude.{category}.{event}.v{version}
+                # ONEX canonical format: onex.{kind}.{producer}.{event-name}.v{n}
                 assert onex_pattern.match(topic.value), (
-                    f"Topic {topic.name} does not follow ONEX naming convention: {topic.value}"
+                    f"Topic {topic.name} does not follow ONEX canonical format: {topic.value}"
                 )
 
 
@@ -93,32 +107,32 @@ class TestBuildTopicValidInputs:
     def test_build_topic_with_prefix(self) -> None:
         """Build full topic name from prefix and base."""
         topic = build_topic("dev", TopicBase.SESSION_STARTED)
-        assert topic == "dev.omniclaude.session.started.v1"
+        assert topic == "dev.onex.evt.omniclaude.session-started.v1"
 
         topic = build_topic("prod", TopicBase.TOOL_EXECUTED)
-        assert topic == "prod.omniclaude.tool.executed.v1"
+        assert topic == "prod.onex.evt.omniclaude.tool-executed.v1"
 
     def test_build_topic_empty_prefix_returns_base(self) -> None:
         """Empty prefix returns just the base topic name."""
         topic = build_topic("", TopicBase.SESSION_STARTED)
-        assert topic == "omniclaude.session.started.v1"
+        assert topic == "onex.evt.omniclaude.session-started.v1"
 
     def test_build_topic_whitespace_prefix_returns_base(self) -> None:
         """Whitespace-only prefix returns just the base topic name."""
         topic = build_topic("   ", TopicBase.SESSION_STARTED)
-        assert topic == "omniclaude.session.started.v1"
+        assert topic == "onex.evt.omniclaude.session-started.v1"
 
         # Tab characters
         topic = build_topic("\t\t", TopicBase.SESSION_STARTED)
-        assert topic == "omniclaude.session.started.v1"
+        assert topic == "onex.evt.omniclaude.session-started.v1"
 
         # Newline characters
         topic = build_topic("\n\n", TopicBase.SESSION_STARTED)
-        assert topic == "omniclaude.session.started.v1"
+        assert topic == "onex.evt.omniclaude.session-started.v1"
 
         # Mixed whitespace
         topic = build_topic("  \t\n  ", TopicBase.SESSION_STARTED)
-        assert topic == "omniclaude.session.started.v1"
+        assert topic == "onex.evt.omniclaude.session-started.v1"
 
     def test_build_topic_strips_whitespace(self) -> None:
         """Prefix and base whitespace is stripped."""
@@ -284,18 +298,18 @@ class TestBuildTopicEdgeCases:
     def test_build_topic_single_char_prefix(self) -> None:
         """Single character prefix is valid."""
         topic = build_topic("d", TopicBase.SESSION_STARTED)
-        assert topic == "d.omniclaude.session.started.v1"
+        assert topic == "d.onex.evt.omniclaude.session-started.v1"
 
     def test_build_topic_numeric_prefix(self) -> None:
         """Numeric string prefix is valid."""
         topic = build_topic("123", TopicBase.SESSION_STARTED)
-        assert topic == "123.omniclaude.session.started.v1"
+        assert topic == "123.onex.evt.omniclaude.session-started.v1"
 
     def test_build_topic_long_prefix(self) -> None:
         """Long prefix is valid."""
         long_prefix = "a" * 100
         topic = build_topic(long_prefix, TopicBase.SESSION_STARTED)
-        assert topic == f"{long_prefix}.omniclaude.session.started.v1"
+        assert topic == f"{long_prefix}.onex.evt.omniclaude.session-started.v1"
 
     def test_build_topic_unicode_prefix_rejected(self) -> None:
         """Unicode characters in prefix are rejected."""
@@ -305,7 +319,7 @@ class TestBuildTopicEdgeCases:
     def test_build_topic_preserves_case_in_prefix(self) -> None:
         """Prefix case is preserved (not forced to lowercase)."""
         topic = build_topic("DEV", TopicBase.SESSION_STARTED)
-        assert topic == "DEV.omniclaude.session.started.v1"
+        assert topic == "DEV.onex.evt.omniclaude.session-started.v1"
 
         topic = build_topic("Dev_Test", TopicBase.SESSION_STARTED)
-        assert topic == "Dev_Test.omniclaude.session.started.v1"
+        assert topic == "Dev_Test.onex.evt.omniclaude.session-started.v1"

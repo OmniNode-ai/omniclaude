@@ -43,6 +43,13 @@ source "${HOOKS_DIR}/scripts/common.sh"
 export ARCHON_INTELLIGENCE_URL="${ARCHON_INTELLIGENCE_URL:-http://localhost:8053}"
 
 log() { printf "[%s] %s\n" "$(date "+%Y-%m-%d %H:%M:%S")" "$*" >> "$LOG_FILE"; }
+
+# Preflight check for jq (required for claude-hook-event JSON construction)
+SKIP_CLAUDE_HOOK_EVENT_EMIT=0
+if ! command -v jq >/dev/null 2>&1; then
+    log "ERROR: jq not found, skipping claude-hook-event emission"
+    SKIP_CLAUDE_HOOK_EVENT_EMIT=1
+fi
 b64() { printf %s "$1" | base64; }
 
 # Define timeout function (portable, works on macOS)
@@ -96,14 +103,69 @@ PROMPT_LENGTH="${#PROMPT}"
 PROMPT_PREVIEW="${PROMPT:0:100}"
 
 if [[ "$KAFKA_ENABLED" == "true" ]]; then
+    # Debug: Log environment for troubleshooting (only when OMNICLAUDE_DEBUG=true)
+    if [[ "${OMNICLAUDE_DEBUG:-false}" == "true" ]]; then
+        log "DEBUG: PYTHON_CMD=$PYTHON_CMD"
+        log "DEBUG: KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-NOT_SET}"
+        log "DEBUG: KAFKA_ENVIRONMENT=${KAFKA_ENVIRONMENT:-NOT_SET}"
+    fi
+
+    # Emit prompt.submitted event (for omniclaude internal use)
     (
         $PYTHON_CMD -m omniclaude.hooks.cli_emit prompt-submitted \
             --session-id "$SESSION_ID" \
             --preview "$PROMPT_PREVIEW" \
             --length "$PROMPT_LENGTH" \
-            >> "$LOG_FILE" 2>&1 || { rc=$?; log "Kafka emit failed (exit=$rc, non-fatal)"; }
+            >> "$LOG_FILE" 2>&1 || { rc=$?; log "Kafka prompt-submitted emit failed (exit=$rc, non-fatal)"; }
     ) &
-    log "Prompt event emission started"
+
+    # -----------------------------------------------------------------------
+    # DUAL-EMISSION ARCHITECTURE (OMN-1402) - FULL PROMPT INTENTIONAL
+    # -----------------------------------------------------------------------
+    # The observability topic above (prompt-submitted) receives a 100-char
+    # TRUNCATED and SANITIZED preview for privacy-safe analytics.
+    #
+    # The intelligence topic below (claude-hook-event) receives the FULL
+    # prompt INTENTIONALLY. This is NOT a bug - it is required for:
+    #
+    #   1. Intent classification - needs complete context to accurately
+    #      classify user intent and select appropriate agents
+    #   2. Pattern learning - truncated prompts lose valuable workflow
+    #      patterns that improve future routing decisions
+    #   3. RAG optimization - full prompts improve retrieval quality and
+    #      context injection accuracy
+    #   4. Workflow analysis - understanding multi-step workflows requires
+    #      complete prompt content
+    #
+    # PRIVACY CONTROLS (enforced at infrastructure level):
+    #   - Topic-level ACLs restrict consumers to OmniIntelligence only
+    #   - Network isolation for intelligence consumers
+    #   - Aggressive retention policy (7-14 days recommended)
+    #   - Audit logging for all reads from intelligence topic
+    #
+    # See CLAUDE.md "Privacy Guidelines" section for full documentation.
+    # -----------------------------------------------------------------------
+    # This uses the ModelClaudeCodeHookEvent format expected by NodeClaudeHookEventEffect
+    # Using single jq -n --arg invocation for safe JSON construction
+    if [ "${SKIP_CLAUDE_HOOK_EVENT_EMIT:-0}" -ne 1 ]; then
+        (
+            jq -n \
+                --arg event_type "UserPromptSubmit" \
+                --arg prompt "$PROMPT" \
+                --arg correlation_id "$CORRELATION_ID" \
+                '{event_type:$event_type,prompt:$prompt,correlation_id:$correlation_id}' 2>/dev/null | \
+            $PYTHON_CMD -m omniclaude.hooks.cli_emit claude-hook-event \
+                --session-id "$SESSION_ID" \
+                --event-type "UserPromptSubmit" \
+                --json \
+                >> "$LOG_FILE" 2>&1 || { rc=$?; log "Kafka claude-hook-event emit failed (exit=$rc, non-fatal)"; }
+        ) &
+    fi
+    if [ "${SKIP_CLAUDE_HOOK_EVENT_EMIT:-0}" -ne 1 ]; then
+        log "Prompt event emission started (observability + intelligence topics)"
+    else
+        log "Prompt event emission started (observability topic only, jq unavailable)"
+    fi
 fi
 
 # -----------------------------

@@ -1281,30 +1281,30 @@ class TestTopics:
     """Tests for topic names and helpers."""
 
     def test_topic_base_names(self) -> None:
-        """Topic base names are defined correctly."""
-        assert TopicBase.SESSION_STARTED == "omniclaude.session.started.v1"
-        assert TopicBase.SESSION_ENDED == "omniclaude.session.ended.v1"
-        assert TopicBase.PROMPT_SUBMITTED == "omniclaude.prompt.submitted.v1"
-        assert TopicBase.TOOL_EXECUTED == "omniclaude.tool.executed.v1"
-        assert TopicBase.LEARNING_PATTERN == "omniclaude.learning.pattern.v1"
+        """Topic base names follow ONEX canonical format (OMN-1537)."""
+        assert TopicBase.SESSION_STARTED == "onex.evt.omniclaude.session-started.v1"
+        assert TopicBase.SESSION_ENDED == "onex.evt.omniclaude.session-ended.v1"
+        assert TopicBase.PROMPT_SUBMITTED == "onex.evt.omniclaude.prompt-submitted.v1"
+        assert TopicBase.TOOL_EXECUTED == "onex.evt.omniclaude.tool-executed.v1"
+        assert TopicBase.LEARNING_PATTERN == "onex.evt.omniclaude.learning-pattern.v1"
 
     def test_build_topic(self) -> None:
         """Build full topic name from prefix and base."""
         topic = build_topic("dev", TopicBase.SESSION_STARTED)
-        assert topic == "dev.omniclaude.session.started.v1"
+        assert topic == "dev.onex.evt.omniclaude.session-started.v1"
 
         topic = build_topic("prod", TopicBase.TOOL_EXECUTED)
-        assert topic == "prod.omniclaude.tool.executed.v1"
+        assert topic == "prod.onex.evt.omniclaude.tool-executed.v1"
 
     def test_build_topic_empty_prefix_returns_base(self) -> None:
         """Empty prefix returns just the base topic name."""
         topic = build_topic("", TopicBase.SESSION_STARTED)
-        assert topic == "omniclaude.session.started.v1"
+        assert topic == "onex.evt.omniclaude.session-started.v1"
 
     def test_build_topic_whitespace_prefix_returns_base(self) -> None:
         """Whitespace-only prefix returns just the base topic name."""
         topic = build_topic("   ", TopicBase.SESSION_STARTED)
-        assert topic == "omniclaude.session.started.v1"
+        assert topic == "onex.evt.omniclaude.session-started.v1"
 
     def test_build_topic_none_prefix_raises(self) -> None:
         """None prefix raises ModelOnexError with clear message."""

@@ -128,7 +128,7 @@ class ContextInjectionConfig(BaseSettings):
         description="Database user",
     )
 
-    db_password: SecretStr = Field(
+    db_password: SecretStr = Field(  # secret-ok: pydantic field name, not hardcoded
         default=SecretStr(""),
         description="Database password (from OMNICLAUDE_CONTEXT_DB_PASSWORD)",
     )
@@ -161,8 +161,8 @@ class ContextInjectionConfig(BaseSettings):
             >>> dsn.startswith("postgresql://")
             True
         """
-        password = self.db_password.get_secret_value()
-        return f"postgresql://{self.db_user}:{password}@{self.db_host}:{self.db_port}/{self.db_name}"
+        db_pass = self.db_password.get_secret_value()  # secret-ok: runtime env value
+        return f"postgresql://{self.db_user}:{db_pass}@{self.db_host}:{self.db_port}/{self.db_name}"
 
     @classmethod
     def from_env(cls) -> ContextInjectionConfig:

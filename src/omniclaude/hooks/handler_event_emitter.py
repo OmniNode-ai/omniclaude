@@ -42,6 +42,10 @@ from uuid import UUID, uuid4
 
 from omnibase_core.enums import EnumCoreErrorCode
 from omnibase_core.models.errors import ModelOnexError
+from omnibase_core.models.hooks.claude_code import (
+    ModelClaudeCodeHookEvent,
+    ModelClaudeCodeHookEventPayload,
+)
 from omnibase_infra.event_bus.event_bus_kafka import EventBusKafka
 from omnibase_infra.event_bus.models.config import ModelKafkaEventBusConfig
 
@@ -60,6 +64,8 @@ from omniclaude.hooks.schemas import (
 from omniclaude.hooks.topics import TopicBase, build_topic
 
 if TYPE_CHECKING:
+    from omnibase_core.enums.hooks.claude_code import EnumClaudeCodeHookEventType
+
     from omniclaude.hooks.schemas import ModelHookPayload
 
 logger = logging.getLogger(__name__)
@@ -183,6 +189,37 @@ class ModelSessionEndedConfig:
     tracing: ModelEventTracingConfig = field(default_factory=ModelEventTracingConfig)
 
 
+@dataclass(frozen=True)
+class ModelClaudeHookEventConfig:
+    """Configuration for Claude hook events consumed by omniintelligence.
+
+    This config is used for emitting raw Claude Code hook events to the
+    omniintelligence topic for intelligence processing and learning.
+
+    Note:
+        The upstream ModelClaudeCodeHookEvent from omnibase_core does NOT
+        include a schema_version field, and the model uses extra="forbid"
+        which prevents adding custom fields. Schema versioning for these
+        events must be handled at the topic level (e.g., .v1, .v2 suffix)
+        rather than at the event level. See OMN-1402 for tracking.
+
+    Attributes:
+        event_type: The Claude Code hook event type (e.g., UserPromptSubmit).
+        session_id: Claude Code session identifier (string per upstream API).
+        prompt: The full prompt text (for UserPromptSubmit events).
+        correlation_id: Optional correlation ID for distributed tracing.
+        timestamp_utc: Event timestamp (defaults to now UTC if not provided).
+        environment: Kafka environment prefix (e.g., "dev", "staging", "prod").
+    """
+
+    event_type: EnumClaudeCodeHookEventType
+    session_id: str
+    prompt: str | None = None
+    correlation_id: UUID | None = None
+    timestamp_utc: datetime | None = None
+    environment: str | None = None
+
+
 # =============================================================================
 # Configuration Constants
 # =============================================================================
@@ -197,6 +234,32 @@ class ModelSessionEndedConfig:
 DEFAULT_KAFKA_TIMEOUT_SECONDS: int = 2  # Short timeout for hooks
 DEFAULT_KAFKA_MAX_RETRY_ATTEMPTS: int = 0  # No retries (latency budget)
 DEFAULT_KAFKA_ACKS: str = "all"  # Using "all" due to aiokafka bug with string "1"
+
+# Prompt size limit for Kafka message safety
+# Kafka default max message size is 1MB. We truncate prompts exceeding this
+# limit to prevent publish failures. The truncation marker "[TRUNCATED]" is
+# appended to indicate the prompt was cut off.
+MAX_PROMPT_SIZE: int = 1_000_000  # 1MB - Kafka message size safety limit
+TRUNCATION_MARKER: str = "[TRUNCATED]"  # Marker appended to truncated prompts
+
+# JSON envelope overhead buffer for Kafka message size calculation
+# The prompt is wrapped in a JSON envelope containing:
+#   - event_type (~50 bytes)
+#   - session_id (~50 bytes)
+#   - correlation_id (~50 bytes)
+#   - timestamp_utc (~30 bytes)
+#   - payload structure (~50 bytes)
+#   - JSON syntax overhead (~50 bytes)
+# We use 500 bytes as a conservative buffer to ensure the total message
+# (prompt + envelope) stays within Kafka's message size limit.
+JSON_ENVELOPE_OVERHEAD_BUFFER: int = 500
+
+# Defensive check - ensure MAX_PROMPT_SIZE can accommodate truncation marker and overhead
+assert len(TRUNCATION_MARKER) + JSON_ENVELOPE_OVERHEAD_BUFFER < MAX_PROMPT_SIZE, (
+    f"MAX_PROMPT_SIZE ({MAX_PROMPT_SIZE}) must be greater than "
+    f"TRUNCATION_MARKER length ({len(TRUNCATION_MARKER)}) + "
+    f"JSON_ENVELOPE_OVERHEAD_BUFFER ({JSON_ENVELOPE_OVERHEAD_BUFFER})"
+)
 
 
 # =============================================================================
@@ -827,13 +890,194 @@ async def emit_tool_executed(
     return await emit_tool_executed_from_config(config)
 
 
+# =============================================================================
+# Claude Hook Event Emission (for omniintelligence)
+# =============================================================================
+
+
+async def emit_claude_hook_event(
+    config: ModelClaudeHookEventConfig,
+) -> ModelEventPublishResult:
+    """Emit a Claude Code hook event to the omniintelligence topic.
+
+    This function emits raw Claude Code hook events in the format expected
+    by omniintelligence's NodeClaudeHookEventEffect. The event is published
+    to the `onex.cmd.omniintelligence.claude-hook-event.v1` topic.
+
+    Note:
+        Prompts exceeding MAX_PROMPT_SIZE (1MB minus JSON overhead buffer)
+        are truncated with a "[TRUNCATED]" suffix to prevent Kafka message
+        size limit failures. A warning is logged when truncation occurs,
+        including the original prompt size.
+
+    Note:
+        The emitted event does NOT include a schema_version field because
+        the upstream ModelClaudeCodeHookEvent from omnibase_core does not
+        support it (uses extra="forbid"). Schema versioning is handled at
+        the topic level via the .v1 suffix in the topic name.
+
+    Args:
+        config: Claude hook event configuration containing event data.
+
+    Returns:
+        ModelEventPublishResult indicating success or failure.
+
+    Example:
+        >>> from datetime import UTC, datetime
+        >>> from uuid import uuid4
+        >>> config = ModelClaudeHookEventConfig(
+        ...     event_type=EnumClaudeCodeHookEventType.USER_PROMPT_SUBMIT,
+        ...     session_id="abc123",
+        ...     prompt="Help me debug this code",
+        ...     correlation_id=uuid4(),
+        ... )
+        >>> result = await emit_claude_hook_event(config)
+        >>> result.success
+        True
+    """
+    bus: EventBusKafka | None = None
+    topic = "unknown"
+
+    try:
+        # Get environment from config, env var, or default
+        env = config.environment or os.environ.get("KAFKA_ENVIRONMENT", "dev")
+        topic = build_topic(env, TopicBase.CLAUDE_HOOK_EVENT)
+
+        # Truncate prompt if it exceeds Kafka message size limit
+        # Account for JSON envelope overhead to ensure total message stays within limit
+        max_prompt_with_overhead = (
+            MAX_PROMPT_SIZE - JSON_ENVELOPE_OVERHEAD_BUFFER - len(TRUNCATION_MARKER)
+        )
+        prompt_to_send = config.prompt
+        if (
+            prompt_to_send is not None
+            and len(prompt_to_send) > max_prompt_with_overhead
+        ):
+            logger.warning(
+                "prompt_truncated_for_kafka",
+                extra={
+                    "original_size": len(prompt_to_send),
+                    "max_size": max_prompt_with_overhead,
+                    "json_overhead_buffer": JSON_ENVELOPE_OVERHEAD_BUFFER,
+                    "session_id": config.session_id,
+                },
+            )
+            prompt_to_send = (
+                prompt_to_send[:max_prompt_with_overhead] + TRUNCATION_MARKER
+            )
+
+        # Build the payload with prompt in model_extra (additionalProperties)
+        # ModelClaudeCodeHookEventPayload uses extra="allow" so we can pass any fields
+        payload_data: dict[str, str] = {}
+        if prompt_to_send is not None:
+            payload_data["prompt"] = prompt_to_send
+
+        payload = ModelClaudeCodeHookEventPayload.model_validate(payload_data)
+
+        # Validate prompt survived model_extra serialization
+        if prompt_to_send is not None:
+            preserved_prompt = (
+                payload.model_extra.get("prompt") if payload.model_extra else None
+            )
+            if preserved_prompt != prompt_to_send:
+                logger.warning(
+                    "prompt_not_preserved_in_payload",
+                    extra={
+                        "expected_length": len(prompt_to_send),
+                        "preserved": preserved_prompt is not None,
+                        "session_id": config.session_id,
+                        "hint": "ModelClaudeCodeHookEventPayload may need extra='allow'",
+                    },
+                )
+
+        # Build the event using omnibase_core model
+        event = ModelClaudeCodeHookEvent(
+            event_type=config.event_type,
+            session_id=config.session_id,
+            correlation_id=config.correlation_id,
+            timestamp_utc=config.timestamp_utc or datetime.now(UTC),
+            payload=payload,
+        )
+
+        # Create Kafka config and bus
+        kafka_config = _create_kafka_config()
+        bus = EventBusKafka(config=kafka_config)
+
+        # Start producer
+        await bus.start()
+
+        # Publish the event
+        # Use session_id as partition key for ordering within session
+        partition_key = config.session_id.encode("utf-8")
+        message_bytes = event.model_dump_json().encode("utf-8")
+
+        await bus.publish(
+            topic=topic,
+            key=partition_key,
+            value=message_bytes,
+        )
+
+        logger.debug(
+            "claude_hook_event_emitted",
+            extra={
+                "topic": topic,
+                "event_type": config.event_type.value,
+                "session_id": config.session_id,
+            },
+        )
+
+        return ModelEventPublishResult(
+            success=True,
+            topic=topic,
+            partition=None,
+            offset=None,
+        )
+
+    except Exception as e:
+        # Log warning but don't crash - observability must never break UX
+        logger.warning(
+            "claude_hook_event_publish_failed",
+            extra={
+                "topic": topic,
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "session_id": config.session_id,
+            },
+        )
+
+        error_msg = f"{type(e).__name__}: {e!s}"
+        return ModelEventPublishResult(
+            success=False,
+            topic=topic,
+            error_message=(
+                error_msg[:997] + "..." if len(error_msg) > 1000 else error_msg
+            ),
+        )
+
+    finally:
+        # Always close the bus if it was created
+        if bus is not None:
+            try:
+                await bus.close()
+            except Exception as close_error:
+                logger.debug(
+                    "kafka_bus_close_error",
+                    extra={"error": str(close_error)},
+                )
+
+
 __all__ = [
+    # Constants
+    "MAX_PROMPT_SIZE",
+    "TRUNCATION_MARKER",
+    "JSON_ENVELOPE_OVERHEAD_BUFFER",
     # Config models
     "ModelEventTracingConfig",
     "ModelToolExecutedConfig",
     "ModelPromptSubmittedConfig",
     "ModelSessionStartedConfig",
     "ModelSessionEndedConfig",
+    "ModelClaudeHookEventConfig",
     # Core emission function
     "emit_hook_event",
     # Config-based convenience functions
@@ -841,6 +1085,8 @@ __all__ = [
     "emit_session_ended_from_config",
     "emit_prompt_submitted_from_config",
     "emit_tool_executed_from_config",
+    # Claude hook event emission (for omniintelligence)
+    "emit_claude_hook_event",
     # Backwards-compatible convenience functions
     "emit_session_started",
     "emit_session_ended",

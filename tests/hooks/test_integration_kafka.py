@@ -750,6 +750,382 @@ class TestKafkaIntegrationPrivacy:
 
 
 # =============================================================================
+# Claude Hook Event Tests (omniintelligence topic)
+# =============================================================================
+
+
+async def wait_for_claude_hook_event(
+    topic: str,
+    session_id: str,
+    consumer_group: str,
+    timeout_seconds: float = 10.0,
+) -> tuple[dict[str, Any] | None, bytes | None]:
+    """Wait for a specific claude-hook-event by session_id.
+
+    Claude hook events have a different structure than observability events.
+    They use ModelClaudeCodeHookEvent from omnibase_core.
+
+    Args:
+        topic: The Kafka topic to consume from.
+        session_id: The session_id to match in the event.
+        consumer_group: Consumer group ID.
+        timeout_seconds: Maximum time to wait.
+
+    Returns:
+        Tuple of (event_payload, partition_key) or (None, None) if not found.
+    """
+    try:
+        from aiokafka import AIOKafkaConsumer
+    except ImportError:
+        pytest.skip("aiokafka not installed")
+        return None, None
+
+    consumer = AIOKafkaConsumer(
+        topic,
+        bootstrap_servers=get_kafka_bootstrap_servers(),
+        group_id=consumer_group,
+        auto_offset_reset="earliest",
+        enable_auto_commit=True,
+        consumer_timeout_ms=int(timeout_seconds * 1000),
+    )
+
+    try:
+        await consumer.start()
+        await consumer.seek_to_end()
+
+        start_time = asyncio.get_running_loop().time()
+        while (asyncio.get_running_loop().time() - start_time) < timeout_seconds:
+            try:
+                result = await consumer.getmany(timeout_ms=500, max_records=100)
+                for _tp, records in result.items():
+                    for record in records:
+                        try:
+                            payload = json.loads(record.value.decode("utf-8"))
+                            # Claude hook events have session_id at root level
+                            if payload.get("session_id") == session_id:
+                                return payload, record.key
+                        except (json.JSONDecodeError, UnicodeDecodeError):
+                            continue
+
+            except TimeoutError:
+                continue
+
+        return None, None
+
+    finally:
+        await consumer.stop()
+
+
+class TestClaudeHookEventIntegration:
+    """Integration tests for emit_claude_hook_event (omniintelligence topic).
+
+    These tests verify that claude-hook-events are correctly published to the
+    omniintelligence topic (onex.cmd.omniintelligence.claude-hook-event.v1).
+
+    This is the "dual emission" path where full prompts are sent to the
+    intelligence service for analysis, separate from the truncated/sanitized
+    observability events.
+
+    Note:
+        These tests use the actual Kafka environment (e.g., "dev") instead of
+        test-specific prefixes because the claude-hook-event topic must exist.
+        Unlike other hook topics that can be auto-created, the intelligence
+        topic is typically pre-created with specific configuration.
+    """
+
+    async def test_claude_hook_event_reaches_kafka(
+        self,
+        _kafka_health_check,
+        unique_consumer_group,
+    ) -> None:
+        """Verify claude-hook-event is published to and consumable from Kafka.
+
+        This test:
+        1. Creates a unique correlation_id for this test run
+        2. Publishes a claude-hook-event
+        3. Consumes from the topic
+        4. Verifies the event with matching session_id arrives
+        """
+        from omnibase_core.enums.hooks.claude_code import EnumClaudeCodeHookEventType
+
+        from omniclaude.hooks.handler_event_emitter import (
+            ModelClaudeHookEventConfig,
+            emit_claude_hook_event,
+        )
+        from omniclaude.hooks.topics import TopicBase, build_topic
+
+        # Generate unique identifiers for this test
+        test_correlation_id = uuid4()
+        test_session_id = f"integration-test-{uuid4().hex[:12]}"
+        test_prompt = f"Integration test prompt at {asyncio.get_running_loop().time()}"
+
+        # Use actual Kafka environment (topic must exist)
+        env = get_kafka_environment()
+
+        # Build topic name
+        topic = build_topic(env, TopicBase.CLAUDE_HOOK_EVENT)
+
+        # Start consumer BEFORE publishing (to catch the message)
+        consumer_task = asyncio.create_task(
+            wait_for_claude_hook_event(
+                topic=topic,
+                session_id=test_session_id,
+                consumer_group=unique_consumer_group,
+                timeout_seconds=15.0,
+            )
+        )
+
+        # Small delay to let consumer subscribe
+        await asyncio.sleep(1.0)
+
+        # Emit the event
+        config = ModelClaudeHookEventConfig(
+            event_type=EnumClaudeCodeHookEventType.USER_PROMPT_SUBMIT,
+            session_id=test_session_id,
+            prompt=test_prompt,
+            correlation_id=test_correlation_id,
+            environment=env,
+        )
+
+        result = await emit_claude_hook_event(config)
+
+        # Verify publish succeeded
+        assert result.success is True, f"Publish failed: {result.error_message}"
+        assert topic in result.topic
+
+        # Wait for consumer to receive the message
+        message, _partition_key = await consumer_task
+
+        # Verify message was received
+        assert message is not None, (
+            f"Event with session_id={test_session_id} not found on topic {topic}"
+        )
+
+        # Verify event contents
+        assert message["event_type"] == "UserPromptSubmit"
+        assert message["session_id"] == test_session_id
+        assert message["correlation_id"] == str(test_correlation_id)
+
+        # Verify payload contains the full prompt
+        assert "payload" in message
+        assert message["payload"]["prompt"] == test_prompt
+
+    async def test_claude_hook_event_partition_key_is_session_id(
+        self,
+        _kafka_health_check,
+        unique_consumer_group,
+    ) -> None:
+        """Verify partition key is set to session_id for ordering guarantees.
+
+        Events with the same session_id should go to the same partition,
+        ensuring ordering within a session.
+        """
+        from omnibase_core.enums.hooks.claude_code import EnumClaudeCodeHookEventType
+
+        from omniclaude.hooks.handler_event_emitter import (
+            ModelClaudeHookEventConfig,
+            emit_claude_hook_event,
+        )
+        from omniclaude.hooks.topics import TopicBase, build_topic
+
+        env = get_kafka_environment()
+        test_session_id = f"partition-key-test-{uuid4().hex[:12]}"
+        topic = build_topic(env, TopicBase.CLAUDE_HOOK_EVENT)
+
+        consumer_task = asyncio.create_task(
+            wait_for_claude_hook_event(
+                topic=topic,
+                session_id=test_session_id,
+                consumer_group=unique_consumer_group,
+                timeout_seconds=15.0,
+            )
+        )
+        await asyncio.sleep(1.0)
+
+        config = ModelClaudeHookEventConfig(
+            event_type=EnumClaudeCodeHookEventType.USER_PROMPT_SUBMIT,
+            session_id=test_session_id,
+            prompt="Test prompt for partition key verification",
+            environment=env,
+        )
+
+        result = await emit_claude_hook_event(config)
+        assert result.success is True, f"Publish failed: {result.error_message}"
+
+        message, partition_key = await consumer_task
+
+        assert message is not None, f"Message not received from topic {topic}"
+
+        # Verify partition key is the session_id
+        assert partition_key is not None, "Partition key should not be None"
+        assert partition_key.decode("utf-8") == test_session_id
+
+    async def test_claude_hook_event_full_prompt_not_truncated(
+        self,
+        _kafka_health_check,
+        unique_consumer_group,
+    ) -> None:
+        """Verify full prompt is sent without truncation.
+
+        Unlike the observability topic (prompt-submitted) which truncates to
+        100 chars, the intelligence topic should receive the full prompt.
+        """
+        from omnibase_core.enums.hooks.claude_code import EnumClaudeCodeHookEventType
+
+        from omniclaude.hooks.handler_event_emitter import (
+            ModelClaudeHookEventConfig,
+            emit_claude_hook_event,
+        )
+        from omniclaude.hooks.topics import TopicBase, build_topic
+
+        env = get_kafka_environment()
+        test_session_id = f"full-prompt-test-{uuid4().hex[:12]}"
+        # Create a long prompt (500 chars - well over 100 char observability limit)
+        long_prompt = "A" * 500
+        topic = build_topic(env, TopicBase.CLAUDE_HOOK_EVENT)
+
+        consumer_task = asyncio.create_task(
+            wait_for_claude_hook_event(
+                topic=topic,
+                session_id=test_session_id,
+                consumer_group=unique_consumer_group,
+                timeout_seconds=15.0,
+            )
+        )
+        await asyncio.sleep(1.0)
+
+        config = ModelClaudeHookEventConfig(
+            event_type=EnumClaudeCodeHookEventType.USER_PROMPT_SUBMIT,
+            session_id=test_session_id,
+            prompt=long_prompt,
+            environment=env,
+        )
+
+        result = await emit_claude_hook_event(config)
+        assert result.success is True, f"Publish failed: {result.error_message}"
+
+        message, _partition_key = await consumer_task
+
+        assert message is not None, f"Message not received from topic {topic}"
+
+        # Verify full prompt was received (not truncated)
+        received_prompt = message["payload"]["prompt"]
+        assert len(received_prompt) == 500
+        assert received_prompt == long_prompt
+
+    async def test_claude_hook_event_correlation_id_preserved(
+        self,
+        _kafka_health_check,
+        unique_consumer_group,
+    ) -> None:
+        """Verify correlation_id is correctly preserved in the event.
+
+        Correlation IDs are critical for distributed tracing across services.
+        """
+        from omnibase_core.enums.hooks.claude_code import EnumClaudeCodeHookEventType
+
+        from omniclaude.hooks.handler_event_emitter import (
+            ModelClaudeHookEventConfig,
+            emit_claude_hook_event,
+        )
+        from omniclaude.hooks.topics import TopicBase, build_topic
+
+        env = get_kafka_environment()
+        test_session_id = f"correlation-test-{uuid4().hex[:12]}"
+        test_correlation_id = uuid4()
+        topic = build_topic(env, TopicBase.CLAUDE_HOOK_EVENT)
+
+        consumer_task = asyncio.create_task(
+            wait_for_claude_hook_event(
+                topic=topic,
+                session_id=test_session_id,
+                consumer_group=unique_consumer_group,
+                timeout_seconds=15.0,
+            )
+        )
+        await asyncio.sleep(1.0)
+
+        config = ModelClaudeHookEventConfig(
+            event_type=EnumClaudeCodeHookEventType.USER_PROMPT_SUBMIT,
+            session_id=test_session_id,
+            prompt="Test prompt for correlation ID verification",
+            correlation_id=test_correlation_id,
+            environment=env,
+        )
+
+        result = await emit_claude_hook_event(config)
+        assert result.success is True, f"Publish failed: {result.error_message}"
+
+        message, _partition_key = await consumer_task
+
+        assert message is not None, f"Message not received from topic {topic}"
+
+        # Verify correlation_id is preserved
+        assert "correlation_id" in message
+        assert message["correlation_id"] == str(test_correlation_id)
+
+    async def test_claude_hook_event_timestamp_present(
+        self,
+        _kafka_health_check,
+        unique_consumer_group,
+    ) -> None:
+        """Verify timestamp_utc is correctly set in the event."""
+        from datetime import UTC, datetime
+
+        from omnibase_core.enums.hooks.claude_code import EnumClaudeCodeHookEventType
+
+        from omniclaude.hooks.handler_event_emitter import (
+            ModelClaudeHookEventConfig,
+            emit_claude_hook_event,
+        )
+        from omniclaude.hooks.topics import TopicBase, build_topic
+
+        env = get_kafka_environment()
+        test_session_id = f"timestamp-test-{uuid4().hex[:12]}"
+        before_emit = datetime.now(UTC)
+        topic = build_topic(env, TopicBase.CLAUDE_HOOK_EVENT)
+
+        consumer_task = asyncio.create_task(
+            wait_for_claude_hook_event(
+                topic=topic,
+                session_id=test_session_id,
+                consumer_group=unique_consumer_group,
+                timeout_seconds=15.0,
+            )
+        )
+        await asyncio.sleep(1.0)
+
+        config = ModelClaudeHookEventConfig(
+            event_type=EnumClaudeCodeHookEventType.USER_PROMPT_SUBMIT,
+            session_id=test_session_id,
+            prompt="Test prompt for timestamp verification",
+            environment=env,
+        )
+
+        result = await emit_claude_hook_event(config)
+        after_emit = datetime.now(UTC)
+
+        assert result.success is True, f"Publish failed: {result.error_message}"
+
+        message, _partition_key = await consumer_task
+
+        assert message is not None, f"Message not received from topic {topic}"
+
+        # Verify timestamp is present and reasonable
+        assert "timestamp_utc" in message
+        # Parse the timestamp (ISO format)
+        timestamp_str = message["timestamp_utc"]
+        # Handle both Z and +00:00 timezone formats
+        if timestamp_str.endswith("Z"):
+            timestamp_str = timestamp_str[:-1] + "+00:00"
+        event_time = datetime.fromisoformat(timestamp_str)
+
+        # Verify timestamp is between before and after emit
+        assert event_time >= before_emit.replace(microsecond=0)
+        assert event_time <= after_emit
+
+
+# =============================================================================
 # Main
 # =============================================================================
 

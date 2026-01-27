@@ -22,15 +22,21 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
+from omnibase_core.enums.hooks.claude_code import EnumClaudeCodeHookEventType
 from omnibase_core.models.errors import ModelOnexError
 
 from omniclaude.hooks.handler_event_emitter import (
+    JSON_ENVELOPE_OVERHEAD_BUFFER,
+    MAX_PROMPT_SIZE,
+    TRUNCATION_MARKER,
+    ModelClaudeHookEventConfig,
     _create_kafka_config,
     _get_event_type,
     _get_topic_base,
+    emit_claude_hook_event,
     emit_hook_event,
     emit_prompt_submitted,
     emit_session_ended,
@@ -373,7 +379,7 @@ class TestSuccessfulEmission:
             result = await emit_hook_event(payload)
 
             assert result.success is True
-            assert "omniclaude.session.started.v1" in result.topic
+            assert "onex.evt.omniclaude.session-started.v1" in result.topic
 
     @pytest.mark.asyncio
     async def test_emit_uses_entity_id_as_partition_key(self) -> None:
@@ -422,7 +428,7 @@ class TestConvenienceFunctions:
             )
 
             assert result.success is True
-            assert "session.started" in result.topic
+            assert "session-started" in result.topic
 
     @pytest.mark.asyncio
     async def test_emit_session_ended(self) -> None:
@@ -443,7 +449,7 @@ class TestConvenienceFunctions:
             )
 
             assert result.success is True
-            assert "session.ended" in result.topic
+            assert "session-ended" in result.topic
 
     @pytest.mark.asyncio
     async def test_emit_prompt_submitted(self) -> None:
@@ -465,7 +471,7 @@ class TestConvenienceFunctions:
             )
 
             assert result.success is True
-            assert "prompt.submitted" in result.topic
+            assert "prompt-submitted" in result.topic
 
     @pytest.mark.asyncio
     async def test_emit_tool_executed(self) -> None:
@@ -488,7 +494,7 @@ class TestConvenienceFunctions:
             )
 
             assert result.success is True
-            assert "tool.executed" in result.topic
+            assert "tool-executed" in result.topic
 
     @pytest.mark.asyncio
     async def test_convenience_functions_auto_generate_ids(self) -> None:
@@ -817,3 +823,316 @@ class TestEdgeCases:
                 prompt_length=150,
             )
             assert result.success is True
+
+
+# =============================================================================
+# Claude Hook Event Tests (for omniintelligence)
+# =============================================================================
+
+
+def make_claude_hook_event_config(
+    *,
+    event_type: EnumClaudeCodeHookEventType = EnumClaudeCodeHookEventType.USER_PROMPT_SUBMIT,
+    session_id: str = "test-session-123",
+    prompt: str | None = None,
+    correlation_id: UUID | None = None,
+) -> ModelClaudeHookEventConfig:
+    """Create a valid Claude hook event config for testing."""
+    return ModelClaudeHookEventConfig(
+        event_type=event_type,
+        session_id=session_id,
+        prompt=prompt,
+        correlation_id=correlation_id or uuid4(),
+    )
+
+
+@pytest.mark.usefixtures("kafka_env")
+class TestClaudeHookEventEmission:
+    """Tests for emit_claude_hook_event() function.
+
+    These tests verify the emission of Claude Code hook events to the
+    omniintelligence topic for intelligence processing.
+    """
+
+    @pytest.mark.asyncio
+    async def test_emit_claude_hook_event_success(self) -> None:
+        """emit_claude_hook_event returns success result with mocked Kafka."""
+        config = make_claude_hook_event_config()
+
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus.start.return_value = None
+            mock_bus.publish.return_value = None
+            mock_bus.close.return_value = None
+            mock_bus_class.return_value = mock_bus
+
+            result = await emit_claude_hook_event(config)
+
+            assert result.success is True
+            assert "claude-hook-event" in result.topic
+            mock_bus.publish.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_emit_claude_hook_event_with_prompt(self) -> None:
+        """emit_claude_hook_event includes prompt in payload."""
+        prompt_text = "Help me debug this authentication issue"
+        config = make_claude_hook_event_config(
+            event_type=EnumClaudeCodeHookEventType.USER_PROMPT_SUBMIT,
+            prompt=prompt_text,
+        )
+
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus_class.return_value = mock_bus
+
+            result = await emit_claude_hook_event(config)
+
+            assert result.success is True
+            # Verify the published message contains the prompt
+            mock_bus.publish.assert_called_once()
+            call_kwargs = mock_bus.publish.call_args.kwargs
+            published_value = call_kwargs["value"]
+            assert prompt_text.encode("utf-8") in published_value
+
+    @pytest.mark.asyncio
+    async def test_emit_claude_hook_event_uses_session_id_as_partition_key(
+        self,
+    ) -> None:
+        """emit_claude_hook_event uses session_id bytes as partition key."""
+        session_id = "my-unique-session-abc123"
+        config = make_claude_hook_event_config(session_id=session_id)
+
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus_class.return_value = mock_bus
+
+            await emit_claude_hook_event(config)
+
+            # Verify publish was called with session_id.encode() as key
+            mock_bus.publish.assert_called_once()
+            call_kwargs = mock_bus.publish.call_args.kwargs
+            assert call_kwargs["key"] == session_id.encode("utf-8")
+
+    @pytest.mark.asyncio
+    async def test_emit_claude_hook_event_handles_kafka_failure(self) -> None:
+        """emit_claude_hook_event handles Kafka failure gracefully."""
+        config = make_claude_hook_event_config()
+
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus.start.side_effect = ConnectionError("Kafka unavailable")
+            mock_bus_class.return_value = mock_bus
+
+            # Should NOT raise
+            result = await emit_claude_hook_event(config)
+
+            # Should return failed result
+            assert result.success is False
+            assert result.error_message is not None
+            assert "ConnectionError" in result.error_message
+
+    @pytest.mark.asyncio
+    async def test_emit_claude_hook_event_topic_correct(self) -> None:
+        """emit_claude_hook_event uses correct omniintelligence topic."""
+        config = make_claude_hook_event_config()
+
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus_class.return_value = mock_bus
+
+            result = await emit_claude_hook_event(config)
+
+            # Verify correct topic name
+            assert result.success is True
+            assert result.topic == "dev.onex.cmd.omniintelligence.claude-hook-event.v1"
+            # Verify the topic was passed to publish
+            call_kwargs = mock_bus.publish.call_args.kwargs
+            assert (
+                call_kwargs["topic"]
+                == "dev.onex.cmd.omniintelligence.claude-hook-event.v1"
+            )
+
+    @pytest.mark.asyncio
+    async def test_emit_claude_hook_event_publish_failure(self) -> None:
+        """emit_claude_hook_event handles publish failure gracefully."""
+        config = make_claude_hook_event_config()
+
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus.start.return_value = None
+            mock_bus.publish.side_effect = RuntimeError("Publish failed")
+            mock_bus.close.return_value = None
+            mock_bus_class.return_value = mock_bus
+
+            result = await emit_claude_hook_event(config)
+
+            assert result.success is False
+            assert "RuntimeError" in result.error_message  # type: ignore[operator]
+
+    @pytest.mark.asyncio
+    async def test_emit_claude_hook_event_different_event_types(self) -> None:
+        """emit_claude_hook_event works with different event types."""
+        event_types = [
+            EnumClaudeCodeHookEventType.SESSION_START,
+            EnumClaudeCodeHookEventType.USER_PROMPT_SUBMIT,
+            EnumClaudeCodeHookEventType.PRE_TOOL_USE,
+            EnumClaudeCodeHookEventType.POST_TOOL_USE,
+            EnumClaudeCodeHookEventType.SESSION_END,
+        ]
+
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus_class.return_value = mock_bus
+
+            for event_type in event_types:
+                config = make_claude_hook_event_config(event_type=event_type)
+                result = await emit_claude_hook_event(config)
+                assert result.success is True, f"Failed for event_type: {event_type}"
+
+    @pytest.mark.asyncio
+    async def test_emit_claude_hook_event_bus_close_failure_is_silent(self) -> None:
+        """Bus close failure doesn't affect result for Claude hook events."""
+        config = make_claude_hook_event_config()
+
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus.start.return_value = None
+            mock_bus.publish.return_value = None
+            mock_bus.close.side_effect = RuntimeError("Close failed")
+            mock_bus_class.return_value = mock_bus
+
+            # Should NOT raise despite close failure
+            result = await emit_claude_hook_event(config)
+
+            # Result should still indicate success (publish succeeded)
+            assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_emit_claude_hook_event_truncates_large_prompt(self) -> None:
+        """emit_claude_hook_event truncates prompts exceeding MAX_PROMPT_SIZE."""
+        import json
+
+        # Create a 1.5MB prompt (exceeds 1MB MAX_PROMPT_SIZE)
+        large_prompt = "x" * 1_500_000
+        config = make_claude_hook_event_config(
+            event_type=EnumClaudeCodeHookEventType.USER_PROMPT_SUBMIT,
+            prompt=large_prompt,
+        )
+
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus.start.return_value = None
+            mock_bus.publish.return_value = None
+            mock_bus.close.return_value = None
+            mock_bus_class.return_value = mock_bus
+
+            result = await emit_claude_hook_event(config)
+
+            assert result.success is True
+            # Verify the published message is truncated
+            mock_bus.publish.assert_called_once()
+            call_kwargs = mock_bus.publish.call_args.kwargs
+            published_value = call_kwargs["value"]
+
+            # Parse the JSON to verify truncation precisely
+            published_json = json.loads(published_value.decode("utf-8"))
+            truncated_prompt = published_json["payload"]["prompt"]
+
+            # Verify truncated prompt is exactly (MAX_PROMPT_SIZE - JSON overhead)
+            # The truncation accounts for JSON envelope overhead to ensure the
+            # total Kafka message stays within limits
+            expected_truncated_size = MAX_PROMPT_SIZE - JSON_ENVELOPE_OVERHEAD_BUFFER
+            assert len(truncated_prompt) == expected_truncated_size, (
+                f"Expected truncated prompt length to be exactly {expected_truncated_size} "
+                f"(MAX_PROMPT_SIZE - JSON_ENVELOPE_OVERHEAD_BUFFER), got {len(truncated_prompt)}"
+            )
+
+            # Verify it ends with the truncation marker
+            assert truncated_prompt.endswith(TRUNCATION_MARKER), (
+                f"Expected truncated prompt to end with '{TRUNCATION_MARKER}'"
+            )
+
+    @pytest.mark.asyncio
+    async def test_emit_claude_hook_event_does_not_truncate_small_prompt(self) -> None:
+        """emit_claude_hook_event does not truncate prompts under MAX_PROMPT_SIZE."""
+        small_prompt = "This is a normal sized prompt"
+        config = make_claude_hook_event_config(
+            event_type=EnumClaudeCodeHookEventType.USER_PROMPT_SUBMIT,
+            prompt=small_prompt,
+        )
+
+        with patch(
+            "omniclaude.hooks.handler_event_emitter.EventBusKafka"
+        ) as mock_bus_class:
+            mock_bus = AsyncMock()
+            mock_bus.start.return_value = None
+            mock_bus.publish.return_value = None
+            mock_bus.close.return_value = None
+            mock_bus_class.return_value = mock_bus
+
+            result = await emit_claude_hook_event(config)
+
+            assert result.success is True
+            call_kwargs = mock_bus.publish.call_args.kwargs
+            published_value = call_kwargs["value"]
+            # Original prompt should be present in full
+            assert small_prompt.encode("utf-8") in published_value
+            # Should NOT have truncation marker
+            assert b"[TRUNCATED]" not in published_value
+
+    @pytest.mark.asyncio
+    async def test_emit_claude_hook_event_preserves_prompt_in_payload(self) -> None:
+        """Verify prompt is preserved via model_extra (catches schema changes).
+
+        The emit_claude_hook_event function relies on ModelClaudeCodeHookEventPayload
+        having extra="allow" to preserve the prompt field. This test catches if
+        omnibase_core changes extra="allow" to extra="forbid".
+        """
+        from omnibase_core.models.hooks.claude_code import (
+            ModelClaudeCodeHookEventPayload,
+        )
+
+        test_prompt = "This prompt must survive serialization"
+
+        # Test that the payload model preserves arbitrary fields in model_extra
+        payload_data = {"prompt": test_prompt}
+        payload = ModelClaudeCodeHookEventPayload.model_validate(payload_data)
+
+        # This test catches if omnibase_core changes extra="allow" to extra="forbid"
+        assert payload.model_extra is not None, (
+            "ModelClaudeCodeHookEventPayload must have model_extra enabled (extra='allow')"
+        )
+        assert payload.model_extra.get("prompt") == test_prompt, (
+            "prompt field must be preserved in model_extra for intelligence processing"
+        )
+
+    def test_truncation_marker_constant_is_valid(self) -> None:
+        """Verify TRUNCATION_MARKER constant is properly defined.
+
+        Ensures:
+        - TRUNCATION_MARKER is a non-empty string
+        - MAX_PROMPT_SIZE is greater than TRUNCATION_MARKER length
+        """
+        assert isinstance(TRUNCATION_MARKER, str)
+        assert len(TRUNCATION_MARKER) > 0
+        assert len(TRUNCATION_MARKER) < MAX_PROMPT_SIZE, (
+            "MAX_PROMPT_SIZE must be greater than TRUNCATION_MARKER length"
+        )
