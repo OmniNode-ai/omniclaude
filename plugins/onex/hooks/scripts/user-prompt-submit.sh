@@ -119,7 +119,32 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
             >> "$LOG_FILE" 2>&1 || { rc=$?; log "Kafka prompt-submitted emit failed (exit=$rc, non-fatal)"; }
     ) &
 
-    # Emit claude-hook-event to omniintelligence topic (for intelligence processing)
+    # -----------------------------------------------------------------------
+    # DUAL-EMISSION ARCHITECTURE (OMN-1402) - FULL PROMPT INTENTIONAL
+    # -----------------------------------------------------------------------
+    # The observability topic above (prompt-submitted) receives a 100-char
+    # TRUNCATED and SANITIZED preview for privacy-safe analytics.
+    #
+    # The intelligence topic below (claude-hook-event) receives the FULL
+    # prompt INTENTIONALLY. This is NOT a bug - it is required for:
+    #
+    #   1. Intent classification - needs complete context to accurately
+    #      classify user intent and select appropriate agents
+    #   2. Pattern learning - truncated prompts lose valuable workflow
+    #      patterns that improve future routing decisions
+    #   3. RAG optimization - full prompts improve retrieval quality and
+    #      context injection accuracy
+    #   4. Workflow analysis - understanding multi-step workflows requires
+    #      complete prompt content
+    #
+    # PRIVACY CONTROLS (enforced at infrastructure level):
+    #   - Topic-level ACLs restrict consumers to OmniIntelligence only
+    #   - Network isolation for intelligence consumers
+    #   - Aggressive retention policy (7-14 days recommended)
+    #   - Audit logging for all reads from intelligence topic
+    #
+    # See CLAUDE.md "Privacy Guidelines" section for full documentation.
+    # -----------------------------------------------------------------------
     # This uses the ModelClaudeCodeHookEvent format expected by NodeClaudeHookEventEffect
     # Using single jq -n --arg invocation for safe JSON construction
     if [ "${SKIP_CLAUDE_HOOK_EVENT_EMIT:-0}" -ne 1 ]; then
@@ -290,12 +315,65 @@ if [[ -n "${IMPL_QUERY:-}" ]]; then
 fi
 
 # -----------------------------
+# Learned Pattern Injection (OMN-1403)
+# -----------------------------
+LEARNED_PATTERNS=""
+if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
+    log "Loading learned patterns via context injection..."
+
+    PATTERN_INPUT="$(jq -n \
+        --arg agent "${AGENT_NAME:-}" \
+        --arg domain "${AGENT_DOMAIN:-}" \
+        --arg session "${SESSION_ID:-}" \
+        --arg project "${PROJECT_NAME:-}" \
+        --arg correlation "${CORRELATION_ID:-}" \
+        --argjson max_patterns "${MAX_PATTERNS:-5}" \
+        --argjson min_confidence "${MIN_CONFIDENCE:-0.7}" \
+        '{
+            agent_name: $agent,
+            domain: $domain,
+            session_id: $session,
+            project: $project,
+            correlation_id: $correlation,
+            max_patterns: $max_patterns,
+            min_confidence: $min_confidence
+        }')"
+
+    # 2s timeout - patterns should be fast (file-based)
+    # Try ONEX-compliant wrapper first, fall back to legacy injector
+    # Use run_with_timeout for portability (works on macOS and Linux)
+    if [[ -f "${HOOKS_LIB}/context_injection_wrapper.py" ]]; then
+        log "Using ONEX-compliant context_injection_wrapper.py"
+        PATTERN_RESULT="$(echo "$PATTERN_INPUT" | run_with_timeout 2 $PYTHON_CMD "${HOOKS_LIB}/context_injection_wrapper.py" 2>>"$LOG_FILE" || echo '{}')"
+    elif [[ -f "${HOOKS_LIB}/learned_pattern_injector.py" ]]; then
+        log "Falling back to legacy learned_pattern_injector.py"
+        PATTERN_RESULT="$(echo "$PATTERN_INPUT" | run_with_timeout 2 $PYTHON_CMD "${HOOKS_LIB}/learned_pattern_injector.py" 2>>"$LOG_FILE" || echo '{}')"
+    else
+        log "INFO: No pattern injector found, skipping pattern injection"
+        PATTERN_RESULT='{}'
+    fi
+
+    PATTERN_SUCCESS="$(echo "$PATTERN_RESULT" | jq -r '.success // false')"
+
+    if [[ "$PATTERN_SUCCESS" == "true" ]]; then
+        LEARNED_PATTERNS="$(echo "$PATTERN_RESULT" | jq -r '.patterns_context // ""')"
+        PATTERN_COUNT="$(echo "$PATTERN_RESULT" | jq -r '.pattern_count // 0')"
+        if [[ -n "$LEARNED_PATTERNS" ]] && [[ "$PATTERN_COUNT" != "0" ]]; then
+            log "Learned patterns loaded: ${PATTERN_COUNT} patterns"
+        fi
+    else
+        log "INFO: No learned patterns available"
+    fi
+fi
+
+# -----------------------------
 # Agent Context Injection
 # -----------------------------
 AGENT_ROLE="${AGENT_NAME#agent-}"
 
 AGENT_CONTEXT="$(cat <<EOF
 ${AGENT_YAML_INJECTION}
+${LEARNED_PATTERNS}
 
 ========================================================================
 MANDATORY AGENT DISPATCH DIRECTIVE

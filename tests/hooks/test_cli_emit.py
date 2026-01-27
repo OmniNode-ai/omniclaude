@@ -44,7 +44,7 @@ class TestTimeoutWrapper:
     def test_timeout_constant_is_configurable(self) -> None:
         """Timeout constant is configurable via KAFKA_HOOK_TIMEOUT_SECONDS env var.
 
-        Default is 3.0s (increased from 0.250ms due to Kafka connection setup time).
+        Default is 3.0s (increased from 250ms due to Kafka connection setup time).
         The .env file may override this value (currently set to 2s).
         """
         # The actual value depends on environment configuration

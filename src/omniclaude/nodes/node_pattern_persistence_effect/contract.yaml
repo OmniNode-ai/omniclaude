@@ -1,0 +1,126 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 OmniNode Team
+#
+# ONEX Node Contract
+# Node: NodePatternPersistenceEffect
+#
+# Capability-oriented effect node for learned pattern storage operations.
+# Named by capability ("learned_pattern.storage"), not by vendor (e.g., PostgreSQL).
+# Principle: "I'm interested in what you do, not what you are"
+#
+# This contract defines the interface for learned pattern storage operations with
+# pluggable backends. Handlers implementing ProtocolPatternPersistence can be
+# swapped without changing the node interface.
+
+# Contract identifiers
+name: node_pattern_persistence_effect
+contract_name: node_pattern_persistence_effect
+node_name: node_pattern_persistence_effect
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+# Node type
+node_type: EFFECT_GENERIC
+
+# Description
+description: >
+  Capability-oriented effect node for learned pattern storage operations.
+  Handles query and upsert operations for learned patterns with pluggable backends.
+
+# Strongly typed I/O models
+input_model:
+  name: ModelLearnedPatternQuery
+  module: omniclaude.nodes.node_pattern_persistence_effect.models
+
+output_model:
+  name: ModelLearnedPatternQueryResult
+  module: omniclaude.nodes.node_pattern_persistence_effect.models
+
+# Capability declaration (capability-oriented naming)
+# STANDARDIZED: Same prefix as handler contract capability_outputs
+capabilities:
+  - name: learned_pattern.storage
+    description: Store and query learned pattern records
+    version: 1.0.0
+
+  - name: learned_pattern.storage.query
+    description: Query patterns with domain/confidence filtering
+
+  - name: learned_pattern.storage.upsert
+    description: Insert or update patterns idempotently
+
+# IO operations (EFFECT node specific)
+# EXPLICIT OPERATION MAPPING:
+# operation name -> protocol method (1:1 by name)
+io_operations:
+  - operation: query_patterns
+    description: Query patterns with optional filters
+    protocol_method: query_patterns  # -> ProtocolPatternPersistence.query_patterns()
+    input_fields:
+      - query: ModelLearnedPatternQuery
+      - correlation_id: UUID | None
+    output_fields:
+      - result: ModelLearnedPatternQueryResult
+    idempotent: true
+
+  - operation: upsert_pattern
+    description: Insert or update a pattern (idempotent via pattern_id)
+    protocol_method: upsert_pattern  # -> ProtocolPatternPersistence.upsert_pattern()
+    input_fields:
+      - pattern: ModelLearnedPatternRecord
+      - correlation_id: UUID | None
+    output_fields:
+      - result: ModelLearnedPatternUpsertResult
+    idempotent: true
+
+# Dependencies (protocols this node requires)
+dependencies:
+  - name: protocol_pattern_persistence
+    type: protocol
+    class_name: ProtocolPatternPersistence
+    module: omniclaude.nodes.node_pattern_persistence_effect.protocols
+    pluggable: true
+
+# Handler routing (for pluggable backends)
+# Uses handler_key ONLY (not module/class) per OMN-1403 requirements
+handler_routing:
+  routing_strategy: backend_match
+  default_backend: postgresql
+  backends:
+    - backend: postgresql
+      handler_key: postgresql
+
+# Error handling configuration
+error_handling:
+  retry_policy:
+    max_retries: 3
+    initial_delay_ms: 100
+    max_delay_ms: 5000
+    exponential_base: 2
+    retry_on:
+      - InfraConnectionError
+      - InfraTimeoutError
+  circuit_breaker:
+    enabled: true
+    failure_threshold: 5
+    reset_timeout_ms: 60000
+
+# Metadata
+metadata:
+  author: OmniNode Team
+  license: MIT
+  ticket: OMN-1403
+  maturity: mvp
+  tags:
+    - effect
+    - learned-patterns
+    - storage
+    - capability-oriented

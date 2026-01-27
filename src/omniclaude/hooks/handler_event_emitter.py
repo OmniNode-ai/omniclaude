@@ -53,6 +53,7 @@ from omniclaude.hooks.models import ModelEventPublishResult
 from omniclaude.hooks.schemas import (
     HookEventType,
     HookSource,
+    ModelHookContextInjectedPayload,
     ModelHookEventEnvelope,
     ModelHookPromptSubmittedPayload,
     ModelHookSessionEndedPayload,
@@ -195,6 +196,13 @@ class ModelClaudeHookEventConfig:
     This config is used for emitting raw Claude Code hook events to the
     omniintelligence topic for intelligence processing and learning.
 
+    Note:
+        The upstream ModelClaudeCodeHookEvent from omnibase_core does NOT
+        include a schema_version field, and the model uses extra="forbid"
+        which prevents adding custom fields. Schema versioning for these
+        events must be handled at the topic level (e.g., .v1, .v2 suffix)
+        rather than at the event level. See OMN-1402 for tracking.
+
     Attributes:
         event_type: The Claude Code hook event type (e.g., UserPromptSubmit).
         session_id: Claude Code session identifier (string per upstream API).
@@ -234,10 +242,23 @@ DEFAULT_KAFKA_ACKS: str = "all"  # Using "all" due to aiokafka bug with string "
 MAX_PROMPT_SIZE: int = 1_000_000  # 1MB - Kafka message size safety limit
 TRUNCATION_MARKER: str = "[TRUNCATED]"  # Marker appended to truncated prompts
 
-# Defensive check - ensure MAX_PROMPT_SIZE can accommodate truncation marker
-assert len(TRUNCATION_MARKER) < MAX_PROMPT_SIZE, (
+# JSON envelope overhead buffer for Kafka message size calculation
+# The prompt is wrapped in a JSON envelope containing:
+#   - event_type (~50 bytes)
+#   - session_id (~50 bytes)
+#   - correlation_id (~50 bytes)
+#   - timestamp_utc (~30 bytes)
+#   - payload structure (~50 bytes)
+#   - JSON syntax overhead (~50 bytes)
+# We use 500 bytes as a conservative buffer to ensure the total message
+# (prompt + envelope) stays within Kafka's message size limit.
+JSON_ENVELOPE_OVERHEAD_BUFFER: int = 500
+
+# Defensive check - ensure MAX_PROMPT_SIZE can accommodate truncation marker and overhead
+assert len(TRUNCATION_MARKER) + JSON_ENVELOPE_OVERHEAD_BUFFER < MAX_PROMPT_SIZE, (
     f"MAX_PROMPT_SIZE ({MAX_PROMPT_SIZE}) must be greater than "
-    f"TRUNCATION_MARKER length ({len(TRUNCATION_MARKER)})"
+    f"TRUNCATION_MARKER length ({len(TRUNCATION_MARKER)}) + "
+    f"JSON_ENVELOPE_OVERHEAD_BUFFER ({JSON_ENVELOPE_OVERHEAD_BUFFER})"
 )
 
 
@@ -250,6 +271,7 @@ _EVENT_TYPE_TO_TOPIC: dict[HookEventType, TopicBase] = {
     HookEventType.SESSION_ENDED: TopicBase.SESSION_ENDED,
     HookEventType.PROMPT_SUBMITTED: TopicBase.PROMPT_SUBMITTED,
     HookEventType.TOOL_EXECUTED: TopicBase.TOOL_EXECUTED,
+    HookEventType.CONTEXT_INJECTED: TopicBase.CONTEXT_INJECTED,
 }
 
 _PAYLOAD_TYPE_TO_EVENT_TYPE: dict[type, HookEventType] = {
@@ -257,6 +279,7 @@ _PAYLOAD_TYPE_TO_EVENT_TYPE: dict[type, HookEventType] = {
     ModelHookSessionEndedPayload: HookEventType.SESSION_ENDED,
     ModelHookPromptSubmittedPayload: HookEventType.PROMPT_SUBMITTED,
     ModelHookToolExecutedPayload: HookEventType.TOOL_EXECUTED,
+    ModelHookContextInjectedPayload: HookEventType.CONTEXT_INJECTED,
 }
 
 
@@ -882,10 +905,16 @@ async def emit_claude_hook_event(
     to the `onex.cmd.omniintelligence.claude-hook-event.v1` topic.
 
     Note:
-        Prompts exceeding MAX_PROMPT_SIZE (1MB) are truncated with a
-        "[TRUNCATED]" suffix to prevent Kafka message size limit failures.
-        A warning is logged when truncation occurs, including the original
-        prompt size.
+        Prompts exceeding MAX_PROMPT_SIZE (1MB minus JSON overhead buffer)
+        are truncated with a "[TRUNCATED]" suffix to prevent Kafka message
+        size limit failures. A warning is logged when truncation occurs,
+        including the original prompt size.
+
+    Note:
+        The emitted event does NOT include a schema_version field because
+        the upstream ModelClaudeCodeHookEvent from omnibase_core does not
+        support it (uses extra="forbid"). Schema versioning is handled at
+        the topic level via the .v1 suffix in the topic name.
 
     Args:
         config: Claude hook event configuration containing event data.
@@ -915,19 +944,26 @@ async def emit_claude_hook_event(
         topic = build_topic(env, TopicBase.CLAUDE_HOOK_EVENT)
 
         # Truncate prompt if it exceeds Kafka message size limit
+        # Account for JSON envelope overhead to ensure total message stays within limit
+        max_prompt_with_overhead = (
+            MAX_PROMPT_SIZE - JSON_ENVELOPE_OVERHEAD_BUFFER - len(TRUNCATION_MARKER)
+        )
         prompt_to_send = config.prompt
-        if prompt_to_send is not None and len(prompt_to_send) > MAX_PROMPT_SIZE:
+        if (
+            prompt_to_send is not None
+            and len(prompt_to_send) > max_prompt_with_overhead
+        ):
             logger.warning(
                 "prompt_truncated_for_kafka",
                 extra={
                     "original_size": len(prompt_to_send),
-                    "max_size": MAX_PROMPT_SIZE,
+                    "max_size": max_prompt_with_overhead,
+                    "json_overhead_buffer": JSON_ENVELOPE_OVERHEAD_BUFFER,
                     "session_id": config.session_id,
                 },
             )
             prompt_to_send = (
-                prompt_to_send[: MAX_PROMPT_SIZE - len(TRUNCATION_MARKER)]
-                + TRUNCATION_MARKER
+                prompt_to_send[:max_prompt_with_overhead] + TRUNCATION_MARKER
             )
 
         # Build the payload with prompt in model_extra (additionalProperties)
@@ -1031,6 +1067,10 @@ async def emit_claude_hook_event(
 
 
 __all__ = [
+    # Constants
+    "MAX_PROMPT_SIZE",
+    "TRUNCATION_MARKER",
+    "JSON_ENVELOPE_OVERHEAD_BUFFER",
     # Config models
     "ModelEventTracingConfig",
     "ModelToolExecutedConfig",

@@ -196,6 +196,9 @@ Topic base names (without environment prefix):
 | Tool Executed | `onex.evt.omniclaude.tool-executed.v1` | Internal observability |
 | Learning Pattern | `onex.evt.omniclaude.learning-pattern.v1` | Future: pattern storage |
 | **Claude Hook Event** | `onex.cmd.omniintelligence.claude-hook-event.v1` | Intelligence (full prompt) |
+| Context Retrieval Requested | `onex.cmd.omniclaude.context-retrieval-requested.v1` | OMN-1403: Context injection |
+| Context Retrieval Completed | `onex.evt.omniclaude.context-retrieval-completed.v1` | OMN-1403: Context injection |
+| Context Injected | `onex.evt.omniclaude.context-injected.v1` | OMN-1403: Context injection |
 
 **Topic Naming Convention**:
 - `evt.*` topics: Events (observability, analytics)
@@ -465,7 +468,7 @@ See `_archive/README_ARCHIVE.md` for details.
 | OMN-1400 | Hook handlers emit to Kafka | Pending |
 | OMN-1401 | Session storage in OmniMemory | Pending |
 | OMN-1402 | Intent capture workflow (dual-emission to intelligence) | In Progress |
-| OMN-1403 | Context injection | Pending |
+| OMN-1403 | Context injection | In Progress |
 | OMN-1404 | E2E integration test | Pending |
 
 ---
@@ -494,7 +497,7 @@ ls -la plugins/onex/hooks/scripts/*.sh
 
 ---
 
-**Last Updated**: 2026-01-26
+**Last Updated**: 2026-01-27
 **Version**: 0.1.0
 **Status**: OMN-1402 (Intent capture workflow with dual-emission)
 **Schemas**: ONEX-compatible event envelopes

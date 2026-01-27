@@ -29,6 +29,7 @@ from omnibase_core.enums.hooks.claude_code import EnumClaudeCodeHookEventType
 from omnibase_core.models.errors import ModelOnexError
 
 from omniclaude.hooks.handler_event_emitter import (
+    JSON_ENVELOPE_OVERHEAD_BUFFER,
     MAX_PROMPT_SIZE,
     TRUNCATION_MARKER,
     ModelClaudeHookEventConfig,
@@ -1025,6 +1026,8 @@ class TestClaudeHookEventEmission:
     @pytest.mark.asyncio
     async def test_emit_claude_hook_event_truncates_large_prompt(self) -> None:
         """emit_claude_hook_event truncates prompts exceeding MAX_PROMPT_SIZE."""
+        import json
+
         # Create a 1.5MB prompt (exceeds 1MB MAX_PROMPT_SIZE)
         large_prompt = "x" * 1_500_000
         config = make_claude_hook_event_config(
@@ -1048,10 +1051,24 @@ class TestClaudeHookEventEmission:
             mock_bus.publish.assert_called_once()
             call_kwargs = mock_bus.publish.call_args.kwargs
             published_value = call_kwargs["value"]
-            # Should be less than 1.5MB and contain truncation marker
-            # MAX_PROMPT_SIZE is 1MB, JSON overhead is ~200 bytes
-            assert len(published_value) < 1_100_000
-            assert b"[TRUNCATED]" in published_value
+
+            # Parse the JSON to verify truncation precisely
+            published_json = json.loads(published_value.decode("utf-8"))
+            truncated_prompt = published_json["payload"]["prompt"]
+
+            # Verify truncated prompt is exactly (MAX_PROMPT_SIZE - JSON overhead)
+            # The truncation accounts for JSON envelope overhead to ensure the
+            # total Kafka message stays within limits
+            expected_truncated_size = MAX_PROMPT_SIZE - JSON_ENVELOPE_OVERHEAD_BUFFER
+            assert len(truncated_prompt) == expected_truncated_size, (
+                f"Expected truncated prompt length to be exactly {expected_truncated_size} "
+                f"(MAX_PROMPT_SIZE - JSON_ENVELOPE_OVERHEAD_BUFFER), got {len(truncated_prompt)}"
+            )
+
+            # Verify it ends with the truncation marker
+            assert truncated_prompt.endswith(TRUNCATION_MARKER), (
+                f"Expected truncated prompt to end with '{TRUNCATION_MARKER}'"
+            )
 
     @pytest.mark.asyncio
     async def test_emit_claude_hook_event_does_not_truncate_small_prompt(self) -> None:

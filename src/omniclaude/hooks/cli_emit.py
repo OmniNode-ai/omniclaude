@@ -77,12 +77,44 @@ logger = logging.getLogger(__name__)
 # Constants
 # =============================================================================
 
+# Default timeout for entire emit path (in seconds)
+_DEFAULT_TIMEOUT: float = 3.0
+
+
+def _parse_timeout() -> float:
+    """Parse timeout from env var with fallback to default.
+
+    This function safely parses the KAFKA_HOOK_TIMEOUT_SECONDS environment
+    variable, falling back to the default timeout if the value is invalid,
+    non-positive, or not set.
+
+    Returns:
+        The parsed timeout value, or _DEFAULT_TIMEOUT if parsing fails.
+    """
+    raw = os.environ.get("KAFKA_HOOK_TIMEOUT_SECONDS", "")
+    if not raw:
+        return _DEFAULT_TIMEOUT
+    try:
+        value = float(raw)
+        if value <= 0:
+            logger.warning(
+                "invalid_timeout_non_positive",
+                extra={"value": raw, "default": _DEFAULT_TIMEOUT},
+            )
+            return _DEFAULT_TIMEOUT
+        return value
+    except ValueError:
+        logger.warning(
+            "invalid_timeout_not_numeric",
+            extra={"value": raw, "default": _DEFAULT_TIMEOUT},
+        )
+        return _DEFAULT_TIMEOUT
+
+
 # Hard wall-clock timeout for entire emit path (in seconds)
 # This is the absolute maximum time we allow before abandoning the operation
 # Can be overridden by KAFKA_HOOK_TIMEOUT_SECONDS env var (useful for slow networks)
-EMIT_TIMEOUT_SECONDS: float = float(
-    os.environ.get("KAFKA_HOOK_TIMEOUT_SECONDS", "3.0")
-)  # Default 3s, was 250ms
+EMIT_TIMEOUT_SECONDS: float = _parse_timeout()
 
 
 # =============================================================================

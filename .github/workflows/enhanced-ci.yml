@@ -66,7 +66,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
-        run: pip install --no-cache-dir uv==0.5.24
+        run: pip install --no-cache-dir "uv>=0.6.0,<0.7.0"
 
       - name: Load cached venv
         id: cached-uv-dependencies
@@ -141,7 +141,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
-        run: pip install --no-cache-dir uv==0.5.24
+        run: pip install --no-cache-dir "uv>=0.6.0,<0.7.0"
 
       - name: Configure Git authentication for private repositories
         run: |
@@ -285,7 +285,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
-        run: pip install --no-cache-dir uv==0.5.24
+        run: pip install --no-cache-dir "uv>=0.6.0,<0.7.0"
 
       - name: Configure Git authentication for private repositories
         run: |
@@ -488,7 +488,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
-        run: pip install --no-cache-dir uv==0.5.24
+        run: pip install --no-cache-dir "uv>=0.6.0,<0.7.0"
 
       - name: Configure Git authentication for private repositories
         run: |
@@ -621,7 +621,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
-        run: pip install --no-cache-dir uv==0.5.24
+        run: pip install --no-cache-dir "uv>=0.6.0,<0.7.0"
 
       - name: Configure Git authentication for private repositories
         run: |
@@ -704,7 +704,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
-        run: pip install --no-cache-dir uv==0.5.24
+        run: pip install --no-cache-dir "uv>=0.6.0,<0.7.0"
 
       - name: Configure Git authentication for private repositories
         run: |
@@ -770,7 +770,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
-        run: pip install --no-cache-dir uv==0.5.24
+        run: pip install --no-cache-dir "uv>=0.6.0,<0.7.0"
 
       - name: Configure Git authentication for private repositories
         run: |

@@ -63,6 +63,13 @@ class TopicBase(StrEnum):
     TRANSFORMATIONS = "agent-transformation-events"
     DETECTION_FAILURES = "agent-detection-failures"
 
+    # ==========================================================================
+    # Context injection topics (OMN-1403)
+    # ==========================================================================
+    CONTEXT_RETRIEVAL_REQUESTED = "onex.cmd.omniclaude.context-retrieval-requested.v1"
+    CONTEXT_RETRIEVAL_COMPLETED = "onex.evt.omniclaude.context-retrieval-completed.v1"
+    CONTEXT_INJECTED = "onex.evt.omniclaude.context-injected.v1"
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).

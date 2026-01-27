@@ -1,0 +1,51 @@
+handler_id: effect.learned_pattern.storage.postgres
+name: Learned Pattern Storage Handler (PostgreSQL)
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+descriptor:
+  handler_kind: effect
+  purity: side_effecting
+  idempotent: true
+  timeout_ms: 30000
+  retry_policy:
+    enabled: true
+    max_retries: 3
+    backoff_strategy: exponential
+    base_delay_ms: 500
+    max_delay_ms: 10000
+  circuit_breaker:
+    enabled: true
+    failure_threshold: 5
+    timeout_ms: 60000
+  concurrency_policy: parallel
+  isolation_policy: none
+  observability_level: standard
+
+# STANDARDIZED: Same prefix as node contract capabilities
+capability_outputs:
+  - learned_pattern.storage.query
+  - learned_pattern.storage.upsert
+
+input_model: omniclaude.nodes.node_pattern_persistence_effect.models.ModelLearnedPatternQuery
+output_model: omniclaude.nodes.node_pattern_persistence_effect.models.ModelLearnedPatternQueryResult
+
+handler_class: omniclaude.handlers.pattern_storage_postgres.handler_pattern_storage_postgres.HandlerPatternStoragePostgres
+handler_key: postgresql
+
+protocol: omniclaude.nodes.node_pattern_persistence_effect.protocols.protocol_pattern_persistence.ProtocolPatternPersistence
+
+supports_lifecycle: true
+supports_health_check: true
+
+metadata:
+  author: OmniNode Team
+  license: MIT
+  ticket: OMN-1403
+  tags:
+    - learned-patterns
+    - postgresql
+    - effect
+    - storage
