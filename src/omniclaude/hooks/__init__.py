@@ -40,12 +40,22 @@ Example:
 
 from __future__ import annotations
 
+from omniclaude.hooks.context_config import ContextInjectionConfig
 from omniclaude.hooks.contracts import (
     CONTRACT_PROMPT_SUBMITTED,
     CONTRACT_SESSION_ENDED,
     CONTRACT_SESSION_STARTED,
     CONTRACT_TOOL_EXECUTED,
     CONTRACTS_DIR,
+)
+from omniclaude.hooks.handler_context_injection import (
+    HandlerContextInjection,
+    ModelInjectionResult,
+    ModelPatternRecord,
+    PatternConnectionError,
+    PatternPersistenceError,
+    inject_patterns,
+    inject_patterns_sync,
 )
 from omniclaude.hooks.handler_event_emitter import (
     emit_hook_event,
@@ -56,7 +66,9 @@ from omniclaude.hooks.handler_event_emitter import (
 )
 from omniclaude.hooks.models import ModelEventPublishResult
 from omniclaude.hooks.schemas import (
+    ContextSource,
     HookEventType,
+    ModelHookContextInjectedPayload,
     ModelHookEventEnvelope,
     ModelHookPayload,
     ModelHookPromptSubmittedPayload,
@@ -68,6 +80,8 @@ from omniclaude.hooks.schemas import (
 from omniclaude.hooks.topics import TopicBase, build_topic
 
 __all__ = [
+    # Configuration
+    "ContextInjectionConfig",
     # Event type enum
     "HookEventType",
     # Payload models (ONEX-compliant)
@@ -75,6 +89,9 @@ __all__ = [
     "ModelHookSessionEndedPayload",
     "ModelHookPromptSubmittedPayload",
     "ModelHookToolExecutedPayload",
+    "ModelHookContextInjectedPayload",
+    # Context source enum
+    "ContextSource",
     # Output models
     "ModelEventPublishResult",
     # Envelope and types
@@ -97,4 +114,13 @@ __all__ = [
     "CONTRACT_SESSION_ENDED",
     "CONTRACT_PROMPT_SUBMITTED",
     "CONTRACT_TOOL_EXECUTED",
+    # Context injection handler (OMN-1403)
+    "HandlerContextInjection",
+    "ModelPatternRecord",  # API transfer model (8 fields) - canonical for context injection
+    "ModelInjectionResult",
+    "inject_patterns",
+    "inject_patterns_sync",
+    # Pattern persistence exceptions (OMN-1403)
+    "PatternPersistenceError",  # Base error for persistence operations
+    "PatternConnectionError",  # Connection error (extends PatternPersistenceError)
 ]

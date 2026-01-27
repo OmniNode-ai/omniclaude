@@ -49,6 +49,7 @@ from omniclaude.hooks.models import ModelEventPublishResult
 from omniclaude.hooks.schemas import (
     HookEventType,
     HookSource,
+    ModelHookContextInjectedPayload,
     ModelHookEventEnvelope,
     ModelHookPromptSubmittedPayload,
     ModelHookSessionEndedPayload,
@@ -207,6 +208,7 @@ _EVENT_TYPE_TO_TOPIC: dict[HookEventType, TopicBase] = {
     HookEventType.SESSION_ENDED: TopicBase.SESSION_ENDED,
     HookEventType.PROMPT_SUBMITTED: TopicBase.PROMPT_SUBMITTED,
     HookEventType.TOOL_EXECUTED: TopicBase.TOOL_EXECUTED,
+    HookEventType.CONTEXT_INJECTED: TopicBase.CONTEXT_INJECTED,
 }
 
 _PAYLOAD_TYPE_TO_EVENT_TYPE: dict[type, HookEventType] = {
@@ -214,6 +216,7 @@ _PAYLOAD_TYPE_TO_EVENT_TYPE: dict[type, HookEventType] = {
     ModelHookSessionEndedPayload: HookEventType.SESSION_ENDED,
     ModelHookPromptSubmittedPayload: HookEventType.PROMPT_SUBMITTED,
     ModelHookToolExecutedPayload: HookEventType.TOOL_EXECUTED,
+    ModelHookContextInjectedPayload: HookEventType.CONTEXT_INJECTED,
 }
 
 
