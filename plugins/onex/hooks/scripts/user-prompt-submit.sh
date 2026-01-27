@@ -43,6 +43,13 @@ source "${HOOKS_DIR}/scripts/common.sh"
 export ARCHON_INTELLIGENCE_URL="${ARCHON_INTELLIGENCE_URL:-http://localhost:8053}"
 
 log() { printf "[%s] %s\n" "$(date "+%Y-%m-%d %H:%M:%S")" "$*" >> "$LOG_FILE"; }
+
+# Preflight check for jq (required for claude-hook-event JSON construction)
+SKIP_CLAUDE_HOOK_EVENT_EMIT=0
+if ! command -v jq >/dev/null 2>&1; then
+    log "ERROR: jq not found, skipping claude-hook-event emission"
+    SKIP_CLAUDE_HOOK_EVENT_EMIT=1
+fi
 b64() { printf %s "$1" | base64; }
 
 # Define timeout function (portable, works on macOS)
@@ -114,15 +121,21 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
 
     # Emit claude-hook-event to omniintelligence topic (for intelligence processing)
     # This uses the ModelClaudeCodeHookEvent format expected by NodeClaudeHookEventEffect
-    # Using stdin JSON to safely handle special characters in prompts
-    (
-        printf '%s' "{\"event_type\": \"UserPromptSubmit\", \"prompt\": $(printf '%s' "$PROMPT" | jq -Rs .), \"correlation_id\": $(printf '%s' "$CORRELATION_ID" | jq -Rs .)}" | \
-        $PYTHON_CMD -m omniclaude.hooks.cli_emit claude-hook-event \
-            --session-id "$SESSION_ID" \
-            --event-type "UserPromptSubmit" \
-            --json \
-            >> "$LOG_FILE" 2>&1 || { rc=$?; log "Kafka claude-hook-event emit failed (exit=$rc, non-fatal)"; }
-    ) &
+    # Using single jq -n --arg invocation for safe JSON construction
+    if [ "${SKIP_CLAUDE_HOOK_EVENT_EMIT:-0}" -ne 1 ]; then
+        (
+            jq -n \
+                --arg event_type "UserPromptSubmit" \
+                --arg prompt "$PROMPT" \
+                --arg correlation_id "$CORRELATION_ID" \
+                '{event_type:$event_type,prompt:$prompt,correlation_id:$correlation_id}' 2>/dev/null | \
+            $PYTHON_CMD -m omniclaude.hooks.cli_emit claude-hook-event \
+                --session-id "$SESSION_ID" \
+                --event-type "UserPromptSubmit" \
+                --json \
+                >> "$LOG_FILE" 2>&1 || { rc=$?; log "Kafka claude-hook-event emit failed (exit=$rc, non-fatal)"; }
+        ) &
+    fi
     log "Prompt event emission started (both topics)"
 fi
 

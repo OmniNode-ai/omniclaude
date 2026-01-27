@@ -29,6 +29,8 @@ from omnibase_core.enums.hooks.claude_code import EnumClaudeCodeHookEventType
 from omnibase_core.models.errors import ModelOnexError
 
 from omniclaude.hooks.handler_event_emitter import (
+    MAX_PROMPT_SIZE,
+    TRUNCATION_MARKER,
     ModelClaudeHookEventConfig,
     _create_kafka_config,
     _get_event_type,
@@ -1078,3 +1080,42 @@ class TestClaudeHookEventEmission:
             assert small_prompt.encode("utf-8") in published_value
             # Should NOT have truncation marker
             assert b"[TRUNCATED]" not in published_value
+
+    @pytest.mark.asyncio
+    async def test_emit_claude_hook_event_preserves_prompt_in_payload(self) -> None:
+        """Verify prompt is preserved via model_extra (catches schema changes).
+
+        The emit_claude_hook_event function relies on ModelClaudeCodeHookEventPayload
+        having extra="allow" to preserve the prompt field. This test catches if
+        omnibase_core changes extra="allow" to extra="forbid".
+        """
+        from omnibase_core.models.hooks.claude_code import (
+            ModelClaudeCodeHookEventPayload,
+        )
+
+        test_prompt = "This prompt must survive serialization"
+
+        # Test that the payload model preserves arbitrary fields in model_extra
+        payload_data = {"prompt": test_prompt}
+        payload = ModelClaudeCodeHookEventPayload.model_validate(payload_data)
+
+        # This test catches if omnibase_core changes extra="allow" to extra="forbid"
+        assert payload.model_extra is not None, (
+            "ModelClaudeCodeHookEventPayload must have model_extra enabled (extra='allow')"
+        )
+        assert payload.model_extra.get("prompt") == test_prompt, (
+            "prompt field must be preserved in model_extra for intelligence processing"
+        )
+
+    def test_truncation_marker_constant_is_valid(self) -> None:
+        """Verify TRUNCATION_MARKER constant is properly defined.
+
+        Ensures:
+        - TRUNCATION_MARKER is a non-empty string
+        - MAX_PROMPT_SIZE is greater than TRUNCATION_MARKER length
+        """
+        assert isinstance(TRUNCATION_MARKER, str)
+        assert len(TRUNCATION_MARKER) > 0
+        assert len(TRUNCATION_MARKER) < MAX_PROMPT_SIZE, (
+            "MAX_PROMPT_SIZE must be greater than TRUNCATION_MARKER length"
+        )

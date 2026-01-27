@@ -232,6 +232,13 @@ DEFAULT_KAFKA_ACKS: str = "all"  # Using "all" due to aiokafka bug with string "
 # limit to prevent publish failures. The truncation marker "[TRUNCATED]" is
 # appended to indicate the prompt was cut off.
 MAX_PROMPT_SIZE: int = 1_000_000  # 1MB - Kafka message size safety limit
+TRUNCATION_MARKER: str = "[TRUNCATED]"  # Marker appended to truncated prompts
+
+# Defensive check - ensure MAX_PROMPT_SIZE can accommodate truncation marker
+assert len(TRUNCATION_MARKER) < MAX_PROMPT_SIZE, (
+    f"MAX_PROMPT_SIZE ({MAX_PROMPT_SIZE}) must be greater than "
+    f"TRUNCATION_MARKER length ({len(TRUNCATION_MARKER)})"
+)
 
 
 # =============================================================================
@@ -918,7 +925,10 @@ async def emit_claude_hook_event(
                     "session_id": config.session_id,
                 },
             )
-            prompt_to_send = prompt_to_send[: MAX_PROMPT_SIZE - 11] + "[TRUNCATED]"
+            prompt_to_send = (
+                prompt_to_send[: MAX_PROMPT_SIZE - len(TRUNCATION_MARKER)]
+                + TRUNCATION_MARKER
+            )
 
         # Build the payload with prompt in model_extra (additionalProperties)
         # ModelClaudeCodeHookEventPayload uses extra="allow" so we can pass any fields
@@ -927,6 +937,22 @@ async def emit_claude_hook_event(
             payload_data["prompt"] = prompt_to_send
 
         payload = ModelClaudeCodeHookEventPayload.model_validate(payload_data)
+
+        # Validate prompt survived model_extra serialization
+        if prompt_to_send is not None:
+            preserved_prompt = (
+                payload.model_extra.get("prompt") if payload.model_extra else None
+            )
+            if preserved_prompt != prompt_to_send:
+                logger.warning(
+                    "prompt_not_preserved_in_payload",
+                    extra={
+                        "expected_length": len(prompt_to_send),
+                        "preserved": preserved_prompt is not None,
+                        "session_id": config.session_id,
+                        "hint": "ModelClaudeCodeHookEventPayload may need extra='allow'",
+                    },
+                )
 
         # Build the event using omnibase_core model
         event = ModelClaudeCodeHookEvent(

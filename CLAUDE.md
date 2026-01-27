@@ -177,7 +177,7 @@ event_json = event.model_dump_json()
 
 # Get topic name
 topic = build_topic("dev", TopicBase.SESSION_STARTED)
-# → "onex.evt.omniclaude.session-started.v1"
+# → "dev.onex.evt.omniclaude.session-started.v1"
 ```
 
 ---
