@@ -96,6 +96,11 @@ PROMPT_LENGTH="${#PROMPT}"
 PROMPT_PREVIEW="${PROMPT:0:100}"
 
 if [[ "$KAFKA_ENABLED" == "true" ]]; then
+    # Debug: Log environment for troubleshooting
+    log "DEBUG: PYTHON_CMD=$PYTHON_CMD"
+    log "DEBUG: KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-NOT_SET}"
+    log "DEBUG: KAFKA_ENVIRONMENT=${KAFKA_ENVIRONMENT:-NOT_SET}"
+
     # Emit prompt.submitted event (for omniclaude internal use)
     (
         $PYTHON_CMD -m omniclaude.hooks.cli_emit prompt-submitted \

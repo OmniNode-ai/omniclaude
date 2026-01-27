@@ -32,6 +32,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import sys
 import uuid
 from collections.abc import Awaitable
@@ -77,7 +78,10 @@ logger = logging.getLogger(__name__)
 
 # Hard wall-clock timeout for entire emit path (in seconds)
 # This is the absolute maximum time we allow before abandoning the operation
-EMIT_TIMEOUT_SECONDS: float = 0.250  # 250ms
+# Can be overridden by KAFKA_HOOK_TIMEOUT_SECONDS env var (useful for slow networks)
+EMIT_TIMEOUT_SECONDS: float = float(
+    os.environ.get("KAFKA_HOOK_TIMEOUT_SECONDS", "3.0")
+)  # Default 3s, was 250ms
 
 
 # =============================================================================
