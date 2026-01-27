@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from omnibase_core.enums.hooks.claude_code import EnumClaudeCodeHookEventType

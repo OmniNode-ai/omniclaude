@@ -8,7 +8,8 @@ wall-clock timeout to ensure hooks never block Claude Code.
 
 Design Decisions (OMN-1400):
     - Uses asyncio.run() to bridge sync CLI to async Kafka emission
-    - 250ms hard wall-clock timeout on entire emit path
+    - 3s hard wall-clock timeout on entire emit path (configurable via
+      KAFKA_HOOK_TIMEOUT_SECONDS env var for slow networks)
     - Always exits 0 - observability must never break Claude Code UX
     - Structured logging on failure, no exceptions to caller
 
@@ -493,22 +494,7 @@ def cmd_tool_executed(
 @click.option(
     "--event-type",
     required=True,
-    type=click.Choice(
-        [
-            "SessionStart",
-            "SessionEnd",
-            "UserPromptSubmit",
-            "PreToolUse",
-            "PermissionRequest",
-            "PostToolUse",
-            "PostToolUseFailure",
-            "SubagentStart",
-            "SubagentStop",
-            "Notification",
-            "Stop",
-            "PreCompact",
-        ]
-    ),
+    type=click.Choice([e.value for e in EnumClaudeCodeHookEventType]),
     help="The Claude Code hook event type.",
 )
 @click.option(
