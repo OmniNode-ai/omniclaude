@@ -88,7 +88,12 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
                 duration_seconds: (if $duration_seconds == "" then null else ($duration_seconds | tonumber) end)
             }' 2>/dev/null)
 
-        emit_via_daemon "session.ended" "$SESSION_PAYLOAD" 100
+        # Validate payload was constructed successfully
+        if [[ -z "$SESSION_PAYLOAD" || "$SESSION_PAYLOAD" == "null" ]]; then
+            echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] WARNING: Failed to construct session payload (jq failed), skipping emission" >> "$LOG_FILE"
+        else
+            emit_via_daemon "session.ended" "$SESSION_PAYLOAD" 100
+        fi
     ) &
 
     log "Session event emission started via emit daemon"
