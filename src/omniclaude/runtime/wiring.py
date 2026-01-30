@@ -116,9 +116,8 @@ async def publish_handler_contracts(
     try:
         publisher = await container.get_service_async("ProtocolEventBusPublisher")
     except Exception as e:
-        logger.error(
-            "Failed to get event bus publisher from container: %s. "
-            "Handler contracts will not be published.",
+        logger.warning(
+            "Failed to get event bus publisher from container: %s",
             e,
         )
         raise
@@ -127,6 +126,7 @@ async def publish_handler_contracts(
     topic = f"{environment}.{TOPIC_SUFFIX_CONTRACT_REGISTERED}"
 
     published: list[str] = []
+    failed: list[str] = []
     for contract_path in contract_paths:
         try:
             # Read contract YAML
@@ -184,12 +184,21 @@ async def publish_handler_contracts(
             )
 
         except Exception as e:
+            contract_name = contract_path.parent.name
+            failed.append(contract_name)
             logger.error(
                 "Failed to publish contract %s: %s",
                 contract_path,
                 e,
             )
             # Continue with other contracts - don't fail everything for one bad contract
+
+    if failed:
+        logger.warning(
+            "Failed to publish %d contract(s): %s",
+            len(failed),
+            ", ".join(failed),
+        )
 
     logger.info(
         "Successfully published %d/%d handler contract(s)",
