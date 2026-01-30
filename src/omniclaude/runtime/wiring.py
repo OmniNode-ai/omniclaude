@@ -142,6 +142,13 @@ async def publish_handler_contracts(
 
             # Extract identity fields
             handler_id = contract_data.get("handler_id", "")
+            if not handler_id:
+                logger.warning(
+                    "Skipping contract with missing handler_id: %s",
+                    contract_path,
+                )
+                continue
+
             name = contract_data.get("name", handler_id)
 
             # Parse version
