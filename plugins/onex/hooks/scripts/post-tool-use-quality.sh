@@ -172,6 +172,97 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Tool event emission started" >> "$LOG_FILE"
 fi
 
+# -----------------------------------------------------------------------
+# INTERIM: Code Content Capture for Pattern Learning (OMN-1702)
+# -----------------------------------------------------------------------
+# Captures tool execution content for omniintelligence pattern learning.
+# This is an INTERIM solution emitting raw JSON until ModelToolExecutionContent
+# is available in omnibase_core.
+#
+# Will be migrated to use proper Pydantic model in OMN-1703.
+# -----------------------------------------------------------------------
+if [[ "$KAFKA_ENABLED" == "true" ]] && [[ "$TOOL_NAME" =~ ^(Read|Write|Edit)$ ]]; then
+    (
+        # Extract file path for Read tool (not extracted earlier for non-Write/Edit tools)
+        if [[ "$TOOL_NAME" == "Read" ]]; then
+            FILE_PATH=$(echo "$TOOL_INFO" | jq -r '.tool_input.file_path // .tool_response.filePath // empty' 2>/dev/null)
+        fi
+
+        # Extract content from tool response
+        # For Read: content is in tool_response
+        # For Write/Edit: content is in tool_input
+        if [[ "$TOOL_NAME" == "Read" ]]; then
+            CONTENT=$(echo "$TOOL_INFO" | jq -r '.tool_response // ""' 2>/dev/null | head -c 50000)
+        else
+            CONTENT=$(echo "$TOOL_INFO" | jq -r '.tool_input.content // .tool_input.new_string // ""' 2>/dev/null | head -c 50000)
+        fi
+
+        if [[ -n "$CONTENT" ]] && [[ "$CONTENT" != "null" ]]; then
+            CONTENT_LENGTH=${#CONTENT}
+            CONTENT_PREVIEW="${CONTENT:0:2000}"
+
+            # Compute SHA256 hash (use shasum on macOS, sha256sum on Linux)
+            if command -v shasum >/dev/null 2>&1; then
+                CONTENT_HASH="sha256:$(echo -n "$CONTENT" | shasum -a 256 | cut -d' ' -f1)"
+            elif command -v sha256sum >/dev/null 2>&1; then
+                CONTENT_HASH="sha256:$(echo -n "$CONTENT" | sha256sum | cut -d' ' -f1)"
+            else
+                CONTENT_HASH=""
+            fi
+
+            # Detect language from file extension
+            LANGUAGE=""
+            if [[ -n "$FILE_PATH" ]]; then
+                case "${FILE_PATH##*.}" in
+                    py) LANGUAGE="python" ;;
+                    js) LANGUAGE="javascript" ;;
+                    ts) LANGUAGE="typescript" ;;
+                    tsx) LANGUAGE="typescript" ;;
+                    jsx) LANGUAGE="javascript" ;;
+                    rs) LANGUAGE="rust" ;;
+                    go) LANGUAGE="go" ;;
+                    java) LANGUAGE="java" ;;
+                    rb) LANGUAGE="ruby" ;;
+                    sh|bash) LANGUAGE="shell" ;;
+                    yml|yaml) LANGUAGE="yaml" ;;
+                    json) LANGUAGE="json" ;;
+                    md) LANGUAGE="markdown" ;;
+                    sql) LANGUAGE="sql" ;;
+                    html) LANGUAGE="html" ;;
+                    css) LANGUAGE="css" ;;
+                    *) LANGUAGE="unknown" ;;
+                esac
+            fi
+
+            # Get correlation ID from context if available
+            CORRELATION_ID_FILE="$PROJECT_ROOT/tmp/correlation_id"
+            if [[ -f "$CORRELATION_ID_FILE" ]]; then
+                CORRELATION_ID=$(cat "$CORRELATION_ID_FILE" 2>/dev/null || echo "")
+            fi
+
+            # Determine success/failure flag using variable for clarity and robustness
+            SUCCESS_FLAG="--success"
+            [[ "$TOOL_SUCCESS" != "true" ]] && SUCCESS_FLAG="--failure"
+
+            # Emit tool content event
+            "$PYTHON_CMD" -m omniclaude.hooks.cli_emit tool-content \
+                --session-id "$SESSION_ID" \
+                --tool-name "$TOOL_NAME" \
+                --tool-type "$TOOL_NAME" \
+                ${FILE_PATH:+--file-path "$FILE_PATH"} \
+                --content-preview "$CONTENT_PREVIEW" \
+                --content-length "$CONTENT_LENGTH" \
+                ${CONTENT_HASH:+--content-hash "$CONTENT_HASH"} \
+                ${LANGUAGE:+--language "$LANGUAGE"} \
+                $SUCCESS_FLAG \
+                ${DURATION_MS:+--duration-ms "$DURATION_MS"} \
+                ${CORRELATION_ID:+--correlation-id "$CORRELATION_ID"} \
+                >> "$LOG_FILE" 2>&1 || { rc=$?; echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Tool content emit failed (exit=$rc, non-fatal)" >> "$LOG_FILE"; }
+        fi
+    ) &
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Tool content emission started for $TOOL_NAME" >> "$LOG_FILE"
+fi
+
 # Always pass through original output
 printf '%s\n' "$TOOL_INFO"
 exit 0

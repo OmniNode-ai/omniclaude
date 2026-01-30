@@ -52,6 +52,8 @@ class TopicBase(StrEnum):
     # ==========================================================================
     # Claude hook event topic (consumed by omniintelligence.NodeClaudeHookEventEffect)
     CLAUDE_HOOK_EVENT = "onex.cmd.omniintelligence.claude-hook-event.v1"
+    # Tool content topic for pattern learning (OMN-1702)
+    TOOL_CONTENT = "onex.cmd.omniintelligence.tool-content.v1"
 
     # ==========================================================================
     # Legacy observability topics (to be migrated in future PR)
