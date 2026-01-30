@@ -200,7 +200,11 @@ async def publish_handler_contracts(
             else:
                 version = ModelSemVer(major=0, minor=0, patch=0)
 
-            # Compute hash for change detection
+            # Compute SHA-256 hash for change detection.
+            # This enables consumers (e.g., KafkaContractSource) to detect contract changes:
+            # - Compare stored hash with incoming hash
+            # - Skip re-processing if hash unchanged (idempotent republishing)
+            # - Trigger re-registration only when contract content changes
             contract_hash = hashlib.sha256(contract_yaml.encode("utf-8")).hexdigest()
 
             # Create registration event

@@ -103,7 +103,10 @@ def contracts_root() -> Path:
     This is the actual contracts directory in the repository,
     containing the pattern_storage_postgres contract.
     """
-    # Path relative to repo root: contracts/handlers
+    # Path resolution: tests/runtime/test_wiring.py -> repo_root
+    # Structure: repo_root/tests/runtime/test_wiring.py (3 levels up)
+    # This assumes the standard repository layout where contracts/
+    # is at the repo root alongside src/ and tests/
     repo_root = Path(__file__).parent.parent.parent
     return repo_root / "contracts" / "handlers"
 
@@ -472,3 +475,62 @@ contract_version:
                 contracts_root=temp_contracts_dir,
                 environment="test",
             )
+
+    @pytest.mark.asyncio
+    async def test_published_event_structure_is_deserializable(
+        self,
+        mock_container: MagicMock,
+        mock_publisher: AsyncMock,
+        temp_contracts_dir: Path,
+        mock_omnibase_imports: None,
+    ) -> None:
+        """Verify published event structure matches KafkaContractSource expectations.
+
+        This test ensures the serialized event can be deserialized and contains
+        all fields required by KafkaContractSource for handler discovery.
+
+        KafkaContractSource expects:
+        - node_name: Handler identifier for routing
+        - contract_hash: SHA-256 hash for change detection
+        - contract_yaml: Raw YAML for contract parsing
+        - node_version: SemVer for version tracking
+        """
+        import json
+
+        # Import after mocks are in place
+        from omniclaude.runtime.wiring import publish_handler_contracts
+
+        # Act
+        result = await publish_handler_contracts(
+            container=mock_container,
+            contracts_root=temp_contracts_dir,
+            environment="test",
+        )
+
+        # Assert: handler was published
+        assert "test.handler.mock" in result.published
+
+        # Get the published value (JSON bytes)
+        call_args = mock_publisher.publish.call_args
+        assert call_args is not None
+        value_bytes = call_args.kwargs.get("value") or call_args.args[2]
+
+        # Verify it's valid JSON
+        event_json = value_bytes.decode("utf-8")
+        event_data = json.loads(event_json)
+
+        # Verify required fields for KafkaContractSource
+        assert "node_name" in event_data, (
+            "Published event must contain 'node_name' for KafkaContractSource routing"
+        )
+        assert event_data["node_name"] == "test.handler.mock", (
+            f"node_name should be handler_id, got: {event_data['node_name']}"
+        )
+
+        assert "contract_hash" in event_data, (
+            "Published event must contain 'contract_hash' for change detection"
+        )
+        # SHA-256 hex digest is 64 characters
+        assert len(event_data["contract_hash"]) == 64, (
+            f"contract_hash should be 64-char SHA-256 hex, got length: {len(event_data['contract_hash'])}"
+        )
