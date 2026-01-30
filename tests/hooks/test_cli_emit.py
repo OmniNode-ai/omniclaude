@@ -798,10 +798,11 @@ class TestLanguageDetection:
     }
 
     def test_all_expected_extensions_documented(self) -> None:
-        """Verify all 16 documented extensions are in expected mappings.
+        """Verify all expected extension mappings are present.
 
-        The PR description mentions "Language detection from 16 file extensions".
-        This test ensures we have exactly 16 unique extensions mapped.
+        The shell script supports 18 file extension mappings covering 16 languages.
+        Some languages have multiple extensions (e.g., ts/tsx -> typescript,
+        sh/bash -> shell, yml/yaml -> yaml).
         """
         # Note: Some extensions map to the same language (ts/tsx -> typescript)
         # Count unique extensions, not unique languages

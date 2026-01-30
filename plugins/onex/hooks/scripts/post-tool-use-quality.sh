@@ -261,7 +261,7 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && [[ "$TOOL_NAME" =~ ^(Read|Write|Edit)$ ]]
                 --content-length "$CONTENT_LENGTH" \
                 ${CONTENT_HASH:+--content-hash "$CONTENT_HASH"} \
                 ${LANGUAGE:+--language "$LANGUAGE"} \
-                $SUCCESS_FLAG \
+                "$SUCCESS_FLAG" \
                 ${DURATION_MS:+--duration-ms "$DURATION_MS"} \
                 ${CORRELATION_ID:+--correlation-id "$CORRELATION_ID"} \
                 >> "$LOG_FILE" 2>&1 || { rc=$?; echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Tool content emit failed (exit=$rc, non-fatal)" >> "$LOG_FILE"; }

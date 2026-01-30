@@ -38,7 +38,7 @@ import sys
 import uuid
 from collections.abc import Awaitable
 from datetime import UTC, datetime
-from typing import Any
+from typing import NotRequired, TypedDict
 from uuid import UUID, uuid4
 
 import click
@@ -70,6 +70,33 @@ from omniclaude.hooks.handler_event_emitter import (
 from omniclaude.hooks.models import ModelEventPublishResult
 from omniclaude.hooks.schemas import HookSource, SessionEndReason
 from omniclaude.hooks.topics import TopicBase, build_topic
+
+
+# =============================================================================
+# INTERIM: TypedDict for Tool Content (OMN-1702)
+# =============================================================================
+# This TypedDict defines the structure for tool content events emitted as raw
+# JSON until omnibase_core has the proper Pydantic model (ModelToolExecutionContent).
+# TODO(OMN-1703): Remove when migrating to proper Pydantic model.
+# =============================================================================
+class ToolContentPayload(TypedDict, total=False):
+    """INTERIM typed dict for tool content payload (OMN-1702)."""
+
+    # Required fields
+    tool_name: str
+    tool_type: str
+    session_id: str
+    correlation_id: str
+    timestamp: str
+    success: bool
+    # Optional fields
+    file_path: NotRequired[str]
+    content_preview: NotRequired[str]
+    content_length: NotRequired[int]
+    content_hash: NotRequired[str]
+    language: NotRequired[str]
+    duration_ms: NotRequired[float]
+
 
 # Configure logging for hook context
 logging.basicConfig(
@@ -622,7 +649,7 @@ def cmd_claude_hook_event(
 
 
 async def _emit_tool_content_raw(
-    payload: dict[str, Any],  # ONEX: exempt - INTERIM raw JSON (OMN-1702)
+    payload: ToolContentPayload,
     environment: str | None = None,
 ) -> ModelEventPublishResult:
     """Emit a tool content event as raw JSON to Kafka.
@@ -807,10 +834,8 @@ def cmd_tool_content(
             duration_ms = data.get("duration_ms", duration_ms)
             correlation_id = data.get("correlation_id", correlation_id)
 
-        # Build payload as dict (INTERIM - no Pydantic model)
-        # ONEX: exempt - INTERIM raw JSON until ModelToolExecutionContent (OMN-1702)
-        # ONEX: exempt - INTERIM raw JSON until ModelToolExecutionContent (OMN-1702)
-        payload: dict[str, Any] = {
+        # Build payload using INTERIM TypedDict (OMN-1702)
+        payload: ToolContentPayload = {
             "tool_name": tool_name,
             "tool_type": tool_type,
             "session_id": session_id,
