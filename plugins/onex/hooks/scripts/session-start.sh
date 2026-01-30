@@ -54,18 +54,33 @@ fi
 # Note: Not exported because emit_client_wrapper.py reads OMNICLAUDE_EMIT_SOCKET directly
 EMIT_DAEMON_SOCKET="${OMNICLAUDE_EMIT_SOCKET:-/tmp/omniclaude-emit.sock}"
 
-# Check if socket exists and is writable (indicates daemon is available)
-# This is simpler and more robust than sending protocol messages.
-# The actual emission will handle real protocol errors.
+# Check if socket file exists and is writable.
+#
+# IMPORTANT LIMITATION: This performs file-based checks only (-S for socket type,
+# -w for writable). It does NOT verify the daemon is accepting connections.
+#
+# Race window: The socket file is created by the daemon before it calls accept().
+# This means there's a brief window where:
+#   1. Socket file exists (this check passes)
+#   2. But daemon hasn't called accept() yet (connection would fail)
+#
+# Mitigation: The 10ms sleep after socket appears (line ~118) allows the daemon
+# to complete its accept() initialization before we declare it "ready".
+#
+# Design tradeoff: We prioritize speed over correctness here. A true protocol
+# ping would add ~5-10ms latency per check. Since real connection errors are
+# handled gracefully at emission time (emit_client_wrapper.py falls back to
+# direct Kafka), this optimistic check is acceptable.
 check_socket_responsive() {
     local socket_path="$1"
     # Parameter kept for API stability - callers pass timeout value but current
-    # implementation uses simple file existence check. May be used for socket
-    # connectivity timeout in future protocol-based checks.
+    # implementation uses simple file existence check. Reserved for potential
+    # future protocol-based checks that would use actual socket timeout.
     # shellcheck disable=SC2034
     local timeout_sec="${2:-0.1}"
 
-    # Check socket exists (-S) and is writable (-w)
+    # File-based checks only: socket exists (-S) and is writable (-w)
+    # Does NOT verify daemon is listening or accepting connections
     [[ -S "$socket_path" ]] && [[ -w "$socket_path" ]]
 }
 

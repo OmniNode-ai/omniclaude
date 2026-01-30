@@ -421,7 +421,6 @@ __all__ = [
     "SUPPORTED_EVENT_TYPES",
     "DEFAULT_SOCKET_PATH",
     "DEFAULT_TIMEOUT_MS",
-    "DEFAULT_CLIENT_TIMEOUT_SECONDS",
     # CLI
     "main",
 ]

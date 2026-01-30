@@ -150,9 +150,7 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
         else
             # Emit via daemon (async, non-blocking)
             # Daemon handles fan-out to observability + intelligence topics
-            (
-                emit_via_daemon "prompt.submitted" "$PROMPT_PAYLOAD" 100
-            ) &
+            emit_via_daemon "prompt.submitted" "$PROMPT_PAYLOAD" 100 &
 
             log "Prompt event emission started via emit daemon (unified fan-out)"
         fi

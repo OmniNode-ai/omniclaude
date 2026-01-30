@@ -60,16 +60,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
 
 from omniclaude.hooks.schemas import (
     PROMPT_PREVIEW_MAX_LENGTH,
     _sanitize_prompt_preview,
 )
 from omniclaude.hooks.topics import TopicBase
-
-if TYPE_CHECKING:
-    pass
 
 # Type alias for payload transform functions
 # Transform: dict -> dict (receives payload, returns transformed payload)
