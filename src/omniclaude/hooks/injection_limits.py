@@ -11,6 +11,13 @@ The selection algorithm is deterministic and constraint-first:
 3. Policy: "prefer_fewer_high_confidence" (early exit, no swap-in)
 4. Deterministic tie-breaking: effective_score DESC → confidence DESC → pattern_id ASC
 
+Bootstrapping Consideration:
+    Patterns with usage_count=0 receive an effective score of 0, meaning they
+    will never be selected through normal ranking. This is intentional - patterns
+    must demonstrate value through usage before competing with established ones.
+    New patterns should be bootstrapped via: (1) manual injection during testing,
+    (2) initial seeding with usage_count=1, or (3) a separate "exploration" quota.
+
 Part of the Manifest Injection Enhancement Plan.
 """
 
@@ -109,6 +116,9 @@ DOMAIN_ALIASES: dict[str, str] = {
 # Set of known canonical domains for validation
 KNOWN_DOMAINS: set[str] = set(DOMAIN_ALIASES.values())
 
+# Prefix for unknown domains to group them separately
+UNKNOWN_DOMAIN_PREFIX: str = "unknown/"
+
 
 def normalize_domain(raw: str) -> str:
     """Normalize domain string through known taxonomy.
@@ -141,7 +151,7 @@ def normalize_domain(raw: str) -> str:
         return lower
 
     # Unknown domain - prefix for grouping
-    return f"unknown/{raw}"
+    return f"{UNKNOWN_DOMAIN_PREFIX}{raw}"
 
 
 # =============================================================================
@@ -180,6 +190,17 @@ def compute_effective_score(
         0.648  # approximately
         >>> compute_effective_score(0.5, 0.5, 0)  # Low everything
         0.0  # log1p(0) = 0
+
+    Bootstrapping Note:
+        Patterns with usage_count=0 will always receive a score of 0 because
+        log1p(0) = 0, making the usage_factor zero and thus the entire score zero.
+        This is intentional behavior - patterns must prove their value through
+        actual usage before they can compete with established patterns.
+
+        To bootstrap new patterns into the selection pool, use one of:
+        1. Manual injection during initial testing/validation
+        2. Seed new patterns with usage_count=1 (minimal but non-zero)
+        3. Implement a separate "exploration" quota that bypasses scoring
     """
     # Clamp inputs to valid ranges
     conf = max(0.0, min(1.0, confidence))
@@ -496,6 +517,7 @@ __all__ = [
     # Constants
     "DOMAIN_ALIASES",
     "KNOWN_DOMAINS",
+    "UNKNOWN_DOMAIN_PREFIX",
     # Internal (for testing)
     "ScoredPattern",
 ]

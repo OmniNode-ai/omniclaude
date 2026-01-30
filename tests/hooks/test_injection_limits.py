@@ -657,3 +657,173 @@ class TestContextInjectionConfigIntegration:
         config = ContextInjectionConfig.from_env()
 
         assert config.limits.max_patterns_per_injection == 8
+
+
+# =============================================================================
+# Format Synchronization Tests
+# =============================================================================
+
+
+class TestFormatSynchronization:
+    """Tests verifying render_single_pattern() stays in sync with handler format.
+
+    The render_single_pattern() function in injection_limits.py must produce
+    identical pattern formatting as _format_patterns_markdown() in
+    handler_context_injection.py. This is critical because:
+
+    1. render_single_pattern() is used for token counting during selection
+    2. _format_patterns_markdown() is used for actual injection output
+    3. If they differ, token budgets won't match actual output sizes
+
+    These tests catch format drift between the two implementations.
+    """
+
+    def test_render_single_pattern_matches_handler_format(self) -> None:
+        """Verify render_single_pattern() produces same format as handler.
+
+        This test creates a pattern, renders it with both functions, and
+        verifies the pattern-specific content is identical. The handler
+        adds a header and removes trailing separators, so we extract the
+        pattern portion for comparison.
+        """
+        from omniclaude.hooks.handler_context_injection import (
+            HandlerContextInjection,
+            PatternRecord,
+        )
+
+        # Create a real PatternRecord (not mock) for handler compatibility
+        pattern = PatternRecord(
+            pattern_id="sync-test-001",
+            domain="testing",
+            title="Format Synchronization Test",
+            description="This pattern tests that render_single_pattern stays in sync.",
+            confidence=0.85,
+            usage_count=42,
+            success_rate=0.92,
+            example_reference=None,
+        )
+
+        # Render with injection_limits function
+        single_render = render_single_pattern(pattern)
+
+        # Render with handler's format function
+        handler = HandlerContextInjection()
+        # Access private method for testing (patterns already limited)
+        handler_render = handler._format_patterns_markdown([pattern], max_patterns=1)
+
+        # Extract pattern content from handler output (skip header)
+        # Header is: "## Learned Patterns...\n\nThe following...\n\n"
+        # That's 4 lines when split
+        header_lines = [
+            "## Learned Patterns (Auto-Injected)",
+            "",
+            "The following patterns have been learned from previous sessions:",
+            "",
+        ]
+        expected_header = "\n".join(header_lines)
+
+        assert handler_render.startswith(expected_header), (
+            f"Handler output should start with expected header.\n"
+            f"Expected header:\n{expected_header!r}\n"
+            f"Got:\n{handler_render[: len(expected_header) + 50]!r}"
+        )
+
+        # Extract pattern portion from handler (after header)
+        handler_pattern_content = handler_render[len(expected_header) :]
+
+        # Single render includes trailing separator "---\n\n"
+        # Handler removes trailing separator for last pattern
+        # So we need to strip the trailing separator from single_render
+        # Also strip leading/trailing whitespace for clean comparison
+        single_render_stripped = single_render.strip()
+        if single_render_stripped.endswith("---"):
+            single_render_stripped = single_render_stripped[:-3].strip()
+
+        handler_pattern_stripped = handler_pattern_content.strip()
+
+        assert single_render_stripped == handler_pattern_stripped, (
+            f"Pattern content mismatch between render_single_pattern() and "
+            f"handler._format_patterns_markdown().\n\n"
+            f"render_single_pattern() produced:\n{single_render_stripped!r}\n\n"
+            f"Handler pattern portion:\n{handler_pattern_stripped!r}\n\n"
+            f"These must stay in sync for accurate token counting."
+        )
+
+    def test_render_single_pattern_with_example_reference(self) -> None:
+        """Verify format sync when pattern has example_reference."""
+        from omniclaude.hooks.handler_context_injection import (
+            HandlerContextInjection,
+            PatternRecord,
+        )
+
+        pattern = PatternRecord(
+            pattern_id="sync-test-002",
+            domain="code_review",
+            title="Pattern With Example",
+            description="Testing example_reference formatting sync.",
+            confidence=0.75,
+            usage_count=10,
+            success_rate=0.80,
+            example_reference="src/module/file.py:123",
+        )
+
+        single_render = render_single_pattern(pattern)
+        handler = HandlerContextInjection()
+        handler_render = handler._format_patterns_markdown([pattern], max_patterns=1)
+
+        # Extract pattern portion (skip 4-line header)
+        header_end = handler_render.find("### ")
+        handler_pattern = handler_render[header_end:]
+
+        # Strip trailing separators for comparison
+        single_stripped = single_render.rstrip()
+        if single_stripped.endswith("---"):
+            single_stripped = single_stripped[:-3].rstrip()
+
+        handler_stripped = handler_pattern.rstrip()
+
+        assert single_stripped == handler_stripped, (
+            f"Pattern with example_reference has format mismatch.\n\n"
+            f"render_single_pattern():\n{single_stripped!r}\n\n"
+            f"Handler:\n{handler_stripped!r}"
+        )
+
+        # Also verify example reference is present in both
+        assert "*Example: `src/module/file.py:123`*" in single_render
+        assert "*Example: `src/module/file.py:123`*" in handler_render
+
+    def test_render_preserves_exact_formatting(self) -> None:
+        """Verify specific formatting elements match exactly."""
+        from omniclaude.hooks.handler_context_injection import (
+            HandlerContextInjection,
+            PatternRecord,
+        )
+
+        pattern = PatternRecord(
+            pattern_id="format-check",
+            domain="python",
+            title="Exact Format Check",
+            description="Verifying exact formatting elements.",
+            confidence=0.90,
+            usage_count=100,
+            success_rate=0.85,
+        )
+
+        single_render = render_single_pattern(pattern)
+        handler = HandlerContextInjection()
+        handler_render = handler._format_patterns_markdown([pattern], max_patterns=1)
+
+        # Check specific format elements are present in both
+        expected_elements = [
+            "### Exact Format Check",
+            "- **Domain**: python",
+            "- **Confidence**: 90%",
+            "- **Success Rate**: 85% (100 uses)",
+            "Verifying exact formatting elements.",
+        ]
+
+        for element in expected_elements:
+            assert element in single_render, (
+                f"render_single_pattern missing: {element!r}"
+            )
+            assert element in handler_render, f"handler format missing: {element!r}"
