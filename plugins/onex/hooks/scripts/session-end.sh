@@ -33,10 +33,8 @@ if [[ -f "$PROJECT_ROOT/.env" ]]; then
     set +a
 fi
 
-# Source shared functions (provides PYTHON_CMD, KAFKA_ENABLED, get_time_ms)
+# Source shared functions (provides PYTHON_CMD, KAFKA_ENABLED, get_time_ms, log)
 source "${HOOKS_DIR}/scripts/common.sh"
-
-log() { printf "[%s] %s\n" "$(date "+%Y-%m-%d %H:%M:%S")" "$*" >> "$LOG_FILE"; }
 
 # Read stdin
 INPUT=$(cat)

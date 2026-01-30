@@ -125,3 +125,17 @@ emit_via_daemon() {
             return 1
         }
 }
+
+# =============================================================================
+# Logging Helper
+# =============================================================================
+# Simple timestamped logging to a file.
+#
+# Requires (must be set before calling):
+#   - LOG_FILE: Path to log file (set by caller script)
+#
+# Usage: log "message to log"
+
+log() {
+    printf "[%s] %s\n" "$(date "+%Y-%m-%d %H:%M:%S")" "$*" >> "$LOG_FILE"
+}

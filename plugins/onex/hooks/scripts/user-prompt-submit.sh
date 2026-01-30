@@ -146,13 +146,18 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
                 event_type: $event_type
             }' 2>/dev/null)
 
-        # Emit via daemon (async, non-blocking)
-        # Daemon handles fan-out to observability + intelligence topics
-        (
-            emit_via_daemon "prompt.submitted" "$PROMPT_PAYLOAD" 100
-        ) &
+        # Validate payload was constructed successfully
+        if [[ -z "$PROMPT_PAYLOAD" || "$PROMPT_PAYLOAD" == "null" ]]; then
+            log "WARNING: Failed to construct prompt payload (jq failed), skipping emission"
+        else
+            # Emit via daemon (async, non-blocking)
+            # Daemon handles fan-out to observability + intelligence topics
+            (
+                emit_via_daemon "prompt.submitted" "$PROMPT_PAYLOAD" 100
+            ) &
 
-        log "Prompt event emission started via emit daemon (unified fan-out)"
+            log "Prompt event emission started via emit daemon (unified fan-out)"
+        fi
     else
         log "Prompt event emission skipped (jq unavailable)"
     fi

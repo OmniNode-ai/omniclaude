@@ -31,12 +31,10 @@ if [[ -f "$PROJECT_ROOT/.env" ]]; then
     set +a
 fi
 
-# Source shared functions (provides PYTHON_CMD, KAFKA_ENABLED, get_time_ms)
+# Source shared functions (provides PYTHON_CMD, KAFKA_ENABLED, get_time_ms, log)
 source "${HOOKS_DIR}/scripts/common.sh"
 
 export PYTHONPATH="${PROJECT_ROOT}:${PLUGIN_ROOT}/lib:${HOOKS_LIB}:${PYTHONPATH:-}"
-
-log() { printf "[%s] %s\n" "$(date "+%Y-%m-%d %H:%M:%S")" "$*" >> "$LOG_FILE"; }
 
 # =============================================================================
 # Emit Daemon Management
@@ -44,7 +42,11 @@ log() { printf "[%s] %s\n" "$(date "+%Y-%m-%d %H:%M:%S")" "$*" >> "$LOG_FILE"; }
 # The emit daemon provides fast, non-blocking Kafka emission via Unix socket.
 # Starting it in SessionStart ensures no first-prompt latency surprise.
 
-EMIT_DAEMON_SOCKET="/tmp/omniclaude-emit.sock"
+# Socket path can be overridden via OMNICLAUDE_EMIT_SOCKET environment variable
+# This enables testing with alternative socket paths and matches emit_client_wrapper.py
+EMIT_DAEMON_SOCKET="${OMNICLAUDE_EMIT_SOCKET:-/tmp/omniclaude-emit.sock}"
+export EMIT_DAEMON_SOCKET
+
 EMIT_DAEMON_AVAILABLE="false"
 export EMIT_DAEMON_AVAILABLE
 
