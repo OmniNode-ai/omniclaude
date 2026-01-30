@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 from uuid import UUID, uuid4
 
 from omnibase_infra.enums.enum_response_status import EnumResponseStatus
@@ -325,7 +325,7 @@ class HandlerPatternStoragePostgres:
                 )
 
             inserted = output.result.payload.rows[0]["inserted"]
-            operation = "insert" if inserted else "update"
+            operation: Literal["insert", "update"] = "insert" if inserted else "update"
 
             return ModelLearnedPatternUpsertResult(
                 success=True,
