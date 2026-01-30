@@ -191,7 +191,12 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
                 git_branch: $git_branch
             }' 2>/dev/null)
 
-        emit_via_daemon "session.started" "$SESSION_PAYLOAD" 100
+        # Validate payload was constructed successfully
+        if [[ -z "$SESSION_PAYLOAD" || "$SESSION_PAYLOAD" == "null" ]]; then
+            log "WARNING: Failed to construct session payload (jq failed), skipping emission"
+        else
+            emit_via_daemon "session.started" "$SESSION_PAYLOAD" 100
+        fi
     ) &
     log "Session event emission started via emit daemon"
 else
