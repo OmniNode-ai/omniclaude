@@ -101,7 +101,7 @@ async def publish_handler_contracts(
         return []
 
     # Discover contract files
-    contract_paths = sorted(contracts_root.glob("**/contract.yaml"))
+    contract_paths: list[Path] = sorted(contracts_root.glob("**/contract.yaml"))
     if not contract_paths:
         logger.info("No handler contracts found in %s", contracts_root)
         return []
@@ -176,7 +176,8 @@ async def publish_handler_contracts(
 
             published.append(handler_id)
             logger.info(
-                "Published handler contract: %s (v%s) to %s",
+                "Published handler contract: %s [%s] (v%s) to %s",
+                name,
                 handler_id,
                 version,
                 topic,
