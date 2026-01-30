@@ -36,6 +36,98 @@ source "${HOOKS_DIR}/scripts/common.sh"
 
 export PYTHONPATH="${PROJECT_ROOT}:${PLUGIN_ROOT}/lib:${HOOKS_LIB}:${PYTHONPATH:-}"
 
+# =============================================================================
+# Emit Daemon Management
+# =============================================================================
+# The emit daemon provides fast, non-blocking Kafka emission via Unix socket.
+# Starting it in SessionStart ensures no first-prompt latency surprise.
+
+EMIT_DAEMON_SOCKET="/tmp/omniclaude-emit.sock"
+EMIT_DAEMON_AVAILABLE="false"
+export EMIT_DAEMON_AVAILABLE
+
+# Check if socket is responsive (portable - works on macOS and Linux)
+# Uses nc with timeout flag on macOS or timeout command on Linux
+check_socket_responsive() {
+    local socket_path="$1"
+    local timeout_sec="${2:-0.1}"
+
+    if command -v timeout >/dev/null 2>&1; then
+        # Linux: use timeout command
+        timeout "$timeout_sec" bash -c "echo 'ping' | nc -U '$socket_path'" >/dev/null 2>&1
+    elif command -v gtimeout >/dev/null 2>&1; then
+        # macOS with coreutils: use gtimeout
+        gtimeout "$timeout_sec" bash -c "echo 'ping' | nc -U '$socket_path'" >/dev/null 2>&1
+    else
+        # macOS fallback: nc with -w flag (timeout in seconds, min 1)
+        # Note: macOS nc -w only accepts integer seconds, so we use 1s minimum
+        echo 'ping' | nc -U -w 1 "$socket_path" >/dev/null 2>&1
+    fi
+}
+
+start_emit_daemon_if_needed() {
+    local log_prefix="[$(date '+%Y-%m-%d %H:%M:%S')]"
+
+    # Check if daemon already running via socket
+    if [[ -S "$EMIT_DAEMON_SOCKET" ]]; then
+        # Verify daemon is responsive with quick ping
+        if check_socket_responsive "$EMIT_DAEMON_SOCKET" 0.1; then
+            echo "$log_prefix Emit daemon already running and responsive" >> "$LOG_FILE"
+            EMIT_DAEMON_AVAILABLE="true"
+            export EMIT_DAEMON_AVAILABLE
+            return 0
+        else
+            # Socket exists but daemon not responsive - remove stale socket
+            echo "$log_prefix Removing stale daemon socket" >> "$LOG_FILE"
+            rm -f "$EMIT_DAEMON_SOCKET" 2>/dev/null || true
+        fi
+    fi
+
+    # Check if daemon module is available
+    if ! "$PYTHON_CMD" -c "import omnibase_infra.runtime.emit_daemon" 2>/dev/null; then
+        echo "$log_prefix Emit daemon module not available (omnibase_infra.runtime.emit_daemon)" >> "$LOG_FILE"
+        return 0  # Non-fatal, continue without daemon
+    fi
+
+    echo "$log_prefix Starting emit daemon..." >> "$LOG_FILE"
+
+    # Start daemon in background, detached from this process
+    # Redirect output to log file for debugging
+    nohup "$PYTHON_CMD" -m omnibase_infra.runtime.emit_daemon \
+        --socket "$EMIT_DAEMON_SOCKET" \
+        >> "${HOOKS_DIR}/logs/emit-daemon.log" 2>&1 &
+
+    local daemon_pid=$!
+    echo "$log_prefix Daemon started with PID $daemon_pid" >> "$LOG_FILE"
+
+    # Wait briefly for daemon to create socket (max 200ms in 20ms increments)
+    local wait_count=0
+    local max_wait=10
+    while [[ ! -S "$EMIT_DAEMON_SOCKET" && $wait_count -lt $max_wait ]]; do
+        sleep 0.02
+        ((wait_count++))
+    done
+
+    # Verify daemon is ready
+    if [[ -S "$EMIT_DAEMON_SOCKET" ]]; then
+        # Quick connectivity check
+        if check_socket_responsive "$EMIT_DAEMON_SOCKET" 0.1; then
+            echo "$log_prefix Emit daemon ready" >> "$LOG_FILE"
+            EMIT_DAEMON_AVAILABLE="true"
+            export EMIT_DAEMON_AVAILABLE
+            return 0
+        else
+            echo "$log_prefix WARNING: Daemon socket exists but not responsive" >> "$LOG_FILE"
+        fi
+    else
+        echo "$log_prefix WARNING: Daemon socket not created within timeout" >> "$LOG_FILE"
+    fi
+
+    # Daemon failed to start properly - continue without it
+    echo "$log_prefix Continuing without emit daemon (session startup not blocked)" >> "$LOG_FILE"
+    return 0
+}
+
 # Performance tracking
 START_TIME=$(get_time_ms)
 
@@ -57,6 +149,10 @@ fi
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Session ID: $SESSION_ID" >> "$LOG_FILE"
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Project Path: $PROJECT_PATH" >> "$LOG_FILE"
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] CWD: $CWD" >> "$LOG_FILE"
+
+# Start emit daemon early (before any Kafka emissions)
+# This ensures daemon is ready for downstream hooks (UserPromptSubmit, PostToolUse)
+start_emit_daemon_if_needed
 
 # Log session start to database (async, non-blocking)
 if [[ -f "${HOOKS_LIB}/session_intelligence.py" ]]; then

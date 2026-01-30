@@ -59,6 +59,23 @@ run_with_timeout() {
     perl -e 'alarm shift; exec @ARGV' "$timeout_sec" "$@"
 }
 
+# Emit event via emit daemon (OMN-1631)
+# Single call - daemon handles fan-out to multiple topics
+emit_via_daemon() {
+    local event_type="$1"
+    local payload="$2"
+    local timeout_ms="${3:-50}"
+
+    $PYTHON_CMD "${HOOKS_LIB}/emit_client_wrapper.py" emit \
+        --event-type "$event_type" \
+        --payload "$payload" \
+        --timeout "$timeout_ms" \
+        >> "$LOG_FILE" 2>&1 || {
+            log "Emit daemon failed for ${event_type} (non-fatal)"
+            return 1
+        }
+}
+
 # Create tmp directory
 mkdir -p "$PROJECT_ROOT/tmp"
 
@@ -94,7 +111,7 @@ fi
 ) &
 
 # Emit prompt.submitted event to Kafka (async, non-blocking)
-# Uses omniclaude-emit CLI with 250ms hard timeout
+# Uses emit_client_wrapper with daemon fan-out (OMN-1631)
 SESSION_ID="$(printf %s "$INPUT" | jq -r '.sessionId // .session_id // ""' 2>/dev/null || echo "")"
 if [[ -z "$SESSION_ID" ]]; then
     SESSION_ID="$CORRELATION_ID"
@@ -110,61 +127,51 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
         log "DEBUG: KAFKA_ENVIRONMENT=${KAFKA_ENVIRONMENT:-NOT_SET}"
     fi
 
-    # Emit prompt.submitted event (for omniclaude internal use)
-    (
-        $PYTHON_CMD -m omniclaude.hooks.cli_emit prompt-submitted \
-            --session-id "$SESSION_ID" \
-            --preview "$PROMPT_PREVIEW" \
-            --length "$PROMPT_LENGTH" \
-            >> "$LOG_FILE" 2>&1 || { rc=$?; log "Kafka prompt-submitted emit failed (exit=$rc, non-fatal)"; }
-    ) &
-
     # -----------------------------------------------------------------------
-    # DUAL-EMISSION ARCHITECTURE (OMN-1402) - FULL PROMPT INTENTIONAL
+    # UNIFIED EMISSION via emit_client_wrapper (OMN-1631)
     # -----------------------------------------------------------------------
-    # The observability topic above (prompt-submitted) receives a 100-char
-    # TRUNCATED and SANITIZED preview for privacy-safe analytics.
-    #
-    # The intelligence topic below (claude-hook-event) receives the FULL
-    # prompt INTENTIONALLY. This is NOT a bug - it is required for:
-    #
-    #   1. Intent classification - needs complete context to accurately
-    #      classify user intent and select appropriate agents
-    #   2. Pattern learning - truncated prompts lose valuable workflow
-    #      patterns that improve future routing decisions
-    #   3. RAG optimization - full prompts improve retrieval quality and
-    #      context injection accuracy
-    #   4. Workflow analysis - understanding multi-step workflows requires
-    #      complete prompt content
+    # Single emission call - daemon handles fan-out to both topics:
+    #   1. Observability topic (prompt-submitted) - 100-char sanitized preview
+    #   2. Intelligence topic (claude-hook-event) - full prompt for:
+    #      - Intent classification
+    #      - Pattern learning
+    #      - RAG optimization
+    #      - Workflow analysis
     #
     # PRIVACY CONTROLS (enforced at infrastructure level):
-    #   - Topic-level ACLs restrict consumers to OmniIntelligence only
+    #   - Topic-level ACLs restrict intelligence consumers
     #   - Network isolation for intelligence consumers
     #   - Aggressive retention policy (7-14 days recommended)
-    #   - Audit logging for all reads from intelligence topic
     #
     # See CLAUDE.md "Privacy Guidelines" section for full documentation.
     # -----------------------------------------------------------------------
-    # This uses the ModelClaudeCodeHookEvent format expected by NodeClaudeHookEventEffect
-    # Using single jq -n --arg invocation for safe JSON construction
     if [ "${SKIP_CLAUDE_HOOK_EVENT_EMIT:-0}" -ne 1 ]; then
+        # Build payload with all fields needed for both topics
+        PROMPT_PAYLOAD=$(jq -n \
+            --arg session_id "$SESSION_ID" \
+            --arg prompt "$PROMPT" \
+            --arg prompt_preview "$PROMPT_PREVIEW" \
+            --argjson prompt_length "$PROMPT_LENGTH" \
+            --arg correlation_id "$CORRELATION_ID" \
+            --arg event_type "UserPromptSubmit" \
+            '{
+                session_id: $session_id,
+                prompt: $prompt,
+                prompt_preview: $prompt_preview,
+                prompt_length: $prompt_length,
+                correlation_id: $correlation_id,
+                event_type: $event_type
+            }' 2>/dev/null)
+
+        # Emit via daemon (async, non-blocking)
+        # Daemon handles fan-out to observability + intelligence topics
         (
-            jq -n \
-                --arg event_type "UserPromptSubmit" \
-                --arg prompt "$PROMPT" \
-                --arg correlation_id "$CORRELATION_ID" \
-                '{event_type:$event_type,prompt:$prompt,correlation_id:$correlation_id}' 2>/dev/null | \
-            $PYTHON_CMD -m omniclaude.hooks.cli_emit claude-hook-event \
-                --session-id "$SESSION_ID" \
-                --event-type "UserPromptSubmit" \
-                --json \
-                >> "$LOG_FILE" 2>&1 || { rc=$?; log "Kafka claude-hook-event emit failed (exit=$rc, non-fatal)"; }
+            emit_via_daemon "prompt.submitted" "$PROMPT_PAYLOAD" 100
         ) &
-    fi
-    if [ "${SKIP_CLAUDE_HOOK_EVENT_EMIT:-0}" -ne 1 ]; then
-        log "Prompt event emission started (observability + intelligence topics)"
+
+        log "Prompt event emission started via emit daemon (unified fan-out)"
     else
-        log "Prompt event emission started (observability topic only, jq unavailable)"
+        log "Prompt event emission skipped (jq unavailable)"
     fi
 fi
 
