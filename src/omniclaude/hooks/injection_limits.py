@@ -16,13 +16,14 @@ Part of the Manifest Injection Enhancement Plan.
 
 from __future__ import annotations
 
+import functools
 import logging
 import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import tiktoken
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 if TYPE_CHECKING:
@@ -36,15 +37,12 @@ logger = logging.getLogger(__name__)
 
 # Use cl100k_base for deterministic token counting across models
 # This is close enough to Claude's tokenization for budget enforcement
-_TOKENIZER: tiktoken.Encoding | None = None
 
 
+@functools.lru_cache(maxsize=1)
 def _get_tokenizer() -> tiktoken.Encoding:
-    """Get or create the tokenizer (lazy singleton)."""
-    global _TOKENIZER
-    if _TOKENIZER is None:
-        _TOKENIZER = tiktoken.get_encoding("cl100k_base")
-    return _TOKENIZER
+    """Get the tokenizer (cached singleton)."""
+    return tiktoken.get_encoding("cl100k_base")
 
 
 def count_tokens(text: str) -> int:
@@ -72,7 +70,6 @@ DOMAIN_ALIASES: dict[str, str] = {
     "python3": "python",
     "js": "javascript",
     "ts": "typescript",
-    "typescript": "typescript",
     "rs": "rust",
     "go": "golang",
     "golang": "golang",
@@ -264,6 +261,29 @@ class InjectionLimitsConfig(BaseSettings):
         description="Scale factor k for usage_count in effective score formula",
     )
 
+    @field_validator("selection_policy")
+    @classmethod
+    def validate_selection_policy(cls, v: str) -> str:
+        """Validate that selection_policy is a known policy.
+
+        Currently only "prefer_fewer_high_confidence" is supported.
+
+        Args:
+            v: The selection policy value to validate.
+
+        Returns:
+            The validated selection policy.
+
+        Raises:
+            ValueError: If the policy is not recognized.
+        """
+        allowed = {"prefer_fewer_high_confidence"}
+        if v not in allowed:
+            raise ValueError(
+                f"Unknown selection_policy: {v!r}. Allowed: {sorted(allowed)}"
+            )
+        return v
+
     @classmethod
     def from_env(cls) -> InjectionLimitsConfig:
         """Load configuration from environment variables."""
@@ -298,7 +318,14 @@ def render_single_pattern(pattern: PatternRecord) -> str:
     """Render a single pattern as markdown block.
 
     This is used for token counting during selection.
-    The format must match _format_patterns_markdown in handler.
+
+    IMPORTANT - Format Synchronization Required:
+        The markdown format here MUST stay in sync with `_format_patterns_markdown()`
+        in `handler_context_injection.py`. Both functions render patterns identically
+        so that token counting during selection matches actual injection output.
+
+        If you modify the format here, update the handler's format function too.
+        If you modify the handler's format, update this function too.
 
     Args:
         pattern: Pattern to render.
@@ -422,6 +449,10 @@ def select_patterns_for_injection(
             continue
 
         # Check max_tokens_injected (skip this pattern)
+        # INTENTIONAL: No backfill with smaller patterns. Per "prefer_fewer_high_confidence"
+        # policy, we skip patterns that exceed budget and do NOT attempt to fit smaller
+        # subsequent patterns. This is by design - we prefer fewer high-quality patterns
+        # over maximizing token utilization with lower-scored alternatives.
         new_total = total_tokens + scored_pattern.rendered_tokens
         if new_total > limits.max_tokens_injected:
             logger.debug(
