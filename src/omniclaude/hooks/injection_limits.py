@@ -29,7 +29,7 @@ import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-import tiktoken  # type: ignore[import-not-found]
+import tiktoken
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
