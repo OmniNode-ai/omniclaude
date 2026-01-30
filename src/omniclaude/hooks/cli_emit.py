@@ -38,6 +38,7 @@ import sys
 import uuid
 from collections.abc import Awaitable
 from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID, uuid4
 
 import click
@@ -621,7 +622,7 @@ def cmd_claude_hook_event(
 
 
 async def _emit_tool_content_raw(
-    payload: dict,
+    payload: dict[str, Any],  # ONEX: exempt - INTERIM raw JSON (OMN-1702)
     environment: str | None = None,
 ) -> ModelEventPublishResult:
     """Emit a tool content event as raw JSON to Kafka.
@@ -807,7 +808,9 @@ def cmd_tool_content(
             correlation_id = data.get("correlation_id", correlation_id)
 
         # Build payload as dict (INTERIM - no Pydantic model)
-        payload: dict = {
+        # ONEX: exempt - INTERIM raw JSON until ModelToolExecutionContent (OMN-1702)
+        # ONEX: exempt - INTERIM raw JSON until ModelToolExecutionContent (OMN-1702)
+        payload: dict[str, Any] = {
             "tool_name": tool_name,
             "tool_type": tool_type,
             "session_id": session_id,
