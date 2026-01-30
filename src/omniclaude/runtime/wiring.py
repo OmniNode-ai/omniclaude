@@ -82,6 +82,11 @@ async def publish_handler_contracts(
     Raises:
         ImportError: If omnibase_core event models are not available.
 
+    Note:
+        Infrastructure errors (missing publisher) raise immediately to fail fast.
+        Contract-level errors (invalid YAML, missing fields) are logged and tracked
+        in the failed list to allow other contracts to proceed.
+
     Example:
         >>> container = ModelONEXContainer(...)
         >>> result = await publish_handler_contracts(container)
@@ -110,6 +115,11 @@ async def publish_handler_contracts(
         contracts_root = (
             Path(__file__).parent.parent.parent.parent / DEFAULT_CONTRACTS_SUBPATH
         )
+        if contracts_root.name != "handlers":
+            logger.warning(
+                "Unexpected contracts path structure: %s (expected to end with 'handlers')",
+                contracts_root,
+            )
 
     # Resolve environment
     if environment is None:
@@ -153,7 +163,9 @@ async def publish_handler_contracts(
         try:
             # Read contract YAML
             contract_yaml = contract_path.read_text(encoding="utf-8")
-            contract_data = yaml.safe_load(contract_yaml)
+            contract_data = yaml.safe_load(
+                contract_yaml
+            )  # type narrowed by isinstance check below
 
             if not isinstance(contract_data, dict):
                 logger.warning(

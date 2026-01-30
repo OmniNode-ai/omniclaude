@@ -57,8 +57,22 @@ class MockModelContractRegisteredEvent:
         self.contract_yaml = contract_yaml
 
     def model_dump_json(self) -> str:
-        """Mock JSON serialization."""
-        return f'{{"node_name": "{self.node_name}", "contract_hash": "{self.contract_hash}"}}'
+        """Mock JSON serialization matching real event structure."""
+        import json
+
+        return json.dumps(
+            {
+                "node_name": self.node_name,
+                "contract_hash": self.contract_hash,
+                "contract_yaml": self.contract_yaml,
+                "event_id": str(self.event_id),
+                "node_version": {
+                    "major": self.node_version.major,
+                    "minor": self.node_version.minor,
+                    "patch": self.node_version.patch,
+                },
+            }
+        )
 
 
 # Topic suffix constant
@@ -104,9 +118,8 @@ def contracts_root() -> Path:
     containing the pattern_storage_postgres contract.
     """
     # Path resolution: tests/runtime/test_wiring.py -> repo_root
-    # Structure: repo_root/tests/runtime/test_wiring.py (3 levels up)
-    # This assumes the standard repository layout where contracts/
-    # is at the repo root alongside src/ and tests/
+    # .parent chain: test_wiring.py -> runtime/ -> tests/ -> repo_root
+    # This assumes standard layout: repo_root/tests/runtime/test_wiring.py
     repo_root = Path(__file__).parent.parent.parent
     return repo_root / "contracts" / "handlers"
 
@@ -533,4 +546,8 @@ contract_version:
         # SHA-256 hex digest is 64 characters
         assert len(event_data["contract_hash"]) == 64, (
             f"contract_hash should be 64-char SHA-256 hex, got length: {len(event_data['contract_hash'])}"
+        )
+
+        assert "contract_yaml" in event_data, (
+            "Published event must contain 'contract_yaml' for contract parsing"
         )
