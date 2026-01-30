@@ -8,10 +8,14 @@ the loader reads handler contracts and auto-registers handlers.
 
 Exported:
     wire_omniclaude_services: Async function to register handlers with container
+    publish_handler_contracts: Async function to publish handler contracts to Kafka
+    PublishResult: Result dataclass with published and failed lists
 """
 
-from .wiring import wire_omniclaude_services
+from .wiring import PublishResult, publish_handler_contracts, wire_omniclaude_services
 
 __all__ = [
+    "PublishResult",
+    "publish_handler_contracts",
     "wire_omniclaude_services",
 ]

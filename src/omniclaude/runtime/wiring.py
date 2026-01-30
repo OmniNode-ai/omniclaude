@@ -23,6 +23,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
@@ -34,6 +35,20 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
+@dataclass(frozen=True)
+class PublishResult:
+    """Result of publishing handler contracts to Kafka.
+
+    Attributes:
+        published: Handler IDs that were successfully published.
+        failed: Contract paths/names that failed to publish or were skipped.
+    """
+
+    published: list[str]
+    failed: list[str]
+
+
 # Default contracts directory relative to repo root
 DEFAULT_CONTRACTS_SUBPATH = "contracts/handlers"
 
@@ -42,12 +57,17 @@ async def publish_handler_contracts(
     container: ModelONEXContainer,
     contracts_root: Path | None = None,
     environment: str | None = None,
-) -> list[str]:
+) -> PublishResult:
     """Publish handler contracts to Kafka for discovery.
 
     Emits ModelContractRegisteredEvent for each handler contract found in
     the contracts directory. The events are consumed by KafkaContractSource
     in omnibase_infra for handler discovery and registration.
+
+    Contracts are skipped (added to failed list) if:
+        - The contract file is not a valid YAML dict
+        - The contract is missing a handler_id
+        - The handler_class is present but not fully qualified (no '.')
 
     Args:
         container: The ONEX container with event bus publisher.
@@ -57,15 +77,17 @@ async def publish_handler_contracts(
             Defaults to ONEX_ENV environment variable or "dev".
 
     Returns:
-        List of handler IDs that were published.
+        PublishResult with published handler IDs and failed contract paths.
 
     Raises:
         ImportError: If omnibase_core event models are not available.
 
     Example:
         >>> container = ModelONEXContainer(...)
-        >>> published = await publish_handler_contracts(container)
-        >>> print(f"Published {len(published)} handler contracts")
+        >>> result = await publish_handler_contracts(container)
+        >>> print(f"Published {len(result.published)} contracts")
+        >>> if result.failed:
+        ...     print(f"Failed: {result.failed}")
     """
     # Import here to avoid circular imports and allow graceful degradation
     try:
@@ -98,13 +120,13 @@ async def publish_handler_contracts(
             "Contracts directory does not exist: %s. No handlers will be published.",
             contracts_root,
         )
-        return []
+        return PublishResult(published=[], failed=[])
 
     # Discover contract files
     contract_paths: list[Path] = sorted(contracts_root.glob("**/contract.yaml"))
     if not contract_paths:
         logger.info("No handler contracts found in %s", contracts_root)
-        return []
+        return PublishResult(published=[], failed=[])
 
     logger.info(
         "Publishing %d handler contract(s) from %s",
@@ -138,6 +160,7 @@ async def publish_handler_contracts(
                     "Skipping invalid contract (not a dict): %s",
                     contract_path,
                 )
+                failed.append(contract_path.parent.name)
                 continue
 
             # Extract identity fields
@@ -147,17 +170,20 @@ async def publish_handler_contracts(
                     "Skipping contract with missing handler_id: %s",
                     contract_path,
                 )
+                failed.append(contract_path.parent.name)
                 continue
 
-            # Validate handler_class format if present
+            # Validate handler_class format if present (required for KafkaContractSource)
             metadata = contract_data.get("metadata", {})
             handler_class = metadata.get("handler_class", "")
             if handler_class and "." not in handler_class:
                 logger.warning(
-                    "handler_class should be fully qualified (contain '.'), got: %s in %s",
+                    "Skipping contract with invalid handler_class (must be fully qualified with '.'): %s in %s",
                     handler_class,
                     contract_path,
                 )
+                failed.append(contract_path.parent.name)
+                continue
 
             name = contract_data.get("name", handler_id)
 
@@ -223,7 +249,7 @@ async def publish_handler_contracts(
         len(contract_paths),
     )
 
-    return published
+    return PublishResult(published=published, failed=failed)
 
 
 async def wire_omniclaude_services(container: ModelONEXContainer) -> None:

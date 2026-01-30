@@ -18,8 +18,8 @@ from uuid import UUID
 
 import pytest
 
-# Mark all tests in this module as unit tests
-pytestmark = pytest.mark.unit
+# Mark all tests in this module as integration tests (they read real contract files)
+pytestmark = pytest.mark.integration
 
 
 # =============================================================================
@@ -192,7 +192,7 @@ class TestPublishHandlerContracts:
         from omniclaude.runtime.wiring import publish_handler_contracts
 
         # Act
-        published = await publish_handler_contracts(
+        result = await publish_handler_contracts(
             container=mock_container,
             contracts_root=contracts_root,
             environment="test",
@@ -204,8 +204,8 @@ class TestPublishHandlerContracts:
         )
 
         # Assert: handler ID is in the returned list
-        assert "effect.learned_pattern.storage.postgres" in published, (
-            "Expected 'effect.learned_pattern.storage.postgres' in published list"
+        assert "effect.learned_pattern.storage.postgres" in result.published, (
+            "Expected 'effect.learned_pattern.storage.postgres' in result.published"
         )
 
         # Assert: at least one publish call was made
@@ -243,15 +243,18 @@ class TestPublishHandlerContracts:
         non_existent_path = tmp_path / "does_not_exist" / "contracts"
 
         # Act
-        published = await publish_handler_contracts(
+        result = await publish_handler_contracts(
             container=mock_container,
             contracts_root=non_existent_path,
             environment="test",
         )
 
-        # Assert: returns empty list
-        assert published == [], (
-            f"Expected empty list for missing directory, got: {published}"
+        # Assert: returns empty published and failed lists
+        assert result.published == [], (
+            f"Expected empty published list for missing directory, got: {result.published}"
+        )
+        assert result.failed == [], (
+            f"Expected empty failed list for missing directory, got: {result.failed}"
         )
 
         # Assert: publisher.publish was NOT called
@@ -280,15 +283,15 @@ class TestPublishHandlerContracts:
         empty_dir.mkdir(parents=True)
 
         # Act
-        published = await publish_handler_contracts(
+        result = await publish_handler_contracts(
             container=mock_container,
             contracts_root=empty_dir,
             environment="test",
         )
 
-        # Assert: returns empty list
-        assert published == [], (
-            f"Expected empty list for empty directory, got: {published}"
+        # Assert: returns empty published list
+        assert result.published == [], (
+            f"Expected empty published list for empty directory, got: {result.published}"
         )
 
         # Assert: publisher.publish was NOT called
@@ -312,14 +315,14 @@ class TestPublishHandlerContracts:
         from omniclaude.runtime.wiring import publish_handler_contracts
 
         # Act
-        published = await publish_handler_contracts(
+        result = await publish_handler_contracts(
             container=mock_container,
             contracts_root=temp_contracts_dir,
             environment="test",
         )
 
         # Assert: handler was published
-        assert "test.handler.mock" in published
+        assert "test.handler.mock" in result.published
 
         # Assert: key was the handler_id as bytes
         call_args = mock_publisher.publish.call_args
@@ -347,13 +350,13 @@ class TestPublishHandlerContracts:
 
         # Act: call without environment parameter
         with patch.dict("os.environ", {"ONEX_ENV": "staging"}):
-            published = await publish_handler_contracts(
+            result = await publish_handler_contracts(
                 container=mock_container,
                 contracts_root=temp_contracts_dir,
             )
 
         # Assert: handler was published
-        assert len(published) >= 1
+        assert len(result.published) >= 1
 
         # Assert: topic uses staging environment
         call_args = mock_publisher.publish.call_args
@@ -427,15 +430,20 @@ contract_version:
         contracts_root = tmp_path / "contracts" / "handlers"
 
         # Act: should not raise
-        published = await publish_handler_contracts(
+        result = await publish_handler_contracts(
             container=mock_container,
             contracts_root=contracts_root,
             environment="test",
         )
 
-        # Assert: valid handler was published, invalid was skipped
-        assert "valid.handler" in published
-        # Invalid contract should not crash the function
+        # Assert: valid handler was published, invalid was tracked as failed
+        assert "valid.handler" in result.published, (
+            f"Expected 'valid.handler' in result.published, got: {result.published}"
+        )
+        # Invalid contract should be tracked in failed list (not crash the function)
+        assert len(result.failed) >= 1, (
+            f"Expected at least one failed contract, got: {result.failed}"
+        )
 
     @pytest.mark.asyncio
     async def test_publish_handler_contracts_raises_on_missing_publisher(
