@@ -135,7 +135,7 @@ def _get_client() -> EmitClient | None:
 def emit_event(
     event_type: str,
     payload: dict[str, object],
-    timeout_ms: int = DEFAULT_TIMEOUT_MS,
+    timeout_ms: int = DEFAULT_TIMEOUT_MS,  # noqa: ARG001
 ) -> bool:
     """Emit event to daemon. Returns True on success, False on failure.
 
@@ -150,12 +150,19 @@ def emit_event(
             - "tool.executed"
         payload: Event payload dictionary. Required fields depend on event type
             (see daemon's EventRegistry for requirements).
-        timeout_ms: Timeout in milliseconds for the emit operation.
-            Defaults to 50ms to minimize hook latency impact.
+        timeout_ms: Reserved for future use. Currently ignored - the client uses
+            a fixed 5-second timeout configured at initialization. This parameter
+            is retained for CLI interface compatibility with shell scripts.
 
     Returns:
         True if the event was successfully queued by the daemon.
         False if the emission failed (daemon unavailable, validation error, etc.).
+
+    Note:
+        The underlying EmitClient uses a fixed timeout (5 seconds) set at
+        initialization. Per-call timeout configuration is not currently supported
+        by the client protocol. This parameter exists to maintain a consistent
+        CLI interface for shell scripts that may pass --timeout.
 
     Example:
         >>> success = emit_event(
@@ -180,8 +187,6 @@ def emit_event(
 
     try:
         # Use sync method for hooks (simpler, no event loop needed)
-        # timeout_ms is not used here - client has its own timeout
-        _ = timeout_ms  # Kept for API compatibility
         event_id = client.emit_sync(event_type, payload)
         logger.debug(f"Event emitted: {event_id}")
         return True

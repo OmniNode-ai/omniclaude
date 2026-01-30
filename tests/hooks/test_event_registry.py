@@ -264,8 +264,14 @@ class TestValidatePayload:
         missing = validate_payload("tool.executed", {"session_id": "abc"})
         assert "tool_name" in missing
 
-        # Valid
+        # Missing session_id
         missing = validate_payload("tool.executed", {"tool_name": "Read"})
+        assert "session_id" in missing
+
+        # Valid (both tool_name and session_id required)
+        missing = validate_payload(
+            "tool.executed", {"tool_name": "Read", "session_id": "abc"}
+        )
         assert len(missing) == 0
 
     def test_validate_payload_raises_for_unknown_type(self) -> None:

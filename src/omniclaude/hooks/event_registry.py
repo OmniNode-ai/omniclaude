@@ -313,7 +313,7 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
             ),
         ],
         partition_key_field="session_id",
-        required_fields=["tool_name"],
+        required_fields=["tool_name", "session_id"],
     ),
 }
 
