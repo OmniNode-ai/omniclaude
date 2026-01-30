@@ -37,6 +37,7 @@ import os
 import sys
 import uuid
 from collections.abc import Awaitable
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import click
@@ -54,6 +55,9 @@ except Exception:
     __version__ = "0.1.0-dev"
 
 from omnibase_core.enums.hooks.claude_code import EnumClaudeCodeHookEventType
+from omnibase_core.models.intelligence import ModelToolExecutionContent
+from omnibase_infra.event_bus.event_bus_kafka import EventBusKafka
+from omnibase_infra.event_bus.models.config import ModelKafkaEventBusConfig
 
 from omniclaude.hooks.handler_event_emitter import (
     ModelClaudeHookEventConfig,
@@ -63,7 +67,9 @@ from omniclaude.hooks.handler_event_emitter import (
     emit_session_started,
     emit_tool_executed,
 )
+from omniclaude.hooks.models import ModelEventPublishResult
 from omniclaude.hooks.schemas import HookSource, SessionEndReason
+from omniclaude.hooks.topics import TopicBase, build_topic
 
 # Configure logging for hook context
 logging.basicConfig(
@@ -601,6 +607,238 @@ def cmd_claude_hook_event(
 
     except Exception as e:
         logger.warning("claude_hook_event_error", extra={"error": str(e)})
+
+    # Always exit 0 - observability must never break Claude Code
+    sys.exit(0)
+
+
+# =============================================================================
+# Tool Content Emission (OMN-1701)
+# =============================================================================
+# Emits tool execution content using ModelToolExecutionContent from omnibase_core.
+# Used by omniintelligence for pattern learning from Claude Code tool executions.
+# =============================================================================
+
+
+async def _emit_tool_content(
+    content: ModelToolExecutionContent,
+    environment: str | None = None,
+) -> ModelEventPublishResult:
+    """Emit a tool content event to Kafka.
+
+    Args:
+        content: The tool execution content model to emit.
+        environment: Optional environment override for topic prefix.
+
+    Returns:
+        ModelEventPublishResult indicating success or failure.
+    """
+    bus: EventBusKafka | None = None
+    topic = "unknown"
+
+    try:
+        # Get environment from param, env var, or default
+        env = environment or os.environ.get("KAFKA_ENVIRONMENT", "dev")
+        topic = build_topic(env, TopicBase.TOOL_CONTENT)
+
+        # Create Kafka config
+        bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS")
+        if not bootstrap_servers:
+            return ModelEventPublishResult(
+                success=False,
+                topic=topic,
+                error_message="KAFKA_BOOTSTRAP_SERVERS not set",
+            )
+
+        config = ModelKafkaEventBusConfig(
+            bootstrap_servers=bootstrap_servers,
+            environment=env,
+            group="omniclaude-hooks",
+            timeout_seconds=2,
+            max_retry_attempts=0,
+            acks="all",
+            circuit_breaker_threshold=5,
+            circuit_breaker_reset_timeout=10.0,
+            enable_idempotence=False,
+        )
+        # New bus per call is intentional - each invocation runs in an isolated
+        # subshell from the shell hook, so connection pooling isn't beneficial
+        bus = EventBusKafka(config=config)
+
+        # Start producer
+        await bus.start()
+
+        # Publish the model as JSON
+        partition_key = (content.session_id or "unknown").encode("utf-8")
+        message_bytes = content.model_dump_json().encode("utf-8")
+
+        await bus.publish(
+            topic=topic,
+            key=partition_key,
+            value=message_bytes,
+        )
+
+        logger.debug(
+            "tool_content_emitted",
+            extra={
+                "topic": topic,
+                "tool_name": content.tool_name_raw,
+                "session_id": content.session_id,
+            },
+        )
+
+        return ModelEventPublishResult(
+            success=True,
+            topic=topic,
+            partition=None,
+            offset=None,
+        )
+
+    except Exception as e:
+        logger.warning(
+            "tool_content_publish_failed",
+            extra={
+                "topic": topic,
+                "error": str(e),
+                "error_type": type(e).__name__,
+            },
+        )
+
+        error_msg = f"{type(e).__name__}: {e!s}"
+        return ModelEventPublishResult(
+            success=False,
+            topic=topic,
+            error_message=(
+                error_msg[:997] + "..." if len(error_msg) > 1000 else error_msg
+            ),
+        )
+
+    finally:
+        if bus is not None:
+            try:
+                await bus.close()
+            except Exception as close_error:
+                logger.debug(
+                    "kafka_bus_close_error",
+                    extra={"error": str(close_error)},
+                )
+
+
+@cli.command("tool-content")
+@click.option("--session-id", required=True, help="Session UUID or string ID.")
+@click.option("--tool-name", required=True, help="Tool name (Read, Write, Edit, Bash).")
+@click.option(
+    "--tool-type",
+    default=None,
+    help="Deprecated: Tool type classification (ignored, kept for backwards compat).",
+)
+@click.option("--file-path", default=None, help="File path if applicable.")
+@click.option(
+    "--content-preview", default=None, help="Content preview (max 2000 chars)."
+)
+@click.option("--content-length", default=None, type=int, help="Full content length.")
+@click.option("--content-hash", default=None, help="SHA256 hash of content.")
+@click.option("--language", default=None, help="Detected programming language.")
+@click.option("--success/--failure", default=True, help="Whether the tool succeeded.")
+@click.option(
+    "--duration-ms", default=None, type=float, help="Execution duration in ms."
+)
+@click.option(
+    "--correlation-id", default=None, help="Correlation UUID for distributed tracing."
+)
+@click.option(
+    "--json", "from_json", is_flag=True, help="Read event data from stdin JSON."
+)
+@click.option("--dry-run", is_flag=True, help="Parse and validate but don't emit.")
+def cmd_tool_content(
+    session_id: str,
+    tool_name: str,
+    tool_type: str | None,  # Kept for backwards compatibility, ignored
+    file_path: str | None,
+    content_preview: str | None,
+    content_length: int | None,
+    content_hash: str | None,
+    language: str | None,
+    success: bool,
+    duration_ms: float | None,
+    correlation_id: str | None,
+    from_json: bool,
+    dry_run: bool,
+) -> None:
+    """Emit tool content event for pattern learning.
+
+    This command emits tool execution content to Kafka for pattern learning
+    using the ModelToolExecutionContent model from omnibase_core.
+
+    Example:
+        omniclaude-emit tool-content \\
+            --session-id abc123 \\
+            --tool-name Write \\
+            --file-path /workspace/src/main.py \\
+            --content-preview "def main():\\n    print('hello')" \\
+            --content-length 42 \\
+            --language python
+    """
+    # ONEX: exempt - CLI command parameters defined by click decorators
+    # Note: tool_type is kept for backwards compatibility but ignored
+    _ = tool_type  # Explicitly mark as unused
+
+    try:
+        if from_json:
+            stdin_content = sys.stdin.read()
+            try:
+                data = json.loads(stdin_content)
+            except json.JSONDecodeError as e:
+                logger.warning(
+                    "invalid_stdin_json",
+                    extra={"error": str(e), "content_length": len(stdin_content)},
+                )
+                sys.exit(0)  # Fail soft - observability must never break Claude Code
+
+            # Override with JSON values if present
+            session_id = data.get("session_id", session_id)
+            tool_name = data.get("tool_name", tool_name)
+            file_path = data.get("file_path", file_path)
+            content_preview = data.get("content_preview", content_preview)
+            content_length = data.get("content_length", content_length)
+            content_hash = data.get("content_hash", content_hash)
+            language = data.get("language", language)
+            success = data.get("success", success)
+            duration_ms = data.get("duration_ms", duration_ms)
+            correlation_id = data.get("correlation_id", correlation_id)
+
+        # Build model using factory method for automatic enum resolution
+        content = ModelToolExecutionContent.from_tool_name(
+            tool_name_raw=tool_name,
+            file_path=file_path,
+            language=language,
+            content_preview=content_preview,
+            content_length=content_length,
+            content_hash=content_hash,
+            success=success,
+            duration_ms=duration_ms,
+            session_id=session_id,
+            correlation_id=correlation_id or str(uuid4()),
+            timestamp=datetime.now(UTC),
+        )
+
+        if dry_run:
+            click.echo(
+                f"[DRY RUN] Would emit tool-content: "
+                f"session_id={session_id}, tool={tool_name}"
+            )
+            click.echo(f"Payload: {content.model_dump_json(indent=2)}")
+            return
+
+        result = run_with_timeout(_emit_tool_content(content))
+
+        if result and result.success:
+            logger.debug("tool_content_emitted", extra={"topic": result.topic})
+        elif result:
+            logger.warning("tool_content_failed", extra={"error": result.error_message})
+
+    except Exception as e:
+        logger.warning("tool_content_error", extra={"error": str(e)})
 
     # Always exit 0 - observability must never break Claude Code
     sys.exit(0)

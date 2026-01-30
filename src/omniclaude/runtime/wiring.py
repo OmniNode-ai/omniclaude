@@ -66,7 +66,7 @@ async def wire_omniclaude_services(container: ModelONEXContainer) -> None:
     # Register handler as the implementation of ProtocolPatternPersistence
     # Using GLOBAL scope since the handler is stateless and thread-safe
     await container.service_registry.register_instance(
-        interface=ProtocolPatternPersistence,
+        interface=ProtocolPatternPersistence,  # type: ignore[type-abstract]
         instance=handler,
         scope=EnumInjectionScope.GLOBAL,
         metadata={"handler_key": "postgresql", "version": "1.0.0"},
