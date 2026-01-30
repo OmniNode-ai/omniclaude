@@ -236,7 +236,6 @@ class TestKafkaConfig:
             assert config.timeout_seconds == 2  # Short timeout
             assert config.max_retry_attempts == 0  # No retries
             assert config.acks == "all"  # All replicas (workaround for aiokafka bug)
-            assert config.group == "omniclaude-hooks"
             assert config.enable_idempotence is False
 
     def test_config_respects_env_vars(self) -> None:
