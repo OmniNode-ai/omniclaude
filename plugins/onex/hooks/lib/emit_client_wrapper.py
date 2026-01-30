@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
-"""Emit Client Wrapper - Hybrid Python + Shell Fallback for Hook Event Emission.
+"""Emit Client Wrapper - Python Client for Hook Event Emission.
 
 This module provides the client-side interface for all hooks to emit events via
-the emit daemon. It uses a hybrid approach with Python as the primary path and
-shell (socat/netcat) as a fallback escape hatch.
+the emit daemon using the EmitClient from omnibase_infra.
 
 Design Decisions:
-    - **Hybrid approach**: Python primary (uses EmitClient from omnibase_infra),
-      shell fallback as escape hatch when Python fails
-    - **Fallback policy**: Daemon-owned, gated by consecutive failure count
+    - **Python-only**: Uses EmitClient from omnibase_infra (required dependency)
     - **Single emission**: Hook sends once, daemon handles fan-out to multiple topics
     - **Non-blocking**: Never raises exceptions that would break hooks
 
@@ -20,7 +17,7 @@ Event Types:
 
 Example Usage:
     ```python
-    from emit_client_wrapper import emit_event, daemon_available, get_fallback_status
+    from emit_client_wrapper import emit_event, daemon_available
 
     # Check if daemon is available
     if daemon_available():
@@ -32,11 +29,6 @@ Example Usage:
         payload={"prompt": "Hello", "session_id": "abc123"},
         timeout_ms=50,
     )
-
-    # Check fallback status
-    status = get_fallback_status()
-    print(f"Consecutive failures: {status['consecutive_failures']}")
-    print(f"Fallback allowed: {status['fallback_allowed']}")
     ```
 
 CLI Usage:
@@ -49,7 +41,7 @@ CLI Usage:
     # Check daemon availability
     python -m emit_client_wrapper ping
 
-    # Get fallback status
+    # Get status
     python -m emit_client_wrapper status
     ```
 
@@ -66,8 +58,6 @@ import argparse
 import json
 import logging
 import os
-import shutil
-import subprocess
 import sys
 import threading
 from pathlib import Path
@@ -89,10 +79,6 @@ DEFAULT_SOCKET_PATH = Path("/tmp/omniclaude-emit.sock")  # noqa: S108
 # Default timeout for emit operations (milliseconds)
 DEFAULT_TIMEOUT_MS = 50
 
-# Consecutive failures before fallback is allowed
-# Set high initially to prefer daemon path, but allow escape hatch
-FALLBACK_THRESHOLD = 5
-
 # Supported event types (must match daemon's EventRegistry)
 SUPPORTED_EVENT_TYPES = frozenset(
     [
@@ -104,227 +90,41 @@ SUPPORTED_EVENT_TYPES = frozenset(
 )
 
 # =============================================================================
-# State Management (thread-safe)
+# Client Initialization (thread-safe, lazy)
 # =============================================================================
 
-_state_lock = threading.Lock()
-_consecutive_failures = 0
-_python_client_available: bool | None = None  # None = not yet checked
+_client_lock = threading.Lock()
 _emit_client: EmitClient | None = None
+_client_initialized = False
 
 
-def _increment_failures() -> int:
-    """Increment consecutive failure count and return new value."""
-    global _consecutive_failures
-    with _state_lock:
-        _consecutive_failures += 1
-        return _consecutive_failures
-
-
-def _reset_failures() -> None:
-    """Reset consecutive failure count to zero."""
-    global _consecutive_failures
-    with _state_lock:
-        _consecutive_failures = 0
-
-
-def _get_failure_count() -> int:
-    """Get current consecutive failure count."""
-    with _state_lock:
-        return _consecutive_failures
-
-
-# =============================================================================
-# Python Client Initialization
-# =============================================================================
-
-
-def _check_python_client() -> bool:
-    """Check if Python EmitClient is available (lazy initialization).
+def _get_client() -> EmitClient | None:
+    """Get or create the EmitClient instance (lazy, thread-safe).
 
     Returns:
-        True if EmitClient can be imported and instantiated.
+        EmitClient instance or None if initialization fails.
     """
-    global _python_client_available, _emit_client
+    global _emit_client, _client_initialized
 
-    with _state_lock:
-        if _python_client_available is not None:
-            return _python_client_available
-
-    # Try to import and instantiate EmitClient
-    try:
-        from omnibase_infra.runtime.emit_daemon.client import EmitClient
-
-        # Create client with default settings
-        socket_path = os.environ.get("OMNICLAUDE_EMIT_SOCKET", str(DEFAULT_SOCKET_PATH))
-        client = EmitClient(socket_path=socket_path, timeout=5.0)
-
-        with _state_lock:
-            _emit_client = client
-            _python_client_available = True
-
-        logger.debug("Python EmitClient initialized successfully")
-        return True
-
-    except ImportError as e:
-        logger.warning(f"EmitClient import failed (will use shell fallback): {e}")
-        with _state_lock:
-            _python_client_available = False
-        return False
-
-    except Exception as e:
-        logger.warning(
-            f"EmitClient initialization failed (will use shell fallback): {e}"
-        )
-        with _state_lock:
-            _python_client_available = False
-        return False
-
-
-def _get_python_client() -> EmitClient | None:
-    """Get the Python EmitClient instance if available.
-
-    Returns:
-        EmitClient instance or None if not available.
-    """
-    if not _check_python_client():
-        return None
-
-    with _state_lock:
-        return _emit_client
-
-
-# =============================================================================
-# Shell Fallback Implementation
-# =============================================================================
-
-
-def _find_shell_tool() -> str | None:
-    """Find available shell tool for Unix socket communication.
-
-    Checks for socat first (preferred), then netcat variants.
-
-    Returns:
-        Path to the tool binary, or None if none available.
-    """
-    # Prefer socat for better Unix socket support
-    for tool in ["socat", "nc", "netcat", "ncat"]:
-        path = shutil.which(tool)
-        if path:
-            logger.debug(f"Found shell tool for fallback: {tool} at {path}")
-            return path
-
-    return None
-
-
-def _emit_via_shell(
-    event_type: str,
-    payload: dict[str, object],
-    timeout_ms: int,
-    socket_path: Path,
-) -> bool:
-    """Emit event using shell tool (socat/netcat) as fallback.
-
-    Protocol:
-        Request: {"event_type": "...", "payload": {...}}\n
-        Response: {"status": "queued", "event_id": "..."}\n
-
-    Args:
-        event_type: Semantic event type.
-        payload: Event payload dictionary.
-        timeout_ms: Timeout in milliseconds.
-        socket_path: Path to daemon's Unix socket.
-
-    Returns:
-        True if event was queued successfully, False otherwise.
-    """
-    tool = _find_shell_tool()
-    if not tool:
-        logger.warning("No shell tool (socat/nc) available for fallback")
-        return False
-
-    # Build request JSON
-    request = {"event_type": event_type, "payload": payload}
-    request_json = json.dumps(request) + "\n"
-
-    # Build command based on tool
-    timeout_sec = max(1, timeout_ms // 1000)  # At least 1 second
-    tool_name = os.path.basename(tool)
-
-    if tool_name == "socat":
-        # socat - best Unix socket support
-        cmd = [
-            tool,
-            "-t",
-            str(timeout_sec),
-            "-",
-            f"UNIX-CONNECT:{socket_path}",
-        ]
-    else:
-        # netcat variants (nc, netcat, ncat)
-        # -U for Unix socket, -w for timeout
-        cmd = [
-            tool,
-            "-U",
-            str(socket_path),
-            "-w",
-            str(timeout_sec),
-        ]
-
-    try:
-        # Run with input/output
-        result = subprocess.run(
-            cmd,
-            input=request_json,
-            capture_output=True,
-            text=True,
-            timeout=timeout_sec + 1,  # Extra second for overhead
-            check=False,
-        )
-
-        if result.returncode != 0:
-            logger.warning(
-                f"Shell fallback failed (rc={result.returncode}): {result.stderr}"
-            )
-            return False
-
-        # Parse response
-        if not result.stdout.strip():
-            logger.warning("Shell fallback: empty response from daemon")
-            return False
+    with _client_lock:
+        if _client_initialized:
+            return _emit_client
 
         try:
-            response = json.loads(result.stdout.strip())
-        except json.JSONDecodeError as e:
-            logger.warning(f"Shell fallback: invalid JSON response: {e}")
-            return False
+            from omnibase_infra.runtime.emit_daemon.client import EmitClient
 
-        # Check status
-        status = response.get("status")
-        if status == "queued":
-            event_id = response.get("event_id", "unknown")
-            logger.debug(f"Shell fallback: event queued with id={event_id}")
-            return True
-        elif status == "error":
-            reason = response.get("reason", "unknown")
-            logger.warning(f"Shell fallback: daemon error: {reason}")
-            return False
-        else:
-            logger.warning(f"Shell fallback: unexpected status: {status}")
-            return False
+            socket_path = os.environ.get(
+                "OMNICLAUDE_EMIT_SOCKET", str(DEFAULT_SOCKET_PATH)
+            )
+            _emit_client = EmitClient(socket_path=socket_path, timeout=5.0)
+            logger.debug("EmitClient initialized successfully")
 
-    except subprocess.TimeoutExpired:
-        logger.warning(f"Shell fallback: timeout after {timeout_sec}s")
-        return False
-    except FileNotFoundError:
-        logger.warning(f"Shell fallback: tool not found: {tool}")
-        return False
-    except OSError as e:
-        logger.warning(f"Shell fallback: OS error: {e}")
-        return False
-    except Exception as e:
-        logger.warning(f"Shell fallback: unexpected error: {e}")
-        return False
+        except Exception as e:
+            logger.warning(f"EmitClient initialization failed: {e}")
+            _emit_client = None
+
+        _client_initialized = True
+        return _emit_client
 
 
 # =============================================================================
@@ -339,11 +139,8 @@ def emit_event(
 ) -> bool:
     """Emit event to daemon. Returns True on success, False on failure.
 
-    Uses Python EmitClient as primary path. Falls back to shell (socat/netcat)
-    if Python client is unavailable or after consecutive failures exceed threshold.
-
     This function is designed to be non-blocking and will never raise exceptions.
-    Failures are logged as warnings and tracked for fallback gating.
+    Failures are logged as warnings.
 
     Args:
         event_type: Semantic event type. Must be one of:
@@ -376,51 +173,22 @@ def emit_event(
         )
         return False
 
-    # Get socket path from environment or use default
-    socket_path = Path(
-        os.environ.get("OMNICLAUDE_EMIT_SOCKET", str(DEFAULT_SOCKET_PATH))
-    )
+    client = _get_client()
+    if client is None:
+        logger.warning("EmitClient not available, event dropped")
+        return False
 
-    # Check if fallback is allowed (consecutive failures exceeded threshold)
-    failures = _get_failure_count()
-    use_fallback = failures >= FALLBACK_THRESHOLD
+    try:
+        # Use sync method for hooks (simpler, no event loop needed)
+        # timeout_ms is not used here - client has its own timeout
+        _ = timeout_ms  # Kept for API compatibility
+        event_id = client.emit_sync(event_type, payload)
+        logger.debug(f"Event emitted: {event_id}")
+        return True
 
-    # Try Python client first (unless fallback threshold exceeded)
-    if not use_fallback:
-        client = _get_python_client()
-        if client is not None:
-            try:
-                # Use sync method for hooks (simpler, no event loop needed)
-                event_id = client.emit_sync(event_type, payload)
-                logger.debug(f"Event emitted via Python client: {event_id}")
-                _reset_failures()  # Success - reset failure counter
-                return True
-
-            except Exception as e:
-                logger.warning(f"Python client emit failed: {e}")
-                count = _increment_failures()
-                logger.debug(f"Consecutive failures: {count}/{FALLBACK_THRESHOLD}")
-
-                # If we just hit the threshold, log it
-                if count == FALLBACK_THRESHOLD:
-                    logger.warning(
-                        f"Fallback threshold reached ({FALLBACK_THRESHOLD} failures). "
-                        "Switching to shell fallback."
-                    )
-
-    # Fall back to shell
-    logger.debug("Using shell fallback for event emission")
-    success = _emit_via_shell(event_type, payload, timeout_ms, socket_path)
-
-    if success:
-        # Shell fallback succeeded - consider resetting or decrementing failures
-        # For now, keep the counter to encourage Python path recovery
-        pass
-    else:
-        # Both paths failed
-        _increment_failures()
-
-    return success
+    except Exception as e:
+        logger.warning(f"Event emission failed: {e}")
+        return False
 
 
 def daemon_available() -> bool:
@@ -439,13 +207,9 @@ def daemon_available() -> bool:
         ... else:
         ...     print("Daemon is not running")
     """
-    client = _get_python_client()
+    client = _get_client()
     if client is None:
-        # Python client not available - check socket file exists
-        socket_path = Path(
-            os.environ.get("OMNICLAUDE_EMIT_SOCKET", str(DEFAULT_SOCKET_PATH))
-        )
-        return socket_path.exists()
+        return False
 
     try:
         return client.is_daemon_running_sync()
@@ -454,43 +218,27 @@ def daemon_available() -> bool:
         return False
 
 
-def get_fallback_status() -> dict[str, object]:
-    """Return fallback status including consecutive failures and fallback state.
+def get_status() -> dict[str, object]:
+    """Return client status information.
 
     Returns:
         Dictionary with:
-            - consecutive_failures: Number of consecutive Python client failures
-            - fallback_threshold: Threshold before fallback is activated
-            - fallback_allowed: Whether fallback is currently allowed
-            - python_client_available: Whether Python EmitClient is importable
+            - client_available: Whether EmitClient is initialized
             - socket_path: Path to daemon socket
+            - daemon_running: Whether daemon is responding (may be slow)
 
     Example:
-        >>> status = get_fallback_status()
-        >>> print(f"Failures: {status['consecutive_failures']}")
-        >>> print(f"Fallback allowed: {status['fallback_allowed']}")
+        >>> status = get_status()
+        >>> print(f"Client available: {status['client_available']}")
     """
-    failures = _get_failure_count()
-    python_available = _check_python_client()
     socket_path = os.environ.get("OMNICLAUDE_EMIT_SOCKET", str(DEFAULT_SOCKET_PATH))
+    client = _get_client()
 
     return {
-        "consecutive_failures": failures,
-        "fallback_threshold": FALLBACK_THRESHOLD,
-        "fallback_allowed": failures >= FALLBACK_THRESHOLD,
-        "python_client_available": python_available,
+        "client_available": client is not None,
         "socket_path": socket_path,
+        "daemon_running": daemon_available() if client else False,
     }
-
-
-def reset_fallback_state() -> None:
-    """Reset fallback state (for testing or recovery).
-
-    Resets the consecutive failure counter to zero, allowing the Python
-    client path to be tried again.
-    """
-    _reset_failures()
-    logger.debug("Fallback state reset")
 
 
 # =============================================================================
@@ -533,16 +281,14 @@ def _cli_ping(_args: argparse.Namespace) -> int:
 
 def _cli_status(args: argparse.Namespace) -> int:
     """CLI handler for status command."""
-    status = get_fallback_status()
+    status = get_status()
 
     if args.json:
         print(json.dumps(status, indent=2))
     else:
-        print(f"Consecutive failures: {status['consecutive_failures']}")
-        print(f"Fallback threshold: {status['fallback_threshold']}")
-        print(f"Fallback allowed: {status['fallback_allowed']}")
-        print(f"Python client available: {status['python_client_available']}")
+        print(f"Client available: {status['client_available']}")
         print(f"Socket path: {status['socket_path']}")
+        print(f"Daemon running: {status['daemon_running']}")
 
     return 0
 
@@ -606,7 +352,7 @@ def main(argv: list[str] | None = None) -> int:
     # status command
     status_parser = subparsers.add_parser(
         "status",
-        help="Get fallback status",
+        help="Get client status",
     )
     status_parser.add_argument(
         "--json",
@@ -640,13 +386,11 @@ __all__ = [
     # Public API
     "emit_event",
     "daemon_available",
-    "get_fallback_status",
-    "reset_fallback_state",
+    "get_status",
     # Constants
     "SUPPORTED_EVENT_TYPES",
     "DEFAULT_SOCKET_PATH",
     "DEFAULT_TIMEOUT_MS",
-    "FALLBACK_THRESHOLD",
     # CLI
     "main",
 ]

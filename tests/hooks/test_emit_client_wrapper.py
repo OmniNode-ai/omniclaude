@@ -6,7 +6,7 @@ This module tests the client-side interface for hooks to emit events via
 the emit daemon. It validates:
 - Module imports and constants
 - Event type validation
-- Fallback state management (thread-safe)
+- Client initialization (thread-safe)
 - CLI argument parsing
 - Public API behavior
 """
@@ -71,12 +71,6 @@ class TestModuleImport:
 
         assert DEFAULT_TIMEOUT_MS == 50
 
-    def test_fallback_threshold_defined(self) -> None:
-        """Verify FALLBACK_THRESHOLD constant is defined."""
-        from plugins.onex.hooks.lib.emit_client_wrapper import FALLBACK_THRESHOLD
-
-        assert FALLBACK_THRESHOLD == 5
-
     def test_public_api_exports(self) -> None:
         """Verify __all__ exports expected public API."""
         from plugins.onex.hooks.lib.emit_client_wrapper import __all__
@@ -85,13 +79,11 @@ class TestModuleImport:
             # Public API
             "emit_event",
             "daemon_available",
-            "get_fallback_status",
-            "reset_fallback_state",
+            "get_status",
             # Constants
             "SUPPORTED_EVENT_TYPES",
             "DEFAULT_SOCKET_PATH",
             "DEFAULT_TIMEOUT_MS",
-            "FALLBACK_THRESHOLD",
             # CLI
             "main",
         }
@@ -133,11 +125,7 @@ class TestEventTypeValidation:
         from plugins.onex.hooks.lib.emit_client_wrapper import (
             SUPPORTED_EVENT_TYPES,
             emit_event,
-            reset_fallback_state,
         )
-
-        # Reset state before test
-        reset_fallback_state()
 
         # For each valid event type, the function should NOT immediately return False
         # due to validation. It may return False due to daemon unavailability, but
@@ -155,101 +143,53 @@ class TestEventTypeValidation:
 
 
 # =============================================================================
-# Fallback Status Tests
+# Status Tests
 # =============================================================================
 
 
-class TestFallbackStatus:
-    """Tests for get_fallback_status function."""
+class TestGetStatus:
+    """Tests for get_status function."""
 
-    def test_get_fallback_status_returns_dict(self) -> None:
-        """get_fallback_status returns a dictionary."""
-        from plugins.onex.hooks.lib.emit_client_wrapper import get_fallback_status
+    def test_get_status_returns_dict(self) -> None:
+        """get_status returns a dictionary."""
+        from plugins.onex.hooks.lib.emit_client_wrapper import get_status
 
-        status = get_fallback_status()
+        status = get_status()
         assert isinstance(status, dict)
 
-    def test_get_fallback_status_has_required_keys(self) -> None:
-        """get_fallback_status returns dict with all required keys."""
-        from plugins.onex.hooks.lib.emit_client_wrapper import get_fallback_status
+    def test_get_status_has_required_keys(self) -> None:
+        """get_status returns dict with all required keys."""
+        from plugins.onex.hooks.lib.emit_client_wrapper import get_status
 
-        status = get_fallback_status()
+        status = get_status()
 
         required_keys = {
-            "consecutive_failures",
-            "fallback_threshold",
-            "fallback_allowed",
-            "python_client_available",
+            "client_available",
             "socket_path",
+            "daemon_running",
         }
         assert set(status.keys()) == required_keys
 
-    def test_get_fallback_status_consecutive_failures_is_int(self) -> None:
-        """consecutive_failures is an integer."""
-        from plugins.onex.hooks.lib.emit_client_wrapper import get_fallback_status
+    def test_get_status_client_available_is_bool(self) -> None:
+        """client_available is a boolean."""
+        from plugins.onex.hooks.lib.emit_client_wrapper import get_status
 
-        status = get_fallback_status()
-        assert isinstance(status["consecutive_failures"], int)
-        assert status["consecutive_failures"] >= 0
+        status = get_status()
+        assert isinstance(status["client_available"], bool)
 
-    def test_get_fallback_status_fallback_threshold_matches_constant(self) -> None:
-        """fallback_threshold matches FALLBACK_THRESHOLD constant."""
-        from plugins.onex.hooks.lib.emit_client_wrapper import (
-            FALLBACK_THRESHOLD,
-            get_fallback_status,
-        )
-
-        status = get_fallback_status()
-        assert status["fallback_threshold"] == FALLBACK_THRESHOLD
-
-    def test_get_fallback_status_fallback_allowed_is_bool(self) -> None:
-        """fallback_allowed is a boolean."""
-        from plugins.onex.hooks.lib.emit_client_wrapper import get_fallback_status
-
-        status = get_fallback_status()
-        assert isinstance(status["fallback_allowed"], bool)
-
-    def test_get_fallback_status_socket_path_is_string(self) -> None:
+    def test_get_status_socket_path_is_string(self) -> None:
         """socket_path is a string."""
-        from plugins.onex.hooks.lib.emit_client_wrapper import get_fallback_status
+        from plugins.onex.hooks.lib.emit_client_wrapper import get_status
 
-        status = get_fallback_status()
+        status = get_status()
         assert isinstance(status["socket_path"], str)
 
+    def test_get_status_daemon_running_is_bool(self) -> None:
+        """daemon_running is a boolean."""
+        from plugins.onex.hooks.lib.emit_client_wrapper import get_status
 
-# =============================================================================
-# Reset Fallback State Tests
-# =============================================================================
-
-
-class TestResetFallbackState:
-    """Tests for reset_fallback_state function."""
-
-    def test_reset_fallback_state_resets_counter(self) -> None:
-        """reset_fallback_state resets the consecutive failure counter to zero."""
-        from plugins.onex.hooks.lib.emit_client_wrapper import (
-            get_fallback_status,
-            reset_fallback_state,
-        )
-
-        # Reset to known state
-        reset_fallback_state()
-
-        status = get_fallback_status()
-        assert status["consecutive_failures"] == 0
-
-    def test_reset_fallback_state_disables_fallback(self) -> None:
-        """After reset, fallback_allowed should be False (counter < threshold)."""
-        from plugins.onex.hooks.lib.emit_client_wrapper import (
-            get_fallback_status,
-            reset_fallback_state,
-        )
-
-        reset_fallback_state()
-
-        status = get_fallback_status()
-        # With 0 failures and threshold of 5, fallback should not be allowed
-        assert status["fallback_allowed"] is False
+        status = get_status()
+        assert isinstance(status["daemon_running"], bool)
 
 
 # =============================================================================
@@ -258,40 +198,11 @@ class TestResetFallbackState:
 
 
 class TestThreadSafety:
-    """Tests for thread-safe state management."""
-
-    def test_concurrent_reset_calls_are_safe(self) -> None:
-        """Multiple threads can call reset_fallback_state concurrently."""
-        from plugins.onex.hooks.lib.emit_client_wrapper import (
-            get_fallback_status,
-            reset_fallback_state,
-        )
-
-        errors = []
-
-        def reset_worker():
-            try:
-                for _ in range(100):
-                    reset_fallback_state()
-            except Exception as e:
-                errors.append(e)
-
-        threads = [threading.Thread(target=reset_worker) for _ in range(10)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
-
-        # No errors should have occurred
-        assert len(errors) == 0
-
-        # Final state should be valid
-        status = get_fallback_status()
-        assert status["consecutive_failures"] >= 0
+    """Tests for thread-safe client initialization."""
 
     def test_concurrent_status_calls_are_safe(self) -> None:
-        """Multiple threads can call get_fallback_status concurrently."""
-        from plugins.onex.hooks.lib.emit_client_wrapper import get_fallback_status
+        """Multiple threads can call get_status concurrently."""
+        from plugins.onex.hooks.lib.emit_client_wrapper import get_status
 
         errors = []
         results = []
@@ -299,7 +210,7 @@ class TestThreadSafety:
         def status_worker():
             try:
                 for _ in range(100):
-                    status = get_fallback_status()
+                    status = get_status()
                     results.append(status)
             except Exception as e:
                 errors.append(e)
@@ -317,7 +228,40 @@ class TestThreadSafety:
         assert len(results) == 1000
         for status in results:
             assert isinstance(status, dict)
-            assert "consecutive_failures" in status
+            assert "client_available" in status
+
+    def test_concurrent_emit_calls_are_safe(self) -> None:
+        """Multiple threads can call emit_event concurrently."""
+        from plugins.onex.hooks.lib.emit_client_wrapper import emit_event
+
+        errors = []
+        results = []
+
+        def emit_worker():
+            try:
+                for _ in range(50):
+                    result = emit_event(
+                        event_type="session.started",
+                        payload={"session_id": "test"},
+                        timeout_ms=1,
+                    )
+                    results.append(result)
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=emit_worker) for _ in range(10)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # No errors should have occurred
+        assert len(errors) == 0
+
+        # All results should be bools
+        assert len(results) == 500
+        for result in results:
+            assert isinstance(result, bool)
 
 
 # =============================================================================
@@ -379,8 +323,8 @@ class TestCliArgumentParsing:
         output = f.getvalue()
         # Should be valid JSON
         parsed = json.loads(output)
-        assert "consecutive_failures" in parsed
-        assert "fallback_threshold" in parsed
+        assert "client_available" in parsed
+        assert "socket_path" in parsed
 
     def test_cli_ping_command_returns_int(self) -> None:
         """CLI ping command returns an integer exit code."""
@@ -469,29 +413,6 @@ class TestCliArgumentParsing:
 
 
 # =============================================================================
-# Shell Fallback Tests
-# =============================================================================
-
-
-class TestShellFallback:
-    """Tests for shell fallback behavior."""
-
-    def test_find_shell_tool_function_exists(self) -> None:
-        """_find_shell_tool internal function exists."""
-        from plugins.onex.hooks.lib.emit_client_wrapper import _find_shell_tool
-
-        # Function should exist and be callable
-        assert callable(_find_shell_tool)
-
-    def test_find_shell_tool_returns_string_or_none(self) -> None:
-        """_find_shell_tool returns a string path or None."""
-        from plugins.onex.hooks.lib.emit_client_wrapper import _find_shell_tool
-
-        result = _find_shell_tool()
-        assert result is None or isinstance(result, str)
-
-
-# =============================================================================
 # Environment Variable Override Tests
 # =============================================================================
 
@@ -500,10 +421,10 @@ class TestEnvironmentVariableOverrides:
     """Tests for environment variable overrides."""
 
     def test_socket_path_from_environment(self) -> None:
-        """get_fallback_status respects OMNICLAUDE_EMIT_SOCKET env var."""
+        """get_status respects OMNICLAUDE_EMIT_SOCKET env var."""
         import os
 
-        from plugins.onex.hooks.lib.emit_client_wrapper import get_fallback_status
+        from plugins.onex.hooks.lib.emit_client_wrapper import get_status
 
         custom_path = "/custom/socket.sock"
 
@@ -511,7 +432,7 @@ class TestEnvironmentVariableOverrides:
         old_value = os.environ.get("OMNICLAUDE_EMIT_SOCKET")
         try:
             os.environ["OMNICLAUDE_EMIT_SOCKET"] = custom_path
-            status = get_fallback_status()
+            status = get_status()
             assert status["socket_path"] == custom_path
         finally:
             # Restore original value
@@ -599,24 +520,15 @@ class TestEdgeCases:
 class TestMockedIntegration:
     """Tests with mocked dependencies for integration scenarios."""
 
-    def test_emit_event_success_resets_failures(self) -> None:
-        """Successful emit resets the consecutive failure counter."""
+    def test_emit_event_success_with_mocked_client(self) -> None:
+        """Successful emit returns True with mocked client."""
         from plugins.onex.hooks.lib import emit_client_wrapper
-        from plugins.onex.hooks.lib.emit_client_wrapper import (
-            get_fallback_status,
-            reset_fallback_state,
-        )
 
-        # Reset state
-        reset_fallback_state()
-
-        # Mock the Python client to succeed
+        # Mock the client to succeed
         mock_client = MagicMock()
         mock_client.emit_sync.return_value = "test-event-id"
 
-        with patch.object(
-            emit_client_wrapper, "_get_python_client", return_value=mock_client
-        ):
+        with patch.object(emit_client_wrapper, "_get_client", return_value=mock_client):
             result = emit_client_wrapper.emit_event(
                 event_type="session.started",
                 payload={"session_id": "test"},
@@ -624,31 +536,19 @@ class TestMockedIntegration:
             )
 
         assert result is True
-        status = get_fallback_status()
-        assert status["consecutive_failures"] == 0
-
-    def test_emit_event_failure_increments_failures(self) -> None:
-        """Failed emit increments the consecutive failure counter."""
-        from plugins.onex.hooks.lib import emit_client_wrapper
-        from plugins.onex.hooks.lib.emit_client_wrapper import (
-            get_fallback_status,
-            reset_fallback_state,
+        mock_client.emit_sync.assert_called_once_with(
+            "session.started", {"session_id": "test"}
         )
 
-        # Reset state
-        reset_fallback_state()
+    def test_emit_event_failure_with_mocked_client(self) -> None:
+        """Failed emit returns False with mocked client."""
+        from plugins.onex.hooks.lib import emit_client_wrapper
 
-        # Mock the Python client to fail
+        # Mock the client to fail
         mock_client = MagicMock()
         mock_client.emit_sync.side_effect = Exception("Connection refused")
 
-        # Also mock shell fallback to fail
-        with (
-            patch.object(
-                emit_client_wrapper, "_get_python_client", return_value=mock_client
-            ),
-            patch.object(emit_client_wrapper, "_emit_via_shell", return_value=False),
-        ):
+        with patch.object(emit_client_wrapper, "_get_client", return_value=mock_client):
             result = emit_client_wrapper.emit_event(
                 event_type="session.started",
                 payload={"session_id": "test"},
@@ -656,6 +556,37 @@ class TestMockedIntegration:
             )
 
         assert result is False
-        status = get_fallback_status()
-        # Should have incremented failures (once for Python client, once for shell fallback)
-        assert status["consecutive_failures"] >= 1
+
+    def test_emit_event_returns_false_when_client_unavailable(self) -> None:
+        """emit_event returns False when client is None."""
+        from plugins.onex.hooks.lib import emit_client_wrapper
+
+        with patch.object(emit_client_wrapper, "_get_client", return_value=None):
+            result = emit_client_wrapper.emit_event(
+                event_type="session.started",
+                payload={"session_id": "test"},
+                timeout_ms=50,
+            )
+
+        assert result is False
+
+    def test_daemon_available_with_mocked_client(self) -> None:
+        """daemon_available returns True when client reports daemon running."""
+        from plugins.onex.hooks.lib import emit_client_wrapper
+
+        mock_client = MagicMock()
+        mock_client.is_daemon_running_sync.return_value = True
+
+        with patch.object(emit_client_wrapper, "_get_client", return_value=mock_client):
+            result = emit_client_wrapper.daemon_available()
+
+        assert result is True
+
+    def test_daemon_available_false_when_client_unavailable(self) -> None:
+        """daemon_available returns False when client is None."""
+        from plugins.onex.hooks.lib import emit_client_wrapper
+
+        with patch.object(emit_client_wrapper, "_get_client", return_value=None):
+            result = emit_client_wrapper.daemon_available()
+
+        assert result is False
