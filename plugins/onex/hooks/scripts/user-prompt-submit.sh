@@ -42,8 +42,6 @@ source "${HOOKS_DIR}/scripts/common.sh"
 
 export ARCHON_INTELLIGENCE_URL="${ARCHON_INTELLIGENCE_URL:-http://localhost:8053}"
 
-log() { printf "[%s] %s\n" "$(date "+%Y-%m-%d %H:%M:%S")" "$*" >> "$LOG_FILE"; }
-
 # Preflight check for jq (required for claude-hook-event JSON construction)
 SKIP_CLAUDE_HOOK_EVENT_EMIT=0
 if ! command -v jq >/dev/null 2>&1; then

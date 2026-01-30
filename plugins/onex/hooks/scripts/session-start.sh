@@ -36,6 +36,13 @@ source "${HOOKS_DIR}/scripts/common.sh"
 
 export PYTHONPATH="${PROJECT_ROOT}:${PLUGIN_ROOT}/lib:${HOOKS_LIB}:${PYTHONPATH:-}"
 
+# Preflight check for jq (required for JSON parsing)
+JQ_AVAILABLE=1
+if ! command -v jq >/dev/null 2>&1; then
+    log "WARNING: jq not found, using fallback values and skipping Kafka emission"
+    JQ_AVAILABLE=0
+fi
+
 # =============================================================================
 # Emit Daemon Management
 # =============================================================================
@@ -50,23 +57,16 @@ export EMIT_DAEMON_SOCKET
 EMIT_DAEMON_AVAILABLE="false"
 export EMIT_DAEMON_AVAILABLE
 
-# Check if socket is responsive (portable - works on macOS and Linux)
-# Uses nc with timeout flag on macOS or timeout command on Linux
+# Check if socket exists and is writable (indicates daemon is available)
+# This is simpler and more robust than sending protocol messages.
+# The actual emission will handle real protocol errors.
 check_socket_responsive() {
     local socket_path="$1"
-    local timeout_sec="${2:-0.1}"
+    # shellcheck disable=SC2034
+    local timeout_sec="${2:-0.1}"  # Kept for API compatibility, not used
 
-    if command -v timeout >/dev/null 2>&1; then
-        # Linux: use timeout command
-        timeout "$timeout_sec" bash -c "echo 'ping' | nc -U '$socket_path'" >/dev/null 2>&1
-    elif command -v gtimeout >/dev/null 2>&1; then
-        # macOS with coreutils: use gtimeout
-        gtimeout "$timeout_sec" bash -c "echo 'ping' | nc -U '$socket_path'" >/dev/null 2>&1
-    else
-        # macOS fallback: nc with -w flag (timeout in seconds, min 1)
-        # Note: macOS nc -w only accepts integer seconds, so we use 1s minimum
-        echo 'ping' | nc -U -w 1 "$socket_path" >/dev/null 2>&1
-    fi
+    # Check socket exists (-S) and is writable (-w)
+    [[ -S "$socket_path" ]] && [[ -w "$socket_path" ]]
 }
 
 start_emit_daemon_if_needed() {
@@ -140,9 +140,16 @@ log "SessionStart hook triggered (plugin mode)"
 log "Using Python: $PYTHON_CMD"
 
 # Extract session information
-SESSION_ID=$(echo "$INPUT" | jq -r '.sessionId // .session_id // ""')
-PROJECT_PATH=$(echo "$INPUT" | jq -r '.projectPath // .project_path // ""')
-CWD=$(echo "$INPUT" | jq -r '.cwd // ""' || pwd)
+if [[ "$JQ_AVAILABLE" -eq 1 ]]; then
+    SESSION_ID=$(echo "$INPUT" | jq -r '.sessionId // .session_id // ""')
+    PROJECT_PATH=$(echo "$INPUT" | jq -r '.projectPath // .project_path // ""')
+    CWD=$(echo "$INPUT" | jq -r '.cwd // ""' || pwd)
+else
+    # Fallback values when jq is not available
+    SESSION_ID=""
+    PROJECT_PATH=""
+    CWD=$(pwd)
+fi
 
 if [[ -z "$CWD" ]]; then
     CWD=$(pwd)
@@ -171,7 +178,8 @@ fi
 
 # Emit session.started event to Kafka (async, non-blocking)
 # Uses emit_client_wrapper with daemon fan-out (OMN-1631)
-if [[ "$KAFKA_ENABLED" == "true" ]]; then
+# Requires jq for payload construction
+if [[ "$KAFKA_ENABLED" == "true" && "$JQ_AVAILABLE" -eq 1 ]]; then
     (
         GIT_BRANCH=""
         if command -v git >/dev/null 2>&1 && git rev-parse --git-dir >/dev/null 2>&1; then
@@ -200,7 +208,11 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
     ) &
     log "Session event emission started via emit daemon"
 else
-    log "Kafka emission skipped (KAFKA_ENABLED=$KAFKA_ENABLED)"
+    if [[ "$JQ_AVAILABLE" -eq 0 ]]; then
+        log "Kafka emission skipped (jq not available for payload construction)"
+    else
+        log "Kafka emission skipped (KAFKA_ENABLED=$KAFKA_ENABLED)"
+    fi
 fi
 
 # Performance tracking
