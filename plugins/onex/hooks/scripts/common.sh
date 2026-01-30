@@ -81,6 +81,26 @@ get_time_ms() {
 }
 
 # =============================================================================
+# Environment File Loading
+# =============================================================================
+# Source project .env file if present to pick up KAFKA_BOOTSTRAP_SERVERS and
+# other configuration. This enables hooks to use project-specific settings.
+#
+# Order of precedence:
+# 1. Already-set environment variables (highest priority)
+# 2. Project .env file
+# 3. Default values (lowest priority)
+
+if [[ -f "${PROJECT_ROOT}/.env" ]]; then
+    # Source .env but don't override already-set variables
+    # Using set -a to export all variables, then set +a to stop
+    set -a
+    # shellcheck disable=SC1091
+    source "${PROJECT_ROOT}/.env" 2>/dev/null || true
+    set +a
+fi
+
+# =============================================================================
 # Kafka Configuration
 # =============================================================================
 # Kafka emission is optional and disabled by default.
