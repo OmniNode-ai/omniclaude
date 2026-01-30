@@ -583,12 +583,12 @@ class TestEdgeCases:
 
 
 # =============================================================================
-# Tool Content Command Tests (OMN-1702)
+# Tool Content Command Tests (OMN-1701)
 # =============================================================================
 
 
 class TestToolContentCommand:
-    """Tests for tool-content command (INTERIM - raw JSON emission)."""
+    """Tests for tool-content command using ModelToolExecutionContent."""
 
     @pytest.fixture
     def runner(self) -> CliRunner:
@@ -693,7 +693,7 @@ class TestToolContentCommand:
                 "--tool-name",
                 "Read",
                 "--tool-type",
-                "file_read",
+                "file_read",  # Kept for backwards compat, ignored
                 "--file-path",
                 "/workspace/test.py",
                 "--language",
@@ -703,7 +703,8 @@ class TestToolContentCommand:
         )
         assert result.exit_code == 0
         assert "Payload:" in result.output
-        assert '"tool_name": "Read"' in result.output
+        # ModelToolExecutionContent uses dual-field pattern
+        assert '"tool_name_raw": "Read"' in result.output
         assert '"language": "python"' in result.output
 
     def test_always_exits_zero_on_failure(self, runner: CliRunner) -> None:
@@ -791,7 +792,7 @@ class TestToolContentCommand:
                         "--tool-name",
                         "Write",
                         "--tool-type",
-                        "file_write",
+                        "file_write",  # Kept for backwards compat, ignored
                         "--file-path",
                         "/workspace/test.py",
                         "--content-preview",
@@ -823,10 +824,11 @@ class TestToolContentCommand:
             # Verify partition key is session_id encoded as bytes
             assert call_kwargs["key"] == b"test-session-abc"
 
-            # Verify payload structure
+            # Verify payload structure (ModelToolExecutionContent format)
             payload = json.loads(call_kwargs["value"])
-            assert payload["tool_name"] == "Write"
-            assert payload["tool_type"] == "file_write"
+            # Dual-field pattern: tool_name_raw (string) + tool_name (enum value)
+            assert payload["tool_name_raw"] == "Write"
+            assert payload["tool_name"] == "Write"  # Enum serializes to string
             assert payload["session_id"] == "test-session-abc"
             assert payload["file_path"] == "/workspace/test.py"
             assert payload["content_preview"] == "test content"

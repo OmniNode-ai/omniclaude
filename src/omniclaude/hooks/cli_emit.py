@@ -38,7 +38,6 @@ import sys
 import uuid
 from collections.abc import Awaitable
 from datetime import UTC, datetime
-from typing import NotRequired, TypedDict
 from uuid import UUID, uuid4
 
 import click
@@ -56,6 +55,7 @@ except Exception:
     __version__ = "0.1.0-dev"
 
 from omnibase_core.enums.hooks.claude_code import EnumClaudeCodeHookEventType
+from omnibase_core.models.intelligence import ModelToolExecutionContent
 from omnibase_infra.event_bus.event_bus_kafka import EventBusKafka
 from omnibase_infra.event_bus.models.config import ModelKafkaEventBusConfig
 
@@ -70,33 +70,6 @@ from omniclaude.hooks.handler_event_emitter import (
 from omniclaude.hooks.models import ModelEventPublishResult
 from omniclaude.hooks.schemas import HookSource, SessionEndReason
 from omniclaude.hooks.topics import TopicBase, build_topic
-
-
-# =============================================================================
-# INTERIM: TypedDict for Tool Content (OMN-1702)
-# =============================================================================
-# This TypedDict defines the structure for tool content events emitted as raw
-# JSON until omnibase_core has the proper Pydantic model (ModelToolExecutionContent).
-# TODO(OMN-1703): Remove when migrating to proper Pydantic model.
-# =============================================================================
-class ToolContentPayload(TypedDict):
-    """INTERIM typed dict for tool content payload (OMN-1702)."""
-
-    # Required fields
-    tool_name: str
-    tool_type: str
-    session_id: str
-    correlation_id: str
-    timestamp: str
-    success: bool
-    # Optional fields
-    file_path: NotRequired[str]
-    content_preview: NotRequired[str]
-    content_length: NotRequired[int]
-    content_hash: NotRequired[str]
-    language: NotRequired[str]
-    duration_ms: NotRequired[float]
-
 
 # Configure logging for hook context
 logging.basicConfig(
@@ -640,27 +613,21 @@ def cmd_claude_hook_event(
 
 
 # =============================================================================
-# INTERIM: Tool Content Emission (OMN-1702)
+# Tool Content Emission (OMN-1701)
 # =============================================================================
-# This command emits tool content events using raw JSON rather than a Pydantic
-# model. This is an INTERIM solution until omnibase_core has the proper model.
-# TODO(OMN-1702): Replace with proper Pydantic model when available.
+# Emits tool execution content using ModelToolExecutionContent from omnibase_core.
+# Used by omniintelligence for pattern learning from Claude Code tool executions.
 # =============================================================================
 
 
-async def _emit_tool_content_raw(
-    payload: ToolContentPayload,
+async def _emit_tool_content(
+    content: ModelToolExecutionContent,
     environment: str | None = None,
 ) -> ModelEventPublishResult:
-    """Emit a tool content event as raw JSON to Kafka.
-
-    INTERIM IMPLEMENTATION (OMN-1702):
-    This function emits tool content directly as a JSON dict rather than
-    using a Pydantic model. Once omnibase_core has the proper model, this
-    should be replaced with a typed implementation.
+    """Emit a tool content event to Kafka.
 
     Args:
-        payload: The raw JSON payload to emit.
+        content: The tool execution content model to emit.
         environment: Optional environment override for topic prefix.
 
     Returns:
@@ -701,9 +668,9 @@ async def _emit_tool_content_raw(
         # Start producer
         await bus.start()
 
-        # Publish the raw JSON payload
-        partition_key = payload.get("session_id", "unknown").encode("utf-8")
-        message_bytes = json.dumps(payload).encode("utf-8")
+        # Publish the model as JSON
+        partition_key = (content.session_id or "unknown").encode("utf-8")
+        message_bytes = content.model_dump_json().encode("utf-8")
 
         await bus.publish(
             topic=topic,
@@ -715,8 +682,8 @@ async def _emit_tool_content_raw(
             "tool_content_emitted",
             extra={
                 "topic": topic,
-                "tool_name": payload.get("tool_name"),
-                "session_id": payload.get("session_id"),
+                "tool_name": content.tool_name_raw,
+                "session_id": content.session_id,
             },
         )
 
@@ -760,7 +727,11 @@ async def _emit_tool_content_raw(
 @cli.command("tool-content")
 @click.option("--session-id", required=True, help="Session UUID or string ID.")
 @click.option("--tool-name", required=True, help="Tool name (Read, Write, Edit, Bash).")
-@click.option("--tool-type", required=True, help="Tool type classification.")
+@click.option(
+    "--tool-type",
+    default=None,
+    help="Deprecated: Tool type classification (ignored, kept for backwards compat).",
+)
 @click.option("--file-path", default=None, help="File path if applicable.")
 @click.option(
     "--content-preview", default=None, help="Content preview (max 2000 chars)."
@@ -782,7 +753,7 @@ async def _emit_tool_content_raw(
 def cmd_tool_content(
     session_id: str,
     tool_name: str,
-    tool_type: str,
+    tool_type: str | None,  # Kept for backwards compatibility, ignored
     file_path: str | None,
     content_preview: str | None,
     content_length: int | None,
@@ -794,23 +765,24 @@ def cmd_tool_content(
     from_json: bool,
     dry_run: bool,
 ) -> None:
-    """Emit tool content event for pattern learning (INTERIM - raw JSON).
+    """Emit tool content event for pattern learning.
 
-    This command emits tool execution content to Kafka for pattern learning.
-    This is an INTERIM solution using raw JSON until omnibase_core has the
-    proper Pydantic model (OMN-1702).
+    This command emits tool execution content to Kafka for pattern learning
+    using the ModelToolExecutionContent model from omnibase_core.
 
     Example:
         omniclaude-emit tool-content \\
             --session-id abc123 \\
             --tool-name Write \\
-            --tool-type file_write \\
             --file-path /workspace/src/main.py \\
             --content-preview "def main():\\n    print('hello')" \\
             --content-length 42 \\
             --language python
     """
     # ONEX: exempt - CLI command parameters defined by click decorators
+    # Note: tool_type is kept for backwards compatibility but ignored
+    _ = tool_type  # Explicitly mark as unused
+
     try:
         if from_json:
             stdin_content = sys.stdin.read()
@@ -826,7 +798,6 @@ def cmd_tool_content(
             # Override with JSON values if present
             session_id = data.get("session_id", session_id)
             tool_name = data.get("tool_name", tool_name)
-            tool_type = data.get("tool_type", tool_type)
             file_path = data.get("file_path", file_path)
             content_preview = data.get("content_preview", content_preview)
             content_length = data.get("content_length", content_length)
@@ -836,39 +807,30 @@ def cmd_tool_content(
             duration_ms = data.get("duration_ms", duration_ms)
             correlation_id = data.get("correlation_id", correlation_id)
 
-        # Build payload using INTERIM TypedDict (OMN-1702)
-        payload: ToolContentPayload = {
-            "tool_name": tool_name,
-            "tool_type": tool_type,
-            "session_id": session_id,
-            "correlation_id": correlation_id or str(uuid4()),
-            "timestamp": datetime.now(UTC).isoformat(),
-            "success": success,
-        }
-
-        # Add optional fields only if present (cleaner JSON)
-        if file_path is not None:
-            payload["file_path"] = file_path
-        if content_preview is not None:
-            payload["content_preview"] = content_preview
-        if content_length is not None:
-            payload["content_length"] = content_length
-        if content_hash is not None:
-            payload["content_hash"] = content_hash
-        if language is not None:
-            payload["language"] = language
-        if duration_ms is not None:
-            payload["duration_ms"] = duration_ms
+        # Build model using factory method for automatic enum resolution
+        content = ModelToolExecutionContent.from_tool_name(
+            tool_name_raw=tool_name,
+            file_path=file_path,
+            language=language,
+            content_preview=content_preview,
+            content_length=content_length,
+            content_hash=content_hash,
+            success=success,
+            duration_ms=duration_ms,
+            session_id=session_id,
+            correlation_id=correlation_id or str(uuid4()),
+            timestamp=datetime.now(UTC),
+        )
 
         if dry_run:
             click.echo(
                 f"[DRY RUN] Would emit tool-content: "
-                f"session_id={session_id}, tool={tool_name}, type={tool_type}"
+                f"session_id={session_id}, tool={tool_name}"
             )
-            click.echo(f"Payload: {json.dumps(payload, indent=2)}")
+            click.echo(f"Payload: {content.model_dump_json(indent=2)}")
             return
 
-        result = run_with_timeout(_emit_tool_content_raw(payload))
+        result = run_with_timeout(_emit_tool_content(content))
 
         if result and result.success:
             logger.debug("tool_content_emitted", extra={"topic": result.topic})
