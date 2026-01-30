@@ -79,7 +79,7 @@ from omniclaude.hooks.topics import TopicBase, build_topic
 # JSON until omnibase_core has the proper Pydantic model (ModelToolExecutionContent).
 # TODO(OMN-1703): Remove when migrating to proper Pydantic model.
 # =============================================================================
-class ToolContentPayload(TypedDict, total=False):
+class ToolContentPayload(TypedDict):
     """INTERIM typed dict for tool content payload (OMN-1702)."""
 
     # Required fields
@@ -694,6 +694,8 @@ async def _emit_tool_content_raw(
             circuit_breaker_reset_timeout=10.0,
             enable_idempotence=False,
         )
+        # New bus per call is intentional - each invocation runs in an isolated
+        # subshell from the shell hook, so connection pooling isn't beneficial
         bus = EventBusKafka(config=config)
 
         # Start producer
