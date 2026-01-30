@@ -29,7 +29,7 @@ import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-import tiktoken
+import tiktoken  # type: ignore[import-not-found]
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -39,11 +39,33 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # =============================================================================
+# Header Constant (Sync with handler_context_injection.py)
+# =============================================================================
+
+# Header format for injection block - MUST stay in sync with _format_patterns_markdown()
+# in handler_context_injection.py. This is defined here to compute token overhead
+# for budget calculations during pattern selection.
+#
+# If you modify _format_patterns_markdown() header, update this constant too.
+INJECTION_HEADER: str = (
+    "## Learned Patterns (Auto-Injected)\n"
+    "\n"
+    "The following patterns have been learned from previous sessions:\n"
+    "\n"
+)
+
+
+# =============================================================================
 # Token Counting
 # =============================================================================
 
 # Use cl100k_base for deterministic token counting across models
 # This is close enough to Claude's tokenization for budget enforcement
+
+# Safety margin to account for tokenizer differences between tiktoken (cl100k_base)
+# and Claude's actual tokenizer. The two tokenizers can differ by ~10-15%, so we
+# apply a 90% safety margin to the configured token budget to avoid over-injection.
+TOKEN_SAFETY_MARGIN: float = 0.9
 
 
 @functools.lru_cache(maxsize=1)
@@ -63,6 +85,11 @@ def count_tokens(text: str) -> int:
     """
     tokenizer = _get_tokenizer()
     return len(tokenizer.encode(text, disallowed_special=()))
+
+
+# Computed header token count - keeps header_tokens default in sync with actual header.
+# This is computed once at module load time for efficiency.
+INJECTION_HEADER_TOKENS: int = count_tokens(INJECTION_HEADER)
 
 
 # =============================================================================
@@ -226,6 +253,13 @@ class InjectionLimitsConfig(BaseSettings):
     Controls hard caps on pattern injection to prevent context explosion.
     All limits are applied in order: domain caps → count caps → token caps.
 
+    Token Budget Safety Margin:
+        The actual token budget used during selection is reduced by
+        TOKEN_SAFETY_MARGIN (90%) to account for differences between tiktoken's
+        cl100k_base encoding and Claude's actual tokenizer, which can differ
+        by ~10-15%. For example, if max_tokens_injected=2000, the effective
+        budget used is 1800 tokens.
+
     Environment variables use the OMNICLAUDE_INJECTION_LIMITS_ prefix:
         OMNICLAUDE_INJECTION_LIMITS_MAX_PATTERNS_PER_INJECTION
         OMNICLAUDE_INJECTION_LIMITS_MAX_TOKENS_INJECTED
@@ -235,7 +269,8 @@ class InjectionLimitsConfig(BaseSettings):
 
     Attributes:
         max_patterns_per_injection: Maximum number of patterns to inject.
-        max_tokens_injected: Maximum tokens in rendered injection block.
+        max_tokens_injected: Maximum tokens in rendered injection block
+            (note: effective budget is reduced by TOKEN_SAFETY_MARGIN).
         max_per_domain: Maximum patterns from any single domain.
         selection_policy: Selection policy (currently only "prefer_fewer_high_confidence").
         usage_count_scale: Scale factor k for usage_count in effective score.
@@ -382,7 +417,7 @@ def select_patterns_for_injection(
     candidates: list[PatternRecord],
     limits: InjectionLimitsConfig,
     *,
-    header_tokens: int = 50,
+    header_tokens: int | None = None,
 ) -> list[PatternRecord]:
     """Select patterns for injection applying all limits.
 
@@ -392,7 +427,13 @@ def select_patterns_for_injection(
     3. Apply limits in order:
        a) max_per_domain - skip if domain quota exhausted
        b) max_patterns_per_injection - stop if count reached
-       c) max_tokens_injected - skip if would exceed budget
+       c) max_tokens_injected - skip if would exceed budget (with safety margin)
+
+    Token Budget Safety Margin:
+        The token budget check applies TOKEN_SAFETY_MARGIN (90%) to account for
+        differences between tiktoken's cl100k_base encoding and Claude's actual
+        tokenizer. This prevents over-injection when Claude counts more tokens
+        than tiktoken for the same content.
 
     Policy "prefer_fewer_high_confidence":
     - Early exit once limits approached
@@ -402,7 +443,9 @@ def select_patterns_for_injection(
     Args:
         candidates: List of candidate patterns to select from.
         limits: Injection limits configuration.
-        header_tokens: Estimated tokens for header/wrapper (default 50).
+        header_tokens: Token count for header/wrapper. Defaults to INJECTION_HEADER_TOKENS
+            which is computed from INJECTION_HEADER to stay in sync with the actual
+            header format used in handler_context_injection.py.
 
     Returns:
         Selected patterns in injection order (highest score first).
@@ -415,6 +458,12 @@ def select_patterns_for_injection(
     """
     if not candidates:
         return []
+
+    # Use computed header tokens if not explicitly provided
+    # This keeps the default in sync with INJECTION_HEADER constant
+    effective_header_tokens = (
+        header_tokens if header_tokens is not None else INJECTION_HEADER_TOKENS
+    )
 
     # Step 1: Score and normalize all candidates
     scored: list[ScoredPattern] = []
@@ -449,7 +498,10 @@ def select_patterns_for_injection(
     # Step 3: Apply limits with greedy selection
     selected: list[PatternRecord] = []
     domain_counts: dict[str, int] = {}
-    total_tokens = header_tokens  # Start with header overhead
+    total_tokens = effective_header_tokens  # Start with header overhead
+
+    # Apply safety margin to token budget to account for tokenizer differences
+    effective_token_budget = int(limits.max_tokens_injected * TOKEN_SAFETY_MARGIN)
 
     for scored_pattern in scored:
         # Check max_patterns_per_injection (hard stop)
@@ -474,11 +526,13 @@ def select_patterns_for_injection(
         # policy, we skip patterns that exceed budget and do NOT attempt to fit smaller
         # subsequent patterns. This is by design - we prefer fewer high-quality patterns
         # over maximizing token utilization with lower-scored alternatives.
+        # NOTE: Uses effective_token_budget (with safety margin) to account for
+        # tokenizer differences between tiktoken and Claude's actual tokenizer.
         new_total = total_tokens + scored_pattern.rendered_tokens
-        if new_total > limits.max_tokens_injected:
+        if new_total > effective_token_budget:
             logger.debug(
                 f"Skipping pattern {scored_pattern.pattern.pattern_id}: "
-                f"would exceed token budget ({new_total} > {limits.max_tokens_injected})"
+                f"would exceed token budget ({new_total} > {effective_token_budget})"
             )
             continue
 
@@ -518,6 +572,9 @@ __all__ = [
     "DOMAIN_ALIASES",
     "KNOWN_DOMAINS",
     "UNKNOWN_DOMAIN_PREFIX",
+    "TOKEN_SAFETY_MARGIN",
+    "INJECTION_HEADER",
+    "INJECTION_HEADER_TOKENS",
     # Internal (for testing)
     "ScoredPattern",
 ]
