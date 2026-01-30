@@ -30,7 +30,10 @@ from uuid import UUID, uuid4
 
 from omniclaude.hooks.context_config import ContextInjectionConfig
 from omniclaude.hooks.handler_event_emitter import emit_hook_event
-from omniclaude.hooks.injection_limits import select_patterns_for_injection
+from omniclaude.hooks.injection_limits import (
+    INJECTION_HEADER,
+    select_patterns_for_injection,
+)
 from omniclaude.hooks.schemas import ContextSource, ModelHookContextInjectedPayload
 
 if TYPE_CHECKING:
@@ -637,18 +640,21 @@ class HandlerContextInjection:
         patterns: list[ModelPatternRecord],
         max_patterns: int,
     ) -> str:
-        """Format patterns as markdown for context injection."""
+        """Format patterns as markdown for context injection.
+
+        Uses INJECTION_HEADER from injection_limits.py as the single source of
+        truth for the header format. This ensures token counting during pattern
+        selection matches the actual output format.
+        """
         if not patterns:
             return ""
 
         patterns_to_format = patterns[:max_patterns]
 
-        lines: list[str] = [
-            "## Learned Patterns (Auto-Injected)",
-            "",
-            "The following patterns have been learned from previous sessions:",
-            "",
-        ]
+        # Start with the header from injection_limits (single source of truth)
+        # INJECTION_HEADER ends with "\n\n", split gives [..., "", ""], but we need
+        # exactly one trailing "" for proper spacing before pattern content
+        lines: list[str] = INJECTION_HEADER.rstrip("\n").split("\n") + [""]
 
         for pattern in patterns_to_format:
             confidence_pct = f"{pattern.confidence * 100:.0f}%"

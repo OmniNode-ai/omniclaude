@@ -39,14 +39,16 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # =============================================================================
-# Header Constant (Sync with handler_context_injection.py)
+# Header Constant (Single Source of Truth)
 # =============================================================================
 
-# Header format for injection block - MUST stay in sync with _format_patterns_markdown()
-# in handler_context_injection.py. This is defined here to compute token overhead
-# for budget calculations during pattern selection.
+# Header format for injection block - SINGLE SOURCE OF TRUTH.
+# This constant is imported by handler_context_injection.py's _format_patterns_markdown()
+# to ensure the header format used for token counting matches the actual output.
 #
-# If you modify _format_patterns_markdown() header, update this constant too.
+# Used for:
+# 1. Token counting during pattern selection (INJECTION_HEADER_TOKENS)
+# 2. Actual markdown output formatting (via import in handler_context_injection.py)
 INJECTION_HEADER: str = (
     "## Learned Patterns (Auto-Injected)\n"
     "\n"
@@ -456,6 +458,20 @@ def select_patterns_for_injection(
         >>> len(selected) <= 3
         True
     """
+    # TODO(OMN-1671): Policy dispatch not yet implemented.
+    #
+    # Currently only "prefer_fewer_high_confidence" is implemented, and the behavior
+    # is hardcoded below. The limits.selection_policy field is validated on config
+    # construction (see InjectionLimitsConfig.validate_selection_policy) but not
+    # actually checked here.
+    #
+    # When adding new policies (e.g., "maximize_diversity", "fill_token_budget"):
+    # 1. Add the policy name to the allowed set in validate_selection_policy()
+    # 2. Add a policy dispatch here, e.g.:
+    #        if limits.selection_policy == "maximize_diversity":
+    #            return _select_maximize_diversity(candidates, limits, ...)
+    # 3. Extract current logic to _select_prefer_fewer_high_confidence()
+
     if not candidates:
         return []
 
