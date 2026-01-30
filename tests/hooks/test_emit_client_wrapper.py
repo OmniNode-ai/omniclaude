@@ -80,6 +80,7 @@ class TestModuleImport:
             "emit_event",
             "daemon_available",
             "get_status",
+            "reset_client",
             # Constants
             "SUPPORTED_EVENT_TYPES",
             "DEFAULT_SOCKET_PATH",
@@ -262,6 +263,73 @@ class TestThreadSafety:
         assert len(results) == 500
         for result in results:
             assert isinstance(result, bool)
+
+
+# =============================================================================
+# Reset Client Tests
+# =============================================================================
+
+
+class TestResetClient:
+    """Tests for reset_client function."""
+
+    def test_reset_client_is_callable(self) -> None:
+        """reset_client function exists and is callable."""
+        from plugins.onex.hooks.lib.emit_client_wrapper import reset_client
+
+        assert callable(reset_client)
+
+    def test_reset_client_returns_none(self) -> None:
+        """reset_client returns None."""
+        from plugins.onex.hooks.lib.emit_client_wrapper import reset_client
+
+        result = reset_client()
+        assert result is None
+
+    def test_reset_client_can_be_called_multiple_times(self) -> None:
+        """reset_client can be called repeatedly without error."""
+        from plugins.onex.hooks.lib.emit_client_wrapper import reset_client
+
+        # Call multiple times - should not raise
+        for _ in range(5):
+            reset_client()
+
+    def test_reset_client_clears_cached_client(self) -> None:
+        """reset_client clears the cached client state."""
+        from plugins.onex.hooks.lib import emit_client_wrapper
+
+        # First, trigger client initialization by calling get_status
+        emit_client_wrapper.get_status()
+
+        # Reset the client
+        emit_client_wrapper.reset_client()
+
+        # Verify internal state is cleared
+        # Access module-level variables directly for testing
+        assert emit_client_wrapper._emit_client is None
+        assert emit_client_wrapper._client_initialized is False
+
+    def test_reset_client_allows_reconnection(self) -> None:
+        """After reset_client, next emit attempts reconnection."""
+        from plugins.onex.hooks.lib import emit_client_wrapper
+
+        # Mock a successful emit
+        mock_client = MagicMock()
+        mock_client.emit_sync.return_value = "event-id-1"
+
+        with patch.object(emit_client_wrapper, "_get_client", return_value=mock_client):
+            result1 = emit_client_wrapper.emit_event(
+                event_type="session.started",
+                payload={"session_id": "test"},
+            )
+            assert result1 is True
+
+        # Reset the client
+        emit_client_wrapper.reset_client()
+
+        # Verify _get_client would be called again on next emit
+        # (internal state should be cleared)
+        assert emit_client_wrapper._client_initialized is False
 
 
 # =============================================================================
@@ -590,3 +658,163 @@ class TestMockedIntegration:
             result = emit_client_wrapper.daemon_available()
 
         assert result is False
+
+
+# =============================================================================
+# Error Classification Tests
+# =============================================================================
+
+
+class TestErrorClassification:
+    """Tests for error classification in emit_event."""
+
+    def test_connection_refused_logs_at_debug_level(self) -> None:
+        """ConnectionRefusedError logs at DEBUG level (expected error)."""
+
+        from plugins.onex.hooks.lib import emit_client_wrapper
+
+        mock_client = MagicMock()
+        mock_client.emit_sync.side_effect = ConnectionRefusedError("Connection refused")
+
+        with patch.object(emit_client_wrapper, "_get_client", return_value=mock_client):
+            with patch.object(emit_client_wrapper.logger, "debug") as mock_debug:
+                with patch.object(
+                    emit_client_wrapper.logger, "warning"
+                ) as mock_warning:
+                    result = emit_client_wrapper.emit_event(
+                        event_type="session.started",
+                        payload={"session_id": "test"},
+                    )
+
+        assert result is False
+        # Should log at DEBUG, not WARNING
+        mock_debug.assert_called()
+        # The warning mock should not be called for the connection error
+        assert not any(
+            "Connection refused" in str(call) for call in mock_warning.call_args_list
+        )
+
+    def test_file_not_found_logs_at_debug_level(self) -> None:
+        """FileNotFoundError logs at DEBUG level (expected error)."""
+        from plugins.onex.hooks.lib import emit_client_wrapper
+
+        mock_client = MagicMock()
+        mock_client.emit_sync.side_effect = FileNotFoundError("Socket not found")
+
+        with patch.object(emit_client_wrapper, "_get_client", return_value=mock_client):
+            with patch.object(emit_client_wrapper.logger, "debug") as mock_debug:
+                result = emit_client_wrapper.emit_event(
+                    event_type="session.started",
+                    payload={"session_id": "test"},
+                )
+
+        assert result is False
+        mock_debug.assert_called()
+
+    def test_broken_pipe_logs_at_debug_level(self) -> None:
+        """BrokenPipeError logs at DEBUG level (expected error)."""
+        from plugins.onex.hooks.lib import emit_client_wrapper
+
+        mock_client = MagicMock()
+        mock_client.emit_sync.side_effect = BrokenPipeError("Broken pipe")
+
+        with patch.object(emit_client_wrapper, "_get_client", return_value=mock_client):
+            with patch.object(emit_client_wrapper.logger, "debug") as mock_debug:
+                result = emit_client_wrapper.emit_event(
+                    event_type="session.started",
+                    payload={"session_id": "test"},
+                )
+
+        assert result is False
+        mock_debug.assert_called()
+
+    def test_type_error_logs_at_error_level(self) -> None:
+        """TypeError logs at ERROR level (indicates bug)."""
+        from plugins.onex.hooks.lib import emit_client_wrapper
+
+        mock_client = MagicMock()
+        mock_client.emit_sync.side_effect = TypeError("unhashable type")
+
+        with patch.object(emit_client_wrapper, "_get_client", return_value=mock_client):
+            with patch.object(emit_client_wrapper.logger, "error") as mock_error:
+                result = emit_client_wrapper.emit_event(
+                    event_type="session.started",
+                    payload={"session_id": "test"},
+                )
+
+        assert result is False
+        mock_error.assert_called()
+
+    def test_value_error_logs_at_error_level(self) -> None:
+        """ValueError logs at ERROR level (indicates bug)."""
+        from plugins.onex.hooks.lib import emit_client_wrapper
+
+        mock_client = MagicMock()
+        mock_client.emit_sync.side_effect = ValueError("invalid value")
+
+        with patch.object(emit_client_wrapper, "_get_client", return_value=mock_client):
+            with patch.object(emit_client_wrapper.logger, "error") as mock_error:
+                result = emit_client_wrapper.emit_event(
+                    event_type="session.started",
+                    payload={"session_id": "test"},
+                )
+
+        assert result is False
+        mock_error.assert_called()
+
+    def test_json_decode_error_logs_at_error_level(self) -> None:
+        """JSONDecodeError logs at ERROR level (indicates bug)."""
+        import json
+
+        from plugins.onex.hooks.lib import emit_client_wrapper
+
+        mock_client = MagicMock()
+        mock_client.emit_sync.side_effect = json.JSONDecodeError("msg", "doc", 0)
+
+        with patch.object(emit_client_wrapper, "_get_client", return_value=mock_client):
+            with patch.object(emit_client_wrapper.logger, "error") as mock_error:
+                result = emit_client_wrapper.emit_event(
+                    event_type="session.started",
+                    payload={"session_id": "test"},
+                )
+
+        assert result is False
+        mock_error.assert_called()
+
+    def test_unexpected_error_logs_at_warning_level(self) -> None:
+        """Unknown exceptions log at WARNING level."""
+        from plugins.onex.hooks.lib import emit_client_wrapper
+
+        mock_client = MagicMock()
+        mock_client.emit_sync.side_effect = RuntimeError("unexpected error")
+
+        with patch.object(emit_client_wrapper, "_get_client", return_value=mock_client):
+            with patch.object(emit_client_wrapper.logger, "warning") as mock_warning:
+                result = emit_client_wrapper.emit_event(
+                    event_type="session.started",
+                    payload={"session_id": "test"},
+                )
+
+        assert result is False
+        mock_warning.assert_called()
+
+    def test_client_unavailable_logs_at_debug_level(self) -> None:
+        """When client is None, logs at DEBUG level (expected during startup)."""
+        from plugins.onex.hooks.lib import emit_client_wrapper
+
+        with patch.object(emit_client_wrapper, "_get_client", return_value=None):
+            with patch.object(emit_client_wrapper.logger, "debug") as mock_debug:
+                with patch.object(
+                    emit_client_wrapper.logger, "warning"
+                ) as mock_warning:
+                    result = emit_client_wrapper.emit_event(
+                        event_type="session.started",
+                        payload={"session_id": "test"},
+                    )
+
+        assert result is False
+        # Should log at DEBUG, not WARNING
+        mock_debug.assert_called()
+        assert not any(
+            "not available" in str(call) for call in mock_warning.call_args_list
+        )

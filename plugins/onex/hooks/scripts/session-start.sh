@@ -64,8 +64,10 @@ EMIT_DAEMON_SOCKET="${OMNICLAUDE_EMIT_SOCKET:-/tmp/omniclaude-emit.sock}"
 #   1. Socket file exists (this check passes)
 #   2. But daemon hasn't called accept() yet (connection would fail)
 #
-# Mitigation: The 10ms sleep after socket appears (line ~118) allows the daemon
-# to complete its accept() initialization before we declare it "ready".
+# Mitigation: After socket appears, we retry this check multiple times with small
+# gaps (up to 5 attempts x 10ms = 50ms max). This adapts to system load rather than
+# using a fixed sleep, succeeding quickly on fast systems while allowing more time
+# on heavily-loaded systems.
 #
 # Design tradeoff: We prioritize speed over correctness here. A true protocol
 # ping would add ~5-10ms latency per check. Since real connection errors are
@@ -126,22 +128,28 @@ start_emit_daemon_if_needed() {
         ((wait_count++))
     done
 
-    # Brief delay after socket appears to allow daemon to complete accept() initialization.
-    # The socket file is created before the daemon calls accept(), so there's a small
-    # window where the socket exists but isn't ready for connections yet.
+    # Retry-based socket verification after file appears.
+    # The socket file is created before the daemon calls accept(), so there's a brief
+    # window where the socket exists but isn't ready for connections. Rather than a
+    # fixed sleep (which is fragile across different system loads), we use a retry
+    # loop that adapts: succeeding immediately on fast systems while giving more
+    # time on heavily-loaded systems. Worst-case adds ~50ms (5 retries x 10ms gap).
     if [[ -S "$EMIT_DAEMON_SOCKET" ]]; then
-        sleep 0.01
-    fi
+        local verify_attempt=0
+        local max_verify_attempts=5  # 5 attempts x 10ms gap = 50ms max additional wait
 
-    # Verify daemon is ready
-    if [[ -S "$EMIT_DAEMON_SOCKET" ]]; then
-        # Quick connectivity check
-        if check_socket_responsive "$EMIT_DAEMON_SOCKET" 0.1; then
-            log "Emit daemon ready"
-            return 0
-        else
-            log "WARNING: Daemon socket exists but not responsive"
-        fi
+        while [[ $verify_attempt -lt $max_verify_attempts ]]; do
+            if check_socket_responsive "$EMIT_DAEMON_SOCKET" 0.1; then
+                log "Emit daemon ready (verified on attempt $((verify_attempt + 1)))"
+                return 0
+            fi
+            ((verify_attempt++))
+            # Small gap between retries to allow daemon to complete accept() initialization
+            sleep 0.01
+        done
+
+        # All retries exhausted - socket exists but daemon not responsive
+        log "WARNING: Daemon socket exists but not responsive after $max_verify_attempts verification attempts"
     else
         log "WARNING: Emit daemon startup timed out after ${max_wait}x20ms, continuing without daemon"
     fi

@@ -138,6 +138,31 @@ def _get_client() -> EmitClient | None:
         return _emit_client
 
 
+def reset_client() -> None:
+    """Reset the cached EmitClient, forcing reconnection on next emit.
+
+    Use this function when:
+    - The daemon has been restarted and the cached connection may be stale
+    - You want to force re-reading of environment variables (socket path, timeout)
+    - Testing scenarios that require a fresh client state
+
+    This function is thread-safe.
+
+    Example:
+        >>> from emit_client_wrapper import emit_event, reset_client
+        >>>
+        >>> # Daemon was restarted, force reconnection
+        >>> reset_client()
+        >>> success = emit_event("session.started", {"session_id": "abc123"})
+    """
+    global _emit_client, _client_initialized
+
+    with _client_lock:
+        _emit_client = None
+        _client_initialized = False
+        logger.debug("EmitClient reset, will reconnect on next emit")
+
+
 # =============================================================================
 # Public API
 # =============================================================================
@@ -146,12 +171,12 @@ def _get_client() -> EmitClient | None:
 def emit_event(
     event_type: str,
     payload: dict[str, object],
-    timeout_ms: int = DEFAULT_TIMEOUT_MS,  # noqa: ARG001
+    timeout_ms: int = DEFAULT_TIMEOUT_MS,  # noqa: ARG001  # Deprecated: unused, kept for API compat
 ) -> bool:
     """Emit event to daemon. Returns True on success, False on failure.
 
     This function is designed to be non-blocking and will never raise exceptions.
-    Failures are logged as warnings.
+    Failures are logged at appropriate levels based on error type.
 
     Args:
         event_type: Semantic event type. Must be one of:
@@ -161,7 +186,7 @@ def emit_event(
             - "tool.executed"
         payload: Event payload dictionary. Required fields depend on event type
             (see daemon's EventRegistry for requirements).
-        timeout_ms: **Accepted for CLI compatibility but currently ignored.**
+        timeout_ms: **Deprecated: This parameter is accepted but ignored.**
             The actual client timeout is controlled by the OMNICLAUDE_EMIT_TIMEOUT
             environment variable (default: 5.0 seconds). Per-call timeout is not
             supported by the underlying socket protocol - the timeout applies to
@@ -185,6 +210,13 @@ def emit_event(
         To adjust timeout behavior, set OMNICLAUDE_EMIT_TIMEOUT before the first
         emit call (client is lazily initialized).
 
+    Note:
+        **Error Classification**: Errors are logged at different levels:
+
+        - DEBUG: Connection errors (daemon not running) - expected during startup
+        - ERROR: Serialization/type errors - indicates bugs in caller code
+        - WARNING: Other unexpected errors - unknown issues
+
     Example:
         >>> success = emit_event(
         ...     event_type="prompt.submitted",
@@ -203,7 +235,7 @@ def emit_event(
 
     client = _get_client()
     if client is None:
-        logger.warning("EmitClient not available, event dropped")
+        logger.debug("EmitClient not available, event dropped")
         return False
 
     try:
@@ -212,8 +244,19 @@ def emit_event(
         logger.debug(f"Event emitted: {event_id}")
         return True
 
+    except (ConnectionRefusedError, FileNotFoundError, BrokenPipeError) as e:
+        # Expected during startup or when daemon is not running
+        logger.debug(f"Event emission failed (daemon unavailable): {e}")
+        return False
+
+    except (json.JSONDecodeError, TypeError, ValueError) as e:
+        # Indicates bugs in caller code (bad payload structure)
+        logger.error(f"Event emission failed (serialization error): {e}")
+        return False
+
     except Exception as e:
-        logger.warning(f"Event emission failed: {e}")
+        # Unknown errors - log at WARNING for investigation
+        logger.warning(f"Event emission failed (unexpected): {e}")
         return False
 
 
@@ -417,6 +460,7 @@ __all__ = [
     "emit_event",
     "daemon_available",
     "get_status",
+    "reset_client",
     # Constants
     "SUPPORTED_EVENT_TYPES",
     "DEFAULT_SOCKET_PATH",
