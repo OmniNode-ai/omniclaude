@@ -179,20 +179,27 @@ fi
 # This is an INTERIM solution emitting raw JSON until ModelToolExecutionContent
 # is available in omnibase_core.
 #
+# Content Limits:
+#   - Max content capture: 50KB (head -c 50000) - safety bound for large files
+#   - Preview truncation: 2000 chars - sent to Kafka for pattern learning
+#   - Full content is hashed but NOT sent to avoid oversized messages
+#
 # Will be migrated to use proper Pydantic model in OMN-1703.
 # -----------------------------------------------------------------------
 if [[ "$KAFKA_ENABLED" == "true" ]] && [[ "$TOOL_NAME" =~ ^(Read|Write|Edit)$ ]]; then
     (
         # Extract file path for Read tool (not extracted earlier for non-Write/Edit tools)
+        # Note: This runs in a subshell, so FILE_PATH here won't affect outer scope
         if [[ "$TOOL_NAME" == "Read" ]]; then
             FILE_PATH=$(echo "$TOOL_INFO" | jq -r '.tool_input.file_path // .tool_response.filePath // empty' 2>/dev/null)
         fi
 
-        # Extract content from tool response
-        # For Read: content is in tool_response
+        # Extract content from tool response (max 50KB for safety)
+        # For Read: prefer .tool_response.content if structured, fallback to raw .tool_response
         # For Write/Edit: content is in tool_input
         if [[ "$TOOL_NAME" == "Read" ]]; then
-            CONTENT=$(echo "$TOOL_INFO" | jq -r '.tool_response // ""' 2>/dev/null | head -c 50000)
+            # Try structured content first, then fall back to raw response
+            CONTENT=$(echo "$TOOL_INFO" | jq -r '.tool_response.content // .tool_response // ""' 2>/dev/null | head -c 50000)
         else
             CONTENT=$(echo "$TOOL_INFO" | jq -r '.tool_input.content // .tool_input.new_string // ""' 2>/dev/null | head -c 50000)
         fi
