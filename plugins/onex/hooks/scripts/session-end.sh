@@ -39,7 +39,7 @@ source "${HOOKS_DIR}/scripts/common.sh"
 # Read stdin
 INPUT=$(cat)
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] SessionEnd hook triggered (plugin mode)" >> "$LOG_FILE"
+log "SessionEnd hook triggered (plugin mode)"
 
 # Extract session metadata
 SESSION_ID=$(echo "$INPUT" | jq -r '.sessionId // ""' 2>/dev/null || echo "")
@@ -53,10 +53,10 @@ case "$SESSION_REASON" in
 esac
 
 if [[ -n "$SESSION_ID" ]]; then
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Session ID: $SESSION_ID" >> "$LOG_FILE"
+    log "Session ID: $SESSION_ID"
 fi
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Duration: ${SESSION_DURATION}ms" >> "$LOG_FILE"
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Reason: $SESSION_REASON" >> "$LOG_FILE"
+log "Duration: ${SESSION_DURATION}ms"
+log "Reason: $SESSION_REASON"
 
 # Call session intelligence module (async, non-blocking)
 (
@@ -64,7 +64,7 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] Reason: $SESSION_REASON" >> "$LOG_FILE"
         --mode end \
         --session-id "${SESSION_ID}" \
         --metadata "{\"hook_duration_ms\": ${SESSION_DURATION}}" \
-        >> "$LOG_FILE" 2>&1 || { rc=$?; echo "[$(date '+%Y-%m-%d %H:%M:%S')] Session end logging failed (exit=$rc)" >> "$LOG_FILE"; }
+        >> "$LOG_FILE" 2>&1 || { rc=$?; log "Session end logging failed (exit=$rc)"; }
 ) &
 
 # Emit session.ended event to Kafka (async, non-blocking)
@@ -90,7 +90,7 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
 
         # Validate payload was constructed successfully
         if [[ -z "$SESSION_PAYLOAD" || "$SESSION_PAYLOAD" == "null" ]]; then
-            echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] WARNING: Failed to construct session payload (jq failed), skipping emission" >> "$LOG_FILE"
+            log "WARNING: Failed to construct session payload (jq failed), skipping emission"
         else
             emit_via_daemon "session.ended" "$SESSION_PAYLOAD" 100
         fi
@@ -111,7 +111,7 @@ get_registry().clear()
 " 2>/dev/null || true
 fi
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] SessionEnd hook completed" >> "$LOG_FILE"
+log "SessionEnd hook completed"
 
 # Output unchanged
 echo "$INPUT"

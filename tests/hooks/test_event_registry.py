@@ -757,3 +757,220 @@ class TestEventRegistryIntegration:
 
         for event_type, reg in EVENT_REGISTRY.items():
             assert len(reg.fan_out) >= 1, f"{event_type} has no fan-out rules"
+
+
+# =============================================================================
+# transform_for_observability() Edge Case Tests
+# =============================================================================
+
+
+class TestTransformForObservabilityEdgeCases:
+    """Tests for edge cases in transform_for_observability.
+
+    These tests specifically verify the non-string prompt handling code path
+    (lines 123-124 in event_registry.py):
+
+        if not isinstance(full_prompt, str):
+            full_prompt = str(full_prompt) if full_prompt is not None else ""
+
+    Each test verifies:
+    - No exception is raised
+    - `prompt_preview` is a string
+    - `prompt_length` reflects the converted string length
+    - Original `prompt` field is removed from output
+    """
+
+    def test_transform_handles_none_prompt(self) -> None:
+        """Transform handles None prompt gracefully."""
+        from omniclaude.hooks.event_registry import transform_for_observability
+
+        payload = {"prompt": None, "session_id": "test-123"}
+        result = transform_for_observability(payload)
+
+        # Verify no exception raised (implicit)
+        # Verify prompt field is removed
+        assert "prompt" not in result
+        # Verify prompt_preview is a string
+        assert isinstance(result["prompt_preview"], str)
+        assert result["prompt_preview"] == ""
+        # Verify prompt_length reflects empty string
+        assert result["prompt_length"] == 0
+        # Verify other fields preserved
+        assert result["session_id"] == "test-123"
+
+    def test_transform_handles_integer_prompt(self) -> None:
+        """Transform converts integer prompt to string."""
+        from omniclaude.hooks.event_registry import transform_for_observability
+
+        payload = {"prompt": 12345, "session_id": "test-123"}
+        result = transform_for_observability(payload)
+
+        # Verify no exception raised (implicit)
+        # Verify prompt field is removed
+        assert "prompt" not in result
+        # Verify prompt_preview is a string
+        assert isinstance(result["prompt_preview"], str)
+        assert result["prompt_preview"] == "12345"
+        # Verify prompt_length reflects converted string length
+        assert result["prompt_length"] == 5  # len("12345")
+        # Verify other fields preserved
+        assert result["session_id"] == "test-123"
+
+    def test_transform_handles_list_prompt(self) -> None:
+        """Transform converts list prompt to string."""
+        from omniclaude.hooks.event_registry import transform_for_observability
+
+        payload = {"prompt": ["item1", "item2", "item3"], "session_id": "test-123"}
+        result = transform_for_observability(payload)
+
+        # Verify no exception raised (implicit)
+        # Verify prompt field is removed
+        assert "prompt" not in result
+        # Verify prompt_preview is a string
+        assert isinstance(result["prompt_preview"], str)
+        # List string representation: "['item1', 'item2', 'item3']"
+        expected_str = str(["item1", "item2", "item3"])
+        assert result["prompt_preview"] == expected_str
+        # Verify prompt_length reflects converted string length
+        assert result["prompt_length"] == len(expected_str)
+        # Verify other fields preserved
+        assert result["session_id"] == "test-123"
+
+    def test_transform_handles_dict_prompt(self) -> None:
+        """Transform converts dict prompt to string."""
+        from omniclaude.hooks.event_registry import transform_for_observability
+
+        payload = {"prompt": {"key": "value", "num": 42}, "session_id": "test-123"}
+        result = transform_for_observability(payload)
+
+        # Verify no exception raised (implicit)
+        # Verify prompt field is removed
+        assert "prompt" not in result
+        # Verify prompt_preview is a string
+        assert isinstance(result["prompt_preview"], str)
+        # Dict string representation: "{'key': 'value', 'num': 42}"
+        expected_str = str({"key": "value", "num": 42})
+        assert result["prompt_preview"] == expected_str
+        # Verify prompt_length reflects converted string length
+        assert result["prompt_length"] == len(expected_str)
+        # Verify other fields preserved
+        assert result["session_id"] == "test-123"
+
+    def test_transform_handles_missing_prompt(self) -> None:
+        """Transform handles payload with no prompt field."""
+        from omniclaude.hooks.event_registry import transform_for_observability
+
+        payload = {"session_id": "test-123", "other_field": "value"}
+        result = transform_for_observability(payload)
+
+        # Verify no exception raised (implicit)
+        # Verify prompt field is not in result (was never there)
+        assert "prompt" not in result
+        # Verify prompt_preview is a string (defaults to empty)
+        assert isinstance(result["prompt_preview"], str)
+        assert result["prompt_preview"] == ""
+        # Verify prompt_length is 0 for missing prompt
+        assert result["prompt_length"] == 0
+        # Verify other fields preserved
+        assert result["session_id"] == "test-123"
+        assert result["other_field"] == "value"
+
+    def test_transform_handles_float_prompt(self) -> None:
+        """Transform converts float prompt to string."""
+        from omniclaude.hooks.event_registry import transform_for_observability
+
+        payload = {"prompt": 3.14159, "session_id": "test-123"}
+        result = transform_for_observability(payload)
+
+        # Verify no exception raised (implicit)
+        # Verify prompt field is removed
+        assert "prompt" not in result
+        # Verify prompt_preview is a string
+        assert isinstance(result["prompt_preview"], str)
+        expected_str = "3.14159"
+        assert result["prompt_preview"] == expected_str
+        # Verify prompt_length reflects converted string length
+        assert result["prompt_length"] == len(expected_str)
+
+    def test_transform_handles_boolean_prompt(self) -> None:
+        """Transform converts boolean prompt to string."""
+        from omniclaude.hooks.event_registry import transform_for_observability
+
+        payload = {"prompt": True, "session_id": "test-123"}
+        result = transform_for_observability(payload)
+
+        # Verify no exception raised (implicit)
+        # Verify prompt field is removed
+        assert "prompt" not in result
+        # Verify prompt_preview is a string
+        assert isinstance(result["prompt_preview"], str)
+        assert result["prompt_preview"] == "True"
+        # Verify prompt_length reflects converted string length
+        assert result["prompt_length"] == 4  # len("True")
+
+    def test_transform_handles_nested_structure_prompt(self) -> None:
+        """Transform converts nested structure prompt to string."""
+        from omniclaude.hooks.event_registry import transform_for_observability
+
+        nested = {"outer": {"inner": [1, 2, 3]}, "list": ["a", "b"]}
+        payload = {"prompt": nested, "session_id": "test-123"}
+        result = transform_for_observability(payload)
+
+        # Verify no exception raised (implicit)
+        # Verify prompt field is removed
+        assert "prompt" not in result
+        # Verify prompt_preview is a string
+        assert isinstance(result["prompt_preview"], str)
+        expected_str = str(nested)
+        assert result["prompt_preview"] == expected_str
+        # Verify prompt_length reflects converted string length
+        assert result["prompt_length"] == len(expected_str)
+
+    def test_transform_handles_zero_prompt(self) -> None:
+        """Transform converts zero (falsy but valid) prompt to string."""
+        from omniclaude.hooks.event_registry import transform_for_observability
+
+        payload = {"prompt": 0, "session_id": "test-123"}
+        result = transform_for_observability(payload)
+
+        # Verify no exception raised (implicit)
+        # Verify prompt field is removed
+        assert "prompt" not in result
+        # Verify prompt_preview is a string
+        assert isinstance(result["prompt_preview"], str)
+        # Zero should become "0", not empty string
+        assert result["prompt_preview"] == "0"
+        # Verify prompt_length reflects converted string length
+        assert result["prompt_length"] == 1  # len("0")
+
+    def test_transform_handles_empty_list_prompt(self) -> None:
+        """Transform converts empty list prompt to string."""
+        from omniclaude.hooks.event_registry import transform_for_observability
+
+        payload = {"prompt": [], "session_id": "test-123"}
+        result = transform_for_observability(payload)
+
+        # Verify no exception raised (implicit)
+        # Verify prompt field is removed
+        assert "prompt" not in result
+        # Verify prompt_preview is a string
+        assert isinstance(result["prompt_preview"], str)
+        assert result["prompt_preview"] == "[]"
+        # Verify prompt_length reflects converted string length
+        assert result["prompt_length"] == 2  # len("[]")
+
+    def test_transform_handles_empty_dict_prompt(self) -> None:
+        """Transform converts empty dict prompt to string."""
+        from omniclaude.hooks.event_registry import transform_for_observability
+
+        payload = {"prompt": {}, "session_id": "test-123"}
+        result = transform_for_observability(payload)
+
+        # Verify no exception raised (implicit)
+        # Verify prompt field is removed
+        assert "prompt" not in result
+        # Verify prompt_preview is a string
+        assert isinstance(result["prompt_preview"], str)
+        assert result["prompt_preview"] == "{}"
+        # Verify prompt_length reflects converted string length
+        assert result["prompt_length"] == 2  # len("{}")

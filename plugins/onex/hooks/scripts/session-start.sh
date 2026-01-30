@@ -51,19 +51,19 @@ fi
 
 # Socket path can be overridden via OMNICLAUDE_EMIT_SOCKET environment variable
 # This enables testing with alternative socket paths and matches emit_client_wrapper.py
+# Note: Not exported because emit_client_wrapper.py reads OMNICLAUDE_EMIT_SOCKET directly
 EMIT_DAEMON_SOCKET="${OMNICLAUDE_EMIT_SOCKET:-/tmp/omniclaude-emit.sock}"
-export EMIT_DAEMON_SOCKET
-
-EMIT_DAEMON_AVAILABLE="false"
-export EMIT_DAEMON_AVAILABLE
 
 # Check if socket exists and is writable (indicates daemon is available)
 # This is simpler and more robust than sending protocol messages.
 # The actual emission will handle real protocol errors.
 check_socket_responsive() {
     local socket_path="$1"
+    # Parameter kept for API stability - callers pass timeout value but current
+    # implementation uses simple file existence check. May be used for socket
+    # connectivity timeout in future protocol-based checks.
     # shellcheck disable=SC2034
-    local timeout_sec="${2:-0.1}"  # Kept for API compatibility, not used
+    local timeout_sec="${2:-0.1}"
 
     # Check socket exists (-S) and is writable (-w)
     [[ -S "$socket_path" ]] && [[ -w "$socket_path" ]]
@@ -75,8 +75,6 @@ start_emit_daemon_if_needed() {
         # Verify daemon is responsive with quick ping
         if check_socket_responsive "$EMIT_DAEMON_SOCKET" 0.1; then
             log "Emit daemon already running and responsive"
-            EMIT_DAEMON_AVAILABLE="true"
-            export EMIT_DAEMON_AVAILABLE
             return 0
         else
             # Socket exists but daemon not responsive - remove stale socket
@@ -92,6 +90,9 @@ start_emit_daemon_if_needed() {
     fi
 
     log "Starting emit daemon..."
+
+    # Ensure logs directory exists for daemon output
+    mkdir -p "${HOOKS_DIR}/logs"
 
     # Start daemon in background, detached from this process
     # Redirect output to log file for debugging
@@ -115,14 +116,12 @@ start_emit_daemon_if_needed() {
         # Quick connectivity check
         if check_socket_responsive "$EMIT_DAEMON_SOCKET" 0.1; then
             log "Emit daemon ready"
-            EMIT_DAEMON_AVAILABLE="true"
-            export EMIT_DAEMON_AVAILABLE
             return 0
         else
             log "WARNING: Daemon socket exists but not responsive"
         fi
     else
-        log "WARNING: Daemon socket not created within timeout"
+        log "WARNING: Emit daemon startup timed out after ${max_wait}x20ms, continuing without daemon"
     fi
 
     # Daemon failed to start properly - continue without it

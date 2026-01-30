@@ -76,8 +76,12 @@ logger = logging.getLogger(__name__)
 # NOTE: /tmp is standard for Unix domain sockets - not a security issue
 DEFAULT_SOCKET_PATH = Path("/tmp/omniclaude-emit.sock")  # noqa: S108
 
-# Default timeout for emit operations (milliseconds)
+# Default timeout for emit operations (milliseconds) - used by CLI interface
 DEFAULT_TIMEOUT_MS = 50
+
+# Default client timeout (seconds) - controls EmitClient socket timeout
+# Can be overridden via OMNICLAUDE_EMIT_TIMEOUT environment variable
+DEFAULT_CLIENT_TIMEOUT_SECONDS = 5.0
 
 # Supported event types (must match daemon's EventRegistry)
 SUPPORTED_EVENT_TYPES = frozenset(
@@ -116,8 +120,15 @@ def _get_client() -> EmitClient | None:
             socket_path = os.environ.get(
                 "OMNICLAUDE_EMIT_SOCKET", str(DEFAULT_SOCKET_PATH)
             )
-            _emit_client = EmitClient(socket_path=socket_path, timeout=5.0)
-            logger.debug("EmitClient initialized successfully")
+            timeout_seconds = float(
+                os.environ.get(
+                    "OMNICLAUDE_EMIT_TIMEOUT", str(DEFAULT_CLIENT_TIMEOUT_SECONDS)
+                )
+            )
+            _emit_client = EmitClient(socket_path=socket_path, timeout=timeout_seconds)
+            logger.debug(
+                f"EmitClient initialized (socket={socket_path}, timeout={timeout_seconds}s)"
+            )
 
         except Exception as e:
             logger.warning(f"EmitClient initialization failed: {e}")
@@ -150,19 +161,29 @@ def emit_event(
             - "tool.executed"
         payload: Event payload dictionary. Required fields depend on event type
             (see daemon's EventRegistry for requirements).
-        timeout_ms: Reserved for future use. Currently ignored - the client uses
-            a fixed 5-second timeout configured at initialization. This parameter
-            is retained for CLI interface compatibility with shell scripts.
+        timeout_ms: **Accepted for CLI compatibility but currently ignored.**
+            The actual client timeout is controlled by the OMNICLAUDE_EMIT_TIMEOUT
+            environment variable (default: 5.0 seconds). Per-call timeout is not
+            supported by the underlying socket protocol - the timeout applies to
+            the entire client connection, not individual emit calls. This parameter
+            exists solely to maintain a consistent CLI interface for shell scripts
+            that may pass ``--timeout``.
 
     Returns:
         True if the event was successfully queued by the daemon.
         False if the emission failed (daemon unavailable, validation error, etc.).
 
     Note:
-        The underlying EmitClient uses a fixed timeout (5 seconds) set at
-        initialization. Per-call timeout configuration is not currently supported
-        by the client protocol. This parameter exists to maintain a consistent
-        CLI interface for shell scripts that may pass --timeout.
+        **Timeout Architecture**: The EmitClient uses a single socket connection
+        with a timeout set at initialization (via OMNICLAUDE_EMIT_TIMEOUT env var,
+        default 5.0s). The protocol does not support per-call timeouts because:
+
+        1. Socket operations are atomic - timeout applies to the connection
+        2. The daemon processes events asynchronously after acknowledgment
+        3. Per-call timeout would require reconnection overhead
+
+        To adjust timeout behavior, set OMNICLAUDE_EMIT_TIMEOUT before the first
+        emit call (client is lazily initialized).
 
     Example:
         >>> success = emit_event(
@@ -343,7 +364,11 @@ def main(argv: list[str] | None = None) -> int:
         "-t",
         type=int,
         default=DEFAULT_TIMEOUT_MS,
-        help=f"Timeout in milliseconds (default: {DEFAULT_TIMEOUT_MS})",
+        help=(
+            f"Timeout in milliseconds (default: {DEFAULT_TIMEOUT_MS}). "
+            "Note: Currently ignored - client timeout is controlled by "
+            "OMNICLAUDE_EMIT_TIMEOUT env var"
+        ),
     )
     emit_parser.set_defaults(func=_cli_emit)
 
@@ -396,6 +421,7 @@ __all__ = [
     "SUPPORTED_EVENT_TYPES",
     "DEFAULT_SOCKET_PATH",
     "DEFAULT_TIMEOUT_MS",
+    "DEFAULT_CLIENT_TIMEOUT_SECONDS",
     # CLI
     "main",
 ]
