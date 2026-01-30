@@ -35,23 +35,6 @@ source "${HOOKS_DIR}/scripts/common.sh"
 
 export PYTHONPATH="${PROJECT_ROOT}:${PLUGIN_ROOT}/lib:${HOOKS_LIB}:${PYTHONPATH:-}"
 
-# Emit via daemon helper (fast path using emit_client_wrapper)
-# Falls back to shell if Python client unavailable
-emit_via_daemon() {
-    local event_type="$1"
-    local payload="$2"
-    local timeout_ms="${3:-50}"
-
-    $PYTHON_CMD "${HOOKS_LIB}/emit_client_wrapper.py" emit \
-        --event-type "$event_type" \
-        --payload "$payload" \
-        --timeout "$timeout_ms" \
-        >> "$LOG_FILE" 2>&1 || {
-            echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Emit daemon failed for ${event_type} (non-fatal)" >> "$LOG_FILE"
-            return 1
-        }
-}
-
 # Get tool info from stdin
 TOOL_INFO=$(cat)
 

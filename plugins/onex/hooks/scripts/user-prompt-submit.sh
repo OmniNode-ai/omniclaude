@@ -59,23 +59,6 @@ run_with_timeout() {
     perl -e 'alarm shift; exec @ARGV' "$timeout_sec" "$@"
 }
 
-# Emit event via emit daemon (OMN-1631)
-# Single call - daemon handles fan-out to multiple topics
-emit_via_daemon() {
-    local event_type="$1"
-    local payload="$2"
-    local timeout_ms="${3:-50}"
-
-    $PYTHON_CMD "${HOOKS_LIB}/emit_client_wrapper.py" emit \
-        --event-type "$event_type" \
-        --payload "$payload" \
-        --timeout "$timeout_ms" \
-        >> "$LOG_FILE" 2>&1 || {
-            log "Emit daemon failed for ${event_type} (non-fatal)"
-            return 1
-        }
-}
-
 # Create tmp directory
 mkdir -p "$PROJECT_ROOT/tmp"
 

@@ -521,7 +521,7 @@ def _cli_emit(args: argparse.Namespace) -> int:
         return 1
 
 
-def _cli_ping(args: argparse.Namespace) -> int:
+def _cli_ping(_args: argparse.Namespace) -> int:
     """CLI handler for ping command."""
     if daemon_available():
         print("Daemon is available")

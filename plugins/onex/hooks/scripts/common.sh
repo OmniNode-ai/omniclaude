@@ -96,3 +96,32 @@ if [[ -n "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
     export KAFKA_BROKERS="${KAFKA_BROKERS:-${KAFKA_BOOTSTRAP_SERVERS:-}}"
 fi
 export KAFKA_ENABLED
+
+# =============================================================================
+# Emit Daemon Helper (OMN-1631, OMN-1632)
+# =============================================================================
+# Emit event via emit daemon for fast, non-blocking Kafka emission.
+# Single call - daemon handles fan-out to multiple topics.
+#
+# Requires (must be set before calling):
+#   - PYTHON_CMD: Path to Python interpreter (provided by common.sh)
+#   - HOOKS_LIB: Path to hooks lib directory (set by caller script)
+#   - LOG_FILE: Path to log file (set by caller script)
+#
+# Usage: emit_via_daemon <event_type> <payload_json> [timeout_ms]
+# Returns: 0 on success, 1 on failure (non-fatal)
+
+emit_via_daemon() {
+    local event_type="$1"
+    local payload="$2"
+    local timeout_ms="${3:-50}"
+
+    $PYTHON_CMD "${HOOKS_LIB}/emit_client_wrapper.py" emit \
+        --event-type "$event_type" \
+        --payload "$payload" \
+        --timeout "$timeout_ms" \
+        >> "$LOG_FILE" 2>&1 || {
+            echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Emit daemon failed for ${event_type} (non-fatal)" >> "$LOG_FILE"
+            return 1
+        }
+}
