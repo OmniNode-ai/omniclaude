@@ -44,6 +44,8 @@ from __future__ import annotations
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from omniclaude.hooks.injection_limits import InjectionLimitsConfig
+
 
 class ContextInjectionConfig(BaseSettings):
     """Configuration for context injection.
@@ -143,6 +145,12 @@ class ContextInjectionConfig(BaseSettings):
     file_fallback_enabled: bool = Field(
         default=False,
         description="Fall back to file if database unavailable",
+    )
+
+    # Injection limits configuration (OMN-1671)
+    limits: InjectionLimitsConfig = Field(
+        default_factory=InjectionLimitsConfig,
+        description="Injection limits to prevent context explosion",
     )
 
     def get_db_dsn(self) -> str:

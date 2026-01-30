@@ -30,6 +30,7 @@ from uuid import UUID, uuid4
 
 from omniclaude.hooks.context_config import ContextInjectionConfig
 from omniclaude.hooks.handler_event_emitter import emit_hook_event
+from omniclaude.hooks.injection_limits import select_patterns_for_injection
 from omniclaude.hooks.schemas import ContextSource, ModelHookContextInjectedPayload
 
 if TYPE_CHECKING:
@@ -320,23 +321,27 @@ class HandlerContextInjection:
                 retrieval_ms=retrieval_ms,
             )
 
-        # Step 2: Filter by domain
+        # Step 2: Filter by domain (pre-filter before selection)
         if agent_domain:
             patterns = [
                 p for p in patterns if p.domain == agent_domain or p.domain == "general"
             ]
 
-        # Step 3: Filter by confidence threshold
+        # Step 3: Filter by confidence threshold (pre-filter)
         patterns = [p for p in patterns if p.confidence >= cfg.min_confidence]
 
-        # Step 4: Sort by confidence descending
-        patterns = sorted(patterns, key=lambda p: p.confidence, reverse=True)
-
-        # Step 5: Limit to max patterns
-        patterns = patterns[: cfg.max_patterns]
+        # Step 4-5: Apply injection limits with new selector (OMN-1671)
+        # This replaces simple sort/limit with:
+        # - Effective score ranking (confidence * success_rate * usage_factor)
+        # - Domain caps (max_per_domain)
+        # - Token budget (max_tokens_injected)
+        # - Deterministic ordering
+        patterns = select_patterns_for_injection(patterns, cfg.limits)
 
         # Step 6: Format as markdown
-        context_markdown = self._format_patterns_markdown(patterns, cfg.max_patterns)
+        context_markdown = self._format_patterns_markdown(
+            patterns, cfg.limits.max_patterns_per_injection
+        )
         context_size_bytes = len(context_markdown.encode("utf-8"))
 
         # Step 7: Emit event

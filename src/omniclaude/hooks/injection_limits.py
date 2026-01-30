@@ -1,0 +1,470 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 OmniNode Team
+"""Injection limits configuration and pattern selection algorithm.
+
+This module implements OMN-1671 (INJECT-002): configurable injection limits
+to prevent context explosion from over-injection.
+
+The selection algorithm is deterministic and constraint-first:
+1. Normalize candidates (domain normalization, effective score computation)
+2. Apply hard caps in order: max_per_domain → max_patterns → max_tokens
+3. Policy: "prefer_fewer_high_confidence" (early exit, no swap-in)
+4. Deterministic tie-breaking: effective_score DESC → confidence DESC → pattern_id ASC
+
+Part of the Manifest Injection Enhancement Plan.
+"""
+
+from __future__ import annotations
+
+import logging
+import math
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+import tiktoken
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+if TYPE_CHECKING:
+    from omniclaude.hooks.handler_context_injection import PatternRecord
+
+logger = logging.getLogger(__name__)
+
+# =============================================================================
+# Token Counting
+# =============================================================================
+
+# Use cl100k_base for deterministic token counting across models
+# This is close enough to Claude's tokenization for budget enforcement
+_TOKENIZER: tiktoken.Encoding | None = None
+
+
+def _get_tokenizer() -> tiktoken.Encoding:
+    """Get or create the tokenizer (lazy singleton)."""
+    global _TOKENIZER
+    if _TOKENIZER is None:
+        _TOKENIZER = tiktoken.get_encoding("cl100k_base")
+    return _TOKENIZER
+
+
+def count_tokens(text: str) -> int:
+    """Count tokens in text using cl100k_base encoding.
+
+    Args:
+        text: The text to tokenize.
+
+    Returns:
+        Number of tokens in the text.
+    """
+    tokenizer = _get_tokenizer()
+    return len(tokenizer.encode(text, disallowed_special=()))
+
+
+# =============================================================================
+# Domain Normalization
+# =============================================================================
+
+# Known domain taxonomy for normalization
+# Maps common aliases to canonical domain names
+DOMAIN_ALIASES: dict[str, str] = {
+    # Programming languages
+    "py": "python",
+    "python3": "python",
+    "js": "javascript",
+    "ts": "typescript",
+    "typescript": "typescript",
+    "rs": "rust",
+    "go": "golang",
+    "golang": "golang",
+    "rb": "ruby",
+    "java": "java",
+    "kotlin": "kotlin",
+    "kt": "kotlin",
+    "swift": "swift",
+    "cpp": "cpp",
+    "c++": "cpp",
+    "cxx": "cpp",
+    "c": "c",
+    # Domains
+    "testing": "testing",
+    "test": "testing",
+    "tests": "testing",
+    "review": "code_review",
+    "code_review": "code_review",
+    "codereview": "code_review",
+    "debug": "debugging",
+    "debugging": "debugging",
+    "docs": "documentation",
+    "documentation": "documentation",
+    "infra": "infrastructure",
+    "infrastructure": "infrastructure",
+    "devops": "infrastructure",
+    "security": "security",
+    "sec": "security",
+    "perf": "performance",
+    "performance": "performance",
+    "optimization": "performance",
+    # General catch-all
+    "general": "general",
+    "all": "general",
+}
+
+# Set of known canonical domains for validation
+KNOWN_DOMAINS: set[str] = set(DOMAIN_ALIASES.values())
+
+
+def normalize_domain(raw: str) -> str:
+    """Normalize domain string through known taxonomy.
+
+    Applies case-insensitive matching and alias resolution.
+    Unknown domains are prefixed with "unknown/" to group them.
+
+    Args:
+        raw: Raw domain string from pattern.
+
+    Returns:
+        Normalized domain string.
+
+    Examples:
+        >>> normalize_domain("py")
+        'python'
+        >>> normalize_domain("Python")
+        'python'
+        >>> normalize_domain("custom_domain")
+        'unknown/custom_domain'
+    """
+    lower = raw.lower().strip()
+
+    # Check direct alias mapping
+    if lower in DOMAIN_ALIASES:
+        return DOMAIN_ALIASES[lower]
+
+    # Check if already a known canonical domain
+    if lower in KNOWN_DOMAINS:
+        return lower
+
+    # Unknown domain - prefix for grouping
+    return f"unknown/{raw}"
+
+
+# =============================================================================
+# Effective Score Calculation
+# =============================================================================
+
+
+def compute_effective_score(
+    confidence: float,
+    success_rate: float,
+    usage_count: int,
+    usage_count_scale: float = 5.0,
+) -> float:
+    """Compute effective score for pattern ranking.
+
+    Formula: confidence * clamp(success_rate, 0..1) * f(usage_count)
+    where f(usage_count) = min(1.0, log1p(usage_count) / k)
+
+    This provides a composite score that considers:
+    - confidence: How certain we are about the pattern
+    - success_rate: Historical success when applied
+    - usage_count: Experience/maturity (bounded to prevent runaway)
+
+    Args:
+        confidence: Pattern confidence (0.0 to 1.0).
+        success_rate: Historical success rate (0.0 to 1.0).
+        usage_count: Number of times pattern was used.
+        usage_count_scale: Scale factor k for usage_count normalization.
+            Higher values = usage_count matters less. Default 5.0.
+
+    Returns:
+        Effective score (0.0 to 1.0).
+
+    Examples:
+        >>> compute_effective_score(0.9, 0.8, 10)  # High confidence, good success
+        0.648  # approximately
+        >>> compute_effective_score(0.5, 0.5, 0)  # Low everything
+        0.0  # log1p(0) = 0
+    """
+    # Clamp inputs to valid ranges
+    conf = max(0.0, min(1.0, confidence))
+    succ = max(0.0, min(1.0, success_rate))
+    count = max(0, usage_count)
+
+    # Usage factor: bounded monotonic function of usage_count
+    # log1p(0) = 0, log1p(e^k - 1) = k, so this ranges from 0 to ~1
+    # For k=5: usage_count needs to be ~147 to reach factor of 1.0
+    usage_factor = min(1.0, math.log1p(count) / usage_count_scale)
+
+    return conf * succ * usage_factor
+
+
+# =============================================================================
+# Configuration
+# =============================================================================
+
+
+class InjectionLimitsConfig(BaseSettings):
+    """Configuration for injection limits.
+
+    Controls hard caps on pattern injection to prevent context explosion.
+    All limits are applied in order: domain caps → count caps → token caps.
+
+    Environment variables use the OMNICLAUDE_INJECTION_LIMITS_ prefix:
+        OMNICLAUDE_INJECTION_LIMITS_MAX_PATTERNS_PER_INJECTION
+        OMNICLAUDE_INJECTION_LIMITS_MAX_TOKENS_INJECTED
+        OMNICLAUDE_INJECTION_LIMITS_MAX_PER_DOMAIN
+        OMNICLAUDE_INJECTION_LIMITS_SELECTION_POLICY
+        OMNICLAUDE_INJECTION_LIMITS_USAGE_COUNT_SCALE
+
+    Attributes:
+        max_patterns_per_injection: Maximum number of patterns to inject.
+        max_tokens_injected: Maximum tokens in rendered injection block.
+        max_per_domain: Maximum patterns from any single domain.
+        selection_policy: Selection policy (currently only "prefer_fewer_high_confidence").
+        usage_count_scale: Scale factor k for usage_count in effective score.
+    """
+
+    model_config = SettingsConfigDict(
+        env_prefix="OMNICLAUDE_INJECTION_LIMITS_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    max_patterns_per_injection: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Maximum number of patterns to inject per session",
+    )
+
+    max_tokens_injected: int = Field(
+        default=2000,
+        ge=100,
+        le=10000,
+        description="Maximum tokens in rendered injection block (content + wrapper)",
+    )
+
+    max_per_domain: int = Field(
+        default=2,
+        ge=1,
+        le=10,
+        description="Maximum patterns from any single domain",
+    )
+
+    selection_policy: str = Field(
+        default="prefer_fewer_high_confidence",
+        description="Selection policy: prefer_fewer_high_confidence",
+    )
+
+    usage_count_scale: float = Field(
+        default=5.0,
+        ge=1.0,
+        le=20.0,
+        description="Scale factor k for usage_count in effective score formula",
+    )
+
+    @classmethod
+    def from_env(cls) -> InjectionLimitsConfig:
+        """Load configuration from environment variables."""
+        return cls()
+
+
+# =============================================================================
+# Pattern Selection
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class ScoredPattern:
+    """Pattern with computed scores for selection.
+
+    Internal data structure used during selection. Immutable.
+
+    Attributes:
+        pattern: Original pattern record.
+        effective_score: Computed composite score.
+        normalized_domain: Domain after normalization.
+        rendered_tokens: Token count of rendered pattern block.
+    """
+
+    pattern: PatternRecord
+    effective_score: float
+    normalized_domain: str
+    rendered_tokens: int
+
+
+def render_single_pattern(pattern: PatternRecord) -> str:
+    """Render a single pattern as markdown block.
+
+    This is used for token counting during selection.
+    The format must match _format_patterns_markdown in handler.
+
+    Args:
+        pattern: Pattern to render.
+
+    Returns:
+        Markdown string for the pattern.
+    """
+    confidence_pct = f"{pattern.confidence * 100:.0f}%"
+    success_pct = f"{pattern.success_rate * 100:.0f}%"
+
+    lines = [
+        f"### {pattern.title}",
+        "",
+        f"- **Domain**: {pattern.domain}",
+        f"- **Confidence**: {confidence_pct}",
+        f"- **Success Rate**: {success_pct} ({pattern.usage_count} uses)",
+        "",
+        pattern.description,
+        "",
+    ]
+
+    if pattern.example_reference:
+        lines.append(f"*Example: `{pattern.example_reference}`*")
+        lines.append("")
+
+    lines.append("---")
+    lines.append("")
+
+    return "\n".join(lines)
+
+
+def select_patterns_for_injection(
+    candidates: list[PatternRecord],
+    limits: InjectionLimitsConfig,
+    *,
+    header_tokens: int = 50,
+) -> list[PatternRecord]:
+    """Select patterns for injection applying all limits.
+
+    Algorithm (deterministic, constraint-first):
+    1. Compute effective_score and normalized_domain for each candidate
+    2. Sort by: effective_score DESC, confidence DESC, pattern_id ASC
+    3. Apply limits in order:
+       a) max_per_domain - skip if domain quota exhausted
+       b) max_patterns_per_injection - stop if count reached
+       c) max_tokens_injected - skip if would exceed budget
+
+    Policy "prefer_fewer_high_confidence":
+    - Early exit once limits approached
+    - Never swap in lower-scoring patterns to fill quota
+    - Prefer leaving budget unused vs injecting low-signal patterns
+
+    Args:
+        candidates: List of candidate patterns to select from.
+        limits: Injection limits configuration.
+        header_tokens: Estimated tokens for header/wrapper (default 50).
+
+    Returns:
+        Selected patterns in injection order (highest score first).
+
+    Examples:
+        >>> limits = InjectionLimitsConfig(max_patterns_per_injection=3)
+        >>> selected = select_patterns_for_injection(patterns, limits)
+        >>> len(selected) <= 3
+        True
+    """
+    if not candidates:
+        return []
+
+    # Step 1: Score and normalize all candidates
+    scored: list[ScoredPattern] = []
+    for pattern in candidates:
+        effective_score = compute_effective_score(
+            confidence=pattern.confidence,
+            success_rate=pattern.success_rate,
+            usage_count=pattern.usage_count,
+            usage_count_scale=limits.usage_count_scale,
+        )
+        normalized_domain = normalize_domain(pattern.domain)
+        rendered = render_single_pattern(pattern)
+        rendered_tokens = count_tokens(rendered)
+
+        scored.append(
+            ScoredPattern(
+                pattern=pattern,
+                effective_score=effective_score,
+                normalized_domain=normalized_domain,
+                rendered_tokens=rendered_tokens,
+            )
+        )
+
+    # Step 2: Deterministic sort
+    # Primary: effective_score DESC
+    # Secondary: confidence DESC
+    # Tertiary: pattern_id ASC (stable tie-breaker)
+    scored.sort(
+        key=lambda s: (-s.effective_score, -s.pattern.confidence, s.pattern.pattern_id)
+    )
+
+    # Step 3: Apply limits with greedy selection
+    selected: list[PatternRecord] = []
+    domain_counts: dict[str, int] = {}
+    total_tokens = header_tokens  # Start with header overhead
+
+    for scored_pattern in scored:
+        # Check max_patterns_per_injection (hard stop)
+        if len(selected) >= limits.max_patterns_per_injection:
+            logger.debug(
+                f"Selection stopped: max_patterns ({limits.max_patterns_per_injection}) reached"
+            )
+            break
+
+        # Check max_per_domain (skip this pattern)
+        domain = scored_pattern.normalized_domain
+        current_domain_count = domain_counts.get(domain, 0)
+        if current_domain_count >= limits.max_per_domain:
+            logger.debug(
+                f"Skipping pattern {scored_pattern.pattern.pattern_id}: "
+                f"domain '{domain}' at cap ({limits.max_per_domain})"
+            )
+            continue
+
+        # Check max_tokens_injected (skip this pattern)
+        new_total = total_tokens + scored_pattern.rendered_tokens
+        if new_total > limits.max_tokens_injected:
+            logger.debug(
+                f"Skipping pattern {scored_pattern.pattern.pattern_id}: "
+                f"would exceed token budget ({new_total} > {limits.max_tokens_injected})"
+            )
+            continue
+
+        # Pattern passes all checks - select it
+        selected.append(scored_pattern.pattern)
+        domain_counts[domain] = current_domain_count + 1
+        total_tokens = new_total
+
+        logger.debug(
+            f"Selected pattern {scored_pattern.pattern.pattern_id}: "
+            f"score={scored_pattern.effective_score:.3f}, "
+            f"domain={domain}, tokens={scored_pattern.rendered_tokens}"
+        )
+
+    logger.info(
+        f"Pattern selection complete: {len(selected)}/{len(candidates)} patterns, "
+        f"{total_tokens} tokens"
+    )
+
+    return selected
+
+
+# =============================================================================
+# Exports
+# =============================================================================
+
+__all__ = [
+    # Configuration
+    "InjectionLimitsConfig",
+    # Functions
+    "select_patterns_for_injection",
+    "compute_effective_score",
+    "normalize_domain",
+    "count_tokens",
+    "render_single_pattern",
+    # Constants
+    "DOMAIN_ALIASES",
+    "KNOWN_DOMAINS",
+    # Internal (for testing)
+    "ScoredPattern",
+]
