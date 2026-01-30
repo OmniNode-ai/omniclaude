@@ -35,6 +35,23 @@ source "${HOOKS_DIR}/scripts/common.sh"
 
 export PYTHONPATH="${PROJECT_ROOT}:${PLUGIN_ROOT}/lib:${HOOKS_LIB}:${PYTHONPATH:-}"
 
+# Emit via daemon helper (fast path using emit_client_wrapper)
+# Falls back to shell if Python client unavailable
+emit_via_daemon() {
+    local event_type="$1"
+    local payload="$2"
+    local timeout_ms="${3:-50}"
+
+    $PYTHON_CMD "${HOOKS_LIB}/emit_client_wrapper.py" emit \
+        --event-type "$event_type" \
+        --payload "$payload" \
+        --timeout "$timeout_ms" \
+        >> "$LOG_FILE" 2>&1 || {
+            echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Emit daemon failed for ${event_type} (non-fatal)" >> "$LOG_FILE"
+            return 1
+        }
+}
+
 # Get tool info from stdin
 TOOL_INFO=$(cat)
 
@@ -157,17 +174,23 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
         TOOL_SUMMARY="${TOOL_NAME} on ${FILE_PATH:-unknown}"
         TOOL_SUMMARY="${TOOL_SUMMARY:0:500}"
 
-        # Determine success/failure flag using variable for clarity and robustness
-        SUCCESS_FLAG="--success"
-        [[ "$TOOL_SUCCESS" != "true" ]] && SUCCESS_FLAG="--failure"
+        # Build JSON payload for tool.executed event
+        # Use jq for proper JSON escaping of all fields
+        PAYLOAD=$(jq -n \
+            --arg session_id "$SESSION_ID" \
+            --arg tool_name "$TOOL_NAME" \
+            --argjson success "$([[ "$TOOL_SUCCESS" == "true" ]] && echo "true" || echo "false")" \
+            --arg duration_ms "${DURATION_MS:-}" \
+            --arg summary "$TOOL_SUMMARY" \
+            '{
+                session_id: $session_id,
+                tool_name: $tool_name,
+                success: $success,
+                summary: $summary
+            } + (if $duration_ms != "" then {duration_ms: ($duration_ms | tonumber)} else {} end)'
+        )
 
-        "$PYTHON_CMD" -m omniclaude.hooks.cli_emit tool-executed \
-            --session-id "$SESSION_ID" \
-            --tool-name "$TOOL_NAME" \
-            $SUCCESS_FLAG \
-            ${DURATION_MS:+--duration-ms "$DURATION_MS"} \
-            --summary "$TOOL_SUMMARY" \
-            >> "$LOG_FILE" 2>&1 || { rc=$?; echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Kafka emit failed (exit=$rc, non-fatal)" >> "$LOG_FILE"; }
+        emit_via_daemon "tool.executed" "$PAYLOAD" 50
     ) &
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Tool event emission started" >> "$LOG_FILE"
 fi

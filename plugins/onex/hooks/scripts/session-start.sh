@@ -36,6 +36,25 @@ source "${HOOKS_DIR}/scripts/common.sh"
 
 export PYTHONPATH="${PROJECT_ROOT}:${PLUGIN_ROOT}/lib:${HOOKS_LIB}:${PYTHONPATH:-}"
 
+log() { printf "[%s] %s\n" "$(date "+%Y-%m-%d %H:%M:%S")" "$*" >> "$LOG_FILE"; }
+
+# Emit event via emit daemon (OMN-1631)
+# Single call - daemon handles fan-out to multiple topics
+emit_via_daemon() {
+    local event_type="$1"
+    local payload="$2"
+    local timeout_ms="${3:-50}"
+
+    $PYTHON_CMD "${HOOKS_LIB}/emit_client_wrapper.py" emit \
+        --event-type "$event_type" \
+        --payload "$payload" \
+        --timeout "$timeout_ms" \
+        >> "$LOG_FILE" 2>&1 || {
+            log "Emit daemon failed for ${event_type} (non-fatal)"
+            return 1
+        }
+}
+
 # =============================================================================
 # Emit Daemon Management
 # =============================================================================
@@ -168,7 +187,7 @@ if [[ -f "${HOOKS_LIB}/session_intelligence.py" ]]; then
 fi
 
 # Emit session.started event to Kafka (async, non-blocking)
-# Uses omniclaude-emit CLI with 250ms hard timeout
+# Uses emit_client_wrapper with daemon fan-out (OMN-1631)
 if [[ "$KAFKA_ENABLED" == "true" ]]; then
     (
         GIT_BRANCH=""
@@ -176,16 +195,24 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
             GIT_BRANCH=$(git branch --show-current 2>/dev/null || echo "")
         fi
 
-        "$PYTHON_CMD" -m omniclaude.hooks.cli_emit session-started \
-            --session-id "$SESSION_ID" \
-            --cwd "$CWD" \
-            --source "startup" \
-            ${GIT_BRANCH:+--git-branch "$GIT_BRANCH"} \
-            >> "$LOG_FILE" 2>&1 || { rc=$?; echo "[$(date '+%Y-%m-%d %H:%M:%S')] Kafka emit failed (exit=$rc, non-fatal)" >> "$LOG_FILE"; }
+        # Build payload with all fields needed for session.started event
+        SESSION_PAYLOAD=$(jq -n \
+            --arg session_id "$SESSION_ID" \
+            --arg working_directory "$CWD" \
+            --arg hook_source "startup" \
+            --arg git_branch "$GIT_BRANCH" \
+            '{
+                session_id: $session_id,
+                working_directory: $working_directory,
+                hook_source: $hook_source,
+                git_branch: $git_branch
+            }' 2>/dev/null)
+
+        emit_via_daemon "session.started" "$SESSION_PAYLOAD" 100
     ) &
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Session event emission started" >> "$LOG_FILE"
+    log "Session event emission started via emit daemon"
 else
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Kafka emission skipped (KAFKA_ENABLED=$KAFKA_ENABLED)" >> "$LOG_FILE"
+    log "Kafka emission skipped (KAFKA_ENABLED=$KAFKA_ENABLED)"
 fi
 
 # Performance tracking

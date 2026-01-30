@@ -36,6 +36,25 @@ fi
 # Source shared functions (provides PYTHON_CMD, KAFKA_ENABLED, get_time_ms)
 source "${HOOKS_DIR}/scripts/common.sh"
 
+log() { printf "[%s] %s\n" "$(date "+%Y-%m-%d %H:%M:%S")" "$*" >> "$LOG_FILE"; }
+
+# Emit event via emit daemon (OMN-1632)
+# Single call - daemon handles fan-out to multiple topics
+emit_via_daemon() {
+    local event_type="$1"
+    local payload="$2"
+    local timeout_ms="${3:-50}"
+
+    $PYTHON_CMD "${HOOKS_LIB}/emit_client_wrapper.py" emit \
+        --event-type "$event_type" \
+        --payload "$payload" \
+        --timeout "$timeout_ms" \
+        >> "$LOG_FILE" 2>&1 || {
+            log "Emit daemon failed for ${event_type} (non-fatal)"
+            return 1
+        }
+}
+
 # Read stdin
 INPUT=$(cat)
 
@@ -68,24 +87,33 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] Reason: $SESSION_REASON" >> "$LOG_FILE"
 ) &
 
 # Emit session.ended event to Kafka (async, non-blocking)
-# Uses omniclaude-emit CLI with 250ms hard timeout
+# Uses emit_client_wrapper with daemon fan-out (OMN-1632)
 if [[ "$KAFKA_ENABLED" == "true" ]]; then
-    (
-        # Convert duration from ms to seconds (using Python instead of bc for reliability)
-        DURATION_SECONDS=""
-        if [[ -n "$SESSION_DURATION" && "$SESSION_DURATION" != "0" ]]; then
-            DURATION_SECONDS=$($PYTHON_CMD -c "import sys; print(f'{float(sys.argv[1])/1000:.3f}')" "$SESSION_DURATION" 2>/dev/null || echo "")
-        fi
+    # Convert duration from ms to seconds (using Python instead of bc for reliability)
+    DURATION_SECONDS=""
+    if [[ -n "$SESSION_DURATION" && "$SESSION_DURATION" != "0" ]]; then
+        DURATION_SECONDS=$($PYTHON_CMD -c "import sys; print(f'{float(sys.argv[1])/1000:.3f}')" "$SESSION_DURATION" 2>/dev/null || echo "")
+    fi
 
-        $PYTHON_CMD -m omniclaude.hooks.cli_emit session-ended \
-            --session-id "$SESSION_ID" \
-            --reason "$SESSION_REASON" \
-            ${DURATION_SECONDS:+--duration "$DURATION_SECONDS"} \
-            >> "$LOG_FILE" 2>&1 || { rc=$?; echo "[$(date '+%Y-%m-%d %H:%M:%S')] Kafka emit failed (exit=$rc, non-fatal)" >> "$LOG_FILE"; }
+    # Build JSON payload for emit daemon
+    SESSION_PAYLOAD=$(jq -n \
+        --arg session_id "$SESSION_ID" \
+        --arg reason "$SESSION_REASON" \
+        --arg duration_seconds "${DURATION_SECONDS:-}" \
+        '{
+            session_id: $session_id,
+            reason: $reason,
+            duration_seconds: (if $duration_seconds == "" then null else ($duration_seconds | tonumber) end)
+        }' 2>/dev/null)
+
+    # Emit via daemon (async, non-blocking)
+    (
+        emit_via_daemon "session.ended" "$SESSION_PAYLOAD" 100
     ) &
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Session event emission started" >> "$LOG_FILE"
+
+    log "Session event emission started via emit daemon"
 else
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Kafka emission skipped (KAFKA_ENABLED=$KAFKA_ENABLED)" >> "$LOG_FILE"
+    log "Kafka emission skipped (KAFKA_ENABLED=$KAFKA_ENABLED)"
 fi
 
 # Clean up correlation state
