@@ -70,25 +70,24 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] Reason: $SESSION_REASON" >> "$LOG_FILE"
 # Emit session.ended event to Kafka (async, non-blocking)
 # Uses emit_client_wrapper with daemon fan-out (OMN-1632)
 if [[ "$KAFKA_ENABLED" == "true" ]]; then
-    # Convert duration from ms to seconds (using Python instead of bc for reliability)
-    DURATION_SECONDS=""
-    if [[ -n "$SESSION_DURATION" && "$SESSION_DURATION" != "0" ]]; then
-        DURATION_SECONDS=$($PYTHON_CMD -c "import sys; print(f'{float(sys.argv[1])/1000:.3f}')" "$SESSION_DURATION" 2>/dev/null || echo "")
-    fi
-
-    # Build JSON payload for emit daemon
-    SESSION_PAYLOAD=$(jq -n \
-        --arg session_id "$SESSION_ID" \
-        --arg reason "$SESSION_REASON" \
-        --arg duration_seconds "${DURATION_SECONDS:-}" \
-        '{
-            session_id: $session_id,
-            reason: $reason,
-            duration_seconds: (if $duration_seconds == "" then null else ($duration_seconds | tonumber) end)
-        }' 2>/dev/null)
-
-    # Emit via daemon (async, non-blocking)
     (
+        # Convert duration from ms to seconds (using Python instead of bc for reliability)
+        DURATION_SECONDS=""
+        if [[ -n "$SESSION_DURATION" && "$SESSION_DURATION" != "0" ]]; then
+            DURATION_SECONDS=$($PYTHON_CMD -c "import sys; print(f'{float(sys.argv[1])/1000:.3f}')" "$SESSION_DURATION" 2>/dev/null || echo "")
+        fi
+
+        # Build JSON payload for emit daemon
+        SESSION_PAYLOAD=$(jq -n \
+            --arg session_id "$SESSION_ID" \
+            --arg reason "$SESSION_REASON" \
+            --arg duration_seconds "${DURATION_SECONDS:-}" \
+            '{
+                session_id: $session_id,
+                reason: $reason,
+                duration_seconds: (if $duration_seconds == "" then null else ($duration_seconds | tonumber) end)
+            }' 2>/dev/null)
+
         emit_via_daemon "session.ended" "$SESSION_PAYLOAD" 100
     ) &
 

@@ -173,7 +173,12 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
             } + (if $duration_ms != "" then {duration_ms: ($duration_ms | tonumber)} else {} end)'
         )
 
-        emit_via_daemon "tool.executed" "$PAYLOAD" 50
+        # Validate payload was constructed successfully
+        if [[ -z "$PAYLOAD" || "$PAYLOAD" == "null" ]]; then
+            echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] WARNING: Failed to construct tool payload (jq failed), skipping emission" >> "$LOG_FILE"
+        else
+            emit_via_daemon "tool.executed" "$PAYLOAD" 50
+        fi
     ) &
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Tool event emission started" >> "$LOG_FILE"
 fi

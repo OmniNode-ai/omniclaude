@@ -70,30 +70,28 @@ check_socket_responsive() {
 }
 
 start_emit_daemon_if_needed() {
-    local log_prefix="[$(date '+%Y-%m-%d %H:%M:%S')]"
-
     # Check if daemon already running via socket
     if [[ -S "$EMIT_DAEMON_SOCKET" ]]; then
         # Verify daemon is responsive with quick ping
         if check_socket_responsive "$EMIT_DAEMON_SOCKET" 0.1; then
-            echo "$log_prefix Emit daemon already running and responsive" >> "$LOG_FILE"
+            log "Emit daemon already running and responsive"
             EMIT_DAEMON_AVAILABLE="true"
             export EMIT_DAEMON_AVAILABLE
             return 0
         else
             # Socket exists but daemon not responsive - remove stale socket
-            echo "$log_prefix Removing stale daemon socket" >> "$LOG_FILE"
+            log "Removing stale daemon socket"
             rm -f "$EMIT_DAEMON_SOCKET" 2>/dev/null || true
         fi
     fi
 
     # Check if daemon module is available
     if ! "$PYTHON_CMD" -c "import omnibase_infra.runtime.emit_daemon" 2>/dev/null; then
-        echo "$log_prefix Emit daemon module not available (omnibase_infra.runtime.emit_daemon)" >> "$LOG_FILE"
+        log "Emit daemon module not available (omnibase_infra.runtime.emit_daemon)"
         return 0  # Non-fatal, continue without daemon
     fi
 
-    echo "$log_prefix Starting emit daemon..." >> "$LOG_FILE"
+    log "Starting emit daemon..."
 
     # Start daemon in background, detached from this process
     # Redirect output to log file for debugging
@@ -102,7 +100,7 @@ start_emit_daemon_if_needed() {
         >> "${HOOKS_DIR}/logs/emit-daemon.log" 2>&1 &
 
     local daemon_pid=$!
-    echo "$log_prefix Daemon started with PID $daemon_pid" >> "$LOG_FILE"
+    log "Daemon started with PID $daemon_pid"
 
     # Wait briefly for daemon to create socket (max 200ms in 20ms increments)
     local wait_count=0
@@ -116,19 +114,19 @@ start_emit_daemon_if_needed() {
     if [[ -S "$EMIT_DAEMON_SOCKET" ]]; then
         # Quick connectivity check
         if check_socket_responsive "$EMIT_DAEMON_SOCKET" 0.1; then
-            echo "$log_prefix Emit daemon ready" >> "$LOG_FILE"
+            log "Emit daemon ready"
             EMIT_DAEMON_AVAILABLE="true"
             export EMIT_DAEMON_AVAILABLE
             return 0
         else
-            echo "$log_prefix WARNING: Daemon socket exists but not responsive" >> "$LOG_FILE"
+            log "WARNING: Daemon socket exists but not responsive"
         fi
     else
-        echo "$log_prefix WARNING: Daemon socket not created within timeout" >> "$LOG_FILE"
+        log "WARNING: Daemon socket not created within timeout"
     fi
 
     # Daemon failed to start properly - continue without it
-    echo "$log_prefix Continuing without emit daemon (session startup not blocked)" >> "$LOG_FILE"
+    log "Continuing without emit daemon (session startup not blocked)"
     return 0
 }
 
@@ -138,8 +136,8 @@ START_TIME=$(get_time_ms)
 # Read stdin
 INPUT=$(cat)
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] SessionStart hook triggered (plugin mode)" >> "$LOG_FILE"
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Using Python: $PYTHON_CMD" >> "$LOG_FILE"
+log "SessionStart hook triggered (plugin mode)"
+log "Using Python: $PYTHON_CMD"
 
 # Extract session information
 SESSION_ID=$(echo "$INPUT" | jq -r '.sessionId // .session_id // ""')
@@ -150,9 +148,9 @@ if [[ -z "$CWD" ]]; then
     CWD=$(pwd)
 fi
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Session ID: $SESSION_ID" >> "$LOG_FILE"
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Project Path: $PROJECT_PATH" >> "$LOG_FILE"
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] CWD: $CWD" >> "$LOG_FILE"
+log "Session ID: $SESSION_ID"
+log "Project Path: $PROJECT_PATH"
+log "CWD: $CWD"
 
 # Start emit daemon early (before any Kafka emissions)
 # This ensures daemon is ready for downstream hooks (UserPromptSubmit, PostToolUse)
@@ -168,7 +166,7 @@ if [[ -f "${HOOKS_LIB}/session_intelligence.py" ]]; then
             --cwd "$CWD" \
             >> "$LOG_FILE" 2>&1
     ) &
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Session intelligence logging started" >> "$LOG_FILE"
+    log "Session intelligence logging started"
 fi
 
 # Emit session.started event to Kafka (async, non-blocking)
@@ -204,10 +202,10 @@ fi
 END_TIME=$(get_time_ms)
 ELAPSED_MS=$((END_TIME - START_TIME))
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Hook execution time: ${ELAPSED_MS}ms" >> "$LOG_FILE"
+log "Hook execution time: ${ELAPSED_MS}ms"
 
 if [[ $ELAPSED_MS -gt 50 ]]; then
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] WARNING: Exceeded 50ms target: ${ELAPSED_MS}ms" >> "$LOG_FILE"
+    log "WARNING: Exceeded 50ms target: ${ELAPSED_MS}ms"
 fi
 
 exit 0
