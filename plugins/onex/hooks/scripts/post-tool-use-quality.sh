@@ -237,15 +237,15 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && [[ "$TOOL_NAME" =~ ^(Read|Write|Edit)$ ]]
                     sql) LANGUAGE="sql" ;;
                     html) LANGUAGE="html" ;;
                     css) LANGUAGE="css" ;;
+                    c|h) LANGUAGE="c" ;;
+                    cpp|hpp|cc|cxx) LANGUAGE="cpp" ;;
                     *) LANGUAGE="unknown" ;;
                 esac
             fi
 
             # Get correlation ID from context if available
             CORRELATION_ID_FILE="$PROJECT_ROOT/tmp/correlation_id"
-            if [[ -f "$CORRELATION_ID_FILE" ]]; then
-                CORRELATION_ID=$(cat "$CORRELATION_ID_FILE" 2>/dev/null || echo "")
-            fi
+            CORRELATION_ID=$(cat "$CORRELATION_ID_FILE" 2>/dev/null || true)
 
             # Determine success/failure flag using variable for clarity and robustness
             SUCCESS_FLAG="--success"

@@ -18,7 +18,7 @@ Note:
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -761,6 +761,82 @@ class TestToolContentCommand:
         # Verify JSON values were used
         assert "Edit" in result.output
 
+    def test_kafka_emission_payload_structure(self, runner: CliRunner) -> None:
+        """Verify actual Kafka payload structure when emitting.
+
+        This test mocks EventBusKafka to capture the actual publish call and
+        verifies the payload structure, topic name, and partition key are correct.
+        """
+        import json
+
+        with patch("omniclaude.hooks.cli_emit.EventBusKafka") as mock_bus_class:
+            # Setup mock bus instance
+            mock_bus = MagicMock()
+            mock_bus.start = AsyncMock()
+            mock_bus.publish = AsyncMock()
+            mock_bus.close = AsyncMock()
+            mock_bus_class.return_value = mock_bus
+
+            with patch.dict(
+                "os.environ",
+                {"KAFKA_BOOTSTRAP_SERVERS": "localhost:9092"},
+                clear=False,
+            ):
+                result = runner.invoke(
+                    cli,
+                    [
+                        "tool-content",
+                        "--session-id",
+                        "test-session-abc",
+                        "--tool-name",
+                        "Write",
+                        "--tool-type",
+                        "file_write",
+                        "--file-path",
+                        "/workspace/test.py",
+                        "--content-preview",
+                        "test content",
+                        "--content-length",
+                        "12",
+                        "--language",
+                        "python",
+                    ],
+                )
+
+            # Command should always exit 0
+            assert result.exit_code == 0
+
+            # Verify EventBusKafka was instantiated
+            mock_bus_class.assert_called_once()
+
+            # Verify bus lifecycle methods were called
+            mock_bus.start.assert_called_once()
+            mock_bus.close.assert_called_once()
+
+            # Verify publish was called
+            mock_bus.publish.assert_called_once()
+            call_kwargs = mock_bus.publish.call_args.kwargs
+
+            # Verify topic contains tool-content.v1
+            assert "tool-content.v1" in call_kwargs["topic"]
+
+            # Verify partition key is session_id encoded as bytes
+            assert call_kwargs["key"] == b"test-session-abc"
+
+            # Verify payload structure
+            payload = json.loads(call_kwargs["value"])
+            assert payload["tool_name"] == "Write"
+            assert payload["tool_type"] == "file_write"
+            assert payload["session_id"] == "test-session-abc"
+            assert payload["file_path"] == "/workspace/test.py"
+            assert payload["content_preview"] == "test content"
+            assert payload["content_length"] == 12
+            assert payload["language"] == "python"
+            assert payload["success"] is True
+            # Verify required fields are present
+            assert "timestamp" in payload
+            assert "correlation_id" in payload
+
 
 # =============================================================================
 # Language Detection Tests (OMN-1702)
@@ -795,19 +871,26 @@ class TestLanguageDetection:
         "sql": "sql",
         "html": "html",
         "css": "css",
+        # C/C++ extensions (OMN-1702 review fix)
+        "c": "c",
+        "h": "c",
+        "cpp": "cpp",
+        "hpp": "cpp",
+        "cc": "cpp",
+        "cxx": "cpp",
     }
 
     def test_all_expected_extensions_documented(self) -> None:
         """Verify all expected extension mappings are present.
 
-        The shell script supports 18 file extension mappings covering 16 languages.
+        The shell script supports 24 file extension mappings covering 18 languages.
         Some languages have multiple extensions (e.g., ts/tsx -> typescript,
-        sh/bash -> shell, yml/yaml -> yaml).
+        sh/bash -> shell, yml/yaml -> yaml, c/h -> c, cpp/hpp/cc/cxx -> cpp).
         """
         # Note: Some extensions map to the same language (ts/tsx -> typescript)
         # Count unique extensions, not unique languages
-        assert len(self.EXPECTED_MAPPINGS) == 18, (
-            f"Expected 18 extension mappings (16 unique + 2 aliases), "
+        assert len(self.EXPECTED_MAPPINGS) == 24, (
+            f"Expected 24 extension mappings (18 languages with aliases), "
             f"got {len(self.EXPECTED_MAPPINGS)}"
         )
 
@@ -869,3 +952,15 @@ class TestLanguageDetection:
     def test_database_extensions(self) -> None:
         """Database files (.sql) map to 'sql'."""
         assert self.EXPECTED_MAPPINGS["sql"] == "sql"
+
+    def test_c_extensions(self) -> None:
+        """C files (.c, .h) map to 'c'."""
+        assert self.EXPECTED_MAPPINGS["c"] == "c"
+        assert self.EXPECTED_MAPPINGS["h"] == "c"
+
+    def test_cpp_extensions(self) -> None:
+        """C++ files (.cpp, .hpp, .cc, .cxx) map to 'cpp'."""
+        assert self.EXPECTED_MAPPINGS["cpp"] == "cpp"
+        assert self.EXPECTED_MAPPINGS["hpp"] == "cpp"
+        assert self.EXPECTED_MAPPINGS["cc"] == "cpp"
+        assert self.EXPECTED_MAPPINGS["cxx"] == "cpp"
