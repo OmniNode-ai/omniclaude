@@ -371,51 +371,74 @@ class TestHandlerHandle:
         assert "Test Pattern 1" in result.context_markdown
 
     @pytest.mark.asyncio
-    async def test_sorts_by_confidence_descending(
+    async def test_sorts_by_effective_score_descending(
         self,
-        handler: HandlerContextInjection,
         temp_project_dir: Path,
         pattern_file: Path,
     ) -> None:
-        """Test that handler sorts patterns by confidence descending."""
-        # Create patterns in reverse confidence order (low first)
+        """Test that handler sorts patterns by effective_score descending.
+
+        Note: OMN-1671 changed sorting from pure confidence to effective_score,
+        which is: confidence * success_rate * f(usage_count).
+        """
+        # Create patterns with different effective scores
+        # Use different domains to avoid domain cap (max_per_domain=2 default)
         patterns_data = {
             **SAMPLE_PATTERN_FILE,
             "patterns": [
                 {
                     **SAMPLE_PATTERN_1,
                     "pattern_id": "low",
+                    "domain": "debugging",
                     "title": "Low",
-                    "confidence": 0.3,
+                    "confidence": 0.75,
+                    "success_rate": 0.5,
+                    "usage_count": 5,  # Low effective score
                 },
                 {
                     **SAMPLE_PATTERN_1,
                     "pattern_id": "high",
+                    "domain": "testing",
                     "title": "High",
-                    "confidence": 0.9,
+                    "confidence": 0.95,
+                    "success_rate": 0.9,
+                    "usage_count": 20,  # High effective score
                 },
                 {
                     **SAMPLE_PATTERN_1,
                     "pattern_id": "mid",
+                    "domain": "code_review",
                     "title": "Mid",
-                    "confidence": 0.6,
+                    "confidence": 0.85,
+                    "success_rate": 0.7,
+                    "usage_count": 10,  # Mid effective score
                 },
             ],
         }
         with pattern_file.open("w") as f:
             json.dump(patterns_data, f)
 
+        # Use min_confidence=0.0 to include all patterns
+        config = ContextInjectionConfig(
+            enabled=True,
+            min_confidence=0.0,
+            db_enabled=False,
+        )
+        handler = HandlerContextInjection(config=config)
+
         result = await handler.handle(
             project_root=str(temp_project_dir),
             emit_event=False,
         )
 
-        # Handler sorts by confidence descending
-        # High (0.9) should appear before Mid (0.6) before Low (0.3)
+        # Handler sorts by effective_score descending
+        # High should appear before Mid before Low
         high_pos = result.context_markdown.find("High")
         mid_pos = result.context_markdown.find("Mid")
         low_pos = result.context_markdown.find("Low")
-        assert high_pos < mid_pos < low_pos
+        assert high_pos < mid_pos < low_pos, (
+            f"Expected High < Mid < Low, got positions: High={high_pos}, Mid={mid_pos}, Low={low_pos}"
+        )
 
     @pytest.mark.asyncio
     async def test_limits_to_max_patterns(
@@ -423,22 +446,38 @@ class TestHandlerHandle:
         temp_project_dir: Path,
         pattern_file: Path,
     ) -> None:
-        """Test that handler limits to max_patterns from config."""
-        # Create many patterns
+        """Test that handler limits to max_patterns from config.
+
+        Note: OMN-1671 added domain caps (max_per_domain). To test
+        max_patterns_per_injection, we use different domains.
+        """
+        # Create many patterns with different domains to avoid domain cap
+        domains = ["testing", "code_review", "debugging", "documentation", "security"]
         patterns = [
-            {**SAMPLE_PATTERN_1, "pattern_id": f"pat-{i}", "title": f"Pattern {i}"}
+            {
+                **SAMPLE_PATTERN_1,
+                "pattern_id": f"pat-{i}",
+                "title": f"Pattern {i}",
+                "domain": domains[i % len(domains)],  # Rotate through domains
+            }
             for i in range(10)
         ]
         patterns_data = {**SAMPLE_PATTERN_FILE, "patterns": patterns}
         with pattern_file.open("w") as f:
             json.dump(patterns_data, f)
 
-        # Config with max_patterns=3
+        # Config with max_patterns=3 via limits
+        from omniclaude.hooks.injection_limits import InjectionLimitsConfig
+
+        limits = InjectionLimitsConfig(
+            max_patterns_per_injection=3,
+            max_per_domain=10,  # High enough to not trigger
+        )
         config = ContextInjectionConfig(
             enabled=True,
             min_confidence=0.0,
-            max_patterns=3,
             db_enabled=False,  # Use file-based loading for tests
+            limits=limits,
         )
         handler = HandlerContextInjection(config=config)
 
