@@ -33,13 +33,13 @@ if [[ -f "$PROJECT_ROOT/.env" ]]; then
     set +a
 fi
 
-# Source shared functions (provides PYTHON_CMD, KAFKA_ENABLED, get_time_ms)
+# Source shared functions (provides PYTHON_CMD, KAFKA_ENABLED, get_time_ms, log)
 source "${HOOKS_DIR}/scripts/common.sh"
 
 # Read stdin
 INPUT=$(cat)
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] SessionEnd hook triggered (plugin mode)" >> "$LOG_FILE"
+log "SessionEnd hook triggered (plugin mode)"
 
 # Extract session metadata
 SESSION_ID=$(echo "$INPUT" | jq -r '.sessionId // ""' 2>/dev/null || echo "")
@@ -53,10 +53,10 @@ case "$SESSION_REASON" in
 esac
 
 if [[ -n "$SESSION_ID" ]]; then
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Session ID: $SESSION_ID" >> "$LOG_FILE"
+    log "Session ID: $SESSION_ID"
 fi
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Duration: ${SESSION_DURATION}ms" >> "$LOG_FILE"
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Reason: $SESSION_REASON" >> "$LOG_FILE"
+log "Duration: ${SESSION_DURATION}ms"
+log "Reason: $SESSION_REASON"
 
 # Call session intelligence module (async, non-blocking)
 (
@@ -64,11 +64,11 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] Reason: $SESSION_REASON" >> "$LOG_FILE"
         --mode end \
         --session-id "${SESSION_ID}" \
         --metadata "{\"hook_duration_ms\": ${SESSION_DURATION}}" \
-        >> "$LOG_FILE" 2>&1 || { rc=$?; echo "[$(date '+%Y-%m-%d %H:%M:%S')] Session end logging failed (exit=$rc)" >> "$LOG_FILE"; }
+        >> "$LOG_FILE" 2>&1 || { rc=$?; log "Session end logging failed (exit=$rc)"; }
 ) &
 
 # Emit session.ended event to Kafka (async, non-blocking)
-# Uses omniclaude-emit CLI with 250ms hard timeout
+# Uses emit_client_wrapper with daemon fan-out (OMN-1632)
 if [[ "$KAFKA_ENABLED" == "true" ]]; then
     (
         # Convert duration from ms to seconds (using Python instead of bc for reliability)
@@ -77,15 +77,28 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
             DURATION_SECONDS=$($PYTHON_CMD -c "import sys; print(f'{float(sys.argv[1])/1000:.3f}')" "$SESSION_DURATION" 2>/dev/null || echo "")
         fi
 
-        $PYTHON_CMD -m omniclaude.hooks.cli_emit session-ended \
-            --session-id "$SESSION_ID" \
-            --reason "$SESSION_REASON" \
-            ${DURATION_SECONDS:+--duration "$DURATION_SECONDS"} \
-            >> "$LOG_FILE" 2>&1 || { rc=$?; echo "[$(date '+%Y-%m-%d %H:%M:%S')] Kafka emit failed (exit=$rc, non-fatal)" >> "$LOG_FILE"; }
+        # Build JSON payload for emit daemon
+        SESSION_PAYLOAD=$(jq -n \
+            --arg session_id "$SESSION_ID" \
+            --arg reason "$SESSION_REASON" \
+            --arg duration_seconds "${DURATION_SECONDS:-}" \
+            '{
+                session_id: $session_id,
+                reason: $reason,
+                duration_seconds: (if $duration_seconds == "" then null else ($duration_seconds | tonumber) end)
+            }' 2>/dev/null)
+
+        # Validate payload was constructed successfully
+        if [[ -z "$SESSION_PAYLOAD" || "$SESSION_PAYLOAD" == "null" ]]; then
+            log "WARNING: Failed to construct session payload (jq failed), skipping emission"
+        else
+            emit_via_daemon "session.ended" "$SESSION_PAYLOAD" 100
+        fi
     ) &
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Session event emission started" >> "$LOG_FILE"
+
+    log "Session event emission started via emit daemon"
 else
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Kafka emission skipped (KAFKA_ENABLED=$KAFKA_ENABLED)" >> "$LOG_FILE"
+    log "Kafka emission skipped (KAFKA_ENABLED=$KAFKA_ENABLED)"
 fi
 
 # Clean up correlation state
@@ -98,7 +111,7 @@ get_registry().clear()
 " 2>/dev/null || true
 fi
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] SessionEnd hook completed" >> "$LOG_FILE"
+log "SessionEnd hook completed"
 
 # Output unchanged
 echo "$INPUT"
