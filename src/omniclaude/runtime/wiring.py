@@ -163,15 +163,17 @@ async def publish_handler_contracts(
                 failed.append(contract_path.parent.name)
                 continue
 
-            # Extract identity fields
+            # Extract identity fields - validate handler_id to avoid empty Kafka keys
             handler_id = contract_data.get("handler_id", "")
-            if not handler_id:
+            if not isinstance(handler_id, str) or not handler_id.strip():
                 logger.warning(
-                    "Skipping contract with missing handler_id: %s",
+                    "Skipping contract with missing or invalid handler_id: %s",
                     contract_path,
                 )
                 failed.append(contract_path.parent.name)
                 continue
+            # Use stripped version to avoid whitespace-only keys
+            handler_id = handler_id.strip()
 
             # Validate handler_class format if present (required for KafkaContractSource)
             metadata = contract_data.get("metadata", {})
