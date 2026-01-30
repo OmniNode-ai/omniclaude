@@ -149,6 +149,16 @@ async def publish_handler_contracts(
                 )
                 continue
 
+            # Validate handler_class format if present
+            metadata = contract_data.get("metadata", {})
+            handler_class = metadata.get("handler_class", "")
+            if handler_class and "." not in handler_class:
+                logger.warning(
+                    "handler_class should be fully qualified (contain '.'), got: %s in %s",
+                    handler_class,
+                    contract_path,
+                )
+
             name = contract_data.get("name", handler_id)
 
             # Parse version
@@ -193,7 +203,7 @@ async def publish_handler_contracts(
         except Exception as e:
             contract_name = contract_path.parent.name
             failed.append(contract_name)
-            logger.error(
+            logger.warning(
                 "Failed to publish contract %s: %s",
                 contract_path,
                 e,
