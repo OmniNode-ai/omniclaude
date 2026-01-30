@@ -111,6 +111,13 @@ start_emit_daemon_if_needed() {
         ((wait_count++))
     done
 
+    # Brief delay after socket appears to allow daemon to complete accept() initialization.
+    # The socket file is created before the daemon calls accept(), so there's a small
+    # window where the socket exists but isn't ready for connections yet.
+    if [[ -S "$EMIT_DAEMON_SOCKET" ]]; then
+        sleep 0.01
+    fi
+
     # Verify daemon is ready
     if [[ -S "$EMIT_DAEMON_SOCKET" ]]; then
         # Quick connectivity check

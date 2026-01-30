@@ -116,7 +116,7 @@ emit_via_daemon() {
     local payload="$2"
     local timeout_ms="${3:-50}"
 
-    $PYTHON_CMD "${HOOKS_LIB}/emit_client_wrapper.py" emit \
+    "$PYTHON_CMD" "${HOOKS_LIB}/emit_client_wrapper.py" emit \
         --event-type "$event_type" \
         --payload "$payload" \
         --timeout "$timeout_ms" \
