@@ -857,7 +857,8 @@ class TestIntegration:
         if not initial_status.get("daemon_running", False):
             pytest.skip(
                 "Emit daemon not running - start with: "
-                "python -m omnibase_infra.runtime.emit_daemon.cli start"
+                "python -m omnibase_infra.runtime.emit_daemon.cli start "
+                "--kafka-servers <host:port>"
             )
 
         errors: list[Exception] = []
