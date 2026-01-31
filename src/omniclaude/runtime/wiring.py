@@ -29,6 +29,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import re
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -52,6 +53,16 @@ if TYPE_CHECKING:
     from omnibase_core.models.container.model_onex_container import ModelONEXContainer
 
 logger = logging.getLogger(__name__)
+
+# Valid fully qualified Python path: module.submodule.ClassName (at least 2 parts, valid Python identifiers)
+HANDLER_CLASS_PATTERN = re.compile(
+    r"^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)+$"
+)
+
+
+def _compute_contract_hash(content: str) -> str:
+    """Compute SHA-256 hash of contract content for change detection."""
+    return hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
 async def publish_handler_contracts(
@@ -123,6 +134,7 @@ async def publish_handler_contracts(
 
     # Resolve contract paths based on mode - NO MAGIC PATHS
     source_description = "unknown"  # Initialize to ensure variable is always bound
+    contracts_root: Path | None = None  # Initialize to prevent unbound variable risk
     match config.mode:
         case "filesystem":
             contracts_root = config.filesystem_root
@@ -267,15 +279,15 @@ async def publish_handler_contracts(
             # Validate handler_class format if present (required for KafkaContractSource)
             metadata = contract_data.get("metadata", {})
             handler_class = metadata.get("handler_class", "")
-            if handler_class and "." not in handler_class:
+            if handler_class and not HANDLER_CLASS_PATTERN.match(handler_class):
                 error = ContractError(
                     contract_path=str(contract_path),
                     error_type="invalid_handler_class",
-                    message=f"handler_class must be fully qualified with '.': {handler_class}",
+                    message=f"handler_class must be a valid fully qualified Python path (e.g., 'module.submodule.ClassName'): {handler_class}",
                 )
                 contract_errors.append(error)
                 logger.warning(
-                    "Skipping contract with invalid handler_class (must be fully qualified with '.'): %s in %s",
+                    "Skipping contract with invalid handler_class (must be a valid fully qualified Python path): %s in %s",
                     handler_class,
                     contract_path,
                 )
@@ -299,7 +311,7 @@ async def publish_handler_contracts(
             # - Compare stored hash with incoming hash
             # - Skip re-processing if hash unchanged (idempotent republishing)
             # - Trigger re-registration only when contract content changes
-            contract_hash = hashlib.sha256(contract_yaml.encode("utf-8")).hexdigest()
+            contract_hash = _compute_contract_hash(contract_yaml)
 
             # Create registration event
             event = ModelContractRegisteredEvent(
