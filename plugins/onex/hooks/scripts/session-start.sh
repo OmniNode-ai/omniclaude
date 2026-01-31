@@ -34,6 +34,21 @@ fi
 # Source shared functions (provides PYTHON_CMD, KAFKA_ENABLED, get_time_ms, log)
 source "${HOOKS_DIR}/scripts/common.sh"
 
+# Write daemon status atomically to prevent race conditions
+write_daemon_status() {
+    local status="$1"
+    local status_file="${HOOKS_DIR}/logs/daemon-status"
+    local tmp_file="${status_file}.tmp.$$"
+
+    # Ensure logs directory exists
+    mkdir -p "${HOOKS_DIR}/logs" 2>/dev/null || true
+
+    # Atomic write: write to temp file then rename
+    if echo "$status" > "$tmp_file" 2>/dev/null; then
+        mv "$tmp_file" "$status_file" 2>/dev/null || rm -f "$tmp_file"
+    fi
+}
+
 export PYTHONPATH="${PROJECT_ROOT}:${PLUGIN_ROOT}/lib:${HOOKS_LIB}:${PYTHONPATH:-}"
 
 # Preflight check for jq (required for JSON parsing)
@@ -117,7 +132,7 @@ start_emit_daemon_if_needed() {
     if [[ -z "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
         log "ERROR: KAFKA_BOOTSTRAP_SERVERS not set - emit daemon CANNOT start"
         log "ERROR: Set KAFKA_BOOTSTRAP_SERVERS in your .env file (e.g., KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092)"
-        echo "kafka_not_configured" > "${HOOKS_DIR}/logs/daemon-status"
+        write_daemon_status "kafka_not_configured"
         return 1
     fi
     nohup "$PYTHON_CMD" -m omnibase_infra.runtime.emit_daemon.cli start \
@@ -150,7 +165,7 @@ start_emit_daemon_if_needed() {
         while [[ $verify_attempt -lt $max_verify_attempts ]]; do
             if check_socket_responsive "$EMIT_DAEMON_SOCKET" 0.1; then
                 log "Emit daemon ready (verified on attempt $((verify_attempt + 1)))"
-                echo "running" > "${HOOKS_DIR}/logs/daemon-status"
+                write_daemon_status "running"
                 return 0
             fi
             ((verify_attempt++))

@@ -96,7 +96,9 @@ if [[ -f "${PROJECT_ROOT}/.env" ]]; then
     # Using set -a to export all variables, then set +a to stop
     set -a
     # shellcheck disable=SC1091
-    source "${PROJECT_ROOT}/.env" 2>/dev/null || true
+    if ! source "${PROJECT_ROOT}/.env" 2>/dev/null; then
+        log "WARN: Failed to source ${PROJECT_ROOT}/.env - using environment defaults"
+    fi
     set +a
 fi
 

@@ -829,3 +829,61 @@ class TestErrorClassification:
         assert not any(
             "not available" in str(call) for call in mock_warning.call_args_list
         )
+
+
+# =============================================================================
+# Integration Tests
+# =============================================================================
+
+
+class TestIntegration:
+    """Integration tests for actual socket operations.
+
+    These tests require a running emit daemon and are skipped in CI.
+    Run locally with: pytest -m integration
+    """
+
+    @pytest.mark.integration
+    def test_concurrent_socket_operations_with_real_daemon(self) -> None:
+        """Integration test: concurrent operations against real daemon socket.
+
+        This test verifies thread-safety with actual socket operations.
+        Requires emit daemon to be running.
+        """
+        from plugins.onex.hooks.lib import emit_client_wrapper
+
+        # Skip if daemon is not running
+        initial_status = emit_client_wrapper.get_status()
+        if not initial_status.get("daemon_running", False):
+            pytest.skip(
+                "Emit daemon not running - start with: "
+                "python -m omnibase_infra.runtime.emit_daemon.cli start"
+            )
+
+        errors: list[Exception] = []
+        results: list[dict] = []
+
+        def status_worker() -> None:
+            try:
+                for _ in range(20):
+                    status = emit_client_wrapper.get_status()
+                    results.append(status)
+            except Exception as e:
+                errors.append(e)
+
+        # Run 5 threads making 20 status calls each
+        threads = [threading.Thread(target=status_worker) for _ in range(5)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=30)
+
+        # Verify no errors occurred
+        assert len(errors) == 0, f"Errors during concurrent access: {errors}"
+
+        # All 100 calls should have succeeded
+        assert len(results) == 100
+
+        # All results should indicate daemon is running
+        for result in results:
+            assert result.get("daemon_running") is True
