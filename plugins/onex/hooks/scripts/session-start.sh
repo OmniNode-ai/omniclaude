@@ -115,8 +115,10 @@ start_emit_daemon_if_needed() {
     # Redirect output to log file for debugging
     # Must pass --kafka-servers explicitly (required by CLI)
     if [[ -z "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
-        log "WARNING: KAFKA_BOOTSTRAP_SERVERS not set, cannot start emit daemon"
-        return 0
+        log "ERROR: KAFKA_BOOTSTRAP_SERVERS not set - emit daemon CANNOT start"
+        log "ERROR: Set KAFKA_BOOTSTRAP_SERVERS in your .env file (e.g., KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092)"
+        echo "kafka_not_configured" > "${HOOKS_DIR}/logs/daemon-status"
+        return 1
     fi
     nohup "$PYTHON_CMD" -m omnibase_infra.runtime.emit_daemon.cli start \
         --kafka-servers "$KAFKA_BOOTSTRAP_SERVERS" \
