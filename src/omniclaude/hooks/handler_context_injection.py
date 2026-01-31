@@ -22,6 +22,7 @@ import hashlib
 import json
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -43,6 +44,7 @@ from omniclaude.hooks.injection_limits import (
 from omniclaude.hooks.models_injection_tracking import (
     EnumInjectionContext,
     EnumInjectionSource,
+    ModelInjectionRecord,
 )
 from omniclaude.hooks.schemas import ContextSource, ModelHookContextInjectedPayload
 
@@ -66,6 +68,42 @@ class PatternConnectionError(PatternPersistenceError):
 
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Lazy Import for Emit Event
+# =============================================================================
+
+# Lazy import for emit_event to avoid circular dependencies
+_emit_event_func: Callable[..., bool] | None = None
+
+
+def _get_emit_event() -> Callable[..., bool]:
+    """Get emit_event function with lazy import.
+
+    Caches the import at module level to avoid repeated import overhead.
+    The import is deferred to avoid circular dependencies during hook
+    subprocess initialization.
+
+    Returns:
+        The emit_event function from emit_client_wrapper.
+    """
+    global _emit_event_func
+    if _emit_event_func is None:
+        from plugins.onex.hooks.lib.emit_client_wrapper import emit_event
+
+        _emit_event_func = emit_event
+    return _emit_event_func
+
+
+def _reset_emit_event_cache() -> None:
+    """Reset the emit_event cache for testing.
+
+    This allows tests to patch the underlying module and have the patch
+    take effect. Should only be used in test code.
+    """
+    global _emit_event_func
+    _emit_event_func = None
 
 
 # =============================================================================
@@ -254,23 +292,29 @@ class HandlerContextInjection:
 
         Non-blocking, returns True on success, False on failure.
         Uses emit daemon for durability (not asyncio.create_task).
+
+        Uses ModelInjectionRecord for Pydantic validation before emission.
         """
         try:
-            # Lazy import to avoid circular dependencies in hook subprocess
-            from plugins.onex.hooks.lib.emit_client_wrapper import emit_event
+            emit_event = _get_emit_event()
 
-            payload = {
-                "injection_id": str(injection_id),
-                "session_id": session_id_raw,
-                "pattern_ids": pattern_ids,
-                "injection_context": injection_context.value,
-                "source": source.value,
-                "cohort": cohort.value,
-                "assignment_seed": assignment_seed,
-                "injected_content": injected_content,
-                "injected_token_count": injected_token_count,
-                "correlation_id": correlation_id,
-            }
+            # Use Pydantic model for validation
+            record = ModelInjectionRecord(
+                injection_id=injection_id,
+                session_id_raw=session_id_raw,
+                pattern_ids=pattern_ids,
+                injection_context=injection_context,
+                source=source,
+                cohort=cohort,
+                assignment_seed=assignment_seed,
+                injected_content=injected_content,
+                injected_token_count=injected_token_count,
+                correlation_id=correlation_id,
+            )
+
+            # Serialize with by_alias=True to output "session_id" instead of "session_id_raw"
+            # mode='json' ensures enums are serialized to their string values
+            payload = record.model_dump(mode="json", by_alias=True)
 
             return emit_event("injection.recorded", payload)
         except Exception as e:

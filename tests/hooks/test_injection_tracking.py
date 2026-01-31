@@ -21,7 +21,10 @@ import pytest
 
 from omniclaude.hooks.cohort_assignment import EnumCohort
 from omniclaude.hooks.context_config import ContextInjectionConfig
-from omniclaude.hooks.handler_context_injection import HandlerContextInjection
+from omniclaude.hooks.handler_context_injection import (
+    HandlerContextInjection,
+    _reset_emit_event_cache,
+)
 from omniclaude.hooks.models_injection_tracking import (
     EnumInjectionContext,
     EnumInjectionSource,
@@ -62,6 +65,17 @@ def disabled_db_config() -> ContextInjectionConfig:
 def handler(disabled_db_config: ContextInjectionConfig) -> HandlerContextInjection:
     """Create a handler with disabled database."""
     return HandlerContextInjection(config=disabled_db_config)
+
+
+@pytest.fixture(autouse=True)
+def reset_emit_cache() -> None:
+    """Reset emit_event cache before each test.
+
+    This is necessary because the handler uses a module-level lazy import
+    pattern. Without resetting, patches don't take effect after the first
+    import.
+    """
+    _reset_emit_event_cache()
 
 
 # =============================================================================

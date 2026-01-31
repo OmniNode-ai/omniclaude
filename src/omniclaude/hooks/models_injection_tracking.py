@@ -46,23 +46,32 @@ class ModelInjectionRecord(BaseModel):
     Maps to pattern_injections table in omniintelligence database.
     All injection attempts are recorded, including control cohort and
     error cases, to enable complete A/B analysis.
+
+    Note: This model is for event emission, not database storage.
+    Pattern IDs and correlation IDs are kept as strings for simplicity
+    since that's how they're passed from the handler.
     """
 
     injection_id: UUID = Field(description="Unique identifier for this injection event")
 
-    # Session tracking - keep raw string, derive UUID if valid
-    session_id_raw: str = Field(description="Original session ID (any format)")
-    session_id_uuid: UUID | None = Field(
-        default=None, description="Parsed UUID if valid"
+    # Session tracking - serializes to "session_id" for backwards compatibility
+    session_id_raw: str = Field(
+        serialization_alias="session_id",
+        description="Original session ID (any format)",
     )
-    correlation_id: UUID | None = Field(
-        default=None, description="Distributed tracing correlation ID"
+    session_id_uuid: UUID | None = Field(
+        default=None,
+        description="Parsed UUID if valid (not serialized in events)",
+        exclude=True,
+    )
+    correlation_id: str = Field(
+        default="", description="Distributed tracing correlation ID"
     )
 
-    # What was injected
-    pattern_ids: list[UUID] = Field(
+    # What was injected - pattern_ids are strings (not UUIDs) for simplicity
+    pattern_ids: list[str] = Field(
         default_factory=list,
-        description="UUIDs of patterns from learned_patterns table",
+        description="IDs of patterns from learned_patterns table",
     )
     injection_context: EnumInjectionContext = Field(
         description="Hook event that triggered injection"
