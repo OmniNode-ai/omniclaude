@@ -115,9 +115,10 @@ fi
 # =============================================================================
 # Kafka Configuration
 # =============================================================================
-# Kafka emission is optional and disabled by default.
-# Set KAFKA_BOOTSTRAP_SERVERS in .env to enable.
-# No fallback - must be explicitly configured.
+# Kafka is REQUIRED for OmniClaude intelligence gathering.
+# The entire architecture is event-driven via Kafka - without it, hooks have no purpose.
+# Set KAFKA_BOOTSTRAP_SERVERS in .env (e.g., KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092).
+# SessionStart hook will fail fast if Kafka is not configured.
 
 KAFKA_ENABLED="false"
 if [[ -n "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
