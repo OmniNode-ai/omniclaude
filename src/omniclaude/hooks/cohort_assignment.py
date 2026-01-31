@@ -74,8 +74,33 @@ def _load_contract_defaults() -> _ContractDefaults:
     try:
         with open(_CONTRACT_PATH, encoding="utf-8") as f:
             contract = yaml.safe_load(f)
+
+        # Guard against non-mapping YAML roots (None, list, scalar)
+        if not isinstance(contract, dict):
+            logger.warning(
+                f"Invalid cohort contract root type: {type(contract).__name__}, "
+                "using defaults"
+            )
+            return _ContractDefaults(
+                control_percentage=_FALLBACK_CONTROL_PERCENTAGE,
+                salt=_FALLBACK_SALT,
+            )
+
         experiment = contract.get("experiment", {})
+        if not isinstance(experiment, dict):
+            logger.warning(
+                f"Invalid experiment section type: {type(experiment).__name__}, "
+                "using defaults for cohort"
+            )
+            experiment = {}
+
         cohort = experiment.get("cohort", {})
+        if not isinstance(cohort, dict):
+            logger.warning(
+                f"Invalid cohort section type: {type(cohort).__name__}, "
+                "using defaults for cohort values"
+            )
+            cohort = {}
 
         control_pct = cohort.get("control_percentage", _FALLBACK_CONTROL_PERCENTAGE)
         salt = cohort.get("salt", _FALLBACK_SALT)

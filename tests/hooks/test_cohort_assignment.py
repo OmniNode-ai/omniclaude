@@ -144,8 +144,10 @@ class TestCohortConstants:
 class TestCohortAssignmentConfig:
     """Test CohortAssignmentConfig configuration class."""
 
-    def test_default_values(self) -> None:
+    def test_default_values(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test config loads defaults correctly."""
+        monkeypatch.delenv("OMNICLAUDE_COHORT_CONTROL_PERCENTAGE", raising=False)
+        monkeypatch.delenv("OMNICLAUDE_COHORT_SALT", raising=False)
         config = CohortAssignmentConfig()
         assert config.control_percentage == 20
         assert config.salt == "omniclaude-injection-v1"
@@ -209,8 +211,12 @@ class TestCohortAssignmentConfig:
         config = CohortAssignmentConfig.from_env()
         assert isinstance(config, CohortAssignmentConfig)
 
-    def test_from_contract_returns_config(self) -> None:
+    def test_from_contract_returns_config(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Test from_contract returns a CohortAssignmentConfig instance."""
+        monkeypatch.delenv("OMNICLAUDE_COHORT_CONTROL_PERCENTAGE", raising=False)
+        monkeypatch.delenv("OMNICLAUDE_COHORT_SALT", raising=False)
         config = CohortAssignmentConfig.from_contract()
         assert isinstance(config, CohortAssignmentConfig)
         # Should have contract defaults
