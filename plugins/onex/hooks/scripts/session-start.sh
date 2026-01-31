@@ -32,20 +32,23 @@ if [[ -f "$PROJECT_ROOT/.env" ]]; then
 fi
 
 # Source shared functions (provides PYTHON_CMD, KAFKA_ENABLED, get_time_ms, log)
+# shellcheck source=common.sh
 source "${HOOKS_DIR}/scripts/common.sh"
+
+# Daemon status file path (used by write_daemon_status for observability)
+readonly DAEMON_STATUS_FILE="${HOOKS_DIR}/logs/daemon-status"
 
 # Write daemon status atomically to prevent race conditions
 write_daemon_status() {
     local status="$1"
-    local status_file="${HOOKS_DIR}/logs/daemon-status"
-    local tmp_file="${status_file}.tmp.$$"
+    local tmp_file="${DAEMON_STATUS_FILE}.tmp.$$"
 
     # Ensure logs directory exists
     mkdir -p "${HOOKS_DIR}/logs" 2>/dev/null || true
 
     # Atomic write: write to temp file then rename
     if echo "$status" > "$tmp_file" 2>/dev/null; then
-        mv "$tmp_file" "$status_file" 2>/dev/null || rm -f "$tmp_file"
+        mv "$tmp_file" "$DAEMON_STATUS_FILE" 2>/dev/null || rm -f "$tmp_file"
     fi
 }
 

@@ -101,8 +101,13 @@ if [[ -f "${PROJECT_ROOT}/.env" ]]; then
     # Using set -a to export all variables, then set +a to stop
     set -a
     # shellcheck disable=SC1091
+    # Note: We use 2>/dev/null because .env files may contain comments or blank
+    # lines that produce benign warnings. Syntax errors are rare in .env files.
     if ! source "${PROJECT_ROOT}/.env" 2>/dev/null; then
-        log "WARN: Failed to source ${PROJECT_ROOT}/.env - using environment defaults"
+        # Only log if LOG_FILE is set (caller script responsibility)
+        if [[ -n "${LOG_FILE:-}" ]]; then
+            log "WARN: Failed to source ${PROJECT_ROOT}/.env - check file syntax"
+        fi
     fi
     set +a
 fi
