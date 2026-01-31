@@ -36,24 +36,19 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 logger = logging.getLogger(__name__)
 
 # =============================================================================
-# Legacy Constants (Deprecated)
+# Contract Configuration
 # =============================================================================
-# DEPRECATED: These constants are kept for backward compatibility only.
-# Use CohortAssignmentConfig for new code. These will be removed in a future version.
-
-# Match omniintelligence constants
-COHORT_CONTROL_PERCENTAGE: int = 20
-COHORT_TREATMENT_PERCENTAGE: int = 80
-COHORT_SALT: str = "omniclaude-injection-v1"
-
-
-# =============================================================================
-# Configuration
-# =============================================================================
-
 
 # Contract file path (relative to this module)
 _CONTRACT_PATH = Path(__file__).parent / "contracts" / "contract_experiment_cohort.yaml"
+
+# =============================================================================
+# Hardcoded Fallbacks (SINGLE SOURCE for when contract is unavailable)
+# =============================================================================
+# These values are ONLY used if the contract YAML cannot be loaded.
+# The contract file is the true source of truth.
+_FALLBACK_CONTROL_PERCENTAGE: int = 20
+_FALLBACK_SALT: str = "omniclaude-injection-v1"
 
 
 class _ContractDefaults(NamedTuple):
@@ -68,13 +63,13 @@ def _load_contract_defaults() -> _ContractDefaults:
 
     Returns:
         _ContractDefaults with 'control_percentage' and 'salt' from contract.
-        Falls back to hardcoded defaults if contract unavailable.
+        Falls back to module-level fallbacks if contract unavailable.
     """
-    default_control = 20
-    default_salt = "omniclaude-injection-v1"
-
     if not _CONTRACT_PATH.exists():
-        return _ContractDefaults(control_percentage=default_control, salt=default_salt)
+        return _ContractDefaults(
+            control_percentage=_FALLBACK_CONTROL_PERCENTAGE,
+            salt=_FALLBACK_SALT,
+        )
 
     try:
         with open(_CONTRACT_PATH, encoding="utf-8") as f:
@@ -82,27 +77,62 @@ def _load_contract_defaults() -> _ContractDefaults:
         experiment = contract.get("experiment", {})
         cohort = experiment.get("cohort", {})
 
-        control_pct = cohort.get("control_percentage", default_control)
-        salt = cohort.get("salt", default_salt)
+        control_pct = cohort.get("control_percentage", _FALLBACK_CONTROL_PERCENTAGE)
+        salt = cohort.get("salt", _FALLBACK_SALT)
 
         # Validate types from YAML
         if not isinstance(control_pct, int):
             logger.warning(
                 f"Invalid control_percentage type in contract: {type(control_pct)}, "
-                f"using default {default_control}"
+                f"using fallback {_FALLBACK_CONTROL_PERCENTAGE}"
             )
-            control_pct = default_control
+            control_pct = _FALLBACK_CONTROL_PERCENTAGE
         if not isinstance(salt, str):
             logger.warning(
-                f"Invalid salt type in contract: {type(salt)}, using default"
+                f"Invalid salt type in contract: {type(salt)}, using fallback"
             )
-            salt = default_salt
+            salt = _FALLBACK_SALT
 
         return _ContractDefaults(control_percentage=control_pct, salt=salt)
     except (OSError, yaml.YAMLError) as e:
-        # Contract unavailable or malformed - use hardcoded defaults
-        logger.warning(f"Failed to load cohort contract, using defaults: {e}")
-        return _ContractDefaults(control_percentage=default_control, salt=default_salt)
+        # Contract unavailable or malformed - use fallback defaults
+        logger.warning(f"Failed to load cohort contract, using fallbacks: {e}")
+        return _ContractDefaults(
+            control_percentage=_FALLBACK_CONTROL_PERCENTAGE,
+            salt=_FALLBACK_SALT,
+        )
+
+
+# =============================================================================
+# Module-Level Constants (loaded from contract at import time)
+# =============================================================================
+# These are the canonical defaults derived from the contract YAML.
+# Use these constants for Field defaults and anywhere defaults are needed.
+
+_CONTRACT_DEFAULTS = _load_contract_defaults()
+
+#: Default control percentage from contract (or fallback if unavailable)
+CONTRACT_DEFAULT_CONTROL_PERCENTAGE: int = _CONTRACT_DEFAULTS.control_percentage
+
+#: Default salt from contract (or fallback if unavailable)
+CONTRACT_DEFAULT_SALT: str = _CONTRACT_DEFAULTS.salt
+
+
+# =============================================================================
+# Legacy Constants (Deprecated)
+# =============================================================================
+# DEPRECATED: These constants are kept for backward compatibility only.
+# Use CohortAssignmentConfig for new code. These will be removed in a future version.
+# Now derived from contract-loaded values for consistency.
+
+COHORT_CONTROL_PERCENTAGE: int = CONTRACT_DEFAULT_CONTROL_PERCENTAGE
+COHORT_TREATMENT_PERCENTAGE: int = 100 - CONTRACT_DEFAULT_CONTROL_PERCENTAGE
+COHORT_SALT: str = CONTRACT_DEFAULT_SALT
+
+
+# =============================================================================
+# Configuration
+# =============================================================================
 
 
 class CohortAssignmentConfig(BaseSettings):
@@ -146,14 +176,14 @@ class CohortAssignmentConfig(BaseSettings):
     )
 
     control_percentage: int = Field(
-        default=20,
+        default=CONTRACT_DEFAULT_CONTROL_PERCENTAGE,
         ge=0,
         le=100,
         description="Percentage of sessions assigned to control group (0-100)",
     )
 
     salt: str = Field(
-        default="omniclaude-injection-v1",
+        default=CONTRACT_DEFAULT_SALT,
         min_length=1,
         description="Salt string for deterministic hash-based assignment",
     )
@@ -190,11 +220,20 @@ class CohortAssignmentConfig(BaseSettings):
         control_pct: int = contract_defaults.control_percentage
         if env_control is not None:
             try:
-                control_pct = int(env_control)
+                parsed = float(env_control)
+                if parsed != int(parsed):
+                    # Value is a float like "35.5" - must be an integer
+                    logger.warning(
+                        f"OMNICLAUDE_COHORT_CONTROL_PERCENTAGE must be an integer, "
+                        f"got float '{env_control}', using contract default {control_pct}"
+                    )
+                else:
+                    control_pct = int(parsed)
             except ValueError:
+                # Value is not a valid number at all
                 logger.warning(
-                    f"Invalid OMNICLAUDE_COHORT_CONTROL_PERCENTAGE='{env_control}', "
-                    f"using contract default {control_pct}"
+                    f"OMNICLAUDE_COHORT_CONTROL_PERCENTAGE is not a valid number: "
+                    f"'{env_control}', using contract default {control_pct}"
                 )
 
         salt: str = env_salt if env_salt is not None else contract_defaults.salt
@@ -278,6 +317,9 @@ __all__ = [
     # Types
     "EnumCohort",
     "CohortAssignment",
+    # Contract-derived constants (canonical defaults)
+    "CONTRACT_DEFAULT_CONTROL_PERCENTAGE",
+    "CONTRACT_DEFAULT_SALT",
     # Legacy constants (deprecated - use CohortAssignmentConfig instead)
     "COHORT_CONTROL_PERCENTAGE",
     "COHORT_TREATMENT_PERCENTAGE",

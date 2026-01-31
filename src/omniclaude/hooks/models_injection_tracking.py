@@ -15,7 +15,11 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from omniclaude.hooks.cohort_assignment import EnumCohort
+from omniclaude.hooks.cohort_assignment import (
+    CONTRACT_DEFAULT_CONTROL_PERCENTAGE,
+    CONTRACT_DEFAULT_SALT,
+    EnumCohort,
+)
 
 
 class EnumInjectionContext(str, Enum):
@@ -89,13 +93,13 @@ class ModelInjectionRecord(BaseModel):
     # Effective config at assignment time (for auditability/replay)
     # These values explain WHY a session was assigned to its cohort
     effective_control_percentage: int = Field(
-        default=20,
+        default=CONTRACT_DEFAULT_CONTROL_PERCENTAGE,
         ge=0,
         le=100,
         description="Control percentage used for this assignment (0-100)",
     )
     effective_salt: str = Field(
-        default="omniclaude-injection-v1",
+        default=CONTRACT_DEFAULT_SALT,
         description="Salt used for hash-based assignment",
     )
 

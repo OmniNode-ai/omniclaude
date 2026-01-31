@@ -279,6 +279,63 @@ class TestCohortAssignmentConfig:
         config = CohortAssignmentConfig()
         assert config.salt == "env-salt-value"
 
+    def test_from_contract_invalid_env_percentage_uses_default(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test invalid env percentage (non-numeric) falls back to contract default."""
+        monkeypatch.setenv("OMNICLAUDE_COHORT_CONTROL_PERCENTAGE", "abc")
+        monkeypatch.delenv("OMNICLAUDE_COHORT_SALT", raising=False)
+
+        with caplog.at_level(logging.WARNING):
+            config = CohortAssignmentConfig.from_contract()
+
+        # Should use contract default
+        assert config.control_percentage == 20
+
+        # Should log warning mentioning the env var
+        assert any(
+            "OMNICLAUDE_COHORT_CONTROL_PERCENTAGE" in record.message
+            for record in caplog.records
+        )
+
+    def test_from_contract_float_env_percentage_uses_default(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test float env percentage falls back to contract default."""
+        monkeypatch.setenv("OMNICLAUDE_COHORT_CONTROL_PERCENTAGE", "35.5")
+        monkeypatch.delenv("OMNICLAUDE_COHORT_SALT", raising=False)
+
+        with caplog.at_level(logging.WARNING):
+            config = CohortAssignmentConfig.from_contract()
+
+        # Should use contract default (int("35.5") raises ValueError)
+        assert config.control_percentage == 20
+
+        # Should log warning mentioning the env var
+        assert any(
+            "OMNICLAUDE_COHORT_CONTROL_PERCENTAGE" in record.message
+            for record in caplog.records
+        )
+
+    def test_from_contract_empty_env_percentage_uses_default(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test empty string env percentage falls back to contract default."""
+        monkeypatch.setenv("OMNICLAUDE_COHORT_CONTROL_PERCENTAGE", "")
+        monkeypatch.delenv("OMNICLAUDE_COHORT_SALT", raising=False)
+
+        with caplog.at_level(logging.WARNING):
+            config = CohortAssignmentConfig.from_contract()
+
+        # Should use contract default (int("") raises ValueError)
+        assert config.control_percentage == 20
+
+        # Should log warning mentioning the env var
+        assert any(
+            "OMNICLAUDE_COHORT_CONTROL_PERCENTAGE" in record.message
+            for record in caplog.records
+        )
+
 
 class TestCohortAssignmentWithCustomConfig:
     """Test assign_cohort with custom configuration."""
