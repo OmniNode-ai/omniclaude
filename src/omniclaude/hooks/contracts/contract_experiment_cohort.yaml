@@ -1,0 +1,95 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 OmniNode Team
+#
+# Experiment Cohort Configuration Contract
+#
+# Defines A/B experiment parameters for pattern injection. These are behavioral
+# parameters that affect session assignment to control/treatment cohorts.
+#
+# Source of truth: This contract defines defaults
+# Override: Environment variables for ops flexibility
+#
+# Part of OMN-1674: INJECT-005 A/B cohort assignment
+
+# Contract identifiers
+name: experiment_cohort
+contract_name: experiment_cohort
+node_name: experiment_cohort
+
+# Version - increment when experiment parameters change
+version:
+  major: 1
+  minor: 0
+  patch: 0
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+# Description
+description: >
+  A/B experiment configuration for pattern injection. Sessions are assigned to
+  cohorts (control/treatment) based on deterministic hashing of session ID with
+  salt. Control cohort receives no pattern injection; treatment receives validated
+  patterns. Change salt to reset experiment and re-randomize all assignments.
+
+# Experiment configuration (source of truth)
+experiment:
+  # Experiment identity
+  name: pattern_injection_v1
+
+  # Randomization design
+  randomization_unit: session_id
+  assignment_method: hash_mod
+
+  # Cohort split configuration
+  cohort:
+    # Percentage of sessions assigned to control (no injection)
+    # Valid range: 0-100
+    # Default: 20 (20% control, 80% treatment)
+    control_percentage: 20
+
+    # Salt for deterministic hash-based assignment
+    # Change this value to reset the experiment and re-randomize assignments
+    # Must be non-empty
+    salt: omniclaude-injection-v1
+
+  # Override configuration
+  # These environment variables can override contract defaults at runtime
+  env_overrides:
+    control_percentage: OMNICLAUDE_COHORT_CONTROL_PERCENTAGE
+    salt: OMNICLAUDE_COHORT_SALT
+
+# Invariants (enforced at load time)
+invariants:
+  - name: control_percentage_range
+    description: Control percentage must be 0-100 inclusive
+    rule: "0 <= cohort.control_percentage <= 100"
+  - name: salt_non_empty
+    description: Salt must be non-empty for deterministic hashing
+    rule: "len(cohort.salt) > 0"
+
+# Auditability requirements
+auditability:
+  # Stamp these values into every injection record for replay/debug
+  stamp_into_record:
+    - effective_control_percentage
+    - effective_salt
+    - assignment_seed
+  rationale: >
+    Replay and debugging require knowing the exact config that determined
+    cohort assignment. Without stamping effective values, "why did session X
+    go control?" becomes unanswerable.
+
+# Metadata
+metadata:
+  author: OmniNode Team
+  license: MIT
+  created: "2026-01-31"
+  ticket: OMN-1674
+  tags:
+    - experiment
+    - cohort
+    - a-b-testing
+    - pattern-injection
+    - configuration

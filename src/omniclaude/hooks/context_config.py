@@ -44,6 +44,7 @@ from __future__ import annotations
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from omniclaude.hooks.cohort_assignment import CohortAssignmentConfig
 from omniclaude.hooks.injection_limits import InjectionLimitsConfig
 
 
@@ -151,6 +152,12 @@ class ContextInjectionConfig(BaseSettings):
     limits: InjectionLimitsConfig = Field(
         default_factory=InjectionLimitsConfig,
         description="Injection limits to prevent context explosion",
+    )
+
+    # Cohort assignment configuration (A/B testing)
+    cohort: CohortAssignmentConfig = Field(
+        default_factory=CohortAssignmentConfig,
+        description="A/B cohort assignment configuration for pattern injection experiments",
     )
 
     def get_db_dsn(self) -> str:

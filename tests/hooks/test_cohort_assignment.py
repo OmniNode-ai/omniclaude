@@ -4,9 +4,13 @@
 
 Tests verify:
 - Deterministic assignment (same session → same cohort)
-- Approximate 20/80 distribution
+- Approximate 20/80 distribution (default)
 - Assignment seed in valid range
 - Enum values match database constraints
+- Configuration defaults and environment variable loading
+- Validation of configuration values (0-100 range, non-empty salt)
+- Custom percentage and salt configurations
+- Distribution accuracy with custom percentages
 
 Part of OMN-1673: INJECT-004 injection tracking.
 """
@@ -14,11 +18,13 @@ Part of OMN-1673: INJECT-004 injection tracking.
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from omniclaude.hooks.cohort_assignment import (
     COHORT_CONTROL_PERCENTAGE,
     COHORT_TREATMENT_PERCENTAGE,
     CohortAssignment,
+    CohortAssignmentConfig,
     EnumCohort,
     assign_cohort,
 )
@@ -130,3 +136,257 @@ class TestCohortConstants:
     def test_treatment_percentage(self) -> None:
         """Test treatment percentage matches spec (80%)."""
         assert COHORT_TREATMENT_PERCENTAGE == 80
+
+
+class TestCohortAssignmentConfig:
+    """Test CohortAssignmentConfig configuration class."""
+
+    def test_default_values(self) -> None:
+        """Test config loads defaults correctly."""
+        config = CohortAssignmentConfig()
+        assert config.control_percentage == 20
+        assert config.salt == "omniclaude-injection-v1"
+        assert config.treatment_percentage == 80
+
+    def test_custom_control_percentage(self) -> None:
+        """Test config accepts custom control percentage."""
+        config = CohortAssignmentConfig(control_percentage=30)
+        assert config.control_percentage == 30
+        assert config.treatment_percentage == 70
+
+    def test_custom_salt(self) -> None:
+        """Test config accepts custom salt."""
+        config = CohortAssignmentConfig(salt="my-custom-salt")
+        assert config.salt == "my-custom-salt"
+
+    def test_treatment_percentage_property(self) -> None:
+        """Test treatment_percentage computed as 100 - control."""
+        test_cases = [
+            (0, 100),
+            (20, 80),
+            (50, 50),
+            (75, 25),
+            (100, 0),
+        ]
+        for control, expected_treatment in test_cases:
+            config = CohortAssignmentConfig(control_percentage=control)
+            assert config.treatment_percentage == expected_treatment, (
+                f"For control={control}, expected treatment={expected_treatment}, "
+                f"got {config.treatment_percentage}"
+            )
+
+    def test_validation_rejects_negative_percentage(self) -> None:
+        """Test validation rejects control_percentage < 0."""
+        with pytest.raises(ValidationError) as exc_info:
+            CohortAssignmentConfig(control_percentage=-1)
+        assert "control_percentage" in str(exc_info.value)
+
+    def test_validation_rejects_over_100_percentage(self) -> None:
+        """Test validation rejects control_percentage > 100."""
+        with pytest.raises(ValidationError) as exc_info:
+            CohortAssignmentConfig(control_percentage=101)
+        assert "control_percentage" in str(exc_info.value)
+
+    def test_validation_accepts_boundary_values(self) -> None:
+        """Test validation accepts 0 and 100 as valid percentages."""
+        config_0 = CohortAssignmentConfig(control_percentage=0)
+        assert config_0.control_percentage == 0
+
+        config_100 = CohortAssignmentConfig(control_percentage=100)
+        assert config_100.control_percentage == 100
+
+    def test_validation_rejects_empty_salt(self) -> None:
+        """Test validation rejects empty salt string."""
+        with pytest.raises(ValidationError) as exc_info:
+            CohortAssignmentConfig(salt="")
+        assert "salt" in str(exc_info.value)
+
+    def test_from_env_returns_config(self) -> None:
+        """Test from_env returns a CohortAssignmentConfig instance."""
+        config = CohortAssignmentConfig.from_env()
+        assert isinstance(config, CohortAssignmentConfig)
+
+    def test_from_contract_returns_config(self) -> None:
+        """Test from_contract returns a CohortAssignmentConfig instance."""
+        config = CohortAssignmentConfig.from_contract()
+        assert isinstance(config, CohortAssignmentConfig)
+        # Should have contract defaults
+        assert config.control_percentage == 20
+        assert config.salt == "omniclaude-injection-v1"
+
+    def test_from_contract_env_override_wins(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test env override takes precedence over contract defaults."""
+        monkeypatch.setenv("OMNICLAUDE_COHORT_CONTROL_PERCENTAGE", "35")
+        monkeypatch.setenv("OMNICLAUDE_COHORT_SALT", "override-salt")
+        config = CohortAssignmentConfig.from_contract()
+        assert config.control_percentage == 35
+        assert config.salt == "override-salt"
+
+    def test_respects_environment_variable_control_percentage(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test config respects OMNICLAUDE_COHORT_CONTROL_PERCENTAGE env var."""
+        monkeypatch.setenv("OMNICLAUDE_COHORT_CONTROL_PERCENTAGE", "45")
+        config = CohortAssignmentConfig()
+        assert config.control_percentage == 45
+        assert config.treatment_percentage == 55
+
+    def test_respects_environment_variable_salt(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test config respects OMNICLAUDE_COHORT_SALT env var."""
+        monkeypatch.setenv("OMNICLAUDE_COHORT_SALT", "env-salt-value")
+        config = CohortAssignmentConfig()
+        assert config.salt == "env-salt-value"
+
+
+class TestCohortAssignmentWithCustomConfig:
+    """Test assign_cohort with custom configuration."""
+
+    def test_zero_percent_control_all_treatment(self) -> None:
+        """Test 0% control assigns all sessions to treatment."""
+        config = CohortAssignmentConfig(control_percentage=0)
+
+        for i in range(100):
+            result = assign_cohort(f"session-{i}", config=config)
+            assert result.cohort == EnumCohort.TREATMENT, (
+                f"Session {i} with seed {result.assignment_seed} "
+                f"should be treatment with 0% control"
+            )
+
+    def test_100_percent_control_all_control(self) -> None:
+        """Test 100% control assigns all sessions to control."""
+        config = CohortAssignmentConfig(control_percentage=100)
+
+        for i in range(100):
+            result = assign_cohort(f"session-{i}", config=config)
+            assert result.cohort == EnumCohort.CONTROL, (
+                f"Session {i} with seed {result.assignment_seed} "
+                f"should be control with 100% control"
+            )
+
+    def test_50_50_split_sees_both_cohorts(self) -> None:
+        """Test 50/50 split produces both cohorts."""
+        config = CohortAssignmentConfig(control_percentage=50)
+        cohorts_seen = set()
+
+        for i in range(100):
+            result = assign_cohort(f"session-{i}", config=config)
+            cohorts_seen.add(result.cohort)
+
+        assert EnumCohort.CONTROL in cohorts_seen
+        assert EnumCohort.TREATMENT in cohorts_seen
+
+    def test_custom_salt_changes_assignment(self) -> None:
+        """Test different salt produces different assignment for same session."""
+        session_id = "test-session-for-salt"
+        config1 = CohortAssignmentConfig(salt="salt-one")
+        config2 = CohortAssignmentConfig(salt="salt-two")
+
+        result1 = assign_cohort(session_id, config=config1)
+        result2 = assign_cohort(session_id, config=config2)
+
+        # Seeds should differ with different salts
+        assert result1.assignment_seed != result2.assignment_seed, (
+            "Different salts should produce different assignment seeds"
+        )
+
+    def test_custom_config_preserves_determinism(self) -> None:
+        """Test same session+config always produces same result."""
+        config = CohortAssignmentConfig(control_percentage=35, salt="custom-salt")
+        session_id = "determinism-test-session"
+
+        result1 = assign_cohort(session_id, config=config)
+        result2 = assign_cohort(session_id, config=config)
+        result3 = assign_cohort(session_id, config=config)
+
+        assert result1 == result2 == result3
+
+    def test_threshold_boundary_control(self) -> None:
+        """Test control cohort assigned when seed < control_percentage."""
+        config = CohortAssignmentConfig(control_percentage=50)
+
+        # Find a session in control
+        for i in range(1000):
+            result = assign_cohort(f"boundary-test-{i}", config=config)
+            if result.assignment_seed < 50:
+                assert result.cohort == EnumCohort.CONTROL
+                return
+
+        pytest.fail("Could not find a session in control with 50% threshold")
+
+    def test_threshold_boundary_treatment(self) -> None:
+        """Test treatment cohort assigned when seed >= control_percentage."""
+        config = CohortAssignmentConfig(control_percentage=50)
+
+        # Find a session in treatment
+        for i in range(1000):
+            result = assign_cohort(f"boundary-test-{i}", config=config)
+            if result.assignment_seed >= 50:
+                assert result.cohort == EnumCohort.TREATMENT
+                return
+
+        pytest.fail("Could not find a session in treatment with 50% threshold")
+
+
+class TestCohortDistributionWithCustomPercentage:
+    """Test distribution matches custom percentages."""
+
+    def test_10_percent_control_distribution(self) -> None:
+        """Test 10% control gives approximately 10% in control cohort."""
+        config = CohortAssignmentConfig(control_percentage=10)
+        n_samples = 2000
+        control_count = 0
+
+        for i in range(n_samples):
+            result = assign_cohort(f"dist-10-{i}", config=config)
+            if result.cohort == EnumCohort.CONTROL:
+                control_count += 1
+
+        control_rate = control_count / n_samples
+        expected_rate = 0.10
+
+        # Allow 3% tolerance (7% to 13%)
+        assert abs(control_rate - expected_rate) < 0.03, (
+            f"Control rate {control_rate:.2%} not within 3% of expected {expected_rate:.2%}"
+        )
+
+    def test_50_percent_control_distribution(self) -> None:
+        """Test 50% control gives approximately 50% in control cohort."""
+        config = CohortAssignmentConfig(control_percentage=50)
+        n_samples = 2000
+        control_count = 0
+
+        for i in range(n_samples):
+            result = assign_cohort(f"dist-50-{i}", config=config)
+            if result.cohort == EnumCohort.CONTROL:
+                control_count += 1
+
+        control_rate = control_count / n_samples
+        expected_rate = 0.50
+
+        # Allow 5% tolerance (45% to 55%)
+        assert abs(control_rate - expected_rate) < 0.05, (
+            f"Control rate {control_rate:.2%} not within 5% of expected {expected_rate:.2%}"
+        )
+
+    def test_90_percent_control_distribution(self) -> None:
+        """Test 90% control gives approximately 90% in control cohort."""
+        config = CohortAssignmentConfig(control_percentage=90)
+        n_samples = 2000
+        control_count = 0
+
+        for i in range(n_samples):
+            result = assign_cohort(f"dist-90-{i}", config=config)
+            if result.cohort == EnumCohort.CONTROL:
+                control_count += 1
+
+        control_rate = control_count / n_samples
+        expected_rate = 0.90
+
+        # Allow 3% tolerance (87% to 93%)
+        assert abs(control_rate - expected_rate) < 0.03, (
+            f"Control rate {control_rate:.2%} not within 3% of expected {expected_rate:.2%}"
+        )

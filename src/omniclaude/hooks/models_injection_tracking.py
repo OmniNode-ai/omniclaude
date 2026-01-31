@@ -86,6 +86,19 @@ class ModelInjectionRecord(BaseModel):
         description="Hash value (0-99) used for deterministic cohort assignment"
     )
 
+    # Effective config at assignment time (for auditability/replay)
+    # These values explain WHY a session was assigned to its cohort
+    effective_control_percentage: int = Field(
+        default=20,
+        ge=0,
+        le=100,
+        description="Control percentage used for this assignment (0-100)",
+    )
+    effective_salt: str = Field(
+        default="omniclaude-injection-v1",
+        description="Salt used for hash-based assignment",
+    )
+
     # Content (renamed from compiled_content per review feedback)
     injected_content: str = Field(
         default="", description="Actual markdown content injected into session"
