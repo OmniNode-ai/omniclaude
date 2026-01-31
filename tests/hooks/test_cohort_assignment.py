@@ -18,20 +18,21 @@ Part of OMN-1673: INJECT-004 injection tracking.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
+from unittest.mock import patch
 
 import pytest
-import yaml
 from pydantic import ValidationError
 
 from omniclaude.hooks.cohort_assignment import (
-    _CONTRACT_PATH,
     COHORT_CONTROL_PERCENTAGE,
     COHORT_TREATMENT_PERCENTAGE,
     CohortAssignment,
     CohortAssignmentConfig,
     EnumCohort,
     assign_cohort,
+)
+from omniclaude.hooks.contracts.contract_experiment_cohort import (
+    ExperimentCohortContract,
 )
 
 pytestmark = pytest.mark.unit
@@ -237,28 +238,23 @@ class TestCohortAssignmentConfig:
 
     def test_from_contract_malformed_yaml_falls_back_to_defaults(
         self,
-        tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
         caplog: pytest.LogCaptureFixture,
     ) -> None:
-        """Test that malformed YAML falls back gracefully to defaults."""
-        # Create malformed YAML file
-        malformed = tmp_path / "malformed.yaml"
-        malformed.write_text("{ invalid yaml: [", encoding="utf-8")
-
-        # Patch contract path to point to malformed file
-        monkeypatch.setattr(
-            "omniclaude.hooks.cohort_assignment._CONTRACT_PATH",
-            malformed,
-        )
-
+        """Test that contract load failure falls back gracefully to defaults."""
         # Clear any env overrides to ensure we test contract fallback
         monkeypatch.delenv("OMNICLAUDE_COHORT_CONTROL_PERCENTAGE", raising=False)
         monkeypatch.delenv("OMNICLAUDE_COHORT_SALT", raising=False)
 
-        # Should fall back to defaults without raising
-        with caplog.at_level(logging.WARNING):
-            config = CohortAssignmentConfig.from_contract()
+        # Patch the contract model's load method to raise an error
+        with patch.object(
+            ExperimentCohortContract,
+            "load",
+            side_effect=Exception("Simulated contract load failure"),
+        ):
+            # Should fall back to defaults without raising
+            with caplog.at_level(logging.WARNING):
+                config = CohortAssignmentConfig.from_contract()
 
         # Verify fallback to hardcoded defaults
         assert config.control_percentage == 20
@@ -346,13 +342,11 @@ class TestCohortAssignmentConfig:
 
     def test_contract_file_exists_and_is_valid(self) -> None:
         """Ensure the shipped contract file exists and contains expected values."""
-        assert _CONTRACT_PATH.exists(), f"Contract not found: {_CONTRACT_PATH}"
+        # Load contract using Pydantic model - validates structure and types
+        contract = ExperimentCohortContract.load()
 
-        with open(_CONTRACT_PATH, encoding="utf-8") as f:
-            contract = yaml.safe_load(f)
-
-        assert contract["experiment"]["cohort"]["control_percentage"] == 20
-        assert contract["experiment"]["cohort"]["salt"] == "omniclaude-injection-v1"
+        assert contract.experiment.cohort.control_percentage == 20
+        assert contract.experiment.cohort.salt == "omniclaude-injection-v1"
 
 
 class TestCohortAssignmentWithCustomConfig:

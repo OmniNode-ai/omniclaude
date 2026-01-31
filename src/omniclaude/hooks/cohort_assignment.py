@@ -26,21 +26,16 @@ import hashlib
 import logging
 import os
 from enum import Enum
-from pathlib import Path
 from typing import NamedTuple
 
-import yaml
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from omniclaude.hooks.contracts.contract_experiment_cohort import (
+    ExperimentCohortContract,
+)
+
 logger = logging.getLogger(__name__)
-
-# =============================================================================
-# Contract Configuration
-# =============================================================================
-
-# Contract file path (relative to this module)
-_CONTRACT_PATH = Path(__file__).parent / "contracts" / "contract_experiment_cohort.yaml"
 
 # =============================================================================
 # Hardcoded Fallbacks (SINGLE SOURCE for when contract is unavailable)
@@ -59,68 +54,19 @@ class _ContractDefaults(NamedTuple):
 
 
 def _load_contract_defaults() -> _ContractDefaults:
-    """Load default values from contract YAML.
+    """Load default values from contract YAML using Pydantic model.
 
     Returns:
         _ContractDefaults with 'control_percentage' and 'salt' from contract.
         Falls back to module-level fallbacks if contract unavailable.
     """
-    if not _CONTRACT_PATH.exists():
-        return _ContractDefaults(
-            control_percentage=_FALLBACK_CONTROL_PERCENTAGE,
-            salt=_FALLBACK_SALT,
-        )
-
     try:
-        with open(_CONTRACT_PATH, encoding="utf-8") as f:
-            contract = yaml.safe_load(f)
-
-        # Guard against non-mapping YAML roots (None, list, scalar)
-        if not isinstance(contract, dict):
-            logger.warning(
-                f"Invalid cohort contract root type: {type(contract).__name__}, "
-                "using defaults"
-            )
-            return _ContractDefaults(
-                control_percentage=_FALLBACK_CONTROL_PERCENTAGE,
-                salt=_FALLBACK_SALT,
-            )
-
-        experiment = contract.get("experiment", {})
-        if not isinstance(experiment, dict):
-            logger.warning(
-                f"Invalid experiment section type: {type(experiment).__name__}, "
-                "using defaults for cohort"
-            )
-            experiment = {}
-
-        cohort = experiment.get("cohort", {})
-        if not isinstance(cohort, dict):
-            logger.warning(
-                f"Invalid cohort section type: {type(cohort).__name__}, "
-                "using defaults for cohort values"
-            )
-            cohort = {}
-
-        control_pct = cohort.get("control_percentage", _FALLBACK_CONTROL_PERCENTAGE)
-        salt = cohort.get("salt", _FALLBACK_SALT)
-
-        # Validate types from YAML
-        if not isinstance(control_pct, int):
-            logger.warning(
-                f"Invalid control_percentage type in contract: {type(control_pct)}, "
-                f"using fallback {_FALLBACK_CONTROL_PERCENTAGE}"
-            )
-            control_pct = _FALLBACK_CONTROL_PERCENTAGE
-        if not isinstance(salt, str):
-            logger.warning(
-                f"Invalid salt type in contract: {type(salt)}, using fallback"
-            )
-            salt = _FALLBACK_SALT
-
-        return _ContractDefaults(control_percentage=control_pct, salt=salt)
-    except (OSError, yaml.YAMLError) as e:
-        # Contract unavailable or malformed - use fallback defaults
+        contract = ExperimentCohortContract.load()
+        return _ContractDefaults(
+            control_percentage=contract.experiment.cohort.control_percentage,
+            salt=contract.experiment.cohort.salt,
+        )
+    except Exception as e:
         logger.warning(f"Failed to load cohort contract, using fallbacks: {e}")
         return _ContractDefaults(
             control_percentage=_FALLBACK_CONTROL_PERCENTAGE,
