@@ -81,11 +81,44 @@ get_time_ms() {
 }
 
 # =============================================================================
+# Environment File Loading
+# =============================================================================
+# Source project .env file if present to pick up KAFKA_BOOTSTRAP_SERVERS and
+# other configuration. This enables hooks to use project-specific settings.
+#
+# Order of precedence:
+# 1. Project .env file (highest priority - overrides existing env vars)
+# 2. Already-set environment variables
+# 3. Default values (lowest priority)
+#
+# SECURITY NOTE: Using `set -a` exports ALL variables from .env to the environment.
+# This means secrets in .env (API keys, passwords, tokens) will be visible to ALL
+# subprocesses spawned by hooks. This is standard shell behavior for local dev
+# environments but be aware of the implications for sensitive credentials.
+
+if [[ -f "${PROJECT_ROOT}/.env" ]]; then
+    # Source .env - note this WILL override already-set variables
+    # Using set -a to export all variables, then set +a to stop
+    set -a
+    # shellcheck disable=SC1091
+    # Note: We use 2>/dev/null because .env files may contain comments or blank
+    # lines that produce benign warnings. Syntax errors are rare in .env files.
+    if ! source "${PROJECT_ROOT}/.env" 2>/dev/null; then
+        # Only log if LOG_FILE is set (caller script responsibility)
+        if [[ -n "${LOG_FILE:-}" ]]; then
+            log "WARN: Failed to source ${PROJECT_ROOT}/.env - check file syntax"
+        fi
+    fi
+    set +a
+fi
+
+# =============================================================================
 # Kafka Configuration
 # =============================================================================
-# Kafka emission is optional and disabled by default.
-# Set KAFKA_BOOTSTRAP_SERVERS in .env to enable.
-# No fallback - must be explicitly configured.
+# Kafka is REQUIRED for OmniClaude intelligence gathering.
+# The entire architecture is event-driven via Kafka - without it, hooks have no purpose.
+# Set KAFKA_BOOTSTRAP_SERVERS in .env (e.g., KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092).
+# SessionStart hook will fail fast if Kafka is not configured.
 
 KAFKA_ENABLED="false"
 if [[ -n "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then

@@ -32,7 +32,25 @@ if [[ -f "$PROJECT_ROOT/.env" ]]; then
 fi
 
 # Source shared functions (provides PYTHON_CMD, KAFKA_ENABLED, get_time_ms, log)
+# shellcheck source=common.sh
 source "${HOOKS_DIR}/scripts/common.sh"
+
+# Daemon status file path (used by write_daemon_status for observability)
+readonly DAEMON_STATUS_FILE="${HOOKS_DIR}/logs/daemon-status"
+
+# Write daemon status atomically to prevent race conditions
+write_daemon_status() {
+    local status="$1"
+    local tmp_file="${DAEMON_STATUS_FILE}.tmp.$$"
+
+    # Ensure logs directory exists
+    mkdir -p "${HOOKS_DIR}/logs" 2>/dev/null || true
+
+    # Atomic write: write to temp file then rename
+    if echo "$status" > "$tmp_file" 2>/dev/null; then
+        mv "$tmp_file" "$DAEMON_STATUS_FILE" 2>/dev/null || rm -f "$tmp_file"
+    fi
+}
 
 export PYTHONPATH="${PROJECT_ROOT}:${PLUGIN_ROOT}/lib:${HOOKS_LIB}:${PYTHONPATH:-}"
 
@@ -113,8 +131,19 @@ start_emit_daemon_if_needed() {
 
     # Start daemon in background, detached from this process
     # Redirect output to log file for debugging
-    nohup "$PYTHON_CMD" -m omnibase_infra.runtime.emit_daemon \
-        --socket "$EMIT_DAEMON_SOCKET" \
+    # Must pass --kafka-servers explicitly (required by CLI)
+    # Supports comma-separated multi-broker strings (e.g., "host1:9092,host2:9092")
+    if [[ -z "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
+        log "FATAL: KAFKA_BOOTSTRAP_SERVERS not set - hook cannot function without Kafka"
+        log "FATAL: OmniClaude's intelligence gathering requires Kafka. Set KAFKA_BOOTSTRAP_SERVERS in your .env file"
+        log "FATAL: Example: KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092"
+        write_daemon_status "kafka_not_configured"
+        exit 1  # Fail fast - Kafka is required for intelligence gathering, not optional
+    fi
+    nohup "$PYTHON_CMD" -m omnibase_infra.runtime.emit_daemon.cli start \
+        --kafka-servers "$KAFKA_BOOTSTRAP_SERVERS" \
+        --socket-path "$EMIT_DAEMON_SOCKET" \
+        --daemonize \
         >> "${HOOKS_DIR}/logs/emit-daemon.log" 2>&1 &
 
     local daemon_pid=$!
@@ -141,6 +170,7 @@ start_emit_daemon_if_needed() {
         while [[ $verify_attempt -lt $max_verify_attempts ]]; do
             if check_socket_responsive "$EMIT_DAEMON_SOCKET" 0.1; then
                 log "Emit daemon ready (verified on attempt $((verify_attempt + 1)))"
+                write_daemon_status "running"
                 return 0
             fi
             ((verify_attempt++))

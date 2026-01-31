@@ -203,24 +203,29 @@ class TestThreadSafety:
 
     def test_concurrent_status_calls_are_safe(self) -> None:
         """Multiple threads can call get_status concurrently."""
-        from plugins.onex.hooks.lib.emit_client_wrapper import get_status
+        from plugins.onex.hooks.lib import emit_client_wrapper
 
-        errors = []
-        results = []
+        errors: list[Exception] = []
+        results: list[dict] = []
+
+        # Mock _get_client to avoid real socket operations that would block
+        mock_client = MagicMock()
+        mock_client.is_daemon_running_sync.return_value = True
 
         def status_worker():
             try:
                 for _ in range(100):
-                    status = get_status()
+                    status = emit_client_wrapper.get_status()
                     results.append(status)
             except Exception as e:
                 errors.append(e)
 
-        threads = [threading.Thread(target=status_worker) for _ in range(10)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
+        with patch.object(emit_client_wrapper, "_get_client", return_value=mock_client):
+            threads = [threading.Thread(target=status_worker) for _ in range(10)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
 
         # No errors should have occurred
         assert len(errors) == 0
@@ -233,15 +238,19 @@ class TestThreadSafety:
 
     def test_concurrent_emit_calls_are_safe(self) -> None:
         """Multiple threads can call emit_event concurrently."""
-        from plugins.onex.hooks.lib.emit_client_wrapper import emit_event
+        from plugins.onex.hooks.lib import emit_client_wrapper
 
-        errors = []
-        results = []
+        errors: list[Exception] = []
+        results: list[bool] = []
+
+        # Mock _get_client to avoid real socket operations that would block
+        mock_client = MagicMock()
+        mock_client.emit_sync.return_value = "test-event-id"
 
         def emit_worker():
             try:
                 for _ in range(50):
-                    result = emit_event(
+                    result = emit_client_wrapper.emit_event(
                         event_type="session.started",
                         payload={"session_id": "test"},
                         timeout_ms=1,
@@ -250,19 +259,21 @@ class TestThreadSafety:
             except Exception as e:
                 errors.append(e)
 
-        threads = [threading.Thread(target=emit_worker) for _ in range(10)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
+        with patch.object(emit_client_wrapper, "_get_client", return_value=mock_client):
+            threads = [threading.Thread(target=emit_worker) for _ in range(10)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
 
         # No errors should have occurred
         assert len(errors) == 0
 
-        # All results should be bools
+        # All results should be bools (True since mock succeeds)
         assert len(results) == 500
         for result in results:
             assert isinstance(result, bool)
+            assert result is True  # Mock client succeeds
 
 
 # =============================================================================
@@ -818,3 +829,62 @@ class TestErrorClassification:
         assert not any(
             "not available" in str(call) for call in mock_warning.call_args_list
         )
+
+
+# =============================================================================
+# Integration Tests
+# =============================================================================
+
+
+class TestIntegration:
+    """Integration tests for actual socket operations.
+
+    These tests require a running emit daemon and are skipped in CI.
+    Run locally with: pytest -m integration
+    """
+
+    @pytest.mark.integration
+    def test_concurrent_socket_operations_with_real_daemon(self) -> None:
+        """Integration test: concurrent operations against real daemon socket.
+
+        This test verifies thread-safety with actual socket operations.
+        Requires emit daemon to be running.
+        """
+        from plugins.onex.hooks.lib import emit_client_wrapper
+
+        # Skip if daemon is not running
+        initial_status = emit_client_wrapper.get_status()
+        if not initial_status.get("daemon_running", False):
+            pytest.skip(
+                "Emit daemon not running - start with: "
+                "python -m omnibase_infra.runtime.emit_daemon.cli start "
+                "--kafka-servers <host:port>"
+            )
+
+        errors: list[Exception] = []
+        results: list[dict] = []
+
+        def status_worker() -> None:
+            try:
+                for _ in range(20):
+                    status = emit_client_wrapper.get_status()
+                    results.append(status)
+            except Exception as e:
+                errors.append(e)
+
+        # Run 5 threads making 20 status calls each
+        threads = [threading.Thread(target=status_worker) for _ in range(5)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=30)
+
+        # Verify no errors occurred
+        assert len(errors) == 0, f"Errors during concurrent access: {errors}"
+
+        # All 100 calls should have succeeded
+        assert len(results) == 100
+
+        # All results should indicate daemon is running
+        for result in results:
+            assert result.get("daemon_running") is True

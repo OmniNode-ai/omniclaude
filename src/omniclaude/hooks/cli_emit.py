@@ -653,7 +653,6 @@ async def _emit_tool_content(
         config = ModelKafkaEventBusConfig(
             bootstrap_servers=bootstrap_servers,
             environment=env,
-            group="omniclaude-hooks",
             timeout_seconds=2,
             max_retry_attempts=0,
             acks="all",

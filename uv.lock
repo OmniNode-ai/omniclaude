@@ -1353,7 +1353,7 @@ wheels = [
 
 [[package]]
 name = "omnibase-core"
-version = "0.9.10"
+version = "0.9.11"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -1365,14 +1365,14 @@ dependencies = [
     { name = "pydantic" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6b/4b/ab7ec803a5cf6f77be9684e0ce5cc22889145b98bb210c1c7335bb50413c/omnibase_core-0.9.10.tar.gz", hash = "sha256:5606116f7c0512945db1cbabd605fa3f63317f054f030a7aac3c66606f0b0f1f", size = 2991359, upload-time = "2026-01-30T14:17:46.991Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ef/6b/b39e91b37812f78d6aca88d2df4a2a41b00a60f2e7c76741f010f3c2c657/omnibase_core-0.9.11.tar.gz", hash = "sha256:433997be3d0cafdc94b482ea44416c92e49603fd2bdc5ee3edbe35b1a5e17934", size = 2991452, upload-time = "2026-01-30T21:05:47.41Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/50/6b/2a834a0a99b9ccee0000835f8c6993f2a42c0d12710ebe611b23789d4e05/omnibase_core-0.9.10-py3-none-any.whl", hash = "sha256:3a67a6b1e75674ef33e5cbeaf63fe5c65d7cd5b0e6899d230191e0750002b847", size = 4478105, upload-time = "2026-01-30T14:17:44.966Z" },
+    { url = "https://files.pythonhosted.org/packages/1a/b5/d286a851a111c3f715c6f528fabe0602c0d142345cc76faaf3e3a620fe69/omnibase_core-0.9.11-py3-none-any.whl", hash = "sha256:501a1e77114b84714b215c7bb47cfd4cb7d658acff2db2453501dcb8cc329341", size = 4478233, upload-time = "2026-01-30T21:05:45.295Z" },
 ]
 
 [[package]]
 name = "omnibase-infra"
-version = "0.2.4"
+version = "0.2.8"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiofiles" },
@@ -1417,23 +1417,23 @@ dependencies = [
     { name = "tenacity" },
     { name = "uvicorn" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9e/6a/0a1fd2ff330c9922c472568f9ef62f950bbf6ee154c2e1fae06a5f06b21b/omnibase_infra-0.2.4.tar.gz", hash = "sha256:4fe723deb9f41bdf67740f425112c30d1fc7ec48612864d72e218eb135a1f028", size = 1430278, upload-time = "2026-01-26T15:04:33.54Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/48/f0/cafd89a79237cfb22e0ef7ba96d6688b5ade257a4cfdaabfb0007bfb0024/omnibase_infra-0.2.8.tar.gz", hash = "sha256:4de17c7fff305f58b133723173d1ea9268c8f00cec977a7239627dcae18bf1cb", size = 1594997, upload-time = "2026-01-31T12:32:44.774Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f4/12/e690fa6e995bd225b6986319743f0c3fe27c93d3131321ca90957a58e55b/omnibase_infra-0.2.4-py3-none-any.whl", hash = "sha256:0f8c5c159eed271cfadf8ab640e7dd8dc6af7ded813729bf4563b1cafe6e5102", size = 1970150, upload-time = "2026-01-26T15:04:32.233Z" },
+    { url = "https://files.pythonhosted.org/packages/9f/d4/5089b53ff635ad0a443cc69fc73f4e13ad9a64956b474722bcd3a7f24988/omnibase_infra-0.2.8-py3-none-any.whl", hash = "sha256:dfb3a1d3770aaf68fb632d0dca4b64891167b50196996e4ee4457c57ad2a6cf9", size = 2202858, upload-time = "2026-01-31T12:32:43.508Z" },
 ]
 
 [[package]]
 name = "omnibase-spi"
-version = "0.6.1"
+version = "0.6.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "omnibase-core" },
     { name = "pydantic" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/18/72/97462e633300a1e52eda44de274540678c3ea120e19acad5e2eb62af87d4/omnibase_spi-0.6.1.tar.gz", hash = "sha256:9009e609ea711b4e2f747e6d11ae15b781565be3de58e985dc4c112999739634", size = 461576, upload-time = "2026-01-26T19:24:16.966Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0e/82/fa964cf10da41098116ada73ab7ffb4844b87963b530674ddbf514d562b8/omnibase_spi-0.6.4.tar.gz", hash = "sha256:07005ffdef8aead96db9a749708984c8f61f73d37d6775bc1c05aed2e585af4b", size = 463786, upload-time = "2026-01-30T21:28:52.699Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f2/74/9fe46a2c2d3ce227232ed6740e1ac27ec50a98b31cab36a29f4d7b47e799/omnibase_spi-0.6.1-py3-none-any.whl", hash = "sha256:2b1da2f0c0d6c31e26af9f61116ceb094bcf11ae824ce62124bc0076f48d45fb", size = 650020, upload-time = "2026-01-26T19:24:15.362Z" },
+    { url = "https://files.pythonhosted.org/packages/dd/54/6db66ff3fc22d4b06fe21b31df5b2e48d8966270dce71c07d5fb4dc12a6b/omnibase_spi-0.6.4-py3-none-any.whl", hash = "sha256:784e455a9f01c5323437054a9bf13a8f8701e8c1dc27fc2ee92b6052046f01ad", size = 652582, upload-time = "2026-01-30T21:28:51.511Z" },
 ]
 
 [[package]]
@@ -1476,9 +1476,9 @@ dev = [
 requires-dist = [
     { name = "cachetools", specifier = ">=5.0.0" },
     { name = "click", specifier = ">=8.1.0" },
-    { name = "omnibase-core", specifier = ">=0.9.10,<0.10.0" },
-    { name = "omnibase-infra", specifier = ">=0.2.4,<0.3.0" },
-    { name = "omnibase-spi", specifier = ">=0.6.1,<0.7.0" },
+    { name = "omnibase-core", specifier = ">=0.9.11,<0.10.0" },
+    { name = "omnibase-infra", specifier = ">=0.2.8,<0.3.0" },
+    { name = "omnibase-spi", specifier = ">=0.6.4,<0.7.0" },
     { name = "pydantic", specifier = ">=2.9.0" },
     { name = "pydantic-settings", specifier = ">=2.6.0" },
     { name = "tiktoken", specifier = ">=0.5.0" },

@@ -373,7 +373,6 @@ def _create_kafka_config() -> ModelKafkaEventBusConfig:
     return ModelKafkaEventBusConfig(
         bootstrap_servers=bootstrap_servers,
         environment=environment,
-        group="omniclaude-hooks",
         timeout_seconds=timeout_seconds,
         max_retry_attempts=DEFAULT_KAFKA_MAX_RETRY_ATTEMPTS,
         acks=DEFAULT_KAFKA_ACKS,
