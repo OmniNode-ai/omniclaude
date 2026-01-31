@@ -85,13 +85,13 @@ def count_tokens(text: str) -> int:
     Returns:
         Number of tokens in the text.
     """
-    tokenizer = _get_tokenizer()
+    tokenizer = _get_tokenizer()  # secret-ok: variable name not a secret
     return len(tokenizer.encode(text, disallowed_special=()))
 
 
 # Computed header token count - keeps header_tokens default in sync with actual header.
 # This is computed once at module load time for efficiency.
-INJECTION_HEADER_TOKENS: int = count_tokens(INJECTION_HEADER)
+INJECTION_HEADER_TOKENS: int = count_tokens(INJECTION_HEADER)  # secret-ok: token count
 
 
 # =============================================================================
@@ -293,7 +293,7 @@ class InjectionLimitsConfig(BaseSettings):
         description="Maximum number of patterns to inject per session",
     )
 
-    max_tokens_injected: int = Field(
+    max_tokens_injected: int = Field(  # secret-ok: field name not a secret
         default=2000,
         ge=100,
         le=10000,
@@ -492,7 +492,7 @@ def select_patterns_for_injection(
         )
         normalized_domain = normalize_domain(pattern.domain)
         rendered = render_single_pattern(pattern)
-        rendered_tokens = count_tokens(rendered)
+        rendered_tokens = count_tokens(rendered)  # secret-ok: token count variable
 
         scored.append(
             ScoredPattern(
@@ -517,7 +517,8 @@ def select_patterns_for_injection(
     total_tokens = effective_header_tokens  # Start with header overhead
 
     # Apply safety margin to token budget to account for tokenizer differences
-    effective_token_budget = int(limits.max_tokens_injected * TOKEN_SAFETY_MARGIN)
+    budget = limits.max_tokens_injected * TOKEN_SAFETY_MARGIN
+    effective_token_budget = int(budget)  # secret-ok: variable name
 
     for scored_pattern in scored:
         # Check max_patterns_per_injection (hard stop)
