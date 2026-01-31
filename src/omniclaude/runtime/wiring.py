@@ -154,9 +154,10 @@ async def publish_handler_contracts(
                     "composite mode with package fallback not yet implemented."
                 )
 
-    # Resolve environment
+    # Resolve environment - handle empty string and None cases
     if environment is None:
-        environment = os.getenv("ONEX_ENV", "dev")
+        environment = os.getenv("ONEX_ENV", "") or "dev"
+    environment = environment.strip() or "dev"
 
     # Initialize error tracking
     contract_errors: list[ContractError] = []
@@ -226,7 +227,6 @@ async def publish_handler_contracts(
     topic = f"{environment}.{CONTRACT_REGISTERED_EVENT}"
 
     for contract_path in contract_paths:
-        contract_name = contract_path.parent.name
         try:
             # Read contract YAML
             contract_yaml = contract_path.read_text(encoding="utf-8")
