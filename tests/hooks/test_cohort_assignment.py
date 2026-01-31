@@ -21,9 +21,11 @@ import logging
 from pathlib import Path
 
 import pytest
+import yaml
 from pydantic import ValidationError
 
 from omniclaude.hooks.cohort_assignment import (
+    _CONTRACT_PATH,
     COHORT_CONTROL_PERCENTAGE,
     COHORT_TREATMENT_PERCENTAGE,
     CohortAssignment,
@@ -341,6 +343,16 @@ class TestCohortAssignmentConfig:
             "OMNICLAUDE_COHORT_CONTROL_PERCENTAGE" in record.message
             for record in caplog.records
         )
+
+    def test_contract_file_exists_and_is_valid(self) -> None:
+        """Ensure the shipped contract file exists and contains expected values."""
+        assert _CONTRACT_PATH.exists(), f"Contract not found: {_CONTRACT_PATH}"
+
+        with open(_CONTRACT_PATH, encoding="utf-8") as f:
+            contract = yaml.safe_load(f)
+
+        assert contract["experiment"]["cohort"]["control_percentage"] == 20
+        assert contract["experiment"]["cohort"]["salt"] == "omniclaude-injection-v1"
 
 
 class TestCohortAssignmentWithCustomConfig:

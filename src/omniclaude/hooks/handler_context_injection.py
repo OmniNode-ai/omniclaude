@@ -30,6 +30,8 @@ from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from omniclaude.hooks.cohort_assignment import (
+    CONTRACT_DEFAULT_CONTROL_PERCENTAGE,
+    CONTRACT_DEFAULT_SALT,
     CohortAssignment,
     EnumCohort,
     assign_cohort,
@@ -287,8 +289,8 @@ class HandlerContextInjection:
         injected_content: str,
         injected_token_count: int,
         correlation_id: str = "",
-        effective_control_percentage: int = 20,
-        effective_salt: str = "omniclaude-injection-v1",
+        effective_control_percentage: int = CONTRACT_DEFAULT_CONTROL_PERCENTAGE,
+        effective_salt: str = CONTRACT_DEFAULT_SALT,
     ) -> bool:
         """Emit injection record via emit daemon.
 
