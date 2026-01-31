@@ -30,6 +30,8 @@ from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from omniclaude.hooks.cohort_assignment import (
+    CONTRACT_DEFAULT_CONTROL_PERCENTAGE,
+    CONTRACT_DEFAULT_SALT,
     CohortAssignment,
     EnumCohort,
     assign_cohort,
@@ -287,6 +289,8 @@ class HandlerContextInjection:
         injected_content: str,
         injected_token_count: int,
         correlation_id: str = "",
+        effective_control_percentage: int = CONTRACT_DEFAULT_CONTROL_PERCENTAGE,
+        effective_salt: str = CONTRACT_DEFAULT_SALT,
     ) -> bool:
         """Emit injection record via emit daemon.
 
@@ -294,6 +298,7 @@ class HandlerContextInjection:
         Uses emit daemon for durability (not asyncio.create_task).
 
         Uses ModelInjectionRecord for Pydantic validation before emission.
+        Stamps effective config values for auditability/replay.
         """
         try:
             emit_event = _get_emit_event()
@@ -310,6 +315,8 @@ class HandlerContextInjection:
                 injected_content=injected_content,
                 injected_token_count=injected_token_count,
                 correlation_id=correlation_id,
+                effective_control_percentage=effective_control_percentage,
+                effective_salt=effective_salt,
             )
 
             # Serialize with by_alias=True to output "session_id" instead of "session_id_raw"
@@ -352,7 +359,7 @@ class HandlerContextInjection:
         # Cohort assignment (before any work)
         cohort_assignment: CohortAssignment | None = None
         if session_id:
-            cohort_assignment = assign_cohort(session_id)
+            cohort_assignment = assign_cohort(session_id, config=cfg.cohort)
 
             # Control cohort: record and return early (no pattern injection)
             if cohort_assignment.cohort == EnumCohort.CONTROL:
@@ -367,6 +374,8 @@ class HandlerContextInjection:
                     injected_content="",
                     injected_token_count=0,
                     correlation_id=correlation_id,
+                    effective_control_percentage=cfg.cohort.control_percentage,
+                    effective_salt=cfg.cohort.salt,
                 )
                 logger.info(f"Session {session_id[:8]}... assigned to control cohort")
                 return ModelInjectionResult(
@@ -452,6 +461,8 @@ class HandlerContextInjection:
                     injected_content="",
                     injected_token_count=0,
                     correlation_id=correlation_id,
+                    effective_control_percentage=cfg.cohort.control_percentage,
+                    effective_salt=cfg.cohort.salt,
                 )
             return ModelInjectionResult(
                 success=True,  # Graceful degradation
@@ -504,6 +515,8 @@ class HandlerContextInjection:
                 injected_content=context_markdown,
                 injected_token_count=token_count,
                 correlation_id=correlation_id,
+                effective_control_percentage=cfg.cohort.control_percentage,
+                effective_salt=cfg.cohort.salt,
             )
 
         # Step 7: Emit event
