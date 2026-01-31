@@ -71,6 +71,8 @@ class TopicBase(StrEnum):
     CONTEXT_RETRIEVAL_REQUESTED = "onex.cmd.omniclaude.context-retrieval-requested.v1"
     CONTEXT_RETRIEVAL_COMPLETED = "onex.evt.omniclaude.context-retrieval-completed.v1"
     CONTEXT_INJECTED = "onex.evt.omniclaude.context-injected.v1"
+    # Injection tracking event (OMN-1673 INJECT-004)
+    INJECTION_RECORDED = "onex.evt.omniclaude.injection-recorded.v1"
 
 
 def _validate_topic_segment(segment: str, name: str) -> str:

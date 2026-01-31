@@ -311,6 +311,21 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         partition_key_field="session_id",
         required_fields=["tool_name", "session_id"],
     ),
+    # =========================================================================
+    # Injection Tracking Events (OMN-1673 INJECT-004)
+    # =========================================================================
+    "injection.recorded": EventRegistration(
+        event_type="injection.recorded",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.INJECTION_RECORDED,
+                transform=None,  # Passthrough - full payload
+                description="Injection tracking for A/B analysis and outcome attribution",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["injection_id", "session_id", "cohort"],
+    ),
 }
 
 
