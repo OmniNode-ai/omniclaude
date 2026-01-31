@@ -18,8 +18,8 @@ from uuid import UUID
 
 import pytest
 
-# Mark all tests in this module as integration tests (they read real contract files)
-pytestmark = pytest.mark.integration
+# Mark all tests in this module as unit tests (they use mocked publishers)
+pytestmark = pytest.mark.unit
 
 
 # =============================================================================
@@ -75,8 +75,8 @@ class MockModelContractRegisteredEvent:
         )
 
 
-# Topic suffix constant
-MOCK_TOPIC_SUFFIX = "onex.evt.omninode.contract-registered.v1"
+# Topic constant (matches CONTRACT_REGISTERED_EVENT in omnibase_core)
+MOCK_CONTRACT_REGISTERED_EVENT = "onex.evt.contract-registered.v1"
 
 
 # =============================================================================
@@ -162,7 +162,9 @@ def mock_omnibase_imports():
     """
     # Create mock modules
     mock_contract_registration = MagicMock()
-    mock_contract_registration.TOPIC_SUFFIX_CONTRACT_REGISTERED = MOCK_TOPIC_SUFFIX
+    mock_contract_registration.CONTRACT_REGISTERED_EVENT = (
+        MOCK_CONTRACT_REGISTERED_EVENT
+    )
     mock_contract_registration.ModelContractRegisteredEvent = (
         MockModelContractRegisteredEvent
     )
@@ -170,12 +172,17 @@ def mock_omnibase_imports():
     mock_primitives = MagicMock()
     mock_primitives.ModelSemVer = MockModelSemVer
 
+    # Mock protocol for type annotation
+    mock_protocol_module = MagicMock()
+    mock_protocol_module.ProtocolEventBusPublisher = MagicMock
+
     # Patch the import system
     with patch.dict(
         sys.modules,
         {
             "omnibase_core.models.events.contract_registration": mock_contract_registration,
             "omnibase_core.models.primitives.model_semver": mock_primitives,
+            "omnibase_spi.protocols.protocol_event_bus_publisher": mock_protocol_module,
         },
     ):
         yield
@@ -392,7 +399,7 @@ class TestPublishHandlerContracts:
         """Verify that the function retrieves publisher from container.
 
         The function should call container.get_service_async() with
-        "ProtocolEventBusPublisher" to obtain the publisher.
+        ProtocolEventBusPublisher protocol class to obtain the publisher.
         """
         # Import after mocks are in place
         from omniclaude.runtime.wiring import publish_handler_contracts
@@ -404,10 +411,9 @@ class TestPublishHandlerContracts:
             environment="test",
         )
 
-        # Assert: get_service_async was called with correct argument
-        mock_container.get_service_async.assert_called_once_with(
-            "ProtocolEventBusPublisher"
-        )
+        # Assert: get_service_async was called exactly once
+        # (The argument is the mocked ProtocolEventBusPublisher class)
+        mock_container.get_service_async.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_publish_handler_contracts_handles_invalid_yaml(

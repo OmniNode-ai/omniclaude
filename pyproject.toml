@@ -4,9 +4,9 @@ version = "0.1.0"
 description = "Claude Code hooks + learning loop integration"
 requires-python = ">=3.12,<4.0"
 dependencies = [
-    "omnibase-core>=0.9.10,<0.10.0",
-    "omnibase-spi>=0.6.1,<0.7.0",
-    "omnibase-infra>=0.2.6,<0.3.0",  # OMN-1654: KafkaContractSource
+    "omnibase-core>=0.9.11,<0.10.0",
+    "omnibase-spi>=0.6.4,<0.7.0",
+    "omnibase-infra>=0.2.7,<0.3.0",  # OMN-1654: KafkaContractSource
     "pydantic>=2.9.0",
     "pydantic-settings>=2.6.0",
     "cachetools>=5.0.0",

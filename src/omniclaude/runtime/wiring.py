@@ -97,13 +97,16 @@ async def publish_handler_contracts(
     # Import here to avoid circular imports and allow graceful degradation
     try:
         from omnibase_core.models.events.contract_registration import (
-            TOPIC_SUFFIX_CONTRACT_REGISTERED,
+            CONTRACT_REGISTERED_EVENT,
             ModelContractRegisteredEvent,
         )
         from omnibase_core.models.primitives.model_semver import ModelSemVer
+        from omnibase_spi.protocols.protocol_event_bus_publisher import (
+            ProtocolEventBusPublisher,
+        )
     except ImportError as e:
         logger.warning(
-            "Contract registration events not available (omnibase_core >= 0.9.10 required): %s",
+            "Contract registration events not available (omnibase_core >= 0.9.11 required): %s",
             e,
         )
         raise
@@ -146,7 +149,9 @@ async def publish_handler_contracts(
 
     # Get event bus publisher from container
     try:
-        publisher = await container.get_service_async("ProtocolEventBusPublisher")
+        publisher: ProtocolEventBusPublisher = await container.get_service_async(
+            ProtocolEventBusPublisher
+        )
     except Exception as e:
         logger.warning(
             "Failed to get event bus publisher from container: %s",
@@ -155,7 +160,7 @@ async def publish_handler_contracts(
         raise
 
     # Build topic name
-    topic = f"{environment}.{TOPIC_SUFFIX_CONTRACT_REGISTERED}"
+    topic = f"{environment}.{CONTRACT_REGISTERED_EVENT}"
 
     published: list[str] = []
     failed: list[str] = []
