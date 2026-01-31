@@ -150,6 +150,7 @@ start_emit_daemon_if_needed() {
         while [[ $verify_attempt -lt $max_verify_attempts ]]; do
             if check_socket_responsive "$EMIT_DAEMON_SOCKET" 0.1; then
                 log "Emit daemon ready (verified on attempt $((verify_attempt + 1)))"
+                echo "running" > "${HOOKS_DIR}/logs/daemon-status"
                 return 0
             fi
             ((verify_attempt++))
