@@ -70,7 +70,9 @@ async def publish_handler_contracts(
           non-fatal: logged, added to contract_errors, processing continues.
         - Infrastructure errors (Kafka, publisher) are fatal by default:
           raises ContractPublishingInfraError immediately when fail_fast=True.
-        - Zero contracts raises NoContractsFoundError when allow_zero_contracts=False.
+        - Zero contracts raises NoContractsFoundError when allow_zero_contracts=False
+          and no contract files exist. If contracts are found but all fail validation,
+          the function returns normally with contract_errors populated.
 
     Args:
         container: The ONEX container with event bus publisher.
@@ -85,7 +87,8 @@ async def publish_handler_contracts(
     Raises:
         ImportError: If omnibase_core event models are not available.
         NotImplementedError: If package or composite mode is used (not yet implemented).
-        NoContractsFoundError: If no contracts found and allow_zero_contracts=False.
+        NoContractsFoundError: If no contract files found (empty directory) and
+            allow_zero_contracts=False. Not raised if contracts exist but all fail validation.
         ContractPublishingInfraError: If infrastructure errors occur and fail_fast=True.
 
     Example:
@@ -119,6 +122,7 @@ async def publish_handler_contracts(
         raise
 
     # Resolve contract paths based on mode - NO MAGIC PATHS
+    source_description = "unknown"  # Initialize to ensure variable is always bound
     match config.mode:
         case "filesystem":
             contracts_root = config.filesystem_root
@@ -367,17 +371,26 @@ async def publish_handler_contracts(
             ", ".join(e.error_type for e in infra_errors),
         )
 
-    logger.info(
-        "Successfully published %d/%d handler contract(s)",
-        len(published),
-        len(contract_paths),
-    )
-
     duration_ms = (time.monotonic() - start_time) * 1000
 
-    # Zero-contracts guard (after allowing contract errors to accumulate)
-    if not published and not config.allow_zero_contracts:
+    logger.info(
+        "Successfully published %d/%d handler contract(s) in %.1fms",
+        len(published),
+        len(contract_paths),
+        duration_ms,
+    )
+
+    # Zero-contracts guard - only raise if truly no contracts found.
+    # If contract_errors is non-empty, we DID find contracts - they just all failed validation.
+    if not published and not contract_errors and not config.allow_zero_contracts:
         raise NoContractsFoundError(source_description)
+
+    # Log when all contracts failed validation (distinct from "not found")
+    if not published and contract_errors:
+        logger.warning(
+            "All %d contract(s) failed validation - none published",
+            len(contract_errors),
+        )
 
     # Fail-fast check for accumulated infra errors (when fail_fast=True but we got here)
     if infra_errors and config.fail_fast:
