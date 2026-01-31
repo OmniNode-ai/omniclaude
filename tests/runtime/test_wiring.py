@@ -11,6 +11,7 @@ Ticket: OMN-1605 - Implement contract-driven handler registration loader
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -212,12 +213,19 @@ class TestPublishHandlerContracts:
         3. The topic includes the environment prefix
         """
         # Import after mocks are in place
+        from omniclaude.runtime.contract_models import ContractPublisherConfig
         from omniclaude.runtime.wiring import publish_handler_contracts
+
+        # Create config for filesystem mode
+        config = ContractPublisherConfig(
+            mode="filesystem",
+            filesystem_root=contracts_root,
+        )
 
         # Act
         result = await publish_handler_contracts(
             container=mock_container,
-            contracts_root=contracts_root,
+            config=config,
             environment="test",
         )
 
@@ -256,28 +264,35 @@ class TestPublishHandlerContracts:
 
         When the contracts_root directory does not exist, the function should:
         1. Return an empty list
-        2. Not raise an exception
+        2. Not raise an exception (when allow_zero_contracts=True)
         3. Not call publisher.publish()
         """
         # Import after mocks are in place
+        from omniclaude.runtime.contract_models import ContractPublisherConfig
         from omniclaude.runtime.wiring import publish_handler_contracts
 
         # Arrange: use a non-existent directory
         non_existent_path = tmp_path / "does_not_exist" / "contracts"
 
+        config = ContractPublisherConfig(
+            mode="filesystem",
+            filesystem_root=non_existent_path,
+            allow_zero_contracts=True,  # Allow empty result
+        )
+
         # Act
         result = await publish_handler_contracts(
             container=mock_container,
-            contracts_root=non_existent_path,
+            config=config,
             environment="test",
         )
 
-        # Assert: returns empty published and failed lists
+        # Assert: returns empty published and error lists
         assert result.published == [], (
             f"Expected empty published list for missing directory, got: {result.published}"
         )
-        assert result.failed == [], (
-            f"Expected empty failed list for missing directory, got: {result.failed}"
+        assert result.contract_errors == [], (
+            f"Expected empty contract_errors list for missing directory, got: {result.contract_errors}"
         )
 
         # Assert: publisher.publish was NOT called
@@ -296,19 +311,26 @@ class TestPublishHandlerContracts:
         """Verify that empty contracts directory returns empty list.
 
         When the contracts_root exists but has no contract.yaml files,
-        the function should return an empty list.
+        the function should return an empty list (when allow_zero_contracts=True).
         """
         # Import after mocks are in place
+        from omniclaude.runtime.contract_models import ContractPublisherConfig
         from omniclaude.runtime.wiring import publish_handler_contracts
 
         # Arrange: create empty directory
         empty_dir = tmp_path / "empty_contracts"
         empty_dir.mkdir(parents=True)
 
+        config = ContractPublisherConfig(
+            mode="filesystem",
+            filesystem_root=empty_dir,
+            allow_zero_contracts=True,  # Allow empty result
+        )
+
         # Act
         result = await publish_handler_contracts(
             container=mock_container,
-            contracts_root=empty_dir,
+            config=config,
             environment="test",
         )
 
@@ -335,12 +357,18 @@ class TestPublishHandlerContracts:
         The key should be the handler_id encoded as UTF-8 bytes.
         """
         # Import after mocks are in place
+        from omniclaude.runtime.contract_models import ContractPublisherConfig
         from omniclaude.runtime.wiring import publish_handler_contracts
+
+        config = ContractPublisherConfig(
+            mode="filesystem",
+            filesystem_root=temp_contracts_dir,
+        )
 
         # Act
         result = await publish_handler_contracts(
             container=mock_container,
-            contracts_root=temp_contracts_dir,
+            config=config,
             environment="test",
         )
 
@@ -369,13 +397,19 @@ class TestPublishHandlerContracts:
         environment variable or fall back to 'dev'.
         """
         # Import after mocks are in place
+        from omniclaude.runtime.contract_models import ContractPublisherConfig
         from omniclaude.runtime.wiring import publish_handler_contracts
+
+        config = ContractPublisherConfig(
+            mode="filesystem",
+            filesystem_root=temp_contracts_dir,
+        )
 
         # Act: call without environment parameter
         with patch.dict("os.environ", {"ONEX_ENV": "staging"}):
             result = await publish_handler_contracts(
                 container=mock_container,
-                contracts_root=temp_contracts_dir,
+                config=config,
             )
 
         # Assert: handler was published
@@ -402,12 +436,18 @@ class TestPublishHandlerContracts:
         ProtocolEventBusPublisher protocol class to obtain the publisher.
         """
         # Import after mocks are in place
+        from omniclaude.runtime.contract_models import ContractPublisherConfig
         from omniclaude.runtime.wiring import publish_handler_contracts
+
+        config = ContractPublisherConfig(
+            mode="filesystem",
+            filesystem_root=temp_contracts_dir,
+        )
 
         # Act
         await publish_handler_contracts(
             container=mock_container,
-            contracts_root=temp_contracts_dir,
+            config=config,
             environment="test",
         )
 
@@ -429,6 +469,7 @@ class TestPublishHandlerContracts:
         it should be skipped and other contracts should still be published.
         """
         # Import after mocks are in place
+        from omniclaude.runtime.contract_models import ContractPublisherConfig
         from omniclaude.runtime.wiring import publish_handler_contracts
 
         # Arrange: create directory with invalid contract
@@ -446,25 +487,32 @@ contract_version:
   major: 1
   minor: 0
   patch: 0
+metadata:
+  handler_class: valid.module.Handler
 """
         (valid_dir / "contract.yaml").write_text(valid_yaml)
 
         contracts_root = tmp_path / "contracts" / "handlers"
 
+        config = ContractPublisherConfig(
+            mode="filesystem",
+            filesystem_root=contracts_root,
+        )
+
         # Act: should not raise
         result = await publish_handler_contracts(
             container=mock_container,
-            contracts_root=contracts_root,
+            config=config,
             environment="test",
         )
 
-        # Assert: valid handler was published, invalid was tracked as failed
+        # Assert: valid handler was published, invalid was tracked as contract error
         assert "valid.handler" in result.published, (
             f"Expected 'valid.handler' in result.published, got: {result.published}"
         )
-        # Invalid contract should be tracked in failed list (not crash the function)
-        assert len(result.failed) >= 1, (
-            f"Expected at least one failed contract, got: {result.failed}"
+        # Invalid contract should be tracked in contract_errors list (not crash the function)
+        assert len(result.contract_errors) >= 1, (
+            f"Expected at least one contract error, got: {result.contract_errors}"
         )
 
     @pytest.mark.asyncio
@@ -476,9 +524,11 @@ contract_version:
         """Verify that missing publisher raises an exception.
 
         When the container cannot provide the event bus publisher,
-        the function should raise an exception.
+        the function should raise ContractPublishingInfraError (fail_fast=True).
         """
         # Import after mocks are in place
+        from omniclaude.runtime.contract_models import ContractPublisherConfig
+        from omniclaude.runtime.exceptions import ContractPublishingInfraError
         from omniclaude.runtime.wiring import publish_handler_contracts
 
         # Arrange: container that fails to get publisher
@@ -487,11 +537,17 @@ contract_version:
             side_effect=Exception("Publisher not available")
         )
 
-        # Act & Assert: should raise
-        with pytest.raises(Exception, match="Publisher not available"):
+        config = ContractPublisherConfig(
+            mode="filesystem",
+            filesystem_root=temp_contracts_dir,
+            fail_fast=True,  # Default behavior
+        )
+
+        # Act & Assert: should raise ContractPublishingInfraError
+        with pytest.raises(ContractPublishingInfraError):
             await publish_handler_contracts(
                 container=mock_container,
-                contracts_root=temp_contracts_dir,
+                config=config,
                 environment="test",
             )
 
@@ -517,12 +573,18 @@ contract_version:
         import json
 
         # Import after mocks are in place
+        from omniclaude.runtime.contract_models import ContractPublisherConfig
         from omniclaude.runtime.wiring import publish_handler_contracts
+
+        config = ContractPublisherConfig(
+            mode="filesystem",
+            filesystem_root=temp_contracts_dir,
+        )
 
         # Act
         result = await publish_handler_contracts(
             container=mock_container,
-            contracts_root=temp_contracts_dir,
+            config=config,
             environment="test",
         )
 
@@ -557,3 +619,246 @@ contract_version:
         assert "contract_yaml" in event_data, (
             "Published event must contain 'contract_yaml' for contract parsing"
         )
+
+    # =========================================================================
+    # New tests for OMN-1605 rework acceptance criteria
+    # =========================================================================
+
+    @pytest.mark.asyncio
+    async def test_requires_explicit_contract_source_config(
+        self,
+        mock_container: MagicMock,
+        mock_omnibase_imports: None,
+    ) -> None:
+        """Verify that missing config raises ContractSourceNotConfiguredError.
+
+        When wire_omniclaude_services is called without config and without
+        OMNICLAUDE_CONTRACTS_ROOT env var, it must fail explicitly.
+        """
+        from omniclaude.runtime.exceptions import ContractSourceNotConfiguredError
+        from omniclaude.runtime.wiring import wire_omniclaude_services
+
+        # Ensure env var is not set by clearing the environment
+        env_copy = os.environ.copy()
+        env_copy.pop("OMNICLAUDE_CONTRACTS_ROOT", None)
+
+        with patch.dict(os.environ, env_copy, clear=True):
+            with pytest.raises(ContractSourceNotConfiguredError):
+                await wire_omniclaude_services(container=mock_container)
+
+    @pytest.mark.asyncio
+    async def test_infra_failure_fails_fast_by_default(
+        self,
+        mock_container: MagicMock,
+        temp_contracts_dir: Path,
+        mock_omnibase_imports: None,
+    ) -> None:
+        """Verify that infrastructure errors fail fast when fail_fast=True (default).
+
+        When Kafka publish fails, the function should raise ContractPublishingInfraError
+        immediately rather than continuing and returning a partial result.
+        """
+        from omniclaude.runtime.contract_models import ContractPublisherConfig
+        from omniclaude.runtime.exceptions import ContractPublishingInfraError
+        from omniclaude.runtime.wiring import publish_handler_contracts
+
+        # Create a publisher that fails
+        failing_publisher = AsyncMock()
+        failing_publisher.publish = AsyncMock(
+            side_effect=Exception("Kafka connection refused")
+        )
+        mock_container.get_service_async = AsyncMock(return_value=failing_publisher)
+
+        config = ContractPublisherConfig(
+            mode="filesystem",
+            filesystem_root=temp_contracts_dir,
+            fail_fast=True,  # Default, but explicit for test clarity
+        )
+
+        with pytest.raises(ContractPublishingInfraError) as exc_info:
+            await publish_handler_contracts(
+                container=mock_container,
+                config=config,
+                environment="test",
+            )
+
+        # Verify infra errors are captured in the exception
+        assert len(exc_info.value.infra_errors) >= 1
+
+    @pytest.mark.asyncio
+    async def test_contract_error_continues_and_reports(
+        self,
+        mock_container: MagicMock,
+        mock_publisher: AsyncMock,
+        tmp_path: Path,
+        mock_omnibase_imports: None,
+    ) -> None:
+        """Verify that contract errors allow other contracts to proceed.
+
+        When one contract has invalid YAML, the function should continue
+        processing other contracts and report the error in the result.
+        """
+        from omniclaude.runtime.contract_models import ContractPublisherConfig
+        from omniclaude.runtime.wiring import publish_handler_contracts
+
+        # Create directory with one invalid and one valid contract
+        invalid_dir = tmp_path / "contracts" / "handlers" / "invalid_contract"
+        invalid_dir.mkdir(parents=True)
+        (invalid_dir / "contract.yaml").write_text("not: valid: yaml: [[[")
+
+        valid_dir = tmp_path / "contracts" / "handlers" / "valid_contract"
+        valid_dir.mkdir(parents=True)
+        valid_yaml = """
+handler_id: valid.test.handler
+name: Valid Test Handler
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+metadata:
+  handler_class: test.module.ValidHandler
+"""
+        (valid_dir / "contract.yaml").write_text(valid_yaml)
+
+        contracts_root = tmp_path / "contracts" / "handlers"
+
+        config = ContractPublisherConfig(
+            mode="filesystem",
+            filesystem_root=contracts_root,
+        )
+
+        result = await publish_handler_contracts(
+            container=mock_container,
+            config=config,
+            environment="test",
+        )
+
+        # Valid contract should be published
+        assert "valid.test.handler" in result.published
+
+        # Invalid contract should be in contract_errors
+        assert len(result.contract_errors) >= 1
+        assert any(e.error_type == "yaml_parse" for e in result.contract_errors)
+
+    @pytest.mark.asyncio
+    async def test_partial_publish_failure_distinguishes_infra_vs_contract(
+        self,
+        mock_container: MagicMock,
+        tmp_path: Path,
+        mock_omnibase_imports: None,
+    ) -> None:
+        """Verify that infra errors and contract errors are tracked separately.
+
+        When both types of errors occur, they should be in different lists
+        in the result, not mixed together.
+        """
+        from omniclaude.runtime.contract_models import ContractPublisherConfig
+        from omniclaude.runtime.wiring import publish_handler_contracts
+
+        # Create one invalid contract (contract error - missing handler_id)
+        invalid_dir = tmp_path / "contracts" / "handlers" / "missing_id"
+        invalid_dir.mkdir(parents=True)
+        (invalid_dir / "contract.yaml").write_text(
+            """
+name: Missing Handler ID
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+"""
+        )  # Missing handler_id = contract error
+
+        # Create one valid contract that will hit publisher
+        valid_dir = tmp_path / "contracts" / "handlers" / "will_fail_publish"
+        valid_dir.mkdir(parents=True)
+        (valid_dir / "contract.yaml").write_text(
+            """
+handler_id: test.will.fail
+name: Will Fail Publish
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+metadata:
+  handler_class: test.module.FailHandler
+"""
+        )
+
+        # Publisher that fails on publish
+        failing_publisher = AsyncMock()
+        failing_publisher.publish = AsyncMock(side_effect=Exception("Broker down"))
+        mock_container.get_service_async = AsyncMock(return_value=failing_publisher)
+
+        contracts_root = tmp_path / "contracts" / "handlers"
+
+        config = ContractPublisherConfig(
+            mode="filesystem",
+            filesystem_root=contracts_root,
+            fail_fast=False,  # Don't raise, let us inspect the result
+            allow_zero_contracts=True,  # Allow empty result since all contracts fail
+        )
+
+        result = await publish_handler_contracts(
+            container=mock_container,
+            config=config,
+            environment="test",
+        )
+
+        # Should have contract errors (missing handler_id)
+        assert len(result.contract_errors) >= 1
+        assert any(e.error_type == "missing_field" for e in result.contract_errors)
+
+        # Should have infra errors (publish failed)
+        assert len(result.infra_errors) >= 1
+        assert any(e.error_type == "publish_failed" for e in result.infra_errors)
+
+    @pytest.mark.asyncio
+    async def test_zero_contracts_is_error_unless_explicitly_allowed(
+        self,
+        mock_container: MagicMock,
+        mock_publisher: AsyncMock,
+        tmp_path: Path,
+        mock_omnibase_imports: None,
+    ) -> None:
+        """Verify that publishing zero contracts is an error by default.
+
+        This catches misconfiguration where the contracts path is wrong.
+        """
+        from omniclaude.runtime.contract_models import ContractPublisherConfig
+        from omniclaude.runtime.exceptions import NoContractsFoundError
+        from omniclaude.runtime.wiring import publish_handler_contracts
+
+        # Empty directory
+        empty_dir = tmp_path / "empty_contracts"
+        empty_dir.mkdir(parents=True)
+
+        # Default config (allow_zero_contracts=False)
+        config = ContractPublisherConfig(
+            mode="filesystem",
+            filesystem_root=empty_dir,
+            allow_zero_contracts=False,  # Default, explicit for clarity
+        )
+
+        with pytest.raises(NoContractsFoundError):
+            await publish_handler_contracts(
+                container=mock_container,
+                config=config,
+                environment="test",
+            )
+
+        # Now test that allow_zero_contracts=True allows empty publish
+        config_allow_empty = ContractPublisherConfig(
+            mode="filesystem",
+            filesystem_root=empty_dir,
+            allow_zero_contracts=True,
+        )
+
+        result = await publish_handler_contracts(
+            container=mock_container,
+            config=config_allow_empty,
+            environment="test",
+        )
+
+        assert result.published == []
+        assert result.contract_errors == []
+        assert result.infra_errors == []

@@ -9,13 +9,19 @@ ServiceRuntimeHostProcess.
 Ticket: OMN-1605 - Implement contract-driven handler registration loader
 
 Event-Driven Wiring Strategy:
-    1. Read handler contracts from contracts/handlers/**/contract.yaml
+    1. Read handler contracts from configured source (filesystem or package)
     2. Emit ModelContractRegisteredEvent to Kafka for each handler
     3. KafkaContractSource (in omnibase_infra) caches the descriptors
     4. ServiceRuntimeHostProcess imports, instantiates, and initializes handlers
 
 This replaces the previous filesystem-based registration approach with
 platform-native event-driven discovery.
+
+Design Principles:
+    - Explicit configuration required - no magic path resolution
+    - Contract errors are non-fatal (degraded mode continues)
+    - Infrastructure errors are fatal by default (fail_fast=True)
+    - Zero contracts is an error by default (allow_zero_contracts=False)
 """
 
 from __future__ import annotations
@@ -23,12 +29,24 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
-from dataclasses import dataclass
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import yaml
+
+from omniclaude.runtime.contract_models import (
+    ContractError,
+    ContractPublisherConfig,
+    InfraError,
+    PublishResult,
+)
+from omniclaude.runtime.exceptions import (
+    ContractPublishingInfraError,
+    ContractSourceNotConfiguredError,
+    NoContractsFoundError,
+)
 
 if TYPE_CHECKING:
     from omnibase_core.models.container.model_onex_container import ModelONEXContainer
@@ -36,64 +54,53 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
-class PublishResult:
-    """Result of publishing handler contracts to Kafka.
-
-    Attributes:
-        published: Handler IDs that were successfully published.
-        failed: Contract paths/names that failed to publish or were skipped.
-    """
-
-    published: list[str]
-    failed: list[str]
-
-
-# Default contracts directory relative to repo root
-DEFAULT_CONTRACTS_SUBPATH = "contracts/handlers"
-
-
 async def publish_handler_contracts(
     container: ModelONEXContainer,
-    contracts_root: Path | None = None,
+    config: ContractPublisherConfig,
     environment: str | None = None,
 ) -> PublishResult:
     """Publish handler contracts to Kafka for discovery.
 
     Emits ModelContractRegisteredEvent for each handler contract found in
-    the contracts directory. The events are consumed by KafkaContractSource
+    the configured source. The events are consumed by KafkaContractSource
     in omnibase_infra for handler discovery and registration.
 
-    Contracts are skipped (added to failed list) if:
-        - The contract file is not a valid YAML dict
-        - The contract is missing a handler_id
-        - The handler_class is present but not fully qualified (no '.')
+    Error Handling:
+        - Contract errors (YAML parse, schema validation, missing fields) are
+          non-fatal: logged, added to contract_errors, processing continues.
+        - Infrastructure errors (Kafka, publisher) are fatal by default:
+          raises ContractPublishingInfraError immediately when fail_fast=True.
+        - Zero contracts raises NoContractsFoundError when allow_zero_contracts=False.
 
     Args:
         container: The ONEX container with event bus publisher.
-        contracts_root: Root directory containing handler contracts.
-            Defaults to contracts/handlers relative to repo root.
+        config: Configuration specifying contract source (filesystem, package, composite).
         environment: Environment prefix for Kafka topics (e.g., "dev").
             Defaults to ONEX_ENV environment variable or "dev".
 
     Returns:
-        PublishResult with published handler IDs and failed contract paths.
+        PublishResult with published handler IDs, contract_errors, infra_errors,
+        and duration_ms.
 
     Raises:
         ImportError: If omnibase_core event models are not available.
-
-    Note:
-        Infrastructure errors (missing publisher) raise immediately to fail fast.
-        Contract-level errors (invalid YAML, missing fields) are logged and tracked
-        in the failed list to allow other contracts to proceed.
+        NotImplementedError: If package or composite mode is used (not yet implemented).
+        NoContractsFoundError: If no contracts found and allow_zero_contracts=False.
+        ContractPublishingInfraError: If infrastructure errors occur and fail_fast=True.
 
     Example:
         >>> container = ModelONEXContainer(...)
-        >>> result = await publish_handler_contracts(container)
-        >>> print(f"Published {len(result.published)} contracts")
-        >>> if result.failed:
-        ...     print(f"Failed: {result.failed}")
+        >>> config = ContractPublisherConfig(
+        ...     mode="filesystem",
+        ...     filesystem_root=Path("/app/contracts/handlers"),
+        ... )
+        >>> result = await publish_handler_contracts(container, config)
+        >>> print(f"Published {len(result.published)} contracts in {result.duration_ms:.1f}ms")
+        >>> if result.contract_errors:
+        ...     print(f"Errors: {len(result.contract_errors)}")
     """
+    start_time = time.monotonic()
+
     # Import here to avoid circular imports and allow graceful degradation
     try:
         from omnibase_core.models.events.contract_registration import (
@@ -111,35 +118,64 @@ async def publish_handler_contracts(
         )
         raise
 
-    # Resolve contracts root
-    if contracts_root is None:
-        # Default: repo_root/contracts/handlers
-        # Path: src/omniclaude/runtime/wiring.py -> ../../../../contracts/handlers
-        contracts_root = (
-            Path(__file__).parent.parent.parent.parent / DEFAULT_CONTRACTS_SUBPATH
-        )
-        if contracts_root.name != "handlers":
-            logger.warning(
-                "Unexpected contracts path structure: %s (expected to end with 'handlers')",
-                contracts_root,
+    # Resolve contract paths based on mode - NO MAGIC PATHS
+    match config.mode:
+        case "filesystem":
+            contracts_root = config.filesystem_root
+            source_description = f"filesystem: {contracts_root}"
+        case "package":
+            # For now, package mode not implemented - raise clear error
+            raise NotImplementedError(
+                "package mode not yet implemented. Use filesystem mode with explicit path."
             )
+        case "composite":
+            # Try filesystem if configured
+            if config.filesystem_root and config.filesystem_root.exists():
+                contracts_root = config.filesystem_root
+                source_description = f"composite (filesystem): {contracts_root}"
+            else:
+                raise NotImplementedError(
+                    "composite mode with package fallback not yet implemented."
+                )
 
     # Resolve environment
     if environment is None:
         environment = os.getenv("ONEX_ENV", "dev")
 
-    if not contracts_root.exists():
+    # Initialize error tracking
+    contract_errors: list[ContractError] = []
+    infra_errors: list[InfraError] = []
+    published: list[str] = []
+
+    # Check if contracts directory exists
+    if contracts_root is None or not contracts_root.exists():
         logger.warning(
-            "Contracts directory does not exist: %s. No handlers will be published.",
+            "Contracts directory does not exist: %s",
             contracts_root,
         )
-        return PublishResult(published=[], failed=[])
+        duration_ms = (time.monotonic() - start_time) * 1000
+        if not config.allow_zero_contracts:
+            raise NoContractsFoundError(source_description)
+        return PublishResult(
+            published=[],
+            contract_errors=[],
+            infra_errors=[],
+            duration_ms=duration_ms,
+        )
 
     # Discover contract files
     contract_paths: list[Path] = sorted(contracts_root.glob("**/contract.yaml"))
     if not contract_paths:
         logger.info("No handler contracts found in %s", contracts_root)
-        return PublishResult(published=[], failed=[])
+        duration_ms = (time.monotonic() - start_time) * 1000
+        if not config.allow_zero_contracts:
+            raise NoContractsFoundError(source_description)
+        return PublishResult(
+            published=[],
+            contract_errors=[],
+            infra_errors=[],
+            duration_ms=duration_ms,
+        )
 
     logger.info(
         "Publishing %d handler contract(s) from %s",
@@ -153,41 +189,73 @@ async def publish_handler_contracts(
             ProtocolEventBusPublisher
         )
     except Exception as e:
-        logger.warning(
-            "Failed to get event bus publisher from container: %s",
-            e,
+        error = InfraError(
+            error_type="publisher_unavailable",
+            message=f"Failed to get event bus publisher from container: {e}",
+            retriable=False,
         )
-        raise
+        infra_errors.append(error)
+        logger.warning(error.message)
+        if config.fail_fast:
+            raise ContractPublishingInfraError(infra_errors)
+        duration_ms = (time.monotonic() - start_time) * 1000
+        return PublishResult(
+            published=[],
+            contract_errors=[],
+            infra_errors=infra_errors,
+            duration_ms=duration_ms,
+        )
 
     # Build topic name
     topic = f"{environment}.{CONTRACT_REGISTERED_EVENT}"
 
-    published: list[str] = []
-    failed: list[str] = []
     for contract_path in contract_paths:
+        contract_name = contract_path.parent.name
         try:
             # Read contract YAML
             contract_yaml = contract_path.read_text(encoding="utf-8")
-            contract_data = yaml.safe_load(
-                contract_yaml
-            )  # type narrowed by isinstance check below
+            try:
+                contract_data = yaml.safe_load(contract_yaml)
+            except yaml.YAMLError as e:
+                error = ContractError(
+                    contract_path=str(contract_path),
+                    error_type="yaml_parse",
+                    message=f"Invalid YAML: {e}",
+                )
+                contract_errors.append(error)
+                logger.warning(
+                    "Skipping contract with YAML parse error: %s - %s",
+                    contract_path,
+                    e,
+                )
+                continue
 
             if not isinstance(contract_data, dict):
+                error = ContractError(
+                    contract_path=str(contract_path),
+                    error_type="schema_validation",
+                    message="Contract is not a dict",
+                )
+                contract_errors.append(error)
                 logger.warning(
                     "Skipping invalid contract (not a dict): %s",
                     contract_path,
                 )
-                failed.append(contract_path.parent.name)
                 continue
 
             # Extract identity fields - validate handler_id to avoid empty Kafka keys
             handler_id = contract_data.get("handler_id", "")
             if not isinstance(handler_id, str) or not handler_id.strip():
+                error = ContractError(
+                    contract_path=str(contract_path),
+                    error_type="missing_field",
+                    message="Contract missing required field: handler_id",
+                )
+                contract_errors.append(error)
                 logger.warning(
                     "Skipping contract with missing or invalid handler_id: %s",
                     contract_path,
                 )
-                failed.append(contract_path.parent.name)
                 continue
             # Use stripped version to avoid whitespace-only keys
             handler_id = handler_id.strip()
@@ -196,12 +264,17 @@ async def publish_handler_contracts(
             metadata = contract_data.get("metadata", {})
             handler_class = metadata.get("handler_class", "")
             if handler_class and "." not in handler_class:
+                error = ContractError(
+                    contract_path=str(contract_path),
+                    error_type="invalid_handler_class",
+                    message=f"handler_class must be fully qualified with '.': {handler_class}",
+                )
+                contract_errors.append(error)
                 logger.warning(
                     "Skipping contract with invalid handler_class (must be fully qualified with '.'): %s in %s",
                     handler_class,
                     contract_path,
                 )
-                failed.append(contract_path.parent.name)
                 continue
 
             name = contract_data.get("name", handler_id)
@@ -234,11 +307,23 @@ async def publish_handler_contracts(
             )
 
             # Publish to Kafka
-            await publisher.publish(
-                topic=topic,
-                key=handler_id.encode("utf-8"),
-                value=event.model_dump_json().encode("utf-8"),
-            )
+            try:
+                await publisher.publish(
+                    topic=topic,
+                    key=handler_id.encode("utf-8"),
+                    value=event.model_dump_json().encode("utf-8"),
+                )
+            except Exception as e:
+                error = InfraError(
+                    error_type="publish_failed",
+                    message=f"Failed to publish contract {handler_id}: {e}",
+                    retriable=True,
+                )
+                infra_errors.append(error)
+                logger.warning(error.message)
+                if config.fail_fast:
+                    raise ContractPublishingInfraError(infra_errors)
+                continue
 
             published.append(handler_id)
             logger.info(
@@ -249,21 +334,37 @@ async def publish_handler_contracts(
                 topic,
             )
 
+        except ContractPublishingInfraError:
+            # Re-raise infra errors immediately
+            raise
         except Exception as e:
-            contract_name = contract_path.parent.name
-            failed.append(contract_name)
+            # Catch-all for unexpected contract-level errors
+            error = ContractError(
+                contract_path=str(contract_path),
+                error_type="schema_validation",
+                message=f"Unexpected error processing contract: {e}",
+            )
+            contract_errors.append(error)
             logger.warning(
-                "Failed to publish contract %s: %s",
+                "Failed to process contract %s: %s",
                 contract_path,
                 e,
             )
             # Continue with other contracts - don't fail everything for one bad contract
 
-    if failed:
+    # Log summary
+    if contract_errors:
         logger.warning(
-            "Failed to publish %d contract(s): %s",
-            len(failed),
-            ", ".join(failed),
+            "Contract errors (%d): %s",
+            len(contract_errors),
+            ", ".join(e.contract_path for e in contract_errors),
+        )
+
+    if infra_errors:
+        logger.warning(
+            "Infrastructure errors (%d): %s",
+            len(infra_errors),
+            ", ".join(e.error_type for e in infra_errors),
         )
 
     logger.info(
@@ -272,10 +373,28 @@ async def publish_handler_contracts(
         len(contract_paths),
     )
 
-    return PublishResult(published=published, failed=failed)
+    duration_ms = (time.monotonic() - start_time) * 1000
+
+    # Zero-contracts guard (after allowing contract errors to accumulate)
+    if not published and not config.allow_zero_contracts:
+        raise NoContractsFoundError(source_description)
+
+    # Fail-fast check for accumulated infra errors (when fail_fast=True but we got here)
+    if infra_errors and config.fail_fast:
+        raise ContractPublishingInfraError(infra_errors)
+
+    return PublishResult(
+        published=published,
+        contract_errors=contract_errors,
+        infra_errors=infra_errors,
+        duration_ms=duration_ms,
+    )
 
 
-async def wire_omniclaude_services(container: ModelONEXContainer) -> None:
+async def wire_omniclaude_services(
+    container: ModelONEXContainer,
+    config: ContractPublisherConfig | None = None,
+) -> None:
     """Register omniclaude handlers with the platform via event-driven discovery.
 
     This function publishes handler contracts to Kafka. The actual handler
@@ -291,12 +410,41 @@ async def wire_omniclaude_services(container: ModelONEXContainer) -> None:
 
     Args:
         container: The ONEX container with event bus publisher.
+        config: Configuration specifying contract source. If None, falls back
+            to OMNICLAUDE_CONTRACTS_ROOT environment variable.
+
+    Raises:
+        ContractSourceNotConfiguredError: If no config provided and
+            OMNICLAUDE_CONTRACTS_ROOT environment variable is not set.
 
     Example:
         from omniclaude.runtime import wire_omniclaude_services
+        from omniclaude.runtime.contract_models import ContractPublisherConfig
+        from pathlib import Path
 
-        # During application bootstrap
+        # During application bootstrap with explicit config
         container = ModelONEXContainer(...)
+        config = ContractPublisherConfig(
+            mode="filesystem",
+            filesystem_root=Path("/app/contracts/handlers"),
+        )
+        await wire_omniclaude_services(container, config)
+
+        # Or using environment variable
+        # export OMNICLAUDE_CONTRACTS_ROOT=/app/contracts/handlers
         await wire_omniclaude_services(container)
     """
-    await publish_handler_contracts(container)
+    if config is None:
+        # Check for env var configuration
+        contracts_root = os.getenv("OMNICLAUDE_CONTRACTS_ROOT")
+        if contracts_root is None:
+            raise ContractSourceNotConfiguredError(
+                "No contract source configured. Either pass ContractPublisherConfig "
+                "or set OMNICLAUDE_CONTRACTS_ROOT environment variable."
+            )
+        config = ContractPublisherConfig(
+            mode="filesystem",
+            filesystem_root=Path(contracts_root),
+        )
+
+    await publish_handler_contracts(container, config)
