@@ -492,6 +492,7 @@ class HandlerContextInjection:
             else:
                 injection_source = EnumInjectionSource.INJECTED
 
+            token_count = count_tokens(context_markdown)
             self._emit_injection_record(
                 injection_id=injection_id,
                 session_id_raw=session_id,
@@ -501,7 +502,7 @@ class HandlerContextInjection:
                 cohort=cohort_assignment.cohort,
                 assignment_seed=cohort_assignment.assignment_seed,
                 injected_content=context_markdown,
-                injected_token_count=count_tokens(context_markdown),
+                injected_token_count=token_count,
                 correlation_id=correlation_id,
             )
 

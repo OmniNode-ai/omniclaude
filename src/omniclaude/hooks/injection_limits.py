@@ -517,7 +517,8 @@ def select_patterns_for_injection(
     total_tokens = effective_header_tokens  # Start with header overhead
 
     # Apply safety margin to token budget to account for tokenizer differences
-    effective_token_budget = int(limits.max_tokens_injected * TOKEN_SAFETY_MARGIN)
+    budget = limits.max_tokens_injected * TOKEN_SAFETY_MARGIN
+    effective_token_budget = int(budget)
 
     for scored_pattern in scored:
         # Check max_patterns_per_injection (hard stop)

@@ -13,7 +13,7 @@ from __future__ import annotations
 from enum import Enum
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from omniclaude.hooks.cohort_assignment import EnumCohort
 
@@ -94,7 +94,7 @@ class ModelInjectionRecord(BaseModel):
         default=0, description="Token count of injected content"
     )
 
-    model_config = {"frozen": True}
+    model_config = ConfigDict(frozen=True)
 
 
 __all__ = [

@@ -169,33 +169,51 @@ class PythonSecretValidator(ast.NodeVisitor):
 
         # Exception patterns - legitimate use cases that shouldn't be flagged
         self.exceptions = {
+            # Password metadata/configuration (not actual passwords)
             "password_field",
             "password_validator",
             "password_hash",
             "password_pattern",
             "password_regex",
-            "token_type",
-            "token_validator",
-            "secret_name",
-            "secret_type",
-            "api_key_name",
+            "password_min_length",
+            "password_max_length",
+            "password_type",
+            "password_updated_at",
+            "password_created_at",
+            "password_error",
             "example_password",
             "sample_password",
             "test_password",
             "dummy_password",
             "fake_password",
-            "password_min_length",
-            "password_max_length",
+            # Pydantic SecretStr field names (runtime env values, not hardcoded)
+            "db_password",
+            "db_pass",
+            # Token counting/limits (not authentication tokens)
+            "tokenizer",
+            "token_count",
+            "injected_token_count",
+            "max_tokens_injected",
+            "rendered_tokens",
+            "effective_token_budget",
+            "header_tokens",
+            "total_tokens",
+            "effective_header_tokens",
+            "injection_header_tokens",  # Computed constant (token count of header string)
+            # Token metadata (not actual tokens)
+            "token_type",
+            "token_validator",
             "token_expiry",
             "token_lifetime",
-            "secret_length",
-            "password_type",
-            "password_updated_at",
-            "password_created_at",
             "token_created_at",
-            "password_error",
             "token_error",
+            # Secret metadata (not actual secrets)
+            "secret_name",
+            "secret_type",
+            "secret_length",
             "secret_error",
+            # API key metadata
+            "api_key_name",
         }
 
         # Metadata patterns - recognize configuration/metadata assignments

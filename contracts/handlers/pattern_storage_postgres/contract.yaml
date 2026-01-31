@@ -1,3 +1,6 @@
+# Handler Contract for Learned Pattern Storage (PostgreSQL)
+# Follows omnibase_core.models.contracts.ModelHandlerContract schema
+# Ticket: OMN-1605 - Event-driven handler registration
 handler_id: effect.learned_pattern.storage.postgres
 name: Learned Pattern Storage Handler (PostgreSQL)
 contract_version:
@@ -6,25 +9,11 @@ contract_version:
   patch: 0
 
 descriptor:
-  handler_kind: effect
+  node_archetype: effect
   purity: side_effecting
   idempotent: true
   timeout_ms: 30000
-  retry_policy:
-    enabled: true
-    max_retries: 3
-    backoff_strategy: exponential
-    base_delay_ms: 500
-    max_delay_ms: 10000
-  circuit_breaker:
-    enabled: true
-    failure_threshold: 5
-    timeout_ms: 60000
-  concurrency_policy: parallel
-  isolation_policy: none
-  observability_level: standard
 
-# STANDARDIZED: Same prefix as node contract capabilities
 capability_outputs:
   - learned_pattern.storage.query
   - learned_pattern.storage.upsert
@@ -32,15 +21,14 @@ capability_outputs:
 input_model: omniclaude.nodes.node_pattern_persistence_effect.models.ModelLearnedPatternQuery
 output_model: omniclaude.nodes.node_pattern_persistence_effect.models.ModelLearnedPatternQueryResult
 
-handler_class: omniclaude.handlers.pattern_storage_postgres.handler_pattern_storage_postgres.HandlerPatternStoragePostgres
-handler_key: postgresql
-
-protocol: omniclaude.nodes.node_pattern_persistence_effect.protocols.protocol_pattern_persistence.ProtocolPatternPersistence
-
 supports_lifecycle: true
 supports_health_check: true
 
+# Extensible metadata - handler_class required for KafkaContractSource discovery
 metadata:
+  handler_class: omniclaude.handlers.pattern_storage_postgres.handler_pattern_storage_postgres.HandlerPatternStoragePostgres
+  protocol: omniclaude.nodes.node_pattern_persistence_effect.protocols.protocol_pattern_persistence.ProtocolPatternPersistence
+  handler_key: postgresql
   author: OmniNode Team
   license: MIT
   ticket: OMN-1403

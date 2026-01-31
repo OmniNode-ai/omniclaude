@@ -2,15 +2,17 @@
 # Copyright (c) 2025 OmniNode Team
 """Contract schema validation - tripwire test to catch schema drift.
 
-This test ensures the handler contract YAML matches the expected runtime schema.
+This test ensures the handler contract YAML matches the canonical
+omnibase_core.models.contracts.ModelHandlerContract schema.
+
 If this test fails, it indicates:
 1. Contract YAML was modified without updating expectations, OR
 2. Runtime expectations changed without updating contract
 
 Purpose: Catch drift between contract definition and runtime usage EARLY.
 
-NOTE: When omnibase_core.contracts.load_contract becomes available, this module
-should be updated to use that instead of the local yaml.safe_load approach.
+Schema Reference: omnibase_core.models.contracts.model_handler_contract.ModelHandlerContract
+Ticket: OMN-1605 - Event-driven handler registration
 """
 
 from __future__ import annotations
@@ -37,9 +39,6 @@ def load_contract(path: Path) -> dict[str, Any]:
     Raises:
         FileNotFoundError: If the contract file does not exist.
         yaml.YAMLError: If the YAML is invalid.
-
-    NOTE: Replace with `from omnibase_core.contracts import load_contract`
-    when that dependency is available.
     """
     with open(path, encoding="utf-8") as f:
         return yaml.safe_load(f)
@@ -52,7 +51,11 @@ HANDLER_CONTRACT_PATH = Path(
 
 
 class TestHandlerContractSchema:
-    """Tripwire tests for handler contract schema validation."""
+    """Tripwire tests for handler contract schema validation.
+
+    These tests validate that the contract YAML matches the canonical
+    ModelHandlerContract schema from omnibase_core.
+    """
 
     def test_contract_file_exists(self) -> None:
         """Handler contract file must exist."""
@@ -68,7 +71,7 @@ class TestHandlerContractSchema:
         assert isinstance(contract, dict), "Contract must be a dictionary"
 
     def test_handler_contract_parses_into_expected_schema(self) -> None:
-        """Ensure handler contract matches runtime schema exactly.
+        """Ensure handler contract matches canonical ModelHandlerContract schema.
 
         This is the primary tripwire test. If any of these assertions fail,
         it means the contract has drifted from runtime expectations.
@@ -83,10 +86,10 @@ class TestHandlerContractSchema:
             "name mismatch - contract may have drifted"
         )
 
-        # Descriptor exists and has correct handler_kind
+        # Descriptor exists and has correct node_archetype (canonical schema)
         assert "descriptor" in contract, "Missing 'descriptor' section in contract"
-        assert contract["descriptor"]["handler_kind"] == "effect", (
-            "handler_kind must be 'effect' for this handler"
+        assert contract["descriptor"]["node_archetype"] == "effect", (
+            "node_archetype must be 'effect' for this handler"
         )
 
         # Capability outputs are standardized with learned_pattern.storage prefix
@@ -99,15 +102,16 @@ class TestHandlerContractSchema:
             "Missing 'learned_pattern.storage.upsert' capability"
         )
 
-        # Handler binding info
-        assert contract["handler_key"] == "postgresql", (
-            "handler_key must be 'postgresql' for PostgreSQL backend"
+        # Handler binding info is in metadata (for KafkaContractSource)
+        metadata = contract.get("metadata", {})
+        assert metadata.get("handler_key") == "postgresql", (
+            "handler_key must be 'postgresql' in metadata for PostgreSQL backend"
         )
-        assert "HandlerPatternStoragePostgres" in contract["handler_class"], (
-            "handler_class must reference HandlerPatternStoragePostgres"
+        assert "HandlerPatternStoragePostgres" in metadata.get("handler_class", ""), (
+            "handler_class in metadata must reference HandlerPatternStoragePostgres"
         )
-        assert "ProtocolPatternPersistence" in contract["protocol"], (
-            "protocol must reference ProtocolPatternPersistence"
+        assert "ProtocolPatternPersistence" in metadata.get("protocol", ""), (
+            "protocol in metadata must reference ProtocolPatternPersistence"
         )
 
     def test_contract_version_is_valid(self) -> None:
@@ -124,12 +128,17 @@ class TestHandlerContractSchema:
         assert isinstance(version["patch"], int), "patch must be an integer"
 
     def test_descriptor_has_required_fields(self) -> None:
-        """Descriptor section must have required handler metadata."""
+        """Descriptor section must have required handler metadata.
+
+        Uses canonical ModelHandlerBehavior schema with node_archetype.
+        """
         contract = load_contract(HANDLER_CONTRACT_PATH)
         descriptor = contract["descriptor"]
 
-        # Required descriptor fields for effect handlers
-        assert "handler_kind" in descriptor
+        # Required descriptor fields (canonical schema uses node_archetype)
+        assert "node_archetype" in descriptor, (
+            "descriptor must have 'node_archetype' (canonical schema)"
+        )
         assert "purity" in descriptor
         assert "idempotent" in descriptor
         assert "timeout_ms" in descriptor
@@ -165,3 +174,19 @@ class TestHandlerContractSchema:
         metadata = contract["metadata"]
         assert "ticket" in metadata, "Missing 'ticket' in metadata"
         assert metadata["ticket"] == "OMN-1403", "Ticket reference should be OMN-1403"
+
+    def test_metadata_contains_handler_class(self) -> None:
+        """Metadata must contain handler_class for KafkaContractSource discovery."""
+        contract = load_contract(HANDLER_CONTRACT_PATH)
+
+        assert "metadata" in contract, "Missing 'metadata' section"
+        metadata = contract["metadata"]
+        assert "handler_class" in metadata, (
+            "Missing 'handler_class' in metadata - required for KafkaContractSource"
+        )
+        # Verify it's a fully qualified Python path
+        handler_class = metadata["handler_class"]
+        assert "." in handler_class, "handler_class must be fully qualified"
+        assert handler_class.startswith("omniclaude."), (
+            "handler_class must start with omniclaude."
+        )
