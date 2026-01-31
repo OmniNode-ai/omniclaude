@@ -129,6 +129,7 @@ start_emit_daemon_if_needed() {
     # Start daemon in background, detached from this process
     # Redirect output to log file for debugging
     # Must pass --kafka-servers explicitly (required by CLI)
+    # Supports comma-separated multi-broker strings (e.g., "host1:9092,host2:9092")
     if [[ -z "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
         log "ERROR: KAFKA_BOOTSTRAP_SERVERS not set - emit daemon CANNOT start"
         log "ERROR: Set KAFKA_BOOTSTRAP_SERVERS in your .env file (e.g., KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092)"

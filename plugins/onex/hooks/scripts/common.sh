@@ -90,6 +90,11 @@ get_time_ms() {
 # 1. Project .env file (highest priority - overrides existing env vars)
 # 2. Already-set environment variables
 # 3. Default values (lowest priority)
+#
+# SECURITY NOTE: Using `set -a` exports ALL variables from .env to the environment.
+# This means secrets in .env (API keys, passwords, tokens) will be visible to ALL
+# subprocesses spawned by hooks. This is standard shell behavior for local dev
+# environments but be aware of the implications for sensitive credentials.
 
 if [[ -f "${PROJECT_ROOT}/.env" ]]; then
     # Source .env - note this WILL override already-set variables
