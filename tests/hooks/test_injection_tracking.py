@@ -126,14 +126,14 @@ class TestInjectionTracking:
             emit_event=False,
         )
 
-        # Check that emit_event was called with injection_context in payload
-        if mock_emit.called:
-            call_args = mock_emit.call_args
-            payload = call_args[0][1]  # Second positional arg is payload
-            assert (
-                payload["injection_context"]
-                == EnumInjectionContext.USER_PROMPT_SUBMIT.value
-            )
+        # Treatment cohort always emits, verify with explicit assertion
+        mock_emit.assert_called_once()
+        call_args = mock_emit.call_args
+        payload = call_args[0][1]  # Second positional arg is payload
+        assert (
+            payload["injection_context"]
+            == EnumInjectionContext.USER_PROMPT_SUBMIT.value
+        )
 
     @pytest.mark.asyncio
     @patch("plugins.onex.hooks.lib.emit_client_wrapper.emit_event")
@@ -158,11 +158,11 @@ class TestInjectionTracking:
         assert result.pattern_count == 0
         assert result.source == "control_cohort"
 
-        # Check emit was called with control_cohort source
-        if mock_emit.called:
-            call_args = mock_emit.call_args
-            payload = call_args[0][1]
-            assert payload["source"] == EnumInjectionSource.CONTROL_COHORT.value
+        # Control cohort also emits (with control_cohort source), verify explicitly
+        mock_emit.assert_called_once()
+        call_args = mock_emit.call_args
+        payload = call_args[0][1]
+        assert payload["source"] == EnumInjectionSource.CONTROL_COHORT.value
 
 
 # =============================================================================
