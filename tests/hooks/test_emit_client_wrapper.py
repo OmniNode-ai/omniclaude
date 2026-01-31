@@ -54,6 +54,7 @@ class TestModuleImport:
             "session.ended",
             "prompt.submitted",
             "tool.executed",
+            "injection.recorded",
         }
         assert expected_types == SUPPORTED_EVENT_TYPES
 
