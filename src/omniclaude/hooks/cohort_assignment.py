@@ -30,10 +30,10 @@ from pathlib import Path
 from typing import NamedTuple
 
 import yaml
-
-logger = logging.getLogger(__name__)
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # Legacy Constants (Deprecated)
@@ -77,7 +77,7 @@ def _load_contract_defaults() -> _ContractDefaults:
         return _ContractDefaults(control_percentage=default_control, salt=default_salt)
 
     try:
-        with open(_CONTRACT_PATH) as f:
+        with open(_CONTRACT_PATH, encoding="utf-8") as f:
             contract = yaml.safe_load(f)
         experiment = contract.get("experiment", {})
         cohort = experiment.get("cohort", {})
@@ -256,7 +256,7 @@ def assign_cohort(
         >>> assignment = assign_cohort("session-123", config=config)
     """
     if config is None:
-        config = CohortAssignmentConfig()
+        config = CohortAssignmentConfig.from_contract()
 
     seed_input = f"{session_id}:{config.salt}"
     hash_bytes = hashlib.sha256(seed_input.encode("utf-8")).digest()

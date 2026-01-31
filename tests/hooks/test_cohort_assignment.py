@@ -17,6 +17,9 @@ Part of OMN-1673: INJECT-004 injection tracking.
 
 from __future__ import annotations
 
+import logging
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -223,6 +226,41 @@ class TestCohortAssignmentConfig:
         config = CohortAssignmentConfig.from_contract()
         assert config.control_percentage == 35
         assert config.salt == "override-salt"
+
+    def test_from_contract_malformed_yaml_falls_back_to_defaults(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        """Test that malformed YAML falls back gracefully to defaults."""
+        # Create malformed YAML file
+        malformed = tmp_path / "malformed.yaml"
+        malformed.write_text("{ invalid yaml: [", encoding="utf-8")
+
+        # Patch contract path to point to malformed file
+        monkeypatch.setattr(
+            "omniclaude.hooks.cohort_assignment._CONTRACT_PATH",
+            malformed,
+        )
+
+        # Clear any env overrides to ensure we test contract fallback
+        monkeypatch.delenv("OMNICLAUDE_COHORT_CONTROL_PERCENTAGE", raising=False)
+        monkeypatch.delenv("OMNICLAUDE_COHORT_SALT", raising=False)
+
+        # Should fall back to defaults without raising
+        with caplog.at_level(logging.WARNING):
+            config = CohortAssignmentConfig.from_contract()
+
+        # Verify fallback to hardcoded defaults
+        assert config.control_percentage == 20
+        assert config.salt == "omniclaude-injection-v1"
+
+        # Verify warning was logged
+        assert any(
+            "Failed to load cohort contract" in record.message
+            for record in caplog.records
+        )
 
     def test_respects_environment_variable_control_percentage(
         self, monkeypatch: pytest.MonkeyPatch

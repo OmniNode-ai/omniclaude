@@ -40,7 +40,7 @@ from collections.abc import Awaitable
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
-import click
+import click  # type: ignore[import-not-found]
 
 # =============================================================================
 # Version Detection
