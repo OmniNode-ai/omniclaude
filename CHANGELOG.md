@@ -5,6 +5,66 @@ All notable changes to the ONEX Autonomous Node Generation Platform.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-01-31
+
+### BREAKING CHANGES
+
+#### Handler Contract Schema (OMN-1605, PR #63)
+
+The handler contract schema has undergone breaking changes to align with the canonical `ModelHandlerContract` from omnibase-core.
+
+**Field Rename**:
+- `descriptor.handler_kind` is now `descriptor.node_archetype`
+
+**Fields Relocated**:
+- `handler_class` moved from top-level to `metadata.handler_class`
+- `protocol` moved from top-level to `metadata.protocol`
+- `handler_key` moved from top-level to `metadata.handler_key`
+
+**Before**:
+```yaml
+handler_id: effect.learned_pattern.storage.postgres
+descriptor:
+  handler_kind: effect
+handler_class: omniclaude.handlers...
+protocol: omniclaude.nodes...
+handler_key: postgresql
+```
+
+**After**:
+```yaml
+handler_id: effect.learned_pattern.storage.postgres
+descriptor:
+  node_archetype: effect
+metadata:
+  handler_class: omniclaude.handlers...
+  protocol: omniclaude.nodes...
+  handler_key: postgresql
+```
+
+**Migration Guide**: See `docs/migrations/SCHEMA_CHANGES_PR63.md` for detailed migration instructions.
+
+### Added
+
+#### Contract-Driven Handler Registration
+- **NEW**: Handler registration system driven by YAML contracts
+  - Handlers define their contracts in `contracts/handlers/`
+  - Automatic handler discovery and registration from contracts
+  - Validation against `ModelHandlerContract` schema
+  - Clean separation between contract identity and implementation metadata
+
+### Changed
+
+- Handler contracts now use `node_archetype` (canonical ONEX terminology) instead of `handler_kind`
+- Implementation details (`handler_class`, `protocol`, `handler_key`) moved to `metadata` section
+- Contract validation enforces new schema structure
+
+### Documentation
+
+- Added `docs/migrations/SCHEMA_CHANGES_PR63.md` - Migration guide for handler contract schema changes
+
+---
+
 ## [2.1.0] - 2025-10-30
 
 ### Added
@@ -242,5 +302,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version History
 
+- **v3.0.0** (2026-01-31): Handler contract schema breaking changes (OMN-1605)
 - **v2.0.0** (2025-10-21): Intelligence enhancement + casing fix
 - **v1.0.0** (2025-10-14): Initial release

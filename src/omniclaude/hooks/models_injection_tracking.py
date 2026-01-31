@@ -90,7 +90,7 @@ class ModelInjectionRecord(BaseModel):
     injected_content: str = Field(
         default="", description="Actual markdown content injected into session"
     )
-    injected_token_count: int = Field(  # secret-ok: field name not a secret
+    injected_token_count: int = Field(
         default=0, description="Token count of injected content"
     )
 
