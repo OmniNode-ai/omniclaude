@@ -199,7 +199,15 @@ class CohortAssignmentConfig(BaseSettings):
                         f"got float '{env_control}', using contract default {control_pct}"
                     )
                 else:
-                    control_pct = int(parsed)
+                    parsed_int = int(parsed)
+                    if parsed_int < 0 or parsed_int > 100:
+                        # Value is out of valid range
+                        logger.warning(
+                            f"OMNICLAUDE_COHORT_CONTROL_PERCENTAGE must be 0-100, "
+                            f"got {parsed_int}, using contract default {control_pct}"
+                        )
+                    else:
+                        control_pct = parsed_int
             except ValueError:
                 # Value is not a valid number at all
                 logger.warning(
@@ -207,7 +215,15 @@ class CohortAssignmentConfig(BaseSettings):
                     f"'{env_control}', using contract default {control_pct}"
                 )
 
-        salt: str = env_salt if env_salt is not None else contract_defaults.salt
+        # Use env salt only if set and non-empty
+        if env_salt is not None and env_salt != "":
+            salt: str = env_salt
+        else:
+            if env_salt == "":
+                logger.warning(
+                    "OMNICLAUDE_COHORT_SALT is empty, using contract default"
+                )
+            salt = contract_defaults.salt
 
         return cls(control_percentage=control_pct, salt=salt)
 

@@ -31,7 +31,7 @@ See Also:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Self
+from typing import Any, Literal, Self
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
@@ -103,10 +103,9 @@ class EventBus(BaseModel):
         min_length=1,
         description="Field name used as partition key for ordering",
     )
-    partition_strategy: str = Field(
+    partition_strategy: Literal["hash", "round_robin", "sticky"] = Field(
         ...,
-        min_length=1,
-        description="Partitioning strategy (e.g., 'hash')",
+        description="Strategy for partition assignment",
     )
 
 

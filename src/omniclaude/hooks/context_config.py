@@ -155,10 +155,17 @@ class ContextInjectionConfig(BaseSettings):
     )
 
     # Cohort assignment configuration (A/B testing)
-    # Uses from_contract to honor contract-first loading with env override
+    # Uses from_contract to honor contract-first loading with env override.
+    # Note: This nested config has its own env prefix (OMNICLAUDE_COHORT_*),
+    # NOT OMNICLAUDE_CONTEXT_COHORT_*. The from_contract factory explicitly
+    # loads from contract YAML and checks for OMNICLAUDE_COHORT_* env overrides.
     cohort: CohortAssignmentConfig = Field(
         default_factory=CohortAssignmentConfig.from_contract,
-        description="A/B cohort assignment configuration for pattern injection experiments",
+        description=(
+            "A/B cohort assignment configuration for pattern injection experiments. "
+            "Loaded via CohortAssignmentConfig.from_contract() which reads from "
+            "contract YAML with optional OMNICLAUDE_COHORT_* env var overrides."
+        ),
     )
 
     def get_db_dsn(self) -> str:
@@ -188,6 +195,22 @@ class ContextInjectionConfig(BaseSettings):
         variables with the OMNICLAUDE_CONTEXT_ prefix. Falls back to
         default values when environment variables are not set.
 
+        Nested Config Loading:
+            The `limits` and `cohort` fields use `default_factory` and have
+            their own environment variable handling:
+
+            - `limits`: Uses InjectionLimitsConfig() which reads from
+              OMNICLAUDE_INJECTION_LIMITS_* env vars automatically via Pydantic.
+
+            - `cohort`: Uses CohortAssignmentConfig.from_contract() which:
+              1. Loads defaults from contract_experiment_cohort.yaml
+              2. Checks for OMNICLAUDE_COHORT_* env var overrides
+              3. Returns configured instance
+
+            Note: The cohort config uses OMNICLAUDE_COHORT_* prefix (NOT
+            OMNICLAUDE_CONTEXT_COHORT_*) for backward compatibility and
+            contract-first design.
+
         Returns:
             ContextInjectionConfig instance with values from environment.
 
@@ -197,5 +220,11 @@ class ContextInjectionConfig(BaseSettings):
             >>> config = ContextInjectionConfig.from_env()
             >>> config.max_patterns
             10
+
+            >>> # Cohort config uses its own env prefix
+            >>> os.environ["OMNICLAUDE_COHORT_CONTROL_PERCENTAGE"] = "30"
+            >>> config = ContextInjectionConfig.from_env()
+            >>> config.cohort.control_percentage
+            30
         """
         return cls()

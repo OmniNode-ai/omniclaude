@@ -33,236 +33,17 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 from omniclaude.hooks.contracts.contract_experiment_cohort import Metadata, Version
+from omniclaude.hooks.contracts.contract_hook_tool_executed import (
+    Capability,
+    Dependency,
+    EventBus,
+    ModelReference,
+    Runtime,
+    TimestampPolicy,
+)
 
 # =============================================================================
-# Nested Models - I/O Model References
-# =============================================================================
-
-
-class ModelReference(BaseModel):
-    """Reference to a Pydantic model used for input or output.
-
-    Attributes:
-        name: Class name of the model.
-        module: Python module path where the model is defined.
-        description: Human-readable description of the model's purpose.
-    """
-
-    model_config = ConfigDict(
-        frozen=True,
-        extra="forbid",
-    )
-
-    name: str = Field(
-        ...,
-        min_length=1,
-        description="Class name of the model",
-    )
-    module: str = Field(
-        ...,
-        min_length=1,
-        description="Python module path where the model is defined",
-    )
-    description: str = Field(
-        ...,
-        min_length=1,
-        description="Human-readable description of the model's purpose",
-    )
-
-
-# =============================================================================
-# Nested Models - Event Bus Configuration
-# =============================================================================
-
-
-class EventBus(BaseModel):
-    """Event bus configuration for Kafka publishing.
-
-    Attributes:
-        topic_base: Base topic name without environment prefix.
-        partition_key_field: Field name used for partition key.
-        partition_strategy: Strategy for partition assignment.
-    """
-
-    model_config = ConfigDict(
-        frozen=True,
-        extra="forbid",
-    )
-
-    topic_base: str = Field(
-        ...,
-        min_length=1,
-        description="Base topic name without environment prefix",
-    )
-    partition_key_field: str = Field(
-        ...,
-        min_length=1,
-        description="Field name used for partition key",
-    )
-    partition_strategy: Literal["hash", "round_robin", "sticky"] = Field(
-        ...,
-        description="Strategy for partition assignment",
-    )
-
-
-# =============================================================================
-# Nested Models - Runtime Configuration
-# =============================================================================
-
-
-class Runtime(BaseModel):
-    """Runtime configuration for the node.
-
-    Attributes:
-        supports_direct_call: Whether the node can be called directly.
-        supports_event_driven: Whether the node can be triggered by events.
-        side_effects: Whether the node has side effects (e.g., Kafka publish).
-        timeout_ms: Maximum execution time in milliseconds.
-        deterministic: Whether same input produces same output.
-    """
-
-    model_config = ConfigDict(
-        frozen=True,
-        extra="forbid",
-    )
-
-    supports_direct_call: bool = Field(
-        ...,
-        description="Whether the node can be called directly",
-    )
-    supports_event_driven: bool = Field(
-        ...,
-        description="Whether the node can be triggered by events",
-    )
-    side_effects: bool = Field(
-        ...,
-        description="Whether the node has side effects (e.g., Kafka publish)",
-    )
-    timeout_ms: int = Field(
-        ...,
-        gt=0,
-        le=60000,
-        description="Maximum execution time in milliseconds",
-    )
-    deterministic: bool = Field(
-        ...,
-        description="Whether same input produces same output",
-    )
-
-
-# =============================================================================
-# Nested Models - Timestamp Policy
-# =============================================================================
-
-
-class TimestampPolicy(BaseModel):
-    """ONEX timestamp policy configuration.
-
-    Attributes:
-        explicit_injection: Whether timestamps must be explicitly injected.
-        timezone_required: Whether timestamps must be timezone-aware.
-        rationale: Explanation for the timestamp policy.
-    """
-
-    model_config = ConfigDict(
-        frozen=True,
-        extra="forbid",
-    )
-
-    explicit_injection: bool = Field(
-        ...,
-        description="Whether timestamps must be explicitly injected",
-    )
-    timezone_required: bool = Field(
-        ...,
-        description="Whether timestamps must be timezone-aware",
-    )
-    rationale: str = Field(
-        ...,
-        min_length=1,
-        description="Explanation for the timestamp policy",
-    )
-
-
-# =============================================================================
-# Nested Models - Dependencies
-# =============================================================================
-
-
-class Dependency(BaseModel):
-    """Dependency definition for the node.
-
-    Attributes:
-        name: Dependency identifier.
-        type: Type of dependency (service, utility, etc.).
-        description: Human-readable description of the dependency.
-        class_name: Optional class name if the dependency is a class.
-        module: Optional Python module path for the dependency.
-    """
-
-    model_config = ConfigDict(
-        frozen=True,
-        extra="forbid",
-    )
-
-    name: str = Field(
-        ...,
-        min_length=1,
-        description="Dependency identifier",
-    )
-    type: Literal["service", "utility", "model", "config"] = Field(
-        ...,
-        description="Type of dependency",
-    )
-    description: str = Field(
-        ...,
-        min_length=1,
-        description="Human-readable description of the dependency",
-    )
-    class_name: str | None = Field(
-        default=None,
-        min_length=1,
-        description="Optional class name if the dependency is a class",
-    )
-    module: str | None = Field(
-        default=None,
-        min_length=1,
-        description="Optional Python module path for the dependency",
-    )
-
-
-# =============================================================================
-# Nested Models - Capabilities
-# =============================================================================
-
-
-class Capability(BaseModel):
-    """Capability provided by the node.
-
-    Attributes:
-        name: Capability identifier.
-        description: Human-readable description of the capability.
-    """
-
-    model_config = ConfigDict(
-        frozen=True,
-        extra="forbid",
-    )
-
-    name: str = Field(
-        ...,
-        min_length=1,
-        description="Capability identifier",
-    )
-    description: str = Field(
-        ...,
-        min_length=1,
-        description="Human-readable description of the capability",
-    )
-
-
-# =============================================================================
-# Nested Models - JSON Schema Definitions
+# Nested Models - JSON Schema Definitions (specific to this contract)
 # =============================================================================
 
 
@@ -510,15 +291,16 @@ class HookSessionStartedContract(BaseModel):
 
 
 __all__ = [
-    # Nested models
+    # Re-exported shared models (from contract_hook_tool_executed)
     "Capability",
     "Dependency",
     "EventBus",
-    "ModelDefinition",
     "ModelReference",
-    "PropertyDefinition",
     "Runtime",
     "TimestampPolicy",
+    # Models specific to session_started contract
+    "ModelDefinition",
+    "PropertyDefinition",
     # Root contract
     "HookSessionStartedContract",
 ]

@@ -135,12 +135,26 @@ class TestCohortConstants:
         """Test control + treatment = 100%."""
         assert COHORT_CONTROL_PERCENTAGE + COHORT_TREATMENT_PERCENTAGE == 100
 
-    def test_control_percentage(self) -> None:
-        """Test control percentage matches spec (20%)."""
+    def test_control_percentage(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test control percentage matches spec (20%).
+
+        Note: COHORT_CONTROL_PERCENTAGE is loaded at module import time from
+        the contract YAML. Clearing env vars here ensures the test documents
+        the expected default value, though the constant is already set.
+        """
+        monkeypatch.delenv("OMNICLAUDE_COHORT_CONTROL_PERCENTAGE", raising=False)
+        monkeypatch.delenv("OMNICLAUDE_COHORT_SALT", raising=False)
         assert COHORT_CONTROL_PERCENTAGE == 20
 
-    def test_treatment_percentage(self) -> None:
-        """Test treatment percentage matches spec (80%)."""
+    def test_treatment_percentage(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Test treatment percentage matches spec (80%).
+
+        Note: COHORT_TREATMENT_PERCENTAGE is loaded at module import time from
+        the contract YAML. Clearing env vars here ensures the test documents
+        the expected default value, though the constant is already set.
+        """
+        monkeypatch.delenv("OMNICLAUDE_COHORT_CONTROL_PERCENTAGE", raising=False)
+        monkeypatch.delenv("OMNICLAUDE_COHORT_SALT", raising=False)
         assert COHORT_TREATMENT_PERCENTAGE == 80
 
 
@@ -340,8 +354,16 @@ class TestCohortAssignmentConfig:
             for record in caplog.records
         )
 
-    def test_contract_file_exists_and_is_valid(self) -> None:
-        """Ensure the shipped contract file exists and contains expected values."""
+    def test_contract_file_exists_and_is_valid(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Ensure the shipped contract file exists and contains expected values.
+
+        Clear env vars to ensure we're testing the actual contract file values,
+        not any environment overrides that might be set in the test environment.
+        """
+        monkeypatch.delenv("OMNICLAUDE_COHORT_CONTROL_PERCENTAGE", raising=False)
+        monkeypatch.delenv("OMNICLAUDE_COHORT_SALT", raising=False)
         # Load contract using Pydantic model - validates structure and types
         contract = ExperimentCohortContract.load()
 
@@ -497,3 +519,39 @@ class TestCohortDistributionWithCustomPercentage:
         assert abs(control_rate - expected_rate) < 0.03, (
             f"Control rate {control_rate:.2%} not within 3% of expected {expected_rate:.2%}"
         )
+
+
+class TestCohortAssignmentImmutability:
+    """Test that CohortAssignment is immutable (NamedTuple guarantee)."""
+
+    def test_cohort_assignment_is_immutable(self) -> None:
+        """Test CohortAssignment attributes cannot be modified."""
+        result = assign_cohort("test-session")
+
+        with pytest.raises(AttributeError):
+            result.cohort = EnumCohort.CONTROL  # type: ignore[misc]
+
+        with pytest.raises(AttributeError):
+            result.assignment_seed = 50  # type: ignore[misc]
+
+    def test_cohort_assignment_is_hashable(self) -> None:
+        """Test CohortAssignment can be used in sets and as dict keys."""
+        result1 = assign_cohort("session-1")
+        result2 = assign_cohort("session-2")
+
+        # Should be usable in a set (requires hashability)
+        result_set = {result1, result2}
+        assert len(result_set) >= 1  # At least one unique result
+
+        # Should be usable as dict key
+        result_dict = {result1: "value1"}
+        assert result_dict[result1] == "value1"
+
+    def test_cohort_assignment_equality(self) -> None:
+        """Test CohortAssignment equality is value-based."""
+        # Same session should produce identical results
+        result1 = assign_cohort("same-session")
+        result2 = assign_cohort("same-session")
+
+        assert result1 == result2
+        assert hash(result1) == hash(result2)
