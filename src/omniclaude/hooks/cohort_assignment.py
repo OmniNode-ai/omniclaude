@@ -23,12 +23,15 @@ Part of OMN-1674: INJECT-005 A/B cohort assignment
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 from enum import Enum
 from pathlib import Path
 from typing import NamedTuple
 
 import yaml
+
+logger = logging.getLogger(__name__)
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -53,17 +56,25 @@ COHORT_SALT: str = "omniclaude-injection-v1"
 _CONTRACT_PATH = Path(__file__).parent / "contracts" / "contract_experiment_cohort.yaml"
 
 
-def _load_contract_defaults() -> dict[str, int | str]:
+class _ContractDefaults(NamedTuple):
+    """Typed container for contract defaults."""
+
+    control_percentage: int
+    salt: str
+
+
+def _load_contract_defaults() -> _ContractDefaults:
     """Load default values from contract YAML.
 
     Returns:
-        Dict with 'control_percentage' and 'salt' from contract.
+        _ContractDefaults with 'control_percentage' and 'salt' from contract.
         Falls back to hardcoded defaults if contract unavailable.
     """
-    defaults = {"control_percentage": 20, "salt": "omniclaude-injection-v1"}
+    default_control = 20
+    default_salt = "omniclaude-injection-v1"
 
     if not _CONTRACT_PATH.exists():
-        return defaults
+        return _ContractDefaults(control_percentage=default_control, salt=default_salt)
 
     try:
         with open(_CONTRACT_PATH) as f:
@@ -71,15 +82,27 @@ def _load_contract_defaults() -> dict[str, int | str]:
         experiment = contract.get("experiment", {})
         cohort = experiment.get("cohort", {})
 
-        if "control_percentage" in cohort:
-            defaults["control_percentage"] = cohort["control_percentage"]
-        if "salt" in cohort:
-            defaults["salt"] = cohort["salt"]
-    except (OSError, yaml.YAMLError):
-        # Contract unavailable or malformed - use hardcoded defaults
-        pass
+        control_pct = cohort.get("control_percentage", default_control)
+        salt = cohort.get("salt", default_salt)
 
-    return defaults
+        # Validate types from YAML
+        if not isinstance(control_pct, int):
+            logger.warning(
+                f"Invalid control_percentage type in contract: {type(control_pct)}, "
+                f"using default {default_control}"
+            )
+            control_pct = default_control
+        if not isinstance(salt, str):
+            logger.warning(
+                f"Invalid salt type in contract: {type(salt)}, using default"
+            )
+            salt = default_salt
+
+        return _ContractDefaults(control_percentage=control_pct, salt=salt)
+    except (OSError, yaml.YAMLError) as e:
+        # Contract unavailable or malformed - use hardcoded defaults
+        logger.warning(f"Failed to load cohort contract, using defaults: {e}")
+        return _ContractDefaults(control_percentage=default_control, salt=default_salt)
 
 
 class CohortAssignmentConfig(BaseSettings):
@@ -164,12 +187,17 @@ class CohortAssignmentConfig(BaseSettings):
         env_salt = os.environ.get("OMNICLAUDE_COHORT_SALT")
 
         # Build config with contract defaults, env overrides win
-        control_pct = (
-            int(env_control)
-            if env_control is not None
-            else contract_defaults["control_percentage"]
-        )
-        salt = env_salt if env_salt is not None else contract_defaults["salt"]
+        control_pct: int = contract_defaults.control_percentage
+        if env_control is not None:
+            try:
+                control_pct = int(env_control)
+            except ValueError:
+                logger.warning(
+                    f"Invalid OMNICLAUDE_COHORT_CONTROL_PERCENTAGE='{env_control}', "
+                    f"using contract default {control_pct}"
+                )
+
+        salt: str = env_salt if env_salt is not None else contract_defaults.salt
 
         return cls(control_percentage=control_pct, salt=salt)
 

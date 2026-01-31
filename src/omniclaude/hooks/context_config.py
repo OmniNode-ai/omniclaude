@@ -155,8 +155,9 @@ class ContextInjectionConfig(BaseSettings):
     )
 
     # Cohort assignment configuration (A/B testing)
+    # Uses from_contract to honor contract-first loading with env override
     cohort: CohortAssignmentConfig = Field(
-        default_factory=CohortAssignmentConfig,
+        default_factory=CohortAssignmentConfig.from_contract,
         description="A/B cohort assignment configuration for pattern injection experiments",
     )
 
