@@ -87,12 +87,12 @@ get_time_ms() {
 # other configuration. This enables hooks to use project-specific settings.
 #
 # Order of precedence:
-# 1. Already-set environment variables (highest priority)
-# 2. Project .env file
+# 1. Project .env file (highest priority - overrides existing env vars)
+# 2. Already-set environment variables
 # 3. Default values (lowest priority)
 
 if [[ -f "${PROJECT_ROOT}/.env" ]]; then
-    # Source .env but don't override already-set variables
+    # Source .env - note this WILL override already-set variables
     # Using set -a to export all variables, then set +a to stop
     set -a
     # shellcheck disable=SC1091

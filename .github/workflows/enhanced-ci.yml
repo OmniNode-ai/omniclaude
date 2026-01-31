@@ -596,6 +596,7 @@ jobs:
   hooks-tests:
     name: Hooks System Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:16-alpine
