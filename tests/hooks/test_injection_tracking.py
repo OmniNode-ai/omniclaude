@@ -29,6 +29,19 @@ from omniclaude.hooks.models_injection_tracking import (
 
 pytestmark = pytest.mark.unit
 
+# =============================================================================
+# Deterministic Session IDs for Cohort Testing
+# =============================================================================
+# These session IDs have been pre-computed to hash deterministically to their
+# respective cohorts using SHA-256(session_id + ":omniclaude-injection-v1") % 100.
+# Control cohort: seed 0-19 (20%), Treatment cohort: seed 20-99 (80%)
+
+# Session ID that deterministically hashes to CONTROL cohort (seed=16)
+SESSION_ID_CONTROL = "test-session-6"
+
+# Session ID that deterministically hashes to TREATMENT cohort (seed=52)
+SESSION_ID_TREATMENT = "test-session-0"
+
 
 # =============================================================================
 # Fixtures
@@ -74,9 +87,10 @@ class TestInjectionTracking:
         handler = HandlerContextInjection(config=disabled_db_config)
 
         # Should not raise even when emit fails
-        # Use a session ID that deterministically maps to treatment cohort
+        # Use pre-computed session ID that deterministically hashes to treatment cohort
+        # SESSION_ID_TREATMENT ("test-session-0") -> seed=52 -> TREATMENT
         result = await handler.handle(
-            session_id="test-session-treatment-cohort-emit-fail",
+            session_id=SESSION_ID_TREATMENT,
             emit_event=False,
         )
         assert result.success  # Handler still succeeds
@@ -104,10 +118,11 @@ class TestInjectionTracking:
         mock_emit.return_value = True
         handler = HandlerContextInjection(config=disabled_db_config)
 
-        # Use a session ID to trigger tracking
+        # Use pre-computed session ID that deterministically hashes to treatment cohort
+        # SESSION_ID_TREATMENT ("test-session-0") -> seed=52 -> TREATMENT
         # The handler will call _emit_injection_record which calls emit_event
         await handler.handle(
-            session_id="test-session-context-default",
+            session_id=SESSION_ID_TREATMENT,
             emit_event=False,
         )
 
@@ -131,18 +146,10 @@ class TestInjectionTracking:
         mock_emit.return_value = True
         handler = HandlerContextInjection(config=disabled_db_config)
 
-        # Find a session ID that maps to control cohort (0-19 seed)
-        # Using known control cohort session from cohort_assignment tests
-        control_session_id = "control-test-session-1"
-        from omniclaude.hooks.cohort_assignment import assign_cohort
-
-        assignment = assign_cohort(control_session_id)
-        # Skip if not control (test is probabilistic)
-        if assignment.cohort != EnumCohort.CONTROL:
-            pytest.skip("Session ID did not map to control cohort")
-
+        # Use pre-computed session ID that deterministically hashes to control cohort
+        # SESSION_ID_CONTROL ("test-session-6") -> seed=16 -> CONTROL
         result = await handler.handle(
-            session_id=control_session_id,
+            session_id=SESSION_ID_CONTROL,
             emit_event=False,
         )
 

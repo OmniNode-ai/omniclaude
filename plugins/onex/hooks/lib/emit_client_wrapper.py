@@ -61,7 +61,7 @@ import os
 import sys
 import threading
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from omnibase_infra.runtime.emit_daemon.client import EmitClient
@@ -282,7 +282,7 @@ def daemon_available() -> bool:
         return False
 
     try:
-        return client.is_daemon_running_sync()
+        return cast("bool", client.is_daemon_running_sync())
     except Exception as e:
         logger.debug(f"Daemon ping failed: {e}")
         return False
@@ -449,7 +449,7 @@ def main(argv: list[str] | None = None) -> int:
             format="%(levelname)s: %(message)s",
         )
 
-    return args.func(args)
+    return cast("int", args.func(args))
 
 
 if __name__ == "__main__":

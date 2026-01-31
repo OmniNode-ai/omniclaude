@@ -386,34 +386,15 @@ class HandlerContextInjection:
 
             retrieval_ms = int((time.monotonic() - start_time) * 1000)
 
-        except TimeoutError:
-            retrieval_ms = int((time.monotonic() - start_time) * 1000)
-            logger.warning(f"Pattern loading timed out after {cfg.timeout_ms}ms")
-            # Record error attempt (if cohort was assigned)
-            if cohort_assignment:
-                self._emit_injection_record(
-                    injection_id=injection_id,
-                    session_id_raw=session_id,
-                    pattern_ids=[],
-                    injection_context=injection_context,
-                    source=EnumInjectionSource.ERROR,
-                    cohort=cohort_assignment.cohort,
-                    assignment_seed=cohort_assignment.assignment_seed,
-                    injected_content="",
-                    injected_token_count=0,
-                    correlation_id=correlation_id,
-                )
-            return ModelInjectionResult(
-                success=True,  # Graceful degradation
-                context_markdown="",
-                pattern_count=0,
-                context_size_bytes=0,
-                source="timeout",
-                retrieval_ms=retrieval_ms,
-            )
         except Exception as e:
             retrieval_ms = int((time.monotonic() - start_time) * 1000)
-            logger.warning(f"Pattern loading failed: {e}")
+            is_timeout = isinstance(e, TimeoutError)
+            if is_timeout:
+                logger.warning(f"Pattern loading timed out after {cfg.timeout_ms}ms")
+                error_source = "timeout"
+            else:
+                logger.warning(f"Pattern loading failed: {e}")
+                error_source = "error"
             # Record error attempt (if cohort was assigned)
             if cohort_assignment:
                 self._emit_injection_record(
@@ -433,7 +414,7 @@ class HandlerContextInjection:
                 context_markdown="",
                 pattern_count=0,
                 context_size_bytes=0,
-                source="error",
+                source=error_source,
                 retrieval_ms=retrieval_ms,
             )
 
