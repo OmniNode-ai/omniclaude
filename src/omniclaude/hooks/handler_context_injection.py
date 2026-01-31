@@ -22,14 +22,30 @@ import hashlib
 import json
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
+from omniclaude.hooks.cohort_assignment import (
+    CohortAssignment,
+    EnumCohort,
+    assign_cohort,
+)
 from omniclaude.hooks.context_config import ContextInjectionConfig
 from omniclaude.hooks.handler_event_emitter import emit_hook_event
+from omniclaude.hooks.injection_limits import (
+    INJECTION_HEADER,
+    count_tokens,
+    select_patterns_for_injection,
+)
+from omniclaude.hooks.models_injection_tracking import (
+    EnumInjectionContext,
+    EnumInjectionSource,
+    ModelInjectionRecord,
+)
 from omniclaude.hooks.schemas import ContextSource, ModelHookContextInjectedPayload
 
 if TYPE_CHECKING:
@@ -52,6 +68,42 @@ class PatternConnectionError(PatternPersistenceError):
 
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# Lazy Import for Emit Event
+# =============================================================================
+
+# Lazy import for emit_event to avoid circular dependencies
+_emit_event_func: Callable[..., bool] | None = None
+
+
+def _get_emit_event() -> Callable[..., bool]:
+    """Get emit_event function with lazy import.
+
+    Caches the import at module level to avoid repeated import overhead.
+    The import is deferred to avoid circular dependencies during hook
+    subprocess initialization.
+
+    Returns:
+        The emit_event function from emit_client_wrapper.
+    """
+    global _emit_event_func
+    if _emit_event_func is None:
+        from plugins.onex.hooks.lib.emit_client_wrapper import emit_event
+
+        _emit_event_func = emit_event
+    return _emit_event_func
+
+
+def _reset_emit_event_cache() -> None:
+    """Reset the emit_event cache for testing.
+
+    This allows tests to patch the underlying module and have the patch
+    take effect. Should only be used in test code.
+    """
+    global _emit_event_func
+    _emit_event_func = None
 
 
 # =============================================================================
@@ -222,6 +274,53 @@ class HandlerContextInjection:
             # Persistence was provided externally, just clear our reference
             self._persistence = None
 
+    def _emit_injection_record(
+        self,
+        *,
+        injection_id: UUID,
+        session_id_raw: str,
+        pattern_ids: list[str],
+        injection_context: EnumInjectionContext,
+        source: EnumInjectionSource,
+        cohort: EnumCohort,
+        assignment_seed: int,
+        injected_content: str,
+        injected_token_count: int,
+        correlation_id: str = "",
+    ) -> bool:
+        """Emit injection record via emit daemon.
+
+        Non-blocking, returns True on success, False on failure.
+        Uses emit daemon for durability (not asyncio.create_task).
+
+        Uses ModelInjectionRecord for Pydantic validation before emission.
+        """
+        try:
+            emit_event = _get_emit_event()
+
+            # Use Pydantic model for validation
+            record = ModelInjectionRecord(
+                injection_id=injection_id,
+                session_id_raw=session_id_raw,
+                pattern_ids=pattern_ids,
+                injection_context=injection_context,
+                source=source,
+                cohort=cohort,
+                assignment_seed=assignment_seed,
+                injected_content=injected_content,
+                injected_token_count=injected_token_count,
+                correlation_id=correlation_id,
+            )
+
+            # Serialize with by_alias=True to output "session_id" instead of "session_id_raw"
+            # mode='json' ensures enums are serialized to their string values
+            payload = record.model_dump(mode="json", by_alias=True)
+
+            return emit_event("injection.recorded", payload)
+        except Exception as e:
+            logger.warning(f"Failed to emit injection record: {e}")
+            return False
+
     async def handle(
         self,
         *,
@@ -230,6 +329,7 @@ class HandlerContextInjection:
         session_id: str = "",
         correlation_id: str = "",
         emit_event: bool = True,
+        injection_context: EnumInjectionContext = EnumInjectionContext.USER_PROMPT_SUBMIT,
     ) -> ModelInjectionResult:
         """Execute context injection workflow.
 
@@ -239,11 +339,44 @@ class HandlerContextInjection:
             session_id: Session identifier for event emission.
             correlation_id: Correlation ID for distributed tracing.
             emit_event: Whether to emit Kafka event.
+            injection_context: Hook event that triggered injection (for A/B tracking).
 
         Returns:
             ModelInjectionResult with formatted context markdown.
         """
         cfg = self._config
+
+        # Generate injection_id at start (for ALL attempts, including control/error)
+        injection_id = uuid4()
+
+        # Cohort assignment (before any work)
+        cohort_assignment: CohortAssignment | None = None
+        if session_id:
+            cohort_assignment = assign_cohort(session_id)
+
+            # Control cohort: record and return early (no pattern injection)
+            if cohort_assignment.cohort == EnumCohort.CONTROL:
+                self._emit_injection_record(
+                    injection_id=injection_id,
+                    session_id_raw=session_id,
+                    pattern_ids=[],
+                    injection_context=injection_context,
+                    source=EnumInjectionSource.CONTROL_COHORT,
+                    cohort=cohort_assignment.cohort,
+                    assignment_seed=cohort_assignment.assignment_seed,
+                    injected_content="",
+                    injected_token_count=0,
+                    correlation_id=correlation_id,
+                )
+                logger.info(f"Session {session_id[:8]}... assigned to control cohort")
+                return ModelInjectionResult(
+                    success=True,
+                    context_markdown="",
+                    pattern_count=0,
+                    context_size_bytes=0,
+                    source="control_cohort",
+                    retrieval_ms=0,
+                )
 
         if not cfg.enabled:
             return ModelInjectionResult(
@@ -297,47 +430,80 @@ class HandlerContextInjection:
 
             retrieval_ms = int((time.monotonic() - start_time) * 1000)
 
-        except TimeoutError:
-            retrieval_ms = int((time.monotonic() - start_time) * 1000)
-            logger.warning(f"Pattern loading timed out after {cfg.timeout_ms}ms")
-            return ModelInjectionResult(
-                success=True,  # Graceful degradation
-                context_markdown="",
-                pattern_count=0,
-                context_size_bytes=0,
-                source="timeout",
-                retrieval_ms=retrieval_ms,
-            )
         except Exception as e:
             retrieval_ms = int((time.monotonic() - start_time) * 1000)
-            logger.warning(f"Pattern loading failed: {e}")
+            is_timeout = isinstance(e, TimeoutError)
+            if is_timeout:
+                logger.warning(f"Pattern loading timed out after {cfg.timeout_ms}ms")
+                error_source = "timeout"
+            else:
+                logger.warning(f"Pattern loading failed: {e}")
+                error_source = "error"
+            # Record error attempt (if cohort was assigned)
+            if cohort_assignment:
+                self._emit_injection_record(
+                    injection_id=injection_id,
+                    session_id_raw=session_id,
+                    pattern_ids=[],
+                    injection_context=injection_context,
+                    source=EnumInjectionSource.ERROR,
+                    cohort=cohort_assignment.cohort,
+                    assignment_seed=cohort_assignment.assignment_seed,
+                    injected_content="",
+                    injected_token_count=0,
+                    correlation_id=correlation_id,
+                )
             return ModelInjectionResult(
                 success=True,  # Graceful degradation
                 context_markdown="",
                 pattern_count=0,
                 context_size_bytes=0,
-                source="error",
+                source=error_source,
                 retrieval_ms=retrieval_ms,
             )
 
-        # Step 2: Filter by domain
+        # Step 2: Filter by domain (pre-filter before selection)
         if agent_domain:
             patterns = [
                 p for p in patterns if p.domain == agent_domain or p.domain == "general"
             ]
 
-        # Step 3: Filter by confidence threshold
+        # Step 3: Filter by confidence threshold (pre-filter)
         patterns = [p for p in patterns if p.confidence >= cfg.min_confidence]
 
-        # Step 4: Sort by confidence descending
-        patterns = sorted(patterns, key=lambda p: p.confidence, reverse=True)
-
-        # Step 5: Limit to max patterns
-        patterns = patterns[: cfg.max_patterns]
+        # Step 4-5: Apply injection limits with new selector (OMN-1671)
+        # This replaces simple sort/limit with:
+        # - Effective score ranking (confidence * success_rate * usage_factor)
+        # - Domain caps (max_per_domain)
+        # - Token budget (max_tokens_injected)
+        # - Deterministic ordering
+        patterns = select_patterns_for_injection(patterns, cfg.limits)
 
         # Step 6: Format as markdown
-        context_markdown = self._format_patterns_markdown(patterns, cfg.max_patterns)
+        context_markdown = self._format_patterns_markdown(
+            patterns, cfg.limits.max_patterns_per_injection
+        )
         context_size_bytes = len(context_markdown.encode("utf-8"))
+
+        # Record injection to database via emit daemon
+        if cohort_assignment:
+            if not patterns:
+                injection_source = EnumInjectionSource.NO_PATTERNS
+            else:
+                injection_source = EnumInjectionSource.INJECTED
+
+            self._emit_injection_record(
+                injection_id=injection_id,
+                session_id_raw=session_id,
+                pattern_ids=[p.pattern_id for p in patterns],
+                injection_context=injection_context,
+                source=injection_source,
+                cohort=cohort_assignment.cohort,
+                assignment_seed=cohort_assignment.assignment_seed,
+                injected_content=context_markdown,
+                injected_token_count=count_tokens(context_markdown),
+                correlation_id=correlation_id,
+            )
 
         # Step 7: Emit event
         if emit_event and patterns:
@@ -632,18 +798,21 @@ class HandlerContextInjection:
         patterns: list[ModelPatternRecord],
         max_patterns: int,
     ) -> str:
-        """Format patterns as markdown for context injection."""
+        """Format patterns as markdown for context injection.
+
+        Uses INJECTION_HEADER from injection_limits.py as the single source of
+        truth for the header format. This ensures token counting during pattern
+        selection matches the actual output format.
+        """
         if not patterns:
             return ""
 
         patterns_to_format = patterns[:max_patterns]
 
-        lines: list[str] = [
-            "## Learned Patterns (Auto-Injected)",
-            "",
-            "The following patterns have been learned from previous sessions:",
-            "",
-        ]
+        # Start with the header from injection_limits (single source of truth)
+        # INJECTION_HEADER ends with "\n\n", split gives [..., "", ""], but we need
+        # exactly one trailing "" for proper spacing before pattern content
+        lines: list[str] = INJECTION_HEADER.rstrip("\n").split("\n") + [""]
 
         for pattern in patterns_to_format:
             confidence_pct = f"{pattern.confidence * 100:.0f}%"

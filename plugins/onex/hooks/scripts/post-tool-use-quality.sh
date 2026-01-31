@@ -157,17 +157,28 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
         TOOL_SUMMARY="${TOOL_NAME} on ${FILE_PATH:-unknown}"
         TOOL_SUMMARY="${TOOL_SUMMARY:0:500}"
 
-        # Determine success/failure flag using variable for clarity and robustness
-        SUCCESS_FLAG="--success"
-        [[ "$TOOL_SUCCESS" != "true" ]] && SUCCESS_FLAG="--failure"
+        # Build JSON payload for tool.executed event
+        # Use jq for proper JSON escaping of all fields
+        PAYLOAD=$(jq -n \
+            --arg session_id "$SESSION_ID" \
+            --arg tool_name "$TOOL_NAME" \
+            --argjson success "$([[ "$TOOL_SUCCESS" == "true" ]] && echo "true" || echo "false")" \
+            --arg duration_ms "${DURATION_MS:-}" \
+            --arg summary "$TOOL_SUMMARY" \
+            '{
+                session_id: $session_id,
+                tool_name: $tool_name,
+                success: $success,
+                summary: $summary
+            } + (if $duration_ms != "" then {duration_ms: ($duration_ms | tonumber)} else {} end)'
+        )
 
-        "$PYTHON_CMD" -m omniclaude.hooks.cli_emit tool-executed \
-            --session-id "$SESSION_ID" \
-            --tool-name "$TOOL_NAME" \
-            $SUCCESS_FLAG \
-            ${DURATION_MS:+--duration-ms "$DURATION_MS"} \
-            --summary "$TOOL_SUMMARY" \
-            >> "$LOG_FILE" 2>&1 || { rc=$?; echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Kafka emit failed (exit=$rc, non-fatal)" >> "$LOG_FILE"; }
+        # Validate payload was constructed successfully
+        if [[ -z "$PAYLOAD" || "$PAYLOAD" == "null" ]]; then
+            echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] WARNING: Failed to construct tool payload (jq failed), skipping emission" >> "$LOG_FILE"
+        else
+            emit_via_daemon "tool.executed" "$PAYLOAD" 50
+        fi
     ) &
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Tool event emission started" >> "$LOG_FILE"
 fi
