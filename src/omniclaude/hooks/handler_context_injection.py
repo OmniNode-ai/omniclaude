@@ -674,9 +674,13 @@ class HandlerContextInjection:
         if rows:
             for row in rows:
                 try:
+                    pattern_id = row.get("pattern_id")
+                    if not pattern_id:
+                        logger.warning("Skipping row with missing pattern_id")
+                        continue
                     patterns.append(
                         PatternRecord(
-                            pattern_id=str(row.get("pattern_id", "")),
+                            pattern_id=str(pattern_id),
                             domain=str(row.get("domain", "")),
                             title=str(row.get("title", "")),
                             description=str(row.get("description", "")),
