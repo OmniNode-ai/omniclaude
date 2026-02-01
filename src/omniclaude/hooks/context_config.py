@@ -16,6 +16,8 @@ Environment variables use the OMNICLAUDE_CONTEXT_ prefix:
     OMNICLAUDE_CONTEXT_DB_NAME: Database name (default: omninode_bridge)
     OMNICLAUDE_CONTEXT_DB_USER: Database user (default: postgres)
     OMNICLAUDE_CONTEXT_DB_PASSWORD: Database password (required, no default)
+    OMNICLAUDE_CONTEXT_DB_POOL_MIN_SIZE: Minimum pool connections (default: 1)
+    OMNICLAUDE_CONTEXT_DB_POOL_MAX_SIZE: Maximum pool connections (default: 5)
 
     Deprecated file-based configuration:
     OMNICLAUDE_CONTEXT_PERSISTENCE_FILE: Path to patterns file (DEPRECATED)
@@ -237,6 +239,8 @@ class ContextInjectionConfig(BaseSettings):
         db_name: Database name.
         db_user: Database user.
         db_password: Database password (SecretStr for security).
+        db_pool_min_size: Minimum database pool connections.
+        db_pool_max_size: Maximum database pool connections.
         persistence_file: DEPRECATED - Path to the learned patterns persistence file.
         file_fallback_enabled: Fall back to file if database unavailable.
     """
@@ -306,6 +310,20 @@ class ContextInjectionConfig(BaseSettings):
     db_password: SecretStr = Field(
         default=SecretStr(""),
         description="Database password (from OMNICLAUDE_CONTEXT_DB_PASSWORD)",
+    )
+
+    db_pool_min_size: int = Field(
+        default=1,
+        ge=1,
+        le=20,
+        description="Minimum database pool connections",
+    )
+
+    db_pool_max_size: int = Field(
+        default=5,
+        ge=1,
+        le=100,
+        description="Maximum database pool connections",
     )
 
     # Contract-driven database access (OMN-1779)

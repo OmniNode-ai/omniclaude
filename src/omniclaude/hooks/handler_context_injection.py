@@ -621,8 +621,8 @@ class HandlerContextInjection:
             dsn = cfg.get_db_dsn()  # noqa: secrets - DSN from config, not hardcoded
             self._pool = await asyncpg.create_pool(
                 dsn,
-                min_size=1,
-                max_size=5,
+                min_size=cfg.db_pool_min_size,
+                max_size=cfg.db_pool_max_size,
                 command_timeout=cfg.timeout_ms / 1000.0,
             )
         except Exception as e:
