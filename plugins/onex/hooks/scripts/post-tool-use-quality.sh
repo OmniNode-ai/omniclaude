@@ -72,6 +72,34 @@ else
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Tool $TOOL_NAME not applicable for auto-fix" >> "$LOG_FILE"
 fi
 
+# -----------------------------------------------------------------------
+# PR Cache Update: Detect "gh pr create" and update statusline cache
+# -----------------------------------------------------------------------
+if [ "$TOOL_NAME" = "Bash" ]; then
+    BASH_COMMAND=$(echo "$TOOL_INFO" | jq -r '.tool_input.command // ""')
+    BASH_OUTPUT=$(echo "$TOOL_INFO" | jq -r '.tool_response // ""')
+
+    # Check if this was a "gh pr create" command
+    if [[ "$BASH_COMMAND" == *"gh pr create"* ]]; then
+        # Extract PR number from URL in output (e.g., https://github.com/.../pull/72)
+        PR_URL=$(echo "$BASH_OUTPUT" | grep -oE 'https://github.com/[^/]+/[^/]+/pull/[0-9]+' | head -1)
+        if [[ -n "$PR_URL" ]]; then
+            PR_NUM=$(echo "$PR_URL" | grep -oE '[0-9]+$')
+            echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Detected PR creation: #$PR_NUM from $PR_URL" >> "$LOG_FILE"
+
+            # Get current git branch and project dir to update cache
+            GIT_BRANCH=$(git branch --show-current 2>/dev/null)
+            if [[ -n "$GIT_BRANCH" ]]; then
+                CACHE_DIR="$HOME/.claude/cache/pr-numbers"
+                mkdir -p "$CACHE_DIR" 2>/dev/null
+                CACHE_KEY=$(echo "${PROJECT_ROOT}:${GIT_BRANCH}" | sed 's/[^a-zA-Z0-9]/_/g')
+                echo "$PR_NUM" > "$CACHE_DIR/$CACHE_KEY"
+                echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Updated PR cache: $CACHE_DIR/$CACHE_KEY = #$PR_NUM" >> "$LOG_FILE"
+            fi
+        fi
+    fi
+fi
+
 # Enhanced metrics collection (async, non-blocking)
 if [[ -f "${HOOKS_LIB}/hook_event_logger.py" && -f "${HOOKS_LIB}/post_tool_metrics.py" ]]; then
     ENABLE_DB_LOGGING="${ENABLE_HOOK_DATABASE_LOGGING:-false}"
