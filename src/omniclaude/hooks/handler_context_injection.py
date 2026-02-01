@@ -577,6 +577,7 @@ class HandlerContextInjection:
             import yaml
             from omnibase_core.models.contracts import ModelDbRepositoryContract
             from omnibase_infra.runtime.db import PostgresRepositoryRuntime
+            from pydantic import ValidationError
         except ImportError as e:
             raise PatternConnectionError(
                 f"Contract runtime unavailable - dependencies not installed: {e}"
@@ -605,6 +606,11 @@ class HandlerContextInjection:
                 contract_data = yaml.safe_load(f)
 
             self._contract = ModelDbRepositoryContract.model_validate(contract_data)
+        except ValidationError as e:
+            # Preserve field-level validation errors from Pydantic
+            raise PatternConnectionError(
+                f"Contract validation failed for {contract_path}: {e.error_count()} errors - {e}"
+            ) from e
         except Exception as e:
             raise PatternConnectionError(
                 f"Failed to load repository contract: {e}"
