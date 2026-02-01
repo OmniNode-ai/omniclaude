@@ -7,7 +7,10 @@ by using marker files to track injection state per session.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # Default marker directory (intentional temp usage for session-scoped markers)
 DEFAULT_MARKER_DIR = "/tmp/omniclaude-sessions"  # noqa: S108  # nosec B108
@@ -51,7 +54,12 @@ def mark_session_injected(
         content = injection_id or ""
         marker_path.write_text(content)
         return True
-    except OSError:
+    except OSError as e:
+        logger.debug(
+            "Failed to create session marker for %s: %s",
+            session_id,
+            e,
+        )
         return False
 
 
@@ -111,7 +119,12 @@ def clear_session_marker(
         marker_path = get_marker_path(session_id, marker_dir)
         marker_path.unlink(missing_ok=True)
         return True
-    except OSError:
+    except OSError as e:
+        logger.debug(
+            "Failed to clear session marker for %s: %s",
+            session_id,
+            e,
+        )
         return False
 
 
