@@ -54,12 +54,24 @@ write_daemon_status() {
 
 export PYTHONPATH="${PROJECT_ROOT}:${PLUGIN_ROOT}/lib:${HOOKS_LIB}:${PYTHONPATH:-}"
 
+# Normalize boolean values to JSON-compatible true/false
+# Accepts: true/false, True/False, TRUE/FALSE, 1/0, yes/no, Yes/No, YES/NO
+_normalize_bool() {
+    local val="${1,,}"  # Convert to lowercase
+    case "$val" in
+        true|1|yes) echo "true" ;;
+        *) echo "false" ;;
+    esac
+}
+
 # SessionStart injection config (OMN-1675)
 SESSION_INJECTION_ENABLED="${OMNICLAUDE_SESSION_INJECTION_ENABLED:-true}"
+SESSION_INJECTION_ENABLED=$(_normalize_bool "$SESSION_INJECTION_ENABLED")
 SESSION_INJECTION_TIMEOUT_MS="${OMNICLAUDE_SESSION_INJECTION_TIMEOUT_MS:-500}"
 SESSION_INJECTION_MAX_PATTERNS="${OMNICLAUDE_SESSION_INJECTION_MAX_PATTERNS:-10}"
 SESSION_INJECTION_MIN_CONFIDENCE="${OMNICLAUDE_SESSION_INJECTION_MIN_CONFIDENCE:-0.7}"
 SESSION_INJECTION_INCLUDE_FOOTER="${OMNICLAUDE_SESSION_INJECTION_INCLUDE_FOOTER:-false}"
+SESSION_INJECTION_INCLUDE_FOOTER=$(_normalize_bool "$SESSION_INJECTION_INCLUDE_FOOTER")
 
 # Define timeout function (portable, works on macOS)
 # Uses perl alarm() because GNU coreutils 'timeout' command is not available

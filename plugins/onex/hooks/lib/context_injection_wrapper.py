@@ -95,6 +95,16 @@ def _get_context_mapping(
     return _CONTEXT_MAPPING
 
 
+def _reset_context_mapping() -> None:
+    """Reset the context mapping cache.
+
+    Used for testing to ensure clean state between test runs.
+    Should not be called in production code.
+    """
+    global _CONTEXT_MAPPING
+    _CONTEXT_MAPPING = None
+
+
 # Configure logging to stderr (stdout reserved for JSON output)
 logging.basicConfig(
     level=logging.WARNING,

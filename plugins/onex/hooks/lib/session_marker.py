@@ -7,7 +7,9 @@ by using marker files to track injection state per session.
 
 from __future__ import annotations
 
+import json
 import logging
+import time
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -50,8 +52,13 @@ def mark_session_injected(
         marker_path = get_marker_path(session_id, marker_dir)
         marker_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Write injection_id if provided, otherwise empty file
-        content = injection_id or ""
+        # Write JSON with injection_id and timestamp for TTL support
+        content = json.dumps(
+            {
+                "injection_id": injection_id or "",
+                "timestamp": time.time(),
+            }
+        )
         marker_path.write_text(content)
         return True
     except OSError as e:
@@ -66,18 +73,37 @@ def mark_session_injected(
 def is_session_injected(
     session_id: str,
     marker_dir: str = DEFAULT_MARKER_DIR,
+    max_age_hours: int = 24,
 ) -> bool:
     """Check if a session has already received pattern injection.
+
+    Uses file modification time for staleness detection. Markers older than
+    max_age_hours are considered stale and will return False, preventing
+    stale markers from blocking injection on new sessions (e.g., after
+    Claude Code crashes or is force-quit).
 
     Args:
         session_id: The session ID
         marker_dir: Directory for marker files
+        max_age_hours: Maximum age in hours before marker is considered stale
 
     Returns:
-        True if session was already injected
+        True if session was already injected and marker is not stale
     """
     marker_path = get_marker_path(session_id, marker_dir)
-    return marker_path.exists()
+    if marker_path.exists():
+        try:
+            age_hours = (time.time() - marker_path.stat().st_mtime) / 3600
+            return age_hours < max_age_hours
+        except OSError as e:
+            logger.debug(
+                "Failed to check marker age for %s: %s",
+                session_id,
+                e,
+            )
+            # If we can't check the age, assume marker is valid
+            return True
+    return False
 
 
 def get_session_injection_id(
@@ -85,6 +111,8 @@ def get_session_injection_id(
     marker_dir: str = DEFAULT_MARKER_DIR,
 ) -> str | None:
     """Get the injection_id for a previously injected session.
+
+    Handles both JSON format (new) and plain text format (backward compatibility).
 
     Args:
         session_id: The session ID
@@ -96,6 +124,19 @@ def get_session_injection_id(
     marker_path = get_marker_path(session_id, marker_dir)
     if marker_path.exists():
         content = marker_path.read_text().strip()
+        if not content:
+            return None
+
+        # Try JSON format first (new format with timestamp)
+        try:
+            data = json.loads(content)
+            if isinstance(data, dict):
+                injection_id = data.get("injection_id", "")
+                return injection_id if injection_id else None
+        except json.JSONDecodeError:
+            pass
+
+        # Fall back to plain text format (backward compatibility)
         return content if content else None
     return None
 
@@ -138,6 +179,12 @@ if __name__ == "__main__":
     parser.add_argument("--session-id", required=True, help="Session ID")
     parser.add_argument("--injection-id", help="Injection ID (for mark command)")
     parser.add_argument("--marker-dir", default=DEFAULT_MARKER_DIR)
+    parser.add_argument(
+        "--max-age-hours",
+        type=int,
+        default=24,
+        help="Max age in hours before marker is stale (for check command)",
+    )
 
     args = parser.parse_args()
 
@@ -147,7 +194,9 @@ if __name__ == "__main__":
         )
         sys.exit(0 if success else 1)
     elif args.command == "check":
-        injected = is_session_injected(args.session_id, args.marker_dir)
+        injected = is_session_injected(
+            args.session_id, args.marker_dir, args.max_age_hours
+        )
         print("true" if injected else "false")
         sys.exit(0 if injected else 1)
     elif args.command == "clear":
