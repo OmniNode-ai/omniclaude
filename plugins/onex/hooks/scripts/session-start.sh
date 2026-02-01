@@ -64,10 +64,15 @@ SESSION_INJECTION_INCLUDE_FOOTER="${OMNICLAUDE_SESSION_INJECTION_INCLUDE_FOOTER:
 # Define timeout function (portable, works on macOS)
 # Uses perl alarm() because GNU coreutils 'timeout' command is not available
 # on macOS by default. perl is pre-installed on macOS and provides SIGALRM.
+# NOTE: perl alarm() only accepts integers, so we round up fractional seconds.
 run_with_timeout() {
     local timeout_sec="$1"
     shift
-    perl -e 'alarm shift; exec @ARGV' "$timeout_sec" "$@"
+    # perl alarm() only accepts integers; round up fractional seconds to minimum of 1
+    local int_timeout
+    int_timeout=$(printf "%.0f" "$timeout_sec")
+    [[ "$int_timeout" -lt 1 ]] && int_timeout=1
+    perl -e 'alarm shift; exec @ARGV' "$int_timeout" "$@"
 }
 
 # Preflight check for jq (required for JSON parsing)
@@ -356,10 +361,11 @@ if [[ "${SESSION_INJECTION_ENABLED:-true}" == "true" ]] && [[ -f "${HOOKS_LIB}/c
     log "Pattern injection complete: count=$PATTERN_COUNT cohort=$INJECTION_COHORT"
 
     # Mark session as injected (for UserPromptSubmit coordination)
-    if [[ -n "$LEARNED_PATTERNS" ]] && [[ -f "${HOOKS_LIB}/session_marker.py" ]]; then
+    # Mark even for control cohort or empty patterns to prevent duplicate attempts
+    if [[ -n "$INJECTION_COHORT" ]] && [[ -f "${HOOKS_LIB}/session_marker.py" ]]; then
         $PYTHON_CMD "${HOOKS_LIB}/session_marker.py" mark \
             --session-id "${SESSION_ID}" \
-            --injection-id "${INJECTION_ID}" 2>>"$LOG_FILE" || true
+            --injection-id "${INJECTION_ID:-control}" 2>>"$LOG_FILE" || true
     fi
 elif [[ "${SESSION_INJECTION_ENABLED:-true}" != "true" ]]; then
     log "Pattern injection disabled (SESSION_INJECTION_ENABLED=false)"

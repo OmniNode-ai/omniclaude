@@ -10,7 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 # Default marker directory (intentional temp usage for session-scoped markers)
-DEFAULT_MARKER_DIR = "/tmp/omniclaude-sessions"  # noqa: S108
+DEFAULT_MARKER_DIR = "/tmp/omniclaude-sessions"  # noqa: S108  # nosec B108
 
 
 def get_marker_path(session_id: str, marker_dir: str = DEFAULT_MARKER_DIR) -> Path:
