@@ -133,6 +133,10 @@ class InjectorInput(TypedDict, total=False):
         correlation_id: Correlation ID for tracing.
         max_patterns: Maximum number of patterns to include.
         min_confidence: Minimum confidence threshold for pattern inclusion.
+        emit_event: Whether to emit Kafka event.
+        injection_context: Hook context that triggered injection
+            ('session_start' or 'user_prompt_submit').
+        include_footer: Whether to append injection_id as HTML comment footer.
     """
 
     agent_name: str
@@ -142,6 +146,9 @@ class InjectorInput(TypedDict, total=False):
     correlation_id: str
     max_patterns: int
     min_confidence: float
+    emit_event: bool
+    injection_context: str
+    include_footer: bool
 
 
 class InjectorOutput(TypedDict):
@@ -154,6 +161,8 @@ class InjectorOutput(TypedDict):
         pattern_count: Number of patterns included.
         source: Source of patterns (file path or "none").
         retrieval_ms: Time taken to retrieve and format patterns.
+        injection_id: Unique identifier for this injection event (for tracking).
+        cohort: Experiment cohort assignment ('control' or 'treatment').
     """
 
     success: bool
@@ -161,6 +170,8 @@ class InjectorOutput(TypedDict):
     pattern_count: int
     source: str
     retrieval_ms: int
+    injection_id: str | None
+    cohort: str | None
 
 
 __all__ = [

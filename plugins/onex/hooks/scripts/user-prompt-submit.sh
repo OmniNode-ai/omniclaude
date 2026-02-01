@@ -42,6 +42,10 @@ source "${HOOKS_DIR}/scripts/common.sh"
 
 export ARCHON_INTELLIGENCE_URL="${ARCHON_INTELLIGENCE_URL:-http://localhost:8053}"
 
+# Skip pattern injection if SessionStart already injected (OMN-1675)
+# When true, UserPromptSubmit will check session marker before injecting patterns
+SKIP_IF_SESSION_INJECTED="${OMNICLAUDE_SESSION_SKIP_IF_INJECTED:-true}"
+
 # Preflight check for jq (required for claude-hook-event JSON construction)
 SKIP_CLAUDE_HOOK_EVENT_EMIT=0
 if ! command -v jq >/dev/null 2>&1; then
@@ -306,10 +310,22 @@ if [[ -n "${IMPL_QUERY:-}" ]]; then
 fi
 
 # -----------------------------
+# Check if SessionStart already injected (OMN-1675)
+# -----------------------------
+SESSION_ALREADY_INJECTED=false
+
+if [[ "$SKIP_IF_SESSION_INJECTED" == "true" ]] && [[ -f "${HOOKS_LIB}/session_marker.py" ]]; then
+    if $PYTHON_CMD "${HOOKS_LIB}/session_marker.py" check --session-id "${SESSION_ID}" 2>/dev/null; then
+        SESSION_ALREADY_INJECTED=true
+        log "Skipping pattern injection: SessionStart already injected for session ${SESSION_ID:0:8}..."
+    fi
+fi
+
+# -----------------------------
 # Learned Pattern Injection (OMN-1403)
 # -----------------------------
 LEARNED_PATTERNS=""
-if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
+if [[ "$SESSION_ALREADY_INJECTED" == "false" ]] && [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
     log "Loading learned patterns via context injection..."
 
     PATTERN_INPUT="$(jq -n \
@@ -355,6 +371,8 @@ if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
     else
         log "INFO: No learned patterns available"
     fi
+elif [[ "$SESSION_ALREADY_INJECTED" == "true" ]]; then
+    log "Using patterns from SessionStart injection (session ${SESSION_ID:0:8}...)"
 fi
 
 # -----------------------------

@@ -54,6 +54,20 @@ write_daemon_status() {
 
 export PYTHONPATH="${PROJECT_ROOT}:${PLUGIN_ROOT}/lib:${HOOKS_LIB}:${PYTHONPATH:-}"
 
+# SessionStart injection config (OMN-1675)
+SESSION_INJECTION_ENABLED="${OMNICLAUDE_SESSION_INJECTION_ENABLED:-true}"
+SESSION_INJECTION_TIMEOUT_MS="${OMNICLAUDE_SESSION_INJECTION_TIMEOUT_MS:-500}"
+SESSION_INJECTION_MAX_PATTERNS="${OMNICLAUDE_SESSION_INJECTION_MAX_PATTERNS:-10}"
+SESSION_INJECTION_MIN_CONFIDENCE="${OMNICLAUDE_SESSION_INJECTION_MIN_CONFIDENCE:-0.7}"
+SESSION_INJECTION_INCLUDE_FOOTER="${OMNICLAUDE_SESSION_INJECTION_INCLUDE_FOOTER:-false}"
+
+# Define timeout function (portable, works on macOS)
+run_with_timeout() {
+    local timeout_sec="$1"
+    shift
+    perl -e 'alarm shift; exec @ARGV' "$timeout_sec" "$@"
+}
+
 # Preflight check for jq (required for JSON parsing)
 JQ_AVAILABLE=1
 if ! command -v jq >/dev/null 2>&1; then
@@ -203,11 +217,14 @@ if [[ "$JQ_AVAILABLE" -eq 1 ]]; then
     SESSION_ID=$(echo "$INPUT" | jq -r '.sessionId // .session_id // ""')
     PROJECT_PATH=$(echo "$INPUT" | jq -r '.projectPath // .project_path // ""')
     CWD=$(echo "$INPUT" | jq -r '.cwd // ""' || pwd)
+    # Generate correlation ID for this session (used for pattern injection tracking)
+    CORRELATION_ID=$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null || echo "session-${SESSION_ID:-unknown}-$(date +%s)")
 else
     # Fallback values when jq is not available
     SESSION_ID=""
     PROJECT_PATH=""
     CWD=$(pwd)
+    CORRELATION_ID=""
 fi
 
 if [[ -z "$CWD" ]]; then
@@ -274,6 +291,61 @@ else
     fi
 fi
 
+# -----------------------------
+# Learned Pattern Injection (OMN-1675)
+# -----------------------------
+LEARNED_PATTERNS=""
+INJECTION_ID=""
+INJECTION_COHORT=""
+
+if [[ "${SESSION_INJECTION_ENABLED:-true}" == "true" ]] && [[ -f "${HOOKS_LIB}/context_injection_wrapper.py" ]] && [[ "$JQ_AVAILABLE" -eq 1 ]]; then
+    log "Starting pattern injection for SessionStart"
+
+    # Build injection input
+    PATTERN_INPUT="$(jq -n \
+        --arg session "${SESSION_ID:-}" \
+        --arg project "${PROJECT_PATH:-$(pwd)}" \
+        --arg correlation "${CORRELATION_ID:-}" \
+        --argjson max_patterns "${SESSION_INJECTION_MAX_PATTERNS:-10}" \
+        --argjson min_confidence "${SESSION_INJECTION_MIN_CONFIDENCE:-0.7}" \
+        --argjson include_footer "${SESSION_INJECTION_INCLUDE_FOOTER:-false}" \
+        '{
+            session_id: $session,
+            project: $project,
+            correlation_id: $correlation,
+            max_patterns: $max_patterns,
+            min_confidence: $min_confidence,
+            injection_context: "session_start",
+            include_footer: $include_footer,
+            emit_event: true
+        }' 2>/dev/null)"
+
+    # Call wrapper with timeout (500ms default, convert to seconds)
+    TIMEOUT_SEC=$(echo "scale=1; ${SESSION_INJECTION_TIMEOUT_MS:-500} / 1000" | bc)
+    PATTERN_RESULT="$(echo "$PATTERN_INPUT" | run_with_timeout "${TIMEOUT_SEC}" $PYTHON_CMD "${HOOKS_LIB}/context_injection_wrapper.py" 2>>"$LOG_FILE" || echo '{}')"
+
+    # Extract results
+    LEARNED_PATTERNS="$(echo "$PATTERN_RESULT" | jq -r '.patterns_context // ""' 2>/dev/null)"
+    INJECTION_ID="$(echo "$PATTERN_RESULT" | jq -r '.injection_id // ""' 2>/dev/null)"
+    INJECTION_COHORT="$(echo "$PATTERN_RESULT" | jq -r '.cohort // ""' 2>/dev/null)"
+    PATTERN_COUNT="$(echo "$PATTERN_RESULT" | jq -r '.pattern_count // 0' 2>/dev/null)"
+
+    log "Pattern injection complete: count=$PATTERN_COUNT cohort=$INJECTION_COHORT"
+
+    # Mark session as injected (for UserPromptSubmit coordination)
+    if [[ -n "$LEARNED_PATTERNS" ]] && [[ -f "${HOOKS_LIB}/session_marker.py" ]]; then
+        $PYTHON_CMD "${HOOKS_LIB}/session_marker.py" mark \
+            --session-id "${SESSION_ID}" \
+            --injection-id "${INJECTION_ID}" 2>>"$LOG_FILE" || true
+    fi
+elif [[ "${SESSION_INJECTION_ENABLED:-true}" != "true" ]]; then
+    log "Pattern injection disabled (SESSION_INJECTION_ENABLED=false)"
+elif [[ "$JQ_AVAILABLE" -eq 0 ]]; then
+    log "Pattern injection skipped (jq not available)"
+else
+    log "Pattern injection skipped (context_injection_wrapper.py not found)"
+fi
+
 # Performance tracking
 END_TIME=$(get_time_ms)
 ELAPSED_MS=$((END_TIME - START_TIME))
@@ -282,6 +354,33 @@ log "Hook execution time: ${ELAPSED_MS}ms"
 
 if [[ $ELAPSED_MS -gt 50 ]]; then
     log "WARNING: Exceeded 50ms target: ${ELAPSED_MS}ms"
+fi
+
+# Build output with additionalContext
+if [[ "$JQ_AVAILABLE" -eq 1 ]]; then
+    if [[ -n "$LEARNED_PATTERNS" ]]; then
+        # Has patterns to inject
+        printf '%s' "$INPUT" | jq \
+            --arg ctx "$LEARNED_PATTERNS" \
+            --arg inj_id "$INJECTION_ID" \
+            --arg cohort "$INJECTION_COHORT" \
+            '.hookSpecificOutput.hookEventName = "SessionStart" |
+             .hookSpecificOutput.additionalContext = $ctx |
+             .hookSpecificOutput.metadata.injection_id = $inj_id |
+             .hookSpecificOutput.metadata.cohort = $cohort'
+    elif [[ -n "$INJECTION_COHORT" ]]; then
+        # Control cohort or no patterns - still set metadata
+        printf '%s' "$INPUT" | jq \
+            --arg cohort "$INJECTION_COHORT" \
+            '.hookSpecificOutput.hookEventName = "SessionStart" |
+             .hookSpecificOutput.metadata.cohort = $cohort'
+    else
+        # No injection attempted, pass through with hookEventName
+        printf '%s' "$INPUT" | jq '.hookSpecificOutput.hookEventName = "SessionStart"'
+    fi
+else
+    # No jq available, echo empty JSON
+    printf '%s' "$INPUT"
 fi
 
 exit 0

@@ -328,6 +328,8 @@ def _create_empty_output(source: str = "none", retrieval_ms: int = 0) -> Injecto
         pattern_count=0,
         source=source,
         retrieval_ms=retrieval_ms,
+        injection_id=None,
+        cohort=None,
     )
 
 
@@ -339,6 +341,8 @@ def _create_error_output(retrieval_ms: int = 0) -> InjectorOutput:
         pattern_count=0,
         source="error",
         retrieval_ms=retrieval_ms,
+        injection_id=None,
+        cohort=None,
     )
 
 
@@ -419,6 +423,8 @@ def main() -> None:
             pattern_count=len(patterns[:max_patterns]),
             source=source,
             retrieval_ms=elapsed_ms,
+            injection_id=None,  # Legacy file-based injector doesn't track injections
+            cohort=None,
         )
 
         print(json.dumps(output))
