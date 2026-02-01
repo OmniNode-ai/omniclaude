@@ -75,6 +75,7 @@ The skill preserves all existing ticket description content above the contract s
 
 | Transition | Trigger Keywords |
 |------------|------------------|
+| research → questions | "questions ready", "done researching" |
 | questions → spec | "requirements clear", "proceed to spec" |
 | spec → implementation | "approve spec", "build it" |
 | implementation → review | "create PR", "ready for review" |
