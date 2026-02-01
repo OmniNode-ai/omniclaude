@@ -100,15 +100,7 @@ async def publish_handler_contracts(
     # Resolve environment if provided (override config setting)
     if environment is not None:
         resolved_env = environment.strip() or "dev"
-        # Create new config with environment override if needed
-        config = ModelContractPublisherConfig(
-            mode=config.mode,
-            filesystem_root=config.filesystem_root,
-            package_module=config.package_module,
-            fail_fast=config.fail_fast,
-            allow_zero_contracts=config.allow_zero_contracts,
-            environment=resolved_env,
-        )
+        config = config.model_copy(update={"environment": resolved_env})
 
     # Delegate to infra service
     publisher = await ServiceContractPublisher.from_container(container, config)
