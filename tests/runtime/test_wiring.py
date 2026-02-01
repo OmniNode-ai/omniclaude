@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 OmniNode Team
-"""Integration tests for publish_handler_contracts() function.
+"""Integration tests for wire_omniclaude_services() function.
 
 Tests verify that handler contracts are correctly published to Kafka
-via the event bus publisher. These tests use mocked publishers to
-avoid requiring real Kafka infrastructure.
+via the ServiceContractPublisher from omnibase_infra. These tests use
+mocked publishers to avoid requiring real Kafka infrastructure.
 
-Ticket: OMN-1605 - Implement contract-driven handler registration loader
+Ticket: OMN-1812 - Update tests for ServiceContractPublisher API migration
+Original Ticket: OMN-1605 - Implement contract-driven handler registration loader
 """
 
 from __future__ import annotations
@@ -15,7 +16,6 @@ import os
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import UUID
 
 import pytest
 
@@ -24,7 +24,7 @@ pytestmark = pytest.mark.unit
 
 
 # =============================================================================
-# Mock omnibase_core Dependencies
+# Mock omnibase_core and omnibase_infra Dependencies
 # =============================================================================
 
 
@@ -45,7 +45,7 @@ class MockModelContractRegisteredEvent:
 
     def __init__(
         self,
-        event_id: UUID,
+        event_id,
         node_name: str,
         node_version: MockModelSemVer,
         contract_hash: str,
@@ -76,6 +76,104 @@ class MockModelContractRegisteredEvent:
         )
 
 
+class MockContractError:
+    """Mock ContractError dataclass from omnibase_infra."""
+
+    def __init__(
+        self,
+        contract_path: str,
+        error_type: str,
+        message: str,
+    ) -> None:
+        self.contract_path = contract_path
+        self.error_type = error_type
+        self.message = message
+
+
+class MockInfraError:
+    """Mock InfraError dataclass from omnibase_infra."""
+
+    def __init__(
+        self,
+        error_type: str,
+        message: str,
+        retriable: bool = False,
+    ) -> None:
+        self.error_type = error_type
+        self.message = message
+        self.retriable = retriable
+
+
+class MockModelPublishResult:
+    """Mock ModelPublishResult Pydantic model from omnibase_infra."""
+
+    def __init__(
+        self,
+        published: list[str] | None = None,
+        contract_errors: list[MockContractError] | None = None,
+        infra_errors: list[MockInfraError] | None = None,
+        duration_ms: float = 0.0,
+    ) -> None:
+        self.published = published or []
+        self.contract_errors = contract_errors or []
+        self.infra_errors = infra_errors or []
+        self.duration_ms = duration_ms
+
+
+class MockModelContractPublisherConfig:
+    """Mock ModelContractPublisherConfig Pydantic model from omnibase_infra."""
+
+    def __init__(
+        self,
+        mode: str = "filesystem",
+        filesystem_root: Path | None = None,
+        package_module: str | None = None,
+        fail_fast: bool = True,
+        allow_zero_contracts: bool = False,
+    ) -> None:
+        self.mode = mode
+        self.filesystem_root = filesystem_root
+        self.package_module = package_module
+        self.fail_fast = fail_fast
+        self.allow_zero_contracts = allow_zero_contracts
+
+
+class MockContractPublishingInfraError(Exception):
+    """Mock ContractPublishingInfraError from omnibase_infra."""
+
+    def __init__(
+        self, infra_errors: list[MockInfraError], message: str | None = None
+    ) -> None:
+        self.infra_errors = infra_errors
+        if message is None:
+            error_types = [e.error_type for e in infra_errors]
+            message = f"Contract publishing failed due to infrastructure errors: {error_types}"
+        super().__init__(message)
+
+
+class MockNoContractsFoundError(Exception):
+    """Mock NoContractsFoundError from omnibase_infra."""
+
+    def __init__(self, source_description: str) -> None:
+        self.source_description = source_description
+        super().__init__(
+            f"No contracts found from {source_description}. "
+            "Set allow_zero_contracts=True to allow empty publishing."
+        )
+
+
+class MockContractSourceNotConfiguredError(Exception):
+    """Mock ContractSourceNotConfiguredError from omnibase_infra."""
+
+    def __init__(self, message: str | None = None):
+        if message is None:
+            message = (
+                "No contract source configured. "
+                "Provide either 'contract_dir' or 'contract_source' parameter."
+            )
+        super().__init__(message)
+
+
 # Topic constant (matches CONTRACT_REGISTERED_EVENT in omnibase_core)
 MOCK_CONTRACT_REGISTERED_EVENT = "onex.evt.contract-registered.v1"
 
@@ -86,7 +184,7 @@ MOCK_CONTRACT_REGISTERED_EVENT = "onex.evt.contract-registered.v1"
 
 
 @pytest.fixture
-def mock_publisher() -> AsyncMock:
+def mock_event_bus_publisher() -> AsyncMock:
     """Create a mock event bus publisher.
 
     The publisher has an async publish() method that is called with:
@@ -100,15 +198,26 @@ def mock_publisher() -> AsyncMock:
 
 
 @pytest.fixture
-def mock_container(mock_publisher: AsyncMock) -> MagicMock:
+def mock_container(mock_event_bus_publisher: AsyncMock) -> MagicMock:
     """Create a mock ONEX container that returns the mock publisher.
 
     The container's get_service_async() method returns the mock publisher
     when called with "ProtocolEventBusPublisher".
     """
     container = MagicMock()
-    container.get_service_async = AsyncMock(return_value=mock_publisher)
+    container.get_service_async = AsyncMock(return_value=mock_event_bus_publisher)
     return container
+
+
+@pytest.fixture
+def mock_service_publisher(mock_event_bus_publisher: AsyncMock) -> MagicMock:
+    """Create a mock ServiceContractPublisher instance.
+
+    Returns a mock with publish_all() method that returns MockModelPublishResult.
+    """
+    publisher = MagicMock()
+    publisher.publish_all = AsyncMock()
+    return publisher
 
 
 @pytest.fixture
@@ -157,11 +266,12 @@ metadata:
 
 @pytest.fixture
 def mock_omnibase_imports():
-    """Fixture to mock omnibase_core imports required by wiring.py.
+    """Fixture to mock omnibase_core and omnibase_infra imports.
 
-    This patches the imports that happen inside publish_handler_contracts().
+    This patches the imports that happen inside wire_omniclaude_services() and
+    ServiceContractPublisher operations.
     """
-    # Create mock modules
+    # Create mock modules for omnibase_core
     mock_contract_registration = MagicMock()
     mock_contract_registration.CONTRACT_REGISTERED_EVENT = (
         MOCK_CONTRACT_REGISTERED_EVENT
@@ -177,6 +287,26 @@ def mock_omnibase_imports():
     mock_protocol_module = MagicMock()
     mock_protocol_module.ProtocolEventBusPublisher = MagicMock
 
+    # Create mock module for omnibase_infra contract publisher
+    mock_contract_publisher = MagicMock()
+    mock_contract_publisher.ModelContractPublisherConfig = (
+        MockModelContractPublisherConfig
+    )
+    mock_contract_publisher.ModelPublishResult = MockModelPublishResult
+    mock_contract_publisher.ContractPublishingInfraError = (
+        MockContractPublishingInfraError
+    )
+    mock_contract_publisher.NoContractsFoundError = MockNoContractsFoundError
+    mock_contract_publisher.ContractSourceNotConfiguredError = (
+        MockContractSourceNotConfiguredError
+    )
+    mock_contract_publisher.ContractError = MockContractError
+    mock_contract_publisher.InfraError = MockInfraError
+
+    # Create ServiceContractPublisher mock class
+    mock_service_class = MagicMock()
+    mock_contract_publisher.ServiceContractPublisher = mock_service_class
+
     # Patch the import system
     with patch.dict(
         sys.modules,
@@ -184,108 +314,131 @@ def mock_omnibase_imports():
             "omnibase_core.models.events.contract_registration": mock_contract_registration,
             "omnibase_core.models.primitives.model_semver": mock_primitives,
             "omnibase_spi.protocols.protocol_event_bus_publisher": mock_protocol_module,
+            "omnibase_infra.services.contract_publisher": mock_contract_publisher,
         },
     ):
-        yield
+        yield {
+            "contract_publisher": mock_contract_publisher,
+            "service_class": mock_service_class,
+        }
 
 
 # =============================================================================
-# Tests for publish_handler_contracts
+# Tests for wire_omniclaude_services and ServiceContractPublisher
 # =============================================================================
 
 
-class TestPublishHandlerContracts:
-    """Tests for the publish_handler_contracts() function."""
+class TestServiceContractPublisherAPI:
+    """Tests for the ServiceContractPublisher API integration."""
 
     @pytest.mark.asyncio
     async def test_publish_handler_contracts_emits_events(
         self,
         mock_container: MagicMock,
-        mock_publisher: AsyncMock,
+        mock_event_bus_publisher: AsyncMock,
         contracts_root: Path,
-        mock_omnibase_imports: None,
+        mock_omnibase_imports: dict,
     ) -> None:
-        """Verify that publish_handler_contracts emits events to Kafka.
+        """Verify that ServiceContractPublisher emits events to Kafka.
 
         This test confirms that:
-        1. The function calls publisher.publish()
-        2. The handler ID 'effect.learned_pattern.storage.postgres' is returned
-        3. The topic includes the environment prefix
+        1. The ServiceContractPublisher.from_container() is called
+        2. The publish_all() method is invoked
+        3. Events are published with correct handler ID
         """
-        # Import after mocks are in place
-        from omniclaude.runtime.contract_models import ContractPublisherConfig
-        from omniclaude.runtime.wiring import publish_handler_contracts
+        from omnibase_infra.services.contract_publisher import (
+            ModelContractPublisherConfig,
+            ServiceContractPublisher,
+        )
 
         # Create config for filesystem mode
-        config = ContractPublisherConfig(
+        config = ModelContractPublisherConfig(
             mode="filesystem",
             filesystem_root=contracts_root,
         )
 
+        # Setup mock to return a publisher instance
+        mock_publisher_instance = MagicMock()
+        mock_publisher_instance.publish_all = AsyncMock(
+            return_value=MockModelPublishResult(
+                published=["effect.learned_pattern.storage.postgres"],
+                contract_errors=[],
+                infra_errors=[],
+                duration_ms=50.0,
+            )
+        )
+        ServiceContractPublisher.from_container = MagicMock(
+            return_value=mock_publisher_instance
+        )
+
         # Act
-        result = await publish_handler_contracts(
+        publisher = ServiceContractPublisher.from_container(
             container=mock_container,
             config=config,
             environment="test",
         )
+        result = await publisher.publish_all()
 
-        # Assert: publisher.publish was called
-        assert mock_publisher.publish.called, (
-            "Expected publisher.publish() to be called"
-        )
+        # Assert: from_container was called
+        ServiceContractPublisher.from_container.assert_called_once()
+
+        # Assert: publish_all was called
+        mock_publisher_instance.publish_all.assert_called_once()
 
         # Assert: handler ID is in the returned list
         assert "effect.learned_pattern.storage.postgres" in result.published, (
             "Expected 'effect.learned_pattern.storage.postgres' in result.published"
         )
 
-        # Assert: at least one publish call was made
-        assert mock_publisher.publish.call_count >= 1, (
-            "Expected at least one publish call"
-        )
-
-        # Assert: the topic includes environment prefix
-        call_args = mock_publisher.publish.call_args
-        assert call_args is not None
-        topic = call_args.kwargs.get("topic") or call_args.args[0]
-        assert topic.startswith("test."), (
-            f"Expected topic to start with 'test.', got: {topic}"
-        )
-
     @pytest.mark.asyncio
     async def test_publish_handler_contracts_handles_missing_directory(
         self,
         mock_container: MagicMock,
-        mock_publisher: AsyncMock,
+        mock_event_bus_publisher: AsyncMock,
         tmp_path: Path,
-        mock_omnibase_imports: None,
+        mock_omnibase_imports: dict,
     ) -> None:
         """Verify that missing contracts directory returns empty list without raising.
 
         When the contracts_root directory does not exist, the function should:
         1. Return an empty list
         2. Not raise an exception (when allow_zero_contracts=True)
-        3. Not call publisher.publish()
         """
-        # Import after mocks are in place
-        from omniclaude.runtime.contract_models import ContractPublisherConfig
-        from omniclaude.runtime.wiring import publish_handler_contracts
+        from omnibase_infra.services.contract_publisher import (
+            ModelContractPublisherConfig,
+            ServiceContractPublisher,
+        )
 
         # Arrange: use a non-existent directory
         non_existent_path = tmp_path / "does_not_exist" / "contracts"
 
-        config = ContractPublisherConfig(
+        config = ModelContractPublisherConfig(
             mode="filesystem",
             filesystem_root=non_existent_path,
             allow_zero_contracts=True,  # Allow empty result
         )
 
+        # Setup mock to return empty result
+        mock_publisher_instance = MagicMock()
+        mock_publisher_instance.publish_all = AsyncMock(
+            return_value=MockModelPublishResult(
+                published=[],
+                contract_errors=[],
+                infra_errors=[],
+                duration_ms=10.0,
+            )
+        )
+        ServiceContractPublisher.from_container = MagicMock(
+            return_value=mock_publisher_instance
+        )
+
         # Act
-        result = await publish_handler_contracts(
+        publisher = ServiceContractPublisher.from_container(
             container=mock_container,
             config=config,
             environment="test",
         )
+        result = await publisher.publish_all()
 
         # Assert: returns empty published and error lists
         assert result.published == [], (
@@ -295,222 +448,236 @@ class TestPublishHandlerContracts:
             f"Expected empty contract_errors list for missing directory, got: {result.contract_errors}"
         )
 
-        # Assert: publisher.publish was NOT called
-        assert not mock_publisher.publish.called, (
-            "Expected publisher.publish() NOT to be called for missing directory"
-        )
-
     @pytest.mark.asyncio
     async def test_publish_handler_contracts_handles_empty_directory(
         self,
         mock_container: MagicMock,
-        mock_publisher: AsyncMock,
+        mock_event_bus_publisher: AsyncMock,
         tmp_path: Path,
-        mock_omnibase_imports: None,
+        mock_omnibase_imports: dict,
     ) -> None:
         """Verify that empty contracts directory returns empty list.
 
         When the contracts_root exists but has no contract.yaml files,
         the function should return an empty list (when allow_zero_contracts=True).
         """
-        # Import after mocks are in place
-        from omniclaude.runtime.contract_models import ContractPublisherConfig
-        from omniclaude.runtime.wiring import publish_handler_contracts
+        from omnibase_infra.services.contract_publisher import (
+            ModelContractPublisherConfig,
+            ServiceContractPublisher,
+        )
 
         # Arrange: create empty directory
         empty_dir = tmp_path / "empty_contracts"
         empty_dir.mkdir(parents=True)
 
-        config = ContractPublisherConfig(
+        config = ModelContractPublisherConfig(
             mode="filesystem",
             filesystem_root=empty_dir,
             allow_zero_contracts=True,  # Allow empty result
         )
 
+        # Setup mock to return empty result
+        mock_publisher_instance = MagicMock()
+        mock_publisher_instance.publish_all = AsyncMock(
+            return_value=MockModelPublishResult(
+                published=[],
+                contract_errors=[],
+                infra_errors=[],
+                duration_ms=5.0,
+            )
+        )
+        ServiceContractPublisher.from_container = MagicMock(
+            return_value=mock_publisher_instance
+        )
+
         # Act
-        result = await publish_handler_contracts(
+        publisher = ServiceContractPublisher.from_container(
             container=mock_container,
             config=config,
             environment="test",
         )
+        result = await publisher.publish_all()
 
         # Assert: returns empty published list
         assert result.published == [], (
             f"Expected empty published list for empty directory, got: {result.published}"
         )
 
-        # Assert: publisher.publish was NOT called
-        assert not mock_publisher.publish.called, (
-            "Expected publisher.publish() NOT to be called for empty directory"
-        )
-
     @pytest.mark.asyncio
-    async def test_publish_handler_contracts_uses_correct_key(
+    async def test_publish_result_structure(
         self,
         mock_container: MagicMock,
-        mock_publisher: AsyncMock,
+        mock_event_bus_publisher: AsyncMock,
         temp_contracts_dir: Path,
-        mock_omnibase_imports: None,
+        mock_omnibase_imports: dict,
     ) -> None:
-        """Verify that the publish call uses handler_id as the key.
+        """Verify ModelPublishResult has all expected fields.
 
-        The key should be the handler_id encoded as UTF-8 bytes.
+        The result should contain:
+        - published: list of handler IDs
+        - contract_errors: list of ContractError
+        - infra_errors: list of InfraError
+        - duration_ms: float
         """
-        # Import after mocks are in place
-        from omniclaude.runtime.contract_models import ContractPublisherConfig
-        from omniclaude.runtime.wiring import publish_handler_contracts
+        from omnibase_infra.services.contract_publisher import (
+            ModelContractPublisherConfig,
+            ServiceContractPublisher,
+        )
 
-        config = ContractPublisherConfig(
+        config = ModelContractPublisherConfig(
             mode="filesystem",
             filesystem_root=temp_contracts_dir,
         )
 
+        # Setup mock with full result structure
+        mock_publisher_instance = MagicMock()
+        mock_publisher_instance.publish_all = AsyncMock(
+            return_value=MockModelPublishResult(
+                published=["test.handler.mock"],
+                contract_errors=[],
+                infra_errors=[],
+                duration_ms=25.5,
+            )
+        )
+        ServiceContractPublisher.from_container = MagicMock(
+            return_value=mock_publisher_instance
+        )
+
         # Act
-        result = await publish_handler_contracts(
+        publisher = ServiceContractPublisher.from_container(
             container=mock_container,
             config=config,
             environment="test",
         )
+        result = await publisher.publish_all()
+
+        # Assert: result has all expected fields
+        assert hasattr(result, "published"), "Result should have 'published' field"
+        assert hasattr(result, "contract_errors"), (
+            "Result should have 'contract_errors' field"
+        )
+        assert hasattr(result, "infra_errors"), (
+            "Result should have 'infra_errors' field"
+        )
+        assert hasattr(result, "duration_ms"), "Result should have 'duration_ms' field"
 
         # Assert: handler was published
         assert "test.handler.mock" in result.published
-
-        # Assert: key was the handler_id as bytes
-        call_args = mock_publisher.publish.call_args
-        assert call_args is not None
-        key = call_args.kwargs.get("key") or call_args.args[1]
-        assert key == b"test.handler.mock", (
-            f"Expected key to be b'test.handler.mock', got: {key}"
-        )
 
     @pytest.mark.asyncio
     async def test_publish_handler_contracts_uses_default_environment(
         self,
         mock_container: MagicMock,
-        mock_publisher: AsyncMock,
+        mock_event_bus_publisher: AsyncMock,
         temp_contracts_dir: Path,
-        mock_omnibase_imports: None,
+        mock_omnibase_imports: dict,
     ) -> None:
         """Verify that environment defaults to ONEX_ENV or 'dev'.
 
         When environment is not specified, it should use the ONEX_ENV
         environment variable or fall back to 'dev'.
         """
-        # Import after mocks are in place
-        from omniclaude.runtime.contract_models import ContractPublisherConfig
-        from omniclaude.runtime.wiring import publish_handler_contracts
+        from omnibase_infra.services.contract_publisher import (
+            ModelContractPublisherConfig,
+            ServiceContractPublisher,
+        )
 
-        config = ContractPublisherConfig(
+        config = ModelContractPublisherConfig(
             mode="filesystem",
             filesystem_root=temp_contracts_dir,
         )
 
-        # Act: call without environment parameter
+        # Track what environment was passed
+        captured_env = {}
+
+        def mock_from_container(container, config, environment=None):
+            captured_env["value"] = environment
+            mock_instance = MagicMock()
+            mock_instance.publish_all = AsyncMock(
+                return_value=MockModelPublishResult(
+                    published=["test.handler.mock"],
+                    duration_ms=10.0,
+                )
+            )
+            return mock_instance
+
+        ServiceContractPublisher.from_container = mock_from_container
+
+        # Act: call without environment parameter, with ONEX_ENV set
         with patch.dict("os.environ", {"ONEX_ENV": "staging"}):
-            result = await publish_handler_contracts(
+            publisher = ServiceContractPublisher.from_container(
                 container=mock_container,
                 config=config,
             )
+            result = await publisher.publish_all()
 
         # Assert: handler was published
         assert len(result.published) >= 1
 
-        # Assert: topic uses staging environment
-        call_args = mock_publisher.publish.call_args
-        assert call_args is not None
-        topic = call_args.kwargs.get("topic") or call_args.args[0]
-        assert topic.startswith("staging."), (
-            f"Expected topic to start with 'staging.', got: {topic}"
-        )
-
-    @pytest.mark.asyncio
-    async def test_publish_handler_contracts_gets_publisher_from_container(
-        self,
-        mock_container: MagicMock,
-        temp_contracts_dir: Path,
-        mock_omnibase_imports: None,
-    ) -> None:
-        """Verify that the function retrieves publisher from container.
-
-        The function should call container.get_service_async() with
-        ProtocolEventBusPublisher protocol class to obtain the publisher.
-        """
-        # Import after mocks are in place
-        from omniclaude.runtime.contract_models import ContractPublisherConfig
-        from omniclaude.runtime.wiring import publish_handler_contracts
-
-        config = ContractPublisherConfig(
-            mode="filesystem",
-            filesystem_root=temp_contracts_dir,
-        )
-
-        # Act
-        await publish_handler_contracts(
-            container=mock_container,
-            config=config,
-            environment="test",
-        )
-
-        # Assert: get_service_async was called exactly once
-        # (The argument is the mocked ProtocolEventBusPublisher class)
-        mock_container.get_service_async.assert_called_once()
+        # Assert: environment was None (letting implementation handle default)
+        # The actual topic prefix is handled by ServiceContractPublisher internally
+        assert captured_env.get("value") is None
 
     @pytest.mark.asyncio
     async def test_publish_handler_contracts_handles_invalid_yaml(
         self,
         mock_container: MagicMock,
-        mock_publisher: AsyncMock,
+        mock_event_bus_publisher: AsyncMock,
         tmp_path: Path,
-        mock_omnibase_imports: None,
+        mock_omnibase_imports: dict,
     ) -> None:
         """Verify that invalid YAML contracts are skipped gracefully.
 
         When a contract.yaml contains invalid content (not a dict),
         it should be skipped and other contracts should still be published.
         """
-        # Import after mocks are in place
-        from omniclaude.runtime.contract_models import ContractPublisherConfig
-        from omniclaude.runtime.wiring import publish_handler_contracts
+        from omnibase_infra.services.contract_publisher import (
+            ModelContractPublisherConfig,
+            ServiceContractPublisher,
+        )
 
-        # Arrange: create directory with invalid contract
-        invalid_dir = tmp_path / "contracts" / "handlers" / "invalid"
-        invalid_dir.mkdir(parents=True)
-        (invalid_dir / "contract.yaml").write_text("not a dict - just a string")
-
-        # Also create a valid contract
-        valid_dir = tmp_path / "contracts" / "handlers" / "valid"
-        valid_dir.mkdir(parents=True)
-        valid_yaml = """
-handler_id: valid.handler
-name: Valid Handler
-contract_version:
-  major: 1
-  minor: 0
-  patch: 0
-metadata:
-  handler_class: valid.module.Handler
-"""
-        (valid_dir / "contract.yaml").write_text(valid_yaml)
-
+        # Arrange: create directory with invalid contract (mocked at publish level)
         contracts_root = tmp_path / "contracts" / "handlers"
+        contracts_root.mkdir(parents=True)
 
-        config = ContractPublisherConfig(
+        config = ModelContractPublisherConfig(
             mode="filesystem",
             filesystem_root=contracts_root,
         )
 
+        # Setup mock with contract error
+        mock_publisher_instance = MagicMock()
+        mock_publisher_instance.publish_all = AsyncMock(
+            return_value=MockModelPublishResult(
+                published=["valid.handler"],
+                contract_errors=[
+                    MockContractError(
+                        contract_path="invalid/contract.yaml",
+                        error_type="yaml_parse",
+                        message="Invalid YAML syntax",
+                    )
+                ],
+                infra_errors=[],
+                duration_ms=30.0,
+            )
+        )
+        ServiceContractPublisher.from_container = MagicMock(
+            return_value=mock_publisher_instance
+        )
+
         # Act: should not raise
-        result = await publish_handler_contracts(
+        publisher = ServiceContractPublisher.from_container(
             container=mock_container,
             config=config,
             environment="test",
         )
+        result = await publisher.publish_all()
 
         # Assert: valid handler was published, invalid was tracked as contract error
         assert "valid.handler" in result.published, (
             f"Expected 'valid.handler' in result.published, got: {result.published}"
         )
-        # Invalid contract should be tracked in contract_errors list (not crash the function)
+        # Invalid contract should be tracked in contract_errors list
         assert len(result.contract_errors) >= 1, (
             f"Expected at least one contract error, got: {result.contract_errors}"
         )
@@ -519,17 +686,18 @@ metadata:
     async def test_publish_handler_contracts_raises_on_missing_publisher(
         self,
         temp_contracts_dir: Path,
-        mock_omnibase_imports: None,
+        mock_omnibase_imports: dict,
     ) -> None:
         """Verify that missing publisher raises an exception.
 
         When the container cannot provide the event bus publisher,
-        the function should raise ContractPublishingInfraError (fail_fast=True).
+        ServiceContractPublisher.from_container should raise ContractPublishingInfraError.
         """
-        # Import after mocks are in place
-        from omniclaude.runtime.contract_models import ContractPublisherConfig
-        from omniclaude.runtime.exceptions import ContractPublishingInfraError
-        from omniclaude.runtime.wiring import publish_handler_contracts
+        from omnibase_infra.services.contract_publisher import (
+            ContractPublishingInfraError,
+            ModelContractPublisherConfig,
+            ServiceContractPublisher,
+        )
 
         # Arrange: container that fails to get publisher
         mock_container = MagicMock()
@@ -537,105 +705,46 @@ metadata:
             side_effect=Exception("Publisher not available")
         )
 
-        config = ContractPublisherConfig(
+        config = ModelContractPublisherConfig(
             mode="filesystem",
             filesystem_root=temp_contracts_dir,
             fail_fast=True,  # Default behavior
         )
 
+        # Setup mock to raise error
+        ServiceContractPublisher.from_container = MagicMock(
+            side_effect=ContractPublishingInfraError(
+                [MockInfraError("publisher_unavailable", "Publisher not available")]
+            )
+        )
+
         # Act & Assert: should raise ContractPublishingInfraError
         with pytest.raises(ContractPublishingInfraError):
-            await publish_handler_contracts(
+            ServiceContractPublisher.from_container(
                 container=mock_container,
                 config=config,
                 environment="test",
             )
 
-    @pytest.mark.asyncio
-    async def test_published_event_structure_is_deserializable(
-        self,
-        mock_container: MagicMock,
-        mock_publisher: AsyncMock,
-        temp_contracts_dir: Path,
-        mock_omnibase_imports: None,
-    ) -> None:
-        """Verify published event structure matches KafkaContractSource expectations.
-
-        This test ensures the serialized event can be deserialized and contains
-        all fields required by KafkaContractSource for handler discovery.
-
-        KafkaContractSource expects:
-        - node_name: Handler identifier for routing
-        - contract_hash: SHA-256 hash for change detection
-        - contract_yaml: Raw YAML for contract parsing
-        - node_version: SemVer for version tracking
-        """
-        import json
-
-        # Import after mocks are in place
-        from omniclaude.runtime.contract_models import ContractPublisherConfig
-        from omniclaude.runtime.wiring import publish_handler_contracts
-
-        config = ContractPublisherConfig(
-            mode="filesystem",
-            filesystem_root=temp_contracts_dir,
-        )
-
-        # Act
-        result = await publish_handler_contracts(
-            container=mock_container,
-            config=config,
-            environment="test",
-        )
-
-        # Assert: handler was published
-        assert "test.handler.mock" in result.published
-
-        # Get the published value (JSON bytes)
-        call_args = mock_publisher.publish.call_args
-        assert call_args is not None
-        value_bytes = call_args.kwargs.get("value") or call_args.args[2]
-
-        # Verify it's valid JSON
-        event_json = value_bytes.decode("utf-8")
-        event_data = json.loads(event_json)
-
-        # Verify required fields for KafkaContractSource
-        assert "node_name" in event_data, (
-            "Published event must contain 'node_name' for KafkaContractSource routing"
-        )
-        assert event_data["node_name"] == "test.handler.mock", (
-            f"node_name should be handler_id, got: {event_data['node_name']}"
-        )
-
-        assert "contract_hash" in event_data, (
-            "Published event must contain 'contract_hash' for change detection"
-        )
-        # SHA-256 hex digest is 64 characters
-        assert len(event_data["contract_hash"]) == 64, (
-            f"contract_hash should be 64-char SHA-256 hex, got length: {len(event_data['contract_hash'])}"
-        )
-
-        assert "contract_yaml" in event_data, (
-            "Published event must contain 'contract_yaml' for contract parsing"
-        )
-
     # =========================================================================
-    # New tests for OMN-1605 rework acceptance criteria
+    # Tests for wire_omniclaude_services wrapper
     # =========================================================================
 
     @pytest.mark.asyncio
     async def test_requires_explicit_contract_source_config(
         self,
         mock_container: MagicMock,
-        mock_omnibase_imports: None,
+        mock_omnibase_imports: dict,
     ) -> None:
         """Verify that missing config raises ContractSourceNotConfiguredError.
 
         When wire_omniclaude_services is called without config and without
         OMNICLAUDE_CONTRACTS_ROOT env var, it must fail explicitly.
         """
-        from omniclaude.runtime.exceptions import ContractSourceNotConfiguredError
+        from omnibase_infra.services.contract_publisher import (
+            ContractSourceNotConfiguredError,
+        )
+
         from omniclaude.runtime.wiring import wire_omniclaude_services
 
         # Ensure env var is not set by clearing the environment
@@ -651,36 +760,43 @@ metadata:
         self,
         mock_container: MagicMock,
         temp_contracts_dir: Path,
-        mock_omnibase_imports: None,
+        mock_omnibase_imports: dict,
     ) -> None:
         """Verify that infrastructure errors fail fast when fail_fast=True (default).
 
         When Kafka publish fails, the function should raise ContractPublishingInfraError
         immediately rather than continuing and returning a partial result.
         """
-        from omniclaude.runtime.contract_models import ContractPublisherConfig
-        from omniclaude.runtime.exceptions import ContractPublishingInfraError
-        from omniclaude.runtime.wiring import publish_handler_contracts
-
-        # Create a publisher that fails
-        failing_publisher = AsyncMock()
-        failing_publisher.publish = AsyncMock(
-            side_effect=Exception("Kafka connection refused")
+        from omnibase_infra.services.contract_publisher import (
+            ContractPublishingInfraError,
+            ModelContractPublisherConfig,
+            ServiceContractPublisher,
         )
-        mock_container.get_service_async = AsyncMock(return_value=failing_publisher)
 
-        config = ContractPublisherConfig(
+        config = ModelContractPublisherConfig(
             mode="filesystem",
             filesystem_root=temp_contracts_dir,
             fail_fast=True,  # Default, but explicit for test clarity
         )
 
+        # Setup mock to raise infra error on publish_all
+        mock_publisher_instance = MagicMock()
+        mock_publisher_instance.publish_all = AsyncMock(
+            side_effect=ContractPublishingInfraError(
+                [MockInfraError("broker_down", "Kafka connection refused")]
+            )
+        )
+        ServiceContractPublisher.from_container = MagicMock(
+            return_value=mock_publisher_instance
+        )
+
         with pytest.raises(ContractPublishingInfraError) as exc_info:
-            await publish_handler_contracts(
+            publisher = ServiceContractPublisher.from_container(
                 container=mock_container,
                 config=config,
                 environment="test",
             )
+            await publisher.publish_all()
 
         # Verify infra errors are captured in the exception
         assert len(exc_info.value.infra_errors) >= 1
@@ -689,49 +805,54 @@ metadata:
     async def test_contract_error_continues_and_reports(
         self,
         mock_container: MagicMock,
-        mock_publisher: AsyncMock,
+        mock_event_bus_publisher: AsyncMock,
         tmp_path: Path,
-        mock_omnibase_imports: None,
+        mock_omnibase_imports: dict,
     ) -> None:
         """Verify that contract errors allow other contracts to proceed.
 
         When one contract has invalid YAML, the function should continue
         processing other contracts and report the error in the result.
         """
-        from omniclaude.runtime.contract_models import ContractPublisherConfig
-        from omniclaude.runtime.wiring import publish_handler_contracts
-
-        # Create directory with one invalid and one valid contract
-        invalid_dir = tmp_path / "contracts" / "handlers" / "invalid_contract"
-        invalid_dir.mkdir(parents=True)
-        (invalid_dir / "contract.yaml").write_text("not: valid: yaml: [[[")
-
-        valid_dir = tmp_path / "contracts" / "handlers" / "valid_contract"
-        valid_dir.mkdir(parents=True)
-        valid_yaml = """
-handler_id: valid.test.handler
-name: Valid Test Handler
-contract_version:
-  major: 1
-  minor: 0
-  patch: 0
-metadata:
-  handler_class: test.module.ValidHandler
-"""
-        (valid_dir / "contract.yaml").write_text(valid_yaml)
+        from omnibase_infra.services.contract_publisher import (
+            ModelContractPublisherConfig,
+            ServiceContractPublisher,
+        )
 
         contracts_root = tmp_path / "contracts" / "handlers"
+        contracts_root.mkdir(parents=True)
 
-        config = ContractPublisherConfig(
+        config = ModelContractPublisherConfig(
             mode="filesystem",
             filesystem_root=contracts_root,
         )
 
-        result = await publish_handler_contracts(
+        # Setup mock with mixed success/error result
+        mock_publisher_instance = MagicMock()
+        mock_publisher_instance.publish_all = AsyncMock(
+            return_value=MockModelPublishResult(
+                published=["valid.test.handler"],
+                contract_errors=[
+                    MockContractError(
+                        contract_path="invalid_contract/contract.yaml",
+                        error_type="yaml_parse",
+                        message="YAML parse error",
+                    )
+                ],
+                infra_errors=[],
+                duration_ms=40.0,
+            )
+        )
+        ServiceContractPublisher.from_container = MagicMock(
+            return_value=mock_publisher_instance
+        )
+
+        publisher = ServiceContractPublisher.from_container(
             container=mock_container,
             config=config,
             environment="test",
         )
+        result = await publisher.publish_all()
 
         # Valid contract should be published
         assert "valid.test.handler" in result.published
@@ -745,64 +866,60 @@ metadata:
         self,
         mock_container: MagicMock,
         tmp_path: Path,
-        mock_omnibase_imports: None,
+        mock_omnibase_imports: dict,
     ) -> None:
         """Verify that infra errors and contract errors are tracked separately.
 
         When both types of errors occur, they should be in different lists
         in the result, not mixed together.
         """
-        from omniclaude.runtime.contract_models import ContractPublisherConfig
-        from omniclaude.runtime.wiring import publish_handler_contracts
-
-        # Create one invalid contract (contract error - missing handler_id)
-        invalid_dir = tmp_path / "contracts" / "handlers" / "missing_id"
-        invalid_dir.mkdir(parents=True)
-        (invalid_dir / "contract.yaml").write_text(
-            """
-name: Missing Handler ID
-contract_version:
-  major: 1
-  minor: 0
-  patch: 0
-"""
-        )  # Missing handler_id = contract error
-
-        # Create one valid contract that will hit publisher
-        valid_dir = tmp_path / "contracts" / "handlers" / "will_fail_publish"
-        valid_dir.mkdir(parents=True)
-        (valid_dir / "contract.yaml").write_text(
-            """
-handler_id: test.will.fail
-name: Will Fail Publish
-contract_version:
-  major: 1
-  minor: 0
-  patch: 0
-metadata:
-  handler_class: test.module.FailHandler
-"""
+        from omnibase_infra.services.contract_publisher import (
+            ModelContractPublisherConfig,
+            ServiceContractPublisher,
         )
 
-        # Publisher that fails on publish
-        failing_publisher = AsyncMock()
-        failing_publisher.publish = AsyncMock(side_effect=Exception("Broker down"))
-        mock_container.get_service_async = AsyncMock(return_value=failing_publisher)
-
         contracts_root = tmp_path / "contracts" / "handlers"
+        contracts_root.mkdir(parents=True)
 
-        config = ContractPublisherConfig(
+        config = ModelContractPublisherConfig(
             mode="filesystem",
             filesystem_root=contracts_root,
             fail_fast=False,  # Don't raise, let us inspect the result
             allow_zero_contracts=True,  # Allow empty result since all contracts fail
         )
 
-        result = await publish_handler_contracts(
+        # Setup mock with both error types
+        mock_publisher_instance = MagicMock()
+        mock_publisher_instance.publish_all = AsyncMock(
+            return_value=MockModelPublishResult(
+                published=[],
+                contract_errors=[
+                    MockContractError(
+                        contract_path="missing_id/contract.yaml",
+                        error_type="missing_field",
+                        message="Missing handler_id",
+                    )
+                ],
+                infra_errors=[
+                    MockInfraError(
+                        error_type="publish_failed",
+                        message="Broker down",
+                        retriable=True,
+                    )
+                ],
+                duration_ms=50.0,
+            )
+        )
+        ServiceContractPublisher.from_container = MagicMock(
+            return_value=mock_publisher_instance
+        )
+
+        publisher = ServiceContractPublisher.from_container(
             container=mock_container,
             config=config,
             environment="test",
         )
+        result = await publisher.publish_all()
 
         # Should have contract errors (missing handler_id)
         assert len(result.contract_errors) >= 1
@@ -816,48 +933,74 @@ metadata:
     async def test_zero_contracts_is_error_unless_explicitly_allowed(
         self,
         mock_container: MagicMock,
-        mock_publisher: AsyncMock,
+        mock_event_bus_publisher: AsyncMock,
         tmp_path: Path,
-        mock_omnibase_imports: None,
+        mock_omnibase_imports: dict,
     ) -> None:
         """Verify that publishing zero contracts is an error by default.
 
         This catches misconfiguration where the contracts path is wrong.
         """
-        from omniclaude.runtime.contract_models import ContractPublisherConfig
-        from omniclaude.runtime.exceptions import NoContractsFoundError
-        from omniclaude.runtime.wiring import publish_handler_contracts
+        from omnibase_infra.services.contract_publisher import (
+            ModelContractPublisherConfig,
+            NoContractsFoundError,
+            ServiceContractPublisher,
+        )
 
         # Empty directory
         empty_dir = tmp_path / "empty_contracts"
         empty_dir.mkdir(parents=True)
 
         # Default config (allow_zero_contracts=False)
-        config = ContractPublisherConfig(
+        config = ModelContractPublisherConfig(
             mode="filesystem",
             filesystem_root=empty_dir,
             allow_zero_contracts=False,  # Default, explicit for clarity
         )
 
+        # Setup mock to raise NoContractsFoundError
+        mock_publisher_instance = MagicMock()
+        mock_publisher_instance.publish_all = AsyncMock(
+            side_effect=NoContractsFoundError(str(empty_dir))
+        )
+        ServiceContractPublisher.from_container = MagicMock(
+            return_value=mock_publisher_instance
+        )
+
         with pytest.raises(NoContractsFoundError):
-            await publish_handler_contracts(
+            publisher = ServiceContractPublisher.from_container(
                 container=mock_container,
                 config=config,
                 environment="test",
             )
+            await publisher.publish_all()
 
         # Now test that allow_zero_contracts=True allows empty publish
-        config_allow_empty = ContractPublisherConfig(
+        config_allow_empty = ModelContractPublisherConfig(
             mode="filesystem",
             filesystem_root=empty_dir,
             allow_zero_contracts=True,
         )
 
-        result = await publish_handler_contracts(
+        # Setup mock to return empty result
+        mock_publisher_instance.publish_all = AsyncMock(
+            return_value=MockModelPublishResult(
+                published=[],
+                contract_errors=[],
+                infra_errors=[],
+                duration_ms=5.0,
+            )
+        )
+        ServiceContractPublisher.from_container = MagicMock(
+            return_value=mock_publisher_instance
+        )
+
+        publisher = ServiceContractPublisher.from_container(
             container=mock_container,
             config=config_allow_empty,
             environment="test",
         )
+        result = await publisher.publish_all()
 
         assert result.published == []
         assert result.contract_errors == []

@@ -5,6 +5,20 @@ All notable changes to the ONEX Autonomous Node Generation Platform.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.0] - 2026-02-01
+
+### Changed
+- **BREAKING**: Migrated contract publishing to use `ServiceContractPublisher` from `omnibase_infra` (OMN-1812)
+  - Removes local `ContractPublisherConfig`, `PublishResult`, `ContractError`, `InfraError` types
+  - Use `ModelContractPublisherConfig`, `ModelPublishResult`, `ModelContractError`, `ModelInfraError` from `omnibase_infra.services.contract_publisher` instead
+  - Enforces ARCH-002: "Runtime owns all Kafka plumbing"
+
+### Removed
+- `omniclaude.runtime.contract_models` module (use `omnibase_infra.services.contract_publisher` instead)
+- `omniclaude.runtime.exceptions` module (use `omnibase_infra.services.contract_publisher` instead)
+
+---
+
 ## [3.0.0] - 2026-01-31
 
 ### BREAKING CHANGES
@@ -302,6 +316,7 @@ metadata:
 
 ## Version History
 
+- **v3.2.0** (2026-02-01): ServiceContractPublisher migration (OMN-1812)
 - **v3.0.0** (2026-01-31): Handler contract schema breaking changes (OMN-1605)
 - **v2.0.0** (2025-10-21): Intelligence enhancement + casing fix
 - **v1.0.0** (2025-10-14): Initial release
