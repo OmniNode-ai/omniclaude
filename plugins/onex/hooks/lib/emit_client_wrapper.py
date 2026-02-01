@@ -88,6 +88,7 @@ SUPPORTED_EVENT_TYPES = frozenset(
     [
         "session.started",
         "session.ended",
+        "session.outcome",
         "prompt.submitted",
         "tool.executed",
         "injection.recorded",

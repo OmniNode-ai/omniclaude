@@ -96,6 +96,29 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
         fi
     ) &
 
+    # Emit session.outcome event for feedback loop (OMN-1735, FEEDBACK-008)
+    # Uses ClaudeCodeSessionOutcome enum values: success, failed, abandoned, unknown
+    # Starting with "unknown" as default - heuristics can be added later
+    (
+        # Build session.outcome payload
+        OUTCOME="unknown"
+
+        OUTCOME_PAYLOAD=$(jq -n \
+            --arg session_id "$SESSION_ID" \
+            --arg outcome "$OUTCOME" \
+            '{
+                session_id: $session_id,
+                outcome: $outcome
+            }' 2>/dev/null)
+
+        # Validate payload was constructed successfully
+        if [[ -z "$OUTCOME_PAYLOAD" || "$OUTCOME_PAYLOAD" == "null" ]]; then
+            log "WARNING: Failed to construct outcome payload (jq failed), skipping emission"
+        else
+            emit_via_daemon "session.outcome" "$OUTCOME_PAYLOAD" 100
+        fi
+    ) &
+
     log "Session event emission started via emit daemon"
 else
     log "Kafka emission skipped (KAFKA_ENABLED=$KAFKA_ENABLED)"

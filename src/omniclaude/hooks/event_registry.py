@@ -266,6 +266,20 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         partition_key_field="session_id",
         required_fields=["session_id"],
     ),
+    # Session outcome event for feedback loop (OMN-1735, FEEDBACK-008)
+    # Triggers pattern_feedback_effect in omniintelligence
+    "session.outcome": EventRegistration(
+        event_type="session.outcome",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.SESSION_OUTCOME,
+                transform=None,  # Passthrough
+                description="Session outcome for feedback loop (success/failed/abandoned/unknown)",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "outcome"],
+    ),
     # =========================================================================
     # Prompt Events (Fan-out to TWO topics)
     # =========================================================================
