@@ -150,6 +150,14 @@ get_registry().clear()
 " 2>/dev/null || true
 fi
 
+# -----------------------------
+# Clear session injection marker (OMN-1675)
+# -----------------------------
+if [[ -f "${HOOKS_LIB}/session_marker.py" ]] && [[ -n "${SESSION_ID}" ]]; then
+    $PYTHON_CMD "${HOOKS_LIB}/session_marker.py" clear --session-id "${SESSION_ID}" 2>>"$LOG_FILE" || true
+    log "Cleared session injection marker"
+fi
+
 log "SessionEnd hook completed"
 
 # Output unchanged

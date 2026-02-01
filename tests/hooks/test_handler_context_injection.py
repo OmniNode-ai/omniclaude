@@ -1130,6 +1130,30 @@ class TestConvenienceFunctions:
         assert result.pattern_count == 2
 
     @pytest.mark.asyncio
+    async def test_inject_patterns_with_session_start_context(
+        self,
+        temp_project_dir: Path,
+        pattern_file: Path,
+        permissive_config: ContextInjectionConfig,
+    ) -> None:
+        """Test inject_patterns accepts session_start injection_context.
+
+        Part of OMN-1675: SessionStart pattern injection.
+        """
+        from omniclaude.hooks.models_injection_tracking import EnumInjectionContext
+
+        result = await inject_patterns(
+            project_root=str(temp_project_dir),
+            config=permissive_config,
+            emit_event=False,
+            injection_context=EnumInjectionContext.SESSION_START,
+        )
+
+        # Should succeed (patterns loaded from file)
+        assert result.success is True
+        assert result.pattern_count == 2
+
+    @pytest.mark.asyncio
     async def test_inject_patterns_with_domain(
         self,
         temp_project_dir: Path,

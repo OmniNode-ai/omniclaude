@@ -41,11 +41,183 @@ Example:
 
 from __future__ import annotations
 
-from pydantic import Field, SecretStr
+import os
+
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from omniclaude.hooks.cohort_assignment import CohortAssignmentConfig
 from omniclaude.hooks.injection_limits import InjectionLimitsConfig
+
+
+class SessionStartInjectionConfig(BaseModel):
+    """Configuration for SessionStart pattern injection.
+
+    Controls behavior of pattern injection at session startup,
+    including timeout, limits, and footer visibility.
+
+    Environment variables use the OMNICLAUDE_SESSION_INJECTION_ prefix:
+        OMNICLAUDE_SESSION_INJECTION_ENABLED: Enable/disable injection (default: true)
+        OMNICLAUDE_SESSION_INJECTION_TIMEOUT_MS: Timeout in milliseconds (default: 500)
+        OMNICLAUDE_SESSION_INJECTION_MAX_PATTERNS: Max patterns to inject (default: 10)
+        OMNICLAUDE_SESSION_INJECTION_MAX_CHARS: Max characters in content (default: 8000)
+        OMNICLAUDE_SESSION_INJECTION_MIN_CONFIDENCE: Min confidence threshold (default: 0.7)
+        OMNICLAUDE_SESSION_INJECTION_INCLUDE_FOOTER: Include injection_id footer (default: false)
+        OMNICLAUDE_SESSION_SKIP_IF_INJECTED: Skip UserPromptSubmit if injected (default: true)
+
+    Attributes:
+        enabled: Whether SessionStart pattern injection is enabled.
+        timeout_ms: Timeout for pattern injection in milliseconds.
+        max_patterns: Maximum number of patterns to inject.
+        max_chars: Maximum characters in injected content.
+        min_confidence: Minimum confidence threshold for pattern inclusion.
+        include_footer: Include injection_id footer in additionalContext.
+        skip_user_prompt_if_injected: Skip UserPromptSubmit injection if SessionStart already injected.
+        marker_file_dir: Directory for session marker files.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    enabled: bool = Field(
+        default=True,
+        description="Whether SessionStart pattern injection is enabled",
+    )
+    timeout_ms: int = Field(
+        default=500,
+        ge=100,
+        le=5000,
+        description="Timeout for pattern injection in milliseconds",
+    )
+    max_patterns: int = Field(
+        default=10,
+        ge=1,
+        le=50,
+        description="Maximum number of patterns to inject",
+    )
+    max_chars: int = Field(
+        default=8000,
+        ge=1000,
+        le=32000,
+        description="Maximum characters in injected content",
+    )
+    min_confidence: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="Minimum confidence threshold for pattern inclusion",
+    )
+    include_footer: bool = Field(
+        default=False,
+        description="Include injection_id footer in additionalContext",
+    )
+    skip_user_prompt_if_injected: bool = Field(
+        default=True,
+        description="Skip UserPromptSubmit injection if SessionStart already injected",
+    )
+    marker_file_dir: str = Field(
+        default="/tmp/omniclaude-sessions",  # noqa: S108  # nosec B108
+        description="Directory for session marker files",
+    )
+
+    @classmethod
+    def from_env(cls) -> SessionStartInjectionConfig:
+        """Load config with environment variable overrides.
+
+        Creates a SessionStartInjectionConfig instance by reading environment
+        variables with the OMNICLAUDE_SESSION_INJECTION_ prefix. Falls back to
+        default values when environment variables are not set or malformed.
+
+        Malformed numeric values (e.g., "abc" for timeout_ms) are logged as
+        warnings and fall back to defaults.
+
+        Returns:
+            SessionStartInjectionConfig instance with values from environment.
+
+        Example:
+            >>> import os
+            >>> os.environ["OMNICLAUDE_SESSION_INJECTION_MAX_PATTERNS"] = "15"
+            >>> config = SessionStartInjectionConfig.from_env()
+            >>> config.max_patterns
+            15
+        """
+        import logging
+
+        logger = logging.getLogger(__name__)
+
+        def safe_int(env_var: str, default: int) -> int:
+            """Parse int from env var with fallback to default."""
+            val = os.getenv(env_var)
+            if val is None:
+                return default
+            try:
+                return int(val)
+            except ValueError:
+                logger.warning(
+                    f"Invalid int for {env_var}='{val}', using default {default}"
+                )
+                return default
+
+        def safe_float(env_var: str, default: float) -> float:
+            """Parse float from env var with fallback to default."""
+            val = os.getenv(env_var)
+            if val is None:
+                return default
+            try:
+                return float(val)
+            except ValueError:
+                logger.warning(
+                    f"Invalid float for {env_var}='{val}', using default {default}"
+                )
+                return default
+
+        def safe_bool(env_var: str, default: bool) -> bool:
+            """Parse bool from env var with fallback to default.
+
+            Accepts case-insensitive: true/false, 1/0, yes/no.
+            Logs warning for unexpected values.
+            """
+            val = os.getenv(env_var)
+            if val is None:
+                return default
+            val_lower = val.lower()
+            if val_lower in ("true", "1", "yes"):
+                return True
+            if val_lower in ("false", "0", "no"):
+                return False
+            logger.warning(
+                f"Invalid bool for {env_var}='{val}', "
+                f"expected true/false/1/0/yes/no, using default {default}"
+            )
+            return default
+
+        try:
+            return cls(
+                enabled=safe_bool("OMNICLAUDE_SESSION_INJECTION_ENABLED", True),
+                timeout_ms=safe_int("OMNICLAUDE_SESSION_INJECTION_TIMEOUT_MS", 500),
+                max_patterns=safe_int("OMNICLAUDE_SESSION_INJECTION_MAX_PATTERNS", 10),
+                max_chars=safe_int("OMNICLAUDE_SESSION_INJECTION_MAX_CHARS", 8000),
+                min_confidence=safe_float(
+                    "OMNICLAUDE_SESSION_INJECTION_MIN_CONFIDENCE", 0.7
+                ),
+                include_footer=safe_bool(
+                    "OMNICLAUDE_SESSION_INJECTION_INCLUDE_FOOTER", False
+                ),
+                skip_user_prompt_if_injected=safe_bool(
+                    "OMNICLAUDE_SESSION_SKIP_IF_INJECTED", True
+                ),
+                marker_file_dir=os.getenv(
+                    "OMNICLAUDE_SESSION_INJECTION_MARKER_DIR",
+                    "/tmp/omniclaude-sessions",  # noqa: S108  # nosec B108
+                ),
+            )
+        except Exception as e:
+            # Catch Pydantic ValidationError or any unexpected errors.
+            # Log with context and return default config to ensure method never raises.
+            logger.warning(
+                f"Failed to create SessionStartInjectionConfig from env: {e}. "
+                "Using default configuration."
+            )
+            return cls()
 
 
 class ContextInjectionConfig(BaseSettings):
@@ -165,6 +337,17 @@ class ContextInjectionConfig(BaseSettings):
             "A/B cohort assignment configuration for pattern injection experiments. "
             "Loaded via CohortAssignmentConfig.from_contract() which reads from "
             "contract YAML with optional OMNICLAUDE_COHORT_* env var overrides."
+        ),
+    )
+
+    # SessionStart pattern injection configuration (OMN-1675)
+    # Controls pattern injection at session startup with its own env prefix.
+    session_start: SessionStartInjectionConfig = Field(
+        default_factory=SessionStartInjectionConfig,
+        description=(
+            "SessionStart pattern injection configuration. Controls behavior of "
+            "pattern injection at session startup including timeout, limits, and "
+            "footer visibility. Uses OMNICLAUDE_SESSION_INJECTION_* env vars."
         ),
     )
 

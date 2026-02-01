@@ -187,6 +187,8 @@ class ModelInjectionResult:
     context_size_bytes: int
     source: str
     retrieval_ms: int
+    injection_id: str | None = None
+    cohort: str | None = None
 
 
 @dataclass(frozen=True)
@@ -385,6 +387,8 @@ class HandlerContextInjection:
                     context_size_bytes=0,
                     source="control_cohort",
                     retrieval_ms=0,
+                    injection_id=str(injection_id),
+                    cohort=cohort_assignment.cohort.value,
                 )
 
         if not cfg.enabled:
@@ -395,6 +399,8 @@ class HandlerContextInjection:
                 context_size_bytes=0,
                 source="disabled",
                 retrieval_ms=0,
+                injection_id=None,
+                cohort=None,
             )
 
         # Step 1: Load patterns (database primary, file fallback)
@@ -471,6 +477,8 @@ class HandlerContextInjection:
                 context_size_bytes=0,
                 source=error_source,
                 retrieval_ms=retrieval_ms,
+                injection_id=str(injection_id) if cohort_assignment else None,
+                cohort=cohort_assignment.cohort.value if cohort_assignment else None,
             )
 
         # Step 2: Filter by domain (pre-filter before selection)
@@ -540,6 +548,8 @@ class HandlerContextInjection:
             context_size_bytes=context_size_bytes,
             source=source,
             retrieval_ms=retrieval_ms,
+            injection_id=str(injection_id) if cohort_assignment else None,
+            cohort=cohort_assignment.cohort.value if cohort_assignment else None,
         )
 
     # =========================================================================
@@ -981,12 +991,22 @@ async def inject_patterns(
     correlation_id: str = "",
     config: ContextInjectionConfig | None = None,
     emit_event: bool = True,
+    injection_context: EnumInjectionContext = EnumInjectionContext.USER_PROMPT_SUBMIT,
 ) -> ModelInjectionResult:
     """Convenience function for context injection.
 
     Creates a handler and invokes it. For repeated calls, consider
     creating a HandlerContextInjection instance directly to manage
     the database connection pool lifecycle.
+
+    Args:
+        project_root: Optional project root path for pattern files.
+        agent_domain: Domain to filter patterns by (empty = all).
+        session_id: Session identifier for event emission.
+        correlation_id: Correlation ID for distributed tracing.
+        config: Optional configuration override.
+        emit_event: Whether to emit Kafka event.
+        injection_context: Hook event that triggered injection (for A/B tracking).
 
     Note: When using custom config, cleanup is handled automatically.
     When using default handler, call cleanup_handler() when done.
@@ -1001,6 +1021,7 @@ async def inject_patterns(
                 session_id=session_id,
                 correlation_id=correlation_id,
                 emit_event=emit_event,
+                injection_context=injection_context,
             )
         finally:
             await handler.close()
@@ -1013,6 +1034,7 @@ async def inject_patterns(
             session_id=session_id,
             correlation_id=correlation_id,
             emit_event=emit_event,
+            injection_context=injection_context,
         )
 
 
@@ -1024,8 +1046,18 @@ def inject_patterns_sync(
     correlation_id: str = "",
     config: ContextInjectionConfig | None = None,
     emit_event: bool = True,
+    injection_context: EnumInjectionContext = EnumInjectionContext.USER_PROMPT_SUBMIT,
 ) -> ModelInjectionResult:
     """Synchronous wrapper for shell scripts.
+
+    Args:
+        project_root: Optional project root path for pattern files.
+        agent_domain: Domain to filter patterns by (empty = all).
+        session_id: Session identifier for event emission.
+        correlation_id: Correlation ID for distributed tracing.
+        config: Optional configuration override.
+        emit_event: Whether to emit Kafka event.
+        injection_context: Hook event that triggered injection (for A/B tracking).
 
     Handles nested event loop detection to avoid RuntimeError.
     """
@@ -1045,6 +1077,7 @@ def inject_patterns_sync(
                     correlation_id=correlation_id,
                     config=config,
                     emit_event=emit_event,
+                    injection_context=injection_context,
                 ),
             )
             return future.result()
@@ -1058,6 +1091,7 @@ def inject_patterns_sync(
                 correlation_id=correlation_id,
                 config=config,
                 emit_event=emit_event,
+                injection_context=injection_context,
             )
         )
 

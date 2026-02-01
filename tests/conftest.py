@@ -29,6 +29,14 @@ _src_path = str(Path(__file__).parent.parent / "src")
 if _src_path not in sys.path:
     sys.path.insert(0, _src_path)
 
+# Plugin lib path for session_marker and other plugin library imports
+# This is needed by tests that import from plugins/onex/hooks/lib/
+_plugin_lib_path = str(
+    Path(__file__).parent.parent / "plugins" / "onex" / "hooks" / "lib"
+)
+if _plugin_lib_path not in sys.path:
+    sys.path.insert(0, _plugin_lib_path)
+
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
