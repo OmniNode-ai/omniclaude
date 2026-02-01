@@ -130,12 +130,14 @@ class MockModelContractPublisherConfig:
         package_module: str | None = None,
         fail_fast: bool = True,
         allow_zero_contracts: bool = False,
+        environment: str | None = None,
     ) -> None:
         self.mode = mode
         self.filesystem_root = filesystem_root
         self.package_module = package_module
         self.fail_fast = fail_fast
         self.allow_zero_contracts = allow_zero_contracts
+        self.environment = environment
 
 
 class MockContractPublishingInfraError(Exception):

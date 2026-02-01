@@ -6,4 +6,4 @@ enabling integration with the omnibase ecosystem for learning and intelligence.
 
 from __future__ import annotations
 
-__version__ = "3.2.0"
+__version__ = "0.1.0"
