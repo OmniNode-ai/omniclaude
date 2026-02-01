@@ -106,6 +106,12 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
             exit 0  # Exit the subshell cleanly
         fi
 
+        # Validate UUID format
+        if [[ ! "$SESSION_ID" =~ ^[a-f0-9-]{36}$ ]]; then
+            log "WARNING: SESSION_ID '$SESSION_ID' is not valid UUID format, skipping session.outcome emission"
+            exit 0
+        fi
+
         # Build session.outcome payload
         # TODO(OMN-1735): Add heuristics to map session end reasons to outcomes
         OUTCOME="unknown"

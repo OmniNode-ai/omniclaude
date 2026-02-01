@@ -1,0 +1,184 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 OmniNode Team
+#
+# ONEX Node Contract
+# Node: NodeHookSessionOutcomeEffect
+#
+# This contract defines the interface for the session outcome hook effect node,
+# which emits events to Kafka when a Claude Code session ends with an outcome
+# classification for feedback loop and pattern learning.
+
+# Contract identifiers
+name: "hook_session_outcome"
+contract_name: "hook_session_outcome"
+node_name: "hook_session_outcome"
+
+# Version (semantic versioning)
+version:
+  major: 1
+  minor: 0
+  patch: 0
+node_version:
+  major: 0
+  minor: 1
+  patch: 0
+
+# Node type - EFFECT because it publishes to Kafka (side effect)
+node_type: "EFFECT"
+
+# Description
+description: >
+  Effect node for emitting session outcome events. When a Claude Code session
+  ends (via SessionEnd hook), this node publishes a ModelSessionOutcome event
+  to Kafka for downstream intelligence processing. Captures session outcome
+  classification (success, failed, abandoned, unknown) to enable pattern learning
+  and success rate tracking in the feedback loop.
+
+# Strongly typed I/O models
+input_model:
+  name: "ModelSessionOutcome"
+  module: "omniclaude.hooks.schemas"
+  description: "Session outcome event payload with outcome classification."
+output_model:
+  name: "ModelEventPublishResult"
+  module: "omniclaude.hooks.models"
+  description: "Result of publishing event to Kafka (success, offset, partition)."
+
+# Event bus configuration
+event_bus:
+  topic_base: "onex.cmd.omniintelligence.session-outcome.v1"
+  partition_key_field: "session_id"
+  partition_strategy: "hash"
+  # Events use session_id for ordering guarantees within a session
+
+# Runtime configuration
+runtime:
+  # Invoked by Claude Code hooks (not orchestrator)
+  supports_direct_call: true
+  # Can be event-driven in future learning pipelines
+  supports_event_driven: true
+  # Publishes to Kafka - has side effects
+  side_effects: true
+  # Hook must complete quickly
+  timeout_ms: 500
+  # Same input always produces same event (deterministic serialization)
+  deterministic: true
+
+# ONEX timestamp policy
+timestamp_policy:
+  # emitted_at has NO default_factory per ONEX architecture
+  explicit_injection: true
+  timezone_required: true
+  rationale: >
+    Producers must explicitly inject timestamps. This ensures deterministic
+    testing (fixed time in tests), consistent ordering (no clock skew between
+    services), and explicit time dependencies.
+
+# Dependencies
+dependencies:
+  - name: "kafka_producer"
+    type: "service"
+    description: "Kafka producer for publishing events"
+  - name: "topic_builder"
+    type: "utility"
+    class_name: "build_topic"
+    module: "omniclaude.hooks.topics"
+    description: "Utility for building full topic names with prefix"
+  - name: "validate_timezone_aware_datetime"
+    type: "utility"
+    module: "omnibase_infra.utils"
+    description: "Validates timestamp is timezone-aware"
+
+# Capabilities provided by this node
+capabilities:
+  - name: "session_outcome_emission"
+    description: "Emit session outcome events to Kafka for feedback loop"
+  - name: "outcome_classification"
+    description: "Classify session outcomes for pattern learning"
+  - name: "success_rate_tracking"
+    description: "Enable success rate tracking in intelligence system"
+
+# Model definitions (reference - actual models in schemas.py)
+definitions:
+  ModelSessionOutcome:
+    type: object
+    description: "Event payload for Claude Code session outcome classification"
+    properties:
+      event_name:
+        type: string
+        const: "session.outcome"
+        description: "Event type discriminator for polymorphic deserialization"
+      session_id:
+        type: string
+        minLength: 1
+        description: "Session identifier string"
+      outcome:
+        type: string
+        enum: ["success", "failed", "abandoned", "unknown"]
+        description: "Classification of how the session ended"
+      emitted_at:
+        type: string
+        format: date-time
+        description: "Timestamp when the event was emitted (UTC, timezone-aware)"
+    required:
+      - event_name
+      - session_id
+      - outcome
+      - emitted_at
+
+  EnumClaudeCodeSessionOutcome:
+    type: string
+    description: "Enumeration of possible session outcome classifications"
+    enum:
+      - success   # Session completed successfully with user goal achieved
+      - failed    # Session ended with errors or unmet goals
+      - abandoned # User abandoned session before completion
+      - unknown   # Outcome could not be determined
+
+  ModelEventPublishResult:
+    type: object
+    description: "Result of publishing event to Kafka"
+    properties:
+      success:
+        type: boolean
+        description: "Whether the event was successfully published"
+      topic:
+        type: string
+        minLength: 1
+        description: "The Kafka topic the event was published to"
+      partition:
+        type: integer
+        nullable: true
+        minimum: 0
+        description: "The partition the event was assigned to (if successful)"
+      offset:
+        type: integer
+        nullable: true
+        minimum: 0
+        description: "The offset within the partition (if successful)"
+      error_message:
+        type: string
+        nullable: true
+        maxLength: 1000
+        description: "Error details if publishing failed"
+    required:
+      - success
+      - topic
+
+# Metadata
+metadata:
+  author: "OmniNode Team"
+  license: "MIT"
+  created: "2025-01-31"
+  ticket: "OMN-1735"
+  tags:
+    - effect
+    - hook
+    - session
+    - outcome
+    - feedback
+    - kafka
+    - event
+    - omniclaude
+    - intelligence
+    - onex
