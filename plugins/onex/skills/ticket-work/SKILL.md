@@ -40,8 +40,16 @@ This will:
 
 ## Phase Flow
 
-```
-intake → research → questions → spec → implementation → review → done
+```mermaid
+stateDiagram-v2
+    [*] --> intake
+    intake --> research : auto
+    research --> questions : human gate
+    questions --> spec : human gate
+    spec --> implementation : human gate
+    implementation --> review : human gate
+    review --> done : human gate
+    done --> [*]
 ```
 
 Each transition requires:

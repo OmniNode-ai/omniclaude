@@ -1,6 +1,6 @@
 ---
 name: ticket-work
-description: Contract-driven ticket execution with Linear integration - orchestrates intake, research, questions, spec, implementation, and review phases with explicit human gates
+description: Contract-driven ticket execution with Linear integration - orchestrates intake, research, questions, spec, implementation, review, and done phases with explicit human gates
 tags: [linear, tickets, automation, workflow, contract-driven]
 args:
   - name: ticket_id

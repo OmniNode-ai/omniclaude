@@ -104,7 +104,10 @@ hardening_tickets: []
 
 **Actions:**
 1. Create contract if not exists
-2. Set `ticket_id`, `title`, `repo` from Linear ticket
+2. Set identity fields:
+   - `ticket_id`: From Linear ticket identifier
+   - `title`: From Linear ticket title
+   - `repo`: From current working directory basename (e.g., `/Volumes/PRO-G40/Code/omniclaude3` → `omniclaude3`)
 3. Save contract to ticket description
 4. **Auto-advance to research phase** (no human gate needed)
 
@@ -311,6 +314,18 @@ hardening_tickets: []
 
 ## Contract Persistence
 
+### Detecting Repo
+
+```python
+def get_current_repo() -> str:
+    """Extract repo name from current working directory.
+
+    Example: /Volumes/PRO-G40/Code/omniclaude3 -> omniclaude3
+    """
+    import os
+    return os.path.basename(os.getcwd())
+```
+
 ### Reading Contract
 
 ```python
@@ -343,6 +358,7 @@ def extract_contract(description: str) -> dict | None:
 def update_description_with_contract(description: str, contract: dict) -> str:
     """Update ticket description with contract, preserving original content."""
     import yaml
+    import re
 
     marker = "## Contract"
     contract_yaml = yaml.dump(contract, default_flow_style=False, sort_keys=False)
