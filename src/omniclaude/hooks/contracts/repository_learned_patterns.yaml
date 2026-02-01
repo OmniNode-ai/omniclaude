@@ -1,0 +1,146 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 OmniNode Team
+#
+# Learned Patterns Repository Contract
+#
+# Defines database operations for pattern injection via contract-driven access.
+# This contract is consumed by PostgresRepositoryRuntime from omnibase_infra.
+#
+# Part of OMN-1779: Wire ManifestInjector to contract runtime
+
+# Contract metadata
+name: learned_patterns
+engine: postgres
+database_ref: omninode_bridge
+description: >
+  Repository contract for learned patterns used in context injection.
+  Patterns are stored in the learned_patterns table and injected into
+  Claude Code sessions to improve response quality.
+
+# Tables this contract is allowed to access (enforced by validators)
+tables:
+  - learned_patterns
+
+# Pydantic models for row mapping
+# Format: alias -> module:class
+models:
+  PatternRow: omniclaude.hooks.handler_context_injection:PatternRecord
+
+# Database operations
+ops:
+  # READ: List validated patterns for injection (primary operation)
+  list_validated_patterns:
+    mode: read
+    description: >
+      Retrieve patterns that are validated, enabled, and current.
+      Results are ordered by quality_score descending then pattern_id
+      for deterministic ordering.
+    sql: |
+      SELECT
+        pattern_id::text,
+        domain,
+        title,
+        description,
+        confidence,
+        usage_count,
+        success_rate,
+        example_reference
+      FROM learned_patterns
+      WHERE status = 'validated'
+        AND disabled_at IS NULL
+        AND deprecated_at IS NULL
+        AND is_current = TRUE
+      ORDER BY quality_score DESC NULLS LAST, pattern_id ASC
+      LIMIT :limit
+    params:
+      limit:
+        name: limit
+        param_type: integer
+        required: false
+        nullable: false
+        default:
+          value_type: number
+          number_value:
+            value: 10
+            value_type: integer
+        ge: 1
+        le: 200
+        description: Maximum number of patterns to return
+    returns:
+      model_ref: PatternRow
+      many: true
+
+  # READ: Get single pattern by ID
+  get_pattern_by_id:
+    mode: read
+    description: Retrieve a specific pattern by its ID.
+    sql: |
+      SELECT
+        pattern_id::text,
+        domain,
+        title,
+        description,
+        confidence,
+        usage_count,
+        success_rate,
+        example_reference
+      FROM learned_patterns
+      WHERE pattern_id = :pattern_id::uuid
+    params:
+      pattern_id:
+        name: pattern_id
+        param_type: uuid
+        required: true
+        nullable: false
+        description: The pattern UUID to retrieve
+    returns:
+      model_ref: PatternRow
+      many: false
+
+  # READ: List patterns by domain
+  list_patterns_by_domain:
+    mode: read
+    description: >
+      Retrieve validated patterns filtered by domain.
+      Includes 'general' domain patterns that apply to all domains.
+    sql: |
+      SELECT
+        pattern_id::text,
+        domain,
+        title,
+        description,
+        confidence,
+        usage_count,
+        success_rate,
+        example_reference
+      FROM learned_patterns
+      WHERE status = 'validated'
+        AND disabled_at IS NULL
+        AND deprecated_at IS NULL
+        AND is_current = TRUE
+        AND (domain = :domain OR domain = 'general')
+      ORDER BY quality_score DESC NULLS LAST, pattern_id ASC
+      LIMIT :limit
+    params:
+      domain:
+        name: domain
+        param_type: string
+        required: true
+        nullable: false
+        description: The domain to filter by
+      limit:
+        name: limit
+        param_type: integer
+        required: false
+        nullable: false
+        default:
+          value_type: number
+          number_value:
+            value: 10
+            value_type: integer
+        ge: 1
+        le: 200
+        description: Maximum number of patterns to return
+    returns:
+      model_ref: PatternRow
+      many: true

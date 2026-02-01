@@ -51,9 +51,9 @@ from omniclaude.hooks.models_injection_tracking import (
 from omniclaude.hooks.schemas import ContextSource, ModelHookContextInjectedPayload
 
 if TYPE_CHECKING:
-    from omniclaude.nodes.node_pattern_persistence_effect.protocols import (
-        ProtocolPatternPersistence,
-    )
+    import asyncpg
+    from omnibase_core.models.contracts import ModelDbRepositoryContract
+    from omnibase_infra.runtime.db import PostgresRepositoryRuntime
 
 
 # Exception classes for graceful degradation
@@ -235,22 +235,24 @@ class HandlerContextInjection:
     def __init__(
         self,
         config: ContextInjectionConfig | None = None,
-        persistence: ProtocolPatternPersistence | None = None,
+        runtime: PostgresRepositoryRuntime | None = None,
     ) -> None:
         """Initialize the handler.
 
         Args:
             config: Optional configuration. If None, loads from environment at init time.
-            persistence: Optional ProtocolPatternPersistence implementation for
-                database access. If None, creates one from config when db_enabled
-                is True. When provided externally, lifecycle is managed by caller.
+            runtime: Optional PostgresRepositoryRuntime for contract-driven database access.
+                If None, creates one from config when db_enabled is True.
+                When provided externally, lifecycle is managed by caller.
         """
         self._config = (
             config if config is not None else ContextInjectionConfig.from_env()
         )
-        self._persistence = persistence
-        # Track whether we created the persistence handler (and thus should close it)
-        self._persistence_owned = persistence is None
+        self._runtime: PostgresRepositoryRuntime | None = runtime
+        self._pool: asyncpg.Pool | None = None
+        self._contract: ModelDbRepositoryContract | None = None
+        # Track whether we created the runtime (and thus should close pool)
+        self._runtime_owned = runtime is None
 
     @property
     def handler_id(self) -> str:
@@ -263,20 +265,17 @@ class HandlerContextInjection:
         Should be called when the handler is no longer needed to release
         database pool resources. Safe to call multiple times.
 
-        Only closes resources if the persistence handler was created internally
+        Only closes resources if the runtime was created internally
         (not provided externally via constructor).
         """
-        if self._persistence is not None and self._persistence_owned:
-            # Check if persistence handler has a close method
-            if hasattr(self._persistence, "close"):
-                try:
-                    await self._persistence.close()
-                except Exception as e:
-                    logger.warning(f"Error closing persistence handler: {e}")
-            self._persistence = None
-        elif self._persistence is not None:
-            # Persistence was provided externally, just clear our reference
-            self._persistence = None
+        if self._pool is not None and self._runtime_owned:
+            try:
+                await self._pool.close()
+            except Exception as e:
+                logger.warning(f"Error closing database pool: {e}")
+            self._pool = None
+        self._runtime = None
+        self._contract = None
 
     def _emit_injection_record(
         self,
@@ -556,68 +555,90 @@ class HandlerContextInjection:
     # Database Methods
     # =========================================================================
 
-    async def _get_persistence_handler(self) -> ProtocolPatternPersistence:
-        """Get or create the pattern persistence handler.
+    async def _get_repository_runtime(self) -> PostgresRepositoryRuntime:
+        """Get or create the contract-driven repository runtime.
 
-        Creates a persistence handler implementation from the node module.
-        Falls back to the PostgreSQL handler directly if available.
+        Creates a PostgresRepositoryRuntime using the learned_patterns contract.
+        This is the contract-driven approach from OMN-1779 - no adapter classes,
+        just runtime + contract.
 
         Returns:
-            Initialized ProtocolPatternPersistence implementation.
+            Initialized PostgresRepositoryRuntime.
 
         Raises:
-            PatternConnectionError: If connection fails or dependencies not installed.
+            PatternConnectionError: If connection fails or contract loading fails.
         """
-        if self._persistence is not None:
-            return self._persistence
+        if self._runtime is not None:
+            return self._runtime
 
-        # Lazy import to avoid circular dependencies and allow graceful degradation
+        # Lazy import to avoid circular dependencies
         try:
-            # Verify node module is available (imports needed for handler below)
-            import omniclaude.nodes.node_pattern_persistence_effect.protocols  # noqa: F401
+            import asyncpg
+            import yaml
+            from omnibase_core.models.contracts import ModelDbRepositoryContract
+            from omnibase_infra.runtime.db import PostgresRepositoryRuntime
         except ImportError as e:
             raise PatternConnectionError(
-                f"Pattern persistence unavailable - node module not installed: {e}"
+                f"Contract runtime unavailable - dependencies not installed: {e}"
             ) from e
 
         cfg = self._config
 
-        # Check if handler module is available using importlib
-        import importlib.util
+        # Load contract YAML
+        try:
+            if cfg.db_contract_path:
+                contract_path = Path(cfg.db_contract_path)
+            else:
+                # Use bundled contract
+                contract_path = (
+                    Path(__file__).parent
+                    / "contracts"
+                    / "repository_learned_patterns.yaml"
+                )
 
-        handler_spec = importlib.util.find_spec(
-            "omniclaude.handlers.pattern_storage_postgres"
-        )
-        if handler_spec is None:
+            if not contract_path.exists():
+                raise PatternConnectionError(
+                    f"Contract file not found: {contract_path}"
+                )
+
+            with contract_path.open() as f:
+                contract_data = yaml.safe_load(f)
+
+            self._contract = ModelDbRepositoryContract.model_validate(contract_data)
+        except Exception as e:
             raise PatternConnectionError(
-                "Pattern persistence handler not available - "
-                "omniclaude.handlers.pattern_storage_postgres module not found"
-            )
+                f"Failed to load repository contract: {e}"
+            ) from e
 
-        # NOTE: HandlerPatternStoragePostgres requires a ModelONEXContainer for
-        # dependency injection (to resolve HandlerDb). For standalone usage without
-        # a container, the caller should provide a pre-configured ProtocolPatternPersistence
-        # via the constructor: HandlerContextInjection(persistence=handler)
-        #
-        # This code path is a placeholder for future container integration.
-        raise PatternConnectionError(
-            "Pattern persistence handler requires container-based initialization. "
-            "HandlerPatternStoragePostgres expects ModelONEXContainer, not DSN/timeout. "
-            "Configure CONTEXT_DB_ENABLED=false or provide a pre-configured "
-            "ProtocolPatternPersistence handler via HandlerContextInjection(persistence=...)."
-        )
+        # Create asyncpg pool
+        try:
+            dsn = cfg.get_db_dsn()  # noqa: secrets - DSN from config, not hardcoded
+            self._pool = await asyncpg.create_pool(
+                dsn,
+                min_size=1,
+                max_size=5,
+                command_timeout=cfg.timeout_ms / 1000.0,
+            )
+        except Exception as e:
+            raise PatternConnectionError(f"Failed to create database pool: {e}") from e
+
+        # Create runtime
+        self._runtime = PostgresRepositoryRuntime(self._pool, self._contract)
+        return self._runtime
 
     async def _load_patterns_from_database(
         self,
         domain: str | None = None,
         project_scope: str | None = None,
     ) -> ModelLoadPatternsResult:
-        """Load patterns from the database using the protocol.
+        """Load patterns from the database using contract-driven runtime.
+
+        Uses PostgresRepositoryRuntime with the learned_patterns contract.
+        This is the contract-driven approach from OMN-1779.
 
         Args:
             domain: Domain to filter by (None = all domains).
-            project_scope: Project scope to filter by (currently unused - add when
-                schema supports it).
+            project_scope: Project scope to filter by (currently unused).
 
         Returns:
             ModelLoadPatternsResult with patterns and source attribution.
@@ -626,53 +647,51 @@ class HandlerContextInjection:
             PatternConnectionError: If database connection fails.
             PatternPersistenceError: If query fails.
         """
-        from uuid import uuid4
-
-        from omniclaude.nodes.node_pattern_persistence_effect.models import (
-            ModelLearnedPatternQuery,
-        )
-
         cfg = self._config
-        persistence = await self._get_persistence_handler()
+        runtime = await self._get_repository_runtime()
 
-        # Build query using the new model
-        query = ModelLearnedPatternQuery(
-            domain=domain if domain else None,
-            min_confidence=cfg.min_confidence,
-            include_general=True,
-            limit=cfg.max_patterns * 2,  # Get extra for filtering
-            offset=0,
-        )
+        # Get extra patterns for filtering (will be filtered by confidence/domain later)
+        limit = cfg.max_patterns * 2
 
-        # Query patterns using the protocol method
-        correlation_id = uuid4()
-        result = await persistence.query_patterns(query, correlation_id=correlation_id)
-
-        if not result.success:
-            raise PatternPersistenceError(
-                f"Pattern query failed: {result.error or 'Unknown error'}"
-            )
-
-        # Convert ModelLearnedPatternRecord to handler's ModelPatternRecord
-        patterns: list[ModelPatternRecord] = []
-        for record in result.records:
-            patterns.append(
-                PatternRecord(
-                    pattern_id=record.pattern_id,
-                    domain=record.domain,
-                    title=record.title,
-                    description=record.description,
-                    confidence=record.confidence,
-                    usage_count=record.usage_count,
-                    success_rate=record.success_rate,
-                    example_reference=record.example_reference,
+        try:
+            # Use domain-filtered operation if domain specified, otherwise list all
+            if domain:
+                rows = await runtime.call(
+                    "list_patterns_by_domain",
+                    domain,  # positional arg
+                    limit,  # positional arg
                 )
-            )
+            else:
+                rows = await runtime.call(
+                    "list_validated_patterns",
+                    limit,  # positional arg
+                )
+        except Exception as e:
+            raise PatternPersistenceError(f"Pattern query failed: {e}") from e
 
-        # Build source attribution from backend type
-        source = (
-            f"database:{result.backend_type}:{cfg.db_host}:{cfg.db_port}/{cfg.db_name}"
-        )
+        # Convert row dicts to PatternRecord objects
+        patterns: list[ModelPatternRecord] = []
+        if rows:
+            for row in rows:
+                try:
+                    patterns.append(
+                        PatternRecord(
+                            pattern_id=str(row.get("pattern_id", "")),
+                            domain=str(row.get("domain", "")),
+                            title=str(row.get("title", "")),
+                            description=str(row.get("description", "")),
+                            confidence=float(row.get("confidence", 0.0)),
+                            usage_count=int(row.get("usage_count", 0)),
+                            success_rate=float(row.get("success_rate", 0.0)),
+                            example_reference=row.get("example_reference"),
+                        )
+                    )
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Skipping invalid pattern row: {e}")
+                    continue
+
+        # Build source attribution
+        source = f"database:contract:{cfg.db_host}:{cfg.db_port}/{cfg.db_name}"
         return ModelLoadPatternsResult(patterns=patterns, source_files=[Path(source)])
 
     # =========================================================================

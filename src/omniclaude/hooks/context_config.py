@@ -308,6 +308,16 @@ class ContextInjectionConfig(BaseSettings):
         description="Database password (from OMNICLAUDE_CONTEXT_DB_PASSWORD)",
     )
 
+    # Contract-driven database access (OMN-1779)
+    db_contract_path: str = Field(
+        default="",
+        description=(
+            "Path to learned_patterns repository contract YAML. "
+            "If empty, uses bundled contract from omniclaude.contracts. "
+            "Override via OMNICLAUDE_CONTEXT_DB_CONTRACT_PATH."
+        ),
+    )
+
     # Deprecated file-based configuration
     persistence_file: str = Field(
         default=".claude/learned_patterns.json",
