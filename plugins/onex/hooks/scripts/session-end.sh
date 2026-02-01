@@ -100,6 +100,12 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
     # Uses ClaudeCodeSessionOutcome enum values: success, failed, abandoned, unknown
     # Starting with "unknown" as default - heuristics can be added later
     (
+        # Validate SESSION_ID before constructing payload
+        if [[ -z "$SESSION_ID" ]]; then
+            log "WARNING: SESSION_ID is empty, skipping session.outcome emission"
+            exit 0  # Exit the subshell cleanly
+        fi
+
         # Build session.outcome payload
         # TODO(OMN-1735): Add heuristics to map session end reasons to outcomes
         OUTCOME="unknown"

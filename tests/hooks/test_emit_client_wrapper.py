@@ -52,6 +52,7 @@ class TestModuleImport:
         expected_types = {
             "session.started",
             "session.ended",
+            "session.outcome",
             "prompt.submitted",
             "tool.executed",
             "injection.recorded",
