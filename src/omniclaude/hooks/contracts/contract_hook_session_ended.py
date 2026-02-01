@@ -31,7 +31,7 @@ See Also:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Self
+from typing import Self
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
@@ -174,7 +174,7 @@ class HookSessionEndedContract(BaseModel):
     )
 
     # Model definitions (JSON Schema-like documentation)
-    definitions: dict[str, Any] = Field(
+    definitions: dict[str, object] = Field(
         ...,
         description="JSON Schema-like model definitions for documentation",
     )

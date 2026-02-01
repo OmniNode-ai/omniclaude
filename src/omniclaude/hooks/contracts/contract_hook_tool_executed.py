@@ -31,7 +31,7 @@ See Also:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Literal, Self
+from typing import Literal, Self
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
@@ -402,7 +402,7 @@ class HookToolExecutedContract(BaseModel):
         min_length=1,
         description="List of capabilities provided by the node",
     )
-    definitions: dict[str, Any] = Field(
+    definitions: dict[str, object] = Field(
         ...,
         description="JSON schema-like definitions for documentation",
     )
