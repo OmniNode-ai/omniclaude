@@ -30,7 +30,7 @@ See Also:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Literal, Self
+from typing import Literal, Self
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
@@ -323,7 +323,7 @@ class HookPromptSubmittedContract(BaseModel):
             path = Path(__file__).parent / "contract_hook_prompt_submitted.yaml"
 
         with open(path) as f:
-            data: dict[str, Any] = yaml.safe_load(f)
+            data: dict[str, object] = yaml.safe_load(f)
 
         return cls.model_validate(data)
 

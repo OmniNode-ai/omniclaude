@@ -96,6 +96,45 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
         fi
     ) &
 
+    # Emit session.outcome event for feedback loop (OMN-1735, FEEDBACK-008)
+    # Uses ClaudeCodeSessionOutcome enum values: success, failed, abandoned, unknown
+    # Starting with "unknown" as default - heuristics can be added later
+    (
+        # Validate SESSION_ID before constructing payload
+        if [[ -z "$SESSION_ID" ]]; then
+            log "WARNING: SESSION_ID is empty, skipping session.outcome emission"
+            exit 0  # Exit the subshell cleanly
+        fi
+
+        # Validate UUID format (8-4-4-4-12 structure, case-insensitive)
+        if [[ ! "$SESSION_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+            log "WARNING: SESSION_ID '$SESSION_ID' is not valid UUID format, skipping session.outcome emission"
+            exit 0
+        fi
+
+        # Build session.outcome payload
+        # TODO(OMN-1735): Add heuristics to map session end reasons to outcomes
+        OUTCOME="unknown"
+        EMITTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+        OUTCOME_PAYLOAD=$(jq -n \
+            --arg session_id "$SESSION_ID" \
+            --arg outcome "$OUTCOME" \
+            --arg emitted_at "$EMITTED_AT" \
+            '{
+                session_id: $session_id,
+                outcome: $outcome,
+                emitted_at: $emitted_at
+            }' 2>/dev/null)
+
+        # Validate payload was constructed successfully
+        if [[ -z "$OUTCOME_PAYLOAD" || "$OUTCOME_PAYLOAD" == "null" ]]; then
+            log "WARNING: Failed to construct outcome payload (jq failed), skipping emission"
+        else
+            emit_via_daemon "session.outcome" "$OUTCOME_PAYLOAD" 100
+        fi
+    ) &
+
     log "Session event emission started via emit daemon"
 else
     log "Kafka emission skipped (KAFKA_ENABLED=$KAFKA_ENABLED)"

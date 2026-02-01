@@ -68,6 +68,7 @@ from enum import StrEnum
 from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
+from omnibase_core.enums import EnumClaudeCodeSessionOutcome
 from omnibase_infra.utils import ensure_timezone_aware
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from pydantic.functional_validators import BeforeValidator
@@ -569,6 +570,54 @@ class ModelHookSessionEndedPayload(BaseModel):
     )
 
 
+class ModelSessionOutcome(BaseModel):
+    """Session outcome event for feedback loop.
+
+    Emitted at session end to capture the final outcome classification
+    (success, failed, abandoned, unknown). This event enables pattern
+    learning and success rate tracking in the intelligence system.
+
+    Attributes:
+        event_name: Literal discriminator for polymorphic deserialization.
+        session_id: Session identifier string.
+        outcome: Classification of how the session ended.
+        emitted_at: Timestamp when the event was emitted (UTC).
+
+    Example:
+        >>> from datetime import UTC, datetime
+        >>> event = ModelSessionOutcome(
+        ...     session_id="abc12345-1234-5678-abcd-1234567890ab",
+        ...     outcome=EnumClaudeCodeSessionOutcome.SUCCESS,
+        ...     emitted_at=datetime(2025, 1, 15, 12, 30, 0, tzinfo=UTC),
+        ... )
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+    )
+
+    event_name: Literal["session.outcome"] = Field(
+        default="session.outcome",
+        description="Event type discriminator for polymorphic deserialization",
+    )
+    session_id: str = Field(
+        ...,
+        min_length=1,
+        description="Session identifier",
+    )
+    outcome: EnumClaudeCodeSessionOutcome = Field(
+        ...,
+        description="Classification of how the session ended (success, failed, abandoned, unknown)",
+    )
+    # Timestamps - MUST be explicitly injected (no default_factory for testability)
+    # Uses TimezoneAwareDatetime for automatic timezone validation
+    emitted_at: TimezoneAwareDatetime = Field(
+        ...,
+        description="Timestamp when the event was emitted (UTC)",
+    )
+
+
 # =============================================================================
 # Prompt Events
 # =============================================================================
@@ -1031,6 +1080,7 @@ __all__ = [
     "HookSource",
     "SessionEndReason",
     "ContextSource",
+    "EnumClaudeCodeSessionOutcome",
     # Annotated types (reusable validators)
     "TimezoneAwareDatetime",
     # Sanitization utilities
@@ -1038,6 +1088,7 @@ __all__ = [
     # Payload models
     "ModelHookSessionStartedPayload",
     "ModelHookSessionEndedPayload",
+    "ModelSessionOutcome",
     "ModelHookPromptSubmittedPayload",
     "ModelHookToolExecutedPayload",
     "ModelHookContextInjectedPayload",

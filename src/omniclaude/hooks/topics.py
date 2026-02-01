@@ -54,6 +54,8 @@ class TopicBase(StrEnum):
     CLAUDE_HOOK_EVENT = "onex.cmd.omniintelligence.claude-hook-event.v1"
     # Tool content topic for pattern learning (OMN-1702)
     TOOL_CONTENT = "onex.cmd.omniintelligence.tool-content.v1"
+    # Session outcome topic for feedback loop (OMN-1735, FEEDBACK-008)
+    SESSION_OUTCOME = "onex.cmd.omniintelligence.session-outcome.v1"
 
     # ==========================================================================
     # Legacy observability topics (to be migrated in future PR)
