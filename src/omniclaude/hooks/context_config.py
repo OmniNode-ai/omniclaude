@@ -170,28 +170,54 @@ class SessionStartInjectionConfig(BaseModel):
                 )
                 return default
 
-        return cls(
-            enabled=os.getenv("OMNICLAUDE_SESSION_INJECTION_ENABLED", "true").lower()
-            == "true",
-            timeout_ms=safe_int("OMNICLAUDE_SESSION_INJECTION_TIMEOUT_MS", 500),
-            max_patterns=safe_int("OMNICLAUDE_SESSION_INJECTION_MAX_PATTERNS", 10),
-            max_chars=safe_int("OMNICLAUDE_SESSION_INJECTION_MAX_CHARS", 8000),
-            min_confidence=safe_float(
-                "OMNICLAUDE_SESSION_INJECTION_MIN_CONFIDENCE", 0.7
-            ),
-            include_footer=os.getenv(
-                "OMNICLAUDE_SESSION_INJECTION_INCLUDE_FOOTER", "false"
-            ).lower()
-            == "true",
-            skip_user_prompt_if_injected=os.getenv(
-                "OMNICLAUDE_SESSION_SKIP_IF_INJECTED", "true"
-            ).lower()
-            == "true",
-            marker_file_dir=os.getenv(
-                "OMNICLAUDE_SESSION_INJECTION_MARKER_DIR",
-                "/tmp/omniclaude-sessions",  # noqa: S108  # nosec B108
-            ),
-        )
+        def safe_bool(env_var: str, default: bool) -> bool:
+            """Parse bool from env var with fallback to default.
+
+            Accepts case-insensitive: true/false, 1/0, yes/no.
+            Logs warning for unexpected values.
+            """
+            val = os.getenv(env_var)
+            if val is None:
+                return default
+            val_lower = val.lower()
+            if val_lower in ("true", "1", "yes"):
+                return True
+            if val_lower in ("false", "0", "no"):
+                return False
+            logger.warning(
+                f"Invalid bool for {env_var}='{val}', "
+                f"expected true/false/1/0/yes/no, using default {default}"
+            )
+            return default
+
+        try:
+            return cls(
+                enabled=safe_bool("OMNICLAUDE_SESSION_INJECTION_ENABLED", True),
+                timeout_ms=safe_int("OMNICLAUDE_SESSION_INJECTION_TIMEOUT_MS", 500),
+                max_patterns=safe_int("OMNICLAUDE_SESSION_INJECTION_MAX_PATTERNS", 10),
+                max_chars=safe_int("OMNICLAUDE_SESSION_INJECTION_MAX_CHARS", 8000),
+                min_confidence=safe_float(
+                    "OMNICLAUDE_SESSION_INJECTION_MIN_CONFIDENCE", 0.7
+                ),
+                include_footer=safe_bool(
+                    "OMNICLAUDE_SESSION_INJECTION_INCLUDE_FOOTER", False
+                ),
+                skip_user_prompt_if_injected=safe_bool(
+                    "OMNICLAUDE_SESSION_SKIP_IF_INJECTED", True
+                ),
+                marker_file_dir=os.getenv(
+                    "OMNICLAUDE_SESSION_INJECTION_MARKER_DIR",
+                    "/tmp/omniclaude-sessions",  # noqa: S108  # nosec B108
+                ),
+            )
+        except Exception as e:
+            # Catch Pydantic ValidationError or any unexpected errors.
+            # Log with context and return default config to ensure method never raises.
+            logger.warning(
+                f"Failed to create SessionStartInjectionConfig from env: {e}. "
+                "Using default configuration."
+            )
+            return cls()
 
 
 class ContextInjectionConfig(BaseSettings):

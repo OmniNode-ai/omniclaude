@@ -64,13 +64,15 @@ SESSION_INJECTION_INCLUDE_FOOTER="${OMNICLAUDE_SESSION_INJECTION_INCLUDE_FOOTER:
 # Define timeout function (portable, works on macOS)
 # Uses perl alarm() because GNU coreutils 'timeout' command is not available
 # on macOS by default. perl is pre-installed on macOS and provides SIGALRM.
-# NOTE: perl alarm() only accepts integers, so we round up fractional seconds.
+# NOTE: perl alarm() only accepts integers, so we use ceiling (round UP).
 run_with_timeout() {
     local timeout_sec="$1"
     shift
-    # perl alarm() only accepts integers; round up fractional seconds to minimum of 1
+    # perl alarm() only accepts integers; use ceiling (round UP) for fractional seconds.
+    # IMPORTANT: printf "%.0f" uses banker's rounding which may round 0.5 to 0 (no timeout!)
+    # Ceiling ensures: 0.5s -> 1s, 0.1s -> 1s, 1.5s -> 2s (always safe, never zero)
     local int_timeout
-    int_timeout=$(printf "%.0f" "$timeout_sec")
+    int_timeout=$(awk -v t="$timeout_sec" 'BEGIN { printf "%d", int(t) + (t > int(t) ? 1 : 0) }')
     [[ "$int_timeout" -lt 1 ]] && int_timeout=1
     perl -e 'alarm shift; exec @ARGV' "$int_timeout" "$@"
 }
@@ -306,67 +308,90 @@ else
 fi
 
 # -----------------------------
-# Learned Pattern Injection (OMN-1675)
+# Learned Pattern Injection (OMN-1675) - ASYNC IMPLEMENTATION
 # -----------------------------
-LEARNED_PATTERNS=""
-INJECTION_ID=""
-INJECTION_COHORT=""
+# Pattern injection runs in background to meet <50ms performance target.
+# The first UserPromptSubmit will handle pattern injection (session not yet marked).
+# This async process marks the session after completion to prevent duplicate injection
+# on subsequent prompts.
+#
+# Trade-off: SessionStart returns immediately without patterns in additionalContext.
+# UserPromptSubmit provides fallback injection for the first prompt.
 
 if [[ "${SESSION_INJECTION_ENABLED:-true}" == "true" ]] && [[ -f "${HOOKS_LIB}/context_injection_wrapper.py" ]] && [[ "$JQ_AVAILABLE" -eq 1 ]]; then
-    log "Starting pattern injection for SessionStart"
+    log "Starting async pattern injection for SessionStart"
 
-    # Build injection input
-    PATTERN_INPUT="$(jq -n \
-        --arg session "${SESSION_ID:-}" \
-        --arg project "${PROJECT_PATH:-$(pwd)}" \
-        --arg correlation "${CORRELATION_ID:-}" \
-        --argjson max_patterns "${SESSION_INJECTION_MAX_PATTERNS:-10}" \
-        --argjson min_confidence "${SESSION_INJECTION_MIN_CONFIDENCE:-0.7}" \
-        --argjson include_footer "${SESSION_INJECTION_INCLUDE_FOOTER:-false}" \
-        '{
-            session_id: $session,
-            project: $project,
-            correlation_id: $correlation,
-            max_patterns: $max_patterns,
-            min_confidence: $min_confidence,
-            injection_context: "session_start",
-            include_footer: $include_footer,
-            emit_event: true
-        }' 2>/dev/null)"
+    # Run pattern injection in background subshell (non-blocking)
+    (
+        _async_log() {
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] [session-start-async] $*" >> "$LOG_FILE"
+        }
 
-    # Call wrapper with timeout (500ms default, convert to seconds)
-    # Use bc if available, otherwise fall back to shell arithmetic
-    if [[ "$BC_AVAILABLE" -eq 1 ]]; then
-        TIMEOUT_SEC=$(echo "scale=1; ${SESSION_INJECTION_TIMEOUT_MS:-500} / 1000" | bc)
-    else
-        # Shell arithmetic fallback: integer division + one decimal place
-        # e.g., 500ms -> 0.5s, 1000ms -> 1.0s, 1500ms -> 1.5s
-        _timeout_ms="${SESSION_INJECTION_TIMEOUT_MS:-500}"
-        _timeout_sec=$((_timeout_ms / 1000))
-        _timeout_decimal=$(((_timeout_ms % 1000) / 100))
-        TIMEOUT_SEC="${_timeout_sec}.${_timeout_decimal}"
-        # Ensure minimum timeout of 0.1s to prevent effectively disabling timeout
-        if [[ "$TIMEOUT_SEC" == "0.0" ]] || [[ "$TIMEOUT_SEC" == "0" ]]; then
-            TIMEOUT_SEC="0.1"
+        _async_log "Async pattern injection started for session ${SESSION_ID:-unknown}"
+
+        # Build injection input
+        PATTERN_INPUT="$(jq -n \
+            --arg session "${SESSION_ID:-}" \
+            --arg project "${PROJECT_PATH:-$(pwd)}" \
+            --arg correlation "${CORRELATION_ID:-}" \
+            --argjson max_patterns "${SESSION_INJECTION_MAX_PATTERNS:-10}" \
+            --argjson min_confidence "${SESSION_INJECTION_MIN_CONFIDENCE:-0.7}" \
+            --argjson include_footer "${SESSION_INJECTION_INCLUDE_FOOTER:-false}" \
+            '{
+                session_id: $session,
+                project: $project,
+                correlation_id: $correlation,
+                max_patterns: $max_patterns,
+                min_confidence: $min_confidence,
+                injection_context: "session_start",
+                include_footer: $include_footer,
+                emit_event: true
+            }' 2>/dev/null)"
+
+        # Call wrapper with timeout (500ms default, convert to seconds)
+        # Use bc if available, otherwise fall back to shell arithmetic
+        if [[ "$BC_AVAILABLE" -eq 1 ]]; then
+            TIMEOUT_SEC=$(echo "scale=1; ${SESSION_INJECTION_TIMEOUT_MS:-500} / 1000" | bc)
+        else
+            # Shell arithmetic fallback: integer division + one decimal place
+            # e.g., 500ms -> 0.5s, 1000ms -> 1.0s, 1500ms -> 1.5s
+            _timeout_ms="${SESSION_INJECTION_TIMEOUT_MS:-500}"
+            _timeout_sec=$((_timeout_ms / 1000))
+            _timeout_decimal=$(((_timeout_ms % 1000) / 100))
+            TIMEOUT_SEC="${_timeout_sec}.${_timeout_decimal}"
+            # Ensure minimum timeout of 0.1s to prevent effectively disabling timeout
+            if [[ "$TIMEOUT_SEC" == "0.0" ]] || [[ "$TIMEOUT_SEC" == "0" ]]; then
+                TIMEOUT_SEC="0.1"
+            fi
         fi
-    fi
-    PATTERN_RESULT="$(echo "$PATTERN_INPUT" | run_with_timeout "${TIMEOUT_SEC}" $PYTHON_CMD "${HOOKS_LIB}/context_injection_wrapper.py" 2>>"$LOG_FILE" || echo '{}')"
+        PATTERN_RESULT="$(echo "$PATTERN_INPUT" | run_with_timeout "${TIMEOUT_SEC}" $PYTHON_CMD "${HOOKS_LIB}/context_injection_wrapper.py" 2>>"$LOG_FILE")" || {
+            _async_log "WARNING: Pattern injection failed (timeout or error), using empty result"
+            PATTERN_RESULT='{}'
+        }
 
-    # Extract results
-    LEARNED_PATTERNS="$(echo "$PATTERN_RESULT" | jq -r '.patterns_context // ""' 2>/dev/null)"
-    INJECTION_ID="$(echo "$PATTERN_RESULT" | jq -r '.injection_id // ""' 2>/dev/null)"
-    INJECTION_COHORT="$(echo "$PATTERN_RESULT" | jq -r '.cohort // ""' 2>/dev/null)"
-    PATTERN_COUNT="$(echo "$PATTERN_RESULT" | jq -r '.pattern_count // 0' 2>/dev/null)"
+        # Extract results
+        INJECTION_ID="$(echo "$PATTERN_RESULT" | jq -r '.injection_id // ""' 2>/dev/null)"
+        INJECTION_COHORT="$(echo "$PATTERN_RESULT" | jq -r '.cohort // ""' 2>/dev/null)"
+        PATTERN_COUNT="$(echo "$PATTERN_RESULT" | jq -r '.pattern_count // 0' 2>/dev/null)"
 
-    log "Pattern injection complete: count=$PATTERN_COUNT cohort=$INJECTION_COHORT"
+        _async_log "Pattern injection complete: count=$PATTERN_COUNT cohort=$INJECTION_COHORT"
 
-    # Mark session as injected (for UserPromptSubmit coordination)
-    # Mark even for control cohort or empty patterns to prevent duplicate attempts
-    if [[ -n "$INJECTION_COHORT" ]] && [[ -f "${HOOKS_LIB}/session_marker.py" ]]; then
-        $PYTHON_CMD "${HOOKS_LIB}/session_marker.py" mark \
-            --session-id "${SESSION_ID}" \
-            --injection-id "${INJECTION_ID:-control}" 2>>"$LOG_FILE" || true
-    fi
+        # Mark session as injected (for UserPromptSubmit coordination)
+        # CRITICAL: Always mark session when injection was ATTEMPTED, regardless of result.
+        # This prevents duplicate injection attempts from UserPromptSubmit on subsequent prompts.
+        # Use injection_id if available, cohort if not, or "async-completed" as fallback.
+        if [[ -f "${HOOKS_LIB}/session_marker.py" ]]; then
+            marker_id="${INJECTION_ID:-${INJECTION_COHORT:-async-completed}}"
+            if $PYTHON_CMD "${HOOKS_LIB}/session_marker.py" mark \
+                --session-id "${SESSION_ID}" \
+                --injection-id "$marker_id" 2>>"$LOG_FILE"; then
+                _async_log "Session marked as injected (marker_id=$marker_id)"
+            else
+                _async_log "WARNING: Failed to mark session as injected"
+            fi
+        fi
+    ) &
+    log "Async pattern injection started in background (PID: $!)"
 elif [[ "${SESSION_INJECTION_ENABLED:-true}" != "true" ]]; then
     log "Pattern injection disabled (SESSION_INJECTION_ENABLED=false)"
 elif [[ "$JQ_AVAILABLE" -eq 0 ]]; then
@@ -386,29 +411,21 @@ if [[ $ELAPSED_MS -gt 50 ]]; then
 fi
 
 # Build output with additionalContext
+# NOTE: Pattern injection is async, so patterns won't be available here.
+# UserPromptSubmit will handle pattern injection for the first prompt.
+# We just set the hookEventName and indicate async injection was started.
 if [[ "$JQ_AVAILABLE" -eq 1 ]]; then
-    if [[ -n "$LEARNED_PATTERNS" ]]; then
-        # Has patterns to inject
+    if [[ "${SESSION_INJECTION_ENABLED:-true}" == "true" ]]; then
+        # Async injection was started - set metadata to indicate this
         printf '%s' "$INPUT" | jq \
-            --arg ctx "$LEARNED_PATTERNS" \
-            --arg inj_id "$INJECTION_ID" \
-            --arg cohort "$INJECTION_COHORT" \
             '.hookSpecificOutput.hookEventName = "SessionStart" |
-             .hookSpecificOutput.additionalContext = $ctx |
-             .hookSpecificOutput.metadata.injection_id = $inj_id |
-             .hookSpecificOutput.metadata.cohort = $cohort'
-    elif [[ -n "$INJECTION_COHORT" ]]; then
-        # Control cohort or no patterns - still set metadata
-        printf '%s' "$INPUT" | jq \
-            --arg cohort "$INJECTION_COHORT" \
-            '.hookSpecificOutput.hookEventName = "SessionStart" |
-             .hookSpecificOutput.metadata.cohort = $cohort'
+             .hookSpecificOutput.metadata.injection_mode = "async"'
     else
-        # No injection attempted, pass through with hookEventName
+        # Injection disabled, just pass through with hookEventName
         printf '%s' "$INPUT" | jq '.hookSpecificOutput.hookEventName = "SessionStart"'
     fi
 else
-    # No jq available, echo empty JSON
+    # No jq available, echo input as-is
     printf '%s' "$INPUT"
 fi
 

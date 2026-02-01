@@ -133,6 +133,91 @@ class TestSessionStartInjectionConfig:
         with pytest.raises(ValidationError):
             SessionStartInjectionConfig(min_confidence=1.1)
 
+    def test_from_env_safe_bool_accepts_valid_values(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test safe_bool accepts various valid boolean representations."""
+        # Test "true" variants
+        for true_val in ("true", "True", "TRUE", "1", "yes", "Yes", "YES"):
+            monkeypatch.setenv("OMNICLAUDE_SESSION_INJECTION_ENABLED", true_val)
+            config = SessionStartInjectionConfig.from_env()
+            assert config.enabled is True, f"Expected True for '{true_val}'"
+
+        # Test "false" variants
+        for false_val in ("false", "False", "FALSE", "0", "no", "No", "NO"):
+            monkeypatch.setenv("OMNICLAUDE_SESSION_INJECTION_ENABLED", false_val)
+            config = SessionStartInjectionConfig.from_env()
+            assert config.enabled is False, f"Expected False for '{false_val}'"
+
+    def test_from_env_safe_bool_logs_warning_for_invalid_values(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test safe_bool logs warning for invalid boolean values and uses default."""
+        import logging
+
+        # Set invalid boolean values
+        monkeypatch.setenv("OMNICLAUDE_SESSION_INJECTION_ENABLED", "maybe")
+        monkeypatch.setenv("OMNICLAUDE_SESSION_INJECTION_INCLUDE_FOOTER", "enabled")
+        monkeypatch.setenv("OMNICLAUDE_SESSION_SKIP_IF_INJECTED", "yep")
+
+        with caplog.at_level(logging.WARNING):
+            config = SessionStartInjectionConfig.from_env()
+
+        # Should fall back to defaults
+        assert config.enabled is True  # default is True
+        assert config.include_footer is False  # default is False
+        assert config.skip_user_prompt_if_injected is True  # default is True
+
+        # Should have logged warnings
+        assert (
+            "Invalid bool for OMNICLAUDE_SESSION_INJECTION_ENABLED='maybe'"
+            in caplog.text
+        )
+        assert (
+            "Invalid bool for OMNICLAUDE_SESSION_INJECTION_INCLUDE_FOOTER='enabled'"
+            in caplog.text
+        )
+        assert (
+            "Invalid bool for OMNICLAUDE_SESSION_SKIP_IF_INJECTED='yep'" in caplog.text
+        )
+
+    def test_from_env_handles_validation_error_gracefully(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test from_env catches ValidationError and returns default config."""
+        import logging
+
+        # Set values that will pass safe_int/safe_float/safe_bool but fail Pydantic validation
+        # timeout_ms must be between 100-5000, but safe_int will parse this successfully
+        monkeypatch.setenv("OMNICLAUDE_SESSION_INJECTION_TIMEOUT_MS", "50")
+
+        with caplog.at_level(logging.WARNING):
+            config = SessionStartInjectionConfig.from_env()
+
+        # Should fall back to complete defaults due to ValidationError
+        assert config.timeout_ms == 500  # default, not 50
+        assert "Failed to create SessionStartInjectionConfig from env" in caplog.text
+
+    def test_from_env_returns_valid_config_always(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test from_env always returns a valid config, never raises."""
+        # Set various malformed values
+        monkeypatch.setenv("OMNICLAUDE_SESSION_INJECTION_ENABLED", "garbage")
+        monkeypatch.setenv("OMNICLAUDE_SESSION_INJECTION_TIMEOUT_MS", "not_a_number")
+        monkeypatch.setenv("OMNICLAUDE_SESSION_INJECTION_MAX_PATTERNS", "-999")
+        monkeypatch.setenv("OMNICLAUDE_SESSION_INJECTION_MIN_CONFIDENCE", "invalid")
+        monkeypatch.setenv("OMNICLAUDE_SESSION_INJECTION_INCLUDE_FOOTER", "maybe")
+
+        # Should NOT raise - always returns valid config
+        config = SessionStartInjectionConfig.from_env()
+
+        # Should have valid defaults
+        assert isinstance(config, SessionStartInjectionConfig)
+        assert isinstance(config.enabled, bool)
+        assert isinstance(config.timeout_ms, int)
+        assert 100 <= config.timeout_ms <= 5000
+
 
 class TestSessionMarker:
     """Tests for session marker utilities."""
