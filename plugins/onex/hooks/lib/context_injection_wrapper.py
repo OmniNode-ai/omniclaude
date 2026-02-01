@@ -42,7 +42,7 @@ import json
 import logging
 import sys
 import time
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from learned_pattern_injector import (
     InjectorInput,
@@ -50,6 +50,50 @@ from learned_pattern_injector import (
     _create_empty_output,
     _create_error_output,
 )
+
+if TYPE_CHECKING:
+    from omniclaude.hooks.models_injection_tracking import EnumInjectionContext
+
+# Module-level cache for context mapping (lazily initialized)
+_CONTEXT_MAPPING: dict[str, EnumInjectionContext] | None = None
+
+
+def _get_context_mapping(
+    EnumInjectionContext: type,  # noqa: N803 - matches class name
+) -> dict[str, EnumInjectionContext]:
+    """
+    Get or create the context mapping dictionary.
+
+    Uses module-level caching to avoid recreating the dictionary on every call.
+    The EnumInjectionContext type is passed in to handle the lazy import pattern.
+
+    Args:
+        EnumInjectionContext: The enum class (imported in main after try/except)
+
+    Returns:
+        Dictionary mapping string keys to EnumInjectionContext values
+    """
+    global _CONTEXT_MAPPING
+    if _CONTEXT_MAPPING is None:
+        # Map injection_context string to enum
+        # Valid values: "session_start", "user_prompt_submit", "pre_tool_use", "subagent_start"
+        # Also accept PascalCase for backwards compatibility with enum values
+        _CONTEXT_MAPPING = {
+            "session_start": EnumInjectionContext.SESSION_START,
+            "sessionstart": EnumInjectionContext.SESSION_START,
+            "SessionStart": EnumInjectionContext.SESSION_START,
+            "user_prompt_submit": EnumInjectionContext.USER_PROMPT_SUBMIT,
+            "userpromptsubmit": EnumInjectionContext.USER_PROMPT_SUBMIT,
+            "UserPromptSubmit": EnumInjectionContext.USER_PROMPT_SUBMIT,
+            "pre_tool_use": EnumInjectionContext.PRE_TOOL_USE,
+            "pretooluse": EnumInjectionContext.PRE_TOOL_USE,
+            "PreToolUse": EnumInjectionContext.PRE_TOOL_USE,
+            "subagent_start": EnumInjectionContext.SUBAGENT_START,
+            "subagentstart": EnumInjectionContext.SUBAGENT_START,
+            "SubagentStart": EnumInjectionContext.SUBAGENT_START,
+        }
+    return _CONTEXT_MAPPING
+
 
 # Configure logging to stderr (stdout reserved for JSON output)
 logging.basicConfig(
@@ -117,23 +161,8 @@ def main() -> None:
             print(json.dumps(output))
             sys.exit(0)
 
-        # Map injection_context string to enum
-        # Valid values: "session_start", "user_prompt_submit", "pre_tool_use", "subagent_start"
-        # Also accept PascalCase for backwards compatibility with enum values
-        context_mapping = {
-            "session_start": EnumInjectionContext.SESSION_START,
-            "sessionstart": EnumInjectionContext.SESSION_START,
-            "SessionStart": EnumInjectionContext.SESSION_START,
-            "user_prompt_submit": EnumInjectionContext.USER_PROMPT_SUBMIT,
-            "userpromptsubmit": EnumInjectionContext.USER_PROMPT_SUBMIT,
-            "UserPromptSubmit": EnumInjectionContext.USER_PROMPT_SUBMIT,
-            "pre_tool_use": EnumInjectionContext.PRE_TOOL_USE,
-            "pretooluse": EnumInjectionContext.PRE_TOOL_USE,
-            "PreToolUse": EnumInjectionContext.PRE_TOOL_USE,
-            "subagent_start": EnumInjectionContext.SUBAGENT_START,
-            "subagentstart": EnumInjectionContext.SUBAGENT_START,
-            "SubagentStart": EnumInjectionContext.SUBAGENT_START,
-        }
+        # Get cached context mapping (created once at module level)
+        context_mapping = _get_context_mapping(EnumInjectionContext)
         injection_context = context_mapping.get(
             injection_context_str, EnumInjectionContext.USER_PROMPT_SUBMIT
         )

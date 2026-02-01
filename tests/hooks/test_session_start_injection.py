@@ -13,17 +13,7 @@ Part of OMN-1675: Wire pattern injection to SessionStart.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import pytest
-
-# Ensure plugins path is available for session_marker import
-_plugin_lib_path = str(
-    Path(__file__).parent.parent.parent / "plugins" / "onex" / "hooks" / "lib"
-)
-if _plugin_lib_path not in sys.path:
-    sys.path.insert(0, _plugin_lib_path)
 
 from omniclaude.hooks.cohort_assignment import (
     CohortAssignmentConfig,
@@ -52,7 +42,7 @@ class TestSessionStartInjectionConfig:
         assert config.min_confidence == 0.7
         assert config.include_footer is False
         assert config.skip_user_prompt_if_injected is True
-        assert config.marker_file_dir == "/tmp"
+        assert config.marker_file_dir == "/tmp/omniclaude-sessions"
 
     def test_from_env_overrides(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test environment variable overrides."""

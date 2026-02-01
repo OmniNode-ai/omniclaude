@@ -75,6 +75,13 @@ if ! command -v jq >/dev/null 2>&1; then
     JQ_AVAILABLE=0
 fi
 
+# Preflight check for bc (used for timeout calculation)
+BC_AVAILABLE=1
+if ! command -v bc >/dev/null 2>&1; then
+    log "WARNING: bc not found, using shell arithmetic fallback for timeout calculation"
+    BC_AVAILABLE=0
+fi
+
 # =============================================================================
 # Emit Daemon Management
 # =============================================================================
@@ -321,7 +328,17 @@ if [[ "${SESSION_INJECTION_ENABLED:-true}" == "true" ]] && [[ -f "${HOOKS_LIB}/c
         }' 2>/dev/null)"
 
     # Call wrapper with timeout (500ms default, convert to seconds)
-    TIMEOUT_SEC=$(echo "scale=1; ${SESSION_INJECTION_TIMEOUT_MS:-500} / 1000" | bc)
+    # Use bc if available, otherwise fall back to shell arithmetic
+    if [[ "$BC_AVAILABLE" -eq 1 ]]; then
+        TIMEOUT_SEC=$(echo "scale=1; ${SESSION_INJECTION_TIMEOUT_MS:-500} / 1000" | bc)
+    else
+        # Shell arithmetic fallback: integer division + one decimal place
+        # e.g., 500ms -> 0.5s, 1000ms -> 1.0s, 1500ms -> 1.5s
+        _timeout_ms="${SESSION_INJECTION_TIMEOUT_MS:-500}"
+        _timeout_sec=$((_timeout_ms / 1000))
+        _timeout_decimal=$(((_timeout_ms % 1000) / 100))
+        TIMEOUT_SEC="${_timeout_sec}.${_timeout_decimal}"
+    fi
     PATTERN_RESULT="$(echo "$PATTERN_INPUT" | run_with_timeout "${TIMEOUT_SEC}" $PYTHON_CMD "${HOOKS_LIB}/context_injection_wrapper.py" 2>>"$LOG_FILE" || echo '{}')"
 
     # Extract results

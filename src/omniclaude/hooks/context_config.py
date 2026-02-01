@@ -115,7 +115,7 @@ class SessionStartInjectionConfig(BaseModel):
         description="Skip UserPromptSubmit injection if SessionStart already injected",
     )
     marker_file_dir: str = Field(
-        default="/tmp",  # noqa: S108
+        default="/tmp/omniclaude-sessions",  # noqa: S108
         description="Directory for session marker files",
     )
 
@@ -158,7 +158,7 @@ class SessionStartInjectionConfig(BaseModel):
             == "true",
             marker_file_dir=os.getenv(
                 "OMNICLAUDE_SESSION_INJECTION_MARKER_DIR",
-                "/tmp",  # noqa: S108
+                "/tmp/omniclaude-sessions",  # noqa: S108
             ),
         )
 
