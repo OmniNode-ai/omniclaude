@@ -8,6 +8,8 @@ This file provides operational guidance for working with code in this repository
 
 These rules are non-negotiable. Violations will cause production issues.
 
+**No backwards compatibility**: This repository has no external consumers. Schemas, APIs, and interfaces may change without deprecation periods. If something needs to change, change it.
+
 | Invariant | Rationale |
 |-----------|-----------|
 | Hook scripts must **never block** on Kafka | Blocking hooks freeze Claude Code UI |
@@ -100,14 +102,6 @@ These modules are intended for external use:
 | `USE_EVENT_ROUTING` | Enable agent routing via Kafka | No (default: false) |
 | `ENFORCEMENT_MODE` | Quality enforcement: `warn`, `block`, `silent` | No (default: warn) |
 
-### Known Aliases (legacy)
-
-| Alias | Canonical | Notes |
-|-------|-----------|-------|
-| `ONEX_ENV` | `KAFKA_ENVIRONMENT` | Some services use this; prefer `KAFKA_ENVIRONMENT` |
-
-**If both are set, `KAFKA_ENVIRONMENT` takes precedence.**
-
 ---
 
 ## Project Structure
@@ -129,10 +123,10 @@ omniclaude/
 │   ├── hooks/                   # Hook scripts and library
 │   │   ├── hooks.json           # Hook configuration
 │   │   ├── scripts/             # Shell handlers
-│   │   └── lib/                 # Python modules (22 files)
-│   ├── agents/configs/          # Agent YAML (53 agents)
-│   ├── commands/                # Commands (9)
-│   └── skills/                  # Skills (40+)
+│   │   └── lib/                 # Python handler modules
+│   ├── agents/configs/          # Agent YAML definitions
+│   ├── commands/                # Slash command definitions
+│   └── skills/                  # Skill definitions
 ├── tests/                       # Test suite
 └── _archive/                    # Archived legacy code
 ```
