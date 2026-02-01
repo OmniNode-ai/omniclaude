@@ -101,14 +101,18 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
     # Starting with "unknown" as default - heuristics can be added later
     (
         # Build session.outcome payload
+        # TODO(OMN-1735): Add heuristics to map session end reasons to outcomes
         OUTCOME="unknown"
+        EMITTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
         OUTCOME_PAYLOAD=$(jq -n \
             --arg session_id "$SESSION_ID" \
             --arg outcome "$OUTCOME" \
+            --arg emitted_at "$EMITTED_AT" \
             '{
                 session_id: $session_id,
-                outcome: $outcome
+                outcome: $outcome,
+                emitted_at: $emitted_at
             }' 2>/dev/null)
 
         # Validate payload was constructed successfully
