@@ -24,9 +24,7 @@ from omniclaude.hooks.contracts.contract_experiment_cohort import (
 )
 from omniclaude.hooks.contracts.contract_hook_prompt_submitted import (
     HookPromptSubmittedContract,
-    ModelDefinition,
     Privacy,
-    PropertyDefinition,
 )
 from omniclaude.hooks.contracts.contract_hook_session_ended import (
     HookSessionEndedContract,
@@ -43,6 +41,11 @@ from omniclaude.hooks.contracts.contract_hook_tool_executed import (
     Runtime,
     TimestampPolicy,
     ToolMatching,
+)
+from omniclaude.hooks.contracts.schema import (
+    ModelJsonSchemaDefinition,
+    ModelJsonSchemaProperty,
+    assert_no_extra_fields,
 )
 
 # Contract directory location
@@ -75,9 +78,11 @@ __all__ = [
     "Metadata",
     # Hook prompt submitted contract models
     "HookPromptSubmittedContract",
-    "ModelDefinition",
     "Privacy",
-    "PropertyDefinition",
+    # Shared JSON Schema models (canonical source)
+    "ModelJsonSchemaDefinition",
+    "ModelJsonSchemaProperty",
+    "assert_no_extra_fields",
     # Hook session started contract
     "HookSessionStartedContract",
     # Hook session ended contract

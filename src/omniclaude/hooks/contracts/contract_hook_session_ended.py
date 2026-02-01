@@ -48,6 +48,7 @@ from omniclaude.hooks.contracts.contract_hook_tool_executed import (
     Runtime,
     TimestampPolicy,
 )
+from omniclaude.hooks.contracts.schema import ModelJsonSchemaDefinition
 
 # =============================================================================
 # Root Contract Model
@@ -174,7 +175,7 @@ class HookSessionEndedContract(BaseModel):
     )
 
     # Model definitions (JSON Schema-like documentation)
-    definitions: dict[str, object] = Field(
+    definitions: dict[str, ModelJsonSchemaDefinition] = Field(
         ...,
         description="JSON Schema-like model definitions for documentation",
     )
@@ -227,4 +228,6 @@ class HookSessionEndedContract(BaseModel):
 __all__ = [
     # Root contract
     "HookSessionEndedContract",
+    # Re-export from shared schema module for backwards compatibility
+    "ModelJsonSchemaDefinition",
 ]

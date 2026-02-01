@@ -40,6 +40,7 @@ from omniclaude.hooks.contracts.contract_experiment_cohort import (
     Metadata,
     Version,
 )
+from omniclaude.hooks.contracts.schema import ModelJsonSchemaDefinition
 
 # =============================================================================
 # Nested Models
@@ -402,7 +403,7 @@ class HookToolExecutedContract(BaseModel):
         min_length=1,
         description="List of capabilities provided by the node",
     )
-    definitions: dict[str, object] = Field(
+    definitions: dict[str, ModelJsonSchemaDefinition] = Field(
         ...,
         description="JSON schema-like definitions for documentation",
     )
@@ -457,4 +458,6 @@ __all__ = [
     "Capability",
     # Root contract
     "HookToolExecutedContract",
+    # Re-export from shared schema module for convenience
+    "ModelJsonSchemaDefinition",
 ]
