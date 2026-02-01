@@ -183,9 +183,9 @@ hardening_tickets: []
 5. Allow edits via user feedback
 
 **Mutations allowed:**
-- `requirements[]` (append/edit)
-- `verification[]` (append/edit)
-- `gates[]` (append/edit)
+- `requirements[]` (append; edits allowed during spec phase only)
+- `verification[]` (append; edits allowed during spec phase only)
+- `gates[]` (append; edits allowed during spec phase only)
 
 **Exit to implementation:**
 - Invariant: `len(requirements) >= 1` AND `len(verification) >= 1`
@@ -326,12 +326,15 @@ def extract_contract(description: str) -> dict | None:
 
     # Extract YAML from fenced code block
     import re
-    match = re.search(r'```yaml\n(.*?)\n```', contract_section, re.DOTALL)
+    match = re.search(r'```(?:yaml|YAML)?\s*\n(.*?)\n\s*```', contract_section, re.DOTALL)
     if not match:
         return None
 
     import yaml
-    return yaml.safe_load(match.group(1))
+    try:
+        return yaml.safe_load(match.group(1))
+    except yaml.YAMLError:
+        return None
 ```
 
 ### Writing Contract
@@ -348,10 +351,10 @@ def update_description_with_contract(description: str, contract: dict) -> str:
     if marker in description:
         # Replace existing contract section
         idx = description.rfind(marker)
-        # Find the start of the section (including preceding ---)
-        section_start = description.rfind("---", 0, idx)
-        if section_start != -1 and section_start > 0:
-            return description[:section_start] + contract_block
+        # Find --- on its own line immediately before ## Contract
+        delimiter_match = re.search(r'\n---\n\s*$', description[:idx])
+        if delimiter_match:
+            return description[:delimiter_match.start()] + contract_block
         return description[:idx] + contract_block
     else:
         # Append new contract section
@@ -460,7 +463,7 @@ def is_done(contract) -> bool:
 | Active phase only | Only mutate fields belonging to active phase |
 | No deletion | Never delete answered questions |
 | No rewrite of history | Never rewrite past commits or verification results |
-| Append-only | Questions, requirements, verification, commits are append-only |
+| Append-only | Questions, requirements, verification, commits are append-only (requirements/verification/gates editable during spec phase) |
 
 ---
 

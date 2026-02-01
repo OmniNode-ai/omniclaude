@@ -1,6 +1,6 @@
 ---
 name: ticket-work
-description: Contract-driven ticket execution with Linear integration - orchestrates intake, research, questions, spec, implementation, and review phases with explicit human gates
+description: Contract-driven ticket execution with Linear integration - orchestrates intake, research, questions, spec, implementation, review, and done phases with explicit human gates
 version: 1.0.0
 category: workflow
 tags:
@@ -75,6 +75,7 @@ The skill preserves all existing ticket description content above the contract s
 
 | Transition | Trigger Keywords |
 |------------|------------------|
+| intake → research | *(auto-advance, no gate required)* |
 | research → questions | "questions ready", "done researching" |
 | questions → spec | "requirements clear", "proceed to spec" |
 | spec → implementation | "approve spec", "build it" |
