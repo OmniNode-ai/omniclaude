@@ -13,6 +13,11 @@ Part of OMN-1675: Wire pattern injection to SessionStart.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+from typing import Any
+from unittest.mock import AsyncMock, patch
+
 import pytest
 
 from omniclaude.hooks.cohort_assignment import (
@@ -402,3 +407,227 @@ class TestSessionStartConfigIntegration:
         # This tests that the nested config can be loaded separately.
         session_config = SessionStartInjectionConfig.from_env()
         assert session_config.max_patterns == 15
+
+
+# =============================================================================
+# Test Data for Event Emission Tests
+# =============================================================================
+
+SAMPLE_PATTERN_FOR_EVENT: dict[str, Any] = {
+    "pattern_id": "pat-event-001",
+    "domain": "testing",
+    "title": "Event Test Pattern",
+    "description": "Pattern for event emission testing",
+    "confidence": 0.9,
+    "usage_count": 10,
+    "success_rate": 0.85,
+    "example_reference": "src/test.py:42",
+}
+
+SAMPLE_PATTERN_FILE_FOR_EVENT: dict[str, Any] = {
+    "version": "1.0.0",
+    "last_updated": "2025-01-26T12:00:00Z",
+    "patterns": [SAMPLE_PATTERN_FOR_EVENT],
+}
+
+
+# =============================================================================
+# Tests for Event Emission from SessionStart Injection
+# =============================================================================
+
+
+class TestSessionStartEventEmission:
+    """Tests for event emission from SessionStart injection.
+
+    Part of OMN-1675: Verify event emission is wired correctly for SessionStart.
+    """
+
+    @pytest.fixture(autouse=True)
+    def isolated_home(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+        """Isolate tests from user's real ~/.claude/ directory."""
+        fake_home = tmp_path / "fake_home"
+        fake_home.mkdir()
+        monkeypatch.setattr(Path, "home", lambda: fake_home)
+        return fake_home
+
+    @pytest.fixture
+    def temp_project_dir(self, tmp_path: Path) -> Path:
+        """Create a temporary project directory with .claude folder."""
+        project_dir = tmp_path / "project"
+        project_dir.mkdir()
+        claude_dir = project_dir / ".claude"
+        claude_dir.mkdir()
+        return project_dir
+
+    @pytest.fixture
+    def pattern_file(self, temp_project_dir: Path) -> Path:
+        """Create a sample pattern file with patterns for event testing."""
+        pattern_path = temp_project_dir / ".claude" / "learned_patterns.json"
+        with pattern_path.open("w") as f:
+            json.dump(SAMPLE_PATTERN_FILE_FOR_EVENT, f)
+        return pattern_path
+
+    @pytest.fixture
+    def permissive_config(self) -> ContextInjectionConfig:
+        """Config with low threshold to allow all patterns through."""
+        return ContextInjectionConfig(
+            enabled=True,
+            min_confidence=0.0,
+            max_patterns=20,
+            db_enabled=False,
+        )
+
+    @pytest.mark.asyncio
+    async def test_session_start_injection_emits_event(
+        self,
+        temp_project_dir: Path,
+        pattern_file: Path,
+        permissive_config: ContextInjectionConfig,
+    ) -> None:
+        """Test that SessionStart injection emits Kafka event when emit_event=True.
+
+        Part of OMN-1675: Verify event emission is wired correctly.
+        """
+        from omniclaude.hooks.handler_context_injection import (
+            _reset_emit_event_cache,
+            inject_patterns,
+        )
+        from omniclaude.hooks.models_injection_tracking import EnumInjectionContext
+
+        # Reset the lazy import cache to allow patching
+        _reset_emit_event_cache()
+
+        # Patch both the hook event emitter and the injection record emit
+        with (
+            patch(
+                "omniclaude.hooks.handler_context_injection.emit_hook_event",
+                new_callable=AsyncMock,
+            ) as mock_emit,
+            patch(
+                "plugins.onex.hooks.lib.emit_client_wrapper.emit_event"
+            ) as mock_emit_client,
+        ):
+            mock_emit.return_value = None  # emit_hook_event returns None
+            mock_emit_client.return_value = True
+
+            # Use session ID that deterministically maps to TREATMENT cohort
+            # "test-session-0" -> seed=52 -> TREATMENT (from test_injection_tracking.py)
+            result = await inject_patterns(
+                project_root=str(temp_project_dir),
+                config=permissive_config,
+                emit_event=True,
+                session_id="test-session-0",
+                correlation_id="corr-456",
+                injection_context=EnumInjectionContext.SESSION_START,
+            )
+
+            # Should succeed with patterns (treatment cohort)
+            assert result.success is True
+            assert result.pattern_count > 0
+
+            # Hook event should have been emitted
+            assert mock_emit.called, (
+                "emit_hook_event should be called when emit_event=True"
+            )
+
+    @pytest.mark.asyncio
+    async def test_session_start_injection_event_not_emitted_when_disabled(
+        self,
+        temp_project_dir: Path,
+        pattern_file: Path,
+        permissive_config: ContextInjectionConfig,
+    ) -> None:
+        """Test that SessionStart injection does NOT emit event when emit_event=False.
+
+        Part of OMN-1675: Verify emit_event flag is respected.
+        """
+        from omniclaude.hooks.handler_context_injection import (
+            _reset_emit_event_cache,
+            inject_patterns,
+        )
+        from omniclaude.hooks.models_injection_tracking import EnumInjectionContext
+
+        # Reset the lazy import cache to allow patching
+        _reset_emit_event_cache()
+
+        # Patch the injection record emit to avoid async context issues
+        with (
+            patch(
+                "omniclaude.hooks.handler_context_injection.emit_hook_event",
+                new_callable=AsyncMock,
+            ) as mock_emit,
+            patch(
+                "plugins.onex.hooks.lib.emit_client_wrapper.emit_event"
+            ) as mock_emit_client,
+        ):
+            mock_emit.return_value = None
+            mock_emit_client.return_value = True
+
+            # Use session ID that deterministically maps to TREATMENT cohort
+            # "test-session-0" -> seed=52 -> TREATMENT (from test_injection_tracking.py)
+            result = await inject_patterns(
+                project_root=str(temp_project_dir),
+                config=permissive_config,
+                emit_event=False,  # Explicitly disabled
+                session_id="test-session-0",
+                correlation_id="corr-012",
+                injection_context=EnumInjectionContext.SESSION_START,
+            )
+
+            # Should succeed with patterns (treatment cohort)
+            assert result.success is True
+            assert result.pattern_count > 0
+
+            # Hook event should NOT have been emitted (emit_event=False)
+            assert not mock_emit.called, (
+                "emit_hook_event should NOT be called when emit_event=False"
+            )
+
+    @pytest.mark.asyncio
+    async def test_session_start_injection_context_passed_to_record(
+        self,
+        temp_project_dir: Path,
+        pattern_file: Path,
+        permissive_config: ContextInjectionConfig,
+    ) -> None:
+        """Test that SESSION_START context is correctly passed to injection record.
+
+        Part of OMN-1675: Verify injection_context flows through to tracking.
+        """
+        from omniclaude.hooks.handler_context_injection import (
+            _reset_emit_event_cache,
+            inject_patterns,
+        )
+        from omniclaude.hooks.models_injection_tracking import EnumInjectionContext
+
+        # Reset the lazy import cache to allow patching
+        _reset_emit_event_cache()
+
+        with patch(
+            "plugins.onex.hooks.lib.emit_client_wrapper.emit_event"
+        ) as mock_emit_client:
+            mock_emit_client.return_value = True
+
+            # Use a session ID that maps to treatment cohort
+            # "test-session-0" -> seed=52 -> TREATMENT (from test_injection_tracking.py)
+            result = await inject_patterns(
+                project_root=str(temp_project_dir),
+                config=permissive_config,
+                emit_event=False,  # Disable hook event, just test injection record
+                session_id="test-session-0",
+                correlation_id="corr-context-test",
+                injection_context=EnumInjectionContext.SESSION_START,
+            )
+
+            # Should succeed with patterns
+            assert result.success is True
+            assert result.pattern_count > 0
+
+            # Verify the injection record was emitted with correct context
+            mock_emit_client.assert_called_once()
+            call_args = mock_emit_client.call_args
+            event_type = call_args[0][0]
+            payload = call_args[0][1]
+
+            assert event_type == "injection.recorded"
+            assert payload["injection_context"] == "SessionStart"

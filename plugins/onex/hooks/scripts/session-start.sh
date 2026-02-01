@@ -62,6 +62,8 @@ SESSION_INJECTION_MIN_CONFIDENCE="${OMNICLAUDE_SESSION_INJECTION_MIN_CONFIDENCE:
 SESSION_INJECTION_INCLUDE_FOOTER="${OMNICLAUDE_SESSION_INJECTION_INCLUDE_FOOTER:-false}"
 
 # Define timeout function (portable, works on macOS)
+# Uses perl alarm() because GNU coreutils 'timeout' command is not available
+# on macOS by default. perl is pre-installed on macOS and provides SIGALRM.
 run_with_timeout() {
     local timeout_sec="$1"
     shift
@@ -338,6 +340,10 @@ if [[ "${SESSION_INJECTION_ENABLED:-true}" == "true" ]] && [[ -f "${HOOKS_LIB}/c
         _timeout_sec=$((_timeout_ms / 1000))
         _timeout_decimal=$(((_timeout_ms % 1000) / 100))
         TIMEOUT_SEC="${_timeout_sec}.${_timeout_decimal}"
+        # Ensure minimum timeout of 0.1s to prevent effectively disabling timeout
+        if [[ "$TIMEOUT_SEC" == "0.0" ]] || [[ "$TIMEOUT_SEC" == "0" ]]; then
+            TIMEOUT_SEC="0.1"
+        fi
     fi
     PATTERN_RESULT="$(echo "$PATTERN_INPUT" | run_with_timeout "${TIMEOUT_SEC}" $PYTHON_CMD "${HOOKS_LIB}/context_injection_wrapper.py" 2>>"$LOG_FILE" || echo '{}')"
 
