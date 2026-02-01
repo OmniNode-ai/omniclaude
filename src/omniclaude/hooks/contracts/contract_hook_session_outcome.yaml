@@ -39,6 +39,8 @@ input_model:
   name: "ModelSessionOutcome"
   module: "omniclaude.hooks.schemas"
   description: "Session outcome event payload with outcome classification."
+# Output model (planned - module to be created in future PR)
+# TODO(OMN-1735): Create omniclaude.hooks.models module with ModelEventPublishResult
 output_model:
   name: "ModelEventPublishResult"
   module: "omniclaude.hooks.models"

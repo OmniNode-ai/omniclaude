@@ -21,6 +21,7 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
+from omnibase_core.enums import EnumClaudeCodeSessionOutcome
 from omnibase_core.models.errors import ModelOnexError
 from pydantic import ValidationError
 
@@ -32,6 +33,7 @@ from omniclaude.hooks.schemas import (
     ModelHookSessionEndedPayload,
     ModelHookSessionStartedPayload,
     ModelHookToolExecutedPayload,
+    ModelSessionOutcome,
     sanitize_text,
 )
 from omniclaude.hooks.topics import TopicBase, build_topic
@@ -403,6 +405,182 @@ class TestModelHookSessionEndedPayload:
         assert "correlation_id" in error_str
         assert "causation_id" in error_str
         assert "emitted_at" in error_str
+
+
+# =============================================================================
+# Session Outcome Tests
+# =============================================================================
+
+
+class TestModelSessionOutcome:
+    """Tests for session outcome event schema."""
+
+    def test_valid_instantiation_with_all_required_fields(self) -> None:
+        """Create session outcome with all required fields."""
+        emitted_at = make_timestamp()
+        event = ModelSessionOutcome(
+            session_id="abc12345-1234-5678-abcd-1234567890ab",
+            outcome=EnumClaudeCodeSessionOutcome.SUCCESS,
+            emitted_at=emitted_at,
+        )
+        assert event.session_id == "abc12345-1234-5678-abcd-1234567890ab"
+        assert event.outcome == EnumClaudeCodeSessionOutcome.SUCCESS
+        assert event.emitted_at == emitted_at
+
+    def test_event_name_defaults_to_session_outcome(self) -> None:
+        """event_name has default value of 'session.outcome'."""
+        event = ModelSessionOutcome(
+            session_id="test-session",
+            outcome=EnumClaudeCodeSessionOutcome.UNKNOWN,
+            emitted_at=make_timestamp(),
+        )
+        assert event.event_name == "session.outcome"
+
+    def test_event_name_literal_enforced(self) -> None:
+        """event_name must be exactly 'session.outcome'."""
+        # Trying to pass a different value should fail
+        with pytest.raises(ValidationError):
+            ModelSessionOutcome(
+                session_id="test-session",
+                outcome=EnumClaudeCodeSessionOutcome.SUCCESS,
+                emitted_at=make_timestamp(),
+                event_name="wrong.event.name",  # type: ignore[arg-type]
+            )
+
+    def test_frozen_immutable(self) -> None:
+        """Events are immutable (frozen=True)."""
+        event = ModelSessionOutcome(
+            session_id="test-session",
+            outcome=EnumClaudeCodeSessionOutcome.SUCCESS,
+            emitted_at=make_timestamp(),
+        )
+        with pytest.raises(ValidationError):
+            event.session_id = "new-value"  # type: ignore[misc]
+
+    def test_frozen_outcome_immutable(self) -> None:
+        """Outcome field is immutable (frozen=True)."""
+        event = ModelSessionOutcome(
+            session_id="test-session",
+            outcome=EnumClaudeCodeSessionOutcome.SUCCESS,
+            emitted_at=make_timestamp(),
+        )
+        with pytest.raises(ValidationError):
+            event.outcome = EnumClaudeCodeSessionOutcome.FAILED  # type: ignore[misc]
+
+    def test_extra_fields_forbidden(self) -> None:
+        """Extra fields are not allowed (extra='forbid')."""
+        with pytest.raises(ValidationError) as exc_info:
+            ModelSessionOutcome(
+                session_id="test-session",
+                outcome=EnumClaudeCodeSessionOutcome.SUCCESS,
+                emitted_at=make_timestamp(),
+                extra_field="should_fail",  # type: ignore[call-arg]
+            )
+        assert "extra_field" in str(exc_info.value)
+
+    def test_outcome_accepts_all_enum_values(self) -> None:
+        """Outcome field accepts all valid enum values."""
+        valid_outcomes = [
+            EnumClaudeCodeSessionOutcome.SUCCESS,
+            EnumClaudeCodeSessionOutcome.FAILED,
+            EnumClaudeCodeSessionOutcome.ABANDONED,
+            EnumClaudeCodeSessionOutcome.UNKNOWN,
+        ]
+        for outcome in valid_outcomes:
+            event = ModelSessionOutcome(
+                session_id="test-session",
+                outcome=outcome,
+                emitted_at=make_timestamp(),
+            )
+            assert event.outcome == outcome
+
+    def test_session_id_requires_min_length_1(self) -> None:
+        """session_id must have at least 1 character."""
+        # Empty string should fail
+        with pytest.raises(ValidationError) as exc_info:
+            ModelSessionOutcome(
+                session_id="",  # Empty string - should fail
+                outcome=EnumClaudeCodeSessionOutcome.SUCCESS,
+                emitted_at=make_timestamp(),
+            )
+        assert "session_id" in str(exc_info.value)
+
+    def test_session_id_with_min_length(self) -> None:
+        """session_id with exactly 1 character is valid."""
+        event = ModelSessionOutcome(
+            session_id="x",  # Single character - should pass
+            outcome=EnumClaudeCodeSessionOutcome.SUCCESS,
+            emitted_at=make_timestamp(),
+        )
+        assert event.session_id == "x"
+
+    def test_session_id_is_required(self) -> None:
+        """session_id is required."""
+        with pytest.raises(ValidationError) as exc_info:
+            ModelSessionOutcome(
+                # Missing session_id
+                outcome=EnumClaudeCodeSessionOutcome.SUCCESS,
+                emitted_at=make_timestamp(),
+            )
+        assert "session_id" in str(exc_info.value)
+
+    def test_outcome_is_required(self) -> None:
+        """outcome is required."""
+        with pytest.raises(ValidationError) as exc_info:
+            ModelSessionOutcome(
+                session_id="test-session",
+                # Missing outcome
+                emitted_at=make_timestamp(),
+            )
+        assert "outcome" in str(exc_info.value)
+
+    def test_emitted_at_is_required(self) -> None:
+        """emitted_at is required."""
+        with pytest.raises(ValidationError) as exc_info:
+            ModelSessionOutcome(
+                session_id="test-session",
+                outcome=EnumClaudeCodeSessionOutcome.SUCCESS,
+                # Missing emitted_at
+            )
+        assert "emitted_at" in str(exc_info.value)
+
+    def test_emitted_at_naive_datetime_converted_to_utc(self) -> None:
+        """Naive datetimes are converted to UTC (graceful degradation)."""
+        naive_dt = datetime(2025, 1, 19, 12, 0, 0)  # No tzinfo
+        event = ModelSessionOutcome(
+            session_id="test-session",
+            outcome=EnumClaudeCodeSessionOutcome.SUCCESS,
+            emitted_at=naive_dt,
+        )
+        # Resulting timestamp should be timezone-aware (UTC)
+        assert event.emitted_at.tzinfo is not None
+
+    def test_emitted_at_accepts_utc(self) -> None:
+        """UTC timezone is accepted."""
+        utc_dt = datetime(2025, 1, 19, 12, 0, 0, tzinfo=UTC)
+        event = ModelSessionOutcome(
+            session_id="test-session",
+            outcome=EnumClaudeCodeSessionOutcome.SUCCESS,
+            emitted_at=utc_dt,
+        )
+        assert event.emitted_at == utc_dt
+        assert event.emitted_at.tzinfo is not None
+
+    def test_json_serialization_roundtrip(self) -> None:
+        """Event survives JSON roundtrip."""
+        emitted_at = make_timestamp()
+        original = ModelSessionOutcome(
+            session_id="test-session-123",
+            outcome=EnumClaudeCodeSessionOutcome.FAILED,
+            emitted_at=emitted_at,
+        )
+        json_str = original.model_dump_json()
+        restored = ModelSessionOutcome.model_validate_json(json_str)
+
+        assert restored.event_name == original.event_name
+        assert restored.session_id == original.session_id
+        assert restored.outcome == original.outcome
+        assert restored.emitted_at == original.emitted_at
 
 
 # =============================================================================

@@ -106,8 +106,8 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
             exit 0  # Exit the subshell cleanly
         fi
 
-        # Validate UUID format
-        if [[ ! "$SESSION_ID" =~ ^[a-f0-9-]{36}$ ]]; then
+        # Validate UUID format (8-4-4-4-12 structure, case-insensitive)
+        if [[ ! "$SESSION_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
             log "WARNING: SESSION_ID '$SESSION_ID' is not valid UUID format, skipping session.outcome emission"
             exit 0
         fi
