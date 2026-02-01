@@ -229,21 +229,54 @@ hardening_tickets: []
 **Entry invariant:** `len(commits) >= 1` AND human signal
 
 **Actions:**
-1. Run verification steps:
+
+1. **Push branch and create PR:**
    ```bash
-   # For each verification step
+   git push -u origin {branch}
+   gh pr create --title "{ticket_id}: {title}" --body "..."
+   ```
+   Update `pr_url` in contract.
+
+2. **Code review loop** (repeat until done):
+   ```
+   Review code locally → Find issues → Fix issues → Commit → Re-review
+   ```
+
+   - Review all changed files for:
+     - Logic errors
+     - Missing edge cases
+     - Inconsistencies with requirements
+     - Documentation accuracy
+   - Fix issues found (do NOT push between iterations)
+   - Re-review locally
+   - Continue until:
+     - All issues fixed, OR
+     - Only nitpicks/minor issues remain (can defer)
+
+3. **Run verification steps:**
+   ```bash
    uv run pytest tests/           # unit_tests
    uv run ruff check .            # lint
    uv run mypy src/               # mypy
    ```
-2. Update `verification[].status` (passed/failed)
-3. Update `verification[].evidence` (command output)
-4. Update `verification[].executed_at`
-5. For gates, present for human approval
-6. If verification fails, allow user to fix and re-run
-7. If hardening tickets needed, create and add to `hardening_tickets[]`
+
+4. **Update contract:**
+   - `verification[].status` (passed/failed)
+   - `verification[].evidence` (command output)
+   - `verification[].executed_at`
+
+5. **Return to user** with review summary:
+   - Issues found and fixed
+   - Remaining minor/nitpick issues (if any)
+   - Verification results
+   - Ask for approval to proceed
+
+6. If hardening tickets needed, create and add to `hardening_tickets[]`
+
+**Important:** Do NOT merge the PR. That decision belongs to the user.
 
 **Mutations allowed:**
+- `commits[]` (append only - from review fixes)
 - `verification[].status`
 - `verification[].evidence`
 - `verification[].executed_at`
@@ -366,7 +399,7 @@ For `script` kind: Use the `command` field from the verification step.
 **Never:**
 - Silently swallow errors
 - Persist invalid contract state
-- Advance phase without explicit human signal
+- Advance phase without explicit human signal (except intake→research which is automatic)
 
 ---
 
@@ -440,8 +473,8 @@ When detecting human signals for phase transitions:
 3. **Phase-gated:** Only accept signals relevant to current phase
 
 **Do not:**
-- Auto-advance based on task completion alone
-- Skip confirmation for phase transitions
+- Auto-advance based on task completion alone (except intake→research)
+- Skip confirmation for meaningful phase transitions
 - Accept signals for phases we're not ready to enter
 
 ---

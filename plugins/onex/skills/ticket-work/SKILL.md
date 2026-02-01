@@ -22,7 +22,7 @@ args:
 
 Orchestrate ticket execution through structured phases with Linear as the single source of truth. The contract YAML block in the ticket description tracks all state.
 
-**Critical Principle:** This skill does NOT self-advance phases. Every phase transition requires explicit human confirmation.
+**Critical Principle:** This skill requires explicit human confirmation for meaningful phase transitions. The intake→research transition is automatic (nothing to review), but all other transitions require human approval.
 
 **Announce at start:** "I'm using the ticket-work skill to work on {ticket_id}."
 
@@ -46,7 +46,7 @@ intake → research → questions → spec → implementation → review → don
 
 Each transition requires:
 - Entry invariant satisfied
-- Human gate (keyword + confirmation)
+- Human gate (keyword + confirmation) - except intake→research which is automatic
 - Exit invariant satisfied
 
 ## Contract Location
@@ -83,4 +83,4 @@ The skill preserves all existing ticket description content above the contract s
 ## See Also
 
 - Linear MCP tools (`mcp__linear-server__*`)
-- Depends on: OMN-1807 (ModelTicketContract in omnibase_core)
+- Related: OMN-1807 (ModelTicketContract in omnibase_core) - contract schema mirrors this model
