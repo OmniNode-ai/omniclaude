@@ -51,7 +51,7 @@ ops:
         AND deprecated_at IS NULL
         AND is_current = TRUE
       ORDER BY quality_score DESC NULLS LAST, pattern_id ASC
-      LIMIT :limit
+      LIMIT $1
     params:
       limit:
         name: limit
@@ -85,7 +85,7 @@ ops:
         success_rate,
         example_reference
       FROM learned_patterns
-      WHERE pattern_id = :pattern_id::uuid
+      WHERE pattern_id = $1::uuid
     params:
       pattern_id:
         name: pattern_id
@@ -118,9 +118,9 @@ ops:
         AND disabled_at IS NULL
         AND deprecated_at IS NULL
         AND is_current = TRUE
-        AND (domain = :domain OR domain = 'general')
+        AND (domain = $1 OR domain = 'general')
       ORDER BY quality_score DESC NULLS LAST, pattern_id ASC
-      LIMIT :limit
+      LIMIT $2
     params:
       domain:
         name: domain

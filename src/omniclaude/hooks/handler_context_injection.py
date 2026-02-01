@@ -626,6 +626,8 @@ class HandlerContextInjection:
                 command_timeout=cfg.timeout_ms / 1000.0,
             )
         except Exception as e:
+            # Clear contract to ensure clean state for retry
+            self._contract = None
             raise PatternConnectionError(f"Failed to create database pool: {e}") from e
 
         # Create runtime
