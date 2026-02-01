@@ -98,12 +98,15 @@ async def publish_handler_contracts(
         ...     print(f"Errors: {len(result.contract_errors)}")
     """
     # Resolve environment if provided (override config setting)
+    resolved_env: str | None = None
     if environment is not None:
         resolved_env = environment.strip() or "dev"
         config = config.model_copy(update={"environment": resolved_env})
 
-    # Delegate to infra service
-    publisher = await ServiceContractPublisher.from_container(container, config)
+    # Delegate to infra service, passing environment if explicitly provided
+    publisher = await ServiceContractPublisher.from_container(
+        container, config, environment=resolved_env
+    )
     return await publisher.publish_all()
 
 

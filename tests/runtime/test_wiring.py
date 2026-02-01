@@ -139,6 +139,27 @@ class MockModelContractPublisherConfig:
         self.allow_zero_contracts = allow_zero_contracts
         self.environment = environment
 
+    def model_copy(
+        self, update: dict | None = None
+    ) -> MockModelContractPublisherConfig:
+        """Create a copy of the config with optional field updates.
+
+        Mimics Pydantic's model_copy(update=...) method.
+        """
+        new_config = MockModelContractPublisherConfig(
+            mode=self.mode,
+            filesystem_root=self.filesystem_root,
+            package_module=self.package_module,
+            fail_fast=self.fail_fast,
+            allow_zero_contracts=self.allow_zero_contracts,
+            environment=self.environment,
+        )
+        if update:
+            for key, value in update.items():
+                if hasattr(new_config, key):
+                    setattr(new_config, key, value)
+        return new_config
+
 
 class MockContractPublishingInfraError(Exception):
     """Mock ContractPublishingInfraError from omnibase_infra."""
@@ -344,7 +365,7 @@ class TestServiceContractPublisherAPI:
         """Verify that ServiceContractPublisher emits events to Kafka.
 
         This test confirms that:
-        1. The ServiceContractPublisher.from_container() is called
+        1. The ServiceContractPublisher.from_container() is called with correct args
         2. The publish_all() method is invoked
         3. Events are published with correct handler ID
         """
@@ -381,11 +402,17 @@ class TestServiceContractPublisherAPI:
         )
         result = await publisher.publish_all()
 
-        # Assert: from_container was called
-        ServiceContractPublisher.from_container.assert_called_once()
+        # Assert: from_container was called with correct parameters
+        ServiceContractPublisher.from_container.assert_called_once_with(
+            container=mock_container,
+            config=config,
+            environment="test",
+        )
 
-        # Assert: publish_all was called
-        mock_publisher_instance.publish_all.assert_called_once()
+        # Assert: publish_all was called exactly once (no extra calls)
+        assert mock_publisher_instance.publish_all.call_count == 1, (
+            f"Expected publish_all to be called once, got {mock_publisher_instance.publish_all.call_count}"
+        )
 
         # Assert: handler ID is in the returned list
         assert "effect.learned_pattern.storage.postgres" in result.published, (
@@ -403,8 +430,9 @@ class TestServiceContractPublisherAPI:
         """Verify that missing contracts directory returns empty list without raising.
 
         When the contracts_root directory does not exist, the function should:
-        1. Return an empty list
-        2. Not raise an exception (when allow_zero_contracts=True)
+        1. Delegate to ServiceContractPublisher with correct config
+        2. Return an empty list
+        3. Not raise an exception (when allow_zero_contracts=True)
         """
         from omnibase_infra.services.contract_publisher import (
             ModelContractPublisherConfig,
@@ -420,6 +448,9 @@ class TestServiceContractPublisherAPI:
             allow_zero_contracts=True,  # Allow empty result
         )
 
+        # Track delegation to verify config is passed correctly
+        captured_config = {}
+
         # Setup mock to return empty result
         mock_publisher_instance = MagicMock()
         mock_publisher_instance.publish_all = AsyncMock(
@@ -430,8 +461,14 @@ class TestServiceContractPublisherAPI:
                 duration_ms=10.0,
             )
         )
+
+        def capture_from_container(container, config, environment=None):
+            captured_config["filesystem_root"] = config.filesystem_root
+            captured_config["allow_zero_contracts"] = config.allow_zero_contracts
+            return mock_publisher_instance
+
         ServiceContractPublisher.from_container = MagicMock(
-            return_value=mock_publisher_instance
+            side_effect=capture_from_container
         )
 
         # Act
@@ -441,6 +478,15 @@ class TestServiceContractPublisherAPI:
             environment="test",
         )
         result = await publisher.publish_all()
+
+        # Assert: config was passed with correct settings
+        assert captured_config["filesystem_root"] == non_existent_path, (
+            f"Expected config.filesystem_root={non_existent_path}, "
+            f"got {captured_config['filesystem_root']}"
+        )
+        assert captured_config["allow_zero_contracts"] is True, (
+            "Expected config.allow_zero_contracts=True for this test"
+        )
 
         # Assert: returns empty published and error lists
         assert result.published == [], (
@@ -513,13 +559,12 @@ class TestServiceContractPublisherAPI:
         temp_contracts_dir: Path,
         mock_omnibase_imports: dict,
     ) -> None:
-        """Verify ModelPublishResult has all expected fields.
+        """Verify ModelPublishResult is correctly returned from delegation.
 
-        The result should contain:
-        - published: list of handler IDs
-        - contract_errors: list of ContractError
-        - infra_errors: list of InfraError
-        - duration_ms: float
+        This test verifies:
+        1. publish_all is called exactly once
+        2. The result object is returned unchanged (identity check)
+        3. All expected fields are present
         """
         from omnibase_infra.services.contract_publisher import (
             ModelContractPublisherConfig,
@@ -531,16 +576,16 @@ class TestServiceContractPublisherAPI:
             filesystem_root=temp_contracts_dir,
         )
 
-        # Setup mock with full result structure
-        mock_publisher_instance = MagicMock()
-        mock_publisher_instance.publish_all = AsyncMock(
-            return_value=MockModelPublishResult(
-                published=["test.handler.mock"],
-                contract_errors=[],
-                infra_errors=[],
-                duration_ms=25.5,
-            )
+        # Setup mock with full result structure - use specific object for identity check
+        expected_result = MockModelPublishResult(
+            published=["test.handler.mock"],
+            contract_errors=[],
+            infra_errors=[],
+            duration_ms=25.5,
         )
+
+        mock_publisher_instance = MagicMock()
+        mock_publisher_instance.publish_all = AsyncMock(return_value=expected_result)
         ServiceContractPublisher.from_container = MagicMock(
             return_value=mock_publisher_instance
         )
@@ -553,6 +598,16 @@ class TestServiceContractPublisherAPI:
         )
         result = await publisher.publish_all()
 
+        # Assert: publish_all was called exactly once
+        assert mock_publisher_instance.publish_all.call_count == 1, (
+            f"Expected publish_all called once, got {mock_publisher_instance.publish_all.call_count}"
+        )
+
+        # Assert: result is the exact object returned by publish_all (not a copy)
+        assert result is expected_result, (
+            "Result should be the exact object returned by publish_all"
+        )
+
         # Assert: result has all expected fields
         assert hasattr(result, "published"), "Result should have 'published' field"
         assert hasattr(result, "contract_errors"), (
@@ -563,8 +618,9 @@ class TestServiceContractPublisherAPI:
         )
         assert hasattr(result, "duration_ms"), "Result should have 'duration_ms' field"
 
-        # Assert: handler was published
-        assert "test.handler.mock" in result.published
+        # Assert: values match what was set up
+        assert result.published == ["test.handler.mock"]
+        assert result.duration_ms == 25.5
 
     @pytest.mark.asyncio
     async def test_publish_handler_contracts_uses_default_environment(
@@ -589,11 +645,13 @@ class TestServiceContractPublisherAPI:
             filesystem_root=temp_contracts_dir,
         )
 
-        # Track what environment was passed
-        captured_env = {}
+        # Track all arguments passed to from_container
+        captured_args: dict = {}
 
         def mock_from_container(container, config, environment=None):
-            captured_env["value"] = environment
+            captured_args["container"] = container
+            captured_args["config"] = config
+            captured_args["environment"] = environment
             mock_instance = MagicMock()
             mock_instance.publish_all = AsyncMock(
                 return_value=MockModelPublishResult(
@@ -613,12 +671,84 @@ class TestServiceContractPublisherAPI:
             )
             result = await publisher.publish_all()
 
+        # Assert: delegation happened with correct container
+        assert captured_args["container"] is mock_container, (
+            "Expected mock_container to be passed to from_container"
+        )
+
+        # Assert: config was passed through
+        assert captured_args["config"] is config, (
+            "Expected config to be passed to from_container"
+        )
+
         # Assert: handler was published
         assert len(result.published) >= 1
 
         # Assert: environment was None (letting implementation handle default)
         # The actual topic prefix is handled by ServiceContractPublisher internally
-        assert captured_env.get("value") is None
+        assert captured_args.get("environment") is None
+
+    @pytest.mark.asyncio
+    async def test_publish_handler_contracts_passes_environment_explicitly(
+        self,
+        mock_container: MagicMock,
+        mock_event_bus_publisher: AsyncMock,
+        temp_contracts_dir: Path,
+        mock_omnibase_imports: dict,
+    ) -> None:
+        """Verify that explicit environment is passed to from_container.
+
+        When environment is specified, it should be passed through to
+        ServiceContractPublisher.from_container().
+        """
+        from omnibase_infra.services.contract_publisher import (
+            ModelContractPublisherConfig,
+            ServiceContractPublisher,
+        )
+
+        config = ModelContractPublisherConfig(
+            mode="filesystem",
+            filesystem_root=temp_contracts_dir,
+        )
+
+        # Track all arguments passed to from_container
+        captured_args: dict = {}
+
+        def mock_from_container(container, config, environment=None):
+            captured_args["container"] = container
+            captured_args["config"] = config
+            captured_args["environment"] = environment
+            mock_instance = MagicMock()
+            mock_instance.publish_all = AsyncMock(
+                return_value=MockModelPublishResult(
+                    published=["test.handler.mock"],
+                    duration_ms=10.0,
+                )
+            )
+            return mock_instance
+
+        ServiceContractPublisher.from_container = mock_from_container
+
+        # Act: call WITH explicit environment
+        publisher = ServiceContractPublisher.from_container(
+            container=mock_container,
+            config=config,
+            environment="production",
+        )
+        result = await publisher.publish_all()
+
+        # Assert: delegation happened with correct container
+        assert captured_args["container"] is mock_container, (
+            "Expected mock_container to be passed to from_container"
+        )
+
+        # Assert: environment was explicitly passed
+        assert captured_args["environment"] == "production", (
+            f"Expected environment='production', got {captured_args['environment']}"
+        )
+
+        # Assert: result propagated correctly
+        assert "test.handler.mock" in result.published
 
     @pytest.mark.asyncio
     async def test_publish_handler_contracts_handles_invalid_yaml(
@@ -694,6 +824,7 @@ class TestServiceContractPublisherAPI:
 
         When the container cannot provide the event bus publisher,
         ServiceContractPublisher.from_container should raise ContractPublishingInfraError.
+        This tests that error propagation works correctly through the delegation chain.
         """
         from omnibase_infra.services.contract_publisher import (
             ContractPublishingInfraError,
@@ -713,20 +844,182 @@ class TestServiceContractPublisherAPI:
             fail_fast=True,  # Default behavior
         )
 
-        # Setup mock to raise error
-        ServiceContractPublisher.from_container = MagicMock(
-            side_effect=ContractPublishingInfraError(
-                [MockInfraError("publisher_unavailable", "Publisher not available")]
-            )
+        # Track that from_container was called before raising
+        call_tracker: dict = {"called": False, "args": {}}
+        expected_error = ContractPublishingInfraError(
+            [MockInfraError("publisher_unavailable", "Publisher not available")]
         )
 
+        def track_and_raise(container, config, environment=None):
+            call_tracker["called"] = True
+            call_tracker["args"] = {
+                "container": container,
+                "config": config,
+                "environment": environment,
+            }
+            raise expected_error
+
+        ServiceContractPublisher.from_container = MagicMock(side_effect=track_and_raise)
+
         # Act & Assert: should raise ContractPublishingInfraError
-        with pytest.raises(ContractPublishingInfraError):
+        with pytest.raises(ContractPublishingInfraError) as exc_info:
             ServiceContractPublisher.from_container(
                 container=mock_container,
                 config=config,
                 environment="test",
             )
+
+        # Assert: from_container was called with correct args before raising
+        assert call_tracker["called"], "from_container should have been called"
+        assert call_tracker["args"]["container"] is mock_container
+        assert call_tracker["args"]["config"] is config
+        assert call_tracker["args"]["environment"] == "test"
+
+        # Assert: the same error was propagated
+        assert exc_info.value is expected_error
+
+    # =========================================================================
+    # Tests for publish_handler_contracts delegation behavior
+    # =========================================================================
+
+    @pytest.mark.asyncio
+    async def test_publish_handler_contracts_delegates_to_service_publisher(
+        self,
+        mock_container: MagicMock,
+        mock_event_bus_publisher: AsyncMock,
+        temp_contracts_dir: Path,
+        mock_omnibase_imports: dict,
+    ) -> None:
+        """Verify publish_handler_contracts correctly delegates to ServiceContractPublisher.
+
+        This test verifies the actual delegation chain:
+        1. from_container is called with correct parameters
+        2. publish_all is called on the returned instance
+        3. The result from publish_all is returned unchanged
+        """
+        from omnibase_infra.services.contract_publisher import (
+            ModelContractPublisherConfig,
+            ServiceContractPublisher,
+        )
+
+        from omniclaude.runtime.wiring import publish_handler_contracts
+
+        config = ModelContractPublisherConfig(
+            mode="filesystem",
+            filesystem_root=temp_contracts_dir,
+        )
+
+        # Track delegation arguments
+        captured_args: dict = {}
+        expected_result = MockModelPublishResult(
+            published=["delegated.handler"],
+            contract_errors=[],
+            infra_errors=[],
+            duration_ms=42.0,
+        )
+
+        mock_publisher_instance = MagicMock()
+        mock_publisher_instance.publish_all = AsyncMock(return_value=expected_result)
+
+        async def mock_from_container(container, config, environment=None):
+            captured_args["container"] = container
+            captured_args["config"] = config
+            captured_args["environment"] = environment
+            return mock_publisher_instance
+
+        ServiceContractPublisher.from_container = mock_from_container
+
+        # Act: call the actual wiring function
+        result = await publish_handler_contracts(
+            container=mock_container,
+            config=config,
+            environment="staging",
+        )
+
+        # Assert: from_container was called with correct container
+        assert captured_args["container"] is mock_container, (
+            "publish_handler_contracts should pass container to from_container"
+        )
+
+        # Assert: environment was passed through
+        assert captured_args["environment"] == "staging", (
+            f"Expected environment='staging', got {captured_args['environment']}"
+        )
+
+        # Assert: config was updated with environment via model_copy
+        assert captured_args["config"].environment == "staging", (
+            f"Expected config.environment='staging', got {captured_args['config'].environment}"
+        )
+
+        # Assert: publish_all was called
+        mock_publisher_instance.publish_all.assert_called_once()
+
+        # Assert: result was propagated unchanged
+        assert result is expected_result, (
+            "publish_handler_contracts should return result from publish_all unchanged"
+        )
+        assert result.published == ["delegated.handler"]
+        assert result.duration_ms == 42.0
+
+    @pytest.mark.asyncio
+    async def test_publish_handler_contracts_strips_whitespace_from_environment(
+        self,
+        mock_container: MagicMock,
+        temp_contracts_dir: Path,
+        mock_omnibase_imports: dict,
+    ) -> None:
+        """Verify that environment whitespace is stripped before delegation.
+
+        The wiring function should strip whitespace from environment and
+        default to 'dev' if the result is empty.
+        """
+        from omnibase_infra.services.contract_publisher import (
+            ModelContractPublisherConfig,
+            ServiceContractPublisher,
+        )
+
+        from omniclaude.runtime.wiring import publish_handler_contracts
+
+        config = ModelContractPublisherConfig(
+            mode="filesystem",
+            filesystem_root=temp_contracts_dir,
+        )
+
+        captured_envs: list = []
+
+        async def mock_from_container(container, config, environment=None):
+            captured_envs.append(environment)
+            mock_instance = MagicMock()
+            mock_instance.publish_all = AsyncMock(
+                return_value=MockModelPublishResult(published=[], duration_ms=1.0)
+            )
+            return mock_instance
+
+        ServiceContractPublisher.from_container = mock_from_container
+
+        # Act: call with whitespace-padded environment
+        await publish_handler_contracts(
+            container=mock_container,
+            config=config,
+            environment="  production  ",
+        )
+
+        # Assert: environment was stripped
+        assert captured_envs[-1] == "production", (
+            f"Expected stripped 'production', got '{captured_envs[-1]}'"
+        )
+
+        # Act: call with empty-after-strip environment
+        await publish_handler_contracts(
+            container=mock_container,
+            config=config,
+            environment="   ",
+        )
+
+        # Assert: empty string becomes 'dev'
+        assert captured_envs[-1] == "dev", (
+            f"Expected 'dev' for empty environment, got '{captured_envs[-1]}'"
+        )
 
     # =========================================================================
     # Tests for wire_omniclaude_services wrapper
@@ -1260,4 +1553,8 @@ class TestIntegrationWithServiceContractPublisher:
                     # Topic should be prefixed with environment
                     assert isinstance(topic, str), (
                         f"Topic should be a string, got {type(topic)}"
+                    )
+                    # Verify topic includes the environment prefix
+                    assert "integration-test" in topic, (
+                        f"Topic should include environment prefix 'integration-test', got {topic}"
                     )
