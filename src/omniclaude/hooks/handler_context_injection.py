@@ -630,8 +630,17 @@ class HandlerContextInjection:
             self._contract = None
             raise PatternConnectionError(f"Failed to create database pool: {e}") from e
 
-        # Create runtime
-        self._runtime = PostgresRepositoryRuntime(self._pool, self._contract)
+        # Create runtime - wrap in try/except to handle partial initialization
+        try:
+            self._runtime = PostgresRepositoryRuntime(self._pool, self._contract)
+        except Exception as e:
+            # Close pool on runtime creation failure to prevent resource leak
+            if self._pool is not None:
+                await self._pool.close()
+            self._pool = None
+            self._contract = None
+            raise PatternConnectionError(f"Failed to create runtime: {e}") from e
+
         return self._runtime
 
     async def _load_patterns_from_database(
@@ -686,15 +695,25 @@ class HandlerContextInjection:
                     if not pattern_id:
                         logger.warning("Skipping row with missing pattern_id")
                         continue
+                    # Handle None values explicitly to avoid str(None) -> "None"
+                    domain_val = row.get("domain")
+                    title_val = row.get("title")
+                    desc_val = row.get("description")
+                    conf_val = row.get("confidence")
+                    usage_val = row.get("usage_count")
+                    rate_val = row.get("success_rate")
+
                     patterns.append(
                         PatternRecord(
                             pattern_id=str(pattern_id),
-                            domain=str(row.get("domain", "")),
-                            title=str(row.get("title", "")),
-                            description=str(row.get("description", "")),
-                            confidence=float(row.get("confidence", 0.0)),
-                            usage_count=int(row.get("usage_count", 0)),
-                            success_rate=float(row.get("success_rate", 0.0)),
+                            domain=str(domain_val) if domain_val is not None else "",
+                            title=str(title_val) if title_val is not None else "",
+                            description=str(desc_val) if desc_val is not None else "",
+                            confidence=float(conf_val) if conf_val is not None else 0.0,
+                            usage_count=int(usage_val) if usage_val is not None else 0,
+                            success_rate=float(rate_val)
+                            if rate_val is not None
+                            else 0.0,
                             example_reference=row.get("example_reference"),
                         )
                     )
