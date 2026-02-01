@@ -1,6 +1,9 @@
 #!/bin/bash
 # ONEX Status Line - Shows folder, git branch, and PR number
 # Part of the onex plugin for Claude Code
+#
+# Note: This script intentionally continues on errors (no set -e) because
+# status line display should never block Claude Code, even if git/gh fail.
 
 input=$(cat)
 PROJECT_DIR=$(echo "$input" | jq -r '.workspace.project_dir // .workspace.current_dir // "."')
@@ -25,22 +28,34 @@ if git -C "$PROJECT_DIR" rev-parse --git-dir >/dev/null 2>&1; then
     # Check if cache exists and is fresh (< 5 minutes old)
     CACHE_FRESH=0
     if [ -f "$CACHE_FILE" ]; then
-      CACHE_AGE=$(( $(date +%s) - $(stat -f %m "$CACHE_FILE" 2>/dev/null || stat -c %Y "$CACHE_FILE" 2>/dev/null || echo 0) ))
+      # Cross-platform stat: macOS uses -f %m, Linux uses -c %Y
+      if stat -f %m "$CACHE_FILE" >/dev/null 2>&1; then
+        CACHE_AGE=$(( $(date +%s) - $(stat -f %m "$CACHE_FILE") ))
+      else
+        CACHE_AGE=$(( $(date +%s) - $(stat -c %Y "$CACHE_FILE" 2>/dev/null || echo 0) ))
+      fi
       [ "$CACHE_AGE" -lt 300 ] && CACHE_FRESH=1
     fi
 
     if [ "$CACHE_FRESH" -eq 1 ]; then
-      # Use cached value
+      # Use cached value (NONE sentinel means no PR exists)
       PR_NUM=$(cat "$CACHE_FILE" 2>/dev/null)
+      [ "$PR_NUM" = "NONE" ] && PR_NUM=""
     else
-      # Fetch in background, update cache
+      # Fetch in background, update cache atomically
       (
         REMOTE_URL=$(git -C "$PROJECT_DIR" remote get-url origin 2>/dev/null)
         NEW_PR=$(gh pr view "$GIT_BRANCH" --json number -q '.number' -R "$REMOTE_URL" 2>/dev/null)
-        echo "$NEW_PR" > "$CACHE_FILE" 2>/dev/null
+        # Use NONE sentinel when no PR exists (avoids ambiguity with empty cache)
+        [ -z "$NEW_PR" ] && NEW_PR="NONE"
+        # Atomic write: temp file + mv prevents race condition corruption
+        echo "$NEW_PR" > "$CACHE_FILE.tmp" 2>/dev/null && mv "$CACHE_FILE.tmp" "$CACHE_FILE" 2>/dev/null
       ) &
-      # Use stale cache if available
-      [ -f "$CACHE_FILE" ] && PR_NUM=$(cat "$CACHE_FILE" 2>/dev/null)
+      # Use stale cache if available (handle NONE sentinel)
+      if [ -f "$CACHE_FILE" ]; then
+        PR_NUM=$(cat "$CACHE_FILE" 2>/dev/null)
+        [ "$PR_NUM" = "NONE" ] && PR_NUM=""
+      fi
     fi
   fi
 fi
