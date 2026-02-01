@@ -13,7 +13,7 @@ Tickets:
     - OMN-1605: Implement contract-driven handler registration loader
     - OMN-1812: Migrate to ServiceContractPublisher from omnibase_infra
 
-Migration Note (v3.2.0):
+Migration Note (OMN-1812):
     Contract publishing now uses ServiceContractPublisher from omnibase_infra,
     enforcing ARCH-002 ("Runtime owns all Kafka plumbing"). For contract
     configuration and result types, use the canonical models from omnibase_infra:
