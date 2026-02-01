@@ -106,11 +106,11 @@ hardening_tickets: []
 1. Create contract if not exists
 2. Set `ticket_id`, `title`, `repo` from Linear ticket
 3. Save contract to ticket description
-4. Announce: "Contract created. Say 'begin research' to start research phase."
+4. **Auto-advance to research phase** (no human gate needed)
 
 **Mutations allowed:** Create contract only
 
-**Exit to research:** User says "begin research" or similar
+**Exit to research:** Automatic after contract creation (no confirmation needed)
 
 ---
 
