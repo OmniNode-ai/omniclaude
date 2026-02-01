@@ -44,6 +44,7 @@ from omniclaude.hooks.contracts.contract_hook_tool_executed import (
     Runtime,
     TimestampPolicy,
 )
+from omniclaude.hooks.contracts.schema import ModelJsonSchemaDefinition
 
 # =============================================================================
 # Privacy Configuration (specific to prompt_submitted)
@@ -80,101 +81,6 @@ class Privacy(BaseModel):
     pii_policy: Literal["exclude", "redact", "allow"] = Field(
         ...,
         description="Policy for handling PII ('exclude', 'redact', 'allow')",
-    )
-
-
-# =============================================================================
-# Model Definition (JSON Schema-like, more type-safe than dict[str, Any])
-# =============================================================================
-
-
-class PropertyDefinition(BaseModel):
-    """JSON Schema-like property definition.
-
-    Attributes:
-        type: Property type (string, integer, boolean, object, array).
-        format: Optional format hint (uuid, date-time).
-        description: Human-readable description.
-        nullable: Whether the property can be null.
-        minimum: Minimum value for numeric types.
-        maximum: Maximum value for numeric types.
-        minLength: Minimum length for string types.
-        maxLength: Maximum length for string types.
-    """
-
-    model_config = ConfigDict(
-        frozen=True,
-        extra="forbid",
-    )
-
-    type: str = Field(
-        ...,
-        min_length=1,
-        description="Property type (string, integer, boolean, object, array)",
-    )
-    format: str | None = Field(
-        default=None,
-        description="Optional format hint (uuid, date-time)",
-    )
-    description: str = Field(
-        ...,
-        min_length=1,
-        description="Human-readable description",
-    )
-    nullable: bool | None = Field(
-        default=None,
-        description="Whether the property can be null",
-    )
-    minimum: int | None = Field(
-        default=None,
-        description="Minimum value for numeric types",
-    )
-    maximum: int | None = Field(
-        default=None,
-        description="Maximum value for numeric types",
-    )
-    minLength: int | None = Field(
-        default=None,
-        description="Minimum length for string types",
-    )
-    maxLength: int | None = Field(
-        default=None,
-        description="Maximum length for string types",
-    )
-
-
-class ModelDefinition(BaseModel):
-    """JSON Schema-like model definition.
-
-    Attributes:
-        type: Model type (typically 'object').
-        description: Human-readable description of the model.
-        properties: Dictionary of property definitions.
-        required: List of required property names.
-    """
-
-    model_config = ConfigDict(
-        frozen=True,
-        extra="forbid",
-    )
-
-    type: str = Field(
-        ...,
-        min_length=1,
-        description="Model type (typically 'object')",
-    )
-    description: str = Field(
-        ...,
-        min_length=1,
-        description="Human-readable description of the model",
-    )
-    properties: dict[str, PropertyDefinition] = Field(
-        ...,
-        description="Dictionary of property definitions",
-    )
-    required: list[str] = Field(
-        ...,
-        description="List of required property names",
     )
 
 
@@ -289,7 +195,7 @@ class HookPromptSubmittedContract(BaseModel):
         min_length=1,
         description="List of capabilities provided by the node",
     )
-    definitions: dict[str, ModelDefinition] = Field(
+    definitions: dict[str, ModelJsonSchemaDefinition] = Field(
         ...,
         description="JSON Schema-like model definitions",
     )
@@ -345,8 +251,8 @@ __all__ = [
     "Capability",
     # New models specific to prompt_submitted
     "Privacy",
-    "PropertyDefinition",
-    "ModelDefinition",
     # Root contract
     "HookPromptSubmittedContract",
+    # Re-export from shared schema module for convenience
+    "ModelJsonSchemaDefinition",
 ]

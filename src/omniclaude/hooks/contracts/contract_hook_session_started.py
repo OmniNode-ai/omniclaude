@@ -41,104 +41,7 @@ from omniclaude.hooks.contracts.contract_hook_tool_executed import (
     Runtime,
     TimestampPolicy,
 )
-
-# =============================================================================
-# Nested Models - JSON Schema Definitions (specific to this contract)
-# =============================================================================
-
-
-class PropertyDefinition(BaseModel):
-    """JSON Schema property definition.
-
-    Attributes:
-        type: JSON Schema type.
-        description: Human-readable description of the property.
-        format: Optional format hint (e.g., uuid, date-time).
-        nullable: Whether the property can be null.
-        minLength: Minimum string length.
-        maxLength: Maximum string length.
-        minimum: Minimum numeric value.
-        enum: List of allowed values.
-    """
-
-    model_config = ConfigDict(
-        frozen=True,
-        extra="forbid",
-    )
-
-    type: str = Field(
-        ...,
-        min_length=1,
-        description="JSON Schema type",
-    )
-    description: str = Field(
-        ...,
-        min_length=1,
-        description="Human-readable description of the property",
-    )
-    format: str | None = Field(
-        default=None,
-        min_length=1,
-        description="Optional format hint (e.g., uuid, date-time)",
-    )
-    nullable: bool | None = Field(
-        default=None,
-        description="Whether the property can be null",
-    )
-    minLength: int | None = Field(
-        default=None,
-        ge=0,
-        description="Minimum string length",
-    )
-    maxLength: int | None = Field(
-        default=None,
-        ge=0,
-        description="Maximum string length",
-    )
-    minimum: int | None = Field(
-        default=None,
-        description="Minimum numeric value",
-    )
-    enum: list[str] | None = Field(
-        default=None,
-        description="List of allowed values",
-    )
-
-
-class ModelDefinition(BaseModel):
-    """JSON Schema model definition.
-
-    Attributes:
-        type: JSON Schema type (always 'object' for models).
-        description: Human-readable description of the model.
-        properties: Dictionary of property definitions.
-        required: List of required property names.
-    """
-
-    model_config = ConfigDict(
-        frozen=True,
-        extra="forbid",
-    )
-
-    type: Literal["object"] = Field(
-        ...,
-        description="JSON Schema type (always 'object' for models)",
-    )
-    description: str = Field(
-        ...,
-        min_length=1,
-        description="Human-readable description of the model",
-    )
-    properties: dict[str, PropertyDefinition] = Field(
-        ...,
-        description="Dictionary of property definitions",
-    )
-    required: list[str] = Field(
-        ...,
-        min_length=1,
-        description="List of required property names",
-    )
-
+from omniclaude.hooks.contracts.schema import ModelJsonSchemaDefinition
 
 # =============================================================================
 # Root Contract Model
@@ -246,7 +149,7 @@ class HookSessionStartedContract(BaseModel):
         min_length=1,
         description="List of capabilities provided by the node",
     )
-    definitions: dict[str, ModelDefinition] = Field(
+    definitions: dict[str, ModelJsonSchemaDefinition] = Field(
         ...,
         description="JSON Schema definitions for models",
     )
@@ -298,9 +201,8 @@ __all__ = [
     "ModelReference",
     "Runtime",
     "TimestampPolicy",
-    # Models specific to session_started contract
-    "ModelDefinition",
-    "PropertyDefinition",
     # Root contract
     "HookSessionStartedContract",
+    # Re-export from shared schema module for convenience
+    "ModelJsonSchemaDefinition",
 ]

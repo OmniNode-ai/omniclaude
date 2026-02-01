@@ -40,6 +40,7 @@ from omniclaude.hooks.contracts.contract_experiment_cohort import (
     Metadata,
     Version,
 )
+from omniclaude.hooks.contracts.schema import ModelJsonSchemaDefinition
 
 # =============================================================================
 # Nested Models
@@ -287,109 +288,6 @@ class Capability(BaseModel):
     )
 
 
-class SchemaProperty(BaseModel):
-    """JSON Schema-like property definition for documentation.
-
-    Represents a single property in a JSON Schema definition, capturing
-    type information, constraints, and documentation for contract models.
-
-    Attributes:
-        type: JSON Schema type (string, integer, boolean, object, array).
-        format: Optional format specifier (uuid, date-time, etc.).
-        description: Human-readable description of the property.
-        min_length: Optional minimum string length.
-        max_length: Optional maximum string length.
-        minimum: Optional minimum numeric value.
-        maximum: Optional maximum numeric value.
-        nullable: Whether the property can be null.
-        default: Optional default value.
-    """
-
-    model_config = ConfigDict(
-        frozen=True,
-        extra="ignore",  # Allow additional JSON Schema fields we don't model
-    )
-
-    type: str = Field(
-        ...,
-        min_length=1,
-        description="JSON Schema type (string, integer, boolean, object, array)",
-    )
-    format: str | None = Field(
-        default=None,
-        description="Optional format specifier (uuid, date-time, etc.)",
-    )
-    description: str | None = Field(
-        default=None,
-        description="Human-readable description of the property",
-    )
-    minLength: int | None = Field(
-        default=None,
-        ge=0,
-        description="Optional minimum string length",
-    )
-    maxLength: int | None = Field(
-        default=None,
-        ge=0,
-        description="Optional maximum string length",
-    )
-    minimum: int | float | None = Field(
-        default=None,
-        description="Optional minimum numeric value",
-    )
-    maximum: int | float | None = Field(
-        default=None,
-        description="Optional maximum numeric value",
-    )
-    nullable: bool | None = Field(
-        default=None,
-        description="Whether the property can be null",
-    )
-    default: bool | int | float | str | None = Field(
-        default=None,
-        description="Optional default value",
-    )
-
-
-class SchemaDefinition(BaseModel):
-    """JSON Schema-like model definition for documentation.
-
-    Represents a complete JSON Schema object definition, typically describing
-    a Pydantic model in the contract. Used for documentation and reference,
-    with actual models defined in schemas.py.
-
-    Attributes:
-        type: Schema type (typically 'object' for model definitions).
-        description: Human-readable description of the model.
-        properties: Mapping of property names to their schema definitions.
-        required: List of required property names.
-    """
-
-    model_config = ConfigDict(
-        frozen=True,
-        extra="ignore",  # Allow additional JSON Schema fields we don't model
-    )
-
-    type: str = Field(
-        ...,
-        min_length=1,
-        description="Schema type (typically 'object' for model definitions)",
-    )
-    description: str = Field(
-        ...,
-        min_length=1,
-        description="Human-readable description of the model",
-    )
-    properties: dict[str, SchemaProperty] = Field(
-        default_factory=dict,
-        description="Mapping of property names to their schema definitions",
-    )
-    required: list[str] = Field(
-        default_factory=list,
-        description="List of required property names",
-    )
-
-
 # =============================================================================
 # Root Contract Model
 # =============================================================================
@@ -505,7 +403,7 @@ class HookToolExecutedContract(BaseModel):
         min_length=1,
         description="List of capabilities provided by the node",
     )
-    definitions: dict[str, object] = Field(
+    definitions: dict[str, ModelJsonSchemaDefinition] = Field(
         ...,
         description="JSON schema-like definitions for documentation",
     )
@@ -558,9 +456,8 @@ __all__ = [
     "ToolMatching",
     "Dependency",
     "Capability",
-    # Schema definition models
-    "SchemaProperty",
-    "SchemaDefinition",
     # Root contract
     "HookToolExecutedContract",
+    # Re-export from shared schema module for convenience
+    "ModelJsonSchemaDefinition",
 ]
