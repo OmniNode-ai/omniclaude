@@ -310,10 +310,23 @@ fi
 # -----------------------------
 # Learned Pattern Injection (OMN-1675) - ASYNC IMPLEMENTATION
 # -----------------------------
-# Pattern injection runs in background to meet <50ms performance target.
+# PERFORMANCE GUARANTEE: Pattern injection runs in a background subshell via `( ... ) &`.
+# This ensures the main hook returns immediately (<50ms target) regardless of:
+#   - Pattern retrieval latency from OmniMemory
+#   - Network timeout to intelligence services
+#   - Any errors in the injection pipeline
+#
 # The first UserPromptSubmit will handle pattern injection (session not yet marked).
 # This async process marks the session after completion to prevent duplicate injection
 # on subsequent prompts.
+#
+# CRITICAL: Session is marked as injected for ALL outcomes:
+#   - Success with patterns: marked with injection_id
+#   - Control cohort (A/B testing): marked with "cohort-<name>"
+#   - Empty patterns (no relevant patterns): marked with "no-patterns"
+#   - Error/timeout: marked with "error-exit-<code>" (e.g., error-exit-142 for timeout)
+#   - Fallback: marked with "async-completed" (rare edge case)
+# This prevents UserPromptSubmit from attempting duplicate injection.
 #
 # Trade-off: SessionStart returns immediately without patterns in additionalContext.
 # UserPromptSubmit provides fallback injection for the first prompt.
@@ -364,8 +377,17 @@ if [[ "${SESSION_INJECTION_ENABLED:-true}" == "true" ]] && [[ -f "${HOOKS_LIB}/c
                 TIMEOUT_SEC="0.1"
             fi
         fi
+        INJECTION_EXIT_CODE=0
         PATTERN_RESULT="$(echo "$PATTERN_INPUT" | run_with_timeout "${TIMEOUT_SEC}" $PYTHON_CMD "${HOOKS_LIB}/context_injection_wrapper.py" 2>>"$LOG_FILE")" || {
-            _async_log "WARNING: Pattern injection failed (timeout or error), using empty result"
+            INJECTION_EXIT_CODE=$?
+            # Log detailed error context for debugging
+            # Exit codes: 142 = SIGALRM (timeout), 1 = general error, other = script-specific
+            _async_log "WARNING: Pattern injection failed - exit_code=${INJECTION_EXIT_CODE} timeout_sec=${TIMEOUT_SEC} session=${SESSION_ID:-unknown}"
+            if [[ $INJECTION_EXIT_CODE -eq 142 ]]; then
+                _async_log "DEBUG: Injection timed out after ${TIMEOUT_SEC}s (SIGALRM). Consider increasing SESSION_INJECTION_TIMEOUT_MS (current: ${SESSION_INJECTION_TIMEOUT_MS:-500})"
+            else
+                _async_log "DEBUG: Injection error (check stderr above in log). Wrapper: ${HOOKS_LIB}/context_injection_wrapper.py"
+            fi
             PATTERN_RESULT='{}'
         }
 
@@ -379,19 +401,47 @@ if [[ "${SESSION_INJECTION_ENABLED:-true}" == "true" ]] && [[ -f "${HOOKS_LIB}/c
         # Mark session as injected (for UserPromptSubmit coordination)
         # CRITICAL: Always mark session when injection was ATTEMPTED, regardless of result.
         # This prevents duplicate injection attempts from UserPromptSubmit on subsequent prompts.
-        # Use injection_id if available, cohort if not, or "async-completed" as fallback.
+        #
+        # Marker ID selection (in priority order):
+        #   1. injection_id: Successful injection with patterns
+        #   2. cohort name: Control cohort (A/B testing) or treatment without patterns
+        #   3. "no-patterns": Empty pattern result (no relevant patterns found)
+        #   4. "error-exit-<code>": Injection failed with specific exit code
+        #   5. "async-completed": Final fallback (should rarely happen)
         if [[ -f "${HOOKS_LIB}/session_marker.py" ]]; then
-            marker_id="${INJECTION_ID:-${INJECTION_COHORT:-async-completed}}"
+            # Determine marker_id based on injection outcome
+            if [[ -n "$INJECTION_ID" ]]; then
+                marker_id="$INJECTION_ID"
+                marker_reason="injection_success"
+            elif [[ -n "$INJECTION_COHORT" ]]; then
+                marker_id="cohort-${INJECTION_COHORT}"
+                marker_reason="cohort_assigned"
+            elif [[ $INJECTION_EXIT_CODE -ne 0 ]]; then
+                marker_id="error-exit-${INJECTION_EXIT_CODE}"
+                marker_reason="injection_error"
+            elif [[ "$PATTERN_COUNT" -eq 0 ]]; then
+                marker_id="no-patterns"
+                marker_reason="empty_result"
+            else
+                marker_id="async-completed"
+                marker_reason="fallback"
+            fi
+
+            _async_log "Marking session: marker_id=$marker_id reason=$marker_reason pattern_count=$PATTERN_COUNT"
+
             if $PYTHON_CMD "${HOOKS_LIB}/session_marker.py" mark \
                 --session-id "${SESSION_ID}" \
                 --injection-id "$marker_id" 2>>"$LOG_FILE"; then
-                _async_log "Session marked as injected (marker_id=$marker_id)"
+                _async_log "Session marked as injected (marker_id=$marker_id, reason=$marker_reason)"
             else
-                _async_log "WARNING: Failed to mark session as injected"
+                _async_log "WARNING: Failed to mark session as injected (marker_id=$marker_id)"
             fi
         fi
     ) &
-    log "Async pattern injection started in background (PID: $!)"
+    # PERFORMANCE: Background subshell (&) ensures main hook returns immediately.
+    # The pattern injection runs asynchronously and will NOT block hook completion.
+    # Session is marked after async completion to coordinate with UserPromptSubmit.
+    log "Async pattern injection started in background (PID: $!) - hook will return immediately"
 elif [[ "${SESSION_INJECTION_ENABLED:-true}" != "true" ]]; then
     log "Pattern injection disabled (SESSION_INJECTION_ENABLED=false)"
 elif [[ "$JQ_AVAILABLE" -eq 0 ]]; then
