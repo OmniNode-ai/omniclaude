@@ -165,7 +165,7 @@ jobs:
       - name: Checkout omnibase_core
         uses: actions/checkout@v4
         with:
-          repository: omninode/omnibase_core
+          repository: OmniNode-ai/omnibase_core
           path: omnibase_core
           token: ${{ secrets.GH_PAT }}
 
