@@ -1,7 +1,9 @@
 #!/bin/bash
 # SessionEnd Hook - Portable Plugin Version
 # Captures session completion and aggregate statistics
+# Also logs active ticket for audit/observability (OMN-1830)
 # Performance target: <50ms execution time
+# NOTE: This hook is audit-only - NO context injection, NO contract mutation
 
 set -euo pipefail
 
@@ -58,6 +60,29 @@ fi
 log "Duration: ${SESSION_DURATION}ms"
 log "Reason: $SESSION_REASON"
 
+# -----------------------------
+# Active Ticket Detection (OMN-1830)
+# -----------------------------
+# Check for active ticket (for audit logging only - NO context injection, NO mutation)
+ACTIVE_TICKET=""
+if [[ -f "${HOOKS_LIB}/ticket_context_injector.py" ]]; then
+    ACTIVE_TICKET=$("$PYTHON_CMD" -c "
+import sys
+sys.path.insert(0, '${HOOKS_LIB}')
+from ticket_context_injector import find_active_ticket
+result = find_active_ticket()
+print(result or '')
+" 2>>"$LOG_FILE") || ACTIVE_TICKET=""
+
+    if [[ -n "$ACTIVE_TICKET" ]]; then
+        log "Session ended with active ticket: $ACTIVE_TICKET"
+    else
+        log "Session ended with no active ticket"
+    fi
+else
+    log "Ticket context injector not found, skipping active ticket detection"
+fi
+
 # Call session intelligence module (async, non-blocking)
 (
     $PYTHON_CMD "${HOOKS_LIB}/session_intelligence.py" \
@@ -77,15 +102,17 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
             DURATION_SECONDS=$($PYTHON_CMD -c "import sys; print(f'{float(sys.argv[1])/1000:.3f}')" "$SESSION_DURATION" 2>/dev/null || echo "")
         fi
 
-        # Build JSON payload for emit daemon
+        # Build JSON payload for emit daemon (includes active_ticket for OMN-1830)
         SESSION_PAYLOAD=$(jq -n \
             --arg session_id "$SESSION_ID" \
             --arg reason "$SESSION_REASON" \
             --arg duration_seconds "${DURATION_SECONDS:-}" \
+            --arg active_ticket "$ACTIVE_TICKET" \
             '{
                 session_id: $session_id,
                 reason: $reason,
-                duration_seconds: (if $duration_seconds == "" then null else ($duration_seconds | tonumber) end)
+                duration_seconds: (if $duration_seconds == "" then null else ($duration_seconds | tonumber) end),
+                active_ticket: (if $active_ticket == "" then null else $active_ticket end)
             }' 2>/dev/null)
 
         # Validate payload was constructed successfully
@@ -121,10 +148,12 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
             --arg session_id "$SESSION_ID" \
             --arg outcome "$OUTCOME" \
             --arg emitted_at "$EMITTED_AT" \
+            --arg active_ticket "$ACTIVE_TICKET" \
             '{
                 session_id: $session_id,
                 outcome: $outcome,
-                emitted_at: $emitted_at
+                emitted_at: $emitted_at,
+                active_ticket: (if $active_ticket == "" then null else $active_ticket end)
             }' 2>/dev/null)
 
         # Validate payload was constructed successfully

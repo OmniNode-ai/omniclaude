@@ -199,6 +199,26 @@ hardening_tickets: []
   - No, needs changes
   ```
 
+**Automation on spec→implementation transition:**
+
+When user approves spec (says "approve spec", "build it", etc.):
+
+1. **Create git branch** using Linear's suggested branch name:
+   ```bash
+   git checkout -b {gitBranchName}
+   # Example: git checkout -b jonah/omn-1830-m4-hook-integration-session-continuity
+   ```
+   If branch exists, checkout existing branch instead.
+
+2. **Update Linear status** to "In Progress":
+   ```
+   mcp__linear-server__update_issue(id="{ticket_id}", state="In Progress")
+   ```
+
+3. **Update contract** with branch name:
+   - Set `branch` field to the git branch name
+   - Persist to both Linear and local
+
 ---
 
 ### Phase: implementation
@@ -387,6 +407,32 @@ mcp__linear-server__update_issue(
 )
 ```
 
+### Local Persistence
+
+After saving to Linear, also persist locally for hook access:
+
+```python
+def persist_contract_locally(ticket_id: str, contract: dict) -> None:
+    """Persist contract to local filesystem for hook injection.
+
+    Path: ~/.claude/tickets/{ticket_id}/contract.yaml
+    """
+    import yaml
+    from pathlib import Path
+
+    tickets_dir = Path.home() / ".claude" / "tickets" / ticket_id
+    tickets_dir.mkdir(parents=True, exist_ok=True)
+
+    contract_path = tickets_dir / "contract.yaml"
+
+    # Atomic write
+    tmp_path = contract_path.with_suffix('.yaml.tmp')
+    tmp_path.write_text(yaml.dump(contract, default_flow_style=False, sort_keys=False))
+    tmp_path.rename(contract_path)
+```
+
+Call this after every `mcp__linear-server__update_issue()` that modifies the contract.
+
 ---
 
 ## Verification Commands (v1 Hardcoded)
@@ -480,6 +526,7 @@ def is_done(contract) -> bool:
 | No deletion | Never delete answered questions |
 | No rewrite of history | Never rewrite past commits or verification results |
 | Append-only | Questions, requirements, verification, commits are append-only (requirements/verification/gates editable during spec phase) |
+| Local persistence | Always persist locally after Linear save |
 
 ---
 

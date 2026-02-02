@@ -462,6 +462,51 @@ else
     log "Pattern injection skipped (context_injection_wrapper.py not found)"
 fi
 
+# -----------------------------
+# Ticket Context Injection (OMN-1830)
+# -----------------------------
+# Inject active ticket context for session continuity.
+# Runs SYNCHRONOUSLY because it's purely local filesystem (fast).
+# This ensures ticket context is available immediately in additionalContext.
+
+TICKET_INJECTION_ENABLED="${OMNICLAUDE_TICKET_INJECTION_ENABLED:-true}"
+TICKET_INJECTION_ENABLED=$(_normalize_bool "$TICKET_INJECTION_ENABLED")
+TICKET_CONTEXT=""
+
+if [[ "${TICKET_INJECTION_ENABLED}" == "true" ]] && [[ -f "${HOOKS_LIB}/ticket_context_injector.py" ]]; then
+    log "Checking for active ticket context"
+
+    # Run ticket context injection synchronously (fast, local-only)
+    # This is intentionally NOT async because it's purely local filesystem
+    ACTIVE_TICKET=$("$PYTHON_CMD" -c "
+import sys
+sys.path.insert(0, '${HOOKS_LIB}')
+from ticket_context_injector import find_active_ticket
+result = find_active_ticket()
+print(result or '')
+" 2>>"$LOG_FILE") || ACTIVE_TICKET=""
+
+    if [[ -n "$ACTIVE_TICKET" ]]; then
+        log "Active ticket found: $ACTIVE_TICKET"
+        TICKET_CONTEXT=$("$PYTHON_CMD" -c "
+import sys
+sys.path.insert(0, '${HOOKS_LIB}')
+from ticket_context_injector import build_ticket_context
+print(build_ticket_context('$ACTIVE_TICKET'))
+" 2>>"$LOG_FILE") || TICKET_CONTEXT=""
+
+        if [[ -n "$TICKET_CONTEXT" ]]; then
+            log "Ticket context generated (${#TICKET_CONTEXT} chars)"
+        fi
+    else
+        log "No active ticket found"
+    fi
+elif [[ "${TICKET_INJECTION_ENABLED}" != "true" ]]; then
+    log "Ticket context injection disabled (TICKET_INJECTION_ENABLED=false)"
+else
+    log "Ticket context injection skipped (ticket_context_injector.py not found)"
+fi
+
 # Performance tracking
 END_TIME=$(get_time_ms)
 ELAPSED_MS=$((END_TIME - START_TIME))
@@ -475,10 +520,18 @@ fi
 # Build output with additionalContext
 # NOTE: Pattern injection is async, so patterns won't be available here.
 # UserPromptSubmit will handle pattern injection for the first prompt.
-# We just set the hookEventName and indicate async injection was started.
+# Ticket context is sync, so it IS available immediately in additionalContext.
 if [[ "$JQ_AVAILABLE" -eq 1 ]]; then
-    if [[ "${SESSION_INJECTION_ENABLED:-true}" == "true" ]]; then
-        # Async injection was started - set metadata to indicate this
+    if [[ -n "$TICKET_CONTEXT" ]]; then
+        # Include ticket context in additionalContext (sync injection)
+        printf '%s' "$INPUT" | jq \
+            --arg ticket_ctx "$TICKET_CONTEXT" \
+            '.hookSpecificOutput.hookEventName = "SessionStart" |
+             .hookSpecificOutput.additionalContext = $ticket_ctx |
+             .hookSpecificOutput.metadata.injection_mode = "sync" |
+             .hookSpecificOutput.metadata.has_ticket_context = true'
+    elif [[ "${SESSION_INJECTION_ENABLED:-true}" == "true" ]]; then
+        # Async pattern injection was started - set metadata to indicate this
         printf '%s' "$INPUT" | jq \
             '.hookSpecificOutput.hookEventName = "SessionStart" |
              .hookSpecificOutput.metadata.injection_mode = "async"'
