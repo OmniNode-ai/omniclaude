@@ -54,15 +54,7 @@ write_daemon_status() {
 
 export PYTHONPATH="${PROJECT_ROOT}:${PLUGIN_ROOT}/lib:${HOOKS_LIB}:${PYTHONPATH:-}"
 
-# Normalize boolean values to JSON-compatible true/false
-# Accepts: true/false, True/False, TRUE/FALSE, 1/0, yes/no, Yes/No, YES/NO
-_normalize_bool() {
-    local val="${1,,}"  # Convert to lowercase
-    case "$val" in
-        true|1|yes) echo "true" ;;
-        *) echo "false" ;;
-    esac
-}
+# Boolean normalization: _normalize_bool is provided by common.sh (sourced above)
 
 # SessionStart injection config (OMN-1675)
 SESSION_INJECTION_ENABLED="${OMNICLAUDE_SESSION_INJECTION_ENABLED:-true}"
@@ -176,11 +168,11 @@ start_emit_daemon_if_needed() {
     # Must pass --kafka-servers explicitly (required by CLI)
     # Supports comma-separated multi-broker strings (e.g., "host1:9092,host2:9092")
     if [[ -z "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
-        log "FATAL: KAFKA_BOOTSTRAP_SERVERS not set - hook cannot function without Kafka"
-        log "FATAL: OmniClaude's intelligence gathering requires Kafka. Set KAFKA_BOOTSTRAP_SERVERS in your .env file"
-        log "FATAL: Example: KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092"
+        log "WARNING: KAFKA_BOOTSTRAP_SERVERS not set - Kafka features disabled"
+        log "INFO: To enable intelligence gathering, set KAFKA_BOOTSTRAP_SERVERS in your .env file"
+        log "INFO: Example: KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092"
         write_daemon_status "kafka_not_configured"
-        exit 1  # Fail fast - Kafka is required for intelligence gathering, not optional
+        return 0  # Non-fatal - continue without Kafka, hook still provides ticket context
     fi
     nohup "$PYTHON_CMD" -m omnibase_infra.runtime.emit_daemon.cli start \
         --kafka-servers "$KAFKA_BOOTSTRAP_SERVERS" \
@@ -462,6 +454,47 @@ else
     log "Pattern injection skipped (context_injection_wrapper.py not found)"
 fi
 
+# -----------------------------
+# Ticket Context Injection (OMN-1830)
+# -----------------------------
+# Inject active ticket context for session continuity.
+# Runs SYNCHRONOUSLY because it's purely local filesystem (fast).
+# This ensures ticket context is available immediately in additionalContext.
+
+TICKET_INJECTION_ENABLED="${OMNICLAUDE_TICKET_INJECTION_ENABLED:-true}"
+TICKET_INJECTION_ENABLED=$(_normalize_bool "$TICKET_INJECTION_ENABLED")
+TICKET_CONTEXT=""
+
+if [[ "${TICKET_INJECTION_ENABLED}" == "true" ]] && [[ -f "${HOOKS_LIB}/ticket_context_injector.py" ]]; then
+    log "Checking for active ticket context"
+
+    # Run ticket context injection synchronously via CLI (fast, local-only)
+    # Single Python invocation for better performance within 50ms budget
+    TICKET_OUTPUT=$(echo '{}' | "$PYTHON_CMD" "${HOOKS_LIB}/ticket_context_injector.py" 2>>"$LOG_FILE") || TICKET_OUTPUT='{}'
+
+    # Parse CLI output using jq
+    if [[ "$JQ_AVAILABLE" -eq 1 ]]; then
+        ACTIVE_TICKET=$(echo "$TICKET_OUTPUT" | jq -r '.ticket_id // empty' 2>/dev/null) || ACTIVE_TICKET=""
+        TICKET_CONTEXT=$(echo "$TICKET_OUTPUT" | jq -r '.ticket_context // empty' 2>/dev/null) || TICKET_CONTEXT=""
+        TICKET_RETRIEVAL_MS=$(echo "$TICKET_OUTPUT" | jq -r '.retrieval_ms // 0' 2>/dev/null) || TICKET_RETRIEVAL_MS=0
+
+        if [[ -n "$ACTIVE_TICKET" ]] && [[ -n "$TICKET_CONTEXT" ]]; then
+            log "Active ticket found: $ACTIVE_TICKET (retrieved in ${TICKET_RETRIEVAL_MS}ms)"
+            log "Ticket context generated (${#TICKET_CONTEXT} chars)"
+        else
+            log "No active ticket found"
+        fi
+    else
+        # Fallback: extract ticket_context using basic string parsing
+        TICKET_CONTEXT=$(echo "$TICKET_OUTPUT" | "$PYTHON_CMD" -c "import sys,json; d=json.load(sys.stdin); print(d.get('ticket_context',''))" 2>/dev/null) || TICKET_CONTEXT=""
+        log "Ticket context check completed (jq unavailable for detailed parsing)"
+    fi
+elif [[ "${TICKET_INJECTION_ENABLED}" != "true" ]]; then
+    log "Ticket context injection disabled (TICKET_INJECTION_ENABLED=false)"
+else
+    log "Ticket context injection skipped (ticket_context_injector.py not found)"
+fi
+
 # Performance tracking
 END_TIME=$(get_time_ms)
 ELAPSED_MS=$((END_TIME - START_TIME))
@@ -475,10 +508,18 @@ fi
 # Build output with additionalContext
 # NOTE: Pattern injection is async, so patterns won't be available here.
 # UserPromptSubmit will handle pattern injection for the first prompt.
-# We just set the hookEventName and indicate async injection was started.
+# Ticket context is sync, so it IS available immediately in additionalContext.
 if [[ "$JQ_AVAILABLE" -eq 1 ]]; then
-    if [[ "${SESSION_INJECTION_ENABLED:-true}" == "true" ]]; then
-        # Async injection was started - set metadata to indicate this
+    if [[ -n "$TICKET_CONTEXT" ]]; then
+        # Include ticket context in additionalContext (sync injection)
+        printf '%s' "$INPUT" | jq \
+            --arg ticket_ctx "$TICKET_CONTEXT" \
+            '.hookSpecificOutput.hookEventName = "SessionStart" |
+             .hookSpecificOutput.additionalContext = $ticket_ctx |
+             .hookSpecificOutput.metadata.injection_mode = "sync" |
+             .hookSpecificOutput.metadata.has_ticket_context = true'
+    elif [[ "${SESSION_INJECTION_ENABLED:-true}" == "true" ]]; then
+        # Async pattern injection was started - set metadata to indicate this
         printf '%s' "$INPUT" | jq \
             '.hookSpecificOutput.hookEventName = "SessionStart" |
              .hookSpecificOutput.metadata.injection_mode = "async"'
