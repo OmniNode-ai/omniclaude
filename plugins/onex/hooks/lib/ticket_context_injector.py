@@ -335,7 +335,7 @@ def main() -> None:
         output = TicketInjectorOutput(
             success=True,
             ticket_context=ticket_context,
-            ticket_id=ticket_id if ticket_context else None,
+            ticket_id=ticket_id,
             retrieval_ms=elapsed_ms,
         )
 

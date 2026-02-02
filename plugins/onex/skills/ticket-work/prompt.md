@@ -204,8 +204,10 @@ hardening_tickets: []
 When user approves spec (says "approve spec", "build it", etc.):
 
 1. **Create git branch** using Linear's suggested branch name:
+   - Get branch name from `mcp__linear-server__get_issue(id="{ticket_id}")` response field `branchName`
+   - Linear auto-generates this based on ticket ID and title
    ```bash
-   git checkout -b {gitBranchName}
+   git checkout -b {branchName}
    # Example: git checkout -b jonah/omn-1830-m4-hook-integration-session-continuity
    ```
    If branch exists, checkout existing branch instead.
@@ -215,9 +217,49 @@ When user approves spec (says "approve spec", "build it", etc.):
    mcp__linear-server__update_issue(id="{ticket_id}", state="In Progress")
    ```
 
+   > **Note**: This assumes the workspace uses "In Progress" as the active state name.
+   > If the update fails with "state not found", query available states with
+   > `mcp__linear-server__list_issue_statuses(team="{team_id}")` and use the appropriate state name.
+
 3. **Update contract** with branch name:
    - Set `branch` field to the git branch name
    - Persist to both Linear and local
+
+**Error handling for automation steps:**
+
+If any step fails, follow this rollback sequence:
+
+| Failure Point | Rollback Action |
+|---------------|-----------------|
+| Git checkout fails | Stop. Do not update Linear or contract. Report error to user. |
+| Linear update fails | Delete created branch (`git branch -D {branchName}`). Report error to user. |
+| Contract persistence fails | Log warning and continue (Linear is source of truth). |
+
+Each step should check for success before proceeding to the next:
+```python
+# Pseudo-code for safe automation
+try:
+    # Step 1: Create branch
+    git_result = run("git checkout -b {branchName}")
+    if git_result.failed:
+        raise AutomationError("Git checkout failed", step=1)
+
+    # Step 2: Update Linear
+    try:
+        mcp__linear_server__update_issue(id=ticket_id, state="In Progress")
+    except Exception as e:
+        run("git branch -D {branchName}")  # Rollback step 1
+        raise AutomationError(f"Linear update failed: {e}", step=2)
+
+    # Step 3: Persist contract locally
+    try:
+        persist_contract_locally(ticket_id, contract)
+    except Exception as e:
+        # Don't rollback - Linear is source of truth
+        log_warning(f"Local persistence failed: {e}")
+except AutomationError as e:
+    report_to_user(e)
+```
 
 ---
 
@@ -429,6 +471,20 @@ def persist_contract_locally(ticket_id: str, contract: dict) -> None:
     tmp_path = contract_path.with_suffix('.yaml.tmp')
     tmp_path.write_text(yaml.dump(contract, default_flow_style=False, sort_keys=False))
     tmp_path.rename(contract_path)
+```
+
+**Error handling:**
+
+Wrap calls to `persist_contract_locally()` in try-except. Failures should log a warning but not block the workflow (Linear is the source of truth):
+
+```python
+try:
+    persist_contract_locally(ticket_id, contract)
+except PermissionError as e:
+    print(f"Warning: Cannot write to tickets directory: {e}")
+except OSError as e:
+    print(f"Warning: Failed to persist contract locally: {e}")
+# Continue workflow - Linear has the authoritative copy
 ```
 
 Call this after every `mcp__linear-server__update_issue()` that modifies the contract.
