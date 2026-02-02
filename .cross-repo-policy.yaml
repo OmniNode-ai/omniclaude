@@ -1,0 +1,59 @@
+# =============================================================================
+# Cross-Repo Validation Policy - Kafka Import Guard
+# =============================================================================
+#
+# Purpose: Prevent direct Kafka library imports in ONEX node and handler code.
+# Nodes and handlers must use Protocol abstractions, not raw Kafka clients.
+#
+# Reference: ARCH-002 "Runtime owns all Kafka plumbing"
+# Ticket: OMN-1748
+# =============================================================================
+
+---
+policy_id: omniclaude_kafka_guard
+policy_version:
+  major: 1
+  minor: 0
+  patch: 0
+repo_id: omniclaude
+
+# =============================================================================
+# Discovery - What files to scan
+# =============================================================================
+discovery:
+  include_globs:
+    - "src/omniclaude/nodes/**/*.py"
+    - "src/omniclaude/handlers/**/*.py"
+  exclude_globs:
+    - "**/__pycache__/**"
+    - "**/node_tests/**"
+    - "**/__init__.py"
+  language_mode: python
+  skip_generated: true
+  generated_markers:
+    - "# AUTO-GENERATED"
+    - "# DO NOT EDIT"
+
+# =============================================================================
+# Rules
+# =============================================================================
+rules:
+  forbidden_imports:
+    enabled: true
+    severity: error
+    # Block entire Kafka libraries, not just consumer classes.
+    # This prevents bypassing via aliases or alternate import paths.
+    forbidden_prefixes:
+      - "aiokafka"
+      - "confluent_kafka"
+      - "kafka"
+    forbidden_modules: []
+    exceptions: []
+
+# =============================================================================
+# Baselines
+# =============================================================================
+# No baseline needed - nodes/handlers directories are clean (verified 2026-02-02)
+# Note: lib/core/ has legacy Kafka consumers but is NOT in the scanned paths.
+# Those will be cleaned up in OMN-1744.
+baselines: []

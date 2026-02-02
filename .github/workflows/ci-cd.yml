@@ -266,6 +266,64 @@ jobs:
           echo "::endgroup::"
 
   # ============================================================================
+  # Cross-Repo Validation (Kafka Import Guard)
+  # ============================================================================
+  cross-repo-validation:
+    name: Kafka Import Guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Load cached venv
+        id: cached-uv-dependencies
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Configure Git authentication for private repositories
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
+        continue-on-error: true
+
+      - name: Install dependencies
+        run: |
+          uv sync --frozen --group dev || {
+            echo "Warning: Some dependencies failed - continuing with available packages"
+            true
+          }
+
+      - name: Run Kafka import guard
+        run: |
+          echo "::group::Kafka Import Guard"
+          echo "Running cross-repo validation..."
+          echo "Policy: .cross-repo-policy.yaml"
+          echo "Scanning: src/omniclaude/nodes/, src/omniclaude/handlers/"
+          echo ""
+          echo "Reference: ARCH-002 'Runtime owns all Kafka plumbing'"
+          echo ""
+
+          uv run python -m omnibase_core.validation.cross_repo --policy .cross-repo-policy.yaml && echo "Kafka import guard passed" || {
+              echo "Kafka import guard failed"
+              echo "Direct Kafka imports found in nodes/ or handlers/"
+              echo "Run: uv run python -m omnibase_core.validation.cross_repo --policy .cross-repo-policy.yaml"
+              exit 1
+            }
+          echo "::endgroup::"
+
+  # ============================================================================
   # Security Scanning - Python Dependencies
   # ============================================================================
   security-python:
@@ -554,7 +612,7 @@ jobs:
   build:
     name: Build Docker Image
     runs-on: ubuntu-latest
-    needs: [quality, pyright, enum-governance, exports-validation, security-python, merge-coverage]
+    needs: [quality, pyright, enum-governance, exports-validation, cross-repo-validation, security-python, merge-coverage]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
