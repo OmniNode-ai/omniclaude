@@ -491,8 +491,8 @@ class TestCliMain:
         output = self._run_cli(input_json)
 
         assert output["success"] is True
-        # ticket_id is None because context couldn't be built
-        assert output["ticket_id"] is None
+        # ticket_id is preserved even when context building fails
+        assert output["ticket_id"] == "OMN-NONEXISTENT"
         assert output["ticket_context"] == ""
 
     def test_cli_main_retrieval_time_tracked(self, tmp_path: Path) -> None:

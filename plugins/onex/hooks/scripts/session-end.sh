@@ -69,13 +69,9 @@ TICKET_INJECTION_ENABLED=$(_normalize_bool "$TICKET_INJECTION_ENABLED")
 ACTIVE_TICKET=""
 
 if [[ "${TICKET_INJECTION_ENABLED}" == "true" ]] && [[ -f "${HOOKS_LIB}/ticket_context_injector.py" ]]; then
-    ACTIVE_TICKET=$("$PYTHON_CMD" -c "
-import sys
-sys.path.insert(0, '${HOOKS_LIB}')
-from ticket_context_injector import find_active_ticket
-result = find_active_ticket()
-print(result or '')
-" 2>>"$LOG_FILE") || ACTIVE_TICKET=""
+    # Use CLI interface for consistency with session-start.sh (OMN-1830)
+    TICKET_OUTPUT=$(echo '{}' | "$PYTHON_CMD" "${HOOKS_LIB}/ticket_context_injector.py" 2>>"$LOG_FILE") || TICKET_OUTPUT='{}'
+    ACTIVE_TICKET=$(echo "$TICKET_OUTPUT" | jq -r '.ticket_id // empty' 2>/dev/null) || ACTIVE_TICKET=""
 
     if [[ -n "$ACTIVE_TICKET" ]]; then
         log "Session ended with active ticket: $ACTIVE_TICKET"

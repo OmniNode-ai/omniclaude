@@ -54,17 +54,7 @@ write_daemon_status() {
 
 export PYTHONPATH="${PROJECT_ROOT}:${PLUGIN_ROOT}/lib:${HOOKS_LIB}:${PYTHONPATH:-}"
 
-# Normalize boolean values to JSON-compatible true/false
-# Accepts: true/false, True/False, TRUE/FALSE, 1/0, yes/no, Yes/No, YES/NO
-_normalize_bool() {
-    # Use tr for lowercase conversion (compatible with bash 3.2 on macOS)
-    local val
-    val=$(echo "$1" | tr '[:upper:]' '[:lower:]')
-    case "$val" in
-        true|1|yes) echo "true" ;;
-        *) echo "false" ;;
-    esac
-}
+# Boolean normalization: _normalize_bool is provided by common.sh (sourced above)
 
 # SessionStart injection config (OMN-1675)
 SESSION_INJECTION_ENABLED="${OMNICLAUDE_SESSION_INJECTION_ENABLED:-true}"
