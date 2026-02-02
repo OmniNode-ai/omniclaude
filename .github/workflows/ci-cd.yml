@@ -172,6 +172,10 @@ jobs:
       - name: Verify handshake is current
         run: |
           echo "::group::Architecture Handshake Verification"
+          if [ ! -f "./omnibase_core/architecture-handshakes/check-handshake.sh" ]; then
+            echo "::error::check-handshake.sh not found in omnibase_core"
+            exit 1
+          fi
           echo "Verifying .claude/architecture-handshake.md matches source in omnibase_core..."
           echo ""
           ./omnibase_core/architecture-handshakes/check-handshake.sh ./omnibase_core

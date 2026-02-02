@@ -98,7 +98,7 @@ async def emit_demo_event(prompt: str, session_id: str | None = None) -> bool:
     Returns:
         True if emission succeeded, False otherwise.
     """
-    session = session_id or f"demo-{uuid4()}"
+    session = session_id or str(uuid4())
     correlation_id = uuid4()
 
     print("Emitting event:")

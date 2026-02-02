@@ -49,7 +49,7 @@ psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DATABASE
 | `status` | TEXT | Pattern status (candidate, validated, etc.) |
 | `recurrence_count` | INT | Number of times pattern observed |
 | `quality_score` | FLOAT | Quality score (0.0 - 1.0) |
-| `days_seen` | INT | Number of distinct days pattern was seen |
+| `distinct_days_seen` | INT | Number of distinct days pattern was seen |
 | `unique_sessions` | INT | Number of unique sessions |
 | `is_current` | BOOLEAN | Whether this is the current version |
 | `first_seen_at` | TIMESTAMP | First observation timestamp |
