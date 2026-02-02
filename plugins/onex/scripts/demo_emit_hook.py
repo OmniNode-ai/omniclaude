@@ -8,7 +8,7 @@ emit_claude_hook_event() function. The event is published to:
     onex.cmd.omniintelligence.claude-hook-event.v1
 
 Usage:
-    # Ensure environment is configured
+    # Ensure environment is configured (REQUIRED)
     source .env
 
     # Run with defaults
@@ -17,9 +17,9 @@ Usage:
     # Custom prompt
     python plugins/onex/scripts/demo_emit_hook.py --prompt "My test prompt"
 
-Environment Variables:
-    KAFKA_BOOTSTRAP_SERVERS: Kafka brokers (default: 192.168.86.200:29092)
-    KAFKA_ENVIRONMENT: Topic prefix (default: dev)
+Environment Variables (REQUIRED - no defaults):
+    KAFKA_BOOTSTRAP_SERVERS: Kafka brokers (e.g., 192.168.86.200:29092)
+    KAFKA_ENVIRONMENT: Topic prefix (e.g., dev, staging, prod)
 """
 
 import argparse
@@ -43,6 +43,27 @@ from omniclaude.hooks.handler_event_emitter import (
 from omniclaude.hooks.topics import TopicBase, build_topic
 
 
+def validate_config() -> None:
+    """Validate required environment variables.
+
+    Per CLAUDE.md, the .env file is the SINGLE SOURCE OF TRUTH for configuration.
+    No hardcoded defaults are allowed.
+    """
+    missing = []
+    if not os.environ.get("KAFKA_BOOTSTRAP_SERVERS"):
+        missing.append("KAFKA_BOOTSTRAP_SERVERS")
+    if not os.environ.get("KAFKA_ENVIRONMENT"):
+        missing.append("KAFKA_ENVIRONMENT")
+
+    if missing:
+        print("[ERROR] Missing required environment variables:")
+        for var in missing:
+            print(f"  - {var}")
+        print()
+        print("Run: source .env")
+        sys.exit(1)
+
+
 def print_banner() -> None:
     """Print demo banner."""
     print("=" * 70)
@@ -52,9 +73,12 @@ def print_banner() -> None:
 
 
 def print_config() -> None:
-    """Print current configuration."""
-    kafka_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:29092")
-    kafka_env = os.environ.get("KAFKA_ENVIRONMENT", "dev")
+    """Print current configuration.
+
+    Note: validate_config() must be called before this function.
+    """
+    kafka_servers = os.environ["KAFKA_BOOTSTRAP_SERVERS"]
+    kafka_env = os.environ["KAFKA_ENVIRONMENT"]
     topic = build_topic(kafka_env, TopicBase.CLAUDE_HOOK_EVENT)
 
     print("Configuration:")
@@ -127,6 +151,7 @@ def main() -> int:
     args = parser.parse_args()
 
     print_banner()
+    validate_config()
     print_config()
 
     # Run async emission
@@ -144,9 +169,10 @@ def main() -> int:
         print("Demo failed at step 1/3: Event emission")
         print()
         print("Troubleshooting:")
-        print("  1. Check KAFKA_BOOTSTRAP_SERVERS is set correctly")
-        print("  2. Verify Kafka/Redpanda is running at 192.168.86.200:29092")
-        print("  3. Check network connectivity")
+        print("  1. Run: source .env")
+        print("  2. Check KAFKA_BOOTSTRAP_SERVERS is set correctly")
+        print("  3. Verify Kafka/Redpanda is running at the configured address")
+        print("  4. Check network connectivity")
     print("=" * 70)
 
     return 0 if success else 1

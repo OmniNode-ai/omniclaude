@@ -22,13 +22,13 @@ Usage:
     # Process single batch and exit
     python plugins/onex/scripts/demo_consume_store.py --once
 
-Environment Variables:
-    KAFKA_BOOTSTRAP_SERVERS: Kafka brokers (default: 192.168.86.200:29092)
+Environment Variables (all required - source .env first):
+    KAFKA_BOOTSTRAP_SERVERS: Kafka brokers (required)
     KAFKA_ENVIRONMENT: Topic prefix (default: dev)
-    POSTGRES_HOST: Database host (default: 192.168.86.200)
-    POSTGRES_PORT: Database port (default: 5436)
-    POSTGRES_DATABASE: Database name (default: omninode_bridge)
-    POSTGRES_USER: Database user (default: postgres)
+    POSTGRES_HOST: Database host (required)
+    POSTGRES_PORT: Database port (required)
+    POSTGRES_DATABASE: Database name (required)
+    POSTGRES_USER: Database user (required)
     POSTGRES_PASSWORD: Database password (required)
 """
 
@@ -39,6 +39,7 @@ import os
 import signal
 import sys
 import time
+import uuid
 from pathlib import Path
 from threading import Event
 
@@ -71,7 +72,12 @@ def print_banner() -> None:
 
 def get_kafka_config() -> dict:
     """Get Kafka configuration from environment."""
-    kafka_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:29092")
+    kafka_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS")
+    if not kafka_servers:
+        print("[ERROR] KAFKA_BOOTSTRAP_SERVERS environment variable required")
+        print("  Run: source .env")
+        sys.exit(1)
+
     kafka_env = os.environ.get("KAFKA_ENVIRONMENT", "dev")
     topic = build_topic(kafka_env, TopicBase.CLAUDE_HOOK_EVENT)
 
@@ -84,18 +90,29 @@ def get_kafka_config() -> dict:
 
 def get_postgres_config() -> dict:
     """Get PostgreSQL configuration from environment."""
-    password = os.environ.get("POSTGRES_PASSWORD")
-    if not password:
-        print("[ERROR] POSTGRES_PASSWORD environment variable required")
+    required_vars = [
+        "POSTGRES_HOST",
+        "POSTGRES_PORT",
+        "POSTGRES_DATABASE",
+        "POSTGRES_USER",
+        "POSTGRES_PASSWORD",
+    ]
+
+    missing = [var for var in required_vars if not os.environ.get(var)]
+    if missing:
+        print("[ERROR] Missing required environment variables:")
+        for var in missing:
+            print(f"  - {var}")
+        print()
         print("  Run: source .env")
         sys.exit(1)
 
     return {
-        "host": os.environ.get("POSTGRES_HOST", "192.168.86.200"),
-        "port": int(os.environ.get("POSTGRES_PORT", "5436")),
-        "database": os.environ.get("POSTGRES_DATABASE", "omninode_bridge"),
-        "user": os.environ.get("POSTGRES_USER", "postgres"),
-        "password": password,
+        "host": os.environ["POSTGRES_HOST"],
+        "port": int(os.environ["POSTGRES_PORT"]),
+        "database": os.environ["POSTGRES_DATABASE"],
+        "user": os.environ["POSTGRES_USER"],
+        "password": os.environ["POSTGRES_PASSWORD"],
     }
 
 
@@ -132,33 +149,55 @@ def extract_pattern_from_event(event: dict) -> dict | None:
     if not prompt:
         return None
 
-    # Generate pattern_id from prompt hash
-    prompt_hash = hashlib.sha256(prompt.encode()).hexdigest()[:16]
-    pattern_id = f"demo-{prompt_hash}"
+    # Generate pattern_signature from prompt (first 500 chars)
+    pattern_signature = prompt[:500]
 
-    # Derive domain from prompt keywords (simple heuristic)
+    # Generate signature_hash using SHA256
+    signature_hash = hashlib.sha256(pattern_signature.encode()).hexdigest()
+
+    # Derive domain_id from prompt keywords (simple heuristic)
+    # Valid domain_id values: architecture, code_generation, code_review,
+    # data_analysis, debugging, devops, documentation, general, refactoring, testing
     prompt_lower = prompt.lower()
     if any(kw in prompt_lower for kw in ["test", "pytest", "unittest"]):
-        domain = "testing"
+        domain_id = "testing"
     elif any(kw in prompt_lower for kw in ["review", "pr", "code review"]):
-        domain = "code_review"
-    elif any(kw in prompt_lower for kw in ["debug", "error", "fix"]):
-        domain = "debugging"
+        domain_id = "code_review"
+    elif any(kw in prompt_lower for kw in ["debug", "error", "fix", "bug"]):
+        domain_id = "debugging"
+    elif any(kw in prompt_lower for kw in ["refactor", "clean", "improve"]):
+        domain_id = "refactoring"
+    elif any(kw in prompt_lower for kw in ["doc", "readme", "comment"]):
+        domain_id = "documentation"
+    elif any(kw in prompt_lower for kw in ["deploy", "ci", "docker", "kubernetes"]):
+        domain_id = "devops"
+    elif any(kw in prompt_lower for kw in ["api", "endpoint", "design", "architect"]):
+        domain_id = "architecture"
+    elif any(kw in prompt_lower for kw in ["generate", "create", "implement"]):
+        domain_id = "code_generation"
     else:
-        domain = "general"
+        domain_id = "general"
 
-    # Extract title from first line or first 50 chars
-    title = prompt.split("\n")[0][:100] if "\n" in prompt else prompt[:100]
+    # Parse session_id as UUID for source_session_ids array
+    session_id_str = event.get("session_id", "")
+    try:
+        session_uuid = uuid.UUID(session_id_str)
+        source_session_ids = [session_uuid]
+    except (ValueError, TypeError):
+        # Generate a random UUID if session_id is invalid
+        source_session_ids = [uuid.uuid4()]
 
     return {
-        "pattern_id": pattern_id,
-        "domain": domain,
-        "title": title,
-        "description": prompt[:500],  # Truncate for storage
-        "confidence": 0.7,  # Default confidence for demo patterns
-        "usage_count": 1,
-        "success_rate": 1.0,
-        "example_reference": f"session:{event.get('session_id', 'unknown')}",
+        "pattern_signature": pattern_signature,
+        "signature_hash": signature_hash,
+        "domain_id": domain_id,
+        "domain_version": "1.0",
+        "confidence": 0.5,  # Minimum allowed confidence
+        "status": "candidate",
+        "source_session_ids": source_session_ids,
+        "recurrence_count": 1,
+        "is_current": True,
+        "version": 1,
     }
 
 
@@ -172,19 +211,20 @@ def upsert_pattern(conn, pattern: dict) -> str:
     Returns:
         "insert" or "update" indicating operation type.
     """
+    # Convert UUID list to PostgreSQL array format
+    session_ids_array = [str(sid) for sid in pattern["source_session_ids"]]
+
     sql = """
         INSERT INTO learned_patterns (
-            pattern_id, domain, title, description, confidence,
-            usage_count, success_rate, example_reference
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-        ON CONFLICT (pattern_id) DO UPDATE SET
-            domain = EXCLUDED.domain,
-            title = EXCLUDED.title,
-            description = EXCLUDED.description,
-            confidence = EXCLUDED.confidence,
-            usage_count = learned_patterns.usage_count + 1,
-            success_rate = EXCLUDED.success_rate,
-            example_reference = EXCLUDED.example_reference
+            pattern_signature, signature_hash, domain_id, domain_version,
+            confidence, status, source_session_ids, recurrence_count,
+            is_current, version
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s::uuid[], %s, %s, %s)
+        ON CONFLICT (pattern_signature, domain_id) WHERE is_current = true
+        DO UPDATE SET
+            recurrence_count = learned_patterns.recurrence_count + 1,
+            last_seen_at = now(),
+            source_session_ids = array_cat(learned_patterns.source_session_ids, EXCLUDED.source_session_ids)
         RETURNING (xmax = 0) as inserted
     """
 
@@ -192,14 +232,16 @@ def upsert_pattern(conn, pattern: dict) -> str:
         cursor.execute(
             sql,
             (
-                pattern["pattern_id"],
-                pattern["domain"],
-                pattern["title"],
-                pattern["description"],
+                pattern["pattern_signature"],
+                pattern["signature_hash"],
+                pattern["domain_id"],
+                pattern["domain_version"],
                 pattern["confidence"],
-                pattern["usage_count"],
-                pattern["success_rate"],
-                pattern["example_reference"],
+                pattern["status"],
+                session_ids_array,
+                pattern["recurrence_count"],
+                pattern["is_current"],
+                pattern["version"],
             ),
         )
         result = cursor.fetchone()
@@ -267,9 +309,13 @@ def consume_and_store(
                         operation = upsert_pattern(conn, pattern)
                         patterns_stored += 1
 
+                        # Truncate pattern_signature for display
+                        sig_preview = pattern["pattern_signature"][:60]
+                        if len(pattern["pattern_signature"]) > 60:
+                            sig_preview += "..."
                         print(
-                            f"[{operation.upper()}] Pattern: {pattern['pattern_id']}"
-                            f" (domain={pattern['domain']})"
+                            f'[{operation.upper()}] Pattern: "{sig_preview}"'
+                            f" (domain={pattern['domain_id']})"
                         )
 
             # Check if we should exit (single batch mode)
@@ -338,7 +384,7 @@ def main() -> int:
         print()
         print("Troubleshooting:")
         print("  1. Run emit first: python plugins/onex/scripts/demo_emit_hook.py")
-        print("  2. Check topic has messages: kcat -L -b 192.168.86.200:29092")
+        print("  2. Check topic has messages: kcat -L -b $KAFKA_BOOTSTRAP_SERVERS")
     print("=" * 70)
 
     return 0

@@ -22,12 +22,12 @@ Usage:
     # Limit results
     python plugins/onex/scripts/demo_query_patterns.py --limit 5
 
-Environment Variables:
-    POSTGRES_HOST: Database host (default: 192.168.86.200)
-    POSTGRES_PORT: Database port (default: 5436)
-    POSTGRES_DATABASE: Database name (default: omninode_bridge)
-    POSTGRES_USER: Database user (default: postgres)
-    POSTGRES_PASSWORD: Database password (required)
+Environment Variables (all required - no defaults):
+    POSTGRES_HOST: Database host
+    POSTGRES_PORT: Database port
+    POSTGRES_DATABASE: Database name
+    POSTGRES_USER: Database user
+    POSTGRES_PASSWORD: Database password
 """
 
 import argparse
@@ -47,19 +47,35 @@ def print_banner() -> None:
 
 
 def get_postgres_config() -> dict:
-    """Get PostgreSQL configuration from environment."""
-    password = os.environ.get("POSTGRES_PASSWORD")
-    if not password:
-        print("[ERROR] POSTGRES_PASSWORD environment variable required")
-        print("  Run: source .env")
+    """Get PostgreSQL configuration from environment.
+
+    All variables are required with no defaults per CLAUDE.md:
+    '.env file is the SINGLE SOURCE OF TRUTH for all configuration values.'
+    """
+    required_vars = [
+        "POSTGRES_HOST",
+        "POSTGRES_PORT",
+        "POSTGRES_DATABASE",
+        "POSTGRES_USER",
+        "POSTGRES_PASSWORD",
+    ]
+
+    missing = [var for var in required_vars if not os.environ.get(var)]
+
+    if missing:
+        print("[ERROR] Missing required environment variables:")
+        for var in missing:
+            print(f"  - {var}")
+        print()
+        print("Run: source .env")
         sys.exit(1)
 
     return {
-        "host": os.environ.get("POSTGRES_HOST", "192.168.86.200"),
-        "port": int(os.environ.get("POSTGRES_PORT", "5436")),
-        "database": os.environ.get("POSTGRES_DATABASE", "omninode_bridge"),
-        "user": os.environ.get("POSTGRES_USER", "postgres"),
-        "password": password,
+        "host": os.environ["POSTGRES_HOST"],
+        "port": int(os.environ["POSTGRES_PORT"]),
+        "database": os.environ["POSTGRES_DATABASE"],
+        "user": os.environ["POSTGRES_USER"],
+        "password": os.environ["POSTGRES_PASSWORD"],
     }
 
 
@@ -82,8 +98,8 @@ def query_patterns(
 
     Args:
         conn: PostgreSQL connection.
-        domain: Optional domain filter.
-        demo_only: If True, only return demo patterns (pattern_id starts with 'demo-').
+        domain: Optional domain filter (domain_id column).
+        demo_only: If True, only return demo patterns (pattern_signature starts with 'Demo pattern:').
         limit: Maximum number of patterns to return.
 
     Returns:
@@ -93,29 +109,32 @@ def query_patterns(
     params = []
 
     if demo_only:
-        conditions.append("pattern_id LIKE 'demo-%%'")
+        conditions.append("pattern_signature LIKE 'Demo pattern:%%'")
 
     if domain:
-        conditions.append("domain = %s")
+        conditions.append("domain_id = %s")
         params.append(domain)
 
     where_clause = " AND ".join(conditions) if conditions else "TRUE"
 
     sql = f"""
         SELECT
-            pattern_id,
-            domain,
-            title,
-            description,
+            id,
+            pattern_signature,
+            signature_hash,
+            domain_id,
             confidence,
-            usage_count,
-            success_rate,
-            example_reference,
-            created_at,
-            updated_at
+            status,
+            recurrence_count,
+            quality_score,
+            source_session_ids,
+            first_seen_at,
+            last_seen_at,
+            distinct_days_seen
         FROM learned_patterns
         WHERE {where_clause}
-        ORDER BY updated_at DESC, confidence DESC
+          AND is_current = true
+        ORDER BY last_seen_at DESC, confidence DESC
         LIMIT %s
     """  # nosec B608 - where_clause built from safe conditions
     params.append(limit)
@@ -127,19 +146,22 @@ def query_patterns(
 
 def print_pattern(pattern: dict, index: int) -> None:
     """Print a single pattern in formatted manner."""
-    print(f"[{index}] {pattern['pattern_id']}")
-    print(f"    Domain:     {pattern['domain']}")
+    sig = pattern["pattern_signature"]
+    print(f"[{index}] {pattern['signature_hash'][:16]}...")
+    print(f"    Domain:      {pattern['domain_id']}")
     print(
-        f"    Title:      {pattern['title'][:60]}..."
-        if len(pattern["title"]) > 60
-        else f"    Title:      {pattern['title']}"
+        f"    Pattern:     {sig[:60]}..."
+        if len(sig) > 60
+        else f"    Pattern:     {sig}"
     )
-    print(f"    Confidence: {pattern['confidence']:.1%}")
-    print(f"    Usage:      {pattern['usage_count']} times")
-    print(f"    Success:    {pattern['success_rate']:.1%}")
-    print(f"    Reference:  {pattern['example_reference'] or 'N/A'}")
-    print(f"    Created:    {pattern['created_at']}")
-    print(f"    Updated:    {pattern['updated_at']}")
+    print(f"    Confidence:  {pattern['confidence']:.1%}")
+    print(f"    Status:      {pattern['status']}")
+    print(f"    Recurrence:  {pattern['recurrence_count']} times")
+    print(f"    Quality:     {(pattern['quality_score'] or 0):.1%}")
+    print(f"    Days seen:   {pattern['distinct_days_seen']}")
+    print(f"    Sessions:    {len(pattern['source_session_ids'] or [])} unique")
+    print(f"    First seen:  {pattern['first_seen_at']}")
+    print(f"    Last seen:   {pattern['last_seen_at']}")
     print()
 
 
@@ -149,40 +171,59 @@ def print_summary(patterns: list[dict]) -> None:
         return
 
     domains = {}
-    total_usage = 0
+    total_recurrence = 0
     avg_confidence = 0
+    avg_quality = 0
 
     for p in patterns:
-        domains[p["domain"]] = domains.get(p["domain"], 0) + 1
-        total_usage += p["usage_count"]
-        avg_confidence += p["confidence"]
+        domains[p["domain_id"]] = domains.get(p["domain_id"], 0) + 1
+        total_recurrence += p["recurrence_count"] or 0
+        avg_confidence += p["confidence"] or 0
+        avg_quality += p["quality_score"] or 0
 
     avg_confidence /= len(patterns)
+    avg_quality /= len(patterns)
 
     print("-" * 70)
     print("Summary:")
-    print(f"  Total patterns:     {len(patterns)}")
-    print(f"  Total usage:        {total_usage}")
-    print(f"  Average confidence: {avg_confidence:.1%}")
+    print(f"  Total patterns:      {len(patterns)}")
+    print(f"  Total recurrence:    {total_recurrence}")
+    print(f"  Average confidence:  {avg_confidence:.1%}")
+    print(f"  Average quality:     {avg_quality:.1%}")
     print(
-        f"  Domains:            {', '.join(f'{k}({v})' for k, v in sorted(domains.items()))}"
+        f"  Domains:             {', '.join(f'{k}({v})' for k, v in sorted(domains.items()))}"
     )
 
 
 def count_all_patterns(conn) -> int:
-    """Count total patterns in database."""
+    """Count total current patterns in database."""
     with conn.cursor() as cursor:
-        cursor.execute("SELECT COUNT(*) FROM learned_patterns")
+        cursor.execute("SELECT COUNT(*) FROM learned_patterns WHERE is_current = true")
         return cursor.fetchone()[0]
 
 
 def count_demo_patterns(conn) -> int:
-    """Count demo patterns in database."""
+    """Count current demo patterns in database."""
     with conn.cursor() as cursor:
         cursor.execute(
-            "SELECT COUNT(*) FROM learned_patterns WHERE pattern_id LIKE 'demo-%%'"
+            "SELECT COUNT(*) FROM learned_patterns WHERE pattern_signature LIKE 'Demo pattern:%%' AND is_current = true"
         )
         return cursor.fetchone()[0]
+
+
+def delete_demo_patterns(conn) -> int:
+    """Delete demo patterns from database.
+
+    Returns:
+        Number of patterns deleted.
+    """
+    with conn.cursor() as cursor:
+        cursor.execute(
+            "DELETE FROM learned_patterns WHERE pattern_signature LIKE 'Demo pattern:%%'"
+        )
+        deleted = cursor.rowcount
+        conn.commit()
+        return deleted
 
 
 def main() -> int:
@@ -199,13 +240,18 @@ def main() -> int:
     parser.add_argument(
         "--demo-only",
         action="store_true",
-        help="Only show demo patterns (pattern_id starts with 'demo-')",
+        help="Only show demo patterns (pattern_signature starts with 'Demo pattern:')",
     )
     parser.add_argument(
         "--limit",
         type=int,
         default=20,
         help="Maximum patterns to display (default: 20)",
+    )
+    parser.add_argument(
+        "--cleanup",
+        action="store_true",
+        help="Delete demo patterns after displaying (clean up test data)",
     )
 
     args = parser.parse_args()
@@ -270,17 +316,28 @@ def main() -> int:
 
         print_summary(patterns)
 
+        # Cleanup demo patterns if requested
+        if args.cleanup:
+            print()
+            print("-" * 70)
+            deleted = delete_demo_patterns(conn)
+            print(f"[CLEANUP] Deleted {deleted} demo patterns from database")
+
     finally:
         conn.close()
 
     print()
     print("=" * 70)
     print("Demo step 3/3 complete: Patterns retrieved from PostgreSQL")
+    if args.cleanup:
+        print("  [OK] Demo patterns cleaned up")
     print()
     print("VERTICAL-001 Demo Summary:")
     print("  [OK] Step 1: Emit hook event to Kafka")
     print("  [OK] Step 2: Consume event and store pattern")
     print("  [OK] Step 3: Query pattern from PostgreSQL")
+    if args.cleanup:
+        print("  [OK] Step 4: Cleanup demo data")
     print()
     print("Full pipeline validated successfully!")
     print("=" * 70)

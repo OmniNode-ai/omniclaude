@@ -11,7 +11,7 @@
 This runbook validates the full pattern extraction pipeline:
 
 ```
-Claude Code Hook → Kafka → Consumer → PostgreSQL → Query
+Claude Code Hook -> Kafka -> Consumer -> PostgreSQL -> Query
 ```
 
 The demo uses shortcuts (direct SQL, hardcoded topics) to prove the architecture works before building proper abstractions.
@@ -24,24 +24,36 @@ The demo uses shortcuts (direct SQL, hardcoded topics) to prove the architecture
 
 | Service | Host | Port | Purpose |
 |---------|------|------|---------|
-| Redpanda/Kafka | 192.168.86.200 | 29092 | Event bus |
-| PostgreSQL | 192.168.86.200 | 5436 | Pattern storage |
+| Redpanda/Kafka | `$KAFKA_BOOTSTRAP_SERVERS` | 29092 | Event bus |
+| PostgreSQL | `$POSTGRES_HOST` | `$POSTGRES_PORT` | Pattern storage |
 
 ### Database
 
-The `learned_patterns` table must exist in `omninode_bridge` database.
+The `learned_patterns` table must exist in the `omninode_bridge` database.
 
 ```bash
-# Verify table exists
-psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge \
-  -c "SELECT COUNT(*) FROM learned_patterns"
+# Verify table exists and check schema
+source .env
+psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DATABASE \
+  -c "SELECT COUNT(*) FROM learned_patterns WHERE is_current = true"
 ```
 
-If missing, run the migration:
-```bash
-psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge \
-  -f migrations/001_create_learned_patterns_table.sql
-```
+**Table Schema** (actual columns):
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `signature_hash` | TEXT | Primary key, SHA-256 hash of pattern signature |
+| `pattern_signature` | TEXT | The actual pattern text |
+| `domain` | TEXT | Pattern domain (general, testing, etc.) |
+| `confidence` | FLOAT | Confidence score (0.0 - 1.0) |
+| `status` | TEXT | Pattern status (candidate, validated, etc.) |
+| `recurrence_count` | INT | Number of times pattern observed |
+| `quality_score` | FLOAT | Quality score (0.0 - 1.0) |
+| `days_seen` | INT | Number of distinct days pattern was seen |
+| `unique_sessions` | INT | Number of unique sessions |
+| `is_current` | BOOLEAN | Whether this is the current version |
+| `first_seen_at` | TIMESTAMP | First observation timestamp |
+| `last_seen_at` | TIMESTAMP | Most recent observation timestamp |
 
 ### Environment
 
@@ -141,8 +153,10 @@ Emitting event:
 
 **Within 5 seconds**, you should see in Terminal T1:
 ```
-[INSERT] Pattern: demo-<hash> (domain=general)
+[INSERT] Pattern: abc123def456... (domain=general)
 ```
+
+Note: The consumer shows the first 12 characters of the `signature_hash`.
 
 ### Step 3: Query Patterns (Terminal T3)
 
@@ -174,21 +188,22 @@ Querying patterns (demo patterns only)...
 
 Found 1 patterns:
 
-[1] demo-<hash>
-    Domain:     general
-    Title:      Demo pattern: Always validate input before processing
-    Confidence: 70.0%
-    Usage:      1 times
-    Success:    100.0%
-    Reference:  session:demo-<uuid>
-    Created:    2026-02-02 ...
-    Updated:    2026-02-02 ...
+[1] abc123def456...
+    Domain:      general
+    Pattern:     Demo pattern: Always validate input before...
+    Confidence:  50.0%
+    Status:      candidate
+    Recurrence:  1 times
+    Quality:     50.0%
+    Days seen:   1
+    Sessions:    1 unique
+    First seen:  2026-02-02 ...
+    Last seen:   2026-02-02 ...
 
 ----------------------------------------------------------------------
 Summary:
   Total patterns:     1
-  Total usage:        1
-  Average confidence: 70.0%
+  Avg confidence:     50.0%
   Domains:            general(1)
 
 ======================================================================
@@ -216,8 +231,8 @@ In Terminal T1, press `Ctrl+C`:
 | Criterion | Expected | Check |
 |-----------|----------|-------|
 | Event emitted to Kafka | "Event emitted successfully" | [ ] |
-| Consumer receives within 5s | "[INSERT] Pattern: demo-..." | [ ] |
-| Pattern in PostgreSQL | Query returns pattern | [ ] |
+| Consumer receives within 5s | "[INSERT] Pattern: abc123..." | [ ] |
+| Pattern in PostgreSQL | Query returns pattern with signature_hash | [ ] |
 | Full cycle < 30s | From emit to query | [ ] |
 
 ---
@@ -228,13 +243,14 @@ In Terminal T1, press `Ctrl+C`:
 
 1. **Check topic exists**:
    ```bash
-   kcat -L -b 192.168.86.200:29092 | grep claude-hook-event
+   source .env
+   kcat -L -b $KAFKA_BOOTSTRAP_SERVERS | grep claude-hook-event
    ```
 
 2. **Check consumer group offset**:
    ```bash
-   # View consumer groups
-   kcat -b 192.168.86.200:29092 -L | grep demo-vertical
+   source .env
+   kcat -b $KAFKA_BOOTSTRAP_SERVERS -L | grep demo-vertical
    ```
 
 3. **Reset consumer offset** (if needed):
@@ -248,18 +264,21 @@ In Terminal T1, press `Ctrl+C`:
 
 1. **Verify connectivity**:
    ```bash
-   psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge -c "SELECT 1"
+   source .env
+   psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DATABASE -c "SELECT 1"
    ```
 
 2. **Check password**:
    ```bash
+   source .env
    echo $POSTGRES_PASSWORD
    # Should not be empty
    ```
 
 3. **Check table exists**:
    ```bash
-   psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge \
+   source .env
+   psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DATABASE \
      -c "\d learned_patterns"
    ```
 
@@ -267,12 +286,14 @@ In Terminal T1, press `Ctrl+C`:
 
 1. **Verify broker**:
    ```bash
-   kcat -b 192.168.86.200:29092 -L
+   source .env
+   kcat -b $KAFKA_BOOTSTRAP_SERVERS -L
    ```
 
 2. **Check network**:
    ```bash
-   nc -zv 192.168.86.200 29092
+   source .env
+   nc -zv $POSTGRES_HOST 29092
    ```
 
 3. **Verify /etc/hosts** (if using hostname):
@@ -311,8 +332,9 @@ python plugins/onex/scripts/demo_consume_store.py --once
 Remove demo patterns after testing:
 
 ```bash
-psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge \
-  -c "DELETE FROM learned_patterns WHERE pattern_id LIKE 'demo-%'"
+source .env
+psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DATABASE \
+  -c "DELETE FROM learned_patterns WHERE pattern_signature LIKE 'Demo pattern:%'"
 ```
 
 ---
