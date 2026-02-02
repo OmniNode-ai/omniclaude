@@ -64,7 +64,6 @@ if TYPE_CHECKING:
 pytestmark = [
     pytest.mark.integration,
     pytest.mark.postgres_integration,
-    pytest.mark.asyncio,
     pytest.mark.slow,
 ]
 
@@ -356,39 +355,13 @@ class TestDatabaseConnection:
 # Integration Tests - Contract Operations
 # =============================================================================
 
-# NOTE: Tests in this section are marked as xfail due to a known bug in
-# omnibase_infra 0.3.0 where PostgresRepositoryRuntime._inject_limit()
-# adds a duplicate LIMIT clause when the contract SQL already contains one.
-# This causes "syntax error at or near LIMIT" errors.
-#
-# These tests document the expected behavior and will pass once the runtime
-# bug is fixed. The tests verify that:
-# 1. The contract is correctly defined
-# 2. The database connection works
-# 3. The expected behavior of each operation
-#
-# To run and see the actual failures (useful for debugging):
-#   POSTGRES_INTEGRATION_TESTS=1 pytest ... --runxfail
-
-
-# Reasons for expected failures
-RUNTIME_LIMIT_BUG = (
-    "omnibase_infra 0.3.0 PostgresRepositoryRuntime._inject_limit() "
-    "duplicates LIMIT clause when contract SQL already has LIMIT $n"
-)
-
-SCHEMA_MISMATCH = (
-    "Contract references columns (pattern_id, domain, title, description) that "
-    "may not exist in actual learned_patterns table schema. The actual schema "
-    "uses different column names (id, domain_id, compiled_snippet, etc.). "
-    "Contract needs update to match production schema."
-)
+# NOTE: The LIMIT clause duplication bug was fixed in omnibase_infra 0.3.1
+# (OMN-1842). Tests no longer need xfail markers for this issue.
 
 
 class TestListValidatedPatterns:
     """Tests for list_validated_patterns operation."""
 
-    @pytest.mark.xfail(reason=RUNTIME_LIMIT_BUG, strict=False)
     async def test_list_validated_patterns_executes(
         self,
         _postgres_health_check: None,
@@ -401,7 +374,6 @@ class TestListValidatedPatterns:
         # Result should be a list (may be empty)
         assert isinstance(result, list)
 
-    @pytest.mark.xfail(reason=RUNTIME_LIMIT_BUG, strict=False)
     async def test_list_validated_patterns_with_limit(
         self,
         _postgres_health_check: None,
@@ -414,7 +386,6 @@ class TestListValidatedPatterns:
         assert isinstance(result, list)
         assert len(result) <= 2
 
-    @pytest.mark.xfail(reason=RUNTIME_LIMIT_BUG, strict=False)
     async def test_list_validated_patterns_returns_expected_columns(
         self,
         _postgres_health_check: None,
@@ -440,7 +411,6 @@ class TestListValidatedPatterns:
                 f"Missing columns: {expected_columns - set(row.keys())}"
             )
 
-    @pytest.mark.xfail(reason=RUNTIME_LIMIT_BUG, strict=False)
     async def test_list_validated_patterns_maps_to_pattern_record(
         self,
         _postgres_health_check: None,
@@ -472,7 +442,6 @@ class TestListValidatedPatterns:
 class TestGetPatternById:
     """Tests for get_pattern_by_id operation."""
 
-    @pytest.mark.xfail(reason=SCHEMA_MISMATCH, strict=False)
     async def test_get_pattern_by_id_with_nonexistent_id(
         self,
         _postgres_health_check: None,
@@ -493,7 +462,6 @@ class TestGetPatternById:
         # Should return None or empty for nonexistent pattern
         assert result is None or result == []
 
-    @pytest.mark.xfail(reason=RUNTIME_LIMIT_BUG, strict=False)
     async def test_get_pattern_by_id_with_existing_pattern(
         self,
         _postgres_health_check: None,
@@ -532,7 +500,6 @@ class TestGetPatternById:
 class TestListPatternsByDomain:
     """Tests for list_patterns_by_domain operation."""
 
-    @pytest.mark.xfail(reason=RUNTIME_LIMIT_BUG, strict=False)
     async def test_list_patterns_by_domain_executes(
         self,
         _postgres_health_check: None,
@@ -545,7 +512,6 @@ class TestListPatternsByDomain:
         # Result should be a list (may be empty)
         assert isinstance(result, list)
 
-    @pytest.mark.xfail(reason=RUNTIME_LIMIT_BUG, strict=False)
     async def test_list_patterns_by_domain_with_limit(
         self,
         _postgres_health_check: None,
@@ -557,7 +523,6 @@ class TestListPatternsByDomain:
         assert isinstance(result, list)
         assert len(result) <= 2
 
-    @pytest.mark.xfail(reason=RUNTIME_LIMIT_BUG, strict=False)
     async def test_list_patterns_by_domain_returns_matching_domain(
         self,
         _postgres_health_check: None,
@@ -574,7 +539,6 @@ class TestListPatternsByDomain:
                     f"Expected domain '{domain}' or 'general', got '{row_domain}'"
                 )
 
-    @pytest.mark.xfail(reason=RUNTIME_LIMIT_BUG, strict=False)
     async def test_list_patterns_by_domain_with_existing_domain(
         self,
         _postgres_health_check: None,
@@ -638,7 +602,6 @@ class TestErrorHandling:
         with pytest.raises((Exception, RepositoryExecutionError)):
             await runtime.call("get_pattern_by_id", "not-a-valid-uuid")
 
-    @pytest.mark.xfail(reason=RUNTIME_LIMIT_BUG, strict=False)
     async def test_negative_limit_handled(
         self,
         _postgres_health_check: None,
@@ -671,7 +634,6 @@ class TestErrorHandling:
 class TestFullWorkflow:
     """End-to-end workflow tests."""
 
-    @pytest.mark.xfail(reason=RUNTIME_LIMIT_BUG, strict=False)
     async def test_full_pattern_injection_workflow(
         self,
         _postgres_health_check: None,

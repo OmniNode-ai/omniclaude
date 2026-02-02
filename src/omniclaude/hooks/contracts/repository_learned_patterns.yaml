@@ -51,7 +51,7 @@ ops:
         CASE
           WHEN injection_count_rolling_20 > 0
           THEN success_count_rolling_20::float / injection_count_rolling_20
-          ELSE 0.5  -- Default: neutral 50% prior for patterns with no injection history
+          ELSE 0.5  -- See header: Bayesian prior for new patterns
         END AS success_rate,
         NULL::text AS example_reference
       FROM learned_patterns
@@ -93,7 +93,7 @@ ops:
         CASE
           WHEN injection_count_rolling_20 > 0
           THEN success_count_rolling_20::float / injection_count_rolling_20
-          ELSE 0.5  -- Default: neutral 50% prior for patterns with no injection history
+          ELSE 0.5  -- See header: Bayesian prior for new patterns
         END AS success_rate,
         NULL::text AS example_reference
       FROM learned_patterns
@@ -126,7 +126,7 @@ ops:
         CASE
           WHEN injection_count_rolling_20 > 0
           THEN success_count_rolling_20::float / injection_count_rolling_20
-          ELSE 0.5  -- Default: neutral 50% prior for patterns with no injection history
+          ELSE 0.5  -- See header: Bayesian prior for new patterns
         END AS success_rate,
         NULL::text AS example_reference
       FROM learned_patterns
