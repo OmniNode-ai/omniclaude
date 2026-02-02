@@ -30,13 +30,18 @@ Environment Variables (all required - no defaults):
     POSTGRES_PASSWORD: Database password
 """
 
+from __future__ import annotations
+
 import argparse
 import os
 import sys
+from typing import TYPE_CHECKING
 
 import psycopg2
-from psycopg2.extensions import connection as PgConnection
 from psycopg2.extras import RealDictCursor
+
+if TYPE_CHECKING:
+    from psycopg2.extensions import connection as PgConnection
 
 
 def print_banner() -> None:

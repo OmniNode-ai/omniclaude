@@ -22,6 +22,8 @@ Environment Variables (REQUIRED - no defaults):
     KAFKA_ENVIRONMENT: Topic prefix (e.g., dev, staging, prod)
 """
 
+from __future__ import annotations
+
 import argparse
 import asyncio
 import os

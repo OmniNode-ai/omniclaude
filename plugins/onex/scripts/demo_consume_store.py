@@ -32,6 +32,8 @@ Environment Variables (all required - source .env first):
     POSTGRES_PASSWORD: Database password (required)
 """
 
+from __future__ import annotations
+
 import argparse
 import hashlib
 import json
@@ -43,16 +45,22 @@ import time
 import uuid
 from pathlib import Path
 from threading import Event
+from typing import TYPE_CHECKING, Any
 
 import psycopg2
 from kafka import KafkaConsumer
-from psycopg2.extensions import connection as PgConnection
+
+if TYPE_CHECKING:
+    from psycopg2.extensions import connection as PgConnection
 
 # Add src to path for imports
 SRC_DIR = Path(__file__).parent.parent.parent.parent / "src"
 sys.path.insert(0, str(SRC_DIR))
 
 from omniclaude.hooks.topics import TopicBase, build_topic
+
+# Maximum number of session IDs to store per pattern
+MAX_SESSION_IDS_PER_PATTERN = 100
 
 # Shutdown event for graceful termination
 shutdown_event = Event()
@@ -231,7 +239,7 @@ def extract_pattern_from_event(event: dict) -> dict | None:
     }
 
 
-def upsert_pattern(conn: PgConnection, pattern: dict) -> str:
+def upsert_pattern(conn: PgConnection, pattern: dict[str, Any]) -> str:
     """Upsert pattern into learned_patterns table.
 
     Args:
@@ -244,7 +252,7 @@ def upsert_pattern(conn: PgConnection, pattern: dict) -> str:
     # Convert UUID list to PostgreSQL array format
     session_ids_array = [str(sid) for sid in pattern["source_session_ids"]]
 
-    sql = """
+    sql = f"""
         INSERT INTO learned_patterns (
             pattern_signature, signature_hash, domain_id, domain_version,
             confidence, status, source_session_ids, recurrence_count,
@@ -258,10 +266,10 @@ def upsert_pattern(conn: PgConnection, pattern: dict) -> str:
                 SELECT ARRAY(SELECT DISTINCT unnest(array_cat(
                     learned_patterns.source_session_ids,
                     EXCLUDED.source_session_ids
-                )) LIMIT 100)
+                )) LIMIT {MAX_SESSION_IDS_PER_PATTERN})
             )
         RETURNING (xmax = 0) as inserted
-    """
+    """  # nosec B608
 
     with conn.cursor() as cursor:
         cursor.execute(

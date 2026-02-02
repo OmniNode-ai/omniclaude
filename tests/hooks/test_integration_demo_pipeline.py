@@ -40,6 +40,8 @@ _src_path = str(Path(__file__).parent.parent.parent / "src")
 if _src_path not in sys.path:
     sys.path.insert(0, _src_path)
 
+from omniclaude.hooks.topics import TopicBase, build_topic
+
 # Path to demo scripts
 SCRIPTS_DIR = Path(__file__).parent.parent.parent / "plugins" / "onex" / "scripts"
 
@@ -262,7 +264,7 @@ class TestDemoPipelineIntegration:
         # Wait for Kafka message to be available (condition-based, not time-based)
         kafka_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "")
         kafka_env = os.environ.get("KAFKA_ENVIRONMENT", "dev")
-        topic = f"{kafka_env}.onex.evt.omniclaude.prompt-submitted.v1"
+        topic = build_topic(kafka_env, TopicBase.CLAUDE_HOOK_EVENT)
         wait_for_kafka_message(
             bootstrap_servers=kafka_servers,
             topic=topic,
@@ -330,7 +332,7 @@ class TestDemoPipelineIntegration:
         # Wait for Kafka message to be available (condition-based, not time-based)
         kafka_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "")
         kafka_env = os.environ.get("KAFKA_ENVIRONMENT", "dev")
-        topic = f"{kafka_env}.onex.evt.omniclaude.prompt-submitted.v1"
+        topic = build_topic(kafka_env, TopicBase.CLAUDE_HOOK_EVENT)
         wait_for_kafka_message(
             bootstrap_servers=kafka_servers,
             topic=topic,
