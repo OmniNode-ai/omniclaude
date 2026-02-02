@@ -257,16 +257,6 @@ def build_ticket_context(
 # =============================================================================
 
 
-def _create_empty_output(retrieval_ms: int = 0) -> TicketInjectorOutput:
-    """Create an empty output for cases with no active ticket."""
-    return TicketInjectorOutput(
-        success=True,
-        ticket_context="",
-        ticket_id=None,
-        retrieval_ms=retrieval_ms,
-    )
-
-
 def _create_error_output(retrieval_ms: int = 0) -> TicketInjectorOutput:
     """Create an output for error cases (still returns success for hook compatibility)."""
     return TicketInjectorOutput(

@@ -488,11 +488,12 @@ print(result or '')
 
     if [[ -n "$ACTIVE_TICKET" ]]; then
         log "Active ticket found: $ACTIVE_TICKET"
-        TICKET_CONTEXT=$("$PYTHON_CMD" -c "
+        TICKET_CONTEXT=$(echo "$ACTIVE_TICKET" | "$PYTHON_CMD" -c "
 import sys
 sys.path.insert(0, '${HOOKS_LIB}')
 from ticket_context_injector import build_ticket_context
-print(build_ticket_context('$ACTIVE_TICKET'))
+ticket_id = sys.stdin.read().strip()
+print(build_ticket_context(ticket_id))
 " 2>>"$LOG_FILE") || TICKET_CONTEXT=""
 
         if [[ -n "$TICKET_CONTEXT" ]]; then
