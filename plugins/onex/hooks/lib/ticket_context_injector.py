@@ -31,6 +31,15 @@ import time
 from pathlib import Path
 from typing import TypedDict
 
+# Optional YAML dependency - handled gracefully if not installed
+try:
+    import yaml
+
+    YAML_AVAILABLE = True
+except ImportError:
+    yaml = None  # type: ignore[assignment]
+    YAML_AVAILABLE = False
+
 # Configure logging to stderr (stdout reserved for JSON output)
 logging.basicConfig(
     level=logging.WARNING,
@@ -147,8 +156,8 @@ def find_active_ticket(tickets_dir: Path | None = None) -> str | None:
             logger.debug("No contract.yaml files found")
             return None
 
-        # Sort by mtime descending and get the most recent
-        contract_files.sort(key=lambda x: x[1], reverse=True)
+        # Sort by mtime descending, then by path ascending for deterministic tie-breaking
+        contract_files.sort(key=lambda x: (-x[1], str(x[0])))
         most_recent_path = contract_files[0][0]
 
         # Extract ticket_id from directory name
@@ -192,18 +201,18 @@ def build_ticket_context(
             return ""
 
         # Parse YAML
-        try:
-            import yaml
-        except ImportError:
+        if not YAML_AVAILABLE:
             logger.warning("PyYAML not installed, cannot parse contract")
             return ""
 
         with contract_path.open("r", encoding="utf-8") as f:
-            data: ContractData = yaml.safe_load(f)
+            raw_data = yaml.safe_load(f)
 
-        if not data or not isinstance(data, dict):
+        if not raw_data or not isinstance(raw_data, dict):
             logger.debug(f"Invalid contract format in {contract_path}")
             return ""
+
+        data: ContractData = raw_data
 
         # Extract fields with defaults
         title = data.get("title", "Untitled")

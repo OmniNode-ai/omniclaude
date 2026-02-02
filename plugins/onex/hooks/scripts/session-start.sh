@@ -476,31 +476,26 @@ TICKET_CONTEXT=""
 if [[ "${TICKET_INJECTION_ENABLED}" == "true" ]] && [[ -f "${HOOKS_LIB}/ticket_context_injector.py" ]]; then
     log "Checking for active ticket context"
 
-    # Run ticket context injection synchronously (fast, local-only)
-    # This is intentionally NOT async because it's purely local filesystem
-    ACTIVE_TICKET=$("$PYTHON_CMD" -c "
-import sys
-sys.path.insert(0, '${HOOKS_LIB}')
-from ticket_context_injector import find_active_ticket
-result = find_active_ticket()
-print(result or '')
-" 2>>"$LOG_FILE") || ACTIVE_TICKET=""
+    # Run ticket context injection synchronously via CLI (fast, local-only)
+    # Single Python invocation for better performance within 50ms budget
+    TICKET_OUTPUT=$(echo '{}' | "$PYTHON_CMD" "${HOOKS_LIB}/ticket_context_injector.py" 2>>"$LOG_FILE") || TICKET_OUTPUT='{}'
 
-    if [[ -n "$ACTIVE_TICKET" ]]; then
-        log "Active ticket found: $ACTIVE_TICKET"
-        TICKET_CONTEXT=$(echo "$ACTIVE_TICKET" | "$PYTHON_CMD" -c "
-import sys
-sys.path.insert(0, '${HOOKS_LIB}')
-from ticket_context_injector import build_ticket_context
-ticket_id = sys.stdin.read().strip()
-print(build_ticket_context(ticket_id))
-" 2>>"$LOG_FILE") || TICKET_CONTEXT=""
+    # Parse CLI output using jq
+    if [[ "$JQ_AVAILABLE" -eq 1 ]]; then
+        ACTIVE_TICKET=$(echo "$TICKET_OUTPUT" | jq -r '.ticket_id // empty' 2>/dev/null) || ACTIVE_TICKET=""
+        TICKET_CONTEXT=$(echo "$TICKET_OUTPUT" | jq -r '.ticket_context // empty' 2>/dev/null) || TICKET_CONTEXT=""
+        TICKET_RETRIEVAL_MS=$(echo "$TICKET_OUTPUT" | jq -r '.retrieval_ms // 0' 2>/dev/null) || TICKET_RETRIEVAL_MS=0
 
-        if [[ -n "$TICKET_CONTEXT" ]]; then
+        if [[ -n "$ACTIVE_TICKET" ]] && [[ -n "$TICKET_CONTEXT" ]]; then
+            log "Active ticket found: $ACTIVE_TICKET (retrieved in ${TICKET_RETRIEVAL_MS}ms)"
             log "Ticket context generated (${#TICKET_CONTEXT} chars)"
+        else
+            log "No active ticket found"
         fi
     else
-        log "No active ticket found"
+        # Fallback: extract ticket_context using basic string parsing
+        TICKET_CONTEXT=$(echo "$TICKET_OUTPUT" | "$PYTHON_CMD" -c "import sys,json; d=json.load(sys.stdin); print(d.get('ticket_context',''))" 2>/dev/null) || TICKET_CONTEXT=""
+        log "Ticket context check completed (jq unavailable for detailed parsing)"
     fi
 elif [[ "${TICKET_INJECTION_ENABLED}" != "true" ]]; then
     log "Ticket context injection disabled (TICKET_INJECTION_ENABLED=false)"

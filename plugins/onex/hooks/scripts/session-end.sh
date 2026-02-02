@@ -64,8 +64,11 @@ log "Reason: $SESSION_REASON"
 # Active Ticket Detection (OMN-1830)
 # -----------------------------
 # Check for active ticket (for audit logging only - NO context injection, NO mutation)
+TICKET_INJECTION_ENABLED="${OMNICLAUDE_TICKET_INJECTION_ENABLED:-true}"
+TICKET_INJECTION_ENABLED=$(_normalize_bool "$TICKET_INJECTION_ENABLED")
 ACTIVE_TICKET=""
-if [[ -f "${HOOKS_LIB}/ticket_context_injector.py" ]]; then
+
+if [[ "${TICKET_INJECTION_ENABLED}" == "true" ]] && [[ -f "${HOOKS_LIB}/ticket_context_injector.py" ]]; then
     ACTIVE_TICKET=$("$PYTHON_CMD" -c "
 import sys
 sys.path.insert(0, '${HOOKS_LIB}')
@@ -79,6 +82,8 @@ print(result or '')
     else
         log "Session ended with no active ticket"
     fi
+elif [[ "${TICKET_INJECTION_ENABLED}" != "true" ]]; then
+    log "Active ticket detection disabled (TICKET_INJECTION_ENABLED=false)"
 else
     log "Ticket context injector not found, skipping active ticket detection"
 fi
