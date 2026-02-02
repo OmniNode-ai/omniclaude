@@ -41,17 +41,8 @@ jobs:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
 
-      - name: Configure Git authentication for private repositories
-        run: |
-          git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
-        continue-on-error: true
-
       - name: Install dependencies
-        run: |
-          uv sync --frozen --group dev || {
-            echo "Warning: Some dependencies failed - continuing with available packages"
-            true
-          }
+        run: uv sync --frozen --group dev
 
       - name: Run Ruff format check
         run: |
@@ -127,17 +118,8 @@ jobs:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
 
-      - name: Configure Git authentication for private repositories
-        run: |
-          git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
-        continue-on-error: true
-
       - name: Install dependencies
-        run: |
-          uv sync --frozen --group dev || {
-            echo "Warning: Some dependencies failed - continuing with available packages"
-            true
-          }
+        run: uv sync --frozen --group dev
 
       - name: Run pyright type checking
         run: |
@@ -179,17 +161,8 @@ jobs:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
 
-      - name: Configure Git authentication for private repositories
-        run: |
-          git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
-        continue-on-error: true
-
       - name: Install dependencies
-        run: |
-          uv sync --frozen --group dev || {
-            echo "Warning: Some dependencies failed - continuing with available packages"
-            true
-          }
+        run: uv sync --frozen --group dev
 
       - name: Run ONEX Enum Governance validation
         run: |
@@ -237,17 +210,8 @@ jobs:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
 
-      - name: Configure Git authentication for private repositories
-        run: |
-          git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
-        continue-on-error: true
-
       - name: Install dependencies
-        run: |
-          uv sync --frozen --group dev || {
-            echo "Warning: Some dependencies failed - continuing with available packages"
-            true
-          }
+        run: uv sync --frozen --group dev
 
       - name: Run exports validation
         run: |
@@ -293,17 +257,8 @@ jobs:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
 
-      - name: Configure Git authentication for private repositories
-        run: |
-          git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
-        continue-on-error: true
-
       - name: Install dependencies
-        run: |
-          uv sync --frozen --group dev || {
-            echo "Warning: Some dependencies failed - continuing with available packages"
-            true
-          }
+        run: uv sync --frozen --group dev
 
       - name: Run Kafka import guard
         run: |
@@ -342,11 +297,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Configure Git authentication for private repositories
-        run: |
-          git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
-        continue-on-error: true
 
       - name: Export requirements
         run: uv pip compile pyproject.toml -o requirements.txt
@@ -450,17 +400,8 @@ jobs:
           path: .venv
           key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
 
-      - name: Configure Git authentication for private repositories
-        run: |
-          git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
-        continue-on-error: true
-
       - name: Install dependencies
-        run: |
-          uv sync --frozen --group dev || {
-            echo "Warning: Some dependencies failed - continuing with available packages"
-            true
-          }
+        run: uv sync --frozen --group dev
 
       - name: Install pytest-split for parallel test execution
         run: |

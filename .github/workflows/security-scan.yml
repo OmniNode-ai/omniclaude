@@ -30,11 +30,6 @@ jobs:
         with:
           version: 1.8.3
 
-      - name: Configure Git authentication for private repositories
-        run: |
-          git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
-        continue-on-error: true
-
       - name: Export requirements
         run: poetry export -f requirements.txt --output requirements.txt --without-hashes
 
