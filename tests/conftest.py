@@ -425,6 +425,10 @@ def pytest_configure(config):
         "markers",
         "benchmark: marks tests as performance benchmarks (deselect with '-m \"not benchmark\"')",
     )
+    config.addinivalue_line(
+        "markers",
+        "postgres_integration: marks tests as PostgreSQL integration tests",
+    )
 
     # Mock AIOKafkaProducer at the earliest possible point
     # This prevents real Kafka connections during tests, which eliminates
@@ -478,8 +482,8 @@ def pytest_collection_modifyitems(config, items):
 
     for item in items:
         # Check if test is specifically a postgres integration test
-        # (by checking the test path for postgres_contract or similar patterns)
-        is_postgres_test = "postgres_contract" in str(item.fspath)
+        # (by checking for postgres_integration marker instead of brittle path detection)
+        is_postgres_test = "postgres_integration" in item.keywords
 
         if "integration" in item.keywords:
             if is_postgres_test:

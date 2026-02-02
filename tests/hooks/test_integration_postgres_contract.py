@@ -69,6 +69,7 @@ if TYPE_CHECKING:
 # They will be skipped unless POSTGRES_INTEGRATION_TESTS=1
 pytestmark = [
     pytest.mark.integration,
+    pytest.mark.postgres_integration,
     pytest.mark.asyncio,
     pytest.mark.slow,
 ]

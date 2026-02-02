@@ -44,8 +44,9 @@ Example:
 from __future__ import annotations
 
 import os
+from typing import Self
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from omniclaude.hooks.cohort_assignment import CohortAssignmentConfig
@@ -378,6 +379,26 @@ class ContextInjectionConfig(BaseSettings):
             "footer visibility. Uses OMNICLAUDE_SESSION_INJECTION_* env vars."
         ),
     )
+
+    @model_validator(mode="after")
+    def validate_pool_sizes(self) -> Self:
+        """Ensure pool min_size <= max_size.
+
+        Validates that db_pool_min_size does not exceed db_pool_max_size,
+        which would cause runtime errors when creating the connection pool.
+
+        Returns:
+            Self: The validated config instance.
+
+        Raises:
+            ValueError: If db_pool_min_size > db_pool_max_size.
+        """
+        if self.db_pool_min_size > self.db_pool_max_size:
+            raise ValueError(
+                f"db_pool_min_size ({self.db_pool_min_size}) must be <= "
+                f"db_pool_max_size ({self.db_pool_max_size})"
+            )
+        return self
 
     def get_db_dsn(self) -> str:
         """Get PostgreSQL connection string.

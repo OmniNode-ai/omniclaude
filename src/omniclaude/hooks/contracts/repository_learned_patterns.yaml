@@ -7,6 +7,11 @@
 # This contract is consumed by PostgresRepositoryRuntime from omnibase_infra.
 #
 # Part of OMN-1779: Wire ManifestInjector to contract runtime
+#
+# Default Values:
+# - success_rate default: 0.5 (50%) - Used when no injection history exists.
+#   Represents a neutral prior that doesn't bias toward or against new patterns.
+#   This Bayesian prior allows new patterns to be tried without unfair penalty.
 
 # Contract metadata
 name: learned_patterns
@@ -46,7 +51,7 @@ ops:
         CASE
           WHEN injection_count_rolling_20 > 0
           THEN success_count_rolling_20::float / injection_count_rolling_20
-          ELSE 0.5
+          ELSE 0.5  -- Default: neutral 50% prior for patterns with no injection history
         END AS success_rate,
         NULL::text AS example_reference
       FROM learned_patterns
@@ -88,7 +93,7 @@ ops:
         CASE
           WHEN injection_count_rolling_20 > 0
           THEN success_count_rolling_20::float / injection_count_rolling_20
-          ELSE 0.5
+          ELSE 0.5  -- Default: neutral 50% prior for patterns with no injection history
         END AS success_rate,
         NULL::text AS example_reference
       FROM learned_patterns
@@ -121,7 +126,7 @@ ops:
         CASE
           WHEN injection_count_rolling_20 > 0
           THEN success_count_rolling_20::float / injection_count_rolling_20
-          ELSE 0.5
+          ELSE 0.5  -- Default: neutral 50% prior for patterns with no injection history
         END AS success_rate,
         NULL::text AS example_reference
       FROM learned_patterns

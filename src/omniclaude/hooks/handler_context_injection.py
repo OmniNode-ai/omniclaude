@@ -53,6 +53,7 @@ from omniclaude.hooks.schemas import ContextSource, ModelHookContextInjectedPayl
 if TYPE_CHECKING:
     import asyncpg
     from omnibase_core.models.contracts import ModelDbRepositoryContract
+    from omnibase_core.types.type_json import StrictJsonPrimitive  # noqa: TC004
     from omnibase_infra.runtime.db import PostgresRepositoryRuntime
 
 
@@ -67,6 +68,26 @@ class PatternConnectionError(PatternPersistenceError):
     """Error when persistence backend connection fails."""
 
     pass
+
+
+# =============================================================================
+# Type Coercion Helpers
+# =============================================================================
+
+
+def _safe_str(val: StrictJsonPrimitive, default: str = "") -> str:
+    """Convert value to string, returning default if None."""
+    return str(val) if val is not None else default
+
+
+def _safe_float(val: StrictJsonPrimitive, default: float = 0.0) -> float:
+    """Convert value to float, returning default if None."""
+    return float(val) if val is not None else default
+
+
+def _safe_int(val: StrictJsonPrimitive, default: int = 0) -> int:
+    """Convert value to int, returning default if None."""
+    return int(val) if val is not None else default
 
 
 logger = logging.getLogger(__name__)
@@ -695,25 +716,16 @@ class HandlerContextInjection:
                     if not pattern_id:
                         logger.warning("Skipping row with missing pattern_id")
                         continue
-                    # Handle None values explicitly to avoid str(None) -> "None"
-                    domain_val = row.get("domain")
-                    title_val = row.get("title")
-                    desc_val = row.get("description")
-                    conf_val = row.get("confidence")
-                    usage_val = row.get("usage_count")
-                    rate_val = row.get("success_rate")
 
                     patterns.append(
                         PatternRecord(
                             pattern_id=str(pattern_id),
-                            domain=str(domain_val) if domain_val is not None else "",
-                            title=str(title_val) if title_val is not None else "",
-                            description=str(desc_val) if desc_val is not None else "",
-                            confidence=float(conf_val) if conf_val is not None else 0.0,
-                            usage_count=int(usage_val) if usage_val is not None else 0,
-                            success_rate=float(rate_val)
-                            if rate_val is not None
-                            else 0.0,
+                            domain=_safe_str(row.get("domain")),
+                            title=_safe_str(row.get("title")),
+                            description=_safe_str(row.get("description")),
+                            confidence=_safe_float(row.get("confidence")),
+                            usage_count=_safe_int(row.get("usage_count")),
+                            success_rate=_safe_float(row.get("success_rate")),
                             example_reference=row.get("example_reference"),
                         )
                     )
