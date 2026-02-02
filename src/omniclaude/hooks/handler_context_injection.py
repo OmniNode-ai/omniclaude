@@ -295,6 +295,7 @@ class HandlerContextInjection:
             except Exception as e:
                 logger.warning(f"Error closing database pool: {e}")
             self._pool = None
+        # Clear references regardless of ownership to allow GC and prevent stale state
         self._runtime = None
         self._contract = None
 

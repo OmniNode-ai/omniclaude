@@ -44,17 +44,11 @@ Note:
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
 import pytest
-
-# Ensure we're using the correct import path
-_src_path = str(Path(__file__).parent.parent.parent / "src")
-if _src_path not in sys.path:
-    sys.path.insert(0, _src_path)
 
 if TYPE_CHECKING:
     import asyncpg
