@@ -54,6 +54,21 @@ PYTHON_CMD="$(find_python)"
 export PYTHON_CMD
 
 # =============================================================================
+# Boolean Normalization
+# =============================================================================
+# Normalizes various boolean representations to "true" or "false".
+# Accepts: true, 1, yes (case-insensitive) -> "true"
+# Everything else -> "false"
+
+_normalize_bool() {
+    local val="${1,,}"  # Convert to lowercase
+    case "$val" in
+        true|1|yes) echo "true" ;;
+        *) echo "false" ;;
+    esac
+}
+
+# =============================================================================
 # Timing Functions
 # =============================================================================
 # Get current time in milliseconds.
