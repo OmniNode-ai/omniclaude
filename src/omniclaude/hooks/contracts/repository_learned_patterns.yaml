@@ -8,6 +8,22 @@
 #
 # Part of OMN-1779: Wire ManifestInjector to contract runtime
 #
+# Schema Mapping (learned_patterns table → PatternRecord):
+# ─────────────────────────────────────────────────────────
+# The SQL aliases map database columns to PatternRecord fields. If the
+# learned_patterns table schema changes, update these mappings accordingly:
+#
+#   DB Column                      → PatternRecord Field
+#   ────────────────────────────────────────────────────────
+#   id::text                       → pattern_id
+#   domain_id                      → domain
+#   pattern_signature              → title
+#   compiled_snippet               → description
+#   confidence                     → confidence
+#   recurrence_count               → usage_count
+#   (computed from rolling stats)  → success_rate
+#   NULL                           → example_reference (not stored)
+#
 # Default Values:
 # - success_rate default: 0.5 (50%) - Used when no injection history exists.
 #   Represents a neutral prior that doesn't bias toward or against new patterns.
