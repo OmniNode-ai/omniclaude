@@ -61,7 +61,9 @@ export PYTHON_CMD
 # Everything else -> "false"
 
 _normalize_bool() {
-    local val="${1,,}"  # Convert to lowercase
+    # Use tr for lowercase conversion (compatible with bash 3.2 on macOS)
+    local val
+    val=$(echo "$1" | tr '[:upper:]' '[:lower:]')
     case "$val" in
         true|1|yes) echo "true" ;;
         *) echo "false" ;;

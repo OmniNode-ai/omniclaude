@@ -57,7 +57,9 @@ export PYTHONPATH="${PROJECT_ROOT}:${PLUGIN_ROOT}/lib:${HOOKS_LIB}:${PYTHONPATH:
 # Normalize boolean values to JSON-compatible true/false
 # Accepts: true/false, True/False, TRUE/FALSE, 1/0, yes/no, Yes/No, YES/NO
 _normalize_bool() {
-    local val="${1,,}"  # Convert to lowercase
+    # Use tr for lowercase conversion (compatible with bash 3.2 on macOS)
+    local val
+    val=$(echo "$1" | tr '[:upper:]' '[:lower:]')
     case "$val" in
         true|1|yes) echo "true" ;;
         *) echo "false" ;;
@@ -176,11 +178,11 @@ start_emit_daemon_if_needed() {
     # Must pass --kafka-servers explicitly (required by CLI)
     # Supports comma-separated multi-broker strings (e.g., "host1:9092,host2:9092")
     if [[ -z "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
-        log "FATAL: KAFKA_BOOTSTRAP_SERVERS not set - hook cannot function without Kafka"
-        log "FATAL: OmniClaude's intelligence gathering requires Kafka. Set KAFKA_BOOTSTRAP_SERVERS in your .env file"
-        log "FATAL: Example: KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092"
+        log "WARNING: KAFKA_BOOTSTRAP_SERVERS not set - Kafka features disabled"
+        log "INFO: To enable intelligence gathering, set KAFKA_BOOTSTRAP_SERVERS in your .env file"
+        log "INFO: Example: KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092"
         write_daemon_status "kafka_not_configured"
-        exit 1  # Fail fast - Kafka is required for intelligence gathering, not optional
+        return 0  # Non-fatal - continue without Kafka, hook still provides ticket context
     fi
     nohup "$PYTHON_CMD" -m omnibase_infra.runtime.emit_daemon.cli start \
         --kafka-servers "$KAFKA_BOOTSTRAP_SERVERS" \
