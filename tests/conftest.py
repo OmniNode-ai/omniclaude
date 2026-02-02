@@ -425,6 +425,10 @@ def pytest_configure(config):
         "markers",
         "benchmark: marks tests as performance benchmarks (deselect with '-m \"not benchmark\"')",
     )
+    config.addinivalue_line(
+        "markers",
+        "postgres_integration: marks tests as PostgreSQL integration tests",
+    )
 
     # Mock AIOKafkaProducer at the earliest possible point
     # This prevents real Kafka connections during tests, which eliminates
@@ -451,26 +455,45 @@ def pytest_configure(config):
 
 def pytest_collection_modifyitems(config, items):
     """
-    Auto-skip integration tests when Kafka is mocked.
+    Auto-skip integration tests when infrastructure is mocked.
 
-    Integration tests that require real Kafka infrastructure will be skipped
-    automatically when running with the mocked producer. To run integration
+    Integration tests that require real infrastructure will be skipped
+    automatically when running with mocked producers. To run integration
     tests, either:
-    1. Use environment variable: KAFKA_INTEGRATION_TESTS=1 pytest ...
-    2. Mark specific tests to always run with @pytest.mark.force_real_kafka
-    """
-    if os.getenv("KAFKA_INTEGRATION_TESTS") == "1":
-        # User explicitly wants to run integration tests
-        return
+    1. Use environment variable: KAFKA_INTEGRATION_TESTS=1 pytest ... (for Kafka tests)
+    2. Use environment variable: POSTGRES_INTEGRATION_TESTS=1 pytest ... (for Postgres tests)
+    3. Mark specific tests to always run with @pytest.mark.force_real_kafka
 
-    skip_integration = pytest.mark.skip(
-        reason="Skipping integration test: Kafka is mocked. "
+    Note: Tests marked with @pytest.mark.postgres_integration will only run when
+    POSTGRES_INTEGRATION_TESTS=1, even if KAFKA_INTEGRATION_TESTS=1 is also set.
+    """
+    kafka_enabled = os.getenv("KAFKA_INTEGRATION_TESTS") == "1"
+    postgres_enabled = os.getenv("POSTGRES_INTEGRATION_TESTS") == "1"
+
+    # If either integration test type is enabled, check individual tests
+    skip_kafka = pytest.mark.skip(
+        reason="Skipping Kafka integration test: Kafka is mocked. "
         "Set KAFKA_INTEGRATION_TESTS=1 to run with real Kafka."
+    )
+    skip_postgres = pytest.mark.skip(
+        reason="Skipping PostgreSQL integration test. "
+        "Set POSTGRES_INTEGRATION_TESTS=1 to run with real PostgreSQL."
     )
 
     for item in items:
+        # Check if test is specifically a postgres integration test
+        # (by checking for postgres_integration marker instead of brittle path detection)
+        is_postgres_test = "postgres_integration" in item.keywords
+
         if "integration" in item.keywords:
-            item.add_marker(skip_integration)
+            if is_postgres_test:
+                # PostgreSQL integration test - needs POSTGRES_INTEGRATION_TESTS
+                if not postgres_enabled:
+                    item.add_marker(skip_postgres)
+            else:
+                # Kafka integration test - needs KAFKA_INTEGRATION_TESTS
+                if not kafka_enabled:
+                    item.add_marker(skip_kafka)
 
 
 # -------------------------------------------------------------------------

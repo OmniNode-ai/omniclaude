@@ -16,6 +16,8 @@ Environment variables use the OMNICLAUDE_CONTEXT_ prefix:
     OMNICLAUDE_CONTEXT_DB_NAME: Database name (default: omninode_bridge)
     OMNICLAUDE_CONTEXT_DB_USER: Database user (default: postgres)
     OMNICLAUDE_CONTEXT_DB_PASSWORD: Database password (required, no default)
+    OMNICLAUDE_CONTEXT_DB_POOL_MIN_SIZE: Minimum pool connections (default: 1)
+    OMNICLAUDE_CONTEXT_DB_POOL_MAX_SIZE: Maximum pool connections (default: 5)
 
     Deprecated file-based configuration:
     OMNICLAUDE_CONTEXT_PERSISTENCE_FILE: Path to patterns file (DEPRECATED)
@@ -42,8 +44,9 @@ Example:
 from __future__ import annotations
 
 import os
+from typing import Self
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from omniclaude.hooks.cohort_assignment import CohortAssignmentConfig
@@ -237,6 +240,8 @@ class ContextInjectionConfig(BaseSettings):
         db_name: Database name.
         db_user: Database user.
         db_password: Database password (SecretStr for security).
+        db_pool_min_size: Minimum database pool connections.
+        db_pool_max_size: Maximum database pool connections.
         persistence_file: DEPRECATED - Path to the learned patterns persistence file.
         file_fallback_enabled: Fall back to file if database unavailable.
     """
@@ -308,6 +313,30 @@ class ContextInjectionConfig(BaseSettings):
         description="Database password (from OMNICLAUDE_CONTEXT_DB_PASSWORD)",
     )
 
+    db_pool_min_size: int = Field(
+        default=1,
+        ge=1,
+        le=20,
+        description="Minimum database pool connections",
+    )
+
+    db_pool_max_size: int = Field(
+        default=5,
+        ge=1,
+        le=100,
+        description="Maximum database pool connections",
+    )
+
+    # Contract-driven database access (OMN-1779)
+    db_contract_path: str = Field(
+        default="",
+        description=(
+            "Path to learned_patterns repository contract YAML. "
+            "If empty, uses bundled contract from omniclaude.contracts. "
+            "Override via OMNICLAUDE_CONTEXT_DB_CONTRACT_PATH."
+        ),
+    )
+
     # Deprecated file-based configuration
     persistence_file: str = Field(
         default=".claude/learned_patterns.json",
@@ -350,6 +379,26 @@ class ContextInjectionConfig(BaseSettings):
             "footer visibility. Uses OMNICLAUDE_SESSION_INJECTION_* env vars."
         ),
     )
+
+    @model_validator(mode="after")
+    def validate_pool_sizes(self) -> Self:
+        """Ensure pool min_size <= max_size.
+
+        Validates that db_pool_min_size does not exceed db_pool_max_size,
+        which would cause runtime errors when creating the connection pool.
+
+        Returns:
+            Self: The validated config instance.
+
+        Raises:
+            ValueError: If db_pool_min_size > db_pool_max_size.
+        """
+        if self.db_pool_min_size > self.db_pool_max_size:
+            raise ValueError(
+                f"db_pool_min_size ({self.db_pool_min_size}) must be <= "
+                f"db_pool_max_size ({self.db_pool_max_size})"
+            )
+        return self
 
     def get_db_dsn(self) -> str:
         """Get PostgreSQL connection string.
