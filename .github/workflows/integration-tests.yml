@@ -65,21 +65,9 @@ jobs:
           path: .venv
           key: venv-${{ runner.os }}-${{ hashFiles('**/uv.lock') }}
 
-      # OPTIONAL: Only needed if uv.lock references private GitHub repositories
-      # The workflow will continue without this if all dependencies are public
-      # Set GH_PAT secret in repository settings if you have private dependencies
-      - name: Configure Git authentication for private repositories (OPTIONAL)
-        run: |
-          git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
-        continue-on-error: true
-
       - name: Install dependencies
         if: steps.cached-uv-dependencies.outputs.cache-hit != 'true'
-        run: |
-          uv sync --frozen --group dev || {
-            echo "Warning: Some dependencies failed - continuing with available packages"
-            true
-          }
+        run: uv sync --frozen --group dev
 
       - name: Initialize database schema
         env:
@@ -284,20 +272,8 @@ jobs:
       - name: Install uv
         run: pip install --no-cache-dir uv
 
-      # OPTIONAL: Only needed if uv.lock references private GitHub repositories
-      # The workflow will continue without this if all dependencies are public
-      # Set GH_PAT secret in repository settings if you have private dependencies
-      - name: Configure Git authentication for private repositories (OPTIONAL)
-        run: |
-          git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
-        continue-on-error: true
-
       - name: Install dependencies
-        run: |
-          uv sync --frozen --group dev || {
-            echo "Warning: Some dependencies failed - continuing"
-            true
-          }
+        run: uv sync --frozen --group dev
 
       - name: Verify Kafka/Redpanda connectivity
         run: |
@@ -461,20 +437,8 @@ jobs:
       - name: Install uv
         run: pip install --no-cache-dir uv
 
-      # OPTIONAL: Only needed if uv.lock references private GitHub repositories
-      # The workflow will continue without this if all dependencies are public
-      # Set GH_PAT secret in repository settings if you have private dependencies
-      - name: Configure Git authentication for private repositories (OPTIONAL)
-        run: |
-          git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
-        continue-on-error: true
-
       - name: Install dependencies
-        run: |
-          uv sync --frozen --group dev || {
-            echo "Warning: Some dependencies failed - continuing"
-            true
-          }
+        run: uv sync --frozen --group dev
 
       - name: Initialize database
         env:
@@ -630,20 +594,8 @@ jobs:
       - name: Install uv
         run: pip install --no-cache-dir uv
 
-      # OPTIONAL: Only needed if uv.lock references private GitHub repositories
-      # The workflow will continue without this if all dependencies are public
-      # Set GH_PAT secret in repository settings if you have private dependencies
-      - name: Configure Git authentication for private repositories (OPTIONAL)
-        run: |
-          git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
-        continue-on-error: true
-
       - name: Install dependencies
-        run: |
-          uv sync --frozen --group dev || {
-            echo "Warning: Some dependencies failed - continuing"
-            true
-          }
+        run: uv sync --frozen --group dev
 
       - name: Initialize database
         env:
