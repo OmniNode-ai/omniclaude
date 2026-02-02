@@ -36,6 +36,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import signal
 import sys
 import time
@@ -87,10 +88,13 @@ def get_kafka_config() -> dict:
 
     topic = build_topic(kafka_env, TopicBase.CLAUDE_HOOK_EVENT)
 
+    # Generate unique group ID per run for test isolation
+    unique_suffix = uuid.uuid4().hex[:8]
+
     return {
         "bootstrap_servers": kafka_servers.split(","),
         "topic": topic,
-        "group_id": "demo-vertical-001-consumer",
+        "group_id": f"demo-vertical-001-consumer-{unique_suffix}",
     }
 
 
@@ -136,6 +140,22 @@ def print_config(kafka_config: dict, postgres_config: dict) -> None:
     print()
 
 
+def has_keyword(text: str, keywords: list[str]) -> bool:
+    """Check if any keyword appears as a whole word in text.
+
+    Uses word boundaries to avoid false positives like 'test' matching 'contest'.
+
+    Args:
+        text: The text to search in.
+        keywords: List of keywords to search for.
+
+    Returns:
+        True if any keyword is found as a whole word, False otherwise.
+    """
+    pattern = r"\b(" + "|".join(re.escape(k) for k in keywords) + r")\b"
+    return bool(re.search(pattern, text, re.IGNORECASE))
+
+
 def extract_pattern_from_event(event: dict) -> dict | None:
     """Extract pattern information from a hook event.
 
@@ -164,22 +184,22 @@ def extract_pattern_from_event(event: dict) -> dict | None:
     # Derive domain_id from prompt keywords (simple heuristic)
     # Valid domain_id values: architecture, code_generation, code_review,
     # data_analysis, debugging, devops, documentation, general, refactoring, testing
-    prompt_lower = prompt.lower()
-    if any(kw in prompt_lower for kw in ["test", "pytest", "unittest"]):
+    # Uses word boundary matching to avoid false positives (e.g., 'test' in 'contest')
+    if has_keyword(prompt, ["test", "pytest", "unittest"]):
         domain_id = "testing"
-    elif any(kw in prompt_lower for kw in ["review", "pr", "code review"]):
+    elif has_keyword(prompt, ["review", "pr", "code review"]):
         domain_id = "code_review"
-    elif any(kw in prompt_lower for kw in ["debug", "error", "fix", "bug"]):
+    elif has_keyword(prompt, ["debug", "error", "fix", "bug"]):
         domain_id = "debugging"
-    elif any(kw in prompt_lower for kw in ["refactor", "clean", "improve"]):
+    elif has_keyword(prompt, ["refactor", "clean", "improve"]):
         domain_id = "refactoring"
-    elif any(kw in prompt_lower for kw in ["doc", "readme", "comment"]):
+    elif has_keyword(prompt, ["doc", "readme", "comment"]):
         domain_id = "documentation"
-    elif any(kw in prompt_lower for kw in ["deploy", "ci", "docker", "kubernetes"]):
+    elif has_keyword(prompt, ["deploy", "ci", "docker", "kubernetes"]):
         domain_id = "devops"
-    elif any(kw in prompt_lower for kw in ["api", "endpoint", "design", "architect"]):
+    elif has_keyword(prompt, ["api", "endpoint", "design", "architect"]):
         domain_id = "architecture"
-    elif any(kw in prompt_lower for kw in ["generate", "create", "implement"]):
+    elif has_keyword(prompt, ["generate", "create", "implement"]):
         domain_id = "code_generation"
     else:
         domain_id = "general"

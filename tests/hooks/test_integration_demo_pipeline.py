@@ -29,6 +29,7 @@ import hashlib
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 from uuid import uuid4
 
@@ -154,6 +155,68 @@ def compute_signature_hash(pattern_signature: str) -> str:
     return hashlib.sha256(pattern_signature[:500].encode()).hexdigest()
 
 
+def wait_for_kafka_message(
+    bootstrap_servers: str,
+    topic: str,
+    timeout: float = 10.0,
+    poll_interval_ms: int = 500,
+) -> bool:
+    """Wait until at least one message is available in topic.
+
+    This function polls Kafka until a message is found or timeout occurs.
+    It uses a unique consumer group to avoid affecting other consumers.
+
+    Args:
+        bootstrap_servers: Kafka bootstrap servers (comma-separated string).
+        topic: The Kafka topic to poll.
+        timeout: Maximum time to wait in seconds.
+        poll_interval_ms: Polling interval in milliseconds.
+
+    Returns:
+        True if message found, False on timeout.
+    """
+    try:
+        from kafka import KafkaConsumer
+    except ImportError:
+        # Fall back to time.sleep if kafka-python not available
+        time.sleep(timeout / 2)
+        return True
+
+    # Parse bootstrap servers - kafka-python expects a list
+    servers = [s.strip() for s in bootstrap_servers.split(",")]
+
+    # Use unique group_id to not affect real consumers
+    group_id = f"test-wait-{uuid4().hex[:8]}"
+
+    try:
+        consumer = KafkaConsumer(
+            topic,
+            bootstrap_servers=servers,
+            consumer_timeout_ms=poll_interval_ms,
+            auto_offset_reset="earliest",  # Start from beginning to catch recent messages
+            group_id=group_id,
+            enable_auto_commit=False,  # Don't commit offsets for test consumer
+        )
+    except Exception:
+        # If consumer creation fails, fall back to sleep
+        time.sleep(timeout / 2)
+        return True
+
+    deadline = time.time() + timeout
+    found = False
+
+    try:
+        while time.time() < deadline:
+            msgs = consumer.poll(timeout_ms=poll_interval_ms)
+            if msgs:
+                found = True
+                break
+    finally:
+        consumer.close()
+
+    return found
+
+
 # =============================================================================
 # Integration Tests
 # =============================================================================
@@ -196,10 +259,16 @@ class TestDemoPipelineIntegration:
         )
         assert emit_result.returncode == 0, f"Emit failed: {emit_result.stderr}"
 
-        # Give Kafka a moment to propagate
-        import time
-
-        time.sleep(2)
+        # Wait for Kafka message to be available (condition-based, not time-based)
+        kafka_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "")
+        kafka_env = os.environ.get("KAFKA_ENVIRONMENT", "dev")
+        topic = f"{kafka_env}.onex.evt.omniclaude.prompt-submitted.v1"
+        wait_for_kafka_message(
+            bootstrap_servers=kafka_servers,
+            topic=topic,
+            timeout=10.0,
+            poll_interval_ms=500,
+        )
 
         # Then consume it
         consume_result = run_demo_script(
@@ -246,7 +315,6 @@ class TestDemoPipelineIntegration:
         4. Cleanup the demo pattern
         """
         skip_unless_integration_enabled()
-        import time
 
         # Step 1: Emit
         emit_result = run_demo_script(
@@ -259,8 +327,16 @@ class TestDemoPipelineIntegration:
         )
         assert "Event emitted successfully" in emit_result.stdout
 
-        # Give Kafka time to propagate
-        time.sleep(3)
+        # Wait for Kafka message to be available (condition-based, not time-based)
+        kafka_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "")
+        kafka_env = os.environ.get("KAFKA_ENVIRONMENT", "dev")
+        topic = f"{kafka_env}.onex.evt.omniclaude.prompt-submitted.v1"
+        wait_for_kafka_message(
+            bootstrap_servers=kafka_servers,
+            topic=topic,
+            timeout=15.0,  # Longer timeout for full pipeline test
+            poll_interval_ms=500,
+        )
 
         # Step 2: Consume
         consume_result = run_demo_script(
