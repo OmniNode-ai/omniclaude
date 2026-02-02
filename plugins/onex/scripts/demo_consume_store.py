@@ -24,7 +24,7 @@ Usage:
 
 Environment Variables (all required - source .env first):
     KAFKA_BOOTSTRAP_SERVERS: Kafka brokers (required)
-    KAFKA_ENVIRONMENT: Topic prefix (default: dev)
+    KAFKA_ENVIRONMENT: Topic prefix (required)
     POSTGRES_HOST: Database host (required)
     POSTGRES_PORT: Database port (required)
     POSTGRES_DATABASE: Database name (required)
@@ -79,7 +79,12 @@ def get_kafka_config() -> dict:
         print("  Run: source .env")
         sys.exit(1)
 
-    kafka_env = os.environ.get("KAFKA_ENVIRONMENT", "dev")
+    kafka_env = os.environ.get("KAFKA_ENVIRONMENT")
+    if not kafka_env:
+        print("[ERROR] KAFKA_ENVIRONMENT environment variable required")
+        print("  Run: source .env")
+        sys.exit(1)
+
     topic = build_topic(kafka_env, TopicBase.CLAUDE_HOOK_EVENT)
 
     return {
