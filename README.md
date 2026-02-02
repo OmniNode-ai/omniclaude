@@ -218,9 +218,40 @@ dependencies = [
 ]
 ```
 
+## Demos
+
+### VERTICAL-001: Pattern Pipeline Demo
+
+Validate the end-to-end pattern extraction pipeline:
+
+```
+Claude Hook → Kafka → Consumer → PostgreSQL → Query
+```
+
+**[📖 View Demo Runbook](plugins/onex/docs/RUNBOOK_VERTICAL_DEMO.md)**
+
+Quick start:
+```bash
+# Terminal 1: Start consumer
+source .env && python plugins/onex/scripts/demo_consume_store.py
+
+# Terminal 2: Emit test event
+source .env && python plugins/onex/scripts/demo_emit_hook.py
+
+# Terminal 3: Query patterns
+source .env && python plugins/onex/scripts/demo_query_patterns.py --demo-only
+```
+
+Run integration tests:
+```bash
+KAFKA_INTEGRATION_TESTS=1 POSTGRES_INTEGRATION_TESTS=1 \
+    pytest tests/hooks/test_integration_demo_pipeline.py -v
+```
+
 ## Documentation
 
 - [CLAUDE.md](CLAUDE.md) - Development guide and reference
+- [RUNBOOK_VERTICAL_DEMO.md](plugins/onex/docs/RUNBOOK_VERTICAL_DEMO.md) - Pattern pipeline demo
 - [_archive/README_ARCHIVE.md](_archive/README_ARCHIVE.md) - Archived code documentation
 
 ## Contributing
