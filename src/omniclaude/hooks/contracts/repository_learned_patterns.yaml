@@ -33,24 +33,27 @@ ops:
     mode: read
     description: >
       Retrieve patterns that are validated, enabled, and current.
-      Results are ordered by quality_score descending then pattern_id
+      Results are ordered by quality_score descending then id
       for deterministic ordering.
     sql: |
       SELECT
-        pattern_id::text,
-        domain,
-        title,
-        description,
+        id::text AS pattern_id,
+        domain_id AS domain,
+        pattern_signature AS title,
+        COALESCE(compiled_snippet, '') AS description,
         confidence,
-        usage_count,
-        success_rate,
-        example_reference
+        recurrence_count AS usage_count,
+        CASE
+          WHEN injection_count_rolling_20 > 0
+          THEN success_count_rolling_20::float / injection_count_rolling_20
+          ELSE 0.5
+        END AS success_rate,
+        NULL::text AS example_reference
       FROM learned_patterns
       WHERE status = 'validated'
-        AND disabled_at IS NULL
         AND deprecated_at IS NULL
         AND is_current = TRUE
-      ORDER BY quality_score DESC NULLS LAST, pattern_id ASC
+      ORDER BY quality_score DESC NULLS LAST, id ASC
       LIMIT $1
     params:
       limit:
@@ -76,16 +79,20 @@ ops:
     description: Retrieve a specific pattern by its ID.
     sql: |
       SELECT
-        pattern_id::text,
-        domain,
-        title,
-        description,
+        id::text AS pattern_id,
+        domain_id AS domain,
+        pattern_signature AS title,
+        COALESCE(compiled_snippet, '') AS description,
         confidence,
-        usage_count,
-        success_rate,
-        example_reference
+        recurrence_count AS usage_count,
+        CASE
+          WHEN injection_count_rolling_20 > 0
+          THEN success_count_rolling_20::float / injection_count_rolling_20
+          ELSE 0.5
+        END AS success_rate,
+        NULL::text AS example_reference
       FROM learned_patterns
-      WHERE pattern_id = $1::uuid
+      WHERE id = $1::uuid
     params:
       pattern_id:
         name: pattern_id
@@ -105,21 +112,24 @@ ops:
       Includes 'general' domain patterns that apply to all domains.
     sql: |
       SELECT
-        pattern_id::text,
-        domain,
-        title,
-        description,
+        id::text AS pattern_id,
+        domain_id AS domain,
+        pattern_signature AS title,
+        COALESCE(compiled_snippet, '') AS description,
         confidence,
-        usage_count,
-        success_rate,
-        example_reference
+        recurrence_count AS usage_count,
+        CASE
+          WHEN injection_count_rolling_20 > 0
+          THEN success_count_rolling_20::float / injection_count_rolling_20
+          ELSE 0.5
+        END AS success_rate,
+        NULL::text AS example_reference
       FROM learned_patterns
       WHERE status = 'validated'
-        AND disabled_at IS NULL
         AND deprecated_at IS NULL
         AND is_current = TRUE
-        AND (domain = $1 OR domain = 'general')
-      ORDER BY quality_score DESC NULLS LAST, pattern_id ASC
+        AND (domain_id = $1 OR domain_id = 'general')
+      ORDER BY quality_score DESC NULLS LAST, id ASC
       LIMIT $2
     params:
       domain:
