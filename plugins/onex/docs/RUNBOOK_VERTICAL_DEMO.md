@@ -58,8 +58,9 @@ psql -h $POSTGRES_HOST -p $POSTGRES_PORT -U $POSTGRES_USER -d $POSTGRES_DATABASE
 ### Environment
 
 ```bash
-# Navigate to repository
-cd /Volumes/PRO-G40/Code/omniclaude
+# Set REPO_ROOT to your omniclaude clone location, e.g.:
+# export REPO_ROOT=/path/to/omniclaude
+cd $REPO_ROOT
 
 # Load environment variables
 source .env
@@ -87,7 +88,7 @@ Open **three** terminal windows:
 ### Step 1: Start Consumer (Terminal T1)
 
 ```bash
-cd /Volumes/PRO-G40/Code/omniclaude
+cd $REPO_ROOT  # Navigate to your omniclaude repository root
 source .env
 
 # Start consumer (runs until Ctrl+C)
@@ -124,7 +125,7 @@ Leave this running.
 ### Step 2: Emit Test Event (Terminal T2)
 
 ```bash
-cd /Volumes/PRO-G40/Code/omniclaude
+cd $REPO_ROOT  # Navigate to your omniclaude repository root
 source .env
 
 # Emit default test event
@@ -161,7 +162,7 @@ Note: The consumer shows the first 12 characters of the `signature_hash`.
 ### Step 3: Query Patterns (Terminal T3)
 
 ```bash
-cd /Volumes/PRO-G40/Code/omniclaude
+cd $REPO_ROOT  # Navigate to your omniclaude repository root
 source .env
 
 # Query demo patterns

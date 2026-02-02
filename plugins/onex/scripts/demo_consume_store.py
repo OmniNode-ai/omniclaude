@@ -45,6 +45,7 @@ from threading import Event
 
 import psycopg2
 from kafka import KafkaConsumer
+from psycopg2.extensions import connection as PgConnection
 
 # Add src to path for imports
 SRC_DIR = Path(__file__).parent.parent.parent.parent / "src"
@@ -185,7 +186,11 @@ def extract_pattern_from_event(event: dict) -> dict | None:
         source_session_ids = [session_uuid]
     except (ValueError, TypeError):
         # Generate a random UUID if session_id is invalid
-        source_session_ids = [uuid.uuid4()]
+        fallback_uuid = uuid.uuid4()
+        print(
+            f"[WARN] Invalid session_id '{session_id_str}', using fallback UUID: {fallback_uuid}"
+        )
+        source_session_ids = [fallback_uuid]
 
     return {
         "pattern_signature": pattern_signature,
@@ -201,7 +206,7 @@ def extract_pattern_from_event(event: dict) -> dict | None:
     }
 
 
-def upsert_pattern(conn, pattern: dict) -> str:
+def upsert_pattern(conn: PgConnection, pattern: dict) -> str:
     """Upsert pattern into learned_patterns table.
 
     Args:
@@ -224,7 +229,12 @@ def upsert_pattern(conn, pattern: dict) -> str:
         DO UPDATE SET
             recurrence_count = learned_patterns.recurrence_count + 1,
             last_seen_at = now(),
-            source_session_ids = array_cat(learned_patterns.source_session_ids, EXCLUDED.source_session_ids)
+            source_session_ids = (
+                SELECT ARRAY(SELECT DISTINCT unnest(array_cat(
+                    learned_patterns.source_session_ids,
+                    EXCLUDED.source_session_ids
+                )) LIMIT 100)
+            )
         RETURNING (xmax = 0) as inserted
     """
 

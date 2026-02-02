@@ -35,6 +35,7 @@ import os
 import sys
 
 import psycopg2
+from psycopg2.extensions import connection as PgConnection
 from psycopg2.extras import RealDictCursor
 
 
@@ -89,7 +90,7 @@ def print_config(config: dict) -> None:
 
 
 def query_patterns(
-    conn,
+    conn: PgConnection,
     domain: str | None = None,
     demo_only: bool = False,
     limit: int = 20,
@@ -195,14 +196,14 @@ def print_summary(patterns: list[dict]) -> None:
     )
 
 
-def count_all_patterns(conn) -> int:
+def count_all_patterns(conn: PgConnection) -> int:
     """Count total current patterns in database."""
     with conn.cursor() as cursor:
         cursor.execute("SELECT COUNT(*) FROM learned_patterns WHERE is_current = true")
         return cursor.fetchone()[0]
 
 
-def count_demo_patterns(conn) -> int:
+def count_demo_patterns(conn: PgConnection) -> int:
     """Count current demo patterns in database."""
     with conn.cursor() as cursor:
         cursor.execute(
@@ -211,7 +212,7 @@ def count_demo_patterns(conn) -> int:
         return cursor.fetchone()[0]
 
 
-def delete_demo_patterns(conn) -> int:
+def delete_demo_patterns(conn: PgConnection) -> int:
     """Delete demo patterns from database.
 
     Returns:
