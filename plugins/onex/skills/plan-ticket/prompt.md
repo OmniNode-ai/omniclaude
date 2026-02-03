@@ -61,19 +61,23 @@ AskUserQuestion(questions=[{
 ```
 
 If user selects "Other":
-```
-AskUserQuestion(questions=[{
-    "question": "Enter the repository name:",
-    "header": "Custom Repository",
-    "allowFreeText": true
-}])
-```
-
-**Validation**: If response is empty or whitespace-only, ask again:
 ```python
-if not custom_repo or not custom_repo.strip():
-    print("Repository name cannot be empty. Please enter a valid name.")
-    # Repeat the question
+while True:
+    AskUserQuestion(questions=[{
+        "question": "Enter the repository name:",
+        "header": "Custom Repository",
+        "allowFreeText": true
+    }])
+    # Store as custom_repo
+
+    # Validation: If response is empty or whitespace-only, ask again
+    if not custom_repo or not custom_repo.strip():
+        print("Repository name cannot be empty. Please enter a valid name.")
+        continue  # Loop back to prompt again
+
+    # Valid input received
+    ticket_repo = custom_repo.strip()
+    break
 ```
 
 Store response as `ticket_repo`.
@@ -128,7 +132,8 @@ while True:
     # Validate non-empty statement
     if not requirement_statement or not requirement_statement.strip():
         print("Requirement statement cannot be empty. Please provide a description.")
-        # Repeat the question (decrement count and continue loop)
+        requirement_count -= 1  # Decrement count so R{n} is re-asked
+        continue  # Loop back to ask the same requirement again
 
     # 4b: Get acceptance criteria
     AskUserQuestion(questions=[{
@@ -183,36 +188,38 @@ AskUserQuestion(questions=[{
 ```
 
 If "Yes":
-```
-AskUserQuestion(questions=[{
-    "question": "Enter the parent ticket ID (e.g., OMN-1800):",
-    "header": "Parent Ticket ID",
-    "allowFreeText": true
-}])
-```
-
-**Validation**: Ticket ID should match format `OMN-XXXX`:
 ```python
 import re
-if parent_ticket and not re.match(r'^OMN-\d+$', parent_ticket.strip()):
-    # Invalid format - ask user to fix or proceed
-    AskUserQuestion(questions=[{
-        "question": f"'{parent_ticket}' doesn't match expected format (OMN-1234). What would you like to do?",
-        "header": "Invalid Format",
-        "options": [
-            {"label": "Re-enter", "description": "Enter the ticket ID again"},
-            {"label": "Use anyway", "description": f"Proceed with '{parent_ticket}' as-is"},
-            {"label": "Skip", "description": "Don't set a parent ticket"}
-        ],
-        "multiSelect": false
-    }])
 
-    if response == "Re-enter":
-        # Loop back to parent ticket ID prompt
-        pass
-    elif response == "Skip":
-        parent_ticket = None
-    # else "Use anyway" - keep the value as entered
+while True:
+    AskUserQuestion(questions=[{
+        "question": "Enter the parent ticket ID (e.g., OMN-1800):",
+        "header": "Parent Ticket ID",
+        "allowFreeText": true
+    }])
+    # Store as parent_ticket
+
+    # Validation: Ticket ID should match format OMN-XXXX
+    if parent_ticket and not re.match(r'^OMN-\d+$', parent_ticket.strip()):
+        # Invalid format - ask user to fix or proceed
+        AskUserQuestion(questions=[{
+            "question": f"'{parent_ticket}' doesn't match expected format (OMN-1234). What would you like to do?",
+            "header": "Invalid Format",
+            "options": [
+                {"label": "Re-enter", "description": "Enter the ticket ID again"},
+                {"label": "Use anyway", "description": f"Proceed with '{parent_ticket}' as-is"},
+                {"label": "Skip", "description": "Don't set a parent ticket"}
+            ],
+            "multiSelect": false
+        }])
+
+        if response == "Re-enter":
+            continue  # Loop back to ask for parent ticket ID again
+        elif response == "Skip":
+            parent_ticket = None
+        # else "Use anyway" - keep the value as entered
+
+    break  # Valid format or user chose to proceed
 ```
 
 Store as `parent_ticket` or `null`.
@@ -234,48 +241,50 @@ AskUserQuestion(questions=[{
 ```
 
 If "Yes":
-```
-AskUserQuestion(questions=[{
-    "question": "Enter the blocking ticket IDs (comma-separated, e.g., OMN-1801, OMN-1802):",
-    "header": "Blocking Ticket IDs",
-    "allowFreeText": true
-}])
-```
-
-**Validation**: Parse and validate each ticket ID:
 ```python
 import re
-blocked_by = []
-invalid_ids = []
 
-for id_str in blocked_by_raw.split(","):
-    id_str = id_str.strip()
-    if id_str:
-        if re.match(r'^OMN-\d+$', id_str):
-            blocked_by.append(id_str)
-        else:
-            invalid_ids.append(id_str)
-
-# If any invalid IDs found, ask user how to handle
-if invalid_ids:
-    invalid_list = ", ".join(invalid_ids)
+while True:
     AskUserQuestion(questions=[{
-        "question": f"The following IDs don't match expected format (OMN-1234): {invalid_list}\n\nWhat would you like to do?",
-        "header": "Invalid IDs",
-        "options": [
-            {"label": "Re-enter all", "description": "Enter the blocking ticket IDs again"},
-            {"label": "Keep valid only", "description": f"Proceed with valid IDs only: {blocked_by or 'none'}"},
-            {"label": "Skip blockers", "description": "Don't set any blocking dependencies"}
-        ],
-        "multiSelect": false
+        "question": "Enter the blocking ticket IDs (comma-separated, e.g., OMN-1801, OMN-1802):",
+        "header": "Blocking Ticket IDs",
+        "allowFreeText": true
     }])
+    # Store as blocked_by_raw
 
-    if response == "Re-enter all":
-        # Loop back to blocked-by prompt
-        pass
-    elif response == "Skip blockers":
-        blocked_by = []
-    # else "Keep valid only" - use the valid IDs already collected
+    # Validation: Parse and validate each ticket ID
+    blocked_by = []
+    invalid_ids = []
+
+    for id_str in blocked_by_raw.split(","):
+        id_str = id_str.strip()
+        if id_str:
+            if re.match(r'^OMN-\d+$', id_str):
+                blocked_by.append(id_str)
+            else:
+                invalid_ids.append(id_str)
+
+    # If any invalid IDs found, ask user how to handle
+    if invalid_ids:
+        invalid_list = ", ".join(invalid_ids)
+        AskUserQuestion(questions=[{
+            "question": f"The following IDs don't match expected format (OMN-1234): {invalid_list}\n\nWhat would you like to do?",
+            "header": "Invalid IDs",
+            "options": [
+                {"label": "Re-enter all", "description": "Enter the blocking ticket IDs again"},
+                {"label": "Keep valid only", "description": f"Proceed with valid IDs only: {blocked_by or 'none'}"},
+                {"label": "Skip blockers", "description": "Don't set any blocking dependencies"}
+            ],
+            "multiSelect": false
+        }])
+
+        if response == "Re-enter all":
+            continue  # Loop back to ask for blocking ticket IDs again
+        elif response == "Skip blockers":
+            blocked_by = []
+        # else "Keep valid only" - use the valid IDs already collected
+
+    break  # All valid or user chose to proceed
 ```
 
 Store as `blocked_by` list or empty list.
@@ -510,8 +519,9 @@ if project_name and project_name != "None":
 ```
 
 Execute:
-```
-Skill(skill="create-ticket", args="{args}")
+```python
+# Use the Skill tool with the constructed args
+Skill(skill="create-ticket", args=args)
 ```
 
 ### Report success:
