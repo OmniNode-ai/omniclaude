@@ -146,6 +146,12 @@ while True:
     # Parse criteria (split by comma or newline)
     acceptance_criteria = [c.strip() for c in acceptance_criteria_raw.replace("\n", ",").split(",") if c.strip()]
 
+    # Validate: at least one acceptance criterion is required
+    if not acceptance_criteria:
+        print("At least one acceptance criterion is required. Please enter valid criteria.")
+        requirement_count -= 1  # Decrement so we re-ask for the same requirement
+        continue  # Loop back to ask for this requirement again
+
     # Add to requirements list
     requirements.append({
         "id": f"R{requirement_count}",
