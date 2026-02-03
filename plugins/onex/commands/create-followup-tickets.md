@@ -18,10 +18,6 @@ args:
   - name: parent
     description: Parent issue ID for all created tickets (e.g., OMN-1850)
     required: false
-  - name: severity
-    description: Minimum severity to include (critical, major, minor, nit)
-    required: false
-    default: "minor"
   - name: include-nits
     description: Include nitpick-level issues
     required: false
@@ -166,9 +162,42 @@ else:
 
 ## Step 3: Detect Repository Label
 
-```bash
-# Auto-detect from git
-REPO_NAME=$(basename $(git remote get-url origin 2>/dev/null) .git 2>/dev/null || basename $(pwd))
+```python
+def detect_repo_label(args) -> str | None:
+    """Auto-detect repository label from git remote or use override."""
+    if args.no_repo_label:
+        return None
+
+    if args.repo:
+        return args.repo
+
+    # Auto-detect from git
+    import subprocess
+    try:
+        result = subprocess.run(
+            ['git', 'remote', 'get-url', 'origin'],
+            capture_output=True, text=True, check=True
+        )
+        # Extract repo name from URL (e.g., git@github.com:org/omniclaude.git -> omniclaude)
+        url = result.stdout.strip()
+        repo_name = url.rstrip('.git').split('/')[-1]
+    except subprocess.CalledProcessError:
+        # Fallback to directory name
+        repo_name = Path.cwd().name
+
+    # Map repo name to Linear label (most repos use same name)
+    label_mapping = {
+        'omniclaude': 'omniclaude',
+        'omnibase_core': 'omnibase_core',
+        'omnibase_infra': 'omnibase_infra',
+        'omniarchon': 'omniarchon',
+        'omnidash': 'omnidash',
+    }
+
+    return label_mapping.get(repo_name, repo_name)
+
+# Call this in workflow and store result
+repo_label = detect_repo_label(args)
 ```
 
 **Label mapping**:
@@ -176,12 +205,12 @@ REPO_NAME=$(basename $(git remote get-url origin 2>/dev/null) .git 2>/dev/null |
 |------|--------------|
 | omniclaude | `omniclaude` |
 | omnibase_core | `omnibase_core` |
-| omnibase_infra | `omninode_infra` |
+| omnibase_infra | `omnibase_infra` |
 | omniarchon | `omniarchon` |
 | omnidash | `omnidash` |
 
 If `--no-repo-label` is set, skip this step.
-If `--repo <label>` is set, use that instead.
+If `--repo <label>` is set, use that instead of auto-detection.
 
 ---
 
@@ -253,7 +282,7 @@ Otherwise: Ask for confirmation via AskUserQuestion.
 For each issue, create a Linear ticket:
 
 ```python
-def create_ticket(issue: dict, project_id: str, args) -> dict:
+def create_ticket(issue: dict, project_id: str, repo_label: str | None, args) -> dict:
     """Create a single Linear ticket from review issue."""
 
     # Build title
@@ -292,10 +321,10 @@ def create_ticket(issue: dict, project_id: str, args) -> dict:
         'nit': 4        # Low
     }
 
-    # Build labels
+    # Build labels (repo_label comes from detect_repo_label())
     labels = [issue['severity'], 'from-review']
-    if args.repo and not args.no_repo_label:
-        labels.append(args.repo)
+    if repo_label:
+        labels.append(repo_label)
 
     # Create ticket
     params = {
@@ -323,7 +352,7 @@ for i, issue in enumerate(issues, 1):
     print(f"Creating ticket {i}/{len(issues)}: [{issue['severity'].upper()}] {issue['description'][:40]}...")
 
     try:
-        result = create_ticket(issue, project_id, args)
+        result = create_ticket(issue, project_id, repo_label, args)
         created.append(result)
         print(f"  Created: {result['identifier']} - {result['url']}")
     except Exception as e:
