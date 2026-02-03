@@ -148,11 +148,11 @@ If no issues found, return: {\"critical\": [], \"major\": [], \"minor\": []}
 - **{file}:{line}** - {description}
 ```
 
-**If no issues**: Skip to Phase 3 (Final Summary)
+**If no issues**: Increment iteration counter, then skip to Phase 3 (Final Summary)
 
-**If `PARSE_FAILED`**: Skip to Phase 3 (do not attempt fixes)
+**If `PARSE_FAILED`**: Skip to Phase 3 (do not attempt fixes, do not increment counter)
 
-**If `--no-fix`**: Display issues and skip to Phase 3
+**If `--no-fix`**: Display issues and skip to Phase 3 (do not increment counter)
 
 ### Step 2.4: Fix Issues
 
@@ -205,6 +205,15 @@ commits_made.append({
 total_issues_fixed += count
 ```
 
+**On commit failure**:
+1. Log the error with failure reason (hooks, conflicts, permissions)
+2. Leave files staged for manual intervention
+3. Set `commit_failed = true` with reason
+4. Exit to Phase 3 immediately (do NOT continue loop)
+5. Final status: "Commit failed - {reason}. Files staged for manual review."
+
+This prevents re-reviewing the same changes and gives the user clear next steps.
+
 ### Step 2.6: Check Loop Condition
 
 ```
@@ -243,6 +252,7 @@ else:
 - `Report only - {n} issues found` (--no-fix mode)
 - `Changes staged - review before commit` (--no-commit mode)
 - `Parse failed - manual review needed` (review response couldn't be parsed)
+- `Commit failed - {reason}. Files staged for manual review.` (commit step failed)
 
 ---
 
