@@ -2,7 +2,7 @@
 source: omnibase_core/architecture-handshakes/repos/omniclaude.md
 source_version: 0.13.1
 source_sha256: ce272e823aede915219c0138f1f2cd19e93269dfb8d97f51da408c3fb1e83c40
-installed_at: 2026-02-03T14:01:17Z
+installed_at: 2026-02-03T14:25:03Z
 installed_by: jonah
 -->
 
