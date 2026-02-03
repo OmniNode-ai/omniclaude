@@ -122,13 +122,18 @@ hardening_tickets: []
 **Entry invariant:** Contract exists
 
 **Actions:**
-1. Analyze the ticket requirements
-2. Use codebase exploration to identify:
+1. **Load architecture handshake** (if available):
+   - Read `.claude/architecture-handshake.md` using the Read tool
+   - If file exists: review repo-specific constraints and patterns
+   - If file doesn't exist: continue without (graceful fallback)
+   - Include relevant constraints in `context.notes`
+2. Analyze the ticket requirements
+3. Use codebase exploration to identify:
    - Relevant files (`context.relevant_files`)
    - Existing patterns (`context.patterns_found`)
    - Notes about approach (`context.notes`)
-3. Generate clarifying questions (add to `questions[]`)
-4. Save contract after each mutation
+4. Generate clarifying questions (add to `questions[]`)
+5. Save contract after each mutation
 
 **Mutations allowed:**
 - `context.relevant_files`
@@ -607,7 +612,11 @@ When `/ticket-work {ticket_id}` is invoked on an existing contract:
 
 1. Fetch ticket, parse contract
 2. Validate contract structure
-3. Report current state:
+3. **Re-read architecture handshake** (if available):
+   - Read `.claude/architecture-handshake.md` using the Read tool
+   - If file exists: refresh understanding of repo-specific constraints
+   - If file doesn't exist: continue without (graceful fallback)
+4. Report current state:
    ```
    Resuming {ticket_id} in {phase} phase.
 
@@ -620,4 +629,4 @@ When `/ticket-work {ticket_id}` is invoked on an existing contract:
 
    Next action: {describe what needs to happen in current phase}
    ```
-4. Continue from current phase
+5. Continue from current phase
