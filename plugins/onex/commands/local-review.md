@@ -357,9 +357,9 @@ Fix the following {severity} issues:
    ```
 5. If SOME fixes succeed: proceed to Step 2.5 to commit successful fixes, note failed issues in commit message
 
-### Step 2.5: Commit Fixes (if not `--no-commit`)
+### Step 2.5: Stage and Commit Fixes
 
-Group fixes by severity and commit.
+**Always stage fixes** (regardless of `--no-commit`):
 
 **Note**: For multi-line commit messages, use heredoc format:
 ```bash
@@ -385,7 +385,16 @@ if [ $? -ne 0 ]; then
     stage_failed = true
     goto Phase 3  # Status: "Stage failed - check file permissions"
 fi
+```
 
+**Track issues fixed** (regardless of `--no-commit`):
+```
+total_issues_fixed += count
+```
+
+**Commit** (if not `--no-commit`):
+
+```bash
 # Commit with descriptive message using heredoc (include failed fixes if any)
 git commit -m "$(cat <<'EOF'
 fix(review): [{severity}] {summary}
@@ -408,8 +417,9 @@ commits_made.append({
   "summary": summary,
   "issues_fixed": count  # Excludes failed fixes
 })
-total_issues_fixed += count  # Only successfully fixed issues are counted
 ```
+
+Note: `total_issues_fixed` was already incremented in the "Track issues fixed" step above.
 
 **On commit failure**:
 1. Log the error with failure reason (hooks, conflicts, permissions)
@@ -461,17 +471,50 @@ else:
 **Status**: {status_indicator}
 ```
 
-**Status indicators**:
-- `Clean - Ready to push` (no Critical/Major/Minor on final review; nits are OK)
-- `Clean with nits - Ready to push` (only nits remain, which are optional)
-- `Max iterations reached - {n} blocking issues remain` (hit limit with Critical/Major/Minor remaining)
-- `Report only - {n} blocking issues found` (--no-fix mode)
-- `Changes staged - review before commit` (--no-commit mode)
-- `Parse failed - manual review needed` (review response couldn't be parsed)
-- `Agent failed - {error}. Manual review required.` (review agent crashed/timed out)
-- `Fix failed - {n} issues need manual attention` (all fix attempts failed in Step 2.4)
-- `Stage failed - check file permissions` (git add failed)
-- `Commit failed - {reason}. Files staged for manual review.` (commit step failed)
+**Status indicators** (choose based on total_issues_fixed and mode):
+- `✅ Clean - No issues found` (no Critical/Major/Minor on first review, 0 issues fixed)
+- `✅ Clean - Ready to push` (all issues fixed and committed)
+- `⚪ Clean with nits - No changes needed` (only nits found, 0 issues fixed)
+- `⚪ Clean with nits - Ready to push` (blocking issues fixed and committed, nits remain)
+- `❌ Max iterations reached - {n} blocking issues remain` (hit limit with Critical/Major/Minor remaining)
+- `📋 Report only - {n} blocking issues found` (--no-fix mode)
+- `📝 Changes staged - review before commit` (--no-commit mode, issues were fixed but not committed)
+- `⚠️ Parse failed - manual review needed` (review response couldn't be parsed)
+- `⚠️ Agent failed - {error}. Manual review required.` (review agent crashed/timed out)
+- `⚠️ Fix failed - {n} issues need manual attention` (all fix attempts failed in Step 2.4)
+- `⚠️ Stage failed - check file permissions` (git add failed)
+- `⚠️ Commit failed - {reason}. Files staged for manual review.` (commit step failed)
+
+**Status selection logic**:
+```
+if parse_failed:
+    "⚠️ Parse failed - manual review needed"
+elif agent_failed:
+    "⚠️ Agent failed - {error}. Manual review required."
+elif fix_failed:
+    "⚠️ Fix failed - {n} issues need manual attention"
+elif stage_failed:
+    "⚠️ Stage failed - check file permissions"
+elif commit_failed:
+    "⚠️ Commit failed - {reason}. Files staged for manual review."
+elif --no-fix:
+    "📋 Report only - {n} blocking issues found"
+elif blocking_issues_remain:
+    "❌ Max iterations reached - {n} blocking issues remain"
+elif total_issues_fixed == 0:
+    # No blocking issues found to fix (only nits which are optional)
+    if nits_remain:
+        "⚪ Clean with nits - No changes needed"
+    else:
+        "✅ Clean - No issues found"
+elif --no-commit:
+    # Issues were fixed but not committed (staged only)
+    "📝 Changes staged - review before commit"
+elif nits_remain:
+    "⚪ Clean with nits - Ready to push"
+else:
+    "✅ Clean - Ready to push"
+```
 
 ---
 

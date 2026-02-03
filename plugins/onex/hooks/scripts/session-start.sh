@@ -495,6 +495,57 @@ else
     log "Ticket context injection skipped (ticket_context_injector.py not found)"
 fi
 
+# -----------------------------
+# Architecture Handshake Injection (OMN-1860)
+# -----------------------------
+# Inject architecture handshake from .claude/architecture-handshake.md
+# Runs SYNCHRONOUSLY because it's purely local filesystem (fast).
+# Combined with ticket context in additionalContext (handshake first, then ticket).
+
+HANDSHAKE_INJECTION_ENABLED="${OMNICLAUDE_HANDSHAKE_INJECTION_ENABLED:-true}"
+HANDSHAKE_INJECTION_ENABLED=$(_normalize_bool "$HANDSHAKE_INJECTION_ENABLED")
+HANDSHAKE_CONTEXT=""
+
+if [[ "${HANDSHAKE_INJECTION_ENABLED}" == "true" ]] && [[ -f "${HOOKS_LIB}/architecture_handshake_injector.py" ]]; then
+    log "Checking for architecture handshake"
+
+    # Build input JSON with project path (prefer repo root over CWD)
+    # PROJECT_PATH is set from hook input, PROJECT_ROOT is detected from .env location
+    HANDSHAKE_PROJECT="${PROJECT_PATH:-}"
+    if [[ -z "$HANDSHAKE_PROJECT" ]]; then
+        HANDSHAKE_PROJECT="${PROJECT_ROOT:-}"
+    fi
+    if [[ -z "$HANDSHAKE_PROJECT" ]]; then
+        HANDSHAKE_PROJECT="$CWD"
+    fi
+    HANDSHAKE_INPUT=$(jq -n --arg project "$HANDSHAKE_PROJECT" '{"project_path": $project}' 2>/dev/null) || HANDSHAKE_INPUT='{}'
+
+    # Run architecture handshake injection synchronously via CLI (fast, local-only)
+    HANDSHAKE_OUTPUT=$(echo "$HANDSHAKE_INPUT" | "$PYTHON_CMD" "${HOOKS_LIB}/architecture_handshake_injector.py" 2>>"$LOG_FILE") || HANDSHAKE_OUTPUT='{}'
+
+    # Parse CLI output using jq
+    if [[ "$JQ_AVAILABLE" -eq 1 ]]; then
+        HANDSHAKE_PATH=$(echo "$HANDSHAKE_OUTPUT" | jq -r '.handshake_path // empty' 2>/dev/null) || HANDSHAKE_PATH=""
+        HANDSHAKE_CONTEXT=$(echo "$HANDSHAKE_OUTPUT" | jq -r '.handshake_context // empty' 2>/dev/null) || HANDSHAKE_CONTEXT=""
+        HANDSHAKE_RETRIEVAL_MS=$(echo "$HANDSHAKE_OUTPUT" | jq -r '.retrieval_ms // 0' 2>/dev/null) || HANDSHAKE_RETRIEVAL_MS=0
+
+        if [[ -n "$HANDSHAKE_PATH" ]] && [[ -n "$HANDSHAKE_CONTEXT" ]]; then
+            log "Architecture handshake found: $HANDSHAKE_PATH (retrieved in ${HANDSHAKE_RETRIEVAL_MS}ms)"
+            log "Handshake context generated (${#HANDSHAKE_CONTEXT} chars)"
+        else
+            log "No architecture handshake found"
+        fi
+    else
+        # Fallback: extract handshake_context using Python
+        HANDSHAKE_CONTEXT=$(echo "$HANDSHAKE_OUTPUT" | "$PYTHON_CMD" -c "import sys,json; d=json.load(sys.stdin); print(d.get('handshake_context',''))" 2>/dev/null) || HANDSHAKE_CONTEXT=""
+        log "Handshake check completed (jq unavailable for detailed parsing)"
+    fi
+elif [[ "${HANDSHAKE_INJECTION_ENABLED}" != "true" ]]; then
+    log "Architecture handshake injection disabled (HANDSHAKE_INJECTION_ENABLED=false)"
+else
+    log "Architecture handshake injection skipped (architecture_handshake_injector.py not found)"
+fi
+
 # Performance tracking
 END_TIME=$(get_time_ms)
 ELAPSED_MS=$((END_TIME - START_TIME))
@@ -508,16 +559,44 @@ fi
 # Build output with additionalContext
 # NOTE: Pattern injection is async, so patterns won't be available here.
 # UserPromptSubmit will handle pattern injection for the first prompt.
-# Ticket context is sync, so it IS available immediately in additionalContext.
+# Architecture handshake and ticket context are sync, so they ARE available immediately.
+# Combined format: handshake first, then ticket context (separated by ---)
 if [[ "$JQ_AVAILABLE" -eq 1 ]]; then
+    # Combine handshake and ticket context if both present
+    COMBINED_CONTEXT=""
+    HAS_HANDSHAKE="false"
+    HAS_TICKET="false"
+
+    if [[ -n "$HANDSHAKE_CONTEXT" ]]; then
+        COMBINED_CONTEXT="$HANDSHAKE_CONTEXT"
+        HAS_HANDSHAKE="true"
+    fi
+
     if [[ -n "$TICKET_CONTEXT" ]]; then
-        # Include ticket context in additionalContext (sync injection)
+        if [[ -n "$COMBINED_CONTEXT" ]]; then
+            # Add separator between handshake and ticket context
+            COMBINED_CONTEXT="${COMBINED_CONTEXT}
+
+---
+
+${TICKET_CONTEXT}"
+        else
+            COMBINED_CONTEXT="$TICKET_CONTEXT"
+        fi
+        HAS_TICKET="true"
+    fi
+
+    if [[ -n "$COMBINED_CONTEXT" ]]; then
+        # Include combined context in additionalContext (sync injection)
         printf '%s' "$INPUT" | jq \
-            --arg ticket_ctx "$TICKET_CONTEXT" \
+            --arg ctx "$COMBINED_CONTEXT" \
+            --argjson has_handshake "$HAS_HANDSHAKE" \
+            --argjson has_ticket "$HAS_TICKET" \
             '.hookSpecificOutput.hookEventName = "SessionStart" |
-             .hookSpecificOutput.additionalContext = $ticket_ctx |
+             .hookSpecificOutput.additionalContext = $ctx |
              .hookSpecificOutput.metadata.injection_mode = "sync" |
-             .hookSpecificOutput.metadata.has_ticket_context = true'
+             .hookSpecificOutput.metadata.has_handshake_context = $has_handshake |
+             .hookSpecificOutput.metadata.has_ticket_context = $has_ticket'
     elif [[ "${SESSION_INJECTION_ENABLED:-true}" == "true" ]]; then
         # Async pattern injection was started - set metadata to indicate this
         printf '%s' "$INPUT" | jq \
