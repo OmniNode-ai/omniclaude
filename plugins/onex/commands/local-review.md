@@ -252,7 +252,7 @@ If no issues found, return: {\"critical\": [], \"major\": [], \"minor\": [], \"n
 **Merge Status**: {Ready | Blocked by N issues}
 ```
 
-**Track nit count**: After parsing the review response, update `nit_count += len(nit_issues)` for the final summary.
+**Track nit count**: After parsing the review response, update `nit_count += len(issues["nit"])` for the final summary.
 
 **Early Exit Conditions** (each increments counter before exiting):
 
@@ -286,10 +286,12 @@ goto Phase 3
 **Pre-filter previously failed issues**:
 ```python
 # Filter out issues that already failed in previous iterations (do not retry)
+# Create set once for O(1) lookups instead of O(n*m) list comprehension
+failed_fixes_set = {(f["file"], f["line"]) for f in failed_fixes}
 for severity in ["critical", "major", "minor"]:
     issues[severity] = [
         issue for issue in issues[severity]
-        if (issue["file"], issue["line"]) not in [(f["file"], f["line"]) for f in failed_fixes]
+        if (issue["file"], issue["line"]) not in failed_fixes_set
     ]
 ```
 
