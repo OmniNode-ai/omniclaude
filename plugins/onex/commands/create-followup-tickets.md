@@ -111,19 +111,46 @@ def parse_review_file(path: str) -> dict:
     current_severity = None
 
     for line in content.split('\n'):
-        if 'Critical' in line:
+        line_lower = line.lower()
+        if 'critical' in line_lower:
             current_severity = 'critical'
-        elif 'Major' in line:
+        elif 'major' in line_lower:
             current_severity = 'major'
-        elif 'Minor' in line:
+        elif 'minor' in line_lower:
             current_severity = 'minor'
-        elif 'Nit' in line:
+        elif 'nit' in line_lower:
             current_severity = 'nit'
         elif line.startswith('- **') and current_severity:
             # Parse: - **file:line** - description [`keyword`]
-            issues[current_severity].append(parse_issue_line(line))
+            # Extract: {"file": str, "line": int, "description": str, "keyword": str}
+            issue = parse_issue_line(line)
+            if issue:
+                issues[current_severity].append(issue)
 
     return issues
+
+
+def parse_issue_line(line: str) -> dict | None:
+    """Parse a single issue line from markdown format.
+
+    Input format: - **file:line** - description [`keyword`]
+    Returns: {"file": str, "line": int, "description": str, "keyword": str}
+    """
+    import re
+
+    # Pattern: - **file:line** - description [`keyword`]
+    pattern = r'^- \*\*([^:]+):(\d+)\*\* - (.+?)(?:\s*\[`([^`]+)`\])?$'
+    match = re.match(pattern, line.strip())
+
+    if not match:
+        return None
+
+    return {
+        "file": match.group(1),
+        "line": int(match.group(2)),
+        "description": match.group(3).strip(),
+        "keyword": match.group(4) or "unspecified"
+    }
 ```
 
 ---
