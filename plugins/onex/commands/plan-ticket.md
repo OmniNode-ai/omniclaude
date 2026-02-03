@@ -24,7 +24,7 @@ The plan-ticket skill provides:
 Use the Skill tool to load the full `plan-ticket` skill, then execute the interactive flow.
 
 ```
-Skill(skill="plan-ticket")
+Skill(skill="onex:plan-ticket")
 ```
 
 Follow the skill's orchestration logic completely. All user interactions must use AskUserQuestion.
