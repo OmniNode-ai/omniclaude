@@ -199,18 +199,28 @@ hardening_tickets: []
   - No, needs changes
   ```
 
-**Automation on spec→implementation transition:**
+**🚨 MANDATORY AUTOMATION on spec→implementation transition:**
 
-When user approves spec (says "approve spec", "build it", etc.):
+**BEFORE ANY IMPLEMENTATION WORK BEGINS**, when user approves spec (says "approve spec", "build it", etc.), you MUST execute these steps IN ORDER:
 
 1. **Create git branch** using Linear's suggested branch name:
    - Get branch name from `mcp__linear-server__get_issue(id="{ticket_id}")` response field `branchName`
    - Linear auto-generates this based on ticket ID and title
+   - **Check if branch already exists before creating:**
    ```bash
-   git checkout -b {branchName}
+   # Check if branch exists
+   if git show-ref --verify --quiet refs/heads/{branchName}; then
+       # Branch exists - checkout existing branch
+       git checkout {branchName}
+       BRANCH_CREATED=false
+   else
+       # Branch doesn't exist - create new
+       git checkout -b {branchName}
+       BRANCH_CREATED=true
+   fi
    # Example: git checkout -b jonah/omn-1830-m4-hook-integration-session-continuity
    ```
-   If branch exists, checkout existing branch instead.
+   Track `BRANCH_CREATED` for rollback safety.
 
 2. **Update Linear status** to "In Progress":
    ```
@@ -225,6 +235,22 @@ When user approves spec (says "approve spec", "build it", etc.):
    - Set `branch` field to the git branch name
    - Persist to both Linear and local
 
+4. **Announce readiness and invoke parallel-solve:**
+   ```
+   ✅ Branch created: {branchName}
+   ✅ Ticket moved to In Progress
+   ✅ Ready for implementation
+
+   Dispatching {N} requirements to /parallel-solve...
+   ```
+
+   Then immediately invoke:
+   ```
+   Skill(skill="parallel-solve", args="Implement {ticket_id}: {title}. Requirements: {r1}, {r2}, ...")
+   ```
+
+**⚠️ DO NOT proceed to implementation actions until ALL automation steps complete successfully.**
+
 **Error handling for automation steps:**
 
 If any step fails, follow this rollback sequence:
@@ -232,15 +258,23 @@ If any step fails, follow this rollback sequence:
 | Failure Point | Rollback Action |
 |---------------|-----------------|
 | Git checkout fails | Stop. Do not update Linear or contract. Report error to user. |
-| Linear update fails | Delete created branch (`git branch -D {branchName}`). Report error to user. |
+| Linear update fails | If `BRANCH_CREATED=true`, checkout previous branch (`git checkout -`) then delete (`git branch -D {branchName}`). Report error to user. |
 | Contract persistence fails | Log warning and continue (Linear is source of truth). |
 
 Each step should check for success before proceeding to the next:
 ```python
 # Pseudo-code for safe automation
 try:
-    # Step 1: Create branch
-    git_result = run("git checkout -b {branchName}")
+    # Step 1: Check for existing branch and create/checkout
+    branch_exists = run("git show-ref --verify refs/heads/{branchName}").success
+    branch_created = False
+
+    if branch_exists:
+        git_result = run("git checkout {branchName}")
+    else:
+        git_result = run("git checkout -b {branchName}")
+        branch_created = True
+
     if git_result.failed:
         raise AutomationError("Git checkout failed", step=1)
 
@@ -248,7 +282,12 @@ try:
     try:
         mcp__linear_server__update_issue(id=ticket_id, state="In Progress")
     except Exception as e:
-        run("git branch -D {branchName}")  # Rollback step 1
+        if branch_created:  # Only delete if we created it
+            checkout_result = run("git checkout -")  # Return to previous branch first
+            if checkout_result.success:
+                run("git branch -D {branchName}")
+            else:
+                log_warning(f"Could not checkout previous branch. Branch '{branchName}' must be deleted manually.")
         raise AutomationError(f"Linear update failed: {e}", step=2)
 
     # Step 3: Persist contract locally
@@ -265,13 +304,32 @@ except AutomationError as e:
 
 ### Phase: implementation
 
-**Entry invariant:** `is_spec_complete()` AND human signal
+**Entry invariant:** `is_spec_complete()` AND human signal AND branch created AND Linear status = "In Progress"
+
+**Pre-conditions (set by spec→implementation automation):**
+- Git branch exists and is checked out
+- Linear ticket status is "In Progress"
+- Contract `branch` field is populated
 
 **Actions:**
-1. Create git branch if not exists (set `branch`)
-2. Implement requirements
-3. Commit changes (append to `commits[]`)
+1. Verify branch is checked out (should already exist from transition automation)
+2. **Execute requirements using /parallel-solve:**
+   ```
+   Invoke: Skill(skill="parallel-solve", args="Implement requirements for {ticket_id}: {title}.
+   Requirements: {requirements_summary}.
+   Files to modify: {context.relevant_files}")
+   ```
+
+   This dispatches polymorphic agents to implement each requirement in parallel where possible.
+
+3. After parallel-solve completes, commit changes (append to `commits[]`)
 4. Update `pr_url` if PR created
+
+**Implementation via parallel-solve:**
+- Requirements from the contract are passed to parallel-solve
+- Independent requirements are executed in parallel by polymorphic agents
+- Sequential dependencies are handled automatically
+- Quality gates are enforced after each agent cycle
 
 **Mutations allowed:**
 - `branch`
@@ -298,8 +356,18 @@ except AutomationError as e:
 1. **Push branch and create PR:**
    ```bash
    git push -u origin {branch}
-   gh pr create --title "{ticket_id}: {title}" --body "..."
+   # Use heredoc for PR body to safely handle special characters in title
+   gh pr create --title "$(cat <<'EOF'
+   {ticket_id}: {title}
+   EOF
+   )" --body "$(cat <<'EOF'
+   ...PR body content...
+   EOF
+   )"
    ```
+
+   **Shell safety**: The heredoc syntax (`<<'EOF'`) with single-quoted delimiter prevents shell expansion of special characters in ticket titles. This protects against command injection if titles contain backticks, dollar signs, or semicolons.
+
    Update `pr_url` in contract.
 
 2. **Code review loop** (repeat until done):

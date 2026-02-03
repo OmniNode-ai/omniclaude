@@ -20,14 +20,13 @@ Usage:
     python scripts/validate_onex.py
 
 Exit codes:
-    0: All validations passed (no errors or warnings)
+    0: All validations passed, or warnings only in non-strict mode
     1: Validation errors found, or any issues in --strict mode
-    2: Warnings only found (non-strict mode, non-blocking)
 
 Options:
     --strict    Fail on any validation issue (warnings or errors).
                 Without this flag, only errors cause exit 1 (failure).
-                Warnings-only returns exit 2 (informational, non-blocking).
+                Warnings-only returns exit 0 (non-blocking for pre-commit).
     --help, -h  Show this help message and exit.
 """
 
@@ -50,6 +49,7 @@ EXCLUDE_PATTERNS = [
     "_archive/",
     "__pycache__/",
     ".venv/",
+    "cli/",  # CLI debugging tools use dynamic DB row types by design
 ]
 
 
@@ -97,9 +97,8 @@ def validate_paths(paths: list[Path], *, strict: bool = False) -> int:
 
     Returns:
         Exit code:
-        - 0: No issues found (validations passed)
-        - 1: Validation errors found (or any issues in strict mode)
-        - 2: Warnings only found (non-strict mode, informational)
+        - 0: No issues found, or warnings only in non-strict mode
+        - 1: Validation errors found, or any issues in strict mode
     """
     validators = [
         ValidatorAnyType(),
@@ -227,9 +226,8 @@ Examples:
       No arguments defaults to validating src/.
 
 Exit codes:
-  0  No issues found (validations passed)
-  1  Validation errors found (or any issues in strict mode)
-  2  Warnings only found (non-strict mode, informational)
+  0  No issues found, or warnings only in non-strict mode
+  1  Validation errors found, or any issues in strict mode
 """,
     )
     parser.add_argument(
@@ -241,7 +239,7 @@ Exit codes:
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="Exit 1 on any issue (warnings or errors). Default: exit 1 for errors only, exit 2 for warnings only",
+        help="Exit 1 on any issue (warnings or errors). Default: exit 1 for errors, exit 0 for warnings only",
     )
     return parser.parse_args(args)
 

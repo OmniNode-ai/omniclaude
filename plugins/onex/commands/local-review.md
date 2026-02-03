@@ -10,6 +10,10 @@ Review local changes, fix issues, commit fixes, and iterate until clean or max i
 
 **Workflow**: Gather changes → Review → Fix → Commit → Repeat until clean
 
+> **Classification System**: Uses onex pr-review keyword-based classification (not confidence scoring).
+> ALL Critical/Major/Minor issues MUST be resolved. Only Nits are optional.
+> See: `${CLAUDE_PLUGIN_ROOT}/skills/pr-review/SKILL.md` for full priority definitions.
+
 ---
 
 ## Arguments
@@ -44,7 +48,7 @@ Parse arguments from `$ARGUMENTS`:
 **2. Detect base reference** (if `--since` not provided):
 ```bash
 # Try to find the merge-base with remote main/master
-git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD origin/master 2>/dev/null || { echo "⚠️ Warning: Could not find merge-base, using HEAD~10" >&2; echo "HEAD~10"; }
+git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD origin/master 2>/dev/null || { echo "Warning: Could not find merge-base, using HEAD~10" >&2; echo "HEAD~10"; }
 ```
 
 **3. Initialize tracking state**:
@@ -73,13 +77,17 @@ total_issues_fixed = 0
 
 ### Step 2.1: Gather Changes
 
+This step uses a two-step diff approach to capture all relevant changes:
+1. Committed changes since base ref (for `--uncommitted=false`)
+2. Uncommitted changes in working tree (always checked)
+
 ```bash
 # Get changed files
 if --uncommitted:
     git diff --name-only
 else:
-    git diff --name-only {base_ref}..HEAD
-    git diff --name-only  # Include uncommitted
+    git diff --name-only {base_ref}..HEAD   # Committed changes since base
+    git diff --name-only                     # Plus any uncommitted changes
 fi
 
 # Apply file filter if --files specified
@@ -95,13 +103,19 @@ fi
 
 ### Step 2.2: Run Code Review
 
-Dispatch a code review agent (uses `polymorphic-agent` with review-focused prompt):
+Dispatch a `polymorphic-agent` with strict keyword-based classification (matching onex pr-review standards):
+
+**IMPORTANT**: Always use `subagent_type="polymorphic-agent"` - do NOT use `feature-dev:code-reviewer` or other specialized review agents. The polymorphic-agent has ONEX capabilities and uses keyword-based classification (not confidence scoring).
 
 ```
 Task(
   subagent_type="polymorphic-agent",
-  description="Code review iteration {iteration+1}",
-  prompt="You are reviewing code changes. Analyze the following for bugs, security issues, and code quality problems.
+  description="Review iteration {iteration+1} changes",
+  prompt="**AGENT REQUIREMENT**: You MUST be a polymorphic-agent. Do NOT delegate to feature-dev:code-reviewer.
+
+You are reviewing local code changes for production readiness.
+
+## Changes to Review
 
 **Base ref**: {base_ref}
 **Files to review**: {file_list}
@@ -114,29 +128,78 @@ Run: git diff -- {files}  # Only uncommitted changes
 Run: git diff {base_ref}..HEAD -- {files}  # Committed changes
 Also run: git diff -- {files}  # Plus any uncommitted changes
 
-**Review Focus**:
-- Critical: Security vulnerabilities, data loss, crashes
-- Major: Logic errors, missing error handling, bugs
-- Minor: Code style, unused imports, magic numbers
+Read each changed file fully to understand context.
 
-**Output Format**:
+## Priority Classification (Keyword-Based)
+
+Classify issues using these keyword triggers (from onex pr-review):
+
+### CRITICAL (Must Fix - BLOCKING)
+Keywords: `security`, `vulnerability`, `injection`, `data loss`, `crash`, `breaking change`, `authentication bypass`, `authorization`, `secrets exposed`
+- Security vulnerabilities (SQL injection, XSS, command injection)
+- Data loss or corruption risks
+- System crashes or unhandled exceptions that halt execution
+- Breaking changes to public APIs
+
+### MAJOR (Should Fix - BLOCKING)
+Keywords: `bug`, `error`, `incorrect`, `wrong`, `fails`, `broken`, `performance`, `missing validation`, `race condition`, `memory leak`
+- Logic errors that produce incorrect results
+- Missing error handling for likely failure cases
+- Performance problems (N+1 queries, unbounded loops)
+- Missing or failing tests for critical paths
+- Race conditions or concurrency bugs
+
+### MINOR (Should Fix - BLOCKING)
+Keywords: `should`, `missing`, `incomplete`, `edge case`, `documentation`
+- Missing edge case handling
+- Incomplete error messages
+- Missing type hints on public APIs
+- Code that works but violates project conventions (check CLAUDE.md)
+
+### NIT (Optional - NOT blocking)
+Keywords: `nit`, `consider`, `suggestion`, `optional`, `style`, `formatting`, `nitpick`
+- Code style preferences
+- Variable naming suggestions
+- Minor refactoring opportunities
+- Formatting inconsistencies
+
+## Merge Requirements (STRICT)
+
+Ready to merge ONLY when:
+- ALL Critical issues resolved
+- ALL Major issues resolved
+- ALL Minor issues resolved
+- Nits are OPTIONAL (nice to have)
+
+NOT ready if ANY Critical/Major/Minor remain
+
+## Output Format
+
 Return issues in this exact JSON format:
 ```json
 {
-  \"critical\": [{\"file\": \"path\", \"line\": 123, \"description\": \"issue\"}],
-  \"major\": [{\"file\": \"path\", \"line\": 123, \"description\": \"issue\"}],
-  \"minor\": [{\"file\": \"path\", \"line\": 123, \"description\": \"issue\"}]
+  \"critical\": [{\"file\": \"path\", \"line\": 123, \"description\": \"issue\", \"keyword\": \"trigger\"}],
+  \"major\": [{\"file\": \"path\", \"line\": 123, \"description\": \"issue\", \"keyword\": \"trigger\"}],
+  \"minor\": [{\"file\": \"path\", \"line\": 123, \"description\": \"issue\", \"keyword\": \"trigger\"}],
+  \"nit\": [{\"file\": \"path\", \"line\": 123, \"description\": \"issue\", \"keyword\": \"trigger\"}]
 }
 ```
 
-If no issues found, return: {\"critical\": [], \"major\": [], \"minor\": []}
+**Rules**:
+- Be specific: include file:line references
+- Explain WHY each issue matters
+- Include the keyword that triggered classification
+- Do NOT mark nitpicks as Critical/Major/Minor
+- Do NOT use confidence scoring - use keyword classification only
+
+If no issues found, return: {\"critical\": [], \"major\": [], \"minor\": [], \"nit\": []}
 "
 )
 ```
 
 **JSON Parsing and Validation**:
 1. Parse the response as JSON
-2. Validate structure: must have `critical`, `major`, `minor` keys, each being an array
+2. Validate structure: must have `critical`, `major`, `minor`, `nit` keys, each being an array
 3. Validate each issue: must have `file` (string), `line` (number), `description` (string)
 4. If validation fails, treat as malformed JSON (continue to fallback)
 
@@ -145,19 +208,19 @@ If no issues found, return: {\"critical\": [], \"major\": [], \"minor\": []}
    - `**{file}:{line}** - {description}` (markdown bold format)
    - `{file}:{line}: {description}` (compiler-style format)
    - `- {file}:{line} - {description}` (list format)
-2. Assign severity based on context keywords: "critical/security/crash" → critical, "bug/error/logic" → major, else → minor
+2. Assign severity based on context keywords: "critical/security/crash" -> critical, "bug/error/logic" -> major, else -> minor
 3. If extraction finds at least one issue, use extracted issues and continue normally
 4. If extraction fails (no recognizable patterns):
    - Log the raw response for debugging
    - Mark iteration as `PARSE_FAILED` (not "clean")
-   - Display: "⚠️ Review response could not be parsed. Manual review required."
+   - Display: "Warning: Review response could not be parsed. Manual review required."
    - **Continue to Step 2.3** (PARSE_FAILED will be handled there with counter increment)
 5. On `PARSE_FAILED`, the final status MUST be "Parse failed - manual review needed" (never "Clean")
 
 **Agent Failure Handling**: If the review agent crashes, times out, or returns an error:
 1. Log the error with details (timeout duration, error message, etc.)
 2. Mark iteration as `AGENT_FAILED` (not "clean" or "parse failed")
-3. Display: "⚠️ Review agent failed: {error}. Manual review required."
+3. Display: "Warning: Review agent failed: {error}. Manual review required."
 4. **Continue to Step 2.3** (AGENT_FAILED will be handled there with counter increment)
 
 ### Step 2.3: Display Issues
@@ -165,33 +228,43 @@ If no issues found, return: {\"critical\": [], \"major\": [], \"minor\": []}
 ```markdown
 ## Review Iteration {iteration+1}
 
-### Critical ({count})
-- **{file}:{line}** - {description}
+### CRITICAL ({count}) - BLOCKING
+- **{file}:{line}** - {description} [`{keyword}`]
 
-### Major ({count})
-- **{file}:{line}** - {description}
+### MAJOR ({count}) - BLOCKING
+- **{file}:{line}** - {description} [`{keyword}`]
 
-### Minor ({count})
-- **{file}:{line}** - {description}
+### MINOR ({count}) - BLOCKING
+- **{file}:{line}** - {description} [`{keyword}`]
+
+### NIT ({count}) - Optional
+- **{file}:{line}** - {description} [`{keyword}`]
+
+**Merge Status**: {Ready | Blocked by N issues}
 ```
 
-**If no issues**: Increment iteration counter, then skip to Phase 3 (Final Summary)
+**If no Critical/Major/Minor issues**: Increment iteration counter, skip to Phase 3 (Final Summary)
+- Nits alone do NOT block - they are optional
 
 **If `PARSE_FAILED`**: Increment iteration counter (a review was attempted), then skip to Phase 3
 
 **If `AGENT_FAILED`**: Increment iteration counter (a review was attempted), then skip to Phase 3
 
-**If `--no-fix`**: Increment iteration counter (a review was performed), then skip to Phase 3
+**If `--no-fix`**: Increment iteration counter (a review was performed), display issues, then skip to Phase 3
 
 ### Step 2.4: Fix Issues
 
-For each severity level (critical first, then major, then minor):
+For each severity level (critical first, then major, then minor), dispatch a `polymorphic-agent`:
+
+**IMPORTANT**: Always use `subagent_type="polymorphic-agent"` for fixes - this ensures ONEX capabilities and proper observability.
 
 ```
 Task(
   subagent_type="polymorphic-agent",
   description="Fix {severity} issues from review",
-  prompt="Fix the following {severity} issues:
+  prompt="**AGENT REQUIREMENT**: You MUST be a polymorphic-agent.
+
+Fix the following {severity} issues:
 
 {issues_list}
 
@@ -215,7 +288,20 @@ Task(
 
 ### Step 2.5: Commit Fixes (if not `--no-commit`)
 
-Group fixes by severity and commit:
+Group fixes by severity and commit.
+
+**Note**: For multi-line commit messages, use heredoc format:
+```bash
+git commit -m "$(cat <<'EOF'
+fix(review): [{severity}] {summary}
+
+- Fixed: {file}:{line} - {description}
+- Fixed: {file}:{line} - {description}
+
+Review iteration: {iteration+1}/{max_iterations}
+EOF
+)"
+```
 
 ```bash
 # Stage fixed files and check for errors
@@ -258,7 +344,7 @@ This prevents re-reviewing the same changes and gives the user clear next steps.
 
 ### Step 2.6: Check Loop Condition
 
-**Note**: This step is ONLY reached in the normal flow (issues found → fixed → committed successfully).
+**Note**: This step is ONLY reached in the normal flow (issues found -> fixed -> committed successfully).
 Early exits (no issues, parse failed, no-fix mode, commit failed) bypass this step entirely
 because they increment the counter before skipping to Phase 3.
 
@@ -283,19 +369,21 @@ else:
 **Iterations**: {iteration}
 **Total issues fixed**: {total_issues_fixed}
 **Commits created**: {len(commits_made)}
+**Nits deferred**: {nit_count} (optional)
 
 ### Commits
-{for commit in commits_made:}
-{index}. {commit.hash} - fix(review): [{commit.severity}] {commit.summary}
+{for index, commit in enumerate(commits_made):}
+{index + 1}. {commit.hash} - fix(review): [{commit.severity}] {commit.summary}
 {end for}
 
 **Status**: {status_indicator}
 ```
 
 **Status indicators**:
-- `Clean - Ready to push` (no issues on final review)
-- `Max iterations reached - manual review recommended` (hit limit, unknown remaining issues)
-- `Report only - {n} issues found` (--no-fix mode)
+- `Clean - Ready to push` (no Critical/Major/Minor on final review; nits are OK)
+- `Clean with nits - Ready to push` (only nits remain, which are optional)
+- `Max iterations reached - {n} blocking issues remain` (hit limit with Critical/Major/Minor remaining)
+- `Report only - {n} blocking issues found` (--no-fix mode)
 - `Changes staged - review before commit` (--no-commit mode)
 - `Parse failed - manual review needed` (review response couldn't be parsed)
 - `Agent failed - {error}. Manual review required.` (review agent crashed/timed out)
@@ -327,10 +415,10 @@ if "--max-iterations" in args:
     try:
         max_iterations = int(args[idx + 1]) if idx + 1 < len(args) else 10
         if max_iterations < 1:
-            print("⚠️ Warning: --max-iterations must be >= 1. Using default (10).")
+            print("Warning: --max-iterations must be >= 1. Using default (10).")
             max_iterations = 10
     except (ValueError, IndexError):
-        print("⚠️ Warning: --max-iterations requires a numeric value. Using default (10).")
+        print("Warning: --max-iterations requires a numeric value. Using default (10).")
         max_iterations = 10
 
 # Extract --files value
@@ -348,17 +436,21 @@ if [ -z "$DEFAULT_BRANCH" ]; then
     DEFAULT_BRANCH="main"
 fi
 
-# Find merge base
-BASE_REF=$(git merge-base HEAD origin/$DEFAULT_BRANCH 2>/dev/null || { echo "⚠️ Warning: Using HEAD~10 fallback" >&2; echo "HEAD~10"; })
+# Find merge base (with warning fallback for CI environments)
+BASE_REF=$(git merge-base HEAD origin/$DEFAULT_BRANCH 2>/dev/null || { echo "Warning: Using HEAD~10 fallback" >&2; echo "HEAD~10"; })
 ```
 
-### Issue Severity Handling
+### Issue Severity Handling (Strict Mode)
 
-**Critical issues**: Must be fixed immediately. Block further progress.
+**CRITICAL issues**: MUST be fixed. BLOCKING - cannot merge.
 
-**Major issues**: Should be fixed. May require judgment on complexity.
+**MAJOR issues**: MUST be fixed. BLOCKING - cannot merge.
 
-**Minor issues**: Nice to fix. May be deferred if time-constrained.
+**MINOR issues**: MUST be fixed. BLOCKING - cannot merge.
+
+**NIT issues**: Optional. NOT blocking - can merge with nits remaining.
+
+**This matches the onex pr-review merge requirements**: ALL Critical/Major/Minor must be resolved before merge. Only nits are optional.
 
 ### Commit Message Format
 
@@ -406,46 +498,54 @@ Review iteration: {current}/{max}
 
 ## Review Iteration 1
 
-### Critical (1)
-- **src/api.py:45** - SQL injection in user query
+### CRITICAL (1) - BLOCKING
+- **src/api.py:45** - SQL injection in user query [`injection`]
 
-### Major (2)
-- **src/auth.py:89** - Missing password validation
-- **src/utils.py:23** - Uncaught exception in parser
+### MAJOR (2) - BLOCKING
+- **src/auth.py:89** - Missing password validation [`missing validation`]
+- **src/utils.py:23** - Uncaught exception in parser [`error`]
 
-### Minor (3)
-- **src/config.py:12** - Magic number should be constant
-- **src/models.py:56** - Unused import
-- **tests/test_api.py:78** - Test missing assertion
+### MINOR (1) - BLOCKING
+- **src/config.py:12** - Magic number should be constant [`should`]
 
-Fixing 6 issues...
+### NIT (2) - Optional
+- **src/models.py:56** - Unused import [`style`]
+- **tests/test_api.py:78** - Consider adding assertion message [`suggestion`]
+
+**Merge Status**: Blocked by 4 issues (1 critical, 2 major, 1 minor)
+
+Fixing 4 blocking issues (nits deferred)...
 
 Created commit: def5678 - fix(review): [critical] SQL injection vulnerability
 Created commit: ghi9012 - fix(review): [major] Password validation and exception handling
-Created commit: jkl3456 - fix(review): [minor] Code cleanup
+Created commit: jkl3456 - fix(review): [minor] Magic number extracted to constant
 
 ---
 
 ## Review Iteration 2
 
-### Critical (0)
-### Major (0)
-### Minor (0)
+### CRITICAL (0)
+### MAJOR (0)
+### MINOR (0)
+### NIT (2) - Optional
+- **src/models.py:56** - Unused import [`style`]
+- **tests/test_api.py:78** - Consider adding assertion message [`suggestion`]
 
-No issues found.
+**Merge Status**: Ready (only optional nits remain)
 
 ---
 
 ## Review Complete
 
 **Iterations**: 2
-**Total issues fixed**: 6
+**Total issues fixed**: 4
 **Commits created**: 3
+**Nits deferred**: 2 (optional)
 
 ### Commits
 1. def5678 - fix(review): [critical] SQL injection vulnerability
 2. ghi9012 - fix(review): [major] Password validation and exception handling
-3. jkl3456 - fix(review): [minor] Code cleanup
+3. jkl3456 - fix(review): [minor] Magic number extracted to constant
 
-**Status**: Clean - Ready to push
+**Status**: Clean with nits - Ready to push
 ```
