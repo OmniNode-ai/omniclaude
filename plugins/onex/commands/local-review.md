@@ -325,7 +325,7 @@ Fix the following {severity} issues:
 2. Add affected issues to `failed_fixes` list (do not retry in subsequent iterations):
    ```python
    for issue in affected_issues:
-       failed_fixes.append({"file": issue.file, "line": issue.line, "description": issue.description})
+       failed_fixes.append({"file": issue["file"], "line": issue["line"], "description": issue["description"]})
    ```
 3. Continue to next severity level (attempt remaining fixes)
 4. If ALL fixes fail:
