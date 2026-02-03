@@ -150,9 +150,9 @@ If no issues found, return: {\"critical\": [], \"major\": [], \"minor\": []}
 
 **If no issues**: Increment iteration counter, then skip to Phase 3 (Final Summary)
 
-**If `PARSE_FAILED`**: Skip to Phase 3 (do not attempt fixes, do not increment counter)
+**If `PARSE_FAILED`**: Increment iteration counter (a review was attempted), then skip to Phase 3
 
-**If `--no-fix`**: Display issues and skip to Phase 3 (do not increment counter)
+**If `--no-fix`**: Increment iteration counter (a review was performed), then skip to Phase 3
 
 ### Step 2.4: Fix Issues
 
@@ -209,8 +209,9 @@ total_issues_fixed += count
 1. Log the error with failure reason (hooks, conflicts, permissions)
 2. Leave files staged for manual intervention
 3. Set `commit_failed = true` with reason
-4. Exit to Phase 3 immediately (do NOT continue loop)
-5. Final status: "Commit failed - {reason}. Files staged for manual review."
+4. Increment iteration counter (a review cycle was attempted)
+5. Exit to Phase 3 immediately (do NOT continue loop)
+6. Final status: "Commit failed - {reason}. Files staged for manual review."
 
 This prevents re-reviewing the same changes and gives the user clear next steps.
 
