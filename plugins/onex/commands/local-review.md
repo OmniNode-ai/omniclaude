@@ -212,7 +212,11 @@ If no issues found, return: {\"critical\": [], \"major\": [], \"minor\": [], \"n
    - `**{file}:{line}** - {description}` (markdown bold format)
    - `{file}:{line}: {description}` (compiler-style format)
    - `- {file}:{line} - {description}` (list format)
-2. Assign severity based on context keywords: "critical/security/crash" -> critical, "bug/error/logic" -> major, else -> minor
+2. Assign severity and keyword based on description content:
+   - "critical/security/crash/injection/vulnerability" -> critical, keyword="extracted:critical"
+   - "bug/error/logic/incorrect/fails/broken" -> major, keyword="extracted:major"
+   - "nit/consider/suggestion/optional/style/formatting" -> nit, keyword="extracted:nit"
+   - else -> minor, keyword="extracted:minor"
 3. **If extraction succeeds** (finds at least one issue):
    - Use extracted issues and proceed normally to Step 2.3 (display issues)
 4. **If extraction fails** (no recognizable patterns):
@@ -282,10 +286,10 @@ goto Phase 3
 **Pre-filter previously failed issues**:
 ```python
 # Filter out issues that already failed in previous iterations (do not retry)
-for severity in [critical, major, minor]:
+for severity in ["critical", "major", "minor"]:
     issues[severity] = [
         issue for issue in issues[severity]
-        if (issue.file, issue.line) not in [(f.file, f.line) for f in failed_fixes]
+        if (issue["file"], issue["line"]) not in [(f["file"], f["line"]) for f in failed_fixes]
     ]
 ```
 
@@ -369,15 +373,16 @@ EOF
 )"
 ```
 
-**Track commit**:
+**Track commit** (only count successfully fixed issues, not failed ones):
 ```
+# count = number of successfully fixed issues (excludes items in failed_fixes)
 commits_made.append({
   "hash": git rev-parse --short HEAD,
   "severity": severity,
   "summary": summary,
-  "issues_fixed": count
+  "issues_fixed": count  # Excludes failed fixes
 })
-total_issues_fixed += count
+total_issues_fixed += count  # Only successfully fixed issues are counted
 ```
 
 **On commit failure**:
