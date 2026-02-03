@@ -104,7 +104,10 @@ def parse_review_file(path: str) -> dict:
 
     # Try JSON first
     if path.endswith('.json'):
-        return json.loads(content)
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON in review file {path}: {e}")
 
     # Parse Markdown format
     issues = {"critical": [], "major": [], "minor": [], "nit": []}
@@ -171,13 +174,17 @@ def parse_issue_line(line: str) -> dict | None:
 # Fetch all projects (use high limit to avoid missing projects in large orgs)
 projects = mcp__linear-server__list_projects(limit=200)
 
+# Validate API response (may return None or error object)
+if not isinstance(projects, list):
+    raise ValueError(f"Unexpected response from Linear API: {type(projects).__name__}")
+
 # Handle empty workspace
 if len(projects) == 0:
     raise ValueError("No projects found in Linear workspace. Please create a project first.")
 
-# Substring match (case-insensitive)
+# Substring match (case-insensitive, with defensive access)
 query = args.project.lower()
-matches = [p for p in projects if query in p['name'].lower()]
+matches = [p for p in projects if query in p.get('name', '').lower()]
 
 # Warn if we hit the limit (may be missing projects)
 if len(projects) >= 200:
@@ -188,7 +195,7 @@ if len(matches) == 0:
     project_options = projects[:4]  # Limit to 4 for AskUserQuestion
     print(f"No projects match '{query}'. Showing {len(project_options)} of {len(projects)} available projects:")
     for p in project_options:
-        print(f"  - {p['name']}")
+        print(f"  - {p.get('name', 'Unnamed')}")
 
     response = AskUserQuestion(
         questions=[{
