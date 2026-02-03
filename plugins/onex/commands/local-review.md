@@ -57,6 +57,7 @@ iteration = 0
 max_iterations = <from args or 10>
 commits_made = []
 total_issues_fixed = 0
+nit_count = 0  # Track deferred nits for final summary
 ```
 
 **4. Display configuration**:
