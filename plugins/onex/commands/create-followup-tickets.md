@@ -97,7 +97,10 @@ If `--from-file` provided, read and parse the review file:
 ```python
 def parse_review_file(path: str) -> dict:
     """Parse review file (JSON or Markdown)."""
-    content = Path(path).read_text()
+    file_path = Path(path)
+    if not file_path.exists():
+        raise FileNotFoundError(f"Review file not found: {path}")
+    content = file_path.read_text()
 
     # Try JSON first
     if path.endswith('.json'):
@@ -128,12 +131,16 @@ def parse_review_file(path: str) -> dict:
 ## Step 2: Resolve Project (Fuzzy Matching)
 
 ```python
-# Fetch all projects
-projects = mcp__linear-server__list_projects(limit=50)
+# Fetch all projects (use high limit to avoid missing projects in large orgs)
+projects = mcp__linear-server__list_projects(limit=200)
 
 # Fuzzy match
 query = args.project.lower()
 matches = [p for p in projects if query in p['name'].lower()]
+
+# Warn if we hit the limit (may be missing projects)
+if len(projects) >= 200:
+    print(f"Note: {len(projects)} projects found. If your project isn't listed, try a more specific name.")
 
 if len(matches) == 0:
     # List available projects
