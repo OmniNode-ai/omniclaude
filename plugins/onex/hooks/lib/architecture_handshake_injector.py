@@ -25,17 +25,29 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
 import time
 from pathlib import Path
 from typing import TypedDict
 
 # Configure logging to stderr (stdout reserved for JSON output)
+# Also log to LOG_FILE if set (per CLAUDE.md: "Failures must be logged to
+# ~/.claude/hooks.log when LOG_FILE environment variable is set")
+_handlers: list[logging.Handler] = [logging.StreamHandler(sys.stderr)]
+_log_file = os.environ.get("LOG_FILE")
+if _log_file:
+    try:
+        _handlers.append(logging.FileHandler(_log_file))
+    except OSError:
+        # Fail open: keep stderr logging only
+        pass
+
 logging.basicConfig(
     level=logging.WARNING,
     format="[%(asctime)s] %(levelname)s: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
-    stream=sys.stderr,
+    handlers=_handlers,
 )
 logger = logging.getLogger(__name__)
 

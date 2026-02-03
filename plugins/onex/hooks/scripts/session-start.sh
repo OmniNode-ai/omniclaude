@@ -509,8 +509,16 @@ HANDSHAKE_CONTEXT=""
 if [[ "${HANDSHAKE_INJECTION_ENABLED}" == "true" ]] && [[ -f "${HOOKS_LIB}/architecture_handshake_injector.py" ]]; then
     log "Checking for architecture handshake"
 
-    # Build input JSON with project path
-    HANDSHAKE_INPUT=$(jq -n --arg project "$CWD" '{"project_path": $project}' 2>/dev/null) || HANDSHAKE_INPUT='{}'
+    # Build input JSON with project path (prefer repo root over CWD)
+    # PROJECT_PATH is set from hook input, PROJECT_ROOT is detected from .env location
+    HANDSHAKE_PROJECT="${PROJECT_PATH:-}"
+    if [[ -z "$HANDSHAKE_PROJECT" ]]; then
+        HANDSHAKE_PROJECT="${PROJECT_ROOT:-}"
+    fi
+    if [[ -z "$HANDSHAKE_PROJECT" ]]; then
+        HANDSHAKE_PROJECT="$CWD"
+    fi
+    HANDSHAKE_INPUT=$(jq -n --arg project "$HANDSHAKE_PROJECT" '{"project_path": $project}' 2>/dev/null) || HANDSHAKE_INPUT='{}'
 
     # Run architecture handshake injection synchronously via CLI (fast, local-only)
     HANDSHAKE_OUTPUT=$(echo "$HANDSHAKE_INPUT" | "$PYTHON_CMD" "${HOOKS_LIB}/architecture_handshake_injector.py" 2>>"$LOG_FILE") || HANDSHAKE_OUTPUT='{}'
