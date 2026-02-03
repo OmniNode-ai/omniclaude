@@ -100,9 +100,14 @@ Task(
 
 **Base ref**: {base_ref}
 **Files to review**: {file_list}
+**Mode**: {--uncommitted | all changes}
 
-Run: git diff {base_ref}..HEAD -- {files}
-Also run: git diff -- {files}  # Include any uncommitted changes
+# If --uncommitted mode:
+Run: git diff -- {files}  # Only uncommitted changes
+
+# If all changes mode (default):
+Run: git diff {base_ref}..HEAD -- {files}  # Committed changes
+Also run: git diff -- {files}  # Plus any uncommitted changes
 
 **Review Focus**:
 - Critical: Security vulnerabilities, data loss, crashes
