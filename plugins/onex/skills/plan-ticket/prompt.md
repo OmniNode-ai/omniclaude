@@ -358,18 +358,22 @@ if api_failed:
     print("Note: Could not fetch project list from Linear. You can enter a project name manually or select 'None'.")
 ```
 
-Build options from results (or allow manual entry if API failed):
+Build options from results (limit to 3 projects + auto-added "Other"):
 ```
+# Select top 3 most recent projects, or fewer if less available
+top_projects = projects[:3] if len(projects) >= 3 else projects
+
 AskUserQuestion(questions=[{
     "question": "Which Linear project should this ticket be added to?",
     "header": "Linear Project",
     "options": [
-        {"label": "{project_1.name}", "description": "{project_1.description or 'No description'}"},
-        {"label": "{project_2.name}", "description": "{project_2.description or 'No description'}"},
-        ...
-        {"label": "None", "description": "Don't add to a project"},
-        {"label": "Other", "description": "Specify a different project name"}
+        # Include up to 3 projects dynamically
+        {"label": "{project.name}", "description": "{project.description or 'No description'}"}
+        for project in top_projects
+    ] + [
+        {"label": "None", "description": "Don't add to a project"}
     ],
+    # Note: "Other" is auto-added for custom project entry
     "multiSelect": false
 }])
 ```
@@ -487,13 +491,25 @@ AskUserQuestion(questions=[{
     "question": "What would you like to change?",
     "header": "Edit Contract",
     "options": [
-        {"label": "Title/Goal", "description": "Change the ticket title"},
-        {"label": "Repository", "description": "Change the repository"},
+        {"label": "Title or Repository", "description": "Change ticket title or target repository"},
         {"label": "Requirements", "description": "Add, edit, or remove requirements"},
-        {"label": "Parent ticket", "description": "Change parent ticket"},
+        {"label": "Dependencies", "description": "Change parent ticket or blocking tickets"},
+        {"label": "Start over", "description": "Begin from scratch"}
+    ],
+    "multiSelect": false
+}])
+```
+
+If user selects "Dependencies", follow up with:
+```
+AskUserQuestion(questions=[{
+    "question": "Which dependency do you want to change?",
+    "header": "Edit Dependencies",
+    "options": [
+        {"label": "Parent ticket", "description": "Change or remove parent ticket"},
         {"label": "Blocked by", "description": "Change blocking tickets"},
         {"label": "Project", "description": "Change Linear project"},
-        {"label": "Start over", "description": "Begin from scratch"}
+        {"label": "Go back", "description": "Return to main edit menu"}
     ],
     "multiSelect": false
 }])
