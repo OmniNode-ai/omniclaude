@@ -1,7 +1,9 @@
 #!/bin/bash
 # SessionEnd Hook - Portable Plugin Version
 # Captures session completion and aggregate statistics
+# Also logs active ticket for audit/observability (OMN-1830)
 # Performance target: <50ms execution time
+# NOTE: This hook is audit-only - NO context injection, NO contract mutation
 
 set -euo pipefail
 
@@ -58,6 +60,30 @@ fi
 log "Duration: ${SESSION_DURATION}ms"
 log "Reason: $SESSION_REASON"
 
+# -----------------------------
+# Active Ticket Detection (OMN-1830)
+# -----------------------------
+# Check for active ticket (for audit logging only - NO context injection, NO mutation)
+TICKET_INJECTION_ENABLED="${OMNICLAUDE_TICKET_INJECTION_ENABLED:-true}"
+TICKET_INJECTION_ENABLED=$(_normalize_bool "$TICKET_INJECTION_ENABLED")
+ACTIVE_TICKET=""
+
+if [[ "${TICKET_INJECTION_ENABLED}" == "true" ]] && [[ -f "${HOOKS_LIB}/ticket_context_injector.py" ]]; then
+    # Use CLI interface for consistency with session-start.sh (OMN-1830)
+    TICKET_OUTPUT=$(echo '{}' | "$PYTHON_CMD" "${HOOKS_LIB}/ticket_context_injector.py" 2>>"$LOG_FILE") || TICKET_OUTPUT='{}'
+    ACTIVE_TICKET=$(echo "$TICKET_OUTPUT" | jq -r '.ticket_id // empty' 2>/dev/null) || ACTIVE_TICKET=""
+
+    if [[ -n "$ACTIVE_TICKET" ]]; then
+        log "Session ended with active ticket: $ACTIVE_TICKET"
+    else
+        log "Session ended with no active ticket"
+    fi
+elif [[ "${TICKET_INJECTION_ENABLED}" != "true" ]]; then
+    log "Active ticket detection disabled (TICKET_INJECTION_ENABLED=false)"
+else
+    log "Ticket context injector not found, skipping active ticket detection"
+fi
+
 # Call session intelligence module (async, non-blocking)
 (
     $PYTHON_CMD "${HOOKS_LIB}/session_intelligence.py" \
@@ -77,15 +103,17 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
             DURATION_SECONDS=$($PYTHON_CMD -c "import sys; print(f'{float(sys.argv[1])/1000:.3f}')" "$SESSION_DURATION" 2>/dev/null || echo "")
         fi
 
-        # Build JSON payload for emit daemon
+        # Build JSON payload for emit daemon (includes active_ticket for OMN-1830)
         SESSION_PAYLOAD=$(jq -n \
             --arg session_id "$SESSION_ID" \
             --arg reason "$SESSION_REASON" \
             --arg duration_seconds "${DURATION_SECONDS:-}" \
+            --arg active_ticket "$ACTIVE_TICKET" \
             '{
                 session_id: $session_id,
                 reason: $reason,
-                duration_seconds: (if $duration_seconds == "" then null else ($duration_seconds | tonumber) end)
+                duration_seconds: (if $duration_seconds == "" then null else ($duration_seconds | tonumber) end),
+                active_ticket: (if $active_ticket == "" then null else $active_ticket end)
             }' 2>/dev/null)
 
         # Validate payload was constructed successfully
@@ -121,10 +149,12 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
             --arg session_id "$SESSION_ID" \
             --arg outcome "$OUTCOME" \
             --arg emitted_at "$EMITTED_AT" \
+            --arg active_ticket "$ACTIVE_TICKET" \
             '{
                 session_id: $session_id,
                 outcome: $outcome,
-                emitted_at: $emitted_at
+                emitted_at: $emitted_at,
+                active_ticket: (if $active_ticket == "" then null else $active_ticket end)
             }' 2>/dev/null)
 
         # Validate payload was constructed successfully

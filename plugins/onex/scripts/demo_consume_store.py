@@ -125,9 +125,17 @@ def get_postgres_config() -> dict:
         print("  Run: source .env")
         sys.exit(1)
 
+    try:
+        port = int(os.environ["POSTGRES_PORT"])
+    except ValueError:
+        print(
+            f"[ERROR] POSTGRES_PORT must be a valid integer, got: {os.environ['POSTGRES_PORT']}"
+        )
+        sys.exit(1)
+
     return {
         "host": os.environ["POSTGRES_HOST"],
-        "port": int(os.environ["POSTGRES_PORT"]),
+        "port": port,
         "database": os.environ["POSTGRES_DATABASE"],
         "user": os.environ["POSTGRES_USER"],
         "password": os.environ["POSTGRES_PASSWORD"],
@@ -306,6 +314,10 @@ def consume_and_store(
     Returns:
         Number of patterns stored.
     """
+    # Initialize for cleanup safety
+    conn = None
+    consumer = None
+
     # Connect to PostgreSQL
     print("[INFO] Connecting to PostgreSQL...")
     conn = psycopg2.connect(**postgres_config)
@@ -378,9 +390,11 @@ def consume_and_store(
         print(f"[SUMMARY] Patterns stored:  {patterns_stored}")
         print()
 
-        # Cleanup
-        consumer.close()
-        conn.close()
+        # Cleanup (check if initialized to handle early failures)
+        if consumer is not None:
+            consumer.close()
+        if conn is not None:
+            conn.close()
         print("[OK] Connections closed")
 
     return patterns_stored

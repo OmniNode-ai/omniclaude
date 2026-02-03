@@ -67,6 +67,7 @@ source .env
 
 # Verify critical variables
 echo "KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS}"
+echo "KAFKA_ENVIRONMENT: ${KAFKA_ENVIRONMENT}"
 echo "POSTGRES_HOST: ${POSTGRES_HOST}"
 echo "POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:+(set)}"
 ```
@@ -291,10 +292,11 @@ In Terminal T1, press `Ctrl+C`:
    kcat -b $KAFKA_BOOTSTRAP_SERVERS -L
    ```
 
-2. **Check network**:
+2. **Check network** (extract host from bootstrap servers):
    ```bash
    source .env
-   nc -zv $POSTGRES_HOST 29092
+   KAFKA_HOST=$(echo $KAFKA_BOOTSTRAP_SERVERS | cut -d: -f1)
+   nc -zv $KAFKA_HOST 29092
    ```
 
 3. **Verify /etc/hosts** (if using hostname):

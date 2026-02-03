@@ -76,9 +76,17 @@ def get_postgres_config() -> dict:
         print("Run: source .env")
         sys.exit(1)
 
+    try:
+        port = int(os.environ["POSTGRES_PORT"])
+    except ValueError:
+        print(
+            f"[ERROR] POSTGRES_PORT must be a valid integer, got: {os.environ['POSTGRES_PORT']}"
+        )
+        sys.exit(1)
+
     return {
         "host": os.environ["POSTGRES_HOST"],
-        "port": int(os.environ["POSTGRES_PORT"]),
+        "port": port,
         "database": os.environ["POSTGRES_DATABASE"],
         "user": os.environ["POSTGRES_USER"],
         "password": os.environ["POSTGRES_PASSWORD"],
