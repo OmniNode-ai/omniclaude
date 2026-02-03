@@ -90,13 +90,13 @@ fi
 
 ### Step 2.2: Run Code Review
 
-Dispatch the `feature-dev:code-reviewer` subagent:
+Dispatch a code review agent (uses `polymorphic-agent` with review-focused prompt):
 
 ```
 Task(
-  subagent_type="feature-dev:code-reviewer",
-  description="Review iteration {iteration+1} changes",
-  prompt="Review the following changes for bugs, security issues, and code quality problems.
+  subagent_type="polymorphic-agent",
+  description="Code review iteration {iteration+1}",
+  prompt="You are reviewing code changes. Analyze the following for bugs, security issues, and code quality problems.
 
 **Base ref**: {base_ref}
 **Files to review**: {file_list}
@@ -122,6 +122,12 @@ If no issues found, return: {\"critical\": [], \"major\": [], \"minor\": []}
 "
 )
 ```
+
+**JSON Parsing Fallback**: If the agent returns malformed JSON or non-JSON response:
+1. Try to extract issues from markdown/text format (look for file:line patterns)
+2. If extraction fails, treat response as "unable to parse - manual review needed"
+3. Log the raw response for debugging
+4. Continue with empty issue list (don't block the loop)
 
 ### Step 2.3: Display Issues
 
@@ -302,7 +308,12 @@ Review iteration: {current}/{max}
 | Invalid --since ref | "Error: Invalid ref '{ref}'. Use branch name or commit SHA." |
 | Review agent failure | Log error, continue with partial results |
 | Fix agent failure | Log error, mark issue as "needs manual fix" |
-| Commit failure | Log error, continue (files remain staged) |
+| Malformed JSON response | Extract from text or skip (see JSON Parsing Fallback) |
+| Commit failure (general) | Log error, files remain staged for manual commit |
+| Commit failure (hooks) | Report hook output, suggest `--no-verify` if appropriate |
+| Commit failure (conflicts) | "Merge conflict detected - resolve manually before continuing" |
+| Commit failure (permissions) | "Permission denied - check file permissions" |
+| Stage failure (git add) | Log error, report which files couldn't be staged |
 
 ---
 
