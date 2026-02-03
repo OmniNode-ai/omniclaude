@@ -131,8 +131,14 @@ If no issues found, return: {\"critical\": [], \"major\": [], \"minor\": []}
    - Log the raw response for debugging
    - Mark iteration as `PARSE_FAILED` (not "clean")
    - Display: "⚠️ Review response could not be parsed. Manual review required."
-   - **Skip directly to Phase 3** (do NOT attempt fixes, do NOT continue loop)
+   - **Continue to Step 2.3** (PARSE_FAILED will be handled there with counter increment)
 4. On `PARSE_FAILED`, the final status MUST be "Parse failed - manual review needed" (never "Clean")
+
+**Agent Failure Handling**: If the review agent crashes, times out, or returns an error:
+1. Log the error with details (timeout duration, error message, etc.)
+2. Mark iteration as `AGENT_FAILED` (not "clean" or "parse failed")
+3. Display: "⚠️ Review agent failed: {error}. Manual review required."
+4. **Continue to Step 2.3** (AGENT_FAILED will be handled there with counter increment)
 
 ### Step 2.3: Display Issues
 
@@ -152,6 +158,8 @@ If no issues found, return: {\"critical\": [], \"major\": [], \"minor\": []}
 **If no issues**: Increment iteration counter, then skip to Phase 3 (Final Summary)
 
 **If `PARSE_FAILED`**: Increment iteration counter (a review was attempted), then skip to Phase 3
+
+**If `AGENT_FAILED`**: Increment iteration counter (a review was attempted), then skip to Phase 3
 
 **If `--no-fix`**: Increment iteration counter (a review was performed), then skip to Phase 3
 
@@ -334,7 +342,7 @@ Review iteration: {current}/{max}
 | No git repo | "Error: Not in a git repository" |
 | No changes | "No changes to review. Working tree clean." |
 | Invalid --since ref | "Error: Invalid ref '{ref}'. Use branch name or commit SHA." |
-| Review agent failure | Log error, mark iteration as `AGENT_FAILED`, exit to Phase 3 with status "Agent failed - {error}. Manual review required." |
+| Review agent failure | Log error, mark iteration as `AGENT_FAILED`, increment counter via Step 2.3, then exit to Phase 3 with status "Agent failed - {error}. Manual review required." |
 | Fix agent failure | Log error, mark issue as "needs manual fix" |
 | Malformed JSON response | Try text extraction; if fails, mark `PARSE_FAILED` (see Fallback) |
 | Commit failure (general) | Log error, files remain staged for manual commit |
