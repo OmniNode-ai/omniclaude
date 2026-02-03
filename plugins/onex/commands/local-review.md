@@ -201,7 +201,7 @@ If no issues found, return: {\"critical\": [], \"major\": [], \"minor\": [], \"n
 **JSON Parsing and Validation**:
 1. Parse the response as JSON
 2. Validate structure: must have `critical`, `major`, `minor`, `nit` keys, each being an array
-3. Validate each issue: must have `file` (string), `line` (number), `description` (string)
+3. Validate each issue: must have `file` (string), `line` (number), `description` (string), `keyword` (string)
 4. If validation fails, treat as malformed JSON (continue to fallback)
 
 **Text Extraction Fallback**: If JSON parsing/validation fails:
@@ -243,6 +243,8 @@ If no issues found, return: {\"critical\": [], \"major\": [], \"minor\": [], \"n
 
 **Merge Status**: {Ready | Blocked by N issues}
 ```
+
+**Track nit count**: After parsing the review response, update `nit_count += len(nit_issues)` for the final summary.
 
 **If no Critical/Major/Minor issues**: Increment iteration counter, skip to Phase 3 (Final Summary)
 - Nits alone do NOT block - they are optional
@@ -312,14 +314,17 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# Commit with descriptive message (include failed fixes if any)
-git commit -m "fix(review): [{severity}] {summary}
+# Commit with descriptive message using heredoc (include failed fixes if any)
+git commit -m "$(cat <<'EOF'
+fix(review): [{severity}] {summary}
 
 - Fixed: {file}:{line} - {description}
 - Fixed: {file}:{line} - {description}
 - FAILED: {file}:{line} - {description} (needs manual fix)
 
-Review iteration: {iteration+1}/{max_iterations}"
+Review iteration: {iteration+1}/{max_iterations}
+EOF
+)"
 ```
 
 **Track commit**:
