@@ -105,13 +105,13 @@ class TestIntelligenceEventClientInitialization:
     def test_initialization_fails_without_bootstrap_servers(
         self, mock_settings
     ) -> None:
-        """Test client raises ModelOnexError when no bootstrap servers configured."""
+        """Test client raises OnexError when no bootstrap servers configured."""
         mock_settings.get_effective_kafka_bootstrap_servers.return_value = None
 
-        from omnibase_core.errors import ModelOnexError
+        from omniclaude.lib.errors import OnexError
 
         with patch.object(intelligence_module, "settings", mock_settings):
-            with pytest.raises(ModelOnexError) as exc_info:
+            with pytest.raises(OnexError) as exc_info:
                 IntelligenceEventClient()
 
             assert "bootstrap_servers" in str(exc_info.value.message)
@@ -125,16 +125,6 @@ class TestIntelligenceEventClientInitialization:
             )
 
             assert client.enable_intelligence is False
-
-    def test_initialization_with_custom_consumer_group(self, mock_settings) -> None:
-        """Test client accepts custom consumer_group_id."""
-        with patch.object(intelligence_module, "settings", mock_settings):
-            client = IntelligenceEventClient(
-                bootstrap_servers="localhost:9092",
-                consumer_group_id="custom-intelligence-group",
-            )
-
-            assert client.bootstrap_servers == "localhost:9092"
 
     def test_topic_names_follow_event_bus_convention(self, mock_settings) -> None:
         """Test that topic names follow EVENT_BUS_INTEGRATION_GUIDE convention."""
@@ -299,13 +289,13 @@ class TestIntelligenceEventClientRequestPatternDiscovery:
     async def test_request_pattern_discovery_fails_when_not_started(
         self, mock_settings
     ) -> None:
-        """Test request_pattern_discovery raises ModelOnexError when not started."""
-        from omnibase_core.errors import ModelOnexError
+        """Test request_pattern_discovery raises OnexError when not started."""
+        from omniclaude.lib.errors import OnexError
 
         with patch.object(intelligence_module, "settings", mock_settings):
             client = IntelligenceEventClient(bootstrap_servers="localhost:9092")
 
-            with pytest.raises(ModelOnexError) as exc_info:
+            with pytest.raises(OnexError) as exc_info:
                 await client.request_pattern_discovery(
                     source_path="node_*_effect.py",
                     language="python",
@@ -376,13 +366,13 @@ class TestIntelligenceEventClientRequestCodeAnalysis:
     async def test_request_code_analysis_fails_when_not_started(
         self, mock_settings
     ) -> None:
-        """Test request_code_analysis raises ModelOnexError when not started."""
-        from omnibase_core.errors import ModelOnexError
+        """Test request_code_analysis raises OnexError when not started."""
+        from omniclaude.lib.errors import OnexError
 
         with patch.object(intelligence_module, "settings", mock_settings):
             client = IntelligenceEventClient(bootstrap_servers="localhost:9092")
 
-            with pytest.raises(ModelOnexError) as exc_info:
+            with pytest.raises(OnexError) as exc_info:
                 await client.request_code_analysis(
                     content="def hello(): pass",
                     source_path="test.py",
@@ -463,12 +453,9 @@ class TestIntelligenceEventClientRequestCodeAnalysis:
     async def test_request_code_analysis_timeout_raises_timeout_error(
         self, mock_settings, mock_wiring
     ) -> None:
-        """Test request_code_analysis raises TimeoutError on timeout with message containing 'timeout'."""
-        # The code checks: if "timeout" in str(e).lower()
-        # Since asyncio.TimeoutError() has empty message, we use an exception with "timeout" in its string
-        mock_wiring.send_request = AsyncMock(
-            side_effect=Exception("Request timeout exceeded")
-        )
+        """Test request_code_analysis raises TimeoutError when TimeoutError occurs."""
+        # Simulate RequestResponseWiring raising TimeoutError
+        mock_wiring.send_request = AsyncMock(side_effect=TimeoutError())
 
         with patch.object(intelligence_module, "settings", mock_settings):
             client = IntelligenceEventClient(bootstrap_servers="localhost:9092")

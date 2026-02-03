@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4
 
-from omnibase_core.errors import EnumCoreErrorCode, ModelOnexError
 from omnibase_core.models.contracts.subcontracts import (
     ModelReplyTopics,
     ModelRequestResponseConfig,
@@ -21,6 +20,7 @@ from omnibase_infra.event_bus.models.config import ModelKafkaEventBusConfig
 from omnibase_infra.runtime.request_response_wiring import RequestResponseWiring
 
 from omniclaude.config import settings
+from omniclaude.lib.errors import EnumCoreErrorCode, OnexError
 
 logger = logging.getLogger(__name__)
 
@@ -38,12 +38,13 @@ class IntelligenceEventClient:
         bootstrap_servers: str | None = None,
         enable_intelligence: bool = True,
         request_timeout_ms: int = 5000,
-        consumer_group_id: str | None = None,
     ):
         self.bootstrap_servers = bootstrap_servers or settings.get_effective_kafka_bootstrap_servers()
         if not self.bootstrap_servers:
-            raise ModelOnexError(
-                message="bootstrap_servers required", error_code=EnumCoreErrorCode.VALIDATION_ERROR, operation="__init__"
+            raise OnexError(
+                code=EnumCoreErrorCode.VALIDATION_ERROR,
+                message="bootstrap_servers required (set KAFKA_BOOTSTRAP_SERVERS)",
+                details={"component": "IntelligenceEventClient"},
             )
         self.enable_intelligence = enable_intelligence
         self.request_timeout_ms = request_timeout_ms
@@ -60,10 +61,10 @@ class IntelligenceEventClient:
         # Validate environment (consistent with routing_event_client)
         self._environment = settings.kafka_environment
         if not self._environment:
-            raise ModelOnexError(
+            raise OnexError(
+                code=EnumCoreErrorCode.CONFIGURATION_ERROR,
                 message="KAFKA_ENVIRONMENT required",
-                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
-                operation="start",
+                details={"component": "IntelligenceEventClient"},
             )
 
         self.logger.info(f"Starting intelligence client (broker: {self.bootstrap_servers})")
@@ -108,8 +109,10 @@ class IntelligenceEventClient:
         self, source_path: str, language: str, timeout_ms: int | None = None,
     ) -> list[dict[str, Any]]:
         if not self._started:
-            raise ModelOnexError(
-                message="Client not started", error_code=EnumCoreErrorCode.VALIDATION_ERROR, operation="request_pattern_discovery"
+            raise OnexError(
+                code=EnumCoreErrorCode.OPERATION_FAILED,
+                message="Client not started. Call start() first.",
+                details={"component": "IntelligenceEventClient"},
             )
         content = None
         fp = Path(source_path)
@@ -122,15 +125,17 @@ class IntelligenceEventClient:
             content=content, source_path=source_path, language=language,
             options={"operation_type": "PATTERN_EXTRACTION", "include_patterns": True}, timeout_ms=timeout_ms,
         )
-        return cast(list[dict[str, Any]], result.get("patterns", []))
+        return cast("list[dict[str, Any]]", result.get("patterns", []))
 
     async def request_code_analysis(
         self, content: str | None, source_path: str, language: str,
         options: dict[str, Any] | None = None, timeout_ms: int | None = None,
     ) -> dict[str, Any]:
         if not self._started or self._wiring is None:
-            raise ModelOnexError(
-                message="Client not started", error_code=EnumCoreErrorCode.VALIDATION_ERROR, operation="request_code_analysis"
+            raise OnexError(
+                code=EnumCoreErrorCode.OPERATION_FAILED,
+                message="Client not started. Call start() first.",
+                details={"component": "IntelligenceEventClient"},
             )
         timeout_seconds = (timeout_ms or self.request_timeout_ms) // 1000
         correlation_id = str(uuid4())
@@ -150,11 +155,9 @@ class IntelligenceEventClient:
             result = await self._wiring.send_request(
                 instance_name=self._INSTANCE_NAME, payload=payload, timeout_seconds=timeout_seconds,
             )
-            return cast(dict[str, Any], result.get("payload", result))
-        except Exception as e:
-            if "timeout" in str(e).lower():
-                raise TimeoutError(f"Request timeout ({correlation_id})") from e
-            raise
+            return cast("dict[str, Any]", result.get("payload", result))
+        except TimeoutError as e:
+            raise TimeoutError(f"Request timeout ({correlation_id})") from e
 
 
 class IntelligenceEventClientContext:

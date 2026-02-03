@@ -116,16 +116,6 @@ class TestRoutingEventClientInitialization:
 
             assert "bootstrap_servers" in str(exc_info.value.message)
 
-    def test_initialization_with_custom_consumer_group(self, mock_settings) -> None:
-        """Test client accepts custom consumer_group_id."""
-        with patch.object(routing_module, "settings", mock_settings):
-            client = RoutingEventClient(
-                bootstrap_servers="localhost:9092",
-                consumer_group_id="custom-group",
-            )
-
-            assert client.bootstrap_servers == "localhost:9092"
-
 
 class TestRoutingEventClientLifecycle:
     """Tests for RoutingEventClient start() and stop() lifecycle."""

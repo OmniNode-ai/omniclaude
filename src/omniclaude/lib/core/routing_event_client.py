@@ -40,7 +40,6 @@ class RoutingEventClient:
         self,
         bootstrap_servers: str | None = None,
         request_timeout_ms: int = 5000,
-        consumer_group_id: str | None = None,
     ) -> None:
         self.bootstrap_servers = (
             bootstrap_servers or settings.get_effective_kafka_bootstrap_servers()
@@ -159,7 +158,7 @@ class RoutingEventClient:
                 timeout_seconds=timeout_sec,
             )
             return cast(
-                list[dict[str, Any]],
+                "list[dict[str, Any]]",
                 response.get("payload", {}).get("recommendations", []),
             )
         except Exception as e:
