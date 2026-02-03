@@ -124,10 +124,14 @@ If no issues found, return: {\"critical\": [], \"major\": [], \"minor\": []}
 ```
 
 **JSON Parsing Fallback**: If the agent returns malformed JSON or non-JSON response:
-1. Try to extract issues from markdown/text format (look for file:line patterns)
-2. If extraction fails, treat response as "unable to parse - manual review needed"
-3. Log the raw response for debugging
-4. Continue with empty issue list (don't block the loop)
+1. Try to extract issues from markdown/text format (look for `**file:line**` or `file.py:123` patterns)
+2. If extraction succeeds, use extracted issues and continue
+3. If extraction fails:
+   - Log the raw response for debugging
+   - Mark iteration as `PARSE_FAILED` (not "clean")
+   - Display: "⚠️ Review response could not be parsed. Manual review required."
+   - Do NOT treat as "clean" - this prevents false positives
+4. On `PARSE_FAILED`, the final status should be "Parse failed - manual review needed" (not "Clean")
 
 ### Step 2.3: Display Issues
 
@@ -258,7 +262,11 @@ if "--since" in args:
 # Extract --max-iterations value
 if "--max-iterations" in args:
     idx = args.index("--max-iterations")
-    max_iterations = int(args[idx + 1]) if idx + 1 < len(args) else 10
+    try:
+        max_iterations = int(args[idx + 1]) if idx + 1 < len(args) else 10
+    except (ValueError, IndexError):
+        print("Error: --max-iterations requires a numeric value")
+        max_iterations = 10  # Fall back to default
 
 # Extract --files value
 if "--files" in args:
@@ -306,9 +314,9 @@ Review iteration: {current}/{max}
 | No git repo | "Error: Not in a git repository" |
 | No changes | "No changes to review. Working tree clean." |
 | Invalid --since ref | "Error: Invalid ref '{ref}'. Use branch name or commit SHA." |
-| Review agent failure | Log error, continue with partial results |
+| Review agent failure | Log error, mark iteration as PARSE_FAILED, require manual review |
 | Fix agent failure | Log error, mark issue as "needs manual fix" |
-| Malformed JSON response | Extract from text or skip (see JSON Parsing Fallback) |
+| Malformed JSON response | Try text extraction; if fails, mark PARSE_FAILED (see Fallback) |
 | Commit failure (general) | Log error, files remain staged for manual commit |
 | Commit failure (hooks) | Report hook output, suggest `--no-verify` if appropriate |
 | Commit failure (conflicts) | "Merge conflict detected - resolve manually before continuing" |
