@@ -85,10 +85,12 @@ This step uses a two-step diff approach to capture all relevant changes:
 ```bash
 # Get changed files
 if --uncommitted:
-    git diff --name-only
+    files=$(git diff --name-only)
 else:
-    git diff --name-only {base_ref}..HEAD   # Committed changes since base
-    git diff --name-only                     # Plus any uncommitted changes
+    # Combine committed and uncommitted changes, then deduplicate
+    committed=$(git diff --name-only {base_ref}..HEAD)
+    uncommitted=$(git diff --name-only)
+    files=$(echo -e "$committed\n$uncommitted" | sort -u | grep -v '^$')
 fi
 
 # Apply file filter if --files specified
@@ -210,12 +212,13 @@ If no issues found, return: {\"critical\": [], \"major\": [], \"minor\": [], \"n
    - `{file}:{line}: {description}` (compiler-style format)
    - `- {file}:{line} - {description}` (list format)
 2. Assign severity based on context keywords: "critical/security/crash" -> critical, "bug/error/logic" -> major, else -> minor
-3. If extraction finds at least one issue, use extracted issues and continue normally
-4. If extraction fails (no recognizable patterns):
+3. **If extraction succeeds** (finds at least one issue):
+   - Use extracted issues and proceed normally to Step 2.3 (display issues)
+4. **If extraction fails** (no recognizable patterns):
    - Log the raw response for debugging
    - Mark iteration as `PARSE_FAILED` (not "clean")
    - Display: "Warning: Review response could not be parsed. Manual review required."
-   - **Continue to Step 2.3** (PARSE_FAILED will be handled there with counter increment)
+   - Proceed to Step 2.3 where `PARSE_FAILED` triggers counter increment and exit to Phase 3
 5. On `PARSE_FAILED`, the final status MUST be "Parse failed - manual review needed" (never "Clean")
 
 **Agent Failure Handling**: If the review agent crashes, times out, or returns an error:
@@ -246,14 +249,32 @@ If no issues found, return: {\"critical\": [], \"major\": [], \"minor\": [], \"n
 
 **Track nit count**: After parsing the review response, update `nit_count += len(nit_issues)` for the final summary.
 
-**If no Critical/Major/Minor issues**: Increment iteration counter, skip to Phase 3 (Final Summary)
+**Early Exit Conditions** (each increments counter before exiting):
+
+**If no Critical/Major/Minor issues**:
+```
+iteration += 1  # A review iteration completed
+goto Phase 3 (Final Summary)
+```
 - Nits alone do NOT block - they are optional
 
-**If `PARSE_FAILED`**: Increment iteration counter (a review was attempted), then skip to Phase 3
+**If `PARSE_FAILED`**:
+```
+iteration += 1  # A review was attempted even though parsing failed
+goto Phase 3
+```
 
-**If `AGENT_FAILED`**: Increment iteration counter (a review was attempted), then skip to Phase 3
+**If `AGENT_FAILED`**:
+```
+iteration += 1  # A review was attempted even though agent failed
+goto Phase 3
+```
 
-**If `--no-fix`**: Increment iteration counter (a review was performed), display issues, then skip to Phase 3
+**If `--no-fix`**:
+```
+iteration += 1  # A review was performed (report-only mode)
+goto Phase 3
+```
 
 ### Step 2.4: Fix Issues
 
@@ -342,17 +363,20 @@ total_issues_fixed += count
 1. Log the error with failure reason (hooks, conflicts, permissions)
 2. Leave files staged for manual intervention
 3. Set `commit_failed = true` with reason
-4. Increment iteration counter (a review cycle was attempted)
-5. Exit to Phase 3 immediately (do NOT continue loop)
-6. Final status: "Commit failed - {reason}. Files staged for manual review."
+4. Increment iteration counter and exit:
+   ```
+   iteration += 1  # A review cycle was attempted
+   goto Phase 3
+   ```
+5. Final status: "Commit failed - {reason}. Files staged for manual review."
 
 This prevents re-reviewing the same changes and gives the user clear next steps.
 
 ### Step 2.6: Check Loop Condition
 
 **Note**: This step is ONLY reached in the normal flow (issues found -> fixed -> committed successfully).
-Early exits (no issues, parse failed, no-fix mode, commit failed) bypass this step entirely
-because they increment the counter before skipping to Phase 3.
+Early exits (no issues, parse failed, no-fix mode, commit failed) have their own explicit
+`iteration += 1` statements in Step 2.3 and Step 2.5 before jumping to Phase 3.
 
 ```
 iteration += 1
@@ -430,7 +454,11 @@ if "--max-iterations" in args:
 # Extract --files value
 if "--files" in args:
     idx = args.index("--files")
-    files_glob = args[idx + 1] if idx + 1 < len(args) else None
+    if idx + 1 >= len(args) or args[idx + 1].startswith("--"):
+        print("Warning: --files requires a glob pattern. Reviewing all files.")
+        files_glob = None
+    else:
+        files_glob = args[idx + 1]
 ```
 
 ### Base Branch Detection
