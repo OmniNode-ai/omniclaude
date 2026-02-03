@@ -69,6 +69,13 @@ AskUserQuestion(questions=[{
 }])
 ```
 
+**Validation**: If response is empty or whitespace-only, ask again:
+```python
+if not custom_repo or not custom_repo.strip():
+    print("Repository name cannot be empty. Please enter a valid name.")
+    # Repeat the question
+```
+
 Store response as `ticket_repo`.
 
 ---
@@ -117,6 +124,11 @@ while True:
         "allowFreeText": true
     }])
     # Store as requirement_statement
+
+    # Validate non-empty statement
+    if not requirement_statement or not requirement_statement.strip():
+        print("Requirement statement cannot be empty. Please provide a description.")
+        # Repeat the question (decrement count and continue loop)
 
     # 4b: Get acceptance criteria
     AskUserQuestion(questions=[{
@@ -179,6 +191,14 @@ AskUserQuestion(questions=[{
 }])
 ```
 
+**Validation**: Ticket ID should match format `OMN-XXXX`:
+```python
+import re
+if parent_ticket and not re.match(r'^OMN-\d+$', parent_ticket.strip()):
+    print(f"Warning: '{parent_ticket}' doesn't match expected format (OMN-1234). Proceed anyway?")
+    # Allow user to fix or continue
+```
+
 Store as `parent_ticket` or `null`.
 
 ---
@@ -206,18 +226,35 @@ AskUserQuestion(questions=[{
 }])
 ```
 
+**Validation**: Parse and validate each ticket ID:
+```python
+import re
+blocked_by = []
+for id_str in blocked_by_raw.split(","):
+    id_str = id_str.strip()
+    if id_str:
+        if not re.match(r'^OMN-\d+$', id_str):
+            print(f"Warning: '{id_str}' doesn't match expected format (OMN-1234). Skipping.")
+        else:
+            blocked_by.append(id_str)
+```
+
 Store as `blocked_by` list or empty list.
 
 ---
 
 ## Step 7: Select Project
 
-First, fetch recent projects:
-```
-mcp__linear-server__list_projects(team="Omninode", limit=10)
+First, fetch recent projects with error handling:
+```python
+try:
+    projects = mcp__linear-server__list_projects(team="Omninode", limit=10)
+except Exception as e:
+    print(f"Warning: Could not fetch projects from Linear: {e}")
+    projects = []  # Fall back to manual entry
 ```
 
-Build options from results:
+Build options from results (or allow manual entry if API failed):
 ```
 AskUserQuestion(questions=[{
     "question": "Which Linear project should this ticket be added to?",
