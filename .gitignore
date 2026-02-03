@@ -272,8 +272,8 @@ docs_archived/
 claude-flow.config.json
 
 # Claude Code settings (personal/local configuration)
-.claude/
-.claude/settings.local.json
+.claude/*
+!.claude/architecture-handshake.md
 *.db
 *.sqlite
 *.db-wal

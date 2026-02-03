@@ -135,6 +135,37 @@ jobs:
           echo "::endgroup::"
 
   # ============================================================================
+  # Architecture Handshake Verification
+  # ============================================================================
+  check-handshake:
+    name: Verify Architecture Handshake
+    runs-on: ubuntu-latest
+    # Skip on fork PRs - forks may not have access to cross-repo checkout
+    # Runs on: push events, workflow_dispatch, and PRs from the same repo
+    if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Checkout omnibase_core
+        uses: actions/checkout@v4
+        with:
+          repository: OmniNode-ai/omnibase_core
+          path: omnibase_core
+
+      - name: Verify handshake is current
+        run: |
+          echo "::group::Architecture Handshake Verification"
+          if [ ! -f "./omnibase_core/architecture-handshakes/check-handshake.sh" ]; then
+            echo "::error::check-handshake.sh not found in omnibase_core"
+            exit 1
+          fi
+          echo "Verifying .claude/architecture-handshake.md matches source in omnibase_core..."
+          echo ""
+          ./omnibase_core/architecture-handshakes/check-handshake.sh ./omnibase_core
+          echo "::endgroup::"
+
+  # ============================================================================
   # ONEX Enum Governance Validation
   # ============================================================================
   enum-governance:
@@ -553,7 +584,7 @@ jobs:
   build:
     name: Build Docker Image
     runs-on: ubuntu-latest
-    needs: [quality, pyright, enum-governance, exports-validation, cross-repo-validation, security-python, merge-coverage]
+    needs: [quality, pyright, check-handshake, enum-governance, exports-validation, cross-repo-validation, security-python, merge-coverage]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

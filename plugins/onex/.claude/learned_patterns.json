@@ -1,0 +1,56 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2026-01-26T12:00:00Z",
+  "patterns": [
+    {
+      "pattern_id": "onex-event-schema-frozen",
+      "domain": "event_schemas",
+      "title": "ONEX Event Schema Immutability",
+      "description": "Use pydantic.BaseModel with frozen=True and extra='forbid' for all event payload models to ensure immutability and strict validation.",
+      "confidence": 0.95,
+      "usage_count": 23,
+      "success_rate": 0.96,
+      "example_reference": "src/omniclaude/hooks/schemas.py:ModelHookSessionStartedPayload"
+    },
+    {
+      "pattern_id": "hook-graceful-exit",
+      "domain": "hooks",
+      "title": "Hook Graceful Exit Pattern",
+      "description": "Hook scripts and Python modules must always exit 0, even on errors. Return success=false in JSON output instead of non-zero exit codes.",
+      "confidence": 0.98,
+      "usage_count": 45,
+      "success_rate": 1.0,
+      "example_reference": "plugins/onex/hooks/lib/learned_pattern_injector.py"
+    },
+    {
+      "pattern_id": "kafka-topic-versioning",
+      "domain": "event_bus",
+      "title": "Kafka Topic Version Suffix",
+      "description": "Include version suffix in topic names (e.g., '.v1') to enable parallel running of old and new consumers during schema migrations.",
+      "confidence": 0.92,
+      "usage_count": 18,
+      "success_rate": 0.94,
+      "example_reference": "src/omniclaude/hooks/topics.py:TopicBase"
+    },
+    {
+      "pattern_id": "pydantic-settings-env-prefix",
+      "domain": "configuration",
+      "title": "Pydantic Settings Environment Prefix",
+      "description": "Use env_prefix in Pydantic Settings to namespace environment variables. Pattern: OMNICLAUDE_{MODULE}_{FIELD}.",
+      "confidence": 0.88,
+      "usage_count": 12,
+      "success_rate": 0.92,
+      "example_reference": "src/omniclaude/hooks/context_config.py:ContextInjectionConfig"
+    },
+    {
+      "pattern_id": "uuid-partition-key",
+      "domain": "event_schemas",
+      "title": "UUID as Kafka Partition Key",
+      "description": "Use entity_id (UUID) as Kafka partition key to ensure all events for a session go to the same partition, maintaining ordering guarantees.",
+      "confidence": 0.90,
+      "usage_count": 15,
+      "success_rate": 0.93,
+      "example_reference": "src/omniclaude/hooks/schemas.py:entity_id field"
+    }
+  ]
+}
