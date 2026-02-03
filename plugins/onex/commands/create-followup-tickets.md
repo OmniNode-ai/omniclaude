@@ -120,16 +120,19 @@ def parse_review_file(path: str) -> dict:
             if issue:
                 issues[current_severity].append(issue)
         else:
-            # Check for severity headers (lines that aren't issues)
-            line_lower = line.lower()
-            if 'critical' in line_lower:
-                current_severity = 'critical'
-            elif 'major' in line_lower:
-                current_severity = 'major'
-            elif 'minor' in line_lower:
-                current_severity = 'minor'
-            elif 'nit' in line_lower:
-                current_severity = 'nit'
+            # Check for severity headers (only markdown headers, not arbitrary text)
+            # This prevents commentary like "major refactoring" from changing severity
+            stripped = line.strip()
+            if stripped.startswith('#'):
+                line_lower = stripped.lower()
+                if 'critical' in line_lower:
+                    current_severity = 'critical'
+                elif 'major' in line_lower:
+                    current_severity = 'major'
+                elif 'minor' in line_lower:
+                    current_severity = 'minor'
+                elif 'nit' in line_lower:
+                    current_severity = 'nit'
 
     return issues
 
