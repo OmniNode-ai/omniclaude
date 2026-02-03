@@ -43,8 +43,8 @@ Parse arguments from `$ARGUMENTS`:
 
 **2. Detect base reference** (if `--since` not provided):
 ```bash
-# Try to find the merge-base with main/master
-git merge-base HEAD main 2>/dev/null || git merge-base HEAD master 2>/dev/null || { echo "⚠️ Warning: Could not find merge-base, using HEAD~10" >&2; echo "HEAD~10"; }
+# Try to find the merge-base with remote main/master
+git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD origin/master 2>/dev/null || { echo "⚠️ Warning: Could not find merge-base, using HEAD~10" >&2; echo "HEAD~10"; }
 ```
 
 **3. Initialize tracking state**:
@@ -221,11 +221,12 @@ Group fixes by severity and commit:
 # Stage fixed files
 git add {fixed_files}
 
-# Commit with descriptive message
+# Commit with descriptive message (include failed fixes if any)
 git commit -m "fix(review): [{severity}] {summary}
 
 - Fixed: {file}:{line} - {description}
 - Fixed: {file}:{line} - {description}
+- FAILED: {file}:{line} - {description} (needs manual fix)
 
 Review iteration: {iteration+1}/{max_iterations}"
 ```
@@ -294,6 +295,8 @@ else:
 - `Changes staged - review before commit` (--no-commit mode)
 - `Parse failed - manual review needed` (review response couldn't be parsed)
 - `Agent failed - {error}. Manual review required.` (review agent crashed/timed out)
+- `Fix failed - {n} issues need manual attention` (all fix attempts failed in Step 2.4)
+- `Stage failed - check file permissions` (git add failed)
 - `Commit failed - {reason}. Files staged for manual review.` (commit step failed)
 
 ---
@@ -376,7 +379,7 @@ Review iteration: {current}/{max}
 | Commit failure (hooks) | Report hook output, increment counter, suggest `--no-verify`, exit to Phase 3 |
 | Commit failure (conflicts) | Log "Merge conflict detected", increment counter, exit to Phase 3 |
 | Commit failure (permissions) | Log "Permission denied", increment counter, exit to Phase 3 |
-| Stage failure (git add) | Log error, report which files couldn't be staged |
+| Stage failure (git add) | Log error, report which files couldn't be staged, increment counter, exit to Phase 3 with status "Stage failed - check file permissions" |
 
 ---
 
