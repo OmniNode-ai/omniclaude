@@ -177,12 +177,25 @@ if len(projects) >= 200:
     print(f"Note: {len(projects)} projects found. If your project isn't listed, try a more specific name.")
 
 if len(matches) == 0:
-    # List available projects
+    # List available projects and let user select
     print("No matching projects found. Available projects:")
-    for p in projects:
+    project_options = projects[:4]  # Limit to 4 for AskUserQuestion
+    for p in project_options:
         print(f"  - {p['name']}")
-    # Use AskUserQuestion to let user select from available projects
-    # Then set project = selected_project
+
+    response = AskUserQuestion(
+        questions=[{
+            "question": "Select a project from the list:",
+            "header": "Project",
+            "options": [{"label": p['name'], "description": p.get('description', '')[:50]} for p in project_options],
+            "multiSelect": False
+        }]
+    )
+    # User selects from options; response contains selected label
+    selected_name = response['answers']['Project']
+    project = next((p for p in projects if p['name'] == selected_name), None)
+    if not project:
+        raise ValueError(f"Project not found: {selected_name}")
 
 elif len(matches) == 1:
     project = matches[0]
@@ -190,7 +203,7 @@ elif len(matches) == 1:
 
 else:
     # Multiple matches - ask user to select
-    AskUserQuestion(
+    response = AskUserQuestion(
         questions=[{
             "question": f"Multiple projects match '{args.project}'. Which one?",
             "header": "Project",
@@ -198,7 +211,11 @@ else:
             "multiSelect": False
         }]
     )
-    # After user responds, set project = matches[selected_index]
+    # User selects from options; response contains selected label
+    selected_name = response['answers']['Project']
+    project = next((p for p in matches if p['name'] == selected_name), None)
+    if not project:
+        raise ValueError(f"Project not found: {selected_name}")
 
 # Extract project_id for ticket creation
 project_id = project['id']
