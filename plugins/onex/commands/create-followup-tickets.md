@@ -357,7 +357,9 @@ def create_ticket(issue: dict, project_id: str, repo_label: str | None, args) ->
 
     # Build title
     severity_upper = issue['severity'].upper()
-    file_ref = f" ({issue['file']}:{issue.get('line', '?')})" if issue.get('file') else ""
+    # Use 'or' to handle both missing key AND None value (since line can be None)
+    line_ref = issue.get('line') or '?'
+    file_ref = f" ({issue['file']}:{line_ref})" if issue.get('file') else ""
     title = f"[{severity_upper}] {issue['description'][:60]}{file_ref}"
 
     # Build description
@@ -373,8 +375,8 @@ def create_ticket(issue: dict, project_id: str, repo_label: str | None, args) ->
 
 ## Location
 
-- **File**: `{issue.get('file', 'N/A')}`
-- **Line**: {issue.get('line', 'N/A')}
+- **File**: `{issue.get('file') or 'N/A'}`
+- **Line**: {issue.get('line') or 'N/A'}
 
 ## Definition of Done
 
