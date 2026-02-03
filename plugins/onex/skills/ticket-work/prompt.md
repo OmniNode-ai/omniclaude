@@ -356,10 +356,17 @@ except AutomationError as e:
 1. **Push branch and create PR:**
    ```bash
    git push -u origin {branch}
-   gh pr create --title "{ticket_id}: {title}" --body "..."
+   # Use heredoc for PR body to safely handle special characters in title
+   gh pr create --title "$(cat <<'EOF'
+   {ticket_id}: {title}
+   EOF
+   )" --body "$(cat <<'EOF'
+   ...PR body content...
+   EOF
+   )"
    ```
 
-   **Shell safety**: When constructing PR titles/bodies, use shell-safe escaping. Pass variables via `--title` and `--body` flags rather than string interpolation. For titles containing special characters, use single quotes or heredoc syntax to prevent shell interpretation.
+   **Shell safety**: The heredoc syntax (`<<'EOF'`) with single-quoted delimiter prevents shell expansion of special characters in ticket titles. This protects against command injection if titles contain backticks, dollar signs, or semicolons.
 
    Update `pr_url` in contract.
 
