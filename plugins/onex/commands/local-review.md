@@ -240,6 +240,7 @@ else:
 - `Max iterations reached - {n} issues remain` (hit limit)
 - `Report only - {n} issues found` (--no-fix mode)
 - `Changes staged - review before commit` (--no-commit mode)
+- `Parse failed - manual review needed` (review response couldn't be parsed)
 
 ---
 
