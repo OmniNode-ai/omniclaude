@@ -283,8 +283,11 @@ try:
         mcp__linear_server__update_issue(id=ticket_id, state="In Progress")
     except Exception as e:
         if branch_created:  # Only delete if we created it
-            run("git checkout -")  # Return to previous branch first
-            run("git branch -D {branchName}")
+            checkout_result = run("git checkout -")  # Return to previous branch first
+            if checkout_result.success:
+                run("git branch -D {branchName}")
+            else:
+                log_warning(f"Could not checkout previous branch. Branch '{branchName}' must be deleted manually.")
         raise AutomationError(f"Linear update failed: {e}", step=2)
 
     # Step 3: Persist contract locally
