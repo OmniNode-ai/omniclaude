@@ -227,7 +227,7 @@ If no issues found, return: {\"critical\": [], \"major\": [], \"minor\": [], \"n
 3. Display: "Warning: Review agent failed: {error}. Manual review required."
 4. **Continue to Step 2.3** (AGENT_FAILED will be handled there with counter increment)
 
-### Step 2.3: Display Issues
+### Step 2.3: Display Issues and Handle Error States
 
 ```markdown
 ## Review Iteration {iteration+1}
@@ -307,7 +307,11 @@ Fix the following {severity} issues:
 1. Log the error with details
 2. Mark affected issues as "needs manual fix" (do not retry)
 3. Continue to next severity level (attempt remaining fixes)
-4. If ALL fixes fail: increment counter and exit to Phase 3 with status "Fix failed - {n} issues need manual attention"
+4. If ALL fixes fail:
+   ```
+   iteration += 1  # A review cycle was attempted but all fixes failed
+   goto Phase 3    # Status: "Fix failed - {n} issues need manual attention"
+   ```
 5. If SOME fixes succeed: proceed to Step 2.5 to commit successful fixes, note failed issues in commit message
 
 ### Step 2.5: Commit Fixes (if not `--no-commit`)
@@ -331,8 +335,10 @@ EOF
 # Stage fixed files and check for errors
 git add {fixed_files}
 if [ $? -ne 0 ]; then
-    # Stage failed - handle via error table (increment counter, exit to Phase 3)
-    exit 1
+    # Stage failed - increment counter and exit to Phase 3
+    iteration += 1
+    stage_failed = true
+    goto Phase 3  # Status: "Stage failed - check file permissions"
 fi
 
 # Commit with descriptive message using heredoc (include failed fixes if any)
