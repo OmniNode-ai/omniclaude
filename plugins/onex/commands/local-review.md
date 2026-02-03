@@ -86,6 +86,9 @@ fi
 # Filter to matching glob pattern
 ```
 
+**If glob matches zero files** (when `--files` specified):
+- Report "No files match pattern '{glob}'" and exit.
+
 **If no changes**:
 - If `iteration == 0` and `commits_made == []`: Report "No changes to review. Working tree clean." and exit.
 - Otherwise: Skip to Phase 3 (show summary of work completed in previous iterations).
@@ -131,15 +134,25 @@ If no issues found, return: {\"critical\": [], \"major\": [], \"minor\": []}
 )
 ```
 
-**JSON Parsing Fallback**: If the agent returns malformed JSON or non-JSON response:
-1. Try to extract issues from markdown/text format (look for `**file:line**` or `file.py:123` patterns)
-2. If extraction succeeds, use extracted issues and continue normally
-3. If extraction fails:
+**JSON Parsing and Validation**:
+1. Parse the response as JSON
+2. Validate structure: must have `critical`, `major`, `minor` keys, each being an array
+3. Validate each issue: must have `file` (string), `line` (number), `description` (string)
+4. If validation fails, treat as malformed JSON (continue to fallback)
+
+**Text Extraction Fallback**: If JSON parsing/validation fails:
+1. Try to extract issues from markdown/text format using these patterns:
+   - `**{file}:{line}** - {description}` (markdown bold format)
+   - `{file}:{line}: {description}` (compiler-style format)
+   - `- {file}:{line} - {description}` (list format)
+2. Assign severity based on context keywords: "critical/security/crash" → critical, "bug/error/logic" → major, else → minor
+3. If extraction finds at least one issue, use extracted issues and continue normally
+4. If extraction fails (no recognizable patterns):
    - Log the raw response for debugging
    - Mark iteration as `PARSE_FAILED` (not "clean")
    - Display: "⚠️ Review response could not be parsed. Manual review required."
    - **Continue to Step 2.3** (PARSE_FAILED will be handled there with counter increment)
-4. On `PARSE_FAILED`, the final status MUST be "Parse failed - manual review needed" (never "Clean")
+5. On `PARSE_FAILED`, the final status MUST be "Parse failed - manual review needed" (never "Clean")
 
 **Agent Failure Handling**: If the review agent crashes, times out, or returns an error:
 1. Log the error with details (timeout duration, error message, etc.)
@@ -192,6 +205,13 @@ Task(
 "
 )
 ```
+
+**Fix Agent Failure Handling**: If the fix agent crashes, times out, or fails:
+1. Log the error with details
+2. Mark affected issues as "needs manual fix" (do not retry)
+3. Continue to next severity level (attempt remaining fixes)
+4. If ALL fixes fail: increment counter and exit to Phase 3 with status "Fix failed - {n} issues need manual attention"
+5. If SOME fixes succeed: proceed to Step 2.5 to commit successful fixes, note failed issues in commit message
 
 ### Step 2.5: Commit Fixes (if not `--no-commit`)
 
