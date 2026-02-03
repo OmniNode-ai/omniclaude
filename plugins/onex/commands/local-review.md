@@ -1,10 +1,10 @@
 ---
-name: review
+name: local-review
 description: Local code review loop that iterates through review, fix, commit cycles without pushing
 tags: [review, code-quality, local, iteration]
 ---
 
-# /review - Local Code Review Loop
+# /local-review - Local Code Review Loop
 
 Review local changes, fix issues, commit fixes, and iterate until clean or max iterations reached.
 
@@ -27,12 +27,12 @@ Parse arguments from `$ARGUMENTS`:
 
 **Examples**:
 ```bash
-/review                           # Review all changes since base branch
-/review --uncommitted             # Only uncommitted changes
-/review --since main              # Explicit base
-/review --max-iterations 5        # Limit iterations
-/review --files "src/**/*.py"     # Specific files only
-/review --no-fix                  # Report only mode
+/local-review                           # Review all changes since base branch
+/local-review --uncommitted             # Only uncommitted changes
+/local-review --since main              # Explicit base
+/local-review --max-iterations 5        # Limit iterations
+/local-review --files "src/**/*.py"     # Specific files only
+/local-review --no-fix                  # Report only mode
 ```
 
 ---
@@ -309,7 +309,7 @@ Review iteration: {current}/{max}
 ## Example Session
 
 ```
-> /review --max-iterations 3
+> /local-review --max-iterations 3
 
 ## Review Configuration
 
