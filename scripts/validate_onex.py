@@ -50,6 +50,7 @@ EXCLUDE_PATTERNS = [
     "_archive/",
     "__pycache__/",
     ".venv/",
+    "cli/",  # CLI debugging tools use dynamic DB row types by design
 ]
 
 

@@ -37,6 +37,7 @@ dev = [
 
 [project.scripts]
 omniclaude-emit = "omniclaude.hooks.cli_emit:main"
+omni-patterns = "omniclaude.cli.patterns:main"
 
 [build-system]
 requires = ["hatchling"]
