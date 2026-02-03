@@ -1,6 +1,6 @@
 # OmniClaude
 
-[![License](https://img.shields.io/badge/license-OmniNode-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Status](https://img.shields.io/badge/status-in%20development-yellow.svg)](#status)
 
@@ -260,4 +260,4 @@ This project is part of the OmniNode ecosystem. See the main documentation for c
 
 ## License
 
-OmniNode License - See LICENSE file for details.
+MIT License - See LICENSE file for details.

@@ -140,6 +140,9 @@ jobs:
   check-handshake:
     name: Verify Architecture Handshake
     runs-on: ubuntu-latest
+    # Skip on fork PRs - forks may not have access to cross-repo checkout
+    # Runs on: push events, workflow_dispatch, and PRs from the same repo
+    if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

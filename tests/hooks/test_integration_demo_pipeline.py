@@ -90,11 +90,8 @@ def unique_demo_prompt() -> str:
 
 
 @pytest.fixture
-def demo_env(unique_demo_prompt: str) -> dict[str, str]:
+def demo_env() -> dict[str, str]:
     """Get environment with all required variables for demo scripts.
-
-    Args:
-        unique_demo_prompt: The unique prompt to use for this test.
 
     Returns:
         dict: Environment variables for subprocess calls.
@@ -262,8 +259,9 @@ class TestDemoPipelineIntegration:
         assert emit_result.returncode == 0, f"Emit failed: {emit_result.stderr}"
 
         # Wait for Kafka message to be available (condition-based, not time-based)
-        kafka_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "")
-        kafka_env = os.environ.get("KAFKA_ENVIRONMENT", "dev")
+        # These env vars are validated by get_required_env_vars() in demo_env fixture
+        kafka_servers = os.environ["KAFKA_BOOTSTRAP_SERVERS"]
+        kafka_env = os.environ["KAFKA_ENVIRONMENT"]
         topic = build_topic(kafka_env, TopicBase.CLAUDE_HOOK_EVENT)
         wait_for_kafka_message(
             bootstrap_servers=kafka_servers,
@@ -330,8 +328,9 @@ class TestDemoPipelineIntegration:
         assert "Event emitted successfully" in emit_result.stdout
 
         # Wait for Kafka message to be available (condition-based, not time-based)
-        kafka_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "")
-        kafka_env = os.environ.get("KAFKA_ENVIRONMENT", "dev")
+        # These env vars are validated by get_required_env_vars() in demo_env fixture
+        kafka_servers = os.environ["KAFKA_BOOTSTRAP_SERVERS"]
+        kafka_env = os.environ["KAFKA_ENVIRONMENT"]
         topic = build_topic(kafka_env, TopicBase.CLAUDE_HOOK_EVENT)
         wait_for_kafka_message(
             bootstrap_servers=kafka_servers,
