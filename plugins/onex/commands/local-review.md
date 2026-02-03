@@ -204,14 +204,15 @@ If no issues found, return: {\"critical\": [], \"major\": [], \"minor\": [], \"n
 **JSON Parsing and Validation**:
 1. Parse the response as JSON
 2. Validate structure: must have `critical`, `major`, `minor`, `nit` keys, each being an array
-3. Validate each issue: must have `file` (string), `line` (number), `description` (string), `keyword` (string)
-4. If validation fails, treat as malformed JSON (continue to fallback)
+3. Validate each issue: must have `file` (string), `line` (positive integer), `description` (string), `keyword` (string)
+4. **Partial validation**: Skip individual malformed issues but continue processing valid ones. Only fall back to text extraction if ALL issues are malformed or JSON structure is invalid.
 
 **Text Extraction Fallback**: If JSON parsing/validation fails:
 1. Try to extract issues from markdown/text format using these patterns:
    - `**{file}:{line}** - {description}` (markdown bold format)
    - `{file}:{line}: {description}` (compiler-style format)
    - `- {file}:{line} - {description}` (list format)
+   - **Validate line numbers**: Extracted `line` must be a positive integer; skip extractions with non-integer or negative values
 2. Assign severity and keyword based on description content:
    - "critical/security/crash/injection/vulnerability" -> critical, keyword="extracted:critical"
    - "bug/error/logic/incorrect/fails/broken" -> major, keyword="extracted:major"
@@ -234,6 +235,8 @@ If no issues found, return: {\"critical\": [], \"major\": [], \"minor\": [], \"n
 
 ### Step 2.3: Display Issues and Handle Error States
 
+**Guard for error states**: If `PARSE_FAILED` or `AGENT_FAILED` is set, skip directly to the early exit conditions below (do not attempt to display issues, as the `issues` dict may not exist).
+
 ```markdown
 ## Review Iteration {iteration+1}
 
@@ -252,7 +255,7 @@ If no issues found, return: {\"critical\": [], \"major\": [], \"minor\": [], \"n
 **Merge Status**: {Ready | Blocked by N issues}
 ```
 
-**Track nit count**: After parsing the review response, update `nit_count += len(issues["nit"])` for the final summary.
+**Track nit count**: After successfully parsing the review response (not on PARSE_FAILED or AGENT_FAILED), update `nit_count += len(issues["nit"])` for the final summary.
 
 **Early Exit Conditions** (each increments counter before exiting):
 
@@ -356,7 +359,9 @@ EOF
 # Stage fixed files and check for errors
 git add {fixed_files}
 if [ $? -ne 0 ]; then
-    # Stage failed - increment counter and exit to Phase 3
+    # Stage failed - some files may be partially staged
+    # Do NOT unstage partial changes (preserve user's ability to inspect)
+    # Report which files succeeded/failed for manual intervention
     iteration += 1
     stage_failed = true
     goto Phase 3  # Status: "Stage failed - check file permissions"
@@ -469,8 +474,8 @@ if "--since" in args:
         print("Error: --since requires a ref argument")
         exit(1)
     since_ref = args[idx + 1]
-    # Validate the ref exists
-    if not git_rev_parse_verify(since_ref):  # git rev-parse --verify {since_ref} >/dev/null 2>&1
+    # Validate the ref exists using bash: git rev-parse --verify {since_ref} >/dev/null 2>&1
+    if subprocess.run(["git", "rev-parse", "--verify", since_ref], capture_output=True).returncode != 0:
         print(f"Error: Invalid ref '{since_ref}'. Use branch name or commit SHA.")
         exit(1)
 
