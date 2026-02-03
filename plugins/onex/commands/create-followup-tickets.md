@@ -255,8 +255,8 @@ def detect_repo_label(args) -> str | None:
         # Extract repo name from URL (e.g., git@github.com:org/omniclaude.git -> omniclaude)
         url = result.stdout.strip()
         repo_name = url.rstrip('.git').split('/')[-1]
-    except subprocess.CalledProcessError:
-        # Fallback to directory name
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+        # Fallback to directory name (handles: git not installed, no remote, permission errors)
         repo_name = Path.cwd().name
 
     # Map repo name to Linear label (most repos use same name)
@@ -431,7 +431,10 @@ for i, issue in enumerate(issues, 1):
     try:
         result = create_ticket(issue, project_id, repo_label, args)
         created.append(result)
-        print(f"  Created: {result['identifier']} - {result['url']}")
+        # Use defensive access for API response fields
+        identifier = result.get('identifier', 'unknown')
+        url = result.get('url', 'N/A')
+        print(f"  Created: {identifier} - {url}")
     except Exception as e:
         failed.append({'issue': issue, 'error': str(e)})
         print(f"  Failed: {e}")
@@ -444,7 +447,11 @@ print(f"Failed: {len(failed)} tickets")
 if created:
     print(f"\n### Created Tickets\n")
     for t in created:
-        print(f"- [{t['identifier']}]({t['url']}) - {t['title'][:50]}")
+        # Use defensive access for API response fields
+        identifier = t.get('identifier', 'unknown')
+        url = t.get('url', '#')
+        title = t.get('title', 'Untitled')[:50]
+        print(f"- [{identifier}]({url}) - {title}")
 ```
 
 ---
