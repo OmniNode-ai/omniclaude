@@ -1,52 +1,8 @@
 #!/usr/bin/env python3
-"""
-Intelligence Event Client - Kafka-based Intelligence Discovery
-
-This module provides a Kafka client for event-based intelligence discovery,
-replacing hard-coded repository paths with event-driven pattern discovery.
-
-Key Features:
-- Request-response pattern with correlation tracking
-- Async producer/consumer using aiokafka
-- Timeout handling with graceful fallback
-- Health check for circuit breaker integration
-- Connection pooling and management
-- EVENT_BUS_INTEGRATION_GUIDE compliant event structure
-
-Event Flow:
-1. Client publishes omninode.intelligence.code-analysis.requested.v1 event
-2. ONEX Intelligence Adapter handler processes request
-3. Client waits for completed or failed response
-4. On timeout/error: graceful degradation with caller handling fallback
-
-EVENT_BUS_INTEGRATION_GUIDE Compliance:
-- Topic naming: {tenant}.{domain}.{entity}.{action}.v{major}
-- Complete event envelope with all required fields
-- Partition key: correlation_id for request→result ordering
-- Required Kafka headers: x-traceparent, x-correlation-id, x-causation-id, x-tenant, x-schema-hash
-- Full dotted event type notation in envelope
-
-Integration:
-- Uses EVENT_BUS_INTEGRATION_GUIDE event contracts (frozen envelope)
-- Compatible with the ONEX intelligence service's confluent-kafka handler (wire protocol)
-- Designed for request-response client usage (not 24/7 consumer service)
-
-Performance Targets:
-- Response time: <100ms p95
-- Timeout: 5000ms default (configurable)
-- Memory overhead: <20MB
-- Success rate: >95%
-
-Created: 2025-10-23
-Updated: 2025-11-13 (EVENT_BUS_INTEGRATION_GUIDE alignment)
-Reference: EVENT_INTELLIGENCE_INTEGRATION_PLAN.md Section 2.1
-          EVENT_BUS_INTEGRATION_GUIDE.md (event structure standards)
-"""
+"""Intelligence Event Client - Thin wrapper over RequestResponseWiring (OMN-1744)."""
 
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
 import os
 from datetime import UTC, datetime
@@ -54,9 +10,15 @@ from pathlib import Path
 from typing import Any, cast
 from uuid import uuid4
 
-from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
-from aiokafka.errors import KafkaError
 from omnibase_core.errors import EnumCoreErrorCode, ModelOnexError
+from omnibase_core.models.contracts.subcontracts import (
+    ModelReplyTopics,
+    ModelRequestResponseConfig,
+    ModelRequestResponseInstance,
+)
+from omnibase_infra.event_bus.event_bus_kafka import EventBusKafka
+from omnibase_infra.event_bus.models.config import ModelKafkaEventBusConfig
+from omnibase_infra.runtime.request_response_wiring import RequestResponseWiring
 
 from omniclaude.config import settings
 
@@ -64,44 +26,12 @@ logger = logging.getLogger(__name__)
 
 
 class IntelligenceEventClient:
-    """
-    Kafka client for intelligence event publishing and consumption.
+    """Kafka client for intelligence events using RequestResponseWiring."""
 
-    Provides request-response pattern with correlation tracking,
-    timeout handling, and graceful fallback for intelligence operations.
-
-    This client uses aiokafka for native async/await integration, perfect
-    for request-response patterns. It is wire-compatible with the ONEX
-    intelligence service's confluent-kafka handler.
-
-    Usage:
-        client = IntelligenceEventClient(
-            bootstrap_servers="localhost:9092",
-            enable_intelligence=True,
-            request_timeout_ms=5000,
-        )
-
-        await client.start()
-
-        try:
-            patterns = await client.request_pattern_discovery(
-                source_path="node_*_effect.py",
-                language="python",
-                timeout_ms=5000,
-            )
-        except TimeoutError:
-            # Graceful fallback to built-in patterns
-            patterns = fallback_patterns()
-        finally:
-            await client.stop()
-    """
-
-    # Kafka topic names (ONEX event bus architecture)
-    # Following EVENT_BUS_INTEGRATION_GUIDE standard naming: {tenant}.{domain}.{entity}.{action}.v{major}
-    # Environment prefix (dev/prod) should be in envelope, not topic name
     TOPIC_REQUEST = "omninode.intelligence.code-analysis.requested.v1"
     TOPIC_COMPLETED = "omninode.intelligence.code-analysis.completed.v1"
     TOPIC_FAILED = "omninode.intelligence.code-analysis.failed.v1"
+    _INSTANCE_NAME = "intelligence"
 
     def __init__(
         self,
@@ -110,710 +40,126 @@ class IntelligenceEventClient:
         request_timeout_ms: int = 5000,
         consumer_group_id: str | None = None,
     ):
-        """
-        Initialize intelligence event client.
-
-        Args:
-            bootstrap_servers: Kafka bootstrap servers
-                - External host: "localhost:9092" or "kafka.example.com:9092"
-                - Docker internal: "kafka:9092"
-            enable_intelligence: Enable event-based intelligence (feature flag)
-            request_timeout_ms: Default timeout for requests in milliseconds
-            consumer_group_id: Optional consumer group ID (default: auto-generated)
-        """
-        # Bootstrap servers - use centralized configuration if not provided
-        self.bootstrap_servers = (
-            bootstrap_servers or settings.get_effective_kafka_bootstrap_servers()
-        )
+        self.bootstrap_servers = bootstrap_servers or settings.get_effective_kafka_bootstrap_servers()
         if not self.bootstrap_servers:
             raise ModelOnexError(
-                message=(
-                    "bootstrap_servers must be provided or set via environment variables.\n"
-                    "Checked variables (in order):\n"
-                    "  1. KAFKA_BOOTSTRAP_SERVERS (general config)\n"
-                    "  2. KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS (intelligence-specific)\n"
-                    "  3. KAFKA_BROKERS (legacy compatibility)\n"
-                    "Example: KAFKA_BOOTSTRAP_SERVERS=localhost:9092\n"
-                    "Current values: KAFKA_BOOTSTRAP_SERVERS={}, KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS={}, KAFKA_BROKERS={}".format(
-                        getattr(settings, "kafka_bootstrap_servers", "not set"),
-                        os.getenv("KAFKA_INTELLIGENCE_BOOTSTRAP_SERVERS", "not set"),
-                        os.getenv("KAFKA_BROKERS", "not set"),
-                    )
-                ),
-                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
-                operation="__init__",
+                message="bootstrap_servers required", error_code=EnumCoreErrorCode.VALIDATION_ERROR, operation="__init__"
             )
         self.enable_intelligence = enable_intelligence
         self.request_timeout_ms = request_timeout_ms
-        self.consumer_group_id = consumer_group_id or f"omniclaude-intelligence-{uuid4().hex[:8]}"
-
-        self._producer: AIOKafkaProducer | None = None
-        self._consumer: AIOKafkaConsumer | None = None
-        self._consumer_task: asyncio.Task[None] | None = None  # Track background consumer task
+        self._environment = os.getenv("KAFKA_ENVIRONMENT", "dev")
+        self._event_bus: EventBusKafka | None = None
+        self._wiring: RequestResponseWiring | None = None
         self._started = False
-        self._pending_requests: dict[str, asyncio.Future[Any]] = {}
-        self._consumer_ready = asyncio.Event()  # Signal when consumer is polling
-
         self.logger = logging.getLogger(__name__)
 
     async def start(self) -> None:
-        """
-        Initialize Kafka producer and consumer.
-
-        Creates producer for publishing requests and consumer for receiving responses.
-        Should be called once before making requests.
-
-        Raises:
-            KafkaError: If Kafka connection fails
-        """
-        if self._started:
-            self.logger.debug("Intelligence event client already started")
+        if self._started or not self.enable_intelligence:
             return
-
-        if not self.enable_intelligence:
-            self.logger.info("Intelligence event client disabled via feature flag")
-            return
-
-        try:
-            self.logger.info(
-                f"Starting intelligence event client (broker: {self.bootstrap_servers})"
+        self.logger.info(f"Starting intelligence client (broker: {self.bootstrap_servers})")
+        config = ModelKafkaEventBusConfig(bootstrap_servers=self.bootstrap_servers, environment=self._environment)
+        self._event_bus = EventBusKafka(config)
+        await self._event_bus.connect()
+        self._wiring = RequestResponseWiring(
+            event_bus=self._event_bus, environment=self._environment,
+            app_name="omniclaude", bootstrap_servers=self.bootstrap_servers,
+        )
+        rr_config = ModelRequestResponseConfig(instances=[
+            ModelRequestResponseInstance(
+                name=self._INSTANCE_NAME, request_topic=self.TOPIC_REQUEST,
+                reply_topics=ModelReplyTopics(completed=self.TOPIC_COMPLETED, failed=self.TOPIC_FAILED),
+                timeout_seconds=self.request_timeout_ms // 1000,
             )
-
-            # Initialize producer
-            self._producer = AIOKafkaProducer(
-                bootstrap_servers=self.bootstrap_servers,
-                compression_type="gzip",
-                linger_ms=20,
-                acks="all",
-                api_version="auto",
-                request_timeout_ms=30000,
-                value_serializer=lambda v: json.dumps(v).encode("utf-8"),
-            )
-            await self._producer.start()
-
-            # Initialize consumer for response topics
-            self._consumer = AIOKafkaConsumer(
-                self.TOPIC_COMPLETED,
-                self.TOPIC_FAILED,
-                bootstrap_servers=self.bootstrap_servers,
-                group_id=self.consumer_group_id,
-                enable_auto_commit=True,
-                auto_offset_reset="earliest",  # CRITICAL: Changed from "latest" to fix race condition
-                # With random consumer groups per request, we need to see
-                # messages published before subscription completes
-                value_deserializer=lambda m: json.loads(m.decode("utf-8")),
-            )
-            await self._consumer.start()
-
-            # CRITICAL: Wait for consumer to have partition assignments
-            # This ensures consumer is ready to receive messages BEFORE we return
-            # Without this, there's a race condition where requests are published
-            # before the consumer finishes subscribing, causing missed responses
-            self.logger.info(
-                f"Waiting for consumer partition assignment (topics: {self.TOPIC_COMPLETED}, {self.TOPIC_FAILED})..."
-            )
-            max_wait_seconds = 10  # Increased from 5s for slow networks
-            start_time = asyncio.get_event_loop().time()
-            check_count = 0
-
-            while not self._consumer.assignment():
-                check_count += 1
-                await asyncio.sleep(0.1)
-                elapsed = asyncio.get_event_loop().time() - start_time
-
-                # Log progress every 1 second
-                if check_count % 10 == 0:
-                    self.logger.debug(
-                        f"Still waiting for partition assignment... ({elapsed:.1f}s elapsed)"
-                    )
-
-                if elapsed > max_wait_seconds:
-                    # Provide detailed error with troubleshooting guidance
-                    error_msg = (
-                        f"Consumer failed to get partition assignment after {max_wait_seconds}s.\n"
-                        f"Troubleshooting:\n"
-                        f"  1. Check Kafka broker is accessible: {self.bootstrap_servers}\n"
-                        f"  2. Verify topics exist: {self.TOPIC_COMPLETED}, {self.TOPIC_FAILED}\n"
-                        f"  3. Check consumer group permissions: {self.consumer_group_id}\n"
-                        f"  4. Review Kafka broker logs for connection issues\n"
-                        f"  5. Verify network connectivity to Kafka cluster"
-                    )
-                    self.logger.error(error_msg)
-                    raise TimeoutError(error_msg)
-
-            partition_count = len(self._consumer.assignment())
-            self.logger.info(
-                f"Consumer ready with {partition_count} partition(s): {self._consumer.assignment()}"
-            )
-
-            # Start background consumer task AFTER partition assignment confirmed
-            self._consumer_task = asyncio.create_task(self._consume_responses())
-
-            # CRITICAL FIX: Wait for consumer task to actually start polling
-            # This prevents race condition where requests are published before
-            # consumer is ready to receive responses
-            self.logger.info("Waiting for consumer task to start polling...")
-            consumer_ready_timeout = 5.0  # 5 seconds
-            try:
-                await asyncio.wait_for(self._consumer_ready.wait(), timeout=consumer_ready_timeout)
-                self.logger.info("Consumer task confirmed polling - ready for requests")
-            except TimeoutError:
-                error_msg = (
-                    f"Consumer task failed to start polling within {consumer_ready_timeout}s.\n"
-                    f"This indicates the consumer loop did not start properly."
-                )
-                self.logger.error(error_msg)
-                raise TimeoutError(error_msg)
-
-            self._started = True
-            self.logger.info("Intelligence event client started successfully")
-
-        except Exception as e:
-            self.logger.error(f"Failed to start intelligence event client: {e}")
-            await self.stop()
-            raise KafkaError(f"Failed to start Kafka client: {e}") from e
+        ])
+        await self._wiring.wire_request_response(rr_config)
+        self._started = True
+        self.logger.info("Intelligence event client started")
 
     async def stop(self) -> None:
-        """
-        Close Kafka connections gracefully.
-
-        Stops producer and consumer, cleans up pending requests.
-        Should be called when client is no longer needed.
-        """
         if not self._started:
             return
-
         self.logger.info("Stopping intelligence event client")
-
-        try:
-            # Cancel background consumer task
-            if self._consumer_task is not None and not self._consumer_task.done():
-                self.logger.debug("Cancelling background consumer task")
-                self._consumer_task.cancel()
-                try:
-                    await self._consumer_task
-                except asyncio.CancelledError:
-                    self.logger.debug("Consumer task cancelled successfully")
-                self._consumer_task = None
-
-            # Stop producer
-            if self._producer is not None:
-                await self._producer.stop()
-                self._producer = None
-
-            # Stop consumer
-            if self._consumer is not None:
-                await self._consumer.stop()
-                self._consumer = None
-
-            # Cancel pending requests
-            for _correlation_id, future in self._pending_requests.items():
-                if not future.done():
-                    future.set_exception(
-                        ModelOnexError(
-                            message="Client stopped while request pending",
-                            error_code=EnumCoreErrorCode.OPERATION_FAILED,
-                            operation="stop",
-                        )
-                    )
-            self._pending_requests.clear()
-
-            # Clear consumer ready flag for restart capability
-            self._consumer_ready.clear()
-
-            self._started = False
-            self.logger.info("Intelligence event client stopped successfully")
-
-        except Exception as e:
-            self.logger.error(f"Error stopping intelligence event client: {e}")
+        if self._wiring:
+            await self._wiring.cleanup()
+            self._wiring = None
+        if self._event_bus:
+            await self._event_bus.disconnect()
+            self._event_bus = None
+        self._started = False
 
     async def health_check(self) -> bool:
-        """
-        Check Kafka connection health.
-
-        Returns:
-            True if Kafka connection is healthy, False otherwise
-
-        Usage:
-            if await client.health_check():
-                patterns = await client.request_pattern_discovery(...)
-            else:
-                patterns = fallback_patterns()
-        """
-        if not self.enable_intelligence or not self._started:
-            return False
-
-        try:
-            # Simple health check: verify producer is connected
-            if self._producer is None:
-                return False
-
-            # Producer API doesn't have direct health check, but we can check metadata
-            # If producer is started successfully, it's healthy
-            return True
-
-        except Exception as e:
-            self.logger.warning(f"Health check failed: {e}")
-            return False
+        return self.enable_intelligence and self._started and self._wiring is not None
 
     async def request_pattern_discovery(
-        self,
-        source_path: str,
-        language: str,
-        timeout_ms: int | None = None,
+        self, source_path: str, language: str, timeout_ms: int | None = None,
     ) -> list[dict[str, Any]]:
-        """
-        Request pattern discovery via events.
-
-        This is the main method for discovering patterns from the
-        codebase using event-based communication.
-
-        Args:
-            source_path: Pattern to search for (e.g., "node_*_effect.py") or actual file path
-            language: Programming language (e.g., "python")
-            timeout_ms: Response timeout in milliseconds (default: request_timeout_ms)
-
-        Returns:
-            List of discovered patterns with metadata
-
-        Raises:
-            TimeoutError: If response not received within timeout
-            KafkaError: If Kafka communication fails
-            ModelOnexError: If client not started
-
-        Example:
-            patterns = await client.request_pattern_discovery(
-                source_path="node_*_effect.py",
-                language="python",
-                timeout_ms=5000,
-            )
-
-            for pattern in patterns:
-                print(f"Found: {pattern['file_path']} (confidence: {pattern['confidence']})")
-        """
         if not self._started:
             raise ModelOnexError(
-                message="Client not started. Call start() first.",
-                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
-                operation="request_pattern_discovery",
+                message="Client not started", error_code=EnumCoreErrorCode.VALIDATION_ERROR, operation="request_pattern_discovery"
             )
-
-        timeout = timeout_ms or self.request_timeout_ms
-
-        # Read file content if source_path is an actual file (not a pattern)
         content = None
-        file_path = Path(source_path)
-        if file_path.exists() and file_path.is_file():
+        fp = Path(source_path)
+        if fp.exists() and fp.is_file():
             try:
-                content = file_path.read_text(encoding="utf-8")
-                self.logger.debug(f"Read file content from {source_path} ({len(content)} bytes)")
-            except Exception as e:
-                self.logger.warning(
-                    f"Failed to read file {source_path}: {e}. Proceeding with empty content."
-                )
-
-        # Use PATTERN_EXTRACTION operation type for pattern discovery
+                content = fp.read_text(encoding="utf-8")
+            except Exception:
+                pass
         result = await self.request_code_analysis(
-            content=content,
-            source_path=source_path,
-            language=language,
-            options={
-                "operation_type": "PATTERN_EXTRACTION",
-                "include_patterns": True,
-                "include_metrics": False,
-            },
-            timeout_ms=timeout,
+            content=content, source_path=source_path, language=language,
+            options={"operation_type": "PATTERN_EXTRACTION", "include_patterns": True}, timeout_ms=timeout_ms,
         )
-
-        # Extract patterns list from result dict
         return cast(list[dict[str, Any]], result.get("patterns", []))
 
     async def request_code_analysis(
-        self,
-        content: str | None,
-        source_path: str,
-        language: str,
-        options: dict[str, Any] | None = None,
-        timeout_ms: int | None = None,
+        self, content: str | None, source_path: str, language: str,
+        options: dict[str, Any] | None = None, timeout_ms: int | None = None,
     ) -> dict[str, Any]:
-        """
-        Request comprehensive code analysis via events.
-
-        More general method that supports all analysis operation types.
-        Use request_pattern_discovery() for simpler pattern discovery use case.
-
-        Args:
-            content: Code content to analyze (None to read from source_path)
-            source_path: File path for context
-            language: Programming language
-            options: Analysis options dictionary
-            timeout_ms: Response timeout in milliseconds
-
-        Returns:
-            Analysis results dictionary containing:
-                - patterns: List of discovered patterns (if requested)
-                - quality_score: Overall quality score
-                - onex_compliance: ONEX compliance score
-                - issues: List of identified issues
-                - recommendations: List of recommendations
-
-        Raises:
-            TimeoutError: If response not received within timeout
-            KafkaError: If Kafka communication fails
-            ModelOnexError: If client not started
-
-        Example:
-            result = await client.request_code_analysis(
-                content="def hello(): pass",
-                source_path="test.py",
-                language="python",
-                options={
-                    "operation_type": "QUALITY_ASSESSMENT",
-                    "include_metrics": True,
-                },
-                timeout_ms=10000,
-            )
-        """
-        if not self._started:
+        if not self._started or self._wiring is None:
             raise ModelOnexError(
-                message="Client not started. Call start() first.",
-                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
-                operation="request_code_analysis",
+                message="Client not started", error_code=EnumCoreErrorCode.VALIDATION_ERROR, operation="request_code_analysis"
             )
-
-        timeout = timeout_ms or self.request_timeout_ms
-
-        # Create request payload
+        timeout_seconds = (timeout_ms or self.request_timeout_ms) // 1000
         correlation_id = str(uuid4())
-        request_payload = self._create_request_payload(
-            correlation_id=correlation_id,
-            content=content,
-            source_path=source_path,
-            language=language,
-            options=options or {},
-        )
-
-        # Publish request and wait for response
-        try:
-            self.logger.debug(
-                f"Publishing code analysis request (correlation_id: {correlation_id}, source_path: {source_path})"
-            )
-
-            result = await self._publish_and_wait(
-                correlation_id=correlation_id,
-                payload=request_payload,
-                timeout_ms=timeout,
-            )
-
-            self.logger.debug(f"Code analysis completed (correlation_id: {correlation_id})")
-
-            return result
-
-        except TimeoutError:
-            self.logger.warning(
-                f"Code analysis request timeout (correlation_id: {correlation_id}, timeout: {timeout}ms)"
-            )
-            raise TimeoutError(
-                f"Request timeout after {timeout}ms (correlation_id: {correlation_id})"
-            )
-
-        except Exception as e:
-            self.logger.error(
-                f"Code analysis request failed (correlation_id: {correlation_id}): {e}"
-            )
-            raise
-
-    def _create_request_payload(
-        self,
-        correlation_id: str,
-        content: str | None,
-        source_path: str,
-        language: str,
-        options: dict[str, Any],
-    ) -> dict[str, Any]:
-        """
-        Build request payload compatible with EVENT_BUS_INTEGRATION_GUIDE standards.
-
-        Creates a complete event envelope with all required fields following
-        the frozen envelope structure from EVENT_BUS_INTEGRATION_GUIDE.
-
-        Args:
-            correlation_id: Unique request identifier
-            content: Optional code content
-            source_path: File path or pattern
-            language: Programming language
-            options: Analysis options
-
-        Returns:
-            Event envelope dictionary with complete structure
-        """
-        # Extract operation type from options (default: PATTERN_EXTRACTION)
-        operation_type = options.get("operation_type", "PATTERN_EXTRACTION")
-
-        # Get environment from settings or default to "dev"
-        environment = os.getenv("ENVIRONMENT", "dev")
-
-        # Build complete event envelope following EVENT_BUS_INTEGRATION_GUIDE standard
-        # Reference: docs/EVENT_BUS_INTEGRATION_GUIDE.md section "Envelope Fields (Frozen)"
-        envelope = {
-            # Full dotted event type (not simplified)
-            "event_type": "omninode.intelligence.code-analysis.requested.v1",
-            # Unique event identifier
-            "event_id": str(uuid4()),
-            # RFC3339 timestamp
-            "timestamp": datetime.now(UTC).isoformat(),
-            # Tenant ID for multi-tenant isolation (default: "default" for single-tenant)
-            "tenant_id": os.getenv("TENANT_ID", "default"),
-            # Namespace for event categorization
-            "namespace": "omninode",
-            # Source service name
-            "source": "omniclaude",
-            # Correlation ID for request-response tracking
-            "correlation_id": correlation_id,
-            # Causation ID for event chain tracking (same as correlation_id for initial request)
-            "causation_id": correlation_id,
-            # Schema reference for validation
+        payload = {
+            "event_type": self.TOPIC_REQUEST, "event_id": str(uuid4()),
+            "timestamp": datetime.now(UTC).isoformat(), "tenant_id": os.getenv("TENANT_ID", "default"),
+            "namespace": "omninode", "source": "omniclaude",
+            "correlation_id": correlation_id, "causation_id": correlation_id,
             "schema_ref": "registry://omninode/intelligence/code_analysis_requested/v1",
-            # Domain-specific payload (validated against schema_ref)
             "payload": {
-                "source_path": source_path,
-                "content": content,  # Keep None as None for pattern discovery
-                "language": language,
-                "operation_type": operation_type,
-                "options": options,
-                "project_id": "omniclaude",
-                "user_id": "system",
-                "environment": environment,  # Environment in payload, not topic name
+                "source_path": source_path, "content": content, "language": language,
+                "operation_type": (options or {}).get("operation_type", "PATTERN_EXTRACTION"),
+                "options": options or {}, "project_id": "omniclaude", "user_id": "system", "environment": self._environment,
             },
         }
-
-        return envelope
-
-    async def _publish_and_wait(
-        self,
-        correlation_id: str,
-        payload: dict[str, Any],
-        timeout_ms: int,
-    ) -> dict[str, Any]:
-        """
-        Publish request and wait for response with timeout.
-
-        Implements request-response pattern with EVENT_BUS_INTEGRATION_GUIDE compliance:
-        1. Create future for this correlation_id
-        2. Publish request event with partition key and headers
-        3. Wait for response with timeout
-        4. Return response or raise timeout
-
-        Args:
-            correlation_id: Request correlation ID
-            payload: Request payload (complete event envelope)
-            timeout_ms: Response timeout in milliseconds
-
-        Returns:
-            Response payload
-
-        Raises:
-            asyncio.TimeoutError: If timeout occurs
-            KafkaError: If Kafka operation fails
-        """
-        # Create future for this request
-        future: asyncio.Future[Any] = asyncio.Future()
-        self._pending_requests[correlation_id] = future
-
         try:
-            # Publish request with partition key and headers
-            if self._producer is None:
-                raise ModelOnexError(
-                    message="Producer not initialized. Call start() first.",
-                    error_code=EnumCoreErrorCode.VALIDATION_ERROR,
-                    operation="_publish_and_wait",
-                )
-
-            # Partition key: Use correlation_id for request→result ordering
-            # Reference: EVENT_BUS_INTEGRATION_GUIDE section "Partition Key Policy"
-            partition_key = correlation_id.encode("utf-8")
-
-            # Build required Kafka headers
-            # Reference: EVENT_BUS_INTEGRATION_GUIDE section "Envelope Fields (Frozen)"
-            headers = [
-                # W3C trace context (simplified for now, full implementation would use OpenTelemetry)
-                (
-                    "x-traceparent",
-                    f"00-{correlation_id.replace('-', '')}-0000000000000000-01".encode(),
-                ),
-                # Correlation ID for request tracking
-                ("x-correlation-id", correlation_id.encode("utf-8")),
-                # Causation ID for event chain tracking (same as correlation_id for initial request)
-                ("x-causation-id", correlation_id.encode("utf-8")),
-                # Tenant ID for ACL enforcement (matches envelope)
-                ("x-tenant", payload.get("tenant_id", "default").encode("utf-8")),
-                # Schema hash for validation (content hash of schema - simplified for now)
-                ("x-schema-hash", payload.get("schema_ref", "").encode("utf-8")),
-            ]
-
-            # Publish with partition key and headers
-            await self._producer.send_and_wait(
-                self.TOPIC_REQUEST,
-                value=payload,
-                key=partition_key,
-                headers=headers,
+            result = await self._wiring.send_request(
+                instance_name=self._INSTANCE_NAME, payload=payload, timeout_seconds=timeout_seconds,
             )
-
-            # Wait for response with timeout
-            result = await asyncio.wait_for(
-                future,
-                timeout=timeout_ms / 1000.0,  # Convert to seconds
-            )
-
-            return cast(dict[str, Any], result)
-
-        finally:
-            # Clean up pending request
-            self._pending_requests.pop(correlation_id, None)
-
-    async def _consume_responses(self) -> None:
-        """
-        Background task to consume response events.
-
-        Continuously polls for CODE_ANALYSIS_COMPLETED and CODE_ANALYSIS_FAILED
-        events, matches them to pending requests by correlation_id, and resolves
-        the corresponding futures.
-
-        This task runs in the background for the lifetime of the client.
-        """
-        self.logger.info("Starting response consumer task")
-        self.logger.info(
-            f"Consumer subscribed to topics: {self.TOPIC_COMPLETED}, {self.TOPIC_FAILED}"
-        )
-
-        try:
-            if self._consumer is None:
-                raise ModelOnexError(
-                    message="Consumer not initialized. Call start() first.",
-                    error_code=EnumCoreErrorCode.VALIDATION_ERROR,
-                    operation="_consume_responses",
-                )
-
-            # Signal that consumer is ready to poll (fixes race condition)
-            self._consumer_ready.set()
-            self.logger.debug("Consumer task entered polling loop - signaling ready")
-
-            async for msg in self._consumer:
-                self.logger.debug(
-                    f"[CONSUMER] Received message: topic={msg.topic}, partition={msg.partition}, offset={msg.offset}"
-                )
-                try:
-                    # Parse response
-                    response = msg.value
-
-                    # Extract correlation_id
-                    correlation_id = response.get("correlation_id")
-                    if not correlation_id:
-                        self.logger.warning(
-                            f"Response missing correlation_id, skipping: {response}"
-                        )
-                        continue
-
-                    # Find pending request
-                    future = self._pending_requests.get(correlation_id)
-                    if future is None:
-                        self.logger.debug(
-                            f"No pending request for correlation_id: {correlation_id}"
-                        )
-                        continue
-
-                    # Determine event type (using full dotted notation)
-                    event_type = response.get("event_type", "")
-
-                    # Check for completion event (full dotted notation)
-                    if (
-                        event_type == "omninode.intelligence.code-analysis.completed.v1"
-                        or event_type == "CODE_ANALYSIS_COMPLETED"  # Backward compatibility
-                        or msg.topic == self.TOPIC_COMPLETED
-                    ):
-                        # Success response
-                        payload = response.get("payload", {})
-                        if not future.done():
-                            future.set_result(payload)
-                            self.logger.debug(
-                                f"Completed request (correlation_id: {correlation_id})"
-                            )
-
-                    # Check for failure event (full dotted notation)
-                    elif (
-                        event_type == "omninode.intelligence.code-analysis.failed.v1"
-                        or event_type == "CODE_ANALYSIS_FAILED"  # Backward compatibility
-                        or msg.topic == self.TOPIC_FAILED
-                    ):
-                        # Error response
-                        payload = response.get("payload", {})
-                        error_code = payload.get("error_code", "UNKNOWN")
-                        error_message = payload.get("error_message", "Analysis failed")
-
-                        if not future.done():
-                            future.set_exception(KafkaError(f"{error_code}: {error_message}"))
-                            self.logger.warning(
-                                f"Failed request (correlation_id: {correlation_id}, error: {error_code})"
-                            )
-
-                    else:
-                        self.logger.warning(
-                            f"Unknown event type: {event_type} (correlation_id: {correlation_id})"
-                        )
-
-                except Exception as e:
-                    self.logger.error(f"Error processing response: {e}", exc_info=True)
-                    continue
-
-        except asyncio.CancelledError:
-            self.logger.debug("Response consumer task cancelled")
-            raise
-
+            return cast(dict[str, Any], result.get("payload", result))
         except Exception as e:
-            self.logger.error(f"Response consumer task failed: {e}", exc_info=True)
+            if "timeout" in str(e).lower():
+                raise TimeoutError(f"Request timeout ({correlation_id})") from e
             raise
 
-        finally:
-            self.logger.debug("Response consumer task stopped")
 
-
-# Convenience context manager for automatic start/stop
 class IntelligenceEventClientContext:
-    """
-    Context manager for automatic client lifecycle management.
-
-    Usage:
-        async with IntelligenceEventClientContext() as client:
-            patterns = await client.request_pattern_discovery(...)
-    """
+    """Context manager for automatic client lifecycle."""
 
     def __init__(
-        self,
-        bootstrap_servers: str | None = None,
-        enable_intelligence: bool = True,
-        request_timeout_ms: int = 5000,
+        self, bootstrap_servers: str | None = None, enable_intelligence: bool = True, request_timeout_ms: int = 5000,
     ):
         self.client = IntelligenceEventClient(
-            bootstrap_servers=bootstrap_servers,
-            enable_intelligence=enable_intelligence,
-            request_timeout_ms=request_timeout_ms,
+            bootstrap_servers=bootstrap_servers, enable_intelligence=enable_intelligence, request_timeout_ms=request_timeout_ms,
         )
 
     async def __aenter__(self) -> IntelligenceEventClient:
         await self.client.start()
         return self.client
 
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: Any,
-    ) -> bool:
+    async def __aexit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: Any) -> bool:
         await self.client.stop()
         return False
 
 
-__all__ = [
-    "IntelligenceEventClient",
-    "IntelligenceEventClientContext",
-]
+__all__ = ["IntelligenceEventClient", "IntelligenceEventClientContext"]
