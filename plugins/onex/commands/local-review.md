@@ -58,6 +58,7 @@ max_iterations = <from args or 10>
 commits_made = []
 total_issues_fixed = 0
 nit_count = 0  # Track deferred nits for final summary
+failed_fixes = []  # Track {file, line, description} of issues that failed to fix (do not retry)
 ```
 
 **4. Display configuration**:
@@ -278,6 +279,16 @@ goto Phase 3
 
 ### Step 2.4: Fix Issues
 
+**Pre-filter previously failed issues**:
+```python
+# Filter out issues that already failed in previous iterations (do not retry)
+for severity in [critical, major, minor]:
+    issues[severity] = [
+        issue for issue in issues[severity]
+        if (issue.file, issue.line) not in [(f.file, f.line) for f in failed_fixes]
+    ]
+```
+
 For each severity level (critical first, then major, then minor), dispatch a `polymorphic-agent`:
 
 **IMPORTANT**: Always use `subagent_type="polymorphic-agent"` for fixes - this ensures ONEX capabilities and proper observability.
@@ -305,7 +316,11 @@ Fix the following {severity} issues:
 
 **Fix Agent Failure Handling**: If the fix agent crashes, times out, or fails:
 1. Log the error with details
-2. Mark affected issues as "needs manual fix" (do not retry)
+2. Add affected issues to `failed_fixes` list (do not retry in subsequent iterations):
+   ```python
+   for issue in affected_issues:
+       failed_fixes.append({"file": issue.file, "line": issue.line, "description": issue.description})
+   ```
 3. Continue to next severity level (attempt remaining fixes)
 4. If ALL fixes fail:
    ```
@@ -440,10 +455,17 @@ uncommitted = "--uncommitted" in args
 no_fix = "--no-fix" in args
 no_commit = "--no-commit" in args
 
-# Extract --since value
+# Extract --since value and validate
 if "--since" in args:
     idx = args.index("--since")
-    since_ref = args[idx + 1] if idx + 1 < len(args) else None
+    if idx + 1 >= len(args) or args[idx + 1].startswith("--"):
+        print("Error: --since requires a ref argument")
+        exit(1)
+    since_ref = args[idx + 1]
+    # Validate the ref exists
+    if not git_rev_parse_verify(since_ref):  # git rev-parse --verify {since_ref} >/dev/null 2>&1
+        print(f"Error: Invalid ref '{since_ref}'. Use branch name or commit SHA.")
+        exit(1)
 
 # Extract --max-iterations value
 if "--max-iterations" in args:
