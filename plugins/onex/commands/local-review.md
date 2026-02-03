@@ -226,14 +226,23 @@ Task(
 )
 ```
 
-### Step 2.5: Commit Fixes (if not `--no-commit`)
+### Step 2.5: Stage and Commit Fixes
 
-Group fixes by severity and commit:
+**Always stage fixes** (regardless of `--no-commit`):
 
 ```bash
 # Stage fixed files
 git add {fixed_files}
+```
 
+**Track issues fixed** (regardless of `--no-commit`):
+```
+total_issues_fixed += count
+```
+
+**Commit** (if not `--no-commit`):
+
+```bash
 # Commit with descriptive message
 git commit -m "fix(review): [{severity}] {summary}
 
@@ -243,7 +252,7 @@ git commit -m "fix(review): [{severity}] {summary}
 Review iteration: {iteration+1}/{max_iterations}"
 ```
 
-**Track commit**:
+**Track commit** (only when committing):
 ```
 commits_made.append({
   "hash": git rev-parse --short HEAD,
@@ -251,7 +260,6 @@ commits_made.append({
   "summary": summary,
   "issues_fixed": count
 })
-total_issues_fixed += count
 ```
 
 ### Step 2.6: Check Loop Condition
@@ -286,12 +294,35 @@ else:
 **Status**: {status_indicator}
 ```
 
-**Status indicators**:
-- `✅ Clean - Ready to push` (no Critical/Major/Minor on final review; nits are OK)
+**Status indicators** (choose based on total_issues_fixed and mode):
+- `✅ Clean - No issues found` (no Critical/Major/Minor on first review, 0 issues fixed)
+- `✅ Clean - Ready to push` (all issues fixed and committed)
+- `⚪ Clean with nits - No changes needed` (only nits found, 0 issues fixed)
+- `⚪ Clean with nits - Ready to push` (blocking issues fixed and committed, nits remain)
 - `❌ Max iterations reached - {n} blocking issues remain` (hit limit with Critical/Major/Minor remaining)
 - `📋 Report only - {n} blocking issues found` (--no-fix mode)
-- `📝 Changes staged - review before commit` (--no-commit mode)
-- `⚪ Clean with nits - Ready to push` (only nits remain, which are optional)
+- `📝 Changes staged - review before commit` (--no-commit mode, issues were fixed but not committed)
+
+**Status selection logic**:
+```
+if --no-fix:
+    "📋 Report only - {n} blocking issues found"
+elif blocking_issues_remain:
+    "❌ Max iterations reached - {n} blocking issues remain"
+elif total_issues_fixed == 0:
+    # No blocking issues found to fix (only nits which are optional)
+    if nits_remain:
+        "⚪ Clean with nits - No changes needed"
+    else:
+        "✅ Clean - No issues found"
+elif --no-commit:
+    # Issues were fixed but not committed (staged only)
+    "📝 Changes staged - review before commit"
+elif nits_remain:
+    "⚪ Clean with nits - Ready to push"
+else:
+    "✅ Clean - Ready to push"
+```
 
 ---
 
