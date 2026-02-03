@@ -91,9 +91,7 @@ class IntelligenceEventClient:
             raise
 
     async def stop(self) -> None:
-        if not self._started:
-            return
-        self.logger.info("Stopping intelligence event client")
+        """Close connections gracefully. Safe to call even if start() failed partway."""
         if self._wiring:
             await self._wiring.cleanup()
             self._wiring = None
