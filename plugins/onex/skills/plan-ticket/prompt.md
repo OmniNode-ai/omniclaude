@@ -520,8 +520,8 @@ if project_name and project_name != "None":
 
 Execute:
 ```python
-# Use the Skill tool with the constructed args
-Skill(skill="create-ticket", args=args)
+# Use the Skill tool with the fully-qualified command name
+Skill(skill="onex:create-ticket", args=args)
 ```
 
 ### Report success:
