@@ -146,15 +146,17 @@ def parse_issue_line(line: str) -> dict | None:
     import re
 
     # Pattern: - **file:line** - description [`keyword`]
-    pattern = r'^- \*\*([^:]+):(\d+)\*\* - (.+?)(?:\s*\[`([^`]+)`\])?$'
+    # Line number is optional to handle issues without specific line references
+    pattern = r'^- \*\*([^:]+)(?::(\d+))?\*\* - (.+?)(?:\s*\[`([^`]+)`\])?$'
     match = re.match(pattern, line.strip())
 
     if not match:
         return None
 
+    line_num = match.group(2)
     return {
         "file": match.group(1),
-        "line": int(match.group(2)),
+        "line": int(line_num) if line_num else None,
         "description": match.group(3).strip(),
         "keyword": match.group(4) or "unspecified"
     }
@@ -168,6 +170,10 @@ def parse_issue_line(line: str) -> dict | None:
 # Fetch all projects (use high limit to avoid missing projects in large orgs)
 projects = mcp__linear-server__list_projects(limit=200)
 
+# Handle empty workspace
+if len(projects) == 0:
+    raise ValueError("No projects found in Linear workspace. Please create a project first.")
+
 # Fuzzy match
 query = args.project.lower()
 matches = [p for p in projects if query in p['name'].lower()]
@@ -177,8 +183,8 @@ if len(projects) >= 200:
     print(f"Note: {len(projects)} projects found. If your project isn't listed, try a more specific name.")
 
 if len(matches) == 0:
-    # List available projects and let user select
-    print("No matching projects found. Available projects:")
+    # No projects match query - list available and let user select
+    print(f"No projects match '{query}'. Available projects:")
     project_options = projects[:4]  # Limit to 4 for AskUserQuestion
     for p in project_options:
         print(f"  - {p['name']}")
