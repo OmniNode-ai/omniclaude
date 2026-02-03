@@ -286,12 +286,34 @@ else:
 **Status**: {status_indicator}
 ```
 
-**Status indicators**:
-- `✅ Clean - Ready to push` (no Critical/Major/Minor on final review; nits are OK)
+**Status indicators** (choose based on commits_made count):
+- `✅ Clean - No issues found` (no Critical/Major/Minor on first review, 0 commits made)
+- `✅ Clean - Ready to push` (all issues fixed, commits made)
+- `⚪ Clean with nits - No changes needed` (only nits found, 0 commits made)
+- `⚪ Clean with nits - Ready to push` (blocking issues fixed, nits remain, commits made)
 - `❌ Max iterations reached - {n} blocking issues remain` (hit limit with Critical/Major/Minor remaining)
 - `📋 Report only - {n} blocking issues found` (--no-fix mode)
 - `📝 Changes staged - review before commit` (--no-commit mode)
-- `⚪ Clean with nits - Ready to push` (only nits remain, which are optional)
+
+**Status selection logic**:
+```
+if --no-fix:
+    "📋 Report only - {n} blocking issues found"
+elif --no-commit:
+    "📝 Changes staged - review before commit"
+elif blocking_issues_remain:
+    "❌ Max iterations reached - {n} blocking issues remain"
+elif len(commits_made) == 0:
+    if nits_remain:
+        "⚪ Clean with nits - No changes needed"
+    else:
+        "✅ Clean - No issues found"
+else:  # commits were made
+    if nits_remain:
+        "⚪ Clean with nits - Ready to push"
+    else:
+        "✅ Clean - Ready to push"
+```
 
 ---
 
