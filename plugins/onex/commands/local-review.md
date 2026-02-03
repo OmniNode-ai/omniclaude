@@ -48,7 +48,15 @@ Parse arguments from `$ARGUMENTS`:
 **2. Detect base reference** (if `--since` not provided):
 ```bash
 # Try to find the merge-base with remote main/master
-git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD origin/master 2>/dev/null || { echo "Warning: Could not find merge-base, using HEAD~10" >&2; echo "HEAD~10"; }
+git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD origin/master 2>/dev/null || {
+    if git rev-parse --verify HEAD~10 >/dev/null 2>&1; then
+        echo "Warning: Could not find merge-base, using HEAD~10" >&2
+        echo "HEAD~10"
+    else
+        echo "Warning: Could not find merge-base, using initial commit" >&2
+        git rev-list --max-parents=0 HEAD 2>/dev/null || echo "HEAD"
+    fi
+}
 ```
 
 **3. Initialize tracking state**:
@@ -86,11 +94,17 @@ This step uses a two-step diff approach to capture all relevant changes:
 ```bash
 # Get changed files
 if --uncommitted:
-    files=$(git diff --name-only)
+    # Capture both unstaged and staged (but uncommitted) changes
+    unstaged=$(git diff --name-only)
+    staged=$(git diff --cached --name-only)
+    files=$(echo -e "$unstaged\n$staged" | sort -u | grep -v '^$')
 else:
     # Combine committed and uncommitted changes, then deduplicate
     committed=$(git diff --name-only {base_ref}..HEAD)
-    uncommitted=$(git diff --name-only)
+    # Capture both unstaged and staged (but uncommitted) changes
+    unstaged=$(git diff --name-only)
+    staged=$(git diff --cached --name-only)
+    uncommitted=$(echo -e "$unstaged\n$staged" | sort -u | grep -v '^$')
     files=$(echo -e "$committed\n$uncommitted" | sort -u | grep -v '^$')
 fi
 
@@ -126,11 +140,13 @@ You are reviewing local code changes for production readiness.
 **Mode**: {--uncommitted | all changes}
 
 # If --uncommitted mode:
-Run: git diff -- {files}  # Only uncommitted changes
+Run: git diff -- {files}  # Unstaged changes
+Also run: git diff --cached -- {files}  # Staged but uncommitted changes
 
 # If all changes mode (default):
 Run: git diff {base_ref}..HEAD -- {files}  # Committed changes
-Also run: git diff -- {files}  # Plus any uncommitted changes
+Also run: git diff -- {files}  # Unstaged changes
+Also run: git diff --cached -- {files}  # Staged but uncommitted changes
 
 Read each changed file fully to understand context.
 
@@ -216,8 +232,9 @@ If no issues found, return: {\"critical\": [], \"major\": [], \"minor\": [], \"n
 2. Assign severity and keyword based on description content:
    - "critical/security/crash/injection/vulnerability" -> critical, keyword="extracted:critical"
    - "bug/error/logic/incorrect/fails/broken" -> major, keyword="extracted:major"
+   - "should/missing/incomplete/edge case/documentation" -> minor, keyword="extracted:minor"
    - "nit/consider/suggestion/optional/style/formatting" -> nit, keyword="extracted:nit"
-   - else -> minor, keyword="extracted:minor"
+   - else -> minor, keyword="extracted:unknown"
 3. **If extraction succeeds** (finds at least one issue):
    - Use extracted issues and proceed normally to Step 2.3 (display issues)
 4. **If extraction fails** (no recognizable patterns):
@@ -255,7 +272,9 @@ If no issues found, return: {\"critical\": [], \"major\": [], \"minor\": [], \"n
 **Merge Status**: {Ready | Blocked by N issues}
 ```
 
-**Track nit count**: After successfully parsing the review response (not on PARSE_FAILED or AGENT_FAILED), update `nit_count += len(issues["nit"])` for the final summary.
+**Track nit count**: After successfully parsing the review response (not on PARSE_FAILED or AGENT_FAILED),
+record the final nit count: `nit_count = len(issues["nit"])` (replaces previous value, not cumulative).
+This represents nits remaining at the end of the review loop.
 
 **Early Exit Conditions** (each increments counter before exiting):
 
