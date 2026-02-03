@@ -111,21 +111,25 @@ def parse_review_file(path: str) -> dict:
     current_severity = None
 
     for line in content.split('\n'):
-        line_lower = line.lower()
-        if 'critical' in line_lower:
-            current_severity = 'critical'
-        elif 'major' in line_lower:
-            current_severity = 'major'
-        elif 'minor' in line_lower:
-            current_severity = 'minor'
-        elif 'nit' in line_lower:
-            current_severity = 'nit'
-        elif line.startswith('- **') and current_severity:
+        # Check for issue lines first (before severity detection)
+        # This prevents issues with descriptions like "critical bug" from being misclassified
+        if line.startswith('- **') and current_severity:
             # Parse: - **file:line** - description [`keyword`]
             # Extract: {"file": str, "line": int, "description": str, "keyword": str}
             issue = parse_issue_line(line)
             if issue:
                 issues[current_severity].append(issue)
+        else:
+            # Check for severity headers (lines that aren't issues)
+            line_lower = line.lower()
+            if 'critical' in line_lower:
+                current_severity = 'critical'
+            elif 'major' in line_lower:
+                current_severity = 'major'
+            elif 'minor' in line_lower:
+                current_severity = 'minor'
+            elif 'nit' in line_lower:
+                current_severity = 'nit'
 
     return issues
 
