@@ -10,6 +10,7 @@ Part of OMN-1860: Architecture handshake injection.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -94,8 +95,6 @@ class TestFindHandshake:
 
     def test_find_handshake_none_uses_cwd(self, tmp_path: Path) -> None:
         """When project_path is None, uses current working directory."""
-        import os
-
         # Save current directory
         original_cwd = os.getcwd()
 
@@ -230,7 +229,9 @@ class TestCliMain:
 
         # Should always exit 0 for hook compatibility
         assert result.returncode == 0, (
-            f"CLI returned {result.returncode}: {result.stderr}"
+            f"CLI returned {result.returncode}\n"
+            f"stdout: {result.stdout}\n"
+            f"stderr: {result.stderr}"
         )
 
         return json.loads(result.stdout)
