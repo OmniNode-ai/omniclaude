@@ -86,7 +86,9 @@ fi
 # Filter to matching glob pattern
 ```
 
-**If no changes**: Report "No changes to review" and exit.
+**If no changes**:
+- If `iteration == 0` and `commits_made == []`: Report "No changes to review. Working tree clean." and exit.
+- Otherwise: Skip to Phase 3 (show summary of work completed in previous iterations).
 
 ### Step 2.2: Run Code Review
 
@@ -267,7 +269,7 @@ else:
 
 **Status indicators**:
 - `Clean - Ready to push` (no issues on final review)
-- `Max iterations reached - {n} issues remain` (hit limit)
+- `Max iterations reached - manual review recommended` (hit limit, unknown remaining issues)
 - `Report only - {n} issues found` (--no-fix mode)
 - `Changes staged - review before commit` (--no-commit mode)
 - `Parse failed - manual review needed` (review response couldn't be parsed)
@@ -350,10 +352,10 @@ Review iteration: {current}/{max}
 | Review agent failure | Log error, mark iteration as `AGENT_FAILED`, increment counter via Step 2.3, then exit to Phase 3 with status "Agent failed - {error}. Manual review required." |
 | Fix agent failure | Log error, mark issue as "needs manual fix" |
 | Malformed JSON response | Try text extraction; if fails, mark `PARSE_FAILED` (see Fallback) |
-| Commit failure (general) | Log error, files remain staged for manual commit |
-| Commit failure (hooks) | Report hook output, suggest `--no-verify` if appropriate |
-| Commit failure (conflicts) | "Merge conflict detected - resolve manually before continuing" |
-| Commit failure (permissions) | "Permission denied - check file permissions" |
+| Commit failure (general) | Log error, increment counter, files remain staged, exit to Phase 3 |
+| Commit failure (hooks) | Report hook output, increment counter, suggest `--no-verify`, exit to Phase 3 |
+| Commit failure (conflicts) | Log "Merge conflict detected", increment counter, exit to Phase 3 |
+| Commit failure (permissions) | Log "Permission denied", increment counter, exit to Phase 3 |
 | Stage failure (git add) | Log error, report which files couldn't be staged |
 
 ---
