@@ -194,7 +194,7 @@ if len(matches) == 0:
         questions=[{
             "question": "Select a project from the list:",
             "header": "Project",
-            "options": [{"label": p['name'], "description": p.get('description', '')[:50]} for p in project_options],
+            "options": [{"label": p['name'], "description": (p.get('description') or '')[:50]} for p in project_options],
             "multiSelect": False
         }]
     )
@@ -217,7 +217,7 @@ else:
         questions=[{
             "question": f"Multiple projects match '{args.project}'. Which one?",
             "header": "Project",
-            "options": [{"label": p['name'], "description": p.get('description', '')[:50]} for p in display_matches],
+            "options": [{"label": p['name'], "description": (p.get('description') or '')[:50]} for p in display_matches],
             "multiSelect": False
         }]
     )
