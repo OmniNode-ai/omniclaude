@@ -147,7 +147,8 @@ def parse_issue_line(line: str) -> dict | None:
 
     # Pattern: - **file:line** - description [`keyword`]
     # Line number is optional to handle issues without specific line references
-    pattern = r'^- \*\*([^:]+)(?::(\d+))?\*\* - (.+?)(?:\s*\[`([^`]+)`\])?$'
+    # Use greedy match up to last colon followed by digits (handles Windows C:\paths)
+    pattern = r'^- \*\*(.+?)(?::(\d+))?\*\* - (.+?)(?:\s*\[`([^`]+)`\])?$'
     match = re.match(pattern, line.strip())
 
     if not match:
@@ -174,7 +175,7 @@ projects = mcp__linear-server__list_projects(limit=200)
 if len(projects) == 0:
     raise ValueError("No projects found in Linear workspace. Please create a project first.")
 
-# Fuzzy match
+# Substring match (case-insensitive)
 query = args.project.lower()
 matches = [p for p in projects if query in p['name'].lower()]
 
@@ -184,8 +185,8 @@ if len(projects) >= 200:
 
 if len(matches) == 0:
     # No projects match query - list available and let user select
-    print(f"No projects match '{query}'. Available projects:")
     project_options = projects[:4]  # Limit to 4 for AskUserQuestion
+    print(f"No projects match '{query}'. Showing {len(project_options)} of {len(projects)} available projects:")
     for p in project_options:
         print(f"  - {p['name']}")
 
@@ -264,7 +265,8 @@ def detect_repo_label(args) -> str | None:
         'omnidash': 'omnidash',
     }
 
-    return label_mapping.get(repo_name, repo_name)
+    # Only use known labels to prevent label pollution from unexpected repo names
+    return label_mapping.get(repo_name)
 
 # Call this in workflow and store result
 repo_label = detect_repo_label(args)
@@ -302,9 +304,9 @@ def filter_issues(review_data: dict, args) -> list:
         # Default: critical, major, minor (no nits)
         severities = ['critical', 'major', 'minor']
 
-    # Collect issues
+    # Collect issues (use 'or []' to handle None values, not just missing keys)
     for severity in severities:
-        for issue in review_data.get(severity, []):
+        for issue in review_data.get(severity) or []:
             issues.append({
                 **issue,
                 'severity': severity
