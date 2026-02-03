@@ -140,7 +140,8 @@ if len(matches) == 0:
     print("No matching projects found. Available projects:")
     for p in projects:
         print(f"  - {p['name']}")
-    # Use AskUserQuestion to let user select
+    # Use AskUserQuestion to let user select from available projects
+    # Then set project = selected_project
 
 elif len(matches) == 1:
     project = matches[0]
@@ -156,6 +157,11 @@ else:
             "multiSelect": False
         }]
     )
+    # After user responds, set project = matches[selected_index]
+
+# Extract project_id for ticket creation
+project_id = project['id']
+print(f"Project ID: {project_id}")
 ```
 
 ---
