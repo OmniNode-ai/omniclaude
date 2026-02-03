@@ -125,13 +125,13 @@ If no issues found, return: {\"critical\": [], \"major\": [], \"minor\": []}
 
 **JSON Parsing Fallback**: If the agent returns malformed JSON or non-JSON response:
 1. Try to extract issues from markdown/text format (look for `**file:line**` or `file.py:123` patterns)
-2. If extraction succeeds, use extracted issues and continue
+2. If extraction succeeds, use extracted issues and continue normally
 3. If extraction fails:
    - Log the raw response for debugging
    - Mark iteration as `PARSE_FAILED` (not "clean")
    - Display: "⚠️ Review response could not be parsed. Manual review required."
-   - Do NOT treat as "clean" - this prevents false positives
-4. On `PARSE_FAILED`, the final status should be "Parse failed - manual review needed" (not "Clean")
+   - **Skip directly to Phase 3** (do NOT attempt fixes, do NOT continue loop)
+4. On `PARSE_FAILED`, the final status MUST be "Parse failed - manual review needed" (never "Clean")
 
 ### Step 2.3: Display Issues
 
@@ -149,6 +149,8 @@ If no issues found, return: {\"critical\": [], \"major\": [], \"minor\": []}
 ```
 
 **If no issues**: Skip to Phase 3 (Final Summary)
+
+**If `PARSE_FAILED`**: Skip to Phase 3 (do not attempt fixes)
 
 **If `--no-fix`**: Display issues and skip to Phase 3
 
