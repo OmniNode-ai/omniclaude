@@ -32,11 +32,17 @@ Start by understanding what the user wants to accomplish.
 AskUserQuestion(questions=[{
     "question": "What's the goal of this ticket? Describe what you want to accomplish.",
     "header": "Ticket Goal",
-    "allowFreeText": true
+    "options": [
+        {"label": "New feature", "description": "Add new functionality to the system"},
+        {"label": "Bug fix", "description": "Fix an existing issue or incorrect behavior"},
+        {"label": "Improvement", "description": "Enhance or optimize existing functionality"},
+        {"label": "Technical debt", "description": "Refactoring, cleanup, or maintenance"}
+    ],
+    "multiSelect": false
 }])
 ```
 
-Store response as `ticket_goal`. This becomes the ticket title.
+**Note**: If user selects "Other" (auto-added), prompt them to describe their goal. Store response as `ticket_goal`. This becomes the ticket title.
 
 ---
 
@@ -50,15 +56,13 @@ AskUserQuestion(questions=[{
         {"label": "omnibase_core", "description": "Core runtime, models, and validation"},
         {"label": "omniclaude", "description": "Claude Code plugin and hooks"},
         {"label": "omnibase_infra", "description": "Infrastructure and deployment"},
-        {"label": "omnidash", "description": "Dashboard and monitoring UI"},
-        {"label": "omniintelligence", "description": "Intelligence and RAG services"},
-        {"label": "omnimemory", "description": "Memory and context services"},
-        {"label": "omninode_infra", "description": "Node infrastructure"},
-        {"label": "Other", "description": "Specify a different repository"}
+        {"label": "omnidash", "description": "Dashboard and monitoring UI"}
     ],
     "multiSelect": false
 }])
 ```
+
+**Note**: Additional repos (omniintelligence, omnimemory, omninode_infra) accessible via auto-added "Other" option.
 
 If user selects "Other":
 ```python
@@ -66,10 +70,17 @@ while True:
     AskUserQuestion(questions=[{
         "question": "Enter the repository name:",
         "header": "Custom Repository",
-        "allowFreeText": true
+        "options": [
+            {"label": "omniintelligence", "description": "Intelligence and RAG services"},
+            {"label": "omnimemory", "description": "Memory and context services"},
+            {"label": "omninode_infra", "description": "Node infrastructure"},
+            {"label": "Custom", "description": "Enter a different repository name"}
+        ],
+        "multiSelect": false
     }])
     # Store as custom_repo
 
+    # If user selects "Other" again, prompt for manual entry
     # Validation: If response is empty or whitespace-only, ask again
     if not custom_repo or not custom_repo.strip():
         print("Repository name cannot be empty. Please enter a valid name.")
@@ -94,8 +105,7 @@ AskUserQuestion(questions=[{
         {"label": "Feature", "description": "New functionality or capability"},
         {"label": "Bug fix", "description": "Fix incorrect behavior"},
         {"label": "Refactor", "description": "Improve code without changing behavior"},
-        {"label": "Documentation", "description": "Update or create documentation"},
-        {"label": "Infrastructure", "description": "DevOps, CI/CD, or tooling changes"}
+        {"label": "Infrastructure", "description": "DevOps, CI/CD, tooling, or documentation"}
     ],
     "multiSelect": false
 }])
@@ -122,11 +132,20 @@ while True:
     requirement_count += 1
 
     # 4a: Get requirement statement
+    # Present common requirement patterns as suggestions; user selects "Other" for custom
     AskUserQuestion(questions=[{
         "question": f"What is requirement R{requirement_count}? (Describe what must be true when this ticket is done)",
         "header": f"Requirement R{requirement_count}",
-        "allowFreeText": true
+        "options": [
+            {"label": "Functional", "description": "System must perform a specific action"},
+            {"label": "Integration", "description": "System must integrate with external service"},
+            {"label": "Performance", "description": "System must meet performance criteria"},
+            {"label": "Custom", "description": "Describe a different requirement"}
+        ],
+        "multiSelect": false
     }])
+    # If user selects predefined option, expand into full statement via follow-up
+    # If user selects "Other", they provide custom statement
     # Store as requirement_statement
 
     # Validate non-empty statement
@@ -136,11 +155,19 @@ while True:
         continue  # Loop back to ask the same requirement again
 
     # 4b: Get acceptance criteria
+    # Present common criteria patterns; user can select "Other" for custom entry
     AskUserQuestion(questions=[{
-        "question": f"What are the acceptance criteria for R{requirement_count}? (How will we verify this requirement is met? Separate multiple criteria with commas.)",
+        "question": f"What are the acceptance criteria for R{requirement_count}? (How will we verify this requirement is met?)",
         "header": f"Acceptance Criteria for R{requirement_count}",
-        "allowFreeText": true
+        "options": [
+            {"label": "Test passes", "description": "Unit or integration test verifies behavior"},
+            {"label": "API responds correctly", "description": "Endpoint returns expected response"},
+            {"label": "No errors in logs", "description": "Operation completes without errors"},
+            {"label": "Custom criteria", "description": "Specify different acceptance criteria"}
+        ],
+        "multiSelect": true
     }])
+    # User can select multiple criteria or "Other" to specify custom
     # Store as acceptance_criteria_raw
 
     # Parse criteria (split by comma or newline)
@@ -198,11 +225,19 @@ If "Yes":
 import re
 
 while True:
+    # Present recent tickets as suggestions; user can enter custom via "Other"
     AskUserQuestion(questions=[{
         "question": "Enter the parent ticket ID (e.g., OMN-1800):",
         "header": "Parent Ticket ID",
-        "allowFreeText": true
+        "options": [
+            {"label": "OMN-1800", "description": "Recent epic or feature ticket"},
+            {"label": "OMN-1700", "description": "Previous milestone ticket"},
+            {"label": "OMN-1600", "description": "Earlier project ticket"},
+            {"label": "Custom ID", "description": "Enter a different ticket ID"}
+        ],
+        "multiSelect": false
     }])
+    # If user selects "Other", they enter custom ticket ID
     # Store as parent_ticket
 
     # Validation: Ticket ID should match format OMN-XXXX
@@ -251,11 +286,19 @@ If "Yes":
 import re
 
 while True:
+    # Present recent tickets as suggestions; user can enter custom via "Other"
     AskUserQuestion(questions=[{
-        "question": "Enter the blocking ticket IDs (comma-separated, e.g., OMN-1801, OMN-1802):",
+        "question": "Which tickets block this one? (Select or enter custom IDs)",
         "header": "Blocking Ticket IDs",
-        "allowFreeText": true
+        "options": [
+            {"label": "OMN-1801", "description": "Recent blocking ticket"},
+            {"label": "OMN-1802", "description": "Another blocking ticket"},
+            {"label": "OMN-1803", "description": "Third blocking ticket"},
+            {"label": "Custom IDs", "description": "Enter comma-separated ticket IDs"}
+        ],
+        "multiSelect": true
     }])
+    # If user selects "Other", they enter comma-separated ticket IDs
     # Store as blocked_by_raw
 
     # Validation: Parse and validate each ticket ID
@@ -336,9 +379,16 @@ If "Other":
 AskUserQuestion(questions=[{
     "question": "Enter the project name:",
     "header": "Project Name",
-    "allowFreeText": true
+    "options": [
+        {"label": "API Improvements", "description": "API-related work"},
+        {"label": "Core Infrastructure", "description": "Infrastructure work"},
+        {"label": "Documentation", "description": "Documentation projects"},
+        {"label": "Custom name", "description": "Enter a different project name"}
+    ],
+    "multiSelect": false
 }])
 ```
+If user selects "Other", they enter custom project name.
 
 Store as `project_name` or `null`.
 
