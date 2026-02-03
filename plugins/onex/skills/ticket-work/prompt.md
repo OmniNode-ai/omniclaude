@@ -258,7 +258,7 @@ If any step fails, follow this rollback sequence:
 | Failure Point | Rollback Action |
 |---------------|-----------------|
 | Git checkout fails | Stop. Do not update Linear or contract. Report error to user. |
-| Linear update fails | If `BRANCH_CREATED=true`, delete branch (`git branch -D {branchName}`). Report error to user. |
+| Linear update fails | If `BRANCH_CREATED=true`, checkout previous branch (`git checkout -`) then delete (`git branch -D {branchName}`). Report error to user. |
 | Contract persistence fails | Log warning and continue (Linear is source of truth). |
 
 Each step should check for success before proceeding to the next:
@@ -283,6 +283,7 @@ try:
         mcp__linear_server__update_issue(id=ticket_id, state="In Progress")
     except Exception as e:
         if branch_created:  # Only delete if we created it
+            run("git checkout -")  # Return to previous branch first
             run("git branch -D {branchName}")
         raise AutomationError(f"Linear update failed: {e}", step=2)
 
