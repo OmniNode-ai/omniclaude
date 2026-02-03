@@ -293,23 +293,24 @@ else:
 - `⚪ Clean with nits - Ready to push` (blocking issues fixed, nits remain, commits made)
 - `❌ Max iterations reached - {n} blocking issues remain` (hit limit with Critical/Major/Minor remaining)
 - `📋 Report only - {n} blocking issues found` (--no-fix mode)
-- `📝 Changes staged - review before commit` (--no-commit mode)
+- `📝 Changes staged - review before commit` (--no-commit mode, issues were fixed)
 
 **Status selection logic**:
 ```
 if --no-fix:
     "📋 Report only - {n} blocking issues found"
-elif --no-commit:
-    "📝 Changes staged - review before commit"
 elif blocking_issues_remain:
     "❌ Max iterations reached - {n} blocking issues remain"
 elif len(commits_made) == 0:
+    # No issues found to fix (or only nits which are optional)
     if nits_remain:
         "⚪ Clean with nits - No changes needed"
     else:
         "✅ Clean - No issues found"
-else:  # commits were made
-    if nits_remain:
+else:  # commits_made > 0: issues were found and fixed
+    if --no-commit:
+        "📝 Changes staged - review before commit"
+    elif nits_remain:
         "⚪ Clean with nits - Ready to push"
     else:
         "✅ Clean - Ready to push"
