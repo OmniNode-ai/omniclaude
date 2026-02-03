@@ -47,7 +47,7 @@ class IntelligenceEventClient:
             )
         self.enable_intelligence = enable_intelligence
         self.request_timeout_ms = request_timeout_ms
-        self._environment = os.getenv("KAFKA_ENVIRONMENT", "dev")
+        self._environment: str | None = None  # Validated in start()
         self._event_bus: EventBusKafka | None = None
         self._wiring: RequestResponseWiring | None = None
         self._started = False
@@ -56,24 +56,38 @@ class IntelligenceEventClient:
     async def start(self) -> None:
         if self._started or not self.enable_intelligence:
             return
-        self.logger.info(f"Starting intelligence client (broker: {self.bootstrap_servers})")
-        config = ModelKafkaEventBusConfig(bootstrap_servers=self.bootstrap_servers, environment=self._environment)
-        self._event_bus = EventBusKafka(config)
-        await self._event_bus.connect()
-        self._wiring = RequestResponseWiring(
-            event_bus=self._event_bus, environment=self._environment,
-            app_name="omniclaude", bootstrap_servers=self.bootstrap_servers,
-        )
-        rr_config = ModelRequestResponseConfig(instances=[
-            ModelRequestResponseInstance(
-                name=self._INSTANCE_NAME, request_topic=self.TOPIC_REQUEST,
-                reply_topics=ModelReplyTopics(completed=self.TOPIC_COMPLETED, failed=self.TOPIC_FAILED),
-                timeout_seconds=self.request_timeout_ms // 1000,
+
+        # Validate environment (consistent with routing_event_client)
+        self._environment = settings.kafka_environment
+        if not self._environment:
+            raise ModelOnexError(
+                message="KAFKA_ENVIRONMENT required",
+                error_code=EnumCoreErrorCode.VALIDATION_ERROR,
+                operation="start",
             )
-        ])
-        await self._wiring.wire_request_response(rr_config)
-        self._started = True
-        self.logger.info("Intelligence event client started")
+
+        self.logger.info(f"Starting intelligence client (broker: {self.bootstrap_servers})")
+        try:
+            config = ModelKafkaEventBusConfig(bootstrap_servers=self.bootstrap_servers, environment=self._environment)
+            self._event_bus = EventBusKafka(config)
+            await self._event_bus.start()
+            self._wiring = RequestResponseWiring(
+                event_bus=self._event_bus, environment=self._environment,
+                app_name="omniclaude", bootstrap_servers=self.bootstrap_servers,
+            )
+            rr_config = ModelRequestResponseConfig(instances=[
+                ModelRequestResponseInstance(
+                    name=self._INSTANCE_NAME, request_topic=self.TOPIC_REQUEST,
+                    reply_topics=ModelReplyTopics(completed=self.TOPIC_COMPLETED, failed=self.TOPIC_FAILED),
+                    timeout_seconds=self.request_timeout_ms // 1000,
+                )
+            ])
+            await self._wiring.wire_request_response(rr_config)
+            self._started = True
+            self.logger.info("Intelligence event client started")
+        except Exception:
+            await self.stop()  # Cleanup partial state
+            raise
 
     async def stop(self) -> None:
         if not self._started:
@@ -83,7 +97,7 @@ class IntelligenceEventClient:
             await self._wiring.cleanup()
             self._wiring = None
         if self._event_bus:
-            await self._event_bus.disconnect()
+            await self._event_bus.stop()
             self._event_bus = None
         self._started = False
 
@@ -102,8 +116,8 @@ class IntelligenceEventClient:
         if fp.exists() and fp.is_file():
             try:
                 content = fp.read_text(encoding="utf-8")
-            except Exception:
-                pass
+            except Exception as e:
+                self.logger.debug(f"Failed to read file {source_path}: {e}")
         result = await self.request_code_analysis(
             content=content, source_path=source_path, language=language,
             options={"operation_type": "PATTERN_EXTRACTION", "include_patterns": True}, timeout_ms=timeout_ms,

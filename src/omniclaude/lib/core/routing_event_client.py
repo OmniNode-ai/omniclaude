@@ -69,37 +69,41 @@ class RoutingEventClient:
                 details={"component": "RoutingEventClient"},
             )
 
-        config = ModelKafkaEventBusConfig(
-            bootstrap_servers=self.bootstrap_servers,
-            environment=kafka_env,
-            timeout_seconds=max(30, self.request_timeout_ms // 1000 + 10),
-        )
-        self._event_bus = EventBusKafka(config)
-        await self._event_bus.start()
-
-        self._wiring = RequestResponseWiring(
-            event_bus=self._event_bus,
-            environment=kafka_env,
-            app_name="omniclaude",
-            bootstrap_servers=self.bootstrap_servers,
-        )
-        await self._wiring.wire_request_response(
-            ModelRequestResponseConfig(
-                instances=[
-                    ModelRequestResponseInstance(
-                        name=_ROUTING_INSTANCE_NAME,
-                        request_topic=TopicBase.ROUTING_REQUESTED,
-                        reply_topics=ModelReplyTopics(
-                            completed=TopicBase.ROUTING_COMPLETED,
-                            failed=TopicBase.ROUTING_FAILED,
-                        ),
-                        timeout_seconds=self.request_timeout_ms // 1000,
-                    )
-                ]
+        try:
+            config = ModelKafkaEventBusConfig(
+                bootstrap_servers=self.bootstrap_servers,
+                environment=kafka_env,
+                timeout_seconds=max(30, self.request_timeout_ms // 1000 + 10),
             )
-        )
-        self._started = True
-        self.logger.info("Routing event client started (RequestResponseWiring)")
+            self._event_bus = EventBusKafka(config)
+            await self._event_bus.start()
+
+            self._wiring = RequestResponseWiring(
+                event_bus=self._event_bus,
+                environment=kafka_env,
+                app_name="omniclaude",
+                bootstrap_servers=self.bootstrap_servers,
+            )
+            await self._wiring.wire_request_response(
+                ModelRequestResponseConfig(
+                    instances=[
+                        ModelRequestResponseInstance(
+                            name=_ROUTING_INSTANCE_NAME,
+                            request_topic=TopicBase.ROUTING_REQUESTED,
+                            reply_topics=ModelReplyTopics(
+                                completed=TopicBase.ROUTING_COMPLETED,
+                                failed=TopicBase.ROUTING_FAILED,
+                            ),
+                            timeout_seconds=self.request_timeout_ms // 1000,
+                        )
+                    ]
+                )
+            )
+            self._started = True
+            self.logger.info("Routing event client started (RequestResponseWiring)")
+        except Exception:
+            await self.stop()  # cleanup partial state
+            raise
 
     async def stop(self) -> None:
         """Close Kafka connections gracefully."""

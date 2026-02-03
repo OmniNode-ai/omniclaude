@@ -58,8 +58,8 @@ def mock_wiring():
 def mock_event_bus():
     """Create mock EventBusKafka."""
     event_bus = MagicMock()
-    event_bus.connect = AsyncMock()
-    event_bus.disconnect = AsyncMock()
+    event_bus.start = AsyncMock()
+    event_bus.stop = AsyncMock()
     return event_bus
 
 
@@ -202,7 +202,7 @@ class TestIntelligenceEventClientLifecycle:
             assert client._wiring is None
             assert client._event_bus is None
             mock_wiring.cleanup.assert_called_once()
-            mock_event_bus.disconnect.assert_called_once()
+            mock_event_bus.stop.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_stop_is_safe_when_not_started(self, mock_settings) -> None:
@@ -229,7 +229,7 @@ class TestIntelligenceEventClientLifecycle:
             await client.stop()
 
             assert client._started is False
-            mock_event_bus.disconnect.assert_called_once()
+            mock_event_bus.stop.assert_called_once()
 
 
 class TestIntelligenceEventClientHealthCheck:
