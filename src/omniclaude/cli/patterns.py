@@ -97,7 +97,7 @@ def get_db_connection() -> PgConnection:
             port=settings.postgres_port,
             database=settings.postgres_database,
             user=settings.postgres_user or "postgres",
-            password=db_pass,  # noqa: secrets - loaded from settings
+            password=db_pass,  # noqa: S106 - loaded from settings, not hardcoded
             cursor_factory=RealDictCursor,
             connect_timeout=5,
         )
