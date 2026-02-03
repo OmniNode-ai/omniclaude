@@ -358,6 +358,9 @@ except AutomationError as e:
    git push -u origin {branch}
    gh pr create --title "{ticket_id}: {title}" --body "..."
    ```
+
+   **Shell safety**: When constructing PR titles/bodies, use shell-safe escaping. Pass variables via `--title` and `--body` flags rather than string interpolation. For titles containing special characters, use single quotes or heredoc syntax to prevent shell interpretation.
+
    Update `pr_url` in contract.
 
 2. **Code review loop** (repeat until done):
