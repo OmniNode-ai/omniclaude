@@ -161,6 +161,8 @@ class RoutingEventClient:
                 "list[dict[str, Any]]",
                 response.get("payload", {}).get("recommendations", []),
             )
+        except TimeoutError as e:
+            raise TimeoutError(f"Routing request timeout ({correlation_id})") from e
         except Exception as e:
             raise OnexError(
                 code=EnumCoreErrorCode.OPERATION_FAILED,

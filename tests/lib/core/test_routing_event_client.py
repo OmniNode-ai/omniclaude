@@ -361,6 +361,28 @@ class TestRoutingEventClientRequestRouting:
             ].get("timeout_seconds")
             assert timeout_seconds == 10  # 10000ms / 1000
 
+    @pytest.mark.asyncio
+    async def test_request_routing_timeout_raises_timeout_error(
+        self, mock_settings, mock_wiring
+    ) -> None:
+        """Test request_routing raises TimeoutError when TimeoutError occurs."""
+        # Simulate RequestResponseWiring raising TimeoutError
+        mock_wiring.send_request = AsyncMock(side_effect=TimeoutError())
+
+        with patch.object(routing_module, "settings", mock_settings):
+            client = RoutingEventClient(bootstrap_servers="localhost:9092")
+            client._started = True
+            client._wiring = mock_wiring
+
+            with pytest.raises(TimeoutError) as exc_info:
+                await client.request_routing(
+                    user_request="test request",
+                    timeout_ms=100,
+                )
+
+            # The custom TimeoutError includes "timeout" and correlation_id
+            assert "timeout" in str(exc_info.value).lower()
+
 
 class TestRoutingEventClientContext:
     """Tests for RoutingEventClientContext context manager."""
