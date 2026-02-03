@@ -195,8 +195,24 @@ AskUserQuestion(questions=[{
 ```python
 import re
 if parent_ticket and not re.match(r'^OMN-\d+$', parent_ticket.strip()):
-    print(f"Warning: '{parent_ticket}' doesn't match expected format (OMN-1234). Proceed anyway?")
-    # Allow user to fix or continue
+    # Invalid format - ask user to fix or proceed
+    AskUserQuestion(questions=[{
+        "question": f"'{parent_ticket}' doesn't match expected format (OMN-1234). What would you like to do?",
+        "header": "Invalid Format",
+        "options": [
+            {"label": "Re-enter", "description": "Enter the ticket ID again"},
+            {"label": "Use anyway", "description": f"Proceed with '{parent_ticket}' as-is"},
+            {"label": "Skip", "description": "Don't set a parent ticket"}
+        ],
+        "multiSelect": false
+    }])
+
+    if response == "Re-enter":
+        # Loop back to parent ticket ID prompt
+        pass
+    elif response == "Skip":
+        parent_ticket = None
+    # else "Use anyway" - keep the value as entered
 ```
 
 Store as `parent_ticket` or `null`.
@@ -230,13 +246,36 @@ AskUserQuestion(questions=[{
 ```python
 import re
 blocked_by = []
+invalid_ids = []
+
 for id_str in blocked_by_raw.split(","):
     id_str = id_str.strip()
     if id_str:
-        if not re.match(r'^OMN-\d+$', id_str):
-            print(f"Warning: '{id_str}' doesn't match expected format (OMN-1234). Skipping.")
-        else:
+        if re.match(r'^OMN-\d+$', id_str):
             blocked_by.append(id_str)
+        else:
+            invalid_ids.append(id_str)
+
+# If any invalid IDs found, ask user how to handle
+if invalid_ids:
+    invalid_list = ", ".join(invalid_ids)
+    AskUserQuestion(questions=[{
+        "question": f"The following IDs don't match expected format (OMN-1234): {invalid_list}\n\nWhat would you like to do?",
+        "header": "Invalid IDs",
+        "options": [
+            {"label": "Re-enter all", "description": "Enter the blocking ticket IDs again"},
+            {"label": "Keep valid only", "description": f"Proceed with valid IDs only: {blocked_by or 'none'}"},
+            {"label": "Skip blockers", "description": "Don't set any blocking dependencies"}
+        ],
+        "multiSelect": false
+    }])
+
+    if response == "Re-enter all":
+        # Loop back to blocked-by prompt
+        pass
+    elif response == "Skip blockers":
+        blocked_by = []
+    # else "Keep valid only" - use the valid IDs already collected
 ```
 
 Store as `blocked_by` list or empty list.
@@ -249,9 +288,16 @@ First, fetch recent projects with error handling:
 ```python
 try:
     projects = mcp__linear-server__list_projects(team="Omninode", limit=10)
+    api_failed = False
 except Exception as e:
-    print(f"Warning: Could not fetch projects from Linear: {e}")
-    projects = []  # Fall back to manual entry
+    projects = []
+    api_failed = True
+```
+
+If API failed, inform the user:
+```python
+if api_failed:
+    print("Note: Could not fetch project list from Linear. You can enter a project name manually or select 'None'.")
 ```
 
 Build options from results (or allow manual entry if API failed):
