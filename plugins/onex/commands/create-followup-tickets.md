@@ -201,19 +201,19 @@ if len(matches) == 0:
         questions=[{
             "question": "Select a project from the list:",
             "header": "Project",
-            "options": [{"label": p['name'], "description": (p.get('description') or '')[:50]} for p in project_options],
+            "options": [{"label": p.get('name', 'Unnamed'), "description": (p.get('description') or '')[:50]} for p in project_options],
             "multiSelect": False
         }]
     )
     # User selects from options; response contains selected label
     selected_name = response['answers']['Project']
-    project = next((p for p in projects if p['name'] == selected_name), None)
+    project = next((p for p in projects if p.get('name') == selected_name), None)
     if not project:
         raise ValueError(f"Project not found: {selected_name}")
 
 elif len(matches) == 1:
     project = matches[0]
-    print(f"Using project: {project['name']}")
+    print(f"Using project: {project.get('name', 'Unnamed')}")
 
 else:
     # Multiple matches - ask user to select
@@ -224,18 +224,20 @@ else:
         questions=[{
             "question": f"Multiple projects match '{args.project}'. Which one?",
             "header": "Project",
-            "options": [{"label": p['name'], "description": (p.get('description') or '')[:50]} for p in display_matches],
+            "options": [{"label": p.get('name', 'Unnamed'), "description": (p.get('description') or '')[:50]} for p in display_matches],
             "multiSelect": False
         }]
     )
     # User selects from options; response contains selected label
     selected_name = response['answers']['Project']
-    project = next((p for p in matches if p['name'] == selected_name), None)
+    project = next((p for p in matches if p.get('name') == selected_name), None)
     if not project:
         raise ValueError(f"Project not found: {selected_name}")
 
-# Extract project_id for ticket creation
-project_id = project['id']
+# Extract project_id for ticket creation (validate required field)
+project_id = project.get('id')
+if not project_id:
+    raise ValueError(f"Project '{project.get('name', 'Unnamed')}' is missing required 'id' field")
 print(f"Project ID: {project_id}")
 ```
 
