@@ -218,8 +218,12 @@ Task(
 Group fixes by severity and commit:
 
 ```bash
-# Stage fixed files
+# Stage fixed files and check for errors
 git add {fixed_files}
+if [ $? -ne 0 ]; then
+    # Stage failed - handle via error table (increment counter, exit to Phase 3)
+    exit 1
+fi
 
 # Commit with descriptive message (include failed fixes if any)
 git commit -m "fix(review): [{severity}] {summary}
@@ -322,6 +326,9 @@ if "--max-iterations" in args:
     idx = args.index("--max-iterations")
     try:
         max_iterations = int(args[idx + 1]) if idx + 1 < len(args) else 10
+        if max_iterations < 1:
+            print("⚠️ Warning: --max-iterations must be >= 1. Using default (10).")
+            max_iterations = 10
     except (ValueError, IndexError):
         print("⚠️ Warning: --max-iterations requires a numeric value. Using default (10).")
         max_iterations = 10
