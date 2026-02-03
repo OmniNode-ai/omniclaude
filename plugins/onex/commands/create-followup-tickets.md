@@ -206,7 +206,9 @@ if len(matches) == 0:
         }]
     )
     # User selects from options; response contains selected label
-    selected_name = response['answers']['Project']
+    selected_name = response.get('answers', {}).get('Project')
+    if not selected_name:
+        raise ValueError("No project selected from options")
     project = next((p for p in projects if p.get('name') == selected_name), None)
     if not project:
         raise ValueError(f"Project not found: {selected_name}")
@@ -229,7 +231,9 @@ else:
         }]
     )
     # User selects from options; response contains selected label
-    selected_name = response['answers']['Project']
+    selected_name = response.get('answers', {}).get('Project')
+    if not selected_name:
+        raise ValueError("No project selected from options")
     project = next((p for p in matches if p.get('name') == selected_name), None)
     if not project:
         raise ValueError(f"Project not found: {selected_name}")
