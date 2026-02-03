@@ -1,30 +1,30 @@
 ---
 name: plan-ticket
-description: Interactive guided ticket creation - walks through requirements gathering and creates standardized Linear tickets
-tags: [linear, tickets, planning, requirements, interactive]
+description: Generate a copyable ticket contract template - fill in the blanks and pass to /create-ticket
+tags: [linear, tickets, planning, templates]
 args: []
 ---
 
-# Interactive Ticket Planning
+# Ticket Planning Template
 
-You are guiding the user through interactive ticket creation. Load and follow the full orchestration logic from the `plan-ticket` skill.
+Generate a pre-filled YAML contract template that you can customize and pass to `/create-ticket`. No interactive prompts - just a copyable block.
 
-**Announce at start:** "I'm using the plan-ticket command to help you create a well-structured ticket."
+**Announce at start:** "I'm using the plan-ticket command to generate a ticket template."
 
 ## Quick Reference
 
 The plan-ticket skill provides:
-- 9-step interactive flow using AskUserQuestion
-- Collects: goal, repository, work type, requirements, parent, blocked-by, project
-- Generates contract YAML preview before creation
-- Delegates to /create-ticket for Linear integration
+- YAML contract template generation
+- Pre-fills fields based on context you provide
+- Template ready for editing and passing to /create-ticket
+- No interactive prompts - outputs a single copyable block
 
 ## Execution
 
-Use the Skill tool to load the full `plan-ticket` skill, then execute the interactive flow.
+Use the Skill tool to load the `plan-ticket` skill, then output the template.
 
 ```
 Skill(skill="onex:plan-ticket")
 ```
 
-Follow the skill's orchestration logic completely. All user interactions must use AskUserQuestion.
+Follow the skill's template generation logic. Output a copyable YAML block with next steps.
