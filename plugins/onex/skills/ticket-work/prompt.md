@@ -206,11 +206,21 @@ hardening_tickets: []
 1. **Create git branch** using Linear's suggested branch name:
    - Get branch name from `mcp__linear-server__get_issue(id="{ticket_id}")` response field `branchName`
    - Linear auto-generates this based on ticket ID and title
+   - **Check if branch already exists before creating:**
    ```bash
-   git checkout -b {branchName}
+   # Check if branch exists
+   if git show-ref --verify --quiet refs/heads/{branchName}; then
+       # Branch exists - checkout existing branch
+       git checkout {branchName}
+       BRANCH_CREATED=false
+   else
+       # Branch doesn't exist - create new
+       git checkout -b {branchName}
+       BRANCH_CREATED=true
+   fi
    # Example: git checkout -b jonah/omn-1830-m4-hook-integration-session-continuity
    ```
-   If branch exists, checkout existing branch instead.
+   Track `BRANCH_CREATED` for rollback safety.
 
 2. **Update Linear status** to "In Progress":
    ```
@@ -248,15 +258,23 @@ If any step fails, follow this rollback sequence:
 | Failure Point | Rollback Action |
 |---------------|-----------------|
 | Git checkout fails | Stop. Do not update Linear or contract. Report error to user. |
-| Linear update fails | Delete created branch (`git branch -D {branchName}`). Report error to user. |
+| Linear update fails | If `BRANCH_CREATED=true`, delete branch (`git branch -D {branchName}`). Report error to user. |
 | Contract persistence fails | Log warning and continue (Linear is source of truth). |
 
 Each step should check for success before proceeding to the next:
 ```python
 # Pseudo-code for safe automation
 try:
-    # Step 1: Create branch
-    git_result = run("git checkout -b {branchName}")
+    # Step 1: Check for existing branch and create/checkout
+    branch_exists = run("git show-ref --verify refs/heads/{branchName}").success
+    branch_created = False
+
+    if branch_exists:
+        git_result = run("git checkout {branchName}")
+    else:
+        git_result = run("git checkout -b {branchName}")
+        branch_created = True
+
     if git_result.failed:
         raise AutomationError("Git checkout failed", step=1)
 
@@ -264,7 +282,8 @@ try:
     try:
         mcp__linear_server__update_issue(id=ticket_id, state="In Progress")
     except Exception as e:
-        run("git branch -D {branchName}")  # Rollback step 1
+        if branch_created:  # Only delete if we created it
+            run("git branch -D {branchName}")
         raise AutomationError(f"Linear update failed: {e}", step=2)
 
     # Step 3: Persist contract locally

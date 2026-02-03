@@ -305,7 +305,7 @@ def build_ticket_description(ticket_data: dict, args) -> str:
     repo = args.repo or ticket_data.get("repo") or get_current_repo()
     lines.append(f"**Repository**: {repo}")
 
-    blocked_by = args.blocked_by.split(",") if args.blocked_by else []
+    blocked_by = [id.strip() for id in args.blocked_by.split(",")] if args.blocked_by else []
     deps = ", ".join(blocked_by) if blocked_by else "None"
     lines.append(f"**Dependencies**: {deps}")
     lines.append("")
@@ -475,7 +475,7 @@ if args.project:
 if args.parent:
     params["parentId"] = args.parent
 if args.blocked_by:
-    params["blockedBy"] = args.blocked_by.split(",")
+    params["blockedBy"] = [id.strip() for id in args.blocked_by.split(",")]
 
 result = mcp__linear-server__create_issue(**params)
 ```
