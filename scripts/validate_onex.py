@@ -226,9 +226,8 @@ Examples:
       No arguments defaults to validating src/.
 
 Exit codes:
-  0  No issues found (validations passed)
-  1  Validation errors found (or any issues in strict mode)
-  2  Warnings only found (non-strict mode, informational)
+  0  No issues found, or warnings only in non-strict mode
+  1  Validation errors found, or any issues in strict mode
 """,
     )
     parser.add_argument(
@@ -240,7 +239,7 @@ Exit codes:
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="Exit 1 on any issue (warnings or errors). Default: exit 1 for errors only, exit 2 for warnings only",
+        help="Exit 1 on any issue (warnings or errors). Default: exit 1 for errors, exit 0 for warnings only",
     )
     return parser.parse_args(args)
 
