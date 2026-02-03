@@ -149,7 +149,6 @@ jobs:
         with:
           repository: OmniNode-ai/omnibase_core
           path: omnibase_core
-          token: ${{ secrets.GH_PAT }}
 
       - name: Verify handshake is current
         run: |
