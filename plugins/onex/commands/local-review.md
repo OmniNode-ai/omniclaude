@@ -102,6 +102,7 @@ Task(
 **Files to review**: {file_list}
 
 Run: git diff {base_ref}..HEAD -- {files}
+Also run: git diff -- {files}  # Include any uncommitted changes
 
 **Review Focus**:
 - Critical: Security vulnerabilities, data loss, crashes
@@ -217,6 +218,10 @@ This prevents re-reviewing the same changes and gives the user clear next steps.
 
 ### Step 2.6: Check Loop Condition
 
+**Note**: This step is ONLY reached in the normal flow (issues found → fixed → committed successfully).
+Early exits (no issues, parse failed, no-fix mode, commit failed) bypass this step entirely
+because they increment the counter before skipping to Phase 3.
+
 ```
 iteration += 1
 
@@ -253,6 +258,7 @@ else:
 - `Report only - {n} issues found` (--no-fix mode)
 - `Changes staged - review before commit` (--no-commit mode)
 - `Parse failed - manual review needed` (review response couldn't be parsed)
+- `Agent failed - {error}. Manual review required.` (review agent crashed/timed out)
 - `Commit failed - {reason}. Files staged for manual review.` (commit step failed)
 
 ---
@@ -328,9 +334,9 @@ Review iteration: {current}/{max}
 | No git repo | "Error: Not in a git repository" |
 | No changes | "No changes to review. Working tree clean." |
 | Invalid --since ref | "Error: Invalid ref '{ref}'. Use branch name or commit SHA." |
-| Review agent failure | Log error, mark iteration as PARSE_FAILED, require manual review |
+| Review agent failure | Log error, mark iteration as `AGENT_FAILED`, exit to Phase 3 with status "Agent failed - {error}. Manual review required." |
 | Fix agent failure | Log error, mark issue as "needs manual fix" |
-| Malformed JSON response | Try text extraction; if fails, mark PARSE_FAILED (see Fallback) |
+| Malformed JSON response | Try text extraction; if fails, mark `PARSE_FAILED` (see Fallback) |
 | Commit failure (general) | Log error, files remain staged for manual commit |
 | Commit failure (hooks) | Report hook output, suggest `--no-verify` if appropriate |
 | Commit failure (conflicts) | "Merge conflict detected - resolve manually before continuing" |
