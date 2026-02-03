@@ -44,7 +44,7 @@ Parse arguments from `$ARGUMENTS`:
 **2. Detect base reference** (if `--since` not provided):
 ```bash
 # Try to find the merge-base with main/master
-git merge-base HEAD main 2>/dev/null || git merge-base HEAD master 2>/dev/null || echo "HEAD~10"
+git merge-base HEAD main 2>/dev/null || git merge-base HEAD master 2>/dev/null || { echo "⚠️ Warning: Could not find merge-base, using HEAD~10" >&2; echo "HEAD~10"; }
 ```
 
 **3. Initialize tracking state**:
@@ -279,8 +279,8 @@ if "--max-iterations" in args:
     try:
         max_iterations = int(args[idx + 1]) if idx + 1 < len(args) else 10
     except (ValueError, IndexError):
-        print("Error: --max-iterations requires a numeric value")
-        max_iterations = 10  # Fall back to default
+        print("⚠️ Warning: --max-iterations requires a numeric value. Using default (10).")
+        max_iterations = 10
 
 # Extract --files value
 if "--files" in args:
@@ -298,7 +298,7 @@ if [ -z "$DEFAULT_BRANCH" ]; then
 fi
 
 # Find merge base
-BASE_REF=$(git merge-base HEAD origin/$DEFAULT_BRANCH 2>/dev/null || echo "HEAD~10")
+BASE_REF=$(git merge-base HEAD origin/$DEFAULT_BRANCH 2>/dev/null || { echo "⚠️ Warning: Using HEAD~10 fallback" >&2; echo "HEAD~10"; })
 ```
 
 ### Issue Severity Handling
