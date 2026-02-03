@@ -147,7 +147,7 @@ def parse_issue_line(line: str) -> dict | None:
 
     # Pattern: - **file:line** - description [`keyword`]
     # Line number is optional to handle issues without specific line references
-    # Use greedy match up to last colon followed by digits (handles Windows C:\paths)
+    # Uses non-greedy match with backtracking to handle paths with colons (e.g., C:\path)
     pattern = r'^- \*\*(.+?)(?::(\d+))?\*\* - (.+?)(?:\s*\[`([^`]+)`\])?$'
     match = re.match(pattern, line.strip())
 
@@ -210,11 +210,14 @@ elif len(matches) == 1:
 
 else:
     # Multiple matches - ask user to select
+    display_matches = matches[:4]  # UI limit
+    if len(matches) > 4:
+        print(f"Showing 4 of {len(matches)} matches. Use a more specific query to narrow results.")
     response = AskUserQuestion(
         questions=[{
             "question": f"Multiple projects match '{args.project}'. Which one?",
             "header": "Project",
-            "options": [{"label": p['name'], "description": p.get('description', '')[:50]} for p in matches[:4]],
+            "options": [{"label": p['name'], "description": p.get('description', '')[:50]} for p in display_matches],
             "multiSelect": False
         }]
     )
