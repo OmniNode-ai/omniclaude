@@ -199,9 +199,9 @@ hardening_tickets: []
   - No, needs changes
   ```
 
-**Automation on spec→implementation transition:**
+**🚨 MANDATORY AUTOMATION on spec→implementation transition:**
 
-When user approves spec (says "approve spec", "build it", etc.):
+**BEFORE ANY IMPLEMENTATION WORK BEGINS**, when user approves spec (says "approve spec", "build it", etc.), you MUST execute these steps IN ORDER:
 
 1. **Create git branch** using Linear's suggested branch name:
    - Get branch name from `mcp__linear-server__get_issue(id="{ticket_id}")` response field `branchName`
@@ -224,6 +224,22 @@ When user approves spec (says "approve spec", "build it", etc.):
 3. **Update contract** with branch name:
    - Set `branch` field to the git branch name
    - Persist to both Linear and local
+
+4. **Announce readiness and invoke parallel-solve:**
+   ```
+   ✅ Branch created: {branchName}
+   ✅ Ticket moved to In Progress
+   ✅ Ready for implementation
+
+   Dispatching {N} requirements to /parallel-solve...
+   ```
+
+   Then immediately invoke:
+   ```
+   Skill(skill="parallel-solve", args="Implement {ticket_id}: {title}. Requirements: {r1}, {r2}, ...")
+   ```
+
+**⚠️ DO NOT proceed to implementation actions until ALL automation steps complete successfully.**
 
 **Error handling for automation steps:**
 
@@ -265,13 +281,32 @@ except AutomationError as e:
 
 ### Phase: implementation
 
-**Entry invariant:** `is_spec_complete()` AND human signal
+**Entry invariant:** `is_spec_complete()` AND human signal AND branch created AND Linear status = "In Progress"
+
+**Pre-conditions (set by spec→implementation automation):**
+- Git branch exists and is checked out
+- Linear ticket status is "In Progress"
+- Contract `branch` field is populated
 
 **Actions:**
-1. Create git branch if not exists (set `branch`)
-2. Implement requirements
-3. Commit changes (append to `commits[]`)
+1. Verify branch is checked out (should already exist from transition automation)
+2. **Execute requirements using /parallel-solve:**
+   ```
+   Invoke: Skill(skill="parallel-solve", args="Implement requirements for {ticket_id}: {title}.
+   Requirements: {requirements_summary}.
+   Files to modify: {context.relevant_files}")
+   ```
+
+   This dispatches polymorphic agents to implement each requirement in parallel where possible.
+
+3. After parallel-solve completes, commit changes (append to `commits[]`)
 4. Update `pr_url` if PR created
+
+**Implementation via parallel-solve:**
+- Requirements from the contract are passed to parallel-solve
+- Independent requirements are executed in parallel by polymorphic agents
+- Sequential dependencies are handled automatically
+- Quality gates are enforced after each agent cycle
 
 **Mutations allowed:**
 - `branch`
