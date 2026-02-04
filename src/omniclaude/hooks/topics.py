@@ -76,6 +76,13 @@ class TopicBase(StrEnum):
     # Injection tracking event (OMN-1673 INJECT-004)
     INJECTION_RECORDED = "onex.evt.omniclaude.injection-recorded.v1"
 
+    # ==========================================================================
+    # Injection metrics topics (OMN-1889)
+    # ==========================================================================
+    CONTEXT_UTILIZATION = "onex.evt.omniclaude.context-utilization.v1"
+    AGENT_MATCH = "onex.evt.omniclaude.agent-match.v1"
+    LATENCY_BREAKDOWN = "onex.evt.omniclaude.latency-breakdown.v1"
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).
