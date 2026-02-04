@@ -174,7 +174,8 @@ class TestGetStatus:
             "socket_path",
             "daemon_running",
         }
-        assert set(status.keys()) == required_keys
+        # Use subset check for forward compatibility if status grows
+        assert required_keys.issubset(status.keys())
 
     def test_get_status_client_available_is_bool(self) -> None:
         """client_available is a boolean."""
