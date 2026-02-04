@@ -154,27 +154,31 @@ class TransformationValidator:
     ])
 
     # Specialized task keywords that should route to specialized agents
+    # NOTE: Avoid overly broad terms (e.g., "python", "sql") that appear in
+    # general questions. Focus on task-oriented phrases that clearly indicate
+    # specialized work requiring a domain expert.
     SPECIALIZED_KEYWORDS = frozenset([
-        "api",
-        "frontend",
-        "backend",
-        "database",
-        "testing",
-        "debug",
-        "performance",
-        "security",
-        "deployment",
-        "documentation",
-        "ui",
-        "ux",
-        "css",
-        "html",
-        "javascript",
-        "python",
-        "sql",
-        "react",
-        "vue",
-        "angular",
+        "api design",
+        "api endpoint",
+        "frontend component",
+        "frontend integration",
+        "backend service",
+        "database schema",
+        "database migration",
+        "unit test",
+        "integration test",
+        "debug issue",
+        "debug error",
+        "performance optimization",
+        "security audit",
+        "security vulnerability",
+        "deploy to",
+        "deployment pipeline",
+        "ui component",
+        "ux design",
+        "react component",
+        "vue component",
+        "angular component",
     ])
 
     def __init__(
@@ -373,7 +377,7 @@ if __name__ == "__main__":
         to_agent="polymorphic-agent",
         reason="Frontend integration with API endpoints and database connections",
         confidence=0.55,
-        user_request="integrate frontend with API",
+        user_request="build a frontend component for the dashboard",
     )
     print(f"  Outcome: {result.outcome.value}")
     print(f"  Valid: {result.is_valid}")

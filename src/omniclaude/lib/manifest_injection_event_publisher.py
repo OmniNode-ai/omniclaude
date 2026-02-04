@@ -52,11 +52,16 @@ KAFKA_PUBLISH_TIMEOUT_SECONDS = 10.0
 
 
 class ManifestInjectionEventType(str, Enum):
-    """Agent manifest injection event types with standardized topic routing."""
+    """Agent manifest injection event types with standardized topic routing.
 
-    STARTED = "onex.evt.omniclaude.manifest-injection.started.v1"
+    Topic names MUST match the canonical definitions in omniclaude/hooks/topics.py
+    (TopicBase enum) to ensure consumers receive events correctly.
+    """
+
+    # Topic names use hyphens (not dots) per ONEX naming convention
+    STARTED = "onex.evt.omniclaude.manifest-injection-started.v1"
     COMPLETED = "onex.evt.omniclaude.manifest-injected.v1"
-    FAILED = "onex.evt.omniclaude.manifest-injection.failed.v1"
+    FAILED = "onex.evt.omniclaude.manifest-injection-failed.v1"
 
     def get_topic_name(self) -> str:
         """
