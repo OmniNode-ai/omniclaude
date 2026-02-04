@@ -45,7 +45,7 @@ def read_plan_file(path: str) -> str:
     plan_path = Path(path).expanduser()
     if not plan_path.exists():
         raise FileNotFoundError(f"Plan file not found: {path}")
-    return plan_path.read_text()
+    return plan_path.read_text(encoding='utf-8')
 ```
 
 If file doesn't exist, report error and stop.
