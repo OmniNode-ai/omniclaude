@@ -252,15 +252,19 @@ class TestThreadSafety:
 
     def test_concurrent_emit_calls_are_safe(self) -> None:
         """Multiple threads can call emit_event concurrently."""
-        from plugins.onex.hooks.lib.emit_client_wrapper import emit_event
+        from plugins.onex.hooks.lib import emit_client_wrapper
 
-        errors = []
-        results = []
+        errors: list[Exception] = []
+        results: list[bool] = []
+
+        # Mock _get_client to avoid real socket operations that would block
+        mock_client = MagicMock()
+        mock_client.emit_sync.return_value = "test-event-id"
 
         def emit_worker():
             try:
                 for _ in range(50):
-                    result = emit_event(
+                    result = emit_client_wrapper.emit_event(
                         event_type="session.started",
                         payload={"session_id": "test"},
                         timeout_ms=1,
@@ -269,19 +273,21 @@ class TestThreadSafety:
             except Exception as e:
                 errors.append(e)
 
-        threads = [threading.Thread(target=emit_worker) for _ in range(10)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
+        with patch.object(emit_client_wrapper, "_get_client", return_value=mock_client):
+            threads = [threading.Thread(target=emit_worker) for _ in range(10)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
 
         # No errors should have occurred
         assert len(errors) == 0
 
-        # All results should be bools
+        # All results should be bools (True since mock succeeds)
         assert len(results) == 500
         for result in results:
             assert isinstance(result, bool)
+            assert result is True  # Mock client succeeds
 
 
 # =============================================================================
