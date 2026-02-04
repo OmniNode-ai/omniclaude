@@ -90,6 +90,9 @@ class HookEventType(StrEnum):
     PROMPT_SUBMITTED = "hook.prompt.submitted"
     TOOL_EXECUTED = "hook.tool.executed"
     CONTEXT_INJECTED = "hook.context.injected"
+    CONTEXT_UTILIZATION = "hook.context.utilization"
+    AGENT_MATCH = "hook.agent.match"
+    LATENCY_BREAKDOWN = "hook.latency.breakdown"
 
 
 class HookSource(StrEnum):
@@ -972,6 +975,262 @@ class ModelHookContextInjectedPayload(BaseModel):
 
 
 # =============================================================================
+# Injection Metrics Events (OMN-1889)
+# =============================================================================
+
+
+class ModelContextUtilizationPayload(BaseModel):
+    """Event payload for context utilization measurement.
+
+    Tracks whether injected context was actually used in Claude's response
+    by comparing identifiers between injected context and response text.
+
+    Attributes:
+        entity_id: Session identifier as UUID (partition key for ordering).
+        session_id: Session identifier string.
+        correlation_id: Correlation ID for distributed tracing.
+        causation_id: ID of the event that triggered this measurement.
+        emitted_at: Timestamp when the event was emitted (UTC).
+        utilization_score: Ratio of reused identifiers (0.0-1.0).
+        method: Detection method used ("identifier_overlap" or "timeout_fallback").
+        injected_count: Number of identifiers found in injected context.
+        reused_count: Number of injected identifiers found in response.
+        detection_duration_ms: Time taken for utilization detection.
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        from_attributes=True,
+    )
+
+    # Entity identification (partition key)
+    entity_id: UUID = Field(
+        ...,
+        description="Session identifier as UUID (partition key for ordering)",
+    )
+    session_id: str = Field(
+        ...,
+        min_length=1,
+        description="Session identifier string",
+    )
+
+    # Tracing and causation
+    correlation_id: UUID = Field(
+        ...,
+        description="Correlation ID for distributed tracing",
+    )
+    causation_id: UUID = Field(
+        ...,
+        description="ID of the event that triggered this measurement",
+    )
+
+    # Timestamps
+    emitted_at: TimezoneAwareDatetime = Field(
+        ...,
+        description="Timestamp when the event was emitted (UTC)",
+    )
+
+    # Utilization metrics
+    utilization_score: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Ratio of reused identifiers (0.0 = none used, 1.0 = all used)",
+    )
+    method: str = Field(
+        ...,
+        description="Detection method: 'identifier_overlap' or 'timeout_fallback'",
+    )
+    injected_count: int = Field(
+        ...,
+        ge=0,
+        description="Number of identifiers found in injected context",
+    )
+    reused_count: int = Field(
+        ...,
+        ge=0,
+        description="Number of injected identifiers found in response",
+    )
+    detection_duration_ms: int = Field(
+        ...,
+        ge=0,
+        le=1000,
+        description="Time taken for utilization detection in milliseconds (max 1 second)",
+    )
+
+
+class ModelAgentMatchPayload(BaseModel):
+    """Event payload for agent routing accuracy measurement.
+
+    Tracks how well agent routing matched expected behavior, enabling
+    feedback loops for routing improvement.
+
+    Attributes:
+        entity_id: Session identifier as UUID (partition key for ordering).
+        session_id: Session identifier string.
+        correlation_id: Correlation ID for distributed tracing.
+        causation_id: ID of the routing event being evaluated.
+        emitted_at: Timestamp when the event was emitted (UTC).
+        selected_agent: Agent that was selected by routing.
+        expected_agent: Expected agent (from feedback or heuristics), if known.
+        match_grade: Quality of match ("exact", "partial", "mismatch", "unknown").
+        confidence: Routing confidence score (0.0-1.0).
+        routing_method: Method used for routing ("event_routing", "fallback", "cache").
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        from_attributes=True,
+    )
+
+    # Entity identification (partition key)
+    entity_id: UUID = Field(
+        ...,
+        description="Session identifier as UUID (partition key for ordering)",
+    )
+    session_id: str = Field(
+        ...,
+        min_length=1,
+        description="Session identifier string",
+    )
+
+    # Tracing and causation
+    correlation_id: UUID = Field(
+        ...,
+        description="Correlation ID for distributed tracing",
+    )
+    causation_id: UUID = Field(
+        ...,
+        description="ID of the routing event being evaluated",
+    )
+
+    # Timestamps
+    emitted_at: TimezoneAwareDatetime = Field(
+        ...,
+        description="Timestamp when the event was emitted (UTC)",
+    )
+
+    # Agent match metrics
+    selected_agent: str = Field(
+        ...,
+        min_length=1,
+        description="Agent that was selected by routing",
+    )
+    expected_agent: str | None = Field(
+        default=None,
+        description="Expected agent from feedback or heuristics, if known",
+    )
+    match_grade: str = Field(
+        ...,
+        description="Quality of match: 'exact', 'partial', 'mismatch', or 'unknown'",
+    )
+    confidence: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Routing confidence score",
+    )
+    routing_method: str = Field(
+        ...,
+        description="Routing method: 'event_routing', 'fallback', or 'cache'",
+    )
+
+
+class ModelLatencyBreakdownPayload(BaseModel):
+    """Event payload for detailed hook latency breakdown.
+
+    Provides fine-grained timing for each phase of hook execution to
+    identify performance bottlenecks and optimize hook performance.
+
+    Attributes:
+        entity_id: Session identifier as UUID (partition key for ordering).
+        session_id: Session identifier string.
+        correlation_id: Correlation ID for distributed tracing.
+        causation_id: ID of the prompt event being measured.
+        emitted_at: Timestamp when the event was emitted (UTC).
+        routing_ms: Time spent on agent routing.
+        agent_load_ms: Time spent loading agent YAML.
+        context_injection_ms: Time spent on context/pattern injection.
+        intelligence_request_ms: Time spent on intelligence requests (optional).
+        total_hook_ms: Total hook execution time.
+        user_perceived_ms: User-perceived latency (optional).
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        from_attributes=True,
+    )
+
+    # Entity identification (partition key)
+    entity_id: UUID = Field(
+        ...,
+        description="Session identifier as UUID (partition key for ordering)",
+    )
+    session_id: str = Field(
+        ...,
+        min_length=1,
+        description="Session identifier string",
+    )
+
+    # Tracing and causation
+    correlation_id: UUID = Field(
+        ...,
+        description="Correlation ID for distributed tracing",
+    )
+    causation_id: UUID = Field(
+        ...,
+        description="ID of the prompt event being measured",
+    )
+
+    # Timestamps
+    emitted_at: TimezoneAwareDatetime = Field(
+        ...,
+        description="Timestamp when the event was emitted (UTC)",
+    )
+
+    # Latency breakdown
+    routing_ms: int = Field(
+        ...,
+        ge=0,
+        le=60000,
+        description="Time spent on agent routing in milliseconds",
+    )
+    agent_load_ms: int = Field(
+        ...,
+        ge=0,
+        le=60000,
+        description="Time spent loading agent YAML in milliseconds",
+    )
+    context_injection_ms: int = Field(
+        ...,
+        ge=0,
+        le=60000,
+        description="Time spent on context/pattern injection in milliseconds",
+    )
+    intelligence_request_ms: int | None = Field(
+        default=None,
+        ge=0,
+        le=60000,
+        description="Time spent on intelligence requests in milliseconds (optional)",
+    )
+    total_hook_ms: int = Field(
+        ...,
+        ge=0,
+        le=600000,
+        description="Total hook execution time in milliseconds",
+    )
+    user_perceived_ms: int | None = Field(
+        default=None,
+        ge=0,
+        le=600000,
+        description="User-perceived latency from prompt to response start (optional)",
+    )
+
+
+# =============================================================================
 # Discriminated Union (for deserialization)
 # =============================================================================
 
@@ -1027,6 +1286,9 @@ class ModelHookEventEnvelope(BaseModel):
         | ModelHookPromptSubmittedPayload
         | ModelHookToolExecutedPayload
         | ModelHookContextInjectedPayload
+        | ModelContextUtilizationPayload
+        | ModelAgentMatchPayload
+        | ModelLatencyBreakdownPayload
     ) = Field(
         ...,
         description="The event payload",
@@ -1051,6 +1313,9 @@ class ModelHookEventEnvelope(BaseModel):
             HookEventType.PROMPT_SUBMITTED: ModelHookPromptSubmittedPayload,
             HookEventType.TOOL_EXECUTED: ModelHookToolExecutedPayload,
             HookEventType.CONTEXT_INJECTED: ModelHookContextInjectedPayload,
+            HookEventType.CONTEXT_UTILIZATION: ModelContextUtilizationPayload,
+            HookEventType.AGENT_MATCH: ModelAgentMatchPayload,
+            HookEventType.LATENCY_BREAKDOWN: ModelLatencyBreakdownPayload,
         }
         expected = expected_types.get(self.event_type)
         if expected and not isinstance(self.payload, expected):
@@ -1067,7 +1332,10 @@ ModelHookPayload = Annotated[
     | ModelHookSessionEndedPayload
     | ModelHookPromptSubmittedPayload
     | ModelHookToolExecutedPayload
-    | ModelHookContextInjectedPayload,
+    | ModelHookContextInjectedPayload
+    | ModelContextUtilizationPayload
+    | ModelAgentMatchPayload
+    | ModelLatencyBreakdownPayload,
     Field(description="Union of all hook event payload types"),
 ]
 
@@ -1092,6 +1360,9 @@ __all__ = [
     "ModelHookPromptSubmittedPayload",
     "ModelHookToolExecutedPayload",
     "ModelHookContextInjectedPayload",
+    "ModelContextUtilizationPayload",
+    "ModelAgentMatchPayload",
+    "ModelLatencyBreakdownPayload",
     # Envelope and types
     "ModelHookEventEnvelope",
     "ModelHookPayload",

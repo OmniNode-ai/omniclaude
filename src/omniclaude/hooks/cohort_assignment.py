@@ -246,45 +246,85 @@ class EnumCohort(str, Enum):
     TREATMENT = "treatment"
 
 
+class IdentityType(str, Enum):
+    """Type of identity used for cohort assignment.
+
+    Priority order: USER_ID > REPO_PATH > SESSION_ID
+    """
+
+    USER_ID = "user_id"
+    REPO_PATH = "repo_path"
+    SESSION_ID = "session_id"
+
+
 class CohortAssignment(NamedTuple):
     """Result of cohort assignment."""
 
     cohort: EnumCohort
     assignment_seed: int  # 0-99, deterministic from hash
+    identity_type: IdentityType  # which identity was used for assignment
 
 
 def assign_cohort(
     session_id: str,
+    user_id: str | None = None,
+    repo_path: str | None = None,
     config: CohortAssignmentConfig | None = None,
 ) -> CohortAssignment:
-    """Assign session to A/B cohort.
+    """Assign session to A/B cohort with sticky identity.
 
-    Algorithm: SHA-256(session_id + salt) → first 8 bytes → mod 100
+    Algorithm: SHA-256(identity + salt) → first 8 bytes → mod 100
+
+    Identity priority (for sticky cohort assignment):
+    1. user_id - Most stable, follows user across sessions/repos
+    2. repo_path - Stable per repository
+    3. session_id - Fallback, changes each session
 
     The control/treatment split is determined by the configuration:
     - 0 to (control_percentage - 1): control
     - control_percentage to 99: treatment
 
     Args:
-        session_id: Session identifier (any string, including UUIDs).
+        session_id: Session identifier (required fallback).
+        user_id: User identifier for sticky assignment (optional).
+        repo_path: Repository path for repo-level stickiness (optional).
         config: Optional configuration. If None, loads from environment
             or uses defaults.
 
     Returns:
-        CohortAssignment with cohort and seed.
+        CohortAssignment with cohort, seed, and identity_type.
 
     Example:
-        >>> # Using defaults
-        >>> assignment = assign_cohort("session-123")
+        >>> # Sticky to user
+        >>> assignment = assign_cohort("sess-123", user_id="user-456")
+        >>> assignment.identity_type
+        <IdentityType.USER_ID: 'user_id'>
 
-        >>> # Using custom config
-        >>> config = CohortAssignmentConfig(control_percentage=50)
-        >>> assignment = assign_cohort("session-123", config=config)
+        >>> # Sticky to repo
+        >>> assignment = assign_cohort("sess-123", repo_path="/workspace/myrepo")
+        >>> assignment.identity_type
+        <IdentityType.REPO_PATH: 'repo_path'>
+
+        >>> # Fallback to session
+        >>> assignment = assign_cohort("sess-123")
+        >>> assignment.identity_type
+        <IdentityType.SESSION_ID: 'session_id'>
     """
     if config is None:
         config = CohortAssignmentConfig.from_contract()
 
-    seed_input = f"{session_id}:{config.salt}"
+    # Determine identity to use (priority: user_id > repo_path > session_id)
+    if user_id is not None and user_id.strip():
+        identity = user_id.strip()
+        identity_type = IdentityType.USER_ID
+    elif repo_path is not None and repo_path.strip():
+        identity = repo_path.strip()
+        identity_type = IdentityType.REPO_PATH
+    else:
+        identity = session_id
+        identity_type = IdentityType.SESSION_ID
+
+    seed_input = f"{identity}:{config.salt}"
     hash_bytes = hashlib.sha256(seed_input.encode("utf-8")).digest()
     assignment_seed = int.from_bytes(hash_bytes[:8], byteorder="big") % 100
 
@@ -293,7 +333,11 @@ def assign_cohort(
         if assignment_seed < config.control_percentage
         else EnumCohort.TREATMENT
     )
-    return CohortAssignment(cohort=cohort, assignment_seed=assignment_seed)
+    return CohortAssignment(
+        cohort=cohort,
+        assignment_seed=assignment_seed,
+        identity_type=identity_type,
+    )
 
 
 __all__ = [
@@ -303,6 +347,7 @@ __all__ = [
     "assign_cohort",
     # Types
     "EnumCohort",
+    "IdentityType",
     "CohortAssignment",
     # Contract-derived constants (canonical defaults)
     "CONTRACT_DEFAULT_CONTROL_PERCENTAGE",
