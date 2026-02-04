@@ -70,13 +70,16 @@ def detect_structure(content: str) -> tuple[str, list[dict]]:
         entries is list of {id, title, content, dependencies}
     """
     # Try Phase sections first (canonical)
-    phase_pattern = r'^## (?:Phase\s+)?(\d+)(?:\.?\d*)?:\s*(.+?)$'
+    # Captures decimal phases: "## Phase 1.5: Title" -> phase_num = "1.5"
+    phase_pattern = r'^## (?:Phase\s+)?(\d+(?:\.\d+)?):\s*(.+?)$'
     phase_matches = list(re.finditer(phase_pattern, content, re.MULTILINE | re.IGNORECASE))
 
     if phase_matches:
         entries = []
         for i, match in enumerate(phase_matches):
             phase_num = match.group(1)
+            # Normalize: 1.5 -> 1_5 for valid ID
+            phase_id = phase_num.replace('.', '_')
             title = match.group(2).strip()
 
             # Extract content until next ## heading or end
@@ -94,7 +97,7 @@ def detect_structure(content: str) -> tuple[str, list[dict]]:
             deps = parse_dependencies(phase_content)
 
             entries.append({
-                'id': f'P{phase_num}',
+                'id': f'P{phase_id}',
                 'title': f'Phase {phase_num}: {title}',
                 'content': phase_content,
                 'dependencies': deps
