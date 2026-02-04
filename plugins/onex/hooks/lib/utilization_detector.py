@@ -23,7 +23,7 @@ Why not hard timeouts?
 4. Regex on typical inputs completes in <5ms, so post-check is sufficient
 
 Defense in depth:
-1. Input size limits (MAX_INPUT_SIZE = 50KB) prevent pathological cases
+1. Input size limits (MAX_INPUT_SIZE = ~50K chars) prevent pathological cases
 2. Per-pattern timeout checks (5 checks per extraction, 10+ total)
 3. Graceful degradation with score=0.0 on timeout
 
@@ -68,10 +68,12 @@ _ALL_PATTERNS = [IDENTIFIER_RE, PATH_RE, TICKET_RE, URL_RE, ENV_KEY_RE]
 # Input Size Limits (Defense in Depth)
 # =============================================================================
 
-# Maximum input size in bytes (50KB). Inputs larger than this are truncated
-# to prevent pathological regex performance. This is a defense-in-depth measure
-# alongside per-pattern timeout checking.
-MAX_INPUT_SIZE = 50 * 1024  # 50KB
+# Maximum input size in characters (~50K chars). Inputs larger than this are
+# truncated to prevent pathological regex performance. This is a defense-in-depth
+# measure alongside per-pattern timeout checking.
+# Note: This is character count (len(text)), not byte count. For UTF-8 text with
+# multi-byte characters, actual byte size may differ.
+MAX_INPUT_SIZE = 50 * 1024  # ~50K characters
 
 # =============================================================================
 # Stopwords (English + Python keywords to prevent score inflation)
@@ -381,7 +383,7 @@ def calculate_utilization(
         UtilizationResult with score, method, and counts.
 
     Note:
-        - Input size is limited to MAX_INPUT_SIZE (50KB) as defense in depth
+        - Input size is limited to MAX_INPUT_SIZE (~50K chars) as defense in depth
         - Timeout is checked after each of 5 regex patterns (10+ checkpoints)
         - If timeout exceeds 2x budget, an error is logged for investigation
 
