@@ -12,9 +12,7 @@ Part of OMN-1889: Emit injection metrics + utilization signal.
 from __future__ import annotations
 
 import re
-import signal
 import time
-from contextlib import contextmanager
 from typing import NamedTuple
 
 # =============================================================================
@@ -178,35 +176,6 @@ class UtilizationTimeoutError(Exception):
     pass
 
 
-@contextmanager
-def timeout_context(timeout_ms: int):
-    """Context manager for timeout with graceful degradation.
-
-    Args:
-        timeout_ms: Maximum time in milliseconds.
-
-    Yields:
-        None
-
-    Raises:
-        UtilizationTimeoutError: If operation exceeds timeout.
-    """
-
-    def handler(signum, frame):
-        raise UtilizationTimeoutError(f"Operation timed out after {timeout_ms}ms")
-
-    # Set alarm (convert ms to seconds, minimum 1 second for signal)
-    timeout_sec = max(1, timeout_ms // 1000) if timeout_ms >= 1000 else 1
-    old_handler = signal.signal(signal.SIGALRM, handler)
-    signal.alarm(timeout_sec)
-
-    try:
-        yield
-    finally:
-        signal.alarm(0)
-        signal.signal(signal.SIGALRM, old_handler)
-
-
 # =============================================================================
 # Result Types
 # =============================================================================
@@ -216,7 +185,7 @@ class UtilizationResult(NamedTuple):
     """Result of utilization detection."""
 
     score: float  # 0.0-1.0 ratio of reused identifiers
-    method: str  # "identifier_overlap" or "timeout_fallback"
+    method: str  # "identifier_overlap", "timeout_fallback", or "error_fallback"
     injected_count: int  # identifiers in injected context
     reused_count: int  # identifiers found in response
     duration_ms: int  # time taken for detection
@@ -352,7 +321,7 @@ def calculate_utilization(
         duration_ms = int((time.perf_counter() - start_time) * 1000)
         return UtilizationResult(
             score=0.0,
-            method="timeout_fallback",
+            method="error_fallback",  # Distinguish from timeout for accurate analytics
             injected_count=0,
             reused_count=0,
             duration_ms=duration_ms,
