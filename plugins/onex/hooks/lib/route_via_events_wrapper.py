@@ -85,10 +85,7 @@ except ImportError:
 # Import cohort assignment for A/B testing tracking (optional)
 _assign_cohort: Callable[..., Any] | None = None
 try:
-    # Add src to path for omniclaude imports
-    import sys
-    from pathlib import Path
-
+    # Add src to path for omniclaude imports (sys and Path already imported above)
     _src_dir = Path(__file__).parent.parent.parent.parent.parent / "src"
     if str(_src_dir) not in sys.path:
         sys.path.insert(0, str(_src_dir))
