@@ -4,7 +4,25 @@
 Measures whether injected context was actually used by comparing identifiers
 between injected patterns and Claude's response.
 
-Performance requirement: 30ms hard timeout with graceful degradation.
+Performance requirement: 30ms soft timeout budget with graceful degradation.
+
+**Timeout Design (Soft Budget)**:
+This module uses a cooperative timeout model, NOT preemptive interruption.
+The timeout_ms parameter is a "soft budget" - we check elapsed time AFTER
+each regex operation completes, not during. This means:
+
+- A single slow regex can exceed the budget before we check
+- The timeout is enforced at operation boundaries, not mid-operation
+- This is intentional: Python regex cannot be safely interrupted mid-execution
+
+Why not hard timeouts?
+1. Python regex operations are atomic C extensions - cannot be interrupted
+2. signal.alarm() only supports whole-second granularity (we need 30ms)
+3. Threading adds complexity and potential race conditions for minimal gain
+4. Regex on typical inputs completes in <5ms, so post-check is sufficient
+
+Graceful degradation: If timeout is exceeded, returns timeout_fallback result
+with score=0.0. If timeout exceeds 2x budget, a warning is logged.
 
 Part of OMN-1889: Emit injection metrics + utilization signal.
 """
@@ -12,7 +30,9 @@ Part of OMN-1889: Emit injection metrics + utilization signal.
 from __future__ import annotations
 
 import logging
+import os
 import re
+import sys
 import time
 from typing import NamedTuple
 
@@ -181,6 +201,51 @@ class UtilizationTimeoutError(Exception):
 
 
 # =============================================================================
+# Guaranteed-Visibility Logging
+# =============================================================================
+
+
+def _log_with_guaranteed_visibility(message: str, level: str = "WARNING") -> None:
+    """Log a message with guaranteed visibility.
+
+    Ensures messages are visible by:
+    1. Always writing to stderr (visible in hook output)
+    2. Writing to LOG_FILE if configured (respects hook system config)
+    3. Using standard logging (for log aggregation)
+
+    This is critical for failure diagnostics in hook contexts where
+    standard logging may not be configured or visible.
+
+    Args:
+        message: The message to log.
+        level: Log level string (WARNING, ERROR, etc).
+    """
+    # Format with timestamp and level for consistency
+    import datetime
+
+    timestamp = datetime.datetime.now(datetime.UTC).isoformat()
+    formatted = f"[{timestamp}] {level}: {message}"
+
+    # 1. Always write to stderr (guaranteed visible in hooks)
+    print(formatted, file=sys.stderr)
+
+    # 2. Write to LOG_FILE if configured (hook system config)
+    log_file = os.environ.get("LOG_FILE")
+    if log_file:
+        try:
+            with open(log_file, "a") as f:
+                f.write(formatted + "\n")
+        except OSError:
+            # Cannot write to log file - stderr already has the message
+            pass
+
+    # 3. Also use standard logging for aggregation systems
+    logger = logging.getLogger(__name__)
+    log_method = getattr(logger, level.lower(), logger.warning)
+    log_method(message)
+
+
+# =============================================================================
 # Result Types
 # =============================================================================
 
@@ -246,10 +311,18 @@ def calculate_utilization(
     Args:
         injected_context: The context that was injected (patterns, etc).
         response_text: Claude's response text.
-        timeout_ms: Hard timeout in milliseconds (default: 30ms).
+        timeout_ms: Soft timeout budget in milliseconds (default: 30ms).
+            This is a cooperative timeout checked AFTER regex operations
+            complete - not a preemptive interrupt. A single slow regex
+            may exceed this budget before we can check. See module docstring
+            for detailed rationale.
 
     Returns:
         UtilizationResult with score, method, and counts.
+
+    Note:
+        If timeout exceeds 2x the budget (e.g., 60ms for 30ms budget),
+        a warning is logged for monitoring purposes.
 
     Example:
         >>> result = calculate_utilization(
@@ -262,15 +335,7 @@ def calculate_utilization(
     start_time = time.perf_counter()
 
     try:
-        # Cooperative timeout design: We check elapsed time AFTER each operation
-        # rather than using preemptive interruption (threads/signals) because:
-        # 1. Python regex operations are atomic - cannot be interrupted mid-execution
-        # 2. signal.alarm() only supports whole-second granularity (we need 30ms)
-        # 3. Threading adds complexity and potential race conditions
-        # 4. Regex on typical inputs completes in <5ms, so post-check is sufficient
-        # If a single regex takes >30ms, we'll exceed timeout but still complete
-        # gracefully - this is acceptable for the 30ms soft budget.
-
+        # Cooperative timeout: checked AFTER operations (see module docstring)
         # Extract identifiers from injected context
         injected_ids = extract_identifiers(injected_context)
 
@@ -312,6 +377,16 @@ def calculate_utilization(
     except UtilizationTimeoutError:
         # Expected: timeout exceeded, graceful degradation
         duration_ms = int((time.perf_counter() - start_time) * 1000)
+
+        # Log warning if significantly over budget (2x threshold)
+        if duration_ms > timeout_ms * 2:
+            _log_with_guaranteed_visibility(
+                f"Utilization detection exceeded 2x timeout budget: "
+                f"{duration_ms}ms (budget: {timeout_ms}ms). "
+                f"Consider investigating input size or regex performance.",
+                level="WARNING",
+            )
+
         return UtilizationResult(
             score=0.0,
             method="timeout_fallback",
@@ -321,11 +396,12 @@ def calculate_utilization(
         )
     except (ValueError, TypeError, AttributeError) as e:
         # Recoverable errors from malformed input - degrade gracefully
-        # Log at warning level for visibility in production diagnostics
-        logging.getLogger(__name__).warning(
-            f"Utilization detection failed with recoverable error: {e}"
-        )
+        # Use guaranteed-visibility logging for hook diagnostics
         duration_ms = int((time.perf_counter() - start_time) * 1000)
+        _log_with_guaranteed_visibility(
+            f"Utilization detection failed with recoverable error: {e}",
+            level="WARNING",
+        )
         return UtilizationResult(
             score=0.0,
             method="error_fallback",  # Distinguish from timeout for accurate analytics

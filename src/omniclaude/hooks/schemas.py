@@ -178,35 +178,39 @@ PROMPT_PREVIEW_MAX_LENGTH: int = 100
 #   1. All patterns are compiled at module load time for O(1) lookup
 #   2. Patterns use word boundaries (\b) where appropriate to avoid partial matches
 #   3. Minimum length requirements reduce false positives
-#   4. Group captures preserve non-secret context for readability
+#   4. Capturing groups (parentheses) are ONLY used when the replacement needs
+#      backreferences like \1 or \2. Otherwise, use non-capturing groups (?:...)
+#      for alternation. This ensures accurate redaction counts with subn().
 #
 _SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # API keys with common prefixes
-    (re.compile(r"\b(sk-[a-zA-Z0-9]{20,})", re.IGNORECASE), "sk-***REDACTED***"),
-    (re.compile(r"\b(AKIA[A-Z0-9]{16})", re.IGNORECASE), "AKIA***REDACTED***"),
-    (re.compile(r"\b(ghp_[a-zA-Z0-9]{36})", re.IGNORECASE), "ghp_***REDACTED***"),
-    (re.compile(r"\b(gho_[a-zA-Z0-9]{36})", re.IGNORECASE), "gho_***REDACTED***"),
+    # Note: No capturing groups - sub()/subn() replace the full match
+    (re.compile(r"\bsk-[a-zA-Z0-9]{20,}", re.IGNORECASE), "sk-***REDACTED***"),
+    (re.compile(r"\bAKIA[A-Z0-9]{16}", re.IGNORECASE), "AKIA***REDACTED***"),
+    (re.compile(r"\bghp_[a-zA-Z0-9]{36}", re.IGNORECASE), "ghp_***REDACTED***"),
+    (re.compile(r"\bgho_[a-zA-Z0-9]{36}", re.IGNORECASE), "gho_***REDACTED***"),
     (
-        re.compile(r"\b(xox[baprs]-[a-zA-Z0-9-]{10,})", re.IGNORECASE),
+        re.compile(r"\bxox[baprs]-[a-zA-Z0-9-]{10,}", re.IGNORECASE),
         "xox*-***REDACTED***",
     ),
     # Stripe API keys (publishable, secret, and restricted)
     # Format: (sk|pk|rk)_(live|test)_[a-zA-Z0-9]{24,}
     # Reference: https://stripe.com/docs/keys
+    # Note: (?:...) is non-capturing group for alternation, not for backreference
     (
-        re.compile(r"\b((?:sk|pk|rk)_(?:live|test)_[a-zA-Z0-9]{24,})", re.IGNORECASE),
+        re.compile(r"\b(?:sk|pk|rk)_(?:live|test)_[a-zA-Z0-9]{24,}", re.IGNORECASE),
         "stripe_***REDACTED***",
     ),
     # Google Cloud Platform API keys
     # Format: AIza[0-9A-Za-z-_]{35}
     # Reference: https://cloud.google.com/docs/authentication/api-keys
-    (re.compile(r"\b(AIza[0-9A-Za-z\-_]{35})"), "AIza***REDACTED***"),
+    (re.compile(r"\bAIza[0-9A-Za-z\-_]{35}"), "AIza***REDACTED***"),
     # JWT tokens (JSON Web Tokens)
     # Format: base64url(header).base64url(payload).base64url(signature)
     # Header always starts with eyJ (base64 of '{"')
     # Reference: RFC 7519 (JSON Web Token)
     (
-        re.compile(r"\b(eyJ[a-zA-Z0-9_-]*\.eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*)"),
+        re.compile(r"\beyJ[a-zA-Z0-9_-]*\.eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*"),
         "jwt_***REDACTED***",
     ),
     # Private keys (PEM format)
