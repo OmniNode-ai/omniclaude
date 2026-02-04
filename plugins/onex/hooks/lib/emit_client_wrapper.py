@@ -55,11 +55,14 @@ Related Tickets:
 from __future__ import annotations
 
 import argparse
+import asyncio
+import concurrent.futures
 import json
 import logging
 import os
 import sys
 import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -94,6 +97,45 @@ SUPPORTED_EVENT_TYPES = frozenset(
         "injection.recorded",
     ]
 )
+
+# =============================================================================
+# Async Context Detection and Thread Execution
+# =============================================================================
+
+
+def _is_in_async_context() -> bool:
+    """Check if we're currently inside a running event loop.
+
+    Returns:
+        True if called from within a running async event loop, False otherwise.
+    """
+    try:
+        asyncio.get_running_loop()
+        return True
+    except RuntimeError:
+        return False
+
+
+def _run_sync_in_thread[T](func: Callable[[], T]) -> T:
+    """Run a sync function in a separate thread.
+
+    This is used when sync methods that internally call run_until_complete()
+    are invoked from within an async context. Running in a thread avoids
+    the "cannot use sync methods from async context" error.
+
+    Args:
+        func: Zero-argument callable to execute in the thread.
+
+    Returns:
+        The result of calling func().
+
+    Raises:
+        Exception: Any exception raised by func() is re-raised.
+    """
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(func)
+        return future.result()
+
 
 # =============================================================================
 # Client Initialization (thread-safe, lazy)
@@ -242,7 +284,14 @@ def emit_event(
 
     try:
         # Use sync method for hooks (simpler, no event loop needed)
-        event_id = client.emit_sync(event_type, payload)
+        # If we're inside an async context, run in a thread to avoid
+        # "cannot use sync methods from async context" error
+        if _is_in_async_context():
+            event_id = _run_sync_in_thread(
+                lambda: client.emit_sync(event_type, payload)
+            )
+        else:
+            event_id = client.emit_sync(event_type, payload)
         logger.debug(f"Event emitted: {event_id}")
         return True
 
@@ -283,7 +332,12 @@ def daemon_available() -> bool:
         return False
 
     try:
-        return cast("bool", client.is_daemon_running_sync())
+        # If we're inside an async context, run in a thread to avoid
+        # "cannot use sync methods from async context" error
+        if _is_in_async_context():
+            return cast("bool", _run_sync_in_thread(client.is_daemon_running_sync))
+        else:
+            return cast("bool", client.is_daemon_running_sync())
     except Exception as e:
         logger.debug(f"Daemon ping failed: {e}")
         return False

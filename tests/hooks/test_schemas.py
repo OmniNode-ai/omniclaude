@@ -27,8 +27,11 @@ from pydantic import ValidationError
 
 from omniclaude.hooks.schemas import (
     PROMPT_PREVIEW_MAX_LENGTH,
+    ContextSource,
     HookEventType,
+    ModelHookContextInjectedPayload,
     ModelHookEventEnvelope,
+    ModelHookManifestInjectedPayload,
     ModelHookPromptSubmittedPayload,
     ModelHookSessionEndedPayload,
     ModelHookSessionStartedPayload,
@@ -1850,6 +1853,32 @@ class TestEventTypePayloadValidation:
                     emitted_at=make_timestamp(),
                     tool_execution_id=uuid4(),
                     tool_name="Read",
+                ),
+            ),
+            (
+                HookEventType.CONTEXT_INJECTED,
+                ModelHookContextInjectedPayload(
+                    entity_id=make_entity_id(),
+                    session_id="test",
+                    correlation_id=make_correlation_id(),
+                    causation_id=make_causation_id(),
+                    emitted_at=make_timestamp(),
+                    context_source=ContextSource.DATABASE,
+                    pattern_count=5,
+                    context_size_bytes=1024,
+                    retrieval_duration_ms=50,
+                ),
+            ),
+            (
+                HookEventType.MANIFEST_INJECTED,
+                ModelHookManifestInjectedPayload(
+                    entity_id=make_entity_id(),
+                    session_id="test",
+                    correlation_id=make_correlation_id(),
+                    causation_id=make_causation_id(),
+                    emitted_at=make_timestamp(),
+                    agent_name="agent-api-architect",
+                    injection_success=True,
                 ),
             ),
         ]

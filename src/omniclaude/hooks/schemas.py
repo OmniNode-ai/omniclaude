@@ -90,6 +90,7 @@ class HookEventType(StrEnum):
     PROMPT_SUBMITTED = "hook.prompt.submitted"
     TOOL_EXECUTED = "hook.tool.executed"
     CONTEXT_INJECTED = "hook.context.injected"
+    MANIFEST_INJECTED = "hook.manifest.injected"
 
 
 class HookSource(StrEnum):
@@ -972,6 +973,135 @@ class ModelHookContextInjectedPayload(BaseModel):
 
 
 # =============================================================================
+# Manifest Injection Events
+# =============================================================================
+
+
+class ModelHookManifestInjectedPayload(BaseModel):
+    """Event payload for agent manifest injection during UserPromptSubmit.
+
+    Emitted when an agent manifest (YAML) is loaded and injected into the session.
+    This provides observability into which agents are being loaded, how long it takes,
+    and whether the injection succeeds.
+
+    Attributes:
+        entity_id: Session identifier as UUID (partition key for ordering).
+        session_id: Session identifier string.
+        correlation_id: Correlation ID for distributed tracing.
+        causation_id: ID of the prompt event that triggered manifest injection.
+        emitted_at: Timestamp when the hook emitted this event (UTC).
+        agent_name: Name of the agent being loaded (e.g., "agent-api-architect").
+        agent_domain: Domain of the agent (e.g., "api-development", "testing").
+        injection_success: Whether the manifest injection succeeded.
+        injection_duration_ms: Time to load and inject manifest in milliseconds.
+        yaml_path: Path to the agent YAML file (optional, for debugging).
+        agent_version: Version of the agent definition if specified.
+        agent_capabilities: List of capabilities from the agent manifest.
+        routing_source: How the agent was selected (explicit, fuzzy_match, fallback).
+        error_message: Error details if injection failed.
+        error_type: Error classification if injection failed.
+
+    Example:
+        >>> from datetime import UTC, datetime
+        >>> from uuid import uuid4
+        >>> session_id = uuid4()
+        >>> event = ModelHookManifestInjectedPayload(
+        ...     entity_id=session_id,
+        ...     session_id=str(session_id),
+        ...     correlation_id=session_id,
+        ...     causation_id=uuid4(),
+        ...     emitted_at=datetime(2025, 1, 15, 12, 5, 0, tzinfo=UTC),
+        ...     agent_name="agent-api-architect",
+        ...     agent_domain="api-development",
+        ...     injection_success=True,
+        ...     injection_duration_ms=45,
+        ...     yaml_path="/path/to/agent-api-architect.yaml",
+        ...     routing_source="explicit",
+        ... )
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        from_attributes=True,
+    )
+
+    # Entity identification (partition key)
+    entity_id: UUID = Field(
+        ...,
+        description="Session identifier as UUID (partition key for ordering)",
+    )
+    session_id: str = Field(
+        ...,
+        min_length=1,
+        description="Session identifier string",
+    )
+
+    # Tracing and causation
+    correlation_id: UUID = Field(
+        default_factory=uuid4,
+        description="Correlation ID for distributed tracing",
+    )
+    causation_id: UUID = Field(
+        ...,
+        description="ID of the prompt event that triggered manifest injection",
+    )
+
+    # Timestamps - MUST be explicitly injected (no default_factory for testability)
+    # Uses TimezoneAwareDatetime for automatic timezone validation
+    emitted_at: TimezoneAwareDatetime = Field(
+        ...,
+        description="Timestamp when the hook emitted this event (UTC)",
+    )
+
+    # Manifest injection-specific fields
+    agent_name: str = Field(
+        ...,
+        min_length=1,
+        description="Name of the agent being loaded (e.g., 'agent-api-architect')",
+    )
+    agent_domain: str | None = Field(
+        default=None,
+        description="Domain of the agent (e.g., 'api-development', 'testing')",
+    )
+    injection_success: bool = Field(
+        default=True,
+        description="Whether the manifest injection succeeded",
+    )
+    injection_duration_ms: int | None = Field(
+        default=None,
+        ge=0,
+        le=10000,
+        description="Time to load and inject manifest in milliseconds (max 10 seconds)",
+    )
+    yaml_path: str | None = Field(
+        default=None,
+        description="Path to the agent YAML file (for debugging, may contain usernames)",
+    )
+    agent_version: str | None = Field(
+        default=None,
+        description="Version of the agent definition if specified",
+    )
+    agent_capabilities: list[str] | None = Field(
+        default=None,
+        description="List of capabilities from the agent manifest",
+    )
+    routing_source: str | None = Field(
+        default=None,
+        description="How the agent was selected (explicit, fuzzy_match, fallback)",
+    )
+    error_message: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Error details if injection failed",
+    )
+    error_type: str | None = Field(
+        default=None,
+        description="Error classification if injection failed",
+    )
+
+
+# =============================================================================
 # Discriminated Union (for deserialization)
 # =============================================================================
 
@@ -1027,6 +1157,7 @@ class ModelHookEventEnvelope(BaseModel):
         | ModelHookPromptSubmittedPayload
         | ModelHookToolExecutedPayload
         | ModelHookContextInjectedPayload
+        | ModelHookManifestInjectedPayload
     ) = Field(
         ...,
         description="The event payload",
@@ -1051,6 +1182,7 @@ class ModelHookEventEnvelope(BaseModel):
             HookEventType.PROMPT_SUBMITTED: ModelHookPromptSubmittedPayload,
             HookEventType.TOOL_EXECUTED: ModelHookToolExecutedPayload,
             HookEventType.CONTEXT_INJECTED: ModelHookContextInjectedPayload,
+            HookEventType.MANIFEST_INJECTED: ModelHookManifestInjectedPayload,
         }
         expected = expected_types.get(self.event_type)
         if expected and not isinstance(self.payload, expected):
@@ -1067,7 +1199,8 @@ ModelHookPayload = Annotated[
     | ModelHookSessionEndedPayload
     | ModelHookPromptSubmittedPayload
     | ModelHookToolExecutedPayload
-    | ModelHookContextInjectedPayload,
+    | ModelHookContextInjectedPayload
+    | ModelHookManifestInjectedPayload,
     Field(description="Union of all hook event payload types"),
 ]
 
@@ -1092,6 +1225,7 @@ __all__ = [
     "ModelHookPromptSubmittedPayload",
     "ModelHookToolExecutedPayload",
     "ModelHookContextInjectedPayload",
+    "ModelHookManifestInjectedPayload",
     # Envelope and types
     "ModelHookEventEnvelope",
     "ModelHookPayload",
