@@ -100,15 +100,15 @@ ENGLISH_STOPWORDS = frozenset(
 
 CODE_STOPWORDS = frozenset(
     {
-        # Python keywords
+        # Python keywords (lowercase for comparison after normalization)
         "def",
         "class",
         "return",
         "import",
         "from",
-        "None",
-        "True",
-        "False",
+        "none",
+        "true",
+        "false",
         "self",
         "cls",
         "async",
@@ -129,7 +129,7 @@ CODE_STOPWORDS = frozenset(
         "del",
         "elif",
         "else",
-        # Common primitives/types
+        # Common primitives/types (lowercase for comparison)
         "str",
         "int",
         "float",
@@ -141,9 +141,9 @@ CODE_STOPWORDS = frozenset(
         "bytes",
         "type",
         "object",
-        "Any",
-        "Optional",
-        "Union",
+        "any",
+        "optional",
+        "union",
         # Common variable names
         "args",
         "kwargs",
