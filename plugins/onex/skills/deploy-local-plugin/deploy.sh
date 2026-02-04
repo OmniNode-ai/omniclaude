@@ -33,11 +33,9 @@ for arg in "$@"; do
     case $arg in
         --execute)
             EXECUTE=true
-            shift
             ;;
         --no-version-bump)
             NO_VERSION_BUMP=true
-            shift
             ;;
         --help|-h)
             echo "Usage: deploy.sh [--execute] [--no-version-bump]"
@@ -152,6 +150,24 @@ echo ""
 if [[ -d "$TARGET" ]]; then
     echo -e "${YELLOW}Warning: Target directory exists, will overwrite${NC}"
     echo ""
+fi
+
+# Validate required source directories exist
+REQUIRED_DIRS=("commands" "skills" "agents" "hooks" ".claude-plugin")
+MISSING_DIRS=()
+
+for dir in "${REQUIRED_DIRS[@]}"; do
+    if [[ ! -d "${SOURCE_ROOT}/${dir}" ]]; then
+        MISSING_DIRS+=("$dir")
+    fi
+done
+
+if [[ ${#MISSING_DIRS[@]} -gt 0 ]]; then
+    echo -e "${RED}Error: Required source directories missing:${NC}"
+    for dir in "${MISSING_DIRS[@]}"; do
+        echo -e "${RED}  - ${SOURCE_ROOT}/${dir}${NC}"
+    done
+    exit 1
 fi
 
 # Execute or show instruction
