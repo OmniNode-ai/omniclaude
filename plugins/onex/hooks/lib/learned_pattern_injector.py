@@ -161,7 +161,9 @@ def load_patterns(
         from omniclaude.hooks.context_config import ContextInjectionConfig
         from omniclaude.hooks.handler_context_injection import inject_patterns_sync
 
-        config = ContextInjectionConfig(min_confidence=min_confidence)
+        # CRITICAL: Disable database in deprecated module - it's for file-based loading only.
+        # Database access would hang in CI environments without database connectivity.
+        config = ContextInjectionConfig(min_confidence=min_confidence, db_enabled=False)
         result = inject_patterns_sync(
             project_root=str(project_root) if project_root else None,
             agent_domain=domain,
