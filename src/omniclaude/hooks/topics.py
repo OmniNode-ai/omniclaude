@@ -76,6 +76,13 @@ class TopicBase(StrEnum):
     # Injection tracking event (OMN-1673 INJECT-004)
     INJECTION_RECORDED = "onex.evt.omniclaude.injection-recorded.v1"
 
+    # ==========================================================================
+    # Manifest injection topics (agent loading observability)
+    # ==========================================================================
+    MANIFEST_INJECTION_STARTED = "onex.evt.omniclaude.manifest-injection-started.v1"
+    MANIFEST_INJECTED = "onex.evt.omniclaude.manifest-injected.v1"
+    MANIFEST_INJECTION_FAILED = "onex.evt.omniclaude.manifest-injection-failed.v1"
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).
