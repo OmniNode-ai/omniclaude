@@ -11,6 +11,7 @@ Part of OMN-1889: Emit injection metrics + utilization signal.
 
 from __future__ import annotations
 
+import logging
 import re
 import time
 from typing import NamedTuple
@@ -313,8 +314,6 @@ def calculate_utilization(
     except (ValueError, TypeError, AttributeError) as e:
         # Recoverable errors from malformed input - degrade gracefully
         # Log at debug level to avoid noise from expected edge cases
-        import logging
-
         logging.getLogger(__name__).debug(
             f"Utilization detection failed with recoverable error: {e}"
         )
