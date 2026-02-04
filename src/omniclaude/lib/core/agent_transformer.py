@@ -416,6 +416,10 @@ class AgentTransformer:
 
         Use async version when possible. This creates event loop if needed.
 
+        WARNING: Do not call this from async code (within a running event loop).
+        Doing so will raise RuntimeError. Use `transform_with_logging` directly
+        in async contexts, or call via `asyncio.run_coroutine_threadsafe()`.
+
         Args:
             Same as transform_with_logging
 
@@ -424,28 +428,41 @@ class AgentTransformer:
 
         Raises:
             ValueError: If transformation is blocked by validator
+            RuntimeError: If called from within a running event loop
         """
-        # Note: asyncio.get_event_loop() is deprecated since Python 3.10.
-        # Use get_running_loop() to check for existing loop, then create new if needed.
+        # Check if we're already in an async context
         try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            # No running loop - create a new one for sync execution
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-
-        return loop.run_until_complete(
-            self.transform_with_logging(
-                agent_name=agent_name,
-                source_agent=source_agent,
-                transformation_reason=transformation_reason,
-                correlation_id=correlation_id,
-                user_request=user_request,
-                routing_confidence=routing_confidence,
-                routing_strategy=routing_strategy,
-                skip_validation=skip_validation,
+            asyncio.get_running_loop()
+            # If we get here, there IS a running loop - we cannot use run_until_complete
+            raise RuntimeError(
+                "Cannot call transform_sync_with_logging from within a running event loop. "
+                "Use `await transform_with_logging(...)` instead, or run in a separate thread."
             )
-        )
+        except RuntimeError as e:
+            # If the error is our own, re-raise it
+            if "Cannot call transform_sync_with_logging" in str(e):
+                raise
+            # Otherwise, no running loop exists - create one for sync execution
+            pass
+
+        # No running loop - safe to create and run synchronously
+        loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(loop)
+            return loop.run_until_complete(
+                self.transform_with_logging(
+                    agent_name=agent_name,
+                    source_agent=source_agent,
+                    transformation_reason=transformation_reason,
+                    correlation_id=correlation_id,
+                    user_request=user_request,
+                    routing_confidence=routing_confidence,
+                    routing_strategy=routing_strategy,
+                    skip_validation=skip_validation,
+                )
+            )
+        finally:
+            loop.close()
 
 
 def main() -> None:

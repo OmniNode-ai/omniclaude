@@ -505,24 +505,43 @@ def publish_transformation_event_sync(
     Synchronous wrapper for publish_transformation_event.
 
     Creates new event loop if needed. Use async version when possible.
-    """
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_closed():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
 
-    return loop.run_until_complete(
-        publish_transformation_event(
-            source_agent=source_agent,
-            target_agent=target_agent,
-            transformation_reason=transformation_reason,
-            **kwargs,
+    WARNING: Do not call this from async code (within a running event loop).
+    Doing so will raise RuntimeError. Use `publish_transformation_event` directly
+    in async contexts, or call via `asyncio.run_coroutine_threadsafe()`.
+
+    Raises:
+        RuntimeError: If called from within a running event loop
+    """
+    # Check if we're already in an async context
+    try:
+        asyncio.get_running_loop()
+        # If we get here, there IS a running loop - we cannot use run_until_complete
+        raise RuntimeError(
+            "Cannot call publish_transformation_event_sync from within a running event loop. "
+            "Use `await publish_transformation_event(...)` instead, or run in a separate thread."
         )
-    )
+    except RuntimeError as e:
+        # If the error is our own, re-raise it
+        if "Cannot call publish_transformation_event_sync" in str(e):
+            raise
+        # Otherwise, no running loop exists - create one for sync execution
+        pass
+
+    # No running loop - safe to create and run synchronously
+    loop = asyncio.new_event_loop()
+    try:
+        asyncio.set_event_loop(loop)
+        return loop.run_until_complete(
+            publish_transformation_event(
+                source_agent=source_agent,
+                target_agent=target_agent,
+                transformation_reason=transformation_reason,
+                **kwargs,
+            )
+        )
+    finally:
+        loop.close()
 
 
 if __name__ == "__main__":
