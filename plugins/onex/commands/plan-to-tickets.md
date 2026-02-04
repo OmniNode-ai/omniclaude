@@ -335,9 +335,20 @@ def resolve_epic(epic_title: str, team: str, no_create: bool, project: str | Non
 ## Step 5: Build Ticket Descriptions
 
 ```python
-def build_ticket_description(entry: dict, structure_type: str) -> str:
-    """Build standardized ticket description from plan entry."""
+def build_ticket_description(entry: dict, structure_type: str, arch_violation_override: bool = False) -> str:
+    """Build standardized ticket description from plan entry.
+
+    Args:
+        entry: Plan entry with title, content, dependencies
+        structure_type: Type of plan structure (phase_sections or milestone_table)
+        arch_violation_override: If True, add warning about architecture validation bypass
+    """
     lines = []
+
+    # Add architecture violation warning if applicable
+    if arch_violation_override:
+        lines.append("> **Architecture Override**: This ticket was created with `--allow-arch-violation` - cross-application dependency requires justification.\n")
+        lines.append("")
 
     lines.append("## Summary\n")
     lines.append(entry['content'][:500] if entry['content'] else f"Implementation for: {entry['title']}")
@@ -436,7 +447,7 @@ def validate_plan_dependencies(
     plan_repo: str | None,
     allow_override: bool,
     dry_run: bool
-) -> bool:
+) -> tuple[bool, bool]:
     """Validate all external dependencies in the plan.
 
     Args:
@@ -446,12 +457,14 @@ def validate_plan_dependencies(
         dry_run: If True, just report what would be validated
 
     Returns:
-        True if validation passes (or override set), False if should abort
+        Tuple of (should_proceed, violations_overridden):
+        - should_proceed: True if validation passes (or override set), False if should abort
+        - violations_overridden: True if violations were found but overridden with --allow-arch-violation
     """
     if not plan_repo:
         print("Warning: No --repo specified. Skipping architecture validation.")
         print("  Provide --repo to enable dependency validation.")
-        return True
+        return (True, False)  # proceed, no violations overridden
 
     # Collect all external dependencies (OMN-#### format)
     external_deps = []
@@ -461,13 +474,13 @@ def validate_plan_dependencies(
                 external_deps.append(dep)
 
     if not external_deps:
-        return True  # No external deps to validate
+        return (True, False)  # proceed, no violations overridden
 
     if dry_run:
         print(f"\n[DRY RUN] Would validate {len(external_deps)} external dependencies:")
         for dep in external_deps:
             print(f"  - {dep}")
-        return True
+        return (True, False)  # proceed, no violations overridden (can't know in dry run)
 
     # Validate each external dependency
     all_errors = []
@@ -498,26 +511,31 @@ def validate_plan_dependencies(
 
         if allow_override:
             print("[WARNING] Proceeding with architecture violations (--allow-arch-violation)\n")
-            return True
+            return (True, True)  # proceed, violations WERE overridden
         else:
             print("Valid dependencies flow: app→foundation or foundation→foundation.")
             print("To proceed anyway, use --allow-arch-violation flag.")
             print("\nNo tickets created. Fix dependencies or use override flag.")
-            return False
+            return (False, False)  # abort, no override
 
-    return True
+    return (True, False)  # proceed, no violations to override
 
 
 # Call before Step 8
 plan_repo = args.repo  # May be None if not specified
 
-if not validate_plan_dependencies(
+should_proceed, arch_violation_override = validate_plan_dependencies(
     entries=entries,
     plan_repo=plan_repo,
     allow_override=args.allow_arch_violation,
     dry_run=args.dry_run
-):
+)
+
+if not should_proceed:
     raise SystemExit(1)
+
+# arch_violation_override is True if violations were found but --allow-arch-violation was used
+# This flag will be passed to create_tickets_batch to annotate tickets with warnings
 ```
 
 **Key behavior**:
@@ -539,9 +557,20 @@ def create_tickets_batch(
     project: str | None,
     structure_type: str,
     skip_existing: bool,
-    dry_run: bool
+    dry_run: bool,
+    arch_violation_override: bool = False
 ) -> dict:
     """Create all tickets from plan entries.
+
+    Args:
+        entries: List of plan entries to create tickets for
+        epic: Parent epic issue, or None
+        team: Linear team name
+        project: Linear project name, or None
+        structure_type: Type of plan structure detected
+        skip_existing: If True, skip existing tickets without asking
+        dry_run: If True, don't actually create tickets
+        arch_violation_override: If True, add warning annotation to ticket descriptions
 
     Returns:
         {created: [], skipped: [], updated: [], failed: [], id_map: {P1: OMN-xxx}}
@@ -576,7 +605,7 @@ def create_tickets_batch(
 
             if action == 'update':
                 if not dry_run:
-                    description = build_ticket_description(entry, structure_type)
+                    description = build_ticket_description(entry, structure_type, arch_violation_override)
                     existing_desc = existing.get('description', '') or ''
                     merged = f"{existing_desc}\n\n---\n\n## Updated from Plan\n\n{description}"
 
@@ -593,7 +622,7 @@ def create_tickets_batch(
                 continue
 
         # Create new ticket
-        description = build_ticket_description(entry, structure_type)
+        description = build_ticket_description(entry, structure_type, arch_violation_override)
 
         if len(description) > MAX_DESC_SIZE:
             description = description[:MAX_DESC_SIZE] + "\n\n[... truncated due to size limit]"
@@ -798,7 +827,8 @@ results = create_tickets_batch(
     project=args.project,
     structure_type=structure_type,
     skip_existing=args.skip_existing,
-    dry_run=args.dry_run
+    dry_run=args.dry_run,
+    arch_violation_override=arch_violation_override  # Add warning to tickets if violations were overridden
 )
 
 # Step 9: Report summary
