@@ -68,7 +68,7 @@ class TestModuleImport:
 
         assert DEFAULT_SOCKET_PATH is not None
         assert isinstance(DEFAULT_SOCKET_PATH, Path)
-        assert str(DEFAULT_SOCKET_PATH) == "/tmp/omniclaude-emit.sock"
+        assert str(DEFAULT_SOCKET_PATH) == "/tmp/omniclaude-emit.sock"  # noqa: S108
 
     def test_default_timeout_ms_defined(self) -> None:
         """Verify DEFAULT_TIMEOUT_MS constant is defined."""
@@ -208,25 +208,31 @@ class TestThreadSafety:
     """Tests for thread-safe client initialization."""
 
     def test_concurrent_status_calls_are_safe(self) -> None:
-        """Multiple threads can call get_status concurrently."""
-        from plugins.onex.hooks.lib import emit_client_wrapper
+        """Multiple threads can call get_status concurrently.
+
+        This test verifies thread safety of get_status() - not actual daemon
+        connectivity. We mock daemon_available() to avoid expensive socket
+        timeout operations in CI where no daemon is running.
+        """
+        from plugins.onex.hooks.lib.emit_client_wrapper import get_status
 
         errors: list[Exception] = []
         results: list[dict] = []
 
-        # Mock _get_client to avoid real socket operations that would block
-        mock_client = MagicMock()
-        mock_client.is_daemon_running_sync.return_value = True
-
         def status_worker():
             try:
                 for _ in range(100):
-                    status = emit_client_wrapper.get_status()
+                    status = get_status()
                     results.append(status)
             except Exception as e:
                 errors.append(e)
 
-        with patch.object(emit_client_wrapper, "_get_client", return_value=mock_client):
+        # Mock daemon_available to avoid slow socket timeouts in CI
+        # The test is about thread safety, not actual daemon connectivity
+        with patch(
+            "plugins.onex.hooks.lib.emit_client_wrapper.daemon_available",
+            return_value=False,
+        ):
             threads = [threading.Thread(target=status_worker) for _ in range(10)]
             for t in threads:
                 t.start()
