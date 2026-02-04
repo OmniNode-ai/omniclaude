@@ -10,6 +10,14 @@
 
 set -euo pipefail
 
+# Check required dependencies
+for cmd in jq rsync; do
+    if ! command -v "$cmd" &>/dev/null; then
+        echo "Error: Required command '$cmd' not found"
+        exit 1
+    fi
+done
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -72,6 +80,12 @@ CURRENT_VERSION=$(jq -r '.version' "$PLUGIN_JSON")
 
 if [[ -z "$CURRENT_VERSION" || "$CURRENT_VERSION" == "null" ]]; then
     echo -e "${RED}Error: Could not read version from plugin.json${NC}"
+    exit 1
+fi
+
+# Validate version format (must be X.Y.Z semver)
+if ! [[ "$CURRENT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo -e "${RED}Error: Version '$CURRENT_VERSION' is not valid semver (X.Y.Z)${NC}"
     exit 1
 fi
 
@@ -184,16 +198,20 @@ if [[ "$EXECUTE" == "true" ]]; then
 
     # Update registry
     if [[ -f "$REGISTRY" ]]; then
-        TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
+        # Verify expected structure exists before updating
+        if jq -e '.plugins["onex@omninode-tools"][0]' "$REGISTRY" >/dev/null 2>&1; then
+            TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
 
-        jq --arg ts "$TIMESTAMP" --arg v "$NEW_VERSION" --arg p "$TARGET" '
-            .plugins["onex@omninode-tools"][0].lastUpdated = $ts |
-            .plugins["onex@omninode-tools"][0].version = $v |
-            .plugins["onex@omninode-tools"][0].installPath = $p
-        ' "$REGISTRY" > "${REGISTRY}.tmp"
+            jq --arg ts "$TIMESTAMP" --arg v "$NEW_VERSION" --arg p "$TARGET" '
+                .plugins["onex@omninode-tools"][0].lastUpdated = $ts |
+                .plugins["onex@omninode-tools"][0].version = $v |
+                .plugins["onex@omninode-tools"][0].installPath = $p
+            ' "$REGISTRY" > "${REGISTRY}.tmp" && mv "${REGISTRY}.tmp" "$REGISTRY"
 
-        mv "${REGISTRY}.tmp" "$REGISTRY"
-        echo -e "${GREEN}  Updated installed_plugins.json${NC}"
+            echo -e "${GREEN}  Updated installed_plugins.json${NC}"
+        else
+            echo -e "${YELLOW}  Warning: Plugin entry not found in registry (skipping update)${NC}"
+        fi
     else
         echo -e "${YELLOW}  Warning: Registry not found at ${REGISTRY}${NC}"
     fi
