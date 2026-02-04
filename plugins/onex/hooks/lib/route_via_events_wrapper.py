@@ -48,6 +48,42 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Canonical routing path values for metrics
+VALID_ROUTING_PATHS = frozenset({"event", "local", "hybrid"})
+
+
+def _compute_routing_path(method: str, event_attempted: bool) -> str:
+    """
+    Map method to canonical routing_path.
+
+    Logic:
+    - event_attempted=False → "local" (never tried event path)
+    - event_attempted=True AND method=event_based → "event"
+    - event_attempted=True AND method=fallback → "hybrid" (tried event, fell back)
+    - Unknown method → "local" with loud warning
+
+    Args:
+        method: The routing method used (event_based, fallback, etc.)
+        event_attempted: Whether event-based routing was attempted
+
+    Returns:
+        Canonical routing path: "event", "local", or "hybrid"
+    """
+    if not event_attempted:
+        return "local"
+
+    if method == "event_based":
+        return "event"
+    elif method == "fallback":
+        return "hybrid"  # Attempted event, but fell back
+    else:
+        # Unknown method - log loudly, do NOT silently accept
+        logger.warning(
+            f"Unknown routing method '{method}' - forcing routing_path='local'. "
+            "This indicates instrumentation drift."
+        )
+        return "local"
+
 
 def route_via_events(
     prompt: str,
@@ -63,9 +99,10 @@ def route_via_events(
         timeout_ms: Timeout in milliseconds
 
     Returns:
-        Routing decision dictionary
+        Routing decision dictionary with routing_path signal
     """
     start_time = time.time()
+    event_attempted = False
 
     try:
         # Check if adapter is available (pre-imported at module level)
@@ -73,6 +110,7 @@ def route_via_events(
             logger.warning(
                 "Event routing not available: hook_event_adapter import failed"
             )
+            # event_attempted stays False - adapter never available
         else:
             adapter = _get_hook_event_adapter()
 
@@ -82,6 +120,7 @@ def route_via_events(
 
             # For now, use the adapter's routing capability if available
             if hasattr(adapter, "route_request"):
+                event_attempted = True  # We're about to try event routing
                 result = adapter.route_request(
                     prompt=prompt,
                     correlation_id=correlation_id,
@@ -89,29 +128,42 @@ def route_via_events(
                 )
                 if result:
                     latency_ms = int((time.time() - start_time) * 1000)
+                    method = "event_based"
                     result["latency_ms"] = latency_ms
-                    result["method"] = "event_based"
+                    result["method"] = method
+                    result["event_attempted"] = True
+                    result["routing_path"] = _compute_routing_path(method, True)
                     return result
 
     except Exception as e:
-        logger.error(f"Event routing failed: {e}")
+        logger.warning(
+            f"Event routing failed with {type(e).__name__}: {e}. "
+            f"event_attempted={event_attempted}"
+        )
+        # event_attempted is True if we got past the adapter check
 
     # Fallback: Return polymorphic-agent as default
     latency_ms = int((time.time() - start_time) * 1000)
+    method = "fallback"
+    routing_path = _compute_routing_path(method, event_attempted)
+
     return {
         "selected_agent": "polymorphic-agent",
         "confidence": 0.5,
         "reasoning": "Event-based routing unavailable - using default agent",
-        "method": "fallback",
+        "method": method,
         "latency_ms": latency_ms,
         "domain": "workflow_coordination",
         "purpose": "Intelligent coordinator for development workflows",
+        "event_attempted": event_attempted,
+        "routing_path": routing_path,
     }
 
 
 def main():
     """CLI entry point."""
     if len(sys.argv) < 3:
+        # Missing args - never attempted event routing
         print(
             json.dumps(
                 {
@@ -122,6 +174,8 @@ def main():
                     "latency_ms": 0,
                     "domain": "workflow_coordination",
                     "purpose": "Intelligent coordinator for development workflows",
+                    "event_attempted": False,
+                    "routing_path": "local",
                 }
             )
         )

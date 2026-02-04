@@ -214,8 +214,9 @@ AGENT_DOMAIN="$(echo "$ROUTING_RESULT" | jq -r '.domain // "general"')"
 AGENT_PURPOSE="$(echo "$ROUTING_RESULT" | jq -r '.purpose // ""')"
 DOMAIN_QUERY="$(echo "$ROUTING_RESULT" | jq -r '.domain_query // ""')"
 IMPL_QUERY="$(echo "$ROUTING_RESULT" | jq -r '.implementation_query // ""')"
+ROUTING_PATH="$(echo "$ROUTING_RESULT" | jq -r '.routing_path // "local"')"
 
-log "Agent: $AGENT_NAME conf=$CONFIDENCE method=$SELECTION_METHOD latency=${LATENCY_MS}ms (service=${SERVICE_USED})"
+log "Agent: $AGENT_NAME conf=$CONFIDENCE method=$SELECTION_METHOD routing_path=$ROUTING_PATH latency=${LATENCY_MS}ms (service=${SERVICE_USED})"
 
 # Log routing decision (non-blocking)
 if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
@@ -224,6 +225,7 @@ if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
             --agent "$AGENT_NAME" \
             --confidence "$CONFIDENCE" \
             --method "$SELECTION_METHOD" \
+            --routing-path "$ROUTING_PATH" \
             --correlation-id "$CORRELATION_ID" \
             --latency-ms "${LATENCY_MS%.*}" \
             --reasoning "${SELECTION_REASONING:0:200}" \

@@ -38,6 +38,9 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Canonical routing path values - must match route_via_events_wrapper.py
+VALID_ROUTING_PATHS = frozenset({"event", "local", "hybrid"})
+
 
 def log_invocation(
     hook_name: str,
@@ -79,6 +82,7 @@ def log_routing(
     reasoning: str = "",
     domain: str = "general",
     context: str | None = None,
+    routing_path: str = "local",
 ) -> str | None:
     """Log routing decision event."""
     try:
@@ -86,12 +90,21 @@ def log_routing(
             logger.warning("HookEventLogger not available (import failed)")
             return None
 
+        # Validate routing_path - do not accept arbitrary values
+        if routing_path not in VALID_ROUTING_PATHS:
+            logger.warning(
+                f"Invalid routing_path '{routing_path}' received - coercing to 'local'. "
+                f"Valid values: {VALID_ROUTING_PATHS}. This indicates instrumentation drift."
+            )
+            routing_path = "local"
+
         event_logger = _HookEventLoggerClass()
 
         payload = {
             "agent_name": agent,
             "confidence": confidence,
             "method": method,
+            "routing_path": routing_path,
             "latency_ms": latency_ms,
             "reasoning": reasoning,
             "domain": domain,
@@ -116,6 +129,7 @@ def log_routing(
                 "correlation_id": correlation_id,
                 "agent_name": agent,
                 "confidence": confidence,
+                "routing_path": routing_path,
             },
         )
     except Exception as e:
@@ -188,6 +202,7 @@ def main():
     route_parser.add_argument("--reasoning", default="")
     route_parser.add_argument("--domain", default="general")
     route_parser.add_argument("--context")
+    route_parser.add_argument("--routing-path", default="local")
 
     # Error subcommand
     error_parser = subparsers.add_parser("error", help="Log hook error")
@@ -215,6 +230,7 @@ def main():
             reasoning=args.reasoning,
             domain=args.domain,
             context=args.context,
+            routing_path=args.routing_path,
         )
     elif args.command == "error":
         event_id = log_error(
