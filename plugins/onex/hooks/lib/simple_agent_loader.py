@@ -19,6 +19,7 @@ Output:
 
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -33,8 +34,23 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# Agent definitions directory (uses omniclaude namespace)
-AGENT_DEFINITIONS_DIR = Path.home() / ".claude" / "agents" / "omniclaude"
+# Agent definitions directory
+# Priority: CLAUDE_PLUGIN_ROOT/agents/configs (for plugins), then ~/.claude/agents/omniclaude (legacy)
+_PLUGIN_ROOT = os.environ.get("CLAUDE_PLUGIN_ROOT", "")
+if _PLUGIN_ROOT:
+    AGENT_DEFINITIONS_DIR = Path(_PLUGIN_ROOT) / "agents" / "configs"
+else:
+    # Fallback: try to detect from script location (lib is 2 levels up from agents/configs)
+    _SCRIPT_DIR = Path(__file__).parent
+    _POSSIBLE_PLUGIN_ROOT = (
+        _SCRIPT_DIR.parent.parent
+    )  # hooks/lib -> hooks -> plugin_root
+    _POSSIBLE_AGENTS_DIR = _POSSIBLE_PLUGIN_ROOT / "agents" / "configs"
+    if _POSSIBLE_AGENTS_DIR.exists():
+        AGENT_DEFINITIONS_DIR = _POSSIBLE_AGENTS_DIR
+    else:
+        # Legacy fallback
+        AGENT_DEFINITIONS_DIR = Path.home() / ".claude" / "agents" / "omniclaude"
 
 
 class AgentLoadSuccess(TypedDict):
