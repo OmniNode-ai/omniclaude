@@ -172,8 +172,8 @@ ALL_STOPWORDS = ENGLISH_STOPWORDS | CODE_STOPWORDS
 # =============================================================================
 
 
-class TimeoutError(Exception):
-    """Raised when operation exceeds timeout."""
+class UtilizationTimeoutError(Exception):
+    """Raised when utilization detection exceeds timeout."""
 
     pass
 
@@ -189,11 +189,11 @@ def timeout_context(timeout_ms: int):
         None
 
     Raises:
-        TimeoutError: If operation exceeds timeout.
+        UtilizationTimeoutError: If operation exceeds timeout.
     """
 
     def handler(signum, frame):
-        raise TimeoutError(f"Operation timed out after {timeout_ms}ms")
+        raise UtilizationTimeoutError(f"Operation timed out after {timeout_ms}ms")
 
     # Set alarm (convert ms to seconds, minimum 1 second for signal)
     timeout_sec = max(1, timeout_ms // 1000) if timeout_ms >= 1000 else 1
@@ -299,7 +299,7 @@ def calculate_utilization(
         # Check manual timeout
         elapsed_ms = (time.perf_counter() - start_time) * 1000
         if elapsed_ms > timeout_ms:
-            raise TimeoutError(f"Exceeded {timeout_ms}ms timeout")
+            raise UtilizationTimeoutError(f"Exceeded {timeout_ms}ms timeout")
 
         # Extract identifiers from response
         response_ids = extract_identifiers(response_text)
@@ -307,7 +307,7 @@ def calculate_utilization(
         # Check manual timeout
         elapsed_ms = (time.perf_counter() - start_time) * 1000
         if elapsed_ms > timeout_ms:
-            raise TimeoutError(f"Exceeded {timeout_ms}ms timeout")
+            raise UtilizationTimeoutError(f"Exceeded {timeout_ms}ms timeout")
 
         # Calculate overlap
         reused_ids = injected_ids & response_ids
@@ -331,8 +331,24 @@ def calculate_utilization(
             duration_ms=duration_ms,
         )
 
-    except (TimeoutError, Exception):
-        # Graceful degradation on timeout or error
+    except UtilizationTimeoutError:
+        # Expected: timeout exceeded, graceful degradation
+        duration_ms = int((time.perf_counter() - start_time) * 1000)
+        return UtilizationResult(
+            score=0.0,
+            method="timeout_fallback",
+            injected_count=0,
+            reused_count=0,
+            duration_ms=duration_ms,
+        )
+    except (ValueError, TypeError, AttributeError) as e:
+        # Recoverable errors from malformed input - degrade gracefully
+        # Log at debug level to avoid noise from expected edge cases
+        import logging
+
+        logging.getLogger(__name__).debug(
+            f"Utilization detection failed with recoverable error: {e}"
+        )
         duration_ms = int((time.perf_counter() - start_time) * 1000)
         return UtilizationResult(
             score=0.0,
@@ -359,5 +375,5 @@ __all__ = [
     "calculate_utilization",
     # Types
     "UtilizationResult",
-    "TimeoutError",
+    "UtilizationTimeoutError",
 ]

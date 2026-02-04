@@ -12,57 +12,24 @@ from __future__ import annotations
 import re
 from typing import NamedTuple
 
-# =============================================================================
-# Secret Patterns (compiled for performance)
-# =============================================================================
-# All patterns use search() semantics - they find secrets anywhere in text
+# Import secret patterns from schemas to avoid duplication
+# The schemas module is the canonical source for secret patterns
+try:
+    from omniclaude.hooks.schemas import _SECRET_PATTERNS
 
-SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
-    # OpenAI API keys
-    (re.compile(r"sk-[a-zA-Z0-9]{20,}"), "sk-***REDACTED***"),
-    # AWS Access Keys
-    (re.compile(r"AKIA[A-Z0-9]{16}"), "AKIA***REDACTED***"),
-    # GitHub Personal Access Tokens
-    (re.compile(r"ghp_[a-zA-Z0-9]{36}"), "ghp_***REDACTED***"),
-    # GitHub OAuth tokens
-    (re.compile(r"gho_[a-zA-Z0-9]{36}"), "gho_***REDACTED***"),
-    # Slack tokens (bot, app, user, etc.)
-    (re.compile(r"xox[baprs]-[a-zA-Z0-9-]{10,}"), "xox*-***REDACTED***"),
-    # Bearer tokens
-    (
-        re.compile(r"Bearer\s+[a-zA-Z0-9._-]{20,}", re.IGNORECASE),
-        "Bearer ***REDACTED***",
-    ),
-    # PEM private keys
-    (
-        re.compile(
-            r"-----BEGIN\s+(?:RSA\s+|EC\s+|DSA\s+|OPENSSH\s+|ENCRYPTED\s+)?PRIVATE\s+KEY-----"
-        ),
-        "-----BEGIN ***REDACTED*** PRIVATE KEY-----",
-    ),
-    # Stripe API keys
-    (
-        re.compile(r"(?:sk|pk|rk)_(?:live|test)_[a-zA-Z0-9]{24,}"),
-        "stripe_***REDACTED***",
-    ),
-    # Google Cloud API keys
-    (re.compile(r"AIza[0-9A-Za-z\-_]{35}"), "AIza***REDACTED***"),
-    # JWT tokens (three-part base64)
-    (
-        re.compile(r"eyJ[a-zA-Z0-9_-]*\.eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*"),
-        "jwt_***REDACTED***",
-    ),
-    # Password in URLs
-    (re.compile(r"(://[^:]+:)[^@]+(@)"), r"\1***REDACTED***\2"),
-    # Generic secrets (password=, secret=, token=, api_key=)
-    (
-        re.compile(
-            r"(\b(?:password|passwd|secret|token|api_key|apikey|auth)\s*[=:]\s*)['\"]?[^\s'\"]{8,}['\"]?",
-            re.IGNORECASE,
-        ),
-        r"\1***REDACTED***",
-    ),
-]
+    SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = _SECRET_PATTERNS
+except ImportError:
+    # Fallback if schemas not available (e.g., standalone usage)
+    # This should not happen in normal operation
+    import logging
+
+    logging.getLogger(__name__).warning(
+        "Could not import _SECRET_PATTERNS from schemas, using minimal fallback"
+    )
+    SECRET_PATTERNS = [
+        (re.compile(r"sk-[a-zA-Z0-9]{20,}"), "sk-***REDACTED***"),
+        (re.compile(r"ghp_[a-zA-Z0-9]{36}"), "ghp_***REDACTED***"),
+    ]
 
 
 class RedactionResult(NamedTuple):
