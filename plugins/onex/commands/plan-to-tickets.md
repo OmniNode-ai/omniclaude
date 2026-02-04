@@ -181,14 +181,16 @@ def parse_dependency_string(deps_str: str) -> list[str]:
             deps.append(omn_match.group(1).upper())
             continue
 
-        # Phase N, Phase 1.5, etc -> P{N}
-        phase_match = re.match(r'Phase\s+(\d+)', part, re.IGNORECASE)
+        # Phase N, Phase 1.5, etc -> P{N} or P{N.N}
+        phase_match = re.match(r'Phase\s+(\d+(?:\.\d+)?)', part, re.IGNORECASE)
         if phase_match:
-            deps.append(f'P{phase_match.group(1)}')
+            # Normalize: P1.5 -> P1_5 for valid ID, or just use integer part
+            phase_id = phase_match.group(1).replace('.', '_')
+            deps.append(f'P{phase_id}')
             continue
 
-        # M# or Milestone # -> P{N}
-        m_match = re.match(r'(?:Milestone\s+)?M?(\d+)', part, re.IGNORECASE)
+        # M# or Milestone # -> P{N} (requires M prefix or "Milestone" word)
+        m_match = re.match(r'(?:Milestone\s+|M)(\d+)', part, re.IGNORECASE)
         if m_match:
             deps.append(f'P{m_match.group(1)}')
             continue
@@ -225,7 +227,7 @@ def extract_epic_title(content: str, override: str | None = None) -> str:
 ## Step 4: Resolve or Create Epic
 
 ```python
-def resolve_epic(epic_title: str, team: str, no_create: bool, project: str | None) -> dict | None:
+def resolve_epic(epic_title: str, team: str, no_create: bool, project: str | None, dry_run: bool = False) -> dict | None:
     """Find existing epic or create new one.
 
     Returns:
@@ -279,6 +281,10 @@ def resolve_epic(epic_title: str, team: str, no_create: bool, project: str | Non
     # No matches - create new epic (unless --no-create-epic)
     if no_create:
         raise ValueError(f"No epic found matching '{epic_title}' and --no-create-epic was set.")
+
+    if dry_run:
+        print(f"[DRY RUN] Would create new epic: {epic_title}")
+        return {'id': 'DRY-EPIC', 'identifier': 'DRY-EPIC', 'title': epic_title, '_dry_run': True}
 
     print(f"Creating new epic: {epic_title}")
 
@@ -443,14 +449,21 @@ def create_tickets_batch(
         # Create new ticket
         description = build_ticket_description(entry, epic['id'] if epic else None, structure_type)
 
-        # Resolve dependencies to actual ticket IDs
+        # Resolve dependencies to actual ticket IDs (forward refs resolved in second pass)
         blocked_by = []
+        unresolved_deps = []
         for dep in entry['dependencies']:
             if dep.startswith('OMN-'):
                 blocked_by.append(dep)
             elif dep in results['id_map']:
                 blocked_by.append(results['id_map'][dep])
-            # else: dependency not yet created, will be linked later or skipped
+            else:
+                # Forward reference - will be resolved in second pass
+                unresolved_deps.append(dep)
+
+        if unresolved_deps:
+            # Store for second pass resolution
+            entry['_unresolved_deps'] = unresolved_deps
 
         if dry_run:
             print(f"  [DRY RUN] Would create: {entry['title']}")
@@ -484,6 +497,35 @@ def create_tickets_batch(
         except Exception as e:
             results['failed'].append({'entry': entry, 'error': str(e)})
             print(f"  Failed: {e}")
+
+    # Second pass: resolve forward dependencies
+    for item in results['created']:
+        if item.get('dry_run'):
+            continue
+
+        entry = item['entry']
+        unresolved = entry.get('_unresolved_deps', [])
+        if not unresolved:
+            continue
+
+        # Resolve forward references now that all tickets exist
+        new_blocked_by = []
+        for dep in unresolved:
+            if dep in results['id_map']:
+                new_blocked_by.append(results['id_map'][dep])
+            else:
+                print(f"  Warning: Unresolved dependency '{dep}' for {item['ticket']['identifier']}")
+
+        if new_blocked_by and not dry_run:
+            try:
+                # Update ticket with forward dependencies
+                mcp__linear-server__update_issue(
+                    id=item['ticket']['id'],
+                    blockedBy=new_blocked_by
+                )
+                print(f"  Linked forward deps for {item['ticket']['identifier']}: {new_blocked_by}")
+            except Exception as e:
+                print(f"  Warning: Failed to link forward deps for {item['ticket']['identifier']}: {e}")
 
     return results
 ```
@@ -572,14 +614,13 @@ print(f"Found {len(entries)} entries to process")
 epic_title = extract_epic_title(content, args.epic_title)
 print(f"Epic title: {epic_title}")
 
-# Step 4: Resolve or create epic
+# Step 4: Resolve or create epic (even in dry-run mode for preview)
 epic = None
-if not args.dry_run or args.epic_title:
-    try:
-        epic = resolve_epic(epic_title, args.team, args.no_create_epic, args.project)
-    except ValueError as e:
-        print(f"Error: {e}")
-        raise SystemExit(1)
+try:
+    epic = resolve_epic(epic_title, args.team, args.no_create_epic, args.project, dry_run=args.dry_run)
+except ValueError as e:
+    print(f"Error: {e}")
+    raise SystemExit(1)
 
 # Step 5-8: Create tickets
 results = create_tickets_batch(
@@ -607,7 +648,7 @@ report_summary(results, epic, structure_type, args.dry_run)
 | Epic not found + --no-create-epic | Report and stop |
 | Multiple epic matches | AskUserQuestion to disambiguate |
 | Ticket creation fails | Log error, continue with remaining |
-| Dependency not resolved | Skip dependency link, log warning |
+| Dependency not resolved | Log warning, skip dependency link (forward refs resolved in second pass) |
 
 ---
 
