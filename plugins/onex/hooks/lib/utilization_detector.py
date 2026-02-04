@@ -6,13 +6,14 @@ between injected patterns and Claude's response.
 
 Performance requirement: 30ms soft timeout budget with graceful degradation.
 
-**Timeout Design (Soft Budget)**:
-This module uses a cooperative timeout model, NOT preemptive interruption.
+**Timeout Design (Cooperative with Granular Checks)**:
+This module uses a cooperative timeout model with per-pattern checking.
 The timeout_ms parameter is a "soft budget" - we check elapsed time AFTER
-each regex operation completes, not during. This means:
+each regex pattern completes (5 patterns per extraction), not during. This means:
 
-- A single slow regex can exceed the budget before we check
-- The timeout is enforced at operation boundaries, not mid-operation
+- Timeout is checked after EACH of the 5 regex patterns (not just after extraction)
+- A single slow regex pattern can still exceed budget before its check
+- Input size limits (MAX_INPUT_SIZE) prevent pathological cases
 - This is intentional: Python regex cannot be safely interrupted mid-execution
 
 Why not hard timeouts?
@@ -20,6 +21,11 @@ Why not hard timeouts?
 2. signal.alarm() only supports whole-second granularity (we need 30ms)
 3. Threading adds complexity and potential race conditions for minimal gain
 4. Regex on typical inputs completes in <5ms, so post-check is sufficient
+
+Defense in depth:
+1. Input size limits (MAX_INPUT_SIZE = 50KB) prevent pathological cases
+2. Per-pattern timeout checks (5 checks per extraction, 10+ total)
+3. Graceful degradation with score=0.0 on timeout
 
 Graceful degradation: If timeout is exceeded, returns timeout_fallback result
 with score=0.0. If timeout exceeds 2x budget, a warning is logged.
@@ -54,6 +60,18 @@ URL_RE = re.compile(r"https?://[^\s<>\"']+")
 
 # Environment variable keys (UPPER_SNAKE_CASE)
 ENV_KEY_RE = re.compile(r"\b[A-Z][A-Z0-9_]{2,}\b")
+
+# All patterns in order of application (for timeout checking)
+_ALL_PATTERNS = [IDENTIFIER_RE, PATH_RE, TICKET_RE, URL_RE, ENV_KEY_RE]
+
+# =============================================================================
+# Input Size Limits (Defense in Depth)
+# =============================================================================
+
+# Maximum input size in bytes (50KB). Inputs larger than this are truncated
+# to prevent pathological regex performance. This is a defense-in-depth measure
+# alongside per-pattern timeout checking.
+MAX_INPUT_SIZE = 50 * 1024  # 50KB
 
 # =============================================================================
 # Stopwords (English + Python keywords to prevent score inflation)
@@ -186,7 +204,9 @@ CODE_STOPWORDS = frozenset(
     }
 )
 
-ALL_STOPWORDS = ENGLISH_STOPWORDS | CODE_STOPWORDS
+# Explicit normalization ensures case-insensitive comparison even if
+# someone accidentally adds a mixed-case stopword to the source sets.
+ALL_STOPWORDS = frozenset(word.lower() for word in ENGLISH_STOPWORDS | CODE_STOPWORDS)
 
 
 # =============================================================================
@@ -265,6 +285,53 @@ class UtilizationResult(NamedTuple):
 # =============================================================================
 
 
+def _extract_identifiers_with_timeout(
+    text: str,
+    start_time: float | None = None,
+    timeout_ms: int | None = None,
+) -> set[str]:
+    """Extract identifiers with per-pattern timeout checking.
+
+    Internal function that supports granular timeout enforcement by checking
+    elapsed time after each regex pattern completes.
+
+    Args:
+        text: Text to extract identifiers from.
+        start_time: Start time from time.perf_counter(). If None, no timeout checking.
+        timeout_ms: Timeout budget in milliseconds. If None, no timeout checking.
+
+    Returns:
+        Set of unique identifiers (lowercase normalized).
+
+    Raises:
+        UtilizationTimeoutError: If timeout_ms exceeded after any pattern.
+    """
+    identifiers: set[str] = set()
+
+    # Apply input size limit as defense in depth
+    if len(text) > MAX_INPUT_SIZE:
+        text = text[:MAX_INPUT_SIZE]
+
+    # Extract from each pattern with timeout check after each
+    for pattern in _ALL_PATTERNS:
+        for match in pattern.findall(text):
+            # Normalize to lowercase
+            normalized = match.lower()
+            # Filter stopwords
+            if normalized not in ALL_STOPWORDS and len(normalized) >= 3:
+                identifiers.add(normalized)
+
+        # Per-pattern timeout check (granular enforcement)
+        if start_time is not None and timeout_ms is not None:
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            if elapsed_ms > timeout_ms:
+                raise UtilizationTimeoutError(
+                    f"Exceeded {timeout_ms}ms timeout after pattern"
+                )
+
+    return identifiers
+
+
 def extract_identifiers(text: str) -> set[str]:
     """Extract meaningful identifiers from text.
 
@@ -278,24 +345,18 @@ def extract_identifiers(text: str) -> set[str]:
 
     Filters out stopwords to prevent score inflation.
 
+    Note:
+        This is the public API without timeout support. For timeout-aware
+        extraction, use calculate_utilization() which handles timeouts
+        internally with per-pattern granularity.
+
     Args:
         text: Text to extract identifiers from.
 
     Returns:
         Set of unique identifiers (lowercase normalized).
     """
-    identifiers: set[str] = set()
-
-    # Extract from each pattern
-    for pattern in [IDENTIFIER_RE, PATH_RE, TICKET_RE, URL_RE, ENV_KEY_RE]:
-        for match in pattern.findall(text):
-            # Normalize to lowercase
-            normalized = match.lower()
-            # Filter stopwords
-            if normalized not in ALL_STOPWORDS and len(normalized) >= 3:
-                identifiers.add(normalized)
-
-    return identifiers
+    return _extract_identifiers_with_timeout(text)
 
 
 def calculate_utilization(
@@ -312,17 +373,17 @@ def calculate_utilization(
         injected_context: The context that was injected (patterns, etc).
         response_text: Claude's response text.
         timeout_ms: Soft timeout budget in milliseconds (default: 30ms).
-            This is a cooperative timeout checked AFTER regex operations
-            complete - not a preemptive interrupt. A single slow regex
-            may exceed this budget before we can check. See module docstring
-            for detailed rationale.
+            Timeout is checked after EACH of the 5 regex patterns (per-pattern
+            granularity), not just after entire extraction. This provides ~10
+            timeout checkpoints total. See module docstring for rationale.
 
     Returns:
         UtilizationResult with score, method, and counts.
 
     Note:
-        If timeout exceeds 2x the budget (e.g., 60ms for 30ms budget),
-        a warning is logged for monitoring purposes.
+        - Input size is limited to MAX_INPUT_SIZE (50KB) as defense in depth
+        - Timeout is checked after each of 5 regex patterns (10+ checkpoints)
+        - If timeout exceeds 2x budget, an error is logged for investigation
 
     Example:
         >>> result = calculate_utilization(
@@ -335,22 +396,16 @@ def calculate_utilization(
     start_time = time.perf_counter()
 
     try:
-        # Cooperative timeout: checked AFTER operations (see module docstring)
-        # Extract identifiers from injected context
-        injected_ids = extract_identifiers(injected_context)
+        # Extract identifiers with per-pattern timeout checking
+        # This checks timeout after EACH of 5 patterns (granular enforcement)
+        injected_ids = _extract_identifiers_with_timeout(
+            injected_context, start_time, timeout_ms
+        )
 
-        # Check manual timeout
-        elapsed_ms = (time.perf_counter() - start_time) * 1000
-        if elapsed_ms > timeout_ms:
-            raise UtilizationTimeoutError(f"Exceeded {timeout_ms}ms timeout")
-
-        # Extract identifiers from response
-        response_ids = extract_identifiers(response_text)
-
-        # Check manual timeout
-        elapsed_ms = (time.perf_counter() - start_time) * 1000
-        if elapsed_ms > timeout_ms:
-            raise UtilizationTimeoutError(f"Exceeded {timeout_ms}ms timeout")
+        # Extract identifiers from response (continues from same start_time)
+        response_ids = _extract_identifiers_with_timeout(
+            response_text, start_time, timeout_ms
+        )
 
         # Calculate overlap
         reused_ids = injected_ids & response_ids
@@ -378,12 +433,21 @@ def calculate_utilization(
         # Expected: timeout exceeded, graceful degradation
         duration_ms = int((time.perf_counter() - start_time) * 1000)
 
-        # Log warning if significantly over budget (2x threshold)
+        # Log ALL timeouts with guaranteed visibility for observability
+        # Severity depends on how much we exceeded the budget:
+        # - 1x-2x budget: WARNING (expected degradation under load)
+        # - 2x+ budget: ERROR (unexpected, needs investigation)
         if duration_ms > timeout_ms * 2:
             _log_with_guaranteed_visibility(
                 f"Utilization detection exceeded 2x timeout budget: "
                 f"{duration_ms}ms (budget: {timeout_ms}ms). "
                 f"Consider investigating input size or regex performance.",
+                level="ERROR",
+            )
+        else:
+            _log_with_guaranteed_visibility(
+                f"Utilization detection timed out: {duration_ms}ms "
+                f"(budget: {timeout_ms}ms). Returning fallback result.",
                 level="WARNING",
             )
 
@@ -396,11 +460,12 @@ def calculate_utilization(
         )
     except (ValueError, TypeError, AttributeError) as e:
         # Recoverable errors from malformed input - degrade gracefully
+        # Use ERROR level: these are unexpected issues, not expected degradation
         # Use guaranteed-visibility logging for hook diagnostics
         duration_ms = int((time.perf_counter() - start_time) * 1000)
         _log_with_guaranteed_visibility(
             f"Utilization detection failed with recoverable error: {e}",
-            level="WARNING",
+            level="ERROR",
         )
         return UtilizationResult(
             score=0.0,
@@ -418,6 +483,8 @@ __all__ = [
     "TICKET_RE",
     "URL_RE",
     "ENV_KEY_RE",
+    # Limits
+    "MAX_INPUT_SIZE",
     # Stopwords
     "ENGLISH_STOPWORDS",
     "CODE_STOPWORDS",

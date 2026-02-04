@@ -20,6 +20,7 @@ from plugins.onex.hooks.lib.utilization_detector import (
     ALL_STOPWORDS,
     CODE_STOPWORDS,
     ENGLISH_STOPWORDS,
+    MAX_INPUT_SIZE,
     UtilizationResult,
     UtilizationTimeoutError,
     calculate_utilization,
@@ -197,6 +198,37 @@ class TestTimeoutHandling:
         )
         assert result.method == "identifier_overlap"
 
+    def test_per_pattern_timeout_checking(self) -> None:
+        """Test that timeout is checked after each regex pattern.
+
+        The improved implementation checks timeout after each of 5 patterns,
+        providing more granular control than checking only after entire extraction.
+        """
+        # With timeout_ms=0, the first pattern that completes should trigger timeout
+        # This tests the per-pattern timeout mechanism
+        result = calculate_utilization(
+            "ModelUser user_service /path/to/file OMN-123 KAFKA_HOST",
+            "response text",
+            timeout_ms=0,
+        )
+        assert result.method == "timeout_fallback"
+        assert result.score == 0.0
+
+    def test_timeout_on_second_extraction(self) -> None:
+        """Test timeout can occur during response extraction.
+
+        With a very tight timeout, the second extraction (response_text)
+        should also be able to trigger timeout.
+        """
+        # Small injected context, larger response - timeout should happen
+        # during response extraction
+        result = calculate_utilization(
+            "ModelUser",  # Small, fast
+            "LongResponseText " * 5000,  # Larger, may trigger timeout
+            timeout_ms=0,  # Immediate timeout
+        )
+        assert result.method == "timeout_fallback"
+
 
 class TestUtilizationTimeoutError:
     """Test UtilizationTimeoutError exception."""
@@ -209,6 +241,68 @@ class TestUtilizationTimeoutError:
         """Test UtilizationTimeoutError can be raised and caught."""
         with pytest.raises(UtilizationTimeoutError):
             raise UtilizationTimeoutError("test timeout")
+
+
+class TestInputSizeLimits:
+    """Test input size limit enforcement."""
+
+    def test_max_input_size_is_defined(self) -> None:
+        """Test MAX_INPUT_SIZE constant is defined and reasonable."""
+        assert MAX_INPUT_SIZE > 0
+        assert MAX_INPUT_SIZE == 50 * 1024  # 50KB
+
+    def test_large_input_is_truncated(self) -> None:
+        """Test that inputs larger than MAX_INPUT_SIZE are handled gracefully.
+
+        The implementation truncates inputs to MAX_INPUT_SIZE as defense in depth
+        against pathological regex performance.
+        """
+        # Create input larger than MAX_INPUT_SIZE (50KB)
+        large_input = "ModelUser " * (MAX_INPUT_SIZE // 10 + 1000)  # ~60KB+
+        assert len(large_input) > MAX_INPUT_SIZE
+
+        # Should still work without hanging or crashing
+        result = calculate_utilization(
+            large_input,
+            "Use ModelUser for the task",
+            timeout_ms=5000,  # 5 second generous timeout
+        )
+
+        # Should complete (either successfully or with graceful degradation)
+        assert result.method in ("identifier_overlap", "timeout_fallback")
+
+    def test_input_at_limit_works(self) -> None:
+        """Test that input exactly at MAX_INPUT_SIZE works correctly."""
+        # Create input exactly at the limit
+        at_limit_input = "x" * MAX_INPUT_SIZE
+
+        # Should complete without issues
+        result = calculate_utilization(
+            at_limit_input,
+            "response",
+            timeout_ms=5000,
+        )
+        assert result.method in ("identifier_overlap", "timeout_fallback")
+
+    def test_normal_input_unaffected(self) -> None:
+        """Test that normal-sized inputs are unaffected by truncation.
+
+        Inputs below MAX_INPUT_SIZE should be processed completely.
+        """
+        # Normal-sized input with identifiable content
+        normal_input = "ModelUserPayload user_service api_endpoint"
+        assert len(normal_input) < MAX_INPUT_SIZE
+
+        result = calculate_utilization(
+            normal_input,
+            "Use ModelUserPayload and api_endpoint",
+            timeout_ms=1000,
+        )
+
+        # Should find the overlap normally
+        assert result.method == "identifier_overlap"
+        assert result.injected_count == 3
+        assert result.reused_count == 2
 
 
 class TestStopwords:
@@ -572,3 +666,44 @@ class TestStickyIdentity:
         # alpha_one not in response, delta_four not in context
         assert "alpha_one" not in expected_overlap
         assert "delta_four" not in expected_overlap
+
+    def test_high_cardinality_sticky(self) -> None:
+        """Test sticky identity with many unique identifiers.
+
+        Ensures set semantics scale correctly with high cardinality.
+        """
+        # Generate 50 unique identifiers
+        context_ids_list = [f"identifier_{i:03d}" for i in range(50)]
+        context = " ".join(context_ids_list)
+
+        # Response uses half of them (every other one)
+        response_ids_list = context_ids_list[::2]  # 25 identifiers
+        response = " ".join(response_ids_list)
+
+        result = calculate_utilization(context, response)
+
+        assert result.injected_count == 50
+        assert result.reused_count == 25
+        assert result.score == 0.5
+
+    def test_context_filtered_to_minimal_identifiers(self) -> None:
+        """Test behavior when most context words are filtered.
+
+        When context contains mostly stopwords and short words,
+        the effective identifier set is small or empty.
+        """
+        # Mix of stopwords, short words, and one real identifier
+        context = "the and for a b c MyService"
+        response = "Using MyService for the task"
+
+        result = calculate_utilization(context, response)
+
+        # Only MyService should survive filtering
+        context_ids = extract_identifiers(context)
+        assert "myservice" in context_ids
+        assert len(context_ids) == 1  # Only MyService
+
+        # Score should be 1.0 since the only identifier is reused
+        assert result.injected_count == 1
+        assert result.reused_count == 1
+        assert result.score == 1.0

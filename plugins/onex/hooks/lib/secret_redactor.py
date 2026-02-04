@@ -64,6 +64,13 @@ def redact_secrets(text: str) -> str:
 def redact_secrets_with_count(text: str) -> RedactionResult:
     """Redact secrets and return count of redactions made.
 
+    Uses subn() for accurate counting. Note: Some patterns have capturing groups
+    for backreference replacements (e.g., "Bearer " prefix preservation). Using
+    subn() is correct here because it counts SUBSTITUTIONS, not matches.
+
+    DO NOT use findall() with SECRET_PATTERNS - capturing groups would cause
+    findall() to return only the captured portions, not full matches.
+
     Args:
         text: Text that may contain secrets.
 
@@ -79,7 +86,8 @@ def redact_secrets_with_count(text: str) -> RedactionResult:
     redacted_count = 0
 
     for pattern, replacement in SECRET_PATTERNS:
-        # Use subn() to replace and count in one pass
+        # subn() returns (new_string, number_of_substitutions_made)
+        # This count is accurate regardless of capturing groups in the pattern
         result, count = pattern.subn(replacement, result)
         redacted_count += count
 

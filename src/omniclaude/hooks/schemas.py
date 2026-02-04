@@ -180,7 +180,13 @@ PROMPT_PREVIEW_MAX_LENGTH: int = 100
 #   3. Minimum length requirements reduce false positives
 #   4. Capturing groups (parentheses) are ONLY used when the replacement needs
 #      backreferences like \1 or \2. Otherwise, use non-capturing groups (?:...)
-#      for alternation. This ensures accurate redaction counts with subn().
+#      for alternation.
+#
+# IMPORTANT: These patterns are designed for use with sub()/subn(), NOT findall().
+#   - subn() correctly counts substitutions regardless of capturing groups
+#   - findall() with capturing groups returns ONLY captured groups, not full matches,
+#     which would cause incorrect counts or unexpected behavior
+#   - If you need to count matches without replacing, use sum(1 for _ in pattern.finditer(text))
 #
 _SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # API keys with common prefixes
