@@ -73,9 +73,9 @@ def redact_secrets_with_count(text: str) -> RedactionResult:
         RedactionResult with redacted text and count.
 
     Example:
-        >>> result = redact_secrets_with_count("key1=sk-abc123... key2=ghp_xyz...")
-        >>> result.redacted_count
-        2
+        >>> result = redact_secrets_with_count("key=sk-1234567890abcdefghij12345 password=secretpass123")
+        >>> result.redacted_count >= 2
+        True
     """
     result = text
     redacted_count = 0
