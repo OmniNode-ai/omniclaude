@@ -432,6 +432,8 @@ def create_tickets_batch(
     Returns:
         {created: [], skipped: [], updated: [], failed: [], id_map: {P1: OMN-xxx}}
     """
+    import time  # For rate limiting between API calls
+
     results = {
         'created': [],
         'skipped': [],
@@ -478,6 +480,11 @@ def create_tickets_batch(
         # Create new ticket
         description = build_ticket_description(entry, epic['id'] if epic else None, structure_type)
 
+        # Linear has ~65KB description limit - truncate if needed
+        MAX_DESC_SIZE = 60000  # Leave margin for safety
+        if len(description) > MAX_DESC_SIZE:
+            description = description[:MAX_DESC_SIZE] + "\n\n[... truncated due to size limit]"
+
         # Resolve dependencies to actual ticket IDs (forward refs resolved in second pass)
         blocked_by = []
         unresolved_deps = []
@@ -503,7 +510,6 @@ def create_tickets_batch(
             continue
 
         # Rate limiting: small delay between API calls to avoid hitting Linear rate limits
-        import time
         time.sleep(0.2)  # 200ms delay = max 5 requests/second, well under Linear limits
 
         try:
