@@ -104,13 +104,15 @@ def detect_structure(content: str) -> tuple[str, list[dict]]:
                 'dependencies': deps
             })
 
-        # Check for duplicate phase IDs
+        # Check for duplicate phase IDs - fail fast to prevent wrong dependency linking
         seen_ids = {}
         for entry in entries:
             if entry['id'] in seen_ids:
-                print(f"Warning: Duplicate phase ID '{entry['id']}' found. "
-                      f"First: '{seen_ids[entry['id']]}', Second: '{entry['title']}'. "
-                      f"Second entry will be used.")
+                raise ValueError(
+                    f"Duplicate phase ID '{entry['id']}' found. "
+                    f"First: '{seen_ids[entry['id']]}', Second: '{entry['title']}'. "
+                    f"Fix plan file to use unique phase numbers."
+                )
             seen_ids[entry['id']] = entry['title']
 
         return ('phase_sections', entries)
@@ -456,7 +458,14 @@ def create_tickets_batch(
             if action == 'update':
                 if not dry_run:
                     description = build_ticket_description(entry, epic['id'] if epic else None, structure_type)
-                    merged = f"{existing.get('description', '')}\n\n---\n\n## Updated from Plan\n\n{description}"
+                    existing_desc = existing.get('description', '') or ''
+                    merged = f"{existing_desc}\n\n---\n\n## Updated from Plan\n\n{description}"
+
+                    # Linear has ~65KB description limit - truncate if needed
+                    MAX_DESC_SIZE = 60000  # Leave margin for safety
+                    if len(merged) > MAX_DESC_SIZE:
+                        merged = merged[:MAX_DESC_SIZE] + "\n\n[... truncated due to size limit]"
+
                     mcp__linear-server__update_issue(
                         id=existing['id'],
                         description=merged
@@ -492,6 +501,10 @@ def create_tickets_batch(
             results['created'].append({'entry': entry, 'dry_run': True})
             results['id_map'][entry['id']] = f"DRY-{entry['id']}"
             continue
+
+        # Rate limiting: small delay between API calls to avoid hitting Linear rate limits
+        import time
+        time.sleep(0.2)  # 200ms delay = max 5 requests/second, well under Linear limits
 
         try:
             params = {
@@ -578,7 +591,7 @@ def report_summary(results: dict, epic: dict | None, structure_type: str, dry_ru
     print(f"{'='*60}")
 
     if epic:
-        print(f"\nEpic: {epic['identifier']} - {epic['title']}")
+        print(f"\nEpic: {epic.get('identifier', 'unknown')} - {epic.get('title', 'untitled')}")
 
     print(f"Structure detected: {structure_type}")
     print(f"\nResults:")
