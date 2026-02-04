@@ -381,7 +381,7 @@ async def publish_transformation_start(
     Publish transformation start event.
 
     Convenience method for publishing at the start of transformation.
-    Publishes to topic: onex.evt.omniclaude.transformation.started.v1
+    Publishes to topic: onex.evt.omniclaude.transformation-started.v1
     """
     return await publish_transformation_event(
         source_agent=source_agent,
@@ -405,7 +405,7 @@ async def publish_transformation_complete(
     Publish transformation complete event.
 
     Convenience method for publishing after successful transformation.
-    Publishes to topic: onex.evt.omniclaude.transformation.completed.v1
+    Publishes to topic: onex.evt.omniclaude.transformation-completed.v1
     """
     return await publish_transformation_event(
         source_agent=source_agent,
@@ -432,7 +432,7 @@ async def publish_transformation_failed(
     Publish transformation failed event.
 
     Convenience method for publishing after transformation failure.
-    Publishes to topic: onex.evt.omniclaude.transformation.failed.v1
+    Publishes to topic: onex.evt.omniclaude.transformation-failed.v1
     """
     return await publish_transformation_event(
         source_agent=source_agent,

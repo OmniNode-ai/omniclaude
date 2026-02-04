@@ -345,7 +345,7 @@ async def publish_manifest_injection_start(
     Publish manifest injection start event.
 
     Convenience method for publishing at the start of manifest injection.
-    Publishes to topic: onex.evt.omniclaude.manifest-injection.started.v1
+    Publishes to topic: onex.evt.omniclaude.manifest-injection-started.v1
     """
     return await publish_manifest_injection_event(
         agent_name=agent_name,
@@ -388,7 +388,7 @@ async def publish_manifest_injection_failed(
     Publish manifest injection failed event.
 
     Convenience method for publishing after manifest injection failure.
-    Publishes to topic: onex.evt.omniclaude.manifest-injection.failed.v1
+    Publishes to topic: onex.evt.omniclaude.manifest-injection-failed.v1
     """
     return await publish_manifest_injection_event(
         agent_name=agent_name,
