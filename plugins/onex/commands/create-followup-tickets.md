@@ -481,6 +481,16 @@ if created:
 
 ---
 
+## Architecture Validation
+
+**Note**: This command does not support `--blocked-by` dependencies between tickets. Each follow-up ticket is created independently from review issues.
+
+The `--parent` flag creates a parent-child relationship (epic grouping), NOT a blocking dependency, so architecture validation does not apply.
+
+If dependency support is added in the future, integrate validation using `plugins/onex/lib/dependency_validator.md`.
+
+---
+
 ## Examples
 
 ```bash
