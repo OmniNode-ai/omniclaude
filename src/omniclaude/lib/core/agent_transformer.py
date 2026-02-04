@@ -30,10 +30,29 @@ try:
 
     KAFKA_AVAILABLE = True
 except ImportError:  # nosec B110 - Optional dependency, graceful degradation
-    logger.warning(
+    logger.debug(
         "transformation_event_publisher not available, transformation events will not be logged"
     )
     KAFKA_AVAILABLE = False
+
+# Import transformation validator
+try:
+    from omniclaude.lib.core.transformation_validator import (
+        TransformationValidationResult,
+        TransformationValidator,
+        ValidatorOutcome,
+    )
+
+    VALIDATOR_AVAILABLE = True
+except ImportError:  # nosec B110 - Optional dependency, graceful degradation
+    logger.debug(
+        "transformation_validator not available, transformations will not be validated"
+    )
+    VALIDATOR_AVAILABLE = False
+    # Stub types for when validator is not available
+    ValidatorOutcome = None  # type: ignore[misc,assignment]
+    TransformationValidator = None  # type: ignore[misc,assignment]
+    TransformationValidationResult = None  # type: ignore[misc,assignment]
 
 
 @dataclass
@@ -229,11 +248,15 @@ class AgentTransformer:
         user_request: str | None = None,
         routing_confidence: float | None = None,
         routing_strategy: str | None = None,
+        skip_validation: bool = False,
     ) -> str:
         """
-        Load agent, log transformation event to Kafka, and return formatted prompt.
+        Load agent, validate transformation, log event to Kafka, and return formatted prompt.
 
-        This is the RECOMMENDED method for transformations as it provides full observability.
+        This is the RECOMMENDED method for transformations as it provides:
+        - Transformation validation (prevents invalid self-transformations)
+        - Full observability via Kafka events
+        - Validation outcome tracking for metrics
 
         Args:
             agent_name: Agent to transform into
@@ -243,20 +266,78 @@ class AgentTransformer:
             user_request: Original user request
             routing_confidence: Router confidence score (0.0-1.0)
             routing_strategy: Routing strategy used
+            skip_validation: Skip validation (use with caution)
 
         Returns:
             Formatted prompt for identity assumption
+
+        Raises:
+            ValueError: If transformation is blocked by validator
         """
         start_time = time.time()
+        validation_result: TransformationValidationResult | None = None
+        validation_outcome: str | None = None
+        validation_metrics: dict | None = None
 
         try:
-            # Load agent identity
+            # Step 1: Validate transformation (unless skipped)
+            if VALIDATOR_AVAILABLE and not skip_validation:
+                validator = TransformationValidator()
+                validation_result = validator.validate(
+                    from_agent=source_agent,
+                    to_agent=agent_name,
+                    reason=transformation_reason or "",
+                    confidence=routing_confidence,
+                    user_request=user_request,
+                )
+                validation_outcome = validation_result.outcome.value
+                validation_metrics = validation_result.metrics
+
+                # Log validation result
+                if validation_result.warning_message:
+                    logger.warning(
+                        f"Transformation validation warning: {validation_result.warning_message}"
+                    )
+
+                # Block invalid transformations
+                if not validation_result.is_valid:
+                    transformation_duration_ms = int((time.time() - start_time) * 1000)
+
+                    # Emit blocked transformation event
+                    if KAFKA_AVAILABLE:
+                        await publish_transformation_event(
+                            source_agent=source_agent,
+                            target_agent=agent_name,
+                            transformation_reason=transformation_reason
+                            or f"Attempted to transform to {agent_name}",
+                            correlation_id=correlation_id,
+                            user_request=user_request,
+                            routing_confidence=routing_confidence,
+                            routing_strategy=routing_strategy,
+                            transformation_duration_ms=transformation_duration_ms,
+                            success=False,
+                            error_message=validation_result.error_message,
+                            error_type="ValidationError",
+                            event_type=TransformationEventType.FAILED,
+                            validation_outcome=validation_outcome,
+                            validation_metrics=validation_metrics,
+                        )
+
+                    logger.warning(
+                        f"Transformation blocked: {source_agent} → {agent_name} | "
+                        f"Reason: {validation_result.error_message}"
+                    )
+                    raise ValueError(
+                        f"Transformation blocked: {validation_result.error_message}"
+                    )
+
+            # Step 2: Load agent identity
             identity = self.load_agent(agent_name)
 
             # Calculate transformation duration
             transformation_duration_ms = int((time.time() - start_time) * 1000)
 
-            # Log transformation event to Kafka (async, non-blocking)
+            # Step 3: Log transformation event to Kafka (async, non-blocking)
             if KAFKA_AVAILABLE:
                 await publish_transformation_event(
                     source_agent=source_agent,
@@ -270,20 +351,28 @@ class AgentTransformer:
                     transformation_duration_ms=transformation_duration_ms,
                     success=True,
                     event_type=TransformationEventType.COMPLETED,
+                    validation_outcome=validation_outcome,
+                    validation_metrics=validation_metrics,
                 )
                 logger.debug(
-                    f"Logged transformation: {source_agent} → {identity.name} "
-                    f"(duration={transformation_duration_ms}ms)"
+                    f"Transformation: {source_agent} → {identity.name} | "
+                    f"validation={validation_outcome} | "
+                    f"duration={transformation_duration_ms}ms"
                 )
             else:
-                logger.warning(
-                    f"Transformation {source_agent} → {identity.name} not logged (Kafka unavailable)"
+                logger.debug(
+                    f"Transformation {source_agent} → {identity.name} "
+                    f"(validation={validation_outcome}, events unavailable)"
                 )
 
             return identity.format_assumption_prompt()
 
+        except ValueError:
+            # Re-raise validation errors (already logged above)
+            raise
+
         except Exception as e:
-            # Log failed transformation
+            # Log failed transformation (non-validation errors)
             transformation_duration_ms = int((time.time() - start_time) * 1000)
 
             if KAFKA_AVAILABLE:
@@ -301,9 +390,11 @@ class AgentTransformer:
                     error_message=str(e),
                     error_type=type(e).__name__,
                     event_type=TransformationEventType.FAILED,
+                    validation_outcome=validation_outcome,
+                    validation_metrics=validation_metrics,
                 )
                 logger.error(
-                    f"Logged failed transformation: {source_agent} → {agent_name} (error={e})"
+                    f"Failed transformation: {source_agent} → {agent_name} | error={e}"
                 )
 
             # Re-raise the exception
@@ -318,6 +409,7 @@ class AgentTransformer:
         user_request: str | None = None,
         routing_confidence: float | None = None,
         routing_strategy: str | None = None,
+        skip_validation: bool = False,
     ) -> str:
         """
         Synchronous wrapper for transform_with_logging.
@@ -329,6 +421,9 @@ class AgentTransformer:
 
         Returns:
             Formatted prompt for identity assumption
+
+        Raises:
+            ValueError: If transformation is blocked by validator
         """
         # Note: asyncio.get_event_loop() is deprecated since Python 3.10.
         # Use get_running_loop() to check for existing loop, then create new if needed.
@@ -348,6 +443,7 @@ class AgentTransformer:
                 user_request=user_request,
                 routing_confidence=routing_confidence,
                 routing_strategy=routing_strategy,
+                skip_validation=skip_validation,
             )
         )
 
