@@ -43,7 +43,7 @@ import logging
 import os
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 logger = logging.getLogger(__name__)
@@ -163,9 +163,12 @@ async def _get_kafka_producer() -> Any | None:
 
     # Get the lock (created lazily under running event loop)
     async with await get_producer_lock():
-        # Double-check after acquiring lock (another coroutine may have created it)
-        if _kafka_producer is not None:
-            return _kafka_producer
+        # Re-read global after acquiring lock - another coroutine may have created it
+        # cast() required because mypy narrows _kafka_producer to None after line 161
+        # but async yield point allows other coroutines to modify the global
+        current_producer = cast("Any | None", _kafka_producer)
+        if current_producer is not None:
+            return current_producer
 
         try:
             from aiokafka import AIOKafkaProducer

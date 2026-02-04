@@ -84,6 +84,7 @@ except ImportError:
 
 # Import cohort assignment for A/B testing tracking (optional)
 _assign_cohort: Callable[..., Any] | None = None
+_EnumCohort: type | None = None
 try:
     # Add src to path for omniclaude imports (sys and Path already imported above)
     _src_dir = Path(__file__).parent.parent.parent.parent.parent / "src"
@@ -96,7 +97,6 @@ try:
     _EnumCohort = EnumCohort
 except ImportError:
     logger.debug("cohort_assignment not available, A/B testing will not be tracked")
-    _EnumCohort = None  # type: ignore[assignment]
 
 
 def _emit_routing_decision(
