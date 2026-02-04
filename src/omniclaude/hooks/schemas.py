@@ -90,6 +90,9 @@ class HookEventType(StrEnum):
     PROMPT_SUBMITTED = "hook.prompt.submitted"
     TOOL_EXECUTED = "hook.tool.executed"
     CONTEXT_INJECTED = "hook.context.injected"
+    CONTEXT_UTILIZATION = "hook.context.utilization"
+    AGENT_MATCH = "hook.agent.match"
+    LATENCY_BREAKDOWN = "hook.latency.breakdown"
     MANIFEST_INJECTED = "hook.manifest.injected"
 
 
@@ -176,35 +179,45 @@ PROMPT_PREVIEW_MAX_LENGTH: int = 100
 #   1. All patterns are compiled at module load time for O(1) lookup
 #   2. Patterns use word boundaries (\b) where appropriate to avoid partial matches
 #   3. Minimum length requirements reduce false positives
-#   4. Group captures preserve non-secret context for readability
+#   4. Capturing groups (parentheses) are ONLY used when the replacement needs
+#      backreferences like \1 or \2. Otherwise, use non-capturing groups (?:...)
+#      for alternation.
+#
+# IMPORTANT: These patterns are designed for use with sub()/subn(), NOT findall().
+#   - subn() correctly counts substitutions regardless of capturing groups
+#   - findall() with capturing groups returns ONLY captured groups, not full matches,
+#     which would cause incorrect counts or unexpected behavior
+#   - If you need to count matches without replacing, use sum(1 for _ in pattern.finditer(text))
 #
 _SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     # API keys with common prefixes
-    (re.compile(r"\b(sk-[a-zA-Z0-9]{20,})", re.IGNORECASE), "sk-***REDACTED***"),
-    (re.compile(r"\b(AKIA[A-Z0-9]{16})", re.IGNORECASE), "AKIA***REDACTED***"),
-    (re.compile(r"\b(ghp_[a-zA-Z0-9]{36})", re.IGNORECASE), "ghp_***REDACTED***"),
-    (re.compile(r"\b(gho_[a-zA-Z0-9]{36})", re.IGNORECASE), "gho_***REDACTED***"),
+    # Note: No capturing groups - sub()/subn() replace the full match
+    (re.compile(r"\bsk-[a-zA-Z0-9]{20,}", re.IGNORECASE), "sk-***REDACTED***"),
+    (re.compile(r"\bAKIA[A-Z0-9]{16}", re.IGNORECASE), "AKIA***REDACTED***"),
+    (re.compile(r"\bghp_[a-zA-Z0-9]{36}", re.IGNORECASE), "ghp_***REDACTED***"),
+    (re.compile(r"\bgho_[a-zA-Z0-9]{36}", re.IGNORECASE), "gho_***REDACTED***"),
     (
-        re.compile(r"\b(xox[baprs]-[a-zA-Z0-9-]{10,})", re.IGNORECASE),
+        re.compile(r"\bxox[baprs]-[a-zA-Z0-9-]{10,}", re.IGNORECASE),
         "xox*-***REDACTED***",
     ),
     # Stripe API keys (publishable, secret, and restricted)
     # Format: (sk|pk|rk)_(live|test)_[a-zA-Z0-9]{24,}
     # Reference: https://stripe.com/docs/keys
+    # Note: (?:...) is non-capturing group for alternation, not for backreference
     (
-        re.compile(r"\b((?:sk|pk|rk)_(?:live|test)_[a-zA-Z0-9]{24,})", re.IGNORECASE),
+        re.compile(r"\b(?:sk|pk|rk)_(?:live|test)_[a-zA-Z0-9]{24,}", re.IGNORECASE),
         "stripe_***REDACTED***",
     ),
     # Google Cloud Platform API keys
     # Format: AIza[0-9A-Za-z-_]{35}
     # Reference: https://cloud.google.com/docs/authentication/api-keys
-    (re.compile(r"\b(AIza[0-9A-Za-z\-_]{35})"), "AIza***REDACTED***"),
+    (re.compile(r"\bAIza[0-9A-Za-z\-_]{35}"), "AIza***REDACTED***"),
     # JWT tokens (JSON Web Tokens)
     # Format: base64url(header).base64url(payload).base64url(signature)
     # Header always starts with eyJ (base64 of '{"')
     # Reference: RFC 7519 (JSON Web Token)
     (
-        re.compile(r"\b(eyJ[a-zA-Z0-9_-]*\.eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*)"),
+        re.compile(r"\beyJ[a-zA-Z0-9_-]*\.eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*"),
         "jwt_***REDACTED***",
     ),
     # Private keys (PEM format)
@@ -973,6 +986,262 @@ class ModelHookContextInjectedPayload(BaseModel):
 
 
 # =============================================================================
+# Injection Metrics Events (OMN-1889)
+# =============================================================================
+
+
+class ModelContextUtilizationPayload(BaseModel):
+    """Event payload for context utilization measurement.
+
+    Tracks whether injected context was actually used in Claude's response
+    by comparing identifiers between injected context and response text.
+
+    Attributes:
+        entity_id: Session identifier as UUID (partition key for ordering).
+        session_id: Session identifier string.
+        correlation_id: Correlation ID for distributed tracing.
+        causation_id: ID of the event that triggered this measurement.
+        emitted_at: Timestamp when the event was emitted (UTC).
+        utilization_score: Ratio of reused identifiers (0.0-1.0).
+        method: Detection method used ("identifier_overlap" or "timeout_fallback").
+        injected_count: Number of identifiers found in injected context.
+        reused_count: Number of injected identifiers found in response.
+        detection_duration_ms: Time taken for utilization detection.
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        from_attributes=True,
+    )
+
+    # Entity identification (partition key)
+    entity_id: UUID = Field(
+        ...,
+        description="Session identifier as UUID (partition key for ordering)",
+    )
+    session_id: str = Field(
+        ...,
+        min_length=1,
+        description="Session identifier string",
+    )
+
+    # Tracing and causation
+    correlation_id: UUID = Field(
+        ...,
+        description="Correlation ID for distributed tracing",
+    )
+    causation_id: UUID = Field(
+        ...,
+        description="ID of the event that triggered this measurement",
+    )
+
+    # Timestamps
+    emitted_at: TimezoneAwareDatetime = Field(
+        ...,
+        description="Timestamp when the event was emitted (UTC)",
+    )
+
+    # Utilization metrics
+    utilization_score: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Ratio of reused identifiers (0.0 = none used, 1.0 = all used)",
+    )
+    method: Literal["identifier_overlap", "timeout_fallback", "error_fallback"] = Field(
+        ...,
+        description="Detection method: 'identifier_overlap', 'timeout_fallback', or 'error_fallback'",
+    )
+    injected_count: int = Field(
+        ...,
+        ge=0,
+        description="Number of identifiers found in injected context",
+    )
+    reused_count: int = Field(
+        ...,
+        ge=0,
+        description="Number of injected identifiers found in response",
+    )
+    detection_duration_ms: int = Field(
+        ...,
+        ge=0,
+        le=1000,
+        description="Time taken for utilization detection in milliseconds (max 1 second)",
+    )
+
+
+class ModelAgentMatchPayload(BaseModel):
+    """Event payload for agent routing accuracy measurement.
+
+    Tracks how well agent routing matched expected behavior, enabling
+    feedback loops for routing improvement.
+
+    Attributes:
+        entity_id: Session identifier as UUID (partition key for ordering).
+        session_id: Session identifier string.
+        correlation_id: Correlation ID for distributed tracing.
+        causation_id: ID of the routing event being evaluated.
+        emitted_at: Timestamp when the event was emitted (UTC).
+        selected_agent: Agent that was selected by routing.
+        expected_agent: Expected agent (from feedback or heuristics), if known.
+        match_grade: Quality of match ("exact", "partial", "mismatch", "unknown").
+        confidence: Routing confidence score (0.0-1.0).
+        routing_method: Method used for routing ("event_routing", "fallback", "cache").
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        from_attributes=True,
+    )
+
+    # Entity identification (partition key)
+    entity_id: UUID = Field(
+        ...,
+        description="Session identifier as UUID (partition key for ordering)",
+    )
+    session_id: str = Field(
+        ...,
+        min_length=1,
+        description="Session identifier string",
+    )
+
+    # Tracing and causation
+    correlation_id: UUID = Field(
+        ...,
+        description="Correlation ID for distributed tracing",
+    )
+    causation_id: UUID = Field(
+        ...,
+        description="ID of the routing event being evaluated",
+    )
+
+    # Timestamps
+    emitted_at: TimezoneAwareDatetime = Field(
+        ...,
+        description="Timestamp when the event was emitted (UTC)",
+    )
+
+    # Agent match metrics
+    selected_agent: str = Field(
+        ...,
+        min_length=1,
+        description="Agent that was selected by routing",
+    )
+    expected_agent: str | None = Field(
+        default=None,
+        description="Expected agent from feedback or heuristics, if known",
+    )
+    match_grade: Literal["exact", "partial", "mismatch", "unknown"] = Field(
+        ...,
+        description="Quality of match: 'exact', 'partial', 'mismatch', or 'unknown'",
+    )
+    confidence: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Routing confidence score",
+    )
+    routing_method: Literal["event_routing", "fallback", "cache"] = Field(
+        ...,
+        description="Routing method: 'event_routing', 'fallback', or 'cache'",
+    )
+
+
+class ModelLatencyBreakdownPayload(BaseModel):
+    """Event payload for detailed hook latency breakdown.
+
+    Provides fine-grained timing for each phase of hook execution to
+    identify performance bottlenecks and optimize hook performance.
+
+    Attributes:
+        entity_id: Session identifier as UUID (partition key for ordering).
+        session_id: Session identifier string.
+        correlation_id: Correlation ID for distributed tracing.
+        causation_id: ID of the prompt event being measured.
+        emitted_at: Timestamp when the event was emitted (UTC).
+        routing_ms: Time spent on agent routing.
+        agent_load_ms: Time spent loading agent YAML.
+        context_injection_ms: Time spent on context/pattern injection.
+        intelligence_request_ms: Time spent on intelligence requests (optional).
+        total_hook_ms: Total hook execution time.
+        user_perceived_ms: User-perceived latency (optional).
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        from_attributes=True,
+    )
+
+    # Entity identification (partition key)
+    entity_id: UUID = Field(
+        ...,
+        description="Session identifier as UUID (partition key for ordering)",
+    )
+    session_id: str = Field(
+        ...,
+        min_length=1,
+        description="Session identifier string",
+    )
+
+    # Tracing and causation
+    correlation_id: UUID = Field(
+        ...,
+        description="Correlation ID for distributed tracing",
+    )
+    causation_id: UUID = Field(
+        ...,
+        description="ID of the prompt event being measured",
+    )
+
+    # Timestamps
+    emitted_at: TimezoneAwareDatetime = Field(
+        ...,
+        description="Timestamp when the event was emitted (UTC)",
+    )
+
+    # Latency breakdown
+    routing_ms: int = Field(
+        ...,
+        ge=0,
+        le=60000,
+        description="Time spent on agent routing in milliseconds",
+    )
+    agent_load_ms: int = Field(
+        ...,
+        ge=0,
+        le=60000,
+        description="Time spent loading agent YAML in milliseconds",
+    )
+    context_injection_ms: int = Field(
+        ...,
+        ge=0,
+        le=60000,
+        description="Time spent on context/pattern injection in milliseconds",
+    )
+    intelligence_request_ms: int | None = Field(
+        default=None,
+        ge=0,
+        le=60000,
+        description="Time spent on intelligence requests in milliseconds (optional)",
+    )
+    total_hook_ms: int = Field(
+        ...,
+        ge=0,
+        le=600000,
+        description="Total hook execution time in milliseconds",
+    )
+    user_perceived_ms: int | None = Field(
+        default=None,
+        ge=0,
+        le=600000,
+        description="User-perceived latency from prompt to response start (optional)",
+    )
+
+
+# =============================================================================
 # Manifest Injection Events
 # =============================================================================
 
@@ -1047,40 +1316,44 @@ class ModelHookManifestInjectedPayload(BaseModel):
         description="ID of the prompt event that triggered manifest injection",
     )
 
-    # Timestamps - MUST be explicitly injected (no default_factory for testability)
-    # Uses TimezoneAwareDatetime for automatic timezone validation
+    # Timestamps
     emitted_at: TimezoneAwareDatetime = Field(
         ...,
         description="Timestamp when the hook emitted this event (UTC)",
     )
 
-    # Manifest injection-specific fields
+    # Agent identification
     agent_name: str = Field(
         ...,
         min_length=1,
-        description="Name of the agent being loaded (e.g., 'agent-api-architect')",
+        description="Name of the agent being loaded",
     )
-    agent_domain: str | None = Field(
-        default=None,
-        description="Domain of the agent (e.g., 'api-development', 'testing')",
+    agent_domain: str = Field(
+        ...,
+        min_length=1,
+        description="Domain of the agent",
     )
+
+    # Injection result
     injection_success: bool = Field(
-        default=True,
+        ...,
         description="Whether the manifest injection succeeded",
     )
-    injection_duration_ms: int | None = Field(
-        default=None,
+    injection_duration_ms: int = Field(
+        ...,
         ge=0,
-        le=10000,
-        description="Time to load and inject manifest in milliseconds (max 10 seconds)",
+        le=60000,
+        description="Time to load and inject manifest in milliseconds",
     )
+
+    # Optional metadata
     yaml_path: str | None = Field(
         default=None,
-        description="Path to the agent YAML file (for debugging, may contain usernames)",
+        description="Path to the agent YAML file",
     )
     agent_version: str | None = Field(
         default=None,
-        description="Version of the agent definition if specified",
+        description="Version of the agent definition",
     )
     agent_capabilities: list[str] | None = Field(
         default=None,
@@ -1090,9 +1363,10 @@ class ModelHookManifestInjectedPayload(BaseModel):
         default=None,
         description="How the agent was selected (explicit, fuzzy_match, fallback)",
     )
+
+    # Error tracking
     error_message: str | None = Field(
         default=None,
-        max_length=500,
         description="Error details if injection failed",
     )
     error_type: str | None = Field(
@@ -1157,6 +1431,9 @@ class ModelHookEventEnvelope(BaseModel):
         | ModelHookPromptSubmittedPayload
         | ModelHookToolExecutedPayload
         | ModelHookContextInjectedPayload
+        | ModelContextUtilizationPayload
+        | ModelAgentMatchPayload
+        | ModelLatencyBreakdownPayload
         | ModelHookManifestInjectedPayload
     ) = Field(
         ...,
@@ -1182,6 +1459,9 @@ class ModelHookEventEnvelope(BaseModel):
             HookEventType.PROMPT_SUBMITTED: ModelHookPromptSubmittedPayload,
             HookEventType.TOOL_EXECUTED: ModelHookToolExecutedPayload,
             HookEventType.CONTEXT_INJECTED: ModelHookContextInjectedPayload,
+            HookEventType.CONTEXT_UTILIZATION: ModelContextUtilizationPayload,
+            HookEventType.AGENT_MATCH: ModelAgentMatchPayload,
+            HookEventType.LATENCY_BREAKDOWN: ModelLatencyBreakdownPayload,
             HookEventType.MANIFEST_INJECTED: ModelHookManifestInjectedPayload,
         }
         expected = expected_types.get(self.event_type)
@@ -1200,6 +1480,9 @@ ModelHookPayload = Annotated[
     | ModelHookPromptSubmittedPayload
     | ModelHookToolExecutedPayload
     | ModelHookContextInjectedPayload
+    | ModelContextUtilizationPayload
+    | ModelAgentMatchPayload
+    | ModelLatencyBreakdownPayload
     | ModelHookManifestInjectedPayload,
     Field(description="Union of all hook event payload types"),
 ]
@@ -1225,6 +1508,9 @@ __all__ = [
     "ModelHookPromptSubmittedPayload",
     "ModelHookToolExecutedPayload",
     "ModelHookContextInjectedPayload",
+    "ModelContextUtilizationPayload",
+    "ModelAgentMatchPayload",
+    "ModelLatencyBreakdownPayload",
     "ModelHookManifestInjectedPayload",
     # Envelope and types
     "ModelHookEventEnvelope",

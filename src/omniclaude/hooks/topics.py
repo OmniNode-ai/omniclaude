@@ -77,6 +77,13 @@ class TopicBase(StrEnum):
     INJECTION_RECORDED = "onex.evt.omniclaude.injection-recorded.v1"
 
     # ==========================================================================
+    # Injection metrics topics (OMN-1889)
+    # ==========================================================================
+    CONTEXT_UTILIZATION = "onex.evt.omniclaude.context-utilization.v1"
+    AGENT_MATCH = "onex.evt.omniclaude.agent-match.v1"
+    LATENCY_BREAKDOWN = "onex.evt.omniclaude.latency-breakdown.v1"
+
+    # ==========================================================================
     # Manifest injection topics (agent loading observability)
     # ==========================================================================
     MANIFEST_INJECTION_STARTED = "onex.evt.omniclaude.manifest-injection-started.v1"

@@ -29,6 +29,7 @@ from omniclaude.hooks.cohort_assignment import (
     CohortAssignment,
     CohortAssignmentConfig,
     EnumCohort,
+    IdentityType,
     assign_cohort,
 )
 from omniclaude.hooks.contracts.contract_experiment_cohort import (
@@ -519,6 +520,106 @@ class TestCohortDistributionWithCustomPercentage:
         assert abs(control_rate - expected_rate) < 0.03, (
             f"Control rate {control_rate:.2%} not within 3% of expected {expected_rate:.2%}"
         )
+
+
+class TestStickyIdentityAssignment:
+    """Test sticky identity functionality for cohort assignment."""
+
+    def test_user_id_takes_priority_over_repo_path(self) -> None:
+        """Test user_id is used when both user_id and repo_path are provided."""
+        result = assign_cohort(
+            "session-123", user_id="user-456", repo_path="/workspace/repo"
+        )
+        assert result.identity_type == IdentityType.USER_ID
+
+    def test_user_id_takes_priority_over_session_id(self) -> None:
+        """Test user_id is used when only session_id and user_id provided."""
+        result = assign_cohort("session-123", user_id="user-456")
+        assert result.identity_type == IdentityType.USER_ID
+
+    def test_repo_path_takes_priority_over_session_id(self) -> None:
+        """Test repo_path is used when user_id not provided."""
+        result = assign_cohort("session-123", repo_path="/workspace/repo")
+        assert result.identity_type == IdentityType.REPO_PATH
+
+    def test_session_id_used_as_fallback(self) -> None:
+        """Test session_id used when no user_id or repo_path provided."""
+        result = assign_cohort("session-123")
+        assert result.identity_type == IdentityType.SESSION_ID
+
+    def test_empty_user_id_falls_back_to_repo_path(self) -> None:
+        """Test empty string user_id falls back to repo_path."""
+        result = assign_cohort("session-123", user_id="", repo_path="/workspace/repo")
+        assert result.identity_type == IdentityType.REPO_PATH
+
+    def test_whitespace_user_id_falls_back_to_repo_path(self) -> None:
+        """Test whitespace-only user_id falls back to repo_path."""
+        result = assign_cohort(
+            "session-123", user_id="   ", repo_path="/workspace/repo"
+        )
+        assert result.identity_type == IdentityType.REPO_PATH
+
+    def test_empty_repo_path_falls_back_to_session_id(self) -> None:
+        """Test empty string repo_path falls back to session_id."""
+        result = assign_cohort("session-123", repo_path="")
+        assert result.identity_type == IdentityType.SESSION_ID
+
+    def test_whitespace_repo_path_falls_back_to_session_id(self) -> None:
+        """Test whitespace-only repo_path falls back to session_id."""
+        result = assign_cohort("session-123", repo_path="   ")
+        assert result.identity_type == IdentityType.SESSION_ID
+
+    def test_none_user_id_falls_back_to_repo_path(self) -> None:
+        """Test None user_id falls back to repo_path."""
+        result = assign_cohort("session-123", user_id=None, repo_path="/workspace/repo")
+        assert result.identity_type == IdentityType.REPO_PATH
+
+    def test_same_user_id_deterministic_across_sessions(self) -> None:
+        """Test same user gets same cohort across different sessions."""
+        result1 = assign_cohort("session-111", user_id="user-stable")
+        result2 = assign_cohort("session-222", user_id="user-stable")
+        result3 = assign_cohort("session-333", user_id="user-stable")
+
+        assert result1.cohort == result2.cohort == result3.cohort
+        assert (
+            result1.assignment_seed
+            == result2.assignment_seed
+            == result3.assignment_seed
+        )
+
+    def test_same_repo_path_deterministic_across_sessions(self) -> None:
+        """Test same repo gets same cohort across different sessions."""
+        result1 = assign_cohort("session-111", repo_path="/workspace/myrepo")
+        result2 = assign_cohort("session-222", repo_path="/workspace/myrepo")
+        result3 = assign_cohort("session-333", repo_path="/workspace/myrepo")
+
+        assert result1.cohort == result2.cohort == result3.cohort
+        assert (
+            result1.assignment_seed
+            == result2.assignment_seed
+            == result3.assignment_seed
+        )
+
+    def test_different_user_ids_can_have_different_cohorts(self) -> None:
+        """Test different users can be assigned to different cohorts."""
+        cohorts_seen = set()
+        for i in range(100):
+            result = assign_cohort(f"session-{i}", user_id=f"user-{i}")
+            cohorts_seen.add(result.cohort)
+
+        # With 100 samples, statistically likely to see both cohorts
+        assert EnumCohort.CONTROL in cohorts_seen
+        assert EnumCohort.TREATMENT in cohorts_seen
+
+    def test_identity_type_in_cohort_assignment_result(self) -> None:
+        """Test CohortAssignment includes identity_type field."""
+        result = assign_cohort("session-123", user_id="user-456")
+
+        # Verify all expected fields are present
+        assert hasattr(result, "cohort")
+        assert hasattr(result, "assignment_seed")
+        assert hasattr(result, "identity_type")
+        assert isinstance(result.identity_type, IdentityType)
 
 
 class TestCohortAssignmentImmutability:

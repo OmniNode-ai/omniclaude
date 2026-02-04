@@ -31,6 +31,9 @@ args:
     description: Linear team name (default Omninode)
     required: false
     default: "Omninode"
+  - name: allow-arch-violation
+    description: Bypass architecture dependency validation (use with caution)
+    required: false
 ---
 
 # Create Linear Ticket
@@ -460,6 +463,62 @@ if existing:
 description = build_ticket_description(ticket_data, args)
 ```
 
+### Step 4.5: Validate Architecture Dependencies
+
+When `--blocked-by` is provided, validate that dependencies respect the OmniNode architecture.
+
+**Reference**: See `plugins/onex/lib/dependency_validator.md` for validation logic.
+
+```python
+# Import validation logic (conceptually - this is documentation)
+from lib.dependency_validator import validate_dependencies, filter_errors, filter_warnings, FOUNDATION_REPOS
+
+if args.blocked_by:
+    blocked_by_ids = [id.strip() for id in args.blocked_by.split(",") if id.strip()]
+    ticket_repo = args.repo or get_current_repo()
+
+    if not ticket_repo:
+        print("Warning: No --repo specified and unable to detect repository. Skipping architecture validation.")
+    else:
+        violations = validate_dependencies(
+            ticket_repo=ticket_repo,
+            blocked_by_ids=blocked_by_ids,
+            fetch_ticket_fn=lambda id: mcp__linear-server__get_issue(id=id)
+        )
+
+        # Filter using ValidationResult severity field
+        errors = filter_errors(violations)
+        warnings = filter_warnings(violations)
+
+        for w in warnings:
+            print(f"[WARNING] {w.message}")
+
+        if errors:
+            if not args.allow_arch_violation:
+                print("\nDependency architecture violations detected:\n")
+                for err in errors:
+                    print(f"  - {err.message}\n")
+                print("\nValid dependencies flow: app→foundation or foundation→foundation.")
+                print("To proceed anyway, use --allow-arch-violation flag.")
+                raise SystemExit(1)
+            else:
+                print("\n[WARNING] Proceeding with architecture violations (--allow-arch-violation):\n")
+                for err in errors:
+                    print(f"  - {err.message}\n")
+                # Append warning to description
+                description += "\n\n---\n\n**Warning**: This ticket has dependencies that violate architecture guidelines."
+```
+
+**Architecture Rules**:
+| Ticket Repo | Blocked By Repo | Verdict |
+|-------------|-----------------|---------|
+| application | application | INVALID (app→app) |
+| foundation | application | INVALID (foundation→app) |
+| application | foundation | VALID |
+| foundation | foundation | VALID |
+
+**Foundation repos**: omnibase_core, omnibase_spi, omnibase_infra
+
 ### Step 5: Create Ticket
 
 ```python
@@ -506,6 +565,7 @@ Ticket created successfully!
 | YAML parse error | Show line number and syntax issue |
 | Missing required field | Report which field is missing |
 | Milestone not found | List available milestones in file |
+| Architecture violation | List violations, suggest --allow-arch-violation to override |
 | Linear API error | Report error, suggest checking permissions |
 | Network timeout | Report timeout, suggest retry |
 
@@ -536,4 +596,9 @@ Ticket created successfully!
 ### With dependencies
 ```
 /create-ticket --title "Implement retry logic" --blocked-by OMN-1801,OMN-1802 --team Omninode
+```
+
+### Override architecture validation (rare)
+```
+/create-ticket --title "Cross-app coordination" --repo omniclaude --blocked-by OMN-1805 --allow-arch-violation
 ```

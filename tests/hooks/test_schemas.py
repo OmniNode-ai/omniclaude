@@ -1878,7 +1878,9 @@ class TestEventTypePayloadValidation:
                     causation_id=make_causation_id(),
                     emitted_at=make_timestamp(),
                     agent_name="agent-api-architect",
+                    agent_domain="api-development",
                     injection_success=True,
+                    injection_duration_ms=45,
                 ),
             ),
         ]

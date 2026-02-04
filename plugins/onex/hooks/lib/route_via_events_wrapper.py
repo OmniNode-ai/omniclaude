@@ -45,6 +45,42 @@ if str(_SCRIPT_DIR) not in sys.path:
 
 logger = logging.getLogger(__name__)
 
+# Canonical routing path values for metrics (from OMN-1893)
+VALID_ROUTING_PATHS = frozenset({"event", "local", "hybrid"})
+
+
+def _compute_routing_path(method: str, event_attempted: bool) -> str:
+    """
+    Map method to canonical routing_path.
+
+    Logic:
+    - event_attempted=False → "local" (never tried event path)
+    - event_attempted=True AND method=event_based → "event"
+    - event_attempted=True AND method=fallback → "hybrid" (tried event, fell back)
+    - Unknown method → "local" with loud warning
+
+    Args:
+        method: The routing method used (event_based, fallback, etc.)
+        event_attempted: Whether event-based routing was attempted
+
+    Returns:
+        Canonical routing path: "event", "local", or "hybrid"
+    """
+    if not event_attempted:
+        return "local"
+
+    if method == "event_based":
+        return "event"
+    elif method == "fallback":
+        return "hybrid"  # Attempted event, but fell back
+    else:
+        # Unknown method - log loudly, do NOT silently accept
+        logger.warning(
+            f"Unknown routing method '{method}' - forcing routing_path='local'. "
+            "This indicates instrumentation drift."
+        )
+        return "local"
+
 
 class RoutingMethod(str, Enum):
     """HOW the routing decision was made."""
@@ -169,9 +205,10 @@ def route_via_events(
         session_id: Session ID for A/B cohort assignment (optional)
 
     Returns:
-        Routing decision dictionary with semantic routing fields
+        Routing decision dictionary with routing_path signal
     """
     start_time = time.time()
+    event_attempted = False  # Polly-first never attempts event routing
 
     # A/B testing cohort assignment (for experiment tracking)
     cohort: str | None = None
@@ -188,6 +225,9 @@ def route_via_events(
     # This is INTENTIONAL, not a fallback
     latency_ms = int((time.time() - start_time) * 1000)
 
+    # Compute routing_path using the helper (for consistency with observability)
+    routing_path = _compute_routing_path(RoutingMethod.LOCAL.value, event_attempted)
+
     result: dict[str, Any] = {
         "selected_agent": "polymorphic-agent",
         "confidence": 0.95,
@@ -195,7 +235,7 @@ def route_via_events(
         # Routing semantics - three distinct fields
         "routing_method": RoutingMethod.LOCAL.value,
         "routing_policy": RoutingPolicy.POLLY_FIRST.value,
-        "routing_path": RoutingPath.LOCAL.value,
+        "routing_path": routing_path,
         # Legacy field for backward compatibility
         "method": RoutingPolicy.POLLY_FIRST.value,
         # Performance tracking
@@ -203,6 +243,8 @@ def route_via_events(
         # Agent metadata
         "domain": "workflow_coordination",
         "purpose": "Intelligent coordinator for development workflows",
+        # Observability signal (from OMN-1893)
+        "event_attempted": event_attempted,
     }
 
     # Add cohort information if available (for A/B testing)
@@ -248,6 +290,7 @@ def main() -> None:
                     "latency_ms": 0,
                     "domain": "workflow_coordination",
                     "purpose": "Intelligent coordinator for development workflows",
+                    "event_attempted": False,
                 }
             )
         )

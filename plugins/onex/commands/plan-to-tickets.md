@@ -25,6 +25,12 @@ args:
     description: Linear team name (default Omninode)
     required: false
     default: "Omninode"
+  - name: repo
+    description: Repository label for all tickets (e.g., omniclaude, omnibase_core)
+    required: false
+  - name: allow-arch-violation
+    description: Bypass architecture dependency validation (use with caution)
+    required: false
 ---
 
 # Batch Create Tickets from Plan
@@ -329,9 +335,20 @@ def resolve_epic(epic_title: str, team: str, no_create: bool, project: str | Non
 ## Step 5: Build Ticket Descriptions
 
 ```python
-def build_ticket_description(entry: dict, structure_type: str) -> str:
-    """Build standardized ticket description from plan entry."""
+def build_ticket_description(entry: dict, structure_type: str, arch_violation_override: bool = False) -> str:
+    """Build standardized ticket description from plan entry.
+
+    Args:
+        entry: Plan entry with title, content, dependencies
+        structure_type: Type of plan structure (phase_sections or milestone_table)
+        arch_violation_override: If True, add warning about architecture validation bypass
+    """
     lines = []
+
+    # Add architecture violation warning if applicable
+    if arch_violation_override:
+        lines.append("> **Architecture Override**: This ticket was created with `--allow-arch-violation` - cross-application dependency requires justification.\n")
+        lines.append("")
 
     lines.append("## Summary\n")
     lines.append(entry['content'][:500] if entry['content'] else f"Implementation for: {entry['title']}")
@@ -415,6 +432,121 @@ def handle_conflict(existing: dict, entry: dict, skip_existing: bool) -> str:
 
 ---
 
+## Step 7.5: Validate Architecture Dependencies
+
+Before creating any tickets, validate that all external dependencies (OMN-#### references) respect the OmniNode architecture.
+
+**Reference**: See `plugins/onex/lib/dependency_validator.md` for validation logic.
+
+```python
+# Validation runs before batch creation
+from lib.dependency_validator import validate_dependencies, filter_errors, filter_warnings, FOUNDATION_REPOS
+
+def validate_plan_dependencies(
+    entries: list[dict],
+    plan_repo: str | None,
+    allow_override: bool,
+    dry_run: bool
+) -> tuple[bool, bool]:
+    """Validate all external dependencies in the plan.
+
+    Args:
+        entries: List of plan entries with 'dependencies' field
+        plan_repo: Repository label for all tickets in this plan
+        allow_override: If True, warn but don't block
+        dry_run: If True, just report what would be validated
+
+    Returns:
+        Tuple of (should_proceed, violations_overridden):
+        - should_proceed: True if validation passes (or override set), False if should abort
+        - violations_overridden: True if violations were found but overridden with --allow-arch-violation
+    """
+    if not plan_repo:
+        print("Warning: No --repo specified. Skipping architecture validation.")
+        print("  Provide --repo to enable dependency validation.")
+        return (True, False)  # proceed, no violations overridden
+
+    # Collect all external dependencies (OMN-#### format)
+    external_deps = []
+    for entry in entries:
+        for dep in entry.get('dependencies', []):
+            if dep.startswith('OMN-') and dep not in external_deps:
+                external_deps.append(dep)
+
+    if not external_deps:
+        return (True, False)  # proceed, no violations overridden
+
+    if dry_run:
+        print(f"\n[DRY RUN] Would validate {len(external_deps)} external dependencies:")
+        for dep in external_deps:
+            print(f"  - {dep}")
+        return (True, False)  # proceed, no violations overridden (can't know in dry run)
+
+    # Validate each external dependency
+    all_errors = []
+    all_warnings = []
+
+    for dep in external_deps:
+        violations = validate_dependencies(
+            ticket_repo=plan_repo,
+            blocked_by_ids=[dep],
+            fetch_ticket_fn=lambda id: mcp__linear-server__get_issue(id=id)
+        )
+
+        errors = filter_errors(violations)
+        warnings = filter_warnings(violations)
+
+        all_errors.extend(errors)
+        all_warnings.extend(warnings)
+
+    # Report warnings
+    for w in all_warnings:
+        print(f"[WARNING] {w.message}")
+
+    # Handle errors
+    if all_errors:
+        print(f"\nArchitecture violations detected ({len(all_errors)}):\n")
+        for err in all_errors:
+            print(f"  - {err.message}\n")
+
+        if allow_override:
+            print("[WARNING] Proceeding with architecture violations (--allow-arch-violation)\n")
+            return (True, True)  # proceed, violations WERE overridden
+        else:
+            print("Valid dependencies flow: app→foundation or foundation→foundation.")
+            print("To proceed anyway, use --allow-arch-violation flag.")
+            print("\nNo tickets created. Fix dependencies or use override flag.")
+            return (False, False)  # abort, no override
+
+    return (True, False)  # proceed, no violations to override
+
+
+# Call before Step 8
+plan_repo = args.repo  # May be None if not specified
+
+should_proceed, arch_violation_override = validate_plan_dependencies(
+    entries=entries,
+    plan_repo=plan_repo,
+    allow_override=args.allow_arch_violation,
+    dry_run=args.dry_run
+)
+
+if not should_proceed:
+    raise SystemExit(1)
+
+# arch_violation_override is True if violations were found but --allow-arch-violation was used
+# This flag will be passed to create_tickets_batch to annotate tickets with warnings
+```
+
+**Key behavior**:
+- **Internal refs (P1, P2, M1)**: Not validated (same plan = same repo)
+- **External refs (OMN-1234)**: Validated against architecture rules
+- **No --repo**: Validation skipped with warning
+- **--dry-run**: Shows what would be validated without API calls
+- **Violations found**: Entire batch aborted (unless --allow-arch-violation)
+
+---
+
 ## Step 8: Create Tickets in Batch
 
 ```python
@@ -425,9 +557,20 @@ def create_tickets_batch(
     project: str | None,
     structure_type: str,
     skip_existing: bool,
-    dry_run: bool
+    dry_run: bool,
+    arch_violation_override: bool = False
 ) -> dict:
     """Create all tickets from plan entries.
+
+    Args:
+        entries: List of plan entries to create tickets for
+        epic: Parent epic issue, or None
+        team: Linear team name
+        project: Linear project name, or None
+        structure_type: Type of plan structure detected
+        skip_existing: If True, skip existing tickets without asking
+        dry_run: If True, don't actually create tickets
+        arch_violation_override: If True, add warning annotation to ticket descriptions
 
     Returns:
         {created: [], skipped: [], updated: [], failed: [], id_map: {P1: OMN-xxx}}
@@ -462,7 +605,7 @@ def create_tickets_batch(
 
             if action == 'update':
                 if not dry_run:
-                    description = build_ticket_description(entry, structure_type)
+                    description = build_ticket_description(entry, structure_type, arch_violation_override)
                     existing_desc = existing.get('description', '') or ''
                     merged = f"{existing_desc}\n\n---\n\n## Updated from Plan\n\n{description}"
 
@@ -479,7 +622,7 @@ def create_tickets_batch(
                 continue
 
         # Create new ticket
-        description = build_ticket_description(entry, structure_type)
+        description = build_ticket_description(entry, structure_type, arch_violation_override)
 
         if len(description) > MAX_DESC_SIZE:
             description = description[:MAX_DESC_SIZE] + "\n\n[... truncated due to size limit]"
@@ -684,7 +827,8 @@ results = create_tickets_batch(
     project=args.project,
     structure_type=structure_type,
     skip_existing=args.skip_existing,
-    dry_run=args.dry_run
+    dry_run=args.dry_run,
+    arch_violation_override=arch_violation_override  # Add warning to tickets if violations were overridden
 )
 
 # Step 9: Report summary
@@ -701,6 +845,7 @@ report_summary(results, epic, structure_type, args.dry_run)
 | No valid structure | Fail fast with example |
 | Epic not found + --no-create-epic | Report and stop |
 | Multiple epic matches | AskUserQuestion to disambiguate |
+| Architecture violation | Abort entire batch, list violations, suggest --allow-arch-violation |
 | Ticket creation fails | Log error, continue with remaining |
 | Dependency not resolved | Log warning, skip dependency link (forward refs resolved in second pass) |
 
@@ -726,4 +871,10 @@ report_summary(results, epic, structure_type, args.dry_run)
 
 # Fail if epic doesn't exist
 /plan-to-tickets ~/.claude/plans/my-plan.md --no-create-epic --epic-title "Existing Epic"
+
+# With repository label (enables architecture validation)
+/plan-to-tickets ~/.claude/plans/my-plan.md --repo omniclaude --project "Workflow Automation"
+
+# Override architecture validation for cross-app dependencies
+/plan-to-tickets ~/.claude/plans/my-plan.md --repo omniclaude --allow-arch-violation
 ```
