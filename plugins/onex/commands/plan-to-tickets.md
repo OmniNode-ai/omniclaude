@@ -594,7 +594,7 @@ def report_summary(results: dict, epic: dict | None, structure_type: str, dry_ru
                 print(f"  - [DRY] {item['entry']['title']}")
             else:
                 t = item['ticket']
-                print(f"  - [{t['identifier']}]({t['url']}) - {t['title'][:50]}")
+                print(f"  - [{t.get('identifier', '?')}]({t.get('url', '#')}) - {t.get('title', '')[:50]}")
 
     if results['skipped']:
         print(f"\n### Skipped (already exist)")
