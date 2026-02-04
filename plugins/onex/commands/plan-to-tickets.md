@@ -70,8 +70,9 @@ def detect_structure(content: str) -> tuple[str, list[dict]]:
         entries is list of {id, title, content, dependencies}
     """
     # Try Phase sections first (canonical)
+    # Requires 'Phase' keyword to avoid matching arbitrary numbered headings
     # Captures decimal phases: "## Phase 1.5: Title" -> phase_num = "1.5"
-    phase_pattern = r'^## (?:Phase\s+)?(\d+(?:\.\d+)?):\s*(.+?)$'
+    phase_pattern = r'^## Phase\s+(\d+(?:\.\d+)?):\s*(.+?)$'
     phase_matches = list(re.finditer(phase_pattern, content, re.MULTILINE | re.IGNORECASE))
 
     if phase_matches:
@@ -103,9 +104,20 @@ def detect_structure(content: str) -> tuple[str, list[dict]]:
                 'dependencies': deps
             })
 
+        # Check for duplicate phase IDs
+        seen_ids = {}
+        for entry in entries:
+            if entry['id'] in seen_ids:
+                print(f"Warning: Duplicate phase ID '{entry['id']}' found. "
+                      f"First: '{seen_ids[entry['id']]}', Second: '{entry['title']}'. "
+                      f"Second entry will be used.")
+            seen_ids[entry['id']] = entry['title']
+
         return ('phase_sections', entries)
 
     # Try Milestone table (legacy fallback)
+    # Expected format: | **M1** | Deliverable | Dependencies |
+    # Must have exactly 3 columns: ID, description, dependencies
     if '## Milestones Overview' in content or '## Milestone Overview' in content:
         # Find table rows with **M#** pattern
         table_pattern = r'\|\s*\*\*M(\d+)\*\*\s*\|([^|]+)\|([^|]*)\|'
@@ -198,10 +210,12 @@ def parse_dependency_string(deps_str: str) -> list[str]:
             deps.append(f'P{m_match.group(1)}')
             continue
 
-        # P# -> P{N}
-        p_match = re.match(r'P(\d+)', part, re.IGNORECASE)
+        # P# -> P{N} (also handles P1_5 or P1.5 decimal variants)
+        p_match = re.match(r'P(\d+(?:[._]\d+)?)', part, re.IGNORECASE)
         if p_match:
-            deps.append(f'P{p_match.group(1)}')
+            # Normalize to underscore format for consistency
+            phase_id = p_match.group(1).replace('.', '_')
+            deps.append(f'P{phase_id}')
             continue
 
     return deps
@@ -300,9 +314,12 @@ def resolve_epic(epic_title: str, team: str, no_create: bool, project: str | Non
     if project:
         params["project"] = project
 
-    epic = mcp__linear-server__create_issue(**params)
-    print(f"Created epic: {epic['identifier']} - {epic['title']}")
-    return epic
+    try:
+        epic = mcp__linear-server__create_issue(**params)
+        print(f"Created epic: {epic.get('identifier', 'unknown')} - {epic.get('title', epic_title)}")
+        return epic
+    except Exception as e:
+        raise ValueError(f"Failed to create epic '{epic_title}': {e}")
 ```
 
 ---
@@ -499,7 +516,7 @@ def create_tickets_batch(
                 'first_pass_blocked_by': blocked_by  # Store for merge in second pass
             })
             results['id_map'][entry['id']] = result['identifier']
-            print(f"  Created: {result['identifier']} - {result['url']}")
+            print(f"  Created: {result.get('identifier', 'unknown')} - {result.get('url', '(no URL)')}")
 
         except Exception as e:
             results['failed'].append({'entry': entry, 'error': str(e)})
@@ -526,8 +543,13 @@ def create_tickets_batch(
         if new_blocked_by and not dry_run:
             try:
                 # Merge with first-pass dependencies (Linear replaces, doesn't merge)
+                # Only include first-pass deps that exist in id_map (validated IDs)
                 first_pass = item.get('first_pass_blocked_by', [])
-                all_blocked_by = first_pass + new_blocked_by
+                validated_first_pass = [
+                    dep for dep in first_pass
+                    if dep.startswith('OMN-') or any(dep == results['id_map'].get(k) for k in results['id_map'])
+                ]
+                all_blocked_by = validated_first_pass + new_blocked_by
 
                 # Update ticket with combined dependencies
                 mcp__linear-server__update_issue(
