@@ -1038,9 +1038,9 @@ class ModelContextUtilizationPayload(BaseModel):
         le=1.0,
         description="Ratio of reused identifiers (0.0 = none used, 1.0 = all used)",
     )
-    method: str = Field(
+    method: Literal["identifier_overlap", "timeout_fallback", "error_fallback"] = Field(
         ...,
-        description="Detection method: 'identifier_overlap' or 'timeout_fallback'",
+        description="Detection method: 'identifier_overlap', 'timeout_fallback', or 'error_fallback'",
     )
     injected_count: int = Field(
         ...,
@@ -1122,7 +1122,7 @@ class ModelAgentMatchPayload(BaseModel):
         default=None,
         description="Expected agent from feedback or heuristics, if known",
     )
-    match_grade: str = Field(
+    match_grade: Literal["exact", "partial", "mismatch", "unknown"] = Field(
         ...,
         description="Quality of match: 'exact', 'partial', 'mismatch', or 'unknown'",
     )
@@ -1132,7 +1132,7 @@ class ModelAgentMatchPayload(BaseModel):
         le=1.0,
         description="Routing confidence score",
     )
-    routing_method: str = Field(
+    routing_method: Literal["event_routing", "fallback", "cache"] = Field(
         ...,
         description="Routing method: 'event_routing', 'fallback', or 'cache'",
     )
