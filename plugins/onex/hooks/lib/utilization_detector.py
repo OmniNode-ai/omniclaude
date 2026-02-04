@@ -79,8 +79,9 @@ MAX_INPUT_SIZE = 50 * 1024  # ~50K characters
 # Stopwords (English + Python keywords to prevent score inflation)
 # =============================================================================
 # NOTE: All stopwords are lowercase to match identifier normalization.
-# Identifiers are normalized via .lower() before comparison (see line ~225).
-# This ensures case-insensitive stopword filtering.
+# Identifiers are normalized via .lower() before comparison
+# (in _extract_identifiers_with_timeout). This ensures case-insensitive
+# stopword filtering.
 
 ENGLISH_STOPWORDS = frozenset(
     {
