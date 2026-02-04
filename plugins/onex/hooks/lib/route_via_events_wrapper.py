@@ -110,9 +110,9 @@ class RoutingPath(str, Enum):
 # Import emit_client_wrapper for event emission (optional)
 _emit_routing_event: Callable[..., bool] | None = None
 try:
-    from emit_client_wrapper import emit_via_daemon
+    from emit_client_wrapper import emit_event
 
-    _emit_routing_event = emit_via_daemon
+    _emit_routing_event = emit_event
 except ImportError:
     logger.debug(
         "emit_client_wrapper not available, routing events will not be emitted"
@@ -173,8 +173,8 @@ def _emit_routing_decision(
         }
         # Remove None values
         event = {k: v for k, v in event.items() if v is not None}
-        # Fire-and-forget - emit_via_daemon is non-blocking
-        _emit_routing_event(json.dumps(event), "routing-decisions")
+        # Fire-and-forget - emit_event is non-blocking
+        _emit_routing_event("routing.decision", event)
     except Exception as e:
         # Log but don't fail - observability is best-effort
         logger.debug(f"Failed to emit routing decision event: {e}")
