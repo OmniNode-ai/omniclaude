@@ -57,9 +57,7 @@ def redact_secrets(text: str) -> str:
     """
     result = text
     for pattern, replacement in SECRET_PATTERNS:
-        # Use search to check if pattern exists anywhere in text
-        if pattern.search(result):
-            result = pattern.sub(replacement, result)
+        result = pattern.sub(replacement, result)
     return result
 
 
@@ -81,11 +79,9 @@ def redact_secrets_with_count(text: str) -> RedactionResult:
     redacted_count = 0
 
     for pattern, replacement in SECRET_PATTERNS:
-        # Count matches before replacement
-        matches = pattern.findall(result)
-        if matches:
-            redacted_count += len(matches)
-            result = pattern.sub(replacement, result)
+        # Use subn() to replace and count in one pass
+        result, count = pattern.subn(replacement, result)
+        redacted_count += count
 
     return RedactionResult(text=result, redacted_count=redacted_count)
 

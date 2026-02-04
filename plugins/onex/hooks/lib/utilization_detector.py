@@ -38,6 +38,9 @@ ENV_KEY_RE = re.compile(r"\b[A-Z][A-Z0-9_]{2,}\b")
 # =============================================================================
 # Stopwords (English + Python keywords to prevent score inflation)
 # =============================================================================
+# NOTE: All stopwords are lowercase to match identifier normalization.
+# Identifiers are normalized via .lower() before comparison (see line ~225).
+# This ensures case-insensitive stopword filtering.
 
 ENGLISH_STOPWORDS = frozenset(
     {
@@ -259,9 +262,14 @@ def calculate_utilization(
     start_time = time.perf_counter()
 
     try:
-        # Try with timeout
-        # Note: For <1s timeout, we use manual time checking instead of signal
-        # since signal.alarm only supports whole seconds
+        # Cooperative timeout design: We check elapsed time AFTER each operation
+        # rather than using preemptive interruption (threads/signals) because:
+        # 1. Python regex operations are atomic - cannot be interrupted mid-execution
+        # 2. signal.alarm() only supports whole-second granularity (we need 30ms)
+        # 3. Threading adds complexity and potential race conditions
+        # 4. Regex on typical inputs completes in <5ms, so post-check is sufficient
+        # If a single regex takes >30ms, we'll exceed timeout but still complete
+        # gracefully - this is acceptable for the 30ms soft budget.
 
         # Extract identifiers from injected context
         injected_ids = extract_identifiers(injected_context)
@@ -313,8 +321,8 @@ def calculate_utilization(
         )
     except (ValueError, TypeError, AttributeError) as e:
         # Recoverable errors from malformed input - degrade gracefully
-        # Log at debug level to avoid noise from expected edge cases
-        logging.getLogger(__name__).debug(
+        # Log at warning level for visibility in production diagnostics
+        logging.getLogger(__name__).warning(
             f"Utilization detection failed with recoverable error: {e}"
         )
         duration_ms = int((time.perf_counter() - start_time) * 1000)
