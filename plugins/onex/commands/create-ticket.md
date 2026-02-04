@@ -471,7 +471,7 @@ When `--blocked-by` is provided, validate that dependencies respect the OmniNode
 
 ```python
 # Import validation logic (conceptually - this is documentation)
-from lib.dependency_validator import validate_dependencies, FOUNDATION_REPOS
+from lib.dependency_validator import validate_dependencies, filter_errors, filter_warnings, FOUNDATION_REPOS
 
 if args.blocked_by:
     blocked_by_ids = [id.strip() for id in args.blocked_by.split(",") if id.strip()]
@@ -486,25 +486,25 @@ if args.blocked_by:
             fetch_ticket_fn=lambda id: mcp__linear-server__get_issue(id=id)
         )
 
-        # Filter warnings vs errors
-        errors = [v for v in violations if not v.startswith("Warning:")]
-        warnings = [v for v in violations if v.startswith("Warning:")]
+        # Filter using ValidationResult severity field
+        errors = filter_errors(violations)
+        warnings = filter_warnings(violations)
 
         for w in warnings:
-            print(w)
+            print(f"[WARNING] {w.message}")
 
         if errors:
             if not args.allow_arch_violation:
                 print("\nDependency architecture violations detected:\n")
                 for err in errors:
-                    print(f"  - {err}\n")
+                    print(f"  - {err.message}\n")
                 print("\nValid dependencies flow: app→foundation or foundation→foundation.")
                 print("To proceed anyway, use --allow-arch-violation flag.")
                 raise SystemExit(1)
             else:
                 print("\n[WARNING] Proceeding with architecture violations (--allow-arch-violation):\n")
                 for err in errors:
-                    print(f"  - {err}\n")
+                    print(f"  - {err.message}\n")
                 # Append warning to description
                 description += "\n\n---\n\n**Warning**: This ticket has dependencies that violate architecture guidelines."
 ```

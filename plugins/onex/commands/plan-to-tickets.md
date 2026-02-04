@@ -440,7 +440,7 @@ Before creating any tickets, validate that all external dependencies (OMN-#### r
 
 ```python
 # Validation runs before batch creation
-from lib.dependency_validator import validate_dependencies, FOUNDATION_REPOS
+from lib.dependency_validator import validate_dependencies, filter_errors, filter_warnings, FOUNDATION_REPOS
 
 def validate_plan_dependencies(
     entries: list[dict],
@@ -493,21 +493,21 @@ def validate_plan_dependencies(
             fetch_ticket_fn=lambda id: mcp__linear-server__get_issue(id=id)
         )
 
-        errors = [v for v in violations if not v.startswith("Warning:")]
-        warnings = [v for v in violations if v.startswith("Warning:")]
+        errors = filter_errors(violations)
+        warnings = filter_warnings(violations)
 
         all_errors.extend(errors)
         all_warnings.extend(warnings)
 
     # Report warnings
     for w in all_warnings:
-        print(w)
+        print(f"[WARNING] {w.message}")
 
     # Handle errors
     if all_errors:
         print(f"\nArchitecture violations detected ({len(all_errors)}):\n")
         for err in all_errors:
-            print(f"  - {err}\n")
+            print(f"  - {err.message}\n")
 
         if allow_override:
             print("[WARNING] Proceeding with architecture violations (--allow-arch-violation)\n")
