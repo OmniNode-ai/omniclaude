@@ -22,15 +22,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-
-# Python 3.11+ has Required/NotRequired, for 3.10 use typing_extensions
-try:
-    from typing import NotRequired, TypedDict
-except ImportError:
-    from typing import NotRequired
-
-    from typing_extensions import TypedDict
-
+from typing import NotRequired, TypedDict
 
 logger = logging.getLogger(__name__)
 

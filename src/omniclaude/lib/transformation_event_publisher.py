@@ -54,11 +54,18 @@ KAFKA_PUBLISH_TIMEOUT_SECONDS = 10.0
 
 
 class TransformationEventType(str, Enum):
-    """Agent transformation event types with standardized topic routing."""
+    """Agent transformation event types with standardized topic routing.
 
-    STARTED = "onex.evt.omniclaude.transformation.started.v1"
-    COMPLETED = "onex.evt.omniclaude.transformation.completed.v1"
-    FAILED = "onex.evt.omniclaude.transformation.failed.v1"
+    Topic names MUST match the canonical definitions in omniclaude/hooks/topics.py
+    (TopicBase enum) to ensure consumers receive events correctly.
+
+    Topic names use hyphens (not dots) per ONEX naming convention.
+    """
+
+    # Topic names use hyphens (not dots) per ONEX naming convention
+    STARTED = "onex.evt.omniclaude.transformation-started.v1"
+    COMPLETED = "onex.evt.omniclaude.transformation-completed.v1"
+    FAILED = "onex.evt.omniclaude.transformation-failed.v1"
 
     def get_topic_name(self) -> str:
         """

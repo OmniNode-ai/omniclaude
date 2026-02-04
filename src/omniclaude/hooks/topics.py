@@ -90,6 +90,13 @@ class TopicBase(StrEnum):
     MANIFEST_INJECTED = "onex.evt.omniclaude.manifest-injected.v1"
     MANIFEST_INJECTION_FAILED = "onex.evt.omniclaude.manifest-injection-failed.v1"
 
+    # ==========================================================================
+    # Transformation topics (agent transformation observability)
+    # ==========================================================================
+    TRANSFORMATION_STARTED = "onex.evt.omniclaude.transformation-started.v1"
+    TRANSFORMATION_COMPLETED = "onex.evt.omniclaude.transformation-completed.v1"
+    TRANSFORMATION_FAILED = "onex.evt.omniclaude.transformation-failed.v1"
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).
