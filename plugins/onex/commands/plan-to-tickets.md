@@ -493,7 +493,11 @@ def create_tickets_batch(
                 params["blockedBy"] = blocked_by
 
             result = mcp__linear-server__create_issue(**params)
-            results['created'].append({'entry': entry, 'ticket': result})
+            results['created'].append({
+                'entry': entry,
+                'ticket': result,
+                'first_pass_blocked_by': blocked_by  # Store for merge in second pass
+            })
             results['id_map'][entry['id']] = result['identifier']
             print(f"  Created: {result['identifier']} - {result['url']}")
 
@@ -521,10 +525,14 @@ def create_tickets_batch(
 
         if new_blocked_by and not dry_run:
             try:
-                # Update ticket with forward dependencies
+                # Merge with first-pass dependencies (Linear replaces, doesn't merge)
+                first_pass = item.get('first_pass_blocked_by', [])
+                all_blocked_by = first_pass + new_blocked_by
+
+                # Update ticket with combined dependencies
                 mcp__linear-server__update_issue(
                     id=item['ticket']['id'],
-                    blockedBy=new_blocked_by
+                    blockedBy=all_blocked_by
                 )
                 print(f"  Linked forward deps for {item['ticket']['identifier']}: {new_blocked_by}")
             except Exception as e:
