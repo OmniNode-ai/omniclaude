@@ -256,7 +256,7 @@ def resolve_epic(epic_title: str, team: str, no_create: bool, project: str | Non
     issues = mcp__linear-server__list_issues(
         query=epic_title,
         team=team,
-        limit=10
+        limit=50
     )
 
     # Filter for exact title matches (case-insensitive)
@@ -275,7 +275,7 @@ def resolve_epic(epic_title: str, team: str, no_create: bool, project: str | Non
         # Multiple matches - ask user to disambiguate
         options = [
             {"label": f"{m['identifier']}: {m['title'][:40]}", "description": m.get('status', '')}
-            for m in matches[:4]  # Limit to 4 for UI
+            for m in matches[:10]  # Limit to 10 for reasonable UI
         ]
 
         response = AskUserQuestion(
@@ -329,7 +329,7 @@ def resolve_epic(epic_title: str, team: str, no_create: bool, project: str | Non
 ## Step 5: Build Ticket Descriptions
 
 ```python
-def build_ticket_description(entry: dict, epic_id: str | None, structure_type: str) -> str:
+def build_ticket_description(entry: dict, structure_type: str) -> str:
     """Build standardized ticket description from plan entry."""
     lines = []
 
@@ -367,7 +367,7 @@ def check_existing_ticket(title: str, team: str) -> dict | None:
     issues = mcp__linear-server__list_issues(
         query=title,
         team=team,
-        limit=5
+        limit=50
     )
 
     for issue in issues.get('issues', []):
@@ -434,6 +434,9 @@ def create_tickets_batch(
     """
     import time  # For rate limiting between API calls
 
+    # Linear has ~65KB description limit - define once for consistency
+    MAX_DESC_SIZE = 60000  # Leave margin for safety
+
     results = {
         'created': [],
         'skipped': [],
@@ -459,12 +462,10 @@ def create_tickets_batch(
 
             if action == 'update':
                 if not dry_run:
-                    description = build_ticket_description(entry, epic['id'] if epic else None, structure_type)
+                    description = build_ticket_description(entry, structure_type)
                     existing_desc = existing.get('description', '') or ''
                     merged = f"{existing_desc}\n\n---\n\n## Updated from Plan\n\n{description}"
 
-                    # Linear has ~65KB description limit - truncate if needed
-                    MAX_DESC_SIZE = 60000  # Leave margin for safety
                     if len(merged) > MAX_DESC_SIZE:
                         merged = merged[:MAX_DESC_SIZE] + "\n\n[... truncated due to size limit]"
 
@@ -478,10 +479,8 @@ def create_tickets_batch(
                 continue
 
         # Create new ticket
-        description = build_ticket_description(entry, epic['id'] if epic else None, structure_type)
+        description = build_ticket_description(entry, structure_type)
 
-        # Linear has ~65KB description limit - truncate if needed
-        MAX_DESC_SIZE = 60000  # Leave margin for safety
         if len(description) > MAX_DESC_SIZE:
             description = description[:MAX_DESC_SIZE] + "\n\n[... truncated due to size limit]"
 
@@ -493,9 +492,12 @@ def create_tickets_batch(
                 blocked_by.append(dep)
             elif dep in results['id_map']:
                 blocked_by.append(results['id_map'][dep])
-            else:
-                # Forward reference - will be resolved in second pass
+            elif re.match(r'^P\d+(?:_\d+)?$', dep):
+                # Forward reference (P# format) - will be resolved in second pass
                 unresolved_deps.append(dep)
+            else:
+                # Unrecognized dependency format - warn user
+                print(f"  Warning: Dependency '{dep}' has unrecognized format (expected OMN-###, P#, Phase #, or M#)")
 
         if unresolved_deps:
             # Store for second pass resolution
@@ -564,9 +566,10 @@ def create_tickets_batch(
                 # Merge with first-pass dependencies (Linear replaces, doesn't merge)
                 # Only include first-pass deps that exist in id_map (validated IDs)
                 first_pass = item.get('first_pass_blocked_by', [])
+                id_map_values = set(results['id_map'].values())
                 validated_first_pass = [
                     dep for dep in first_pass
-                    if dep.startswith('OMN-') or any(dep == results['id_map'].get(k) for k in results['id_map'])
+                    if dep.startswith('OMN-') or dep in id_map_values
                 ]
                 all_blocked_by = validated_first_pass + new_blocked_by
 
@@ -659,8 +662,7 @@ Provide a plan with explicit phases or milestones.
     # Stop execution
     raise SystemExit(1)
 
-print(f"Detected structure: {structure_type}")
-print(f"Found {len(entries)} entries to process")
+print(f"[structure_detected] type={structure_type} entries={len(entries)}")
 
 # Step 3: Extract epic title
 epic_title = extract_epic_title(content, args.epic_title)
