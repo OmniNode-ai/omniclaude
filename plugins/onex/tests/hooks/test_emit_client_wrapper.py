@@ -52,8 +52,13 @@ class TestModuleImport:
         expected_types = {
             "session.started",
             "session.ended",
+            "session.outcome",
             "prompt.submitted",
             "tool.executed",
+            "injection.recorded",
+            "context.utilization",  # OMN-1889
+            "agent.match",  # OMN-1889
+            "latency.breakdown",  # OMN-1889
         }
         assert expected_types == SUPPORTED_EVENT_TYPES
 
@@ -63,7 +68,7 @@ class TestModuleImport:
 
         assert DEFAULT_SOCKET_PATH is not None
         assert isinstance(DEFAULT_SOCKET_PATH, Path)
-        assert str(DEFAULT_SOCKET_PATH) == "/tmp/omniclaude-emit.sock"
+        assert str(DEFAULT_SOCKET_PATH) == "/tmp/omniclaude-emit.sock"  # noqa: S108
 
     def test_default_timeout_ms_defined(self) -> None:
         """Verify DEFAULT_TIMEOUT_MS constant is defined."""

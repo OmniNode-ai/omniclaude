@@ -56,6 +56,9 @@ class TestModuleImport:
             "prompt.submitted",
             "tool.executed",
             "injection.recorded",
+            "context.utilization",  # OMN-1889
+            "agent.match",  # OMN-1889
+            "latency.breakdown",  # OMN-1889
         }
         assert expected_types == SUPPORTED_EVENT_TYPES
 
