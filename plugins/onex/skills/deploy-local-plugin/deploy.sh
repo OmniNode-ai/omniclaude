@@ -232,6 +232,29 @@ if [[ "$EXECUTE" == "true" ]]; then
         echo -e "${YELLOW}  Warning: Registry not found at ${REGISTRY}${NC}"
     fi
 
+    # Update known_marketplaces.json ONLY if using directory source (not GitHub)
+    KNOWN_MARKETPLACES="$HOME/.claude/plugins/known_marketplaces.json"
+    if [[ -f "$KNOWN_MARKETPLACES" ]]; then
+        CURRENT_SOURCE_TYPE="$(jq -r '.["omninode-tools"].source.source // "unknown"' "$KNOWN_MARKETPLACES")"
+
+        if [[ "$CURRENT_SOURCE_TYPE" == "github" ]]; then
+            echo -e "${YELLOW}  Note: Marketplace uses GitHub source - not modifying known_marketplaces.json${NC}"
+            echo -e "${YELLOW}  Push changes to GitHub and restart Claude Code to deploy${NC}"
+        elif jq -e '.["omninode-tools"]' "$KNOWN_MARKETPLACES" >/dev/null 2>&1; then
+            # Get the plugins directory (parent of SOURCE_ROOT which is the onex plugin)
+            PLUGINS_DIR="$(dirname "$SOURCE_ROOT")"
+
+            jq --arg path "$PLUGINS_DIR" '
+                .["omninode-tools"].source.path = $path |
+                .["omninode-tools"].installLocation = $path
+            ' "$KNOWN_MARKETPLACES" > "${KNOWN_MARKETPLACES}.tmp" && mv "${KNOWN_MARKETPLACES}.tmp" "$KNOWN_MARKETPLACES"
+
+            echo -e "${GREEN}  Updated known_marketplaces.json source path${NC}"
+        else
+            echo -e "${YELLOW}  Warning: omninode-tools not found in known_marketplaces.json${NC}"
+        fi
+    fi
+
     echo ""
     echo -e "${GREEN}Deployment complete!${NC}"
     echo ""
