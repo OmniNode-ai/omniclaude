@@ -98,6 +98,7 @@ SUPPORTED_EVENT_TYPES = frozenset(
         "context.utilization",  # NEW - OMN-1889
         "agent.match",  # NEW - OMN-1889
         "latency.breakdown",  # NEW - OMN-1889
+        "routing.decision",  # Polly-first routing observability
     ]
 )
 

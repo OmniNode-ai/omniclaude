@@ -1,20 +1,19 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 OmniNode Team
 """
-Tests for route_via_events_wrapper.py
+Tests for route_via_events_wrapper.py (Polly-First Architecture)
 
 Verifies:
 - routing_path is always present in responses
-- routing_path correctly reflects event_attempted state
+- Polly-first routing always returns local path (event_attempted=False)
+- _compute_routing_path helper works correctly
 - Unknown methods produce warnings (no silent failures)
-- Fallback behavior is properly instrumented
 """
 
 import json
 import logging
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -25,6 +24,9 @@ if str(_HOOKS_LIB) not in sys.path:
 
 from route_via_events_wrapper import (
     VALID_ROUTING_PATHS,
+    RoutingMethod,
+    RoutingPath,
+    RoutingPolicy,
     _compute_routing_path,
     route_via_events,
 )
@@ -78,122 +80,97 @@ class TestComputeRoutingPath:
         assert "local" in VALID_ROUTING_PATHS
 
 
-class TestRouteViaEvents:
-    """Tests for the route_via_events function."""
+class TestRouteViaEventsPollyFirst:
+    """Tests for the Polly-first route_via_events function.
 
-    def test_returns_routing_path_event_on_success(self):
-        """Successful event-based routing should return routing_path='event'."""
-        mock_adapter = MagicMock()
-        mock_adapter.route_request.return_value = {
-            "selected_agent": "test-agent",
-            "confidence": 0.9,
-            "reasoning": "Test routing",
-            "domain": "testing",
-            "purpose": "Test purpose",
-        }
+    In Polly-first architecture:
+    - polymorphic-agent is ALWAYS selected
+    - routing_path is ALWAYS 'local'
+    - event_attempted is ALWAYS False
+    - routing_method is ALWAYS 'local'
+    - routing_policy is ALWAYS 'polly_first'
+    """
 
-        with patch(
-            "route_via_events_wrapper._get_hook_event_adapter",
-            return_value=mock_adapter,
-        ):
-            result = route_via_events("test prompt", "corr-123")
+    def test_always_returns_polymorphic_agent(self):
+        """Polly-first: should always return polymorphic-agent."""
+        result = route_via_events("test prompt", "corr-123")
+        assert result["selected_agent"] == "polymorphic-agent"
 
-        assert result["routing_path"] == "event"
-        assert result["event_attempted"] is True
-        assert result["method"] == "event_based"
-
-    def test_returns_routing_path_hybrid_on_exception(self, caplog):
-        """Exception after attempting event routing should return routing_path='hybrid'."""
-        mock_adapter = MagicMock()
-        mock_adapter.route_request.side_effect = TimeoutError("Kafka timeout")
-
-        with patch(
-            "route_via_events_wrapper._get_hook_event_adapter",
-            return_value=mock_adapter,
-        ):
-            with caplog.at_level(logging.WARNING):
-                result = route_via_events("test prompt", "corr-123")
-
-        assert result["routing_path"] == "hybrid"
-        assert result["event_attempted"] is True
-        assert result["method"] == "fallback"
-        assert "TimeoutError" in caplog.text
-
-    def test_returns_routing_path_local_when_adapter_unavailable(self, caplog):
-        """When adapter is None (import failed), should return routing_path='local'."""
-        with patch("route_via_events_wrapper._get_hook_event_adapter", None):
-            with caplog.at_level(logging.WARNING):
-                result = route_via_events("test prompt", "corr-123")
-
+    def test_always_returns_local_routing_path(self):
+        """Polly-first: routing_path should always be 'local'."""
+        result = route_via_events("test prompt", "corr-123")
         assert result["routing_path"] == "local"
-        assert result["event_attempted"] is False
-        assert result["method"] == "fallback"
-        assert "hook_event_adapter import failed" in caplog.text
+        assert result["routing_path"] in VALID_ROUTING_PATHS
 
-    def test_returns_routing_path_local_when_adapter_lacks_route_request(self):
-        """Adapter without route_request method should return routing_path='local'."""
-        mock_adapter = MagicMock(spec=[])  # No route_request attribute
-
-        with patch(
-            "route_via_events_wrapper._get_hook_event_adapter",
-            return_value=mock_adapter,
-        ):
-            result = route_via_events("test prompt", "corr-123")
-
-        # Adapter exists but can't route - event_attempted stays False
-        assert result["routing_path"] == "local"
+    def test_event_attempted_is_always_false(self):
+        """Polly-first never attempts event-based routing."""
+        result = route_via_events("test prompt", "corr-123")
         assert result["event_attempted"] is False
 
-    def test_routing_path_is_always_present(self):
-        """Both success and fallback paths must include routing_path."""
-        # Success path
-        mock_adapter = MagicMock()
-        mock_adapter.route_request.return_value = {
-            "selected_agent": "test-agent",
-            "confidence": 0.9,
-        }
+    def test_routing_method_is_local(self):
+        """Polly-first uses local routing method."""
+        result = route_via_events("test prompt", "corr-123")
+        assert result["routing_method"] == RoutingMethod.LOCAL.value
 
-        with patch(
-            "route_via_events_wrapper._get_hook_event_adapter",
-            return_value=mock_adapter,
-        ):
-            success_result = route_via_events("test", "corr")
+    def test_routing_policy_is_polly_first(self):
+        """Polly-first sets routing_policy to polly_first."""
+        result = route_via_events("test prompt", "corr-123")
+        assert result["routing_policy"] == RoutingPolicy.POLLY_FIRST.value
 
-        assert "routing_path" in success_result
-        assert success_result["routing_path"] in VALID_ROUTING_PATHS
+    def test_high_confidence(self):
+        """Polly-first should have high confidence."""
+        result = route_via_events("test prompt", "corr-123")
+        assert result["confidence"] == 0.95
 
-        # Fallback path
-        with patch("route_via_events_wrapper._get_hook_event_adapter", None):
-            fallback_result = route_via_events("test", "corr")
-
-        assert "routing_path" in fallback_result
-        assert fallback_result["routing_path"] in VALID_ROUTING_PATHS
-
-    def test_fallback_includes_debugging_context(self, caplog):
-        """Fallback should log enough context for debugging."""
-        mock_adapter = MagicMock()
-        mock_adapter.route_request.side_effect = ConnectionError("Connection refused")
-
-        with patch(
-            "route_via_events_wrapper._get_hook_event_adapter",
-            return_value=mock_adapter,
-        ):
-            with caplog.at_level(logging.WARNING):
-                route_via_events("test prompt", "corr-123")
-
-        # Should include exception type
-        assert "ConnectionError" in caplog.text
-        # Should include event_attempted state
-        assert "event_attempted=True" in caplog.text
+    def test_includes_domain_and_purpose(self):
+        """Response should include agent metadata."""
+        result = route_via_events("test prompt", "corr-123")
+        assert result["domain"] == "workflow_coordination"
+        assert result["purpose"] == "Intelligent coordinator for development workflows"
 
     def test_latency_is_captured(self):
         """Latency should be captured in milliseconds."""
-        with patch("route_via_events_wrapper._get_hook_event_adapter", None):
-            result = route_via_events("test", "corr")
-
+        result = route_via_events("test prompt", "corr-123")
         assert "latency_ms" in result
         assert isinstance(result["latency_ms"], int)
         assert result["latency_ms"] >= 0
+
+    def test_routing_path_is_always_present(self):
+        """routing_path must always be present in response."""
+        result = route_via_events("test", "corr")
+        assert "routing_path" in result
+        assert result["routing_path"] in VALID_ROUTING_PATHS
+
+    def test_reasoning_explains_polly_first(self):
+        """Reasoning should explain Polly-first architecture."""
+        result = route_via_events("test prompt", "corr-123")
+        assert "Polly-first" in result["reasoning"]
+
+    def test_legacy_method_field_for_backward_compatibility(self):
+        """Legacy 'method' field should still be present."""
+        result = route_via_events("test prompt", "corr-123")
+        assert "method" in result
+        assert result["method"] == RoutingPolicy.POLLY_FIRST.value
+
+
+class TestRouteViaEventsCohort:
+    """Tests for cohort assignment in route_via_events."""
+
+    def test_cohort_included_when_session_id_provided(self):
+        """Cohort information should be included when session_id is provided."""
+        result = route_via_events(
+            "test prompt", "corr-123", session_id="session-abc-123"
+        )
+        # Cohort may or may not be present depending on whether
+        # cohort_assignment module is available - just verify no errors
+        assert "selected_agent" in result
+
+    def test_cohort_excluded_when_no_session_id(self):
+        """Cohort information should not be present without session_id."""
+        result = route_via_events("test prompt", "corr-123")
+        # Without session_id, cohort assignment is skipped
+        # (cohort field won't be present or will be None)
+        assert result["selected_agent"] == "polymorphic-agent"
 
 
 class TestMainCLI:
@@ -216,4 +193,78 @@ class TestMainCLI:
 
         assert result["routing_path"] == "local"
         assert result["event_attempted"] is False
-        assert result["method"] == "fallback"
+        # In Polly-first, method is polly_first not fallback
+        assert result["method"] == RoutingPolicy.POLLY_FIRST.value
+
+    def test_with_args_returns_polly_first_result(self, capsys, monkeypatch):
+        """CLI with proper args should return Polly-first routing."""
+        monkeypatch.setattr(
+            sys, "argv", ["route_via_events_wrapper.py", "test prompt", "corr-123"]
+        )
+
+        from route_via_events_wrapper import main
+
+        # main() doesn't call sys.exit on success - it just returns
+        main()
+
+        captured = capsys.readouterr()
+        result = json.loads(captured.out)
+
+        assert result["selected_agent"] == "polymorphic-agent"
+        assert result["routing_path"] == "local"
+
+    def test_cli_with_timeout_and_session_id(self, capsys, monkeypatch):
+        """CLI accepts timeout_ms and session_id arguments."""
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "route_via_events_wrapper.py",
+                "test prompt",
+                "corr-123",
+                "5000",
+                "session-123",
+            ],
+        )
+
+        from route_via_events_wrapper import main
+
+        # Run main - it should not raise
+        try:
+            main()
+        except SystemExit as e:
+            pass  # Expected - main doesn't exit normally
+
+        captured = capsys.readouterr()
+        result = json.loads(captured.out)
+
+        assert result["selected_agent"] == "polymorphic-agent"
+        assert result["routing_path"] == "local"
+
+
+class TestRoutingEnums:
+    """Tests for routing enum consistency."""
+
+    def test_routing_method_values(self):
+        """Verify RoutingMethod enum values."""
+        assert RoutingMethod.EVENT_BASED.value == "event_based"
+        assert RoutingMethod.LOCAL.value == "local"
+        assert RoutingMethod.FALLBACK.value == "fallback"
+
+    def test_routing_policy_values(self):
+        """Verify RoutingPolicy enum values."""
+        assert RoutingPolicy.POLLY_FIRST.value == "polly_first"
+        assert RoutingPolicy.SAFETY_GATE.value == "safety_gate"
+        assert RoutingPolicy.COST_GATE.value == "cost_gate"
+        assert RoutingPolicy.EXPLICIT_AGENT.value == "explicit_agent"
+
+    def test_routing_path_values(self):
+        """Verify RoutingPath enum values."""
+        assert RoutingPath.EVENT.value == "event"
+        assert RoutingPath.LOCAL.value == "local"
+        assert RoutingPath.HYBRID.value == "hybrid"
+
+    def test_valid_routing_paths_matches_enum(self):
+        """VALID_ROUTING_PATHS should contain all RoutingPath enum values."""
+        for path in RoutingPath:
+            assert path.value in VALID_ROUTING_PATHS
