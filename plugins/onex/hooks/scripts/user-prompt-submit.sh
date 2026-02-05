@@ -76,7 +76,11 @@ if [[ -z "$PROMPT" ]]; then
     printf %s "$INPUT"
     exit 0
 fi
-log "Prompt: ${PROMPT:0:100}..."
+if [ ${#PROMPT} -gt 100 ]; then
+    log "Prompt: ${PROMPT:0:100}..."
+else
+    log "Prompt: ${PROMPT}"
+fi
 PROMPT_B64="$(b64 "$PROMPT")"
 
 # Generate correlation ID
@@ -382,48 +386,60 @@ fi
 # -----------------------------
 AGENT_ROLE="${AGENT_NAME#agent-}"
 
-AGENT_CONTEXT="$(cat <<EOF
+# Confidence threshold for Polly dispatch (default: 0.7)
+POLLY_DISPATCH_THRESHOLD="${POLLY_DISPATCH_THRESHOLD:-0.7}"
+
+# Check if confidence meets dispatch threshold
+CONFIDENCE_NUM="$(echo "$CONFIDENCE" | awk '{printf "%.2f", $1}')"
+MEETS_THRESHOLD="$(awk -v conf="$CONFIDENCE_NUM" -v thresh="$POLLY_DISPATCH_THRESHOLD" 'BEGIN {print (conf >= thresh) ? "true" : "false"}')"
+
+if [[ "$MEETS_THRESHOLD" == "true" ]] && [[ "$AGENT_NAME" == "polymorphic-agent" ]]; then
+    # High confidence Polly routing - DISPATCH via Task tool
+    AGENT_CONTEXT="$(cat <<EOF
 ${AGENT_YAML_INJECTION}
 ${LEARNED_PATTERNS}
 
 ========================================================================
-MANDATORY AGENT DISPATCH DIRECTIVE
+POLLY-FIRST DISPATCH DIRECTIVE
 ========================================================================
 
-CRITICAL INSTRUCTION: DO NOT USE TASK TOOL
-
-DETECTED AGENT: ${AGENT_NAME}
-Detected Role: ${AGENT_ROLE}
-Confidence: ${CONFIDENCE} | Method: ${SELECTION_METHOD} | Latency: ${LATENCY_MS}ms
+ROUTING DECISION: Dispatch to polymorphic-agent via Task tool
+Confidence: ${CONFIDENCE} (threshold: ${POLLY_DISPATCH_THRESHOLD})
+Method: ${SELECTION_METHOD} | Latency: ${LATENCY_MS}ms
 Domain: ${AGENT_DOMAIN}
 Purpose: ${AGENT_PURPOSE}
 
-$(if [[ -n "$AGENT_YAML_INJECTION" ]]; then
-    echo "AGENT IDENTITY LOADED - Polymorphic transformation active"
-    echo "   Complete agent configuration injected above"
-else
-    echo "AGENT IDENTITY NOT LOADED - Directive mode only"
-    echo "   Agent detected but YAML not available (check logs)"
-fi)
-
 ========================================================================
-EXECUTION MODE: DIRECT AGENT RESPONSE REQUIRED
+EXECUTION MODE: TASK TOOL DISPATCH REQUIRED
 ========================================================================
 
-You MUST respond directly as the ${AGENT_NAME} agent.
+You MUST dispatch this work to a polymorphic-agent subagent using the Task tool.
 
-DO NOT:
-  - Use the Task tool to delegate
-  - Launch a separate agent
-  - Dispatch this to another process
+DISPATCH PATTERN:
+\`\`\`
+Task(
+  subagent_type="polymorphic-agent",
+  description="<3-5 word summary of task>",
+  prompt="<full user request with any relevant context>"
+)
+\`\`\`
 
 DO:
-  - Assume the ${AGENT_ROLE} identity immediately
-  - Use the agent capabilities defined above
-  - Respond directly using agent expertise
-  - Apply agent-specific workflows and methods
+  - Use the Task tool with subagent_type="polymorphic-agent"
+  - Include the full user request in the prompt
+  - Add relevant context from the conversation if needed
+  - Let Polly handle the actual work
 
-ROUTING COMPLETE - You are now ${AGENT_NAME}.
+DO NOT:
+  - Execute the work directly yourself
+  - Skip the Task tool dispatch
+  - Use a different subagent_type unless specifically requested
+
+WHY POLLY DISPATCH:
+  - Polly subagents have full ONEX capabilities
+  - Enables observability and action logging
+  - Allows transformation to specialized agents when needed
+  - Provides consistent execution patterns
 
 Intelligence Context Available:
 - Domain: {REPO}/tmp/agent_intelligence_domain_${CORRELATION_ID}.json
@@ -434,6 +450,48 @@ Routing Reasoning: ${SELECTION_REASONING:0:200}
 ========================================================================
 EOF
 )"
+else
+    # Low confidence or non-Polly agent - respond directly (fallback behavior)
+    AGENT_CONTEXT="$(cat <<EOF
+${AGENT_YAML_INJECTION}
+${LEARNED_PATTERNS}
+
+========================================================================
+AGENT CONTEXT (Low Confidence / Direct Mode)
+========================================================================
+
+DETECTED AGENT: ${AGENT_NAME}
+Detected Role: ${AGENT_ROLE}
+Confidence: ${CONFIDENCE} (below threshold ${POLLY_DISPATCH_THRESHOLD} or non-Polly agent)
+Method: ${SELECTION_METHOD} | Latency: ${LATENCY_MS}ms
+Domain: ${AGENT_DOMAIN}
+Purpose: ${AGENT_PURPOSE}
+
+$(if [[ -n "$AGENT_YAML_INJECTION" ]]; then
+    echo "AGENT IDENTITY LOADED"
+    echo "   Complete agent configuration injected above"
+else
+    echo "AGENT IDENTITY NOT LOADED"
+    echo "   Agent detected but YAML not available (check logs)"
+fi)
+
+========================================================================
+EXECUTION MODE: DIRECT RESPONSE (Fallback)
+========================================================================
+
+Confidence is below dispatch threshold or agent is not polymorphic-agent.
+Respond directly using the detected agent's expertise.
+
+Intelligence Context Available:
+- Domain: {REPO}/tmp/agent_intelligence_domain_${CORRELATION_ID}.json
+- Implementation: {REPO}/tmp/agent_intelligence_impl_${CORRELATION_ID}.json
+- Correlation ID: ${CORRELATION_ID}
+
+Routing Reasoning: ${SELECTION_REASONING:0:200}
+========================================================================
+EOF
+)"
+fi
 
 # Output with injected context
 printf %s "$INPUT" | jq --arg ctx "$AGENT_CONTEXT" \

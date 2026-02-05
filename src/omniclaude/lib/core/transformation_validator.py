@@ -158,27 +158,50 @@ class TransformationValidator:
     # general questions. Focus on task-oriented phrases that clearly indicate
     # specialized work requiring a domain expert.
     SPECIALIZED_KEYWORDS = frozenset([
+        # Frontend keywords
         "api design",
         "api endpoint",
         "frontend component",
         "frontend integration",
-        "backend service",
-        "database schema",
-        "database migration",
-        "unit test",
-        "integration test",
-        "debug issue",
-        "debug error",
-        "performance optimization",
-        "security audit",
-        "security vulnerability",
-        "deploy to",
-        "deployment pipeline",
         "ui component",
         "ux design",
         "react component",
         "vue component",
         "angular component",
+        # Backend keywords
+        "backend service",
+        "database schema",
+        "database migration",
+        "orm model",
+        "sql query",
+        "rest api",
+        "graphql schema",
+        "grpc service",
+        # Infrastructure keywords
+        "cache layer",
+        "redis cache",
+        "memcached",
+        "message queue",
+        "kafka topic",
+        "rabbitmq",
+        "celery task",
+        # Security keywords
+        "auth flow",
+        "oauth integration",
+        "jwt token",
+        "authentication",
+        "security audit",
+        "security vulnerability",
+        # Testing keywords
+        "unit test",
+        "integration test",
+        # Debugging keywords
+        "debug issue",
+        "debug error",
+        # DevOps keywords
+        "performance optimization",
+        "deploy to",
+        "deployment pipeline",
     ])
 
     def __init__(
