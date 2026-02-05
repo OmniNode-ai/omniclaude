@@ -121,10 +121,18 @@ except ImportError:
 # Import cohort assignment for A/B testing tracking (optional)
 _assign_cohort: Callable[..., Any] | None = None
 try:
-    # Add src to path for omniclaude imports (sys and Path already imported above)
-    _src_dir = Path(__file__).parent.parent.parent.parent.parent / "src"
-    if str(_src_dir) not in sys.path:
-        sys.path.insert(0, str(_src_dir))
+    # Find project root by searching for pyproject.toml (more robust than counting parents)
+    _current = Path(__file__).resolve()
+    _project_root: Path | None = None
+    for _parent in [_current] + list(_current.parents):
+        if (_parent / "pyproject.toml").exists():
+            _project_root = _parent
+            break
+
+    if _project_root is not None:
+        _src_dir = _project_root / "src"
+        if _src_dir.exists() and str(_src_dir) not in sys.path:
+            sys.path.insert(0, str(_src_dir))
 
     from omniclaude.hooks.cohort_assignment import assign_cohort
 
@@ -181,7 +189,7 @@ def _emit_routing_decision(
 def route_via_events(
     prompt: str,
     correlation_id: str,
-    timeout_ms: int = 5000,
+    timeout_ms: int = 5000,  # noqa: ARG001 - Reserved for future event-based routing
     session_id: str | None = None,
 ) -> dict[str, Any]:
     """

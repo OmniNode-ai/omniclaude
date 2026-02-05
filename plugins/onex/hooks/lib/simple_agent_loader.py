@@ -20,29 +20,125 @@ Output:
 import json
 import logging
 import os
+import re
 import sys
 from pathlib import Path
 from typing import NotRequired, TypedDict
 
 logger = logging.getLogger(__name__)
 
-# Agent definitions directory
-# Priority: CLAUDE_PLUGIN_ROOT/agents/configs (for plugins), then ~/.claude/agents/omniclaude (legacy)
-_PLUGIN_ROOT = os.environ.get("CLAUDE_PLUGIN_ROOT", "")
-if _PLUGIN_ROOT:
-    AGENT_DEFINITIONS_DIR = Path(_PLUGIN_ROOT) / "agents" / "configs"
-else:
+# Security: Pattern for valid agent names (alphanumeric, hyphen, underscore only)
+_VALID_AGENT_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+
+def validate_agent_name(agent_name: str) -> tuple[bool, str]:
+    """
+    Validate agent name to prevent path traversal attacks.
+
+    Only allows alphanumeric characters, hyphens, and underscores.
+    Rejects any path traversal attempts (../, /, \\, etc.).
+
+    Args:
+        agent_name: The agent name to validate
+
+    Returns:
+        Tuple of (is_valid, error_message). If valid, error_message is empty.
+
+    Example:
+        >>> validate_agent_name("agent-api")
+        (True, "")
+        >>> validate_agent_name("../../../etc/passwd")
+        (False, "Invalid agent name: contains path traversal characters")
+    """
+    if not agent_name:
+        return False, "Agent name cannot be empty"
+
+    # Check for path traversal characters
+    if ".." in agent_name:
+        return False, "Invalid agent name: contains path traversal sequence '..'"
+
+    if "/" in agent_name or "\\" in agent_name:
+        return False, "Invalid agent name: contains path separator characters"
+
+    # Check against allowlist pattern (alphanumeric, hyphen, underscore)
+    if not _VALID_AGENT_NAME_PATTERN.match(agent_name):
+        return (
+            False,
+            "Invalid agent name: must contain only alphanumeric characters, "
+            "hyphens, and underscores",
+        )
+
+    # Additional length check to prevent DoS via extremely long names
+    if len(agent_name) > 128:
+        return False, "Invalid agent name: exceeds maximum length of 128 characters"
+
+    return True, ""
+
+
+# Agent definitions directory resolution with hardened validation
+# Priority: CLAUDE_PLUGIN_ROOT/agents/configs (for plugins), then script-relative, then legacy
+def _resolve_agent_definitions_dir() -> Path:
+    """
+    Resolve the agent definitions directory with proper validation.
+
+    Resolution order:
+    1. CLAUDE_PLUGIN_ROOT environment variable (if set and valid)
+    2. Script-relative path detection (hooks/lib -> plugin_root/agents/configs)
+    3. Legacy fallback (~/.claude/agents/omniclaude)
+
+    Returns:
+        Path to the agent definitions directory
+
+    Logs warnings for misconfigurations to aid debugging.
+    """
+    plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT", "").strip()
+
+    if plugin_root:
+        plugin_path = Path(plugin_root)
+
+        # Validate the plugin root exists
+        if not plugin_path.exists():
+            logger.warning(
+                f"CLAUDE_PLUGIN_ROOT is set but path does not exist: {plugin_root}. "
+                "Falling back to script-relative detection."
+            )
+        elif not plugin_path.is_dir():
+            logger.warning(
+                f"CLAUDE_PLUGIN_ROOT is set but is not a directory: {plugin_root}. "
+                "Falling back to script-relative detection."
+            )
+        else:
+            agents_dir = plugin_path / "agents" / "configs"
+            if agents_dir.exists() and agents_dir.is_dir():
+                return agents_dir
+            else:
+                logger.warning(
+                    f"CLAUDE_PLUGIN_ROOT is set but agents/configs not found: {agents_dir}. "
+                    "Falling back to script-relative detection."
+                )
+
     # Fallback: try to detect from script location (lib is 2 levels up from agents/configs)
-    _SCRIPT_DIR = Path(__file__).parent
-    _POSSIBLE_PLUGIN_ROOT = (
-        _SCRIPT_DIR.parent.parent
-    )  # hooks/lib -> hooks -> plugin_root
-    _POSSIBLE_AGENTS_DIR = _POSSIBLE_PLUGIN_ROOT / "agents" / "configs"
-    if _POSSIBLE_AGENTS_DIR.exists():
-        AGENT_DEFINITIONS_DIR = _POSSIBLE_AGENTS_DIR
-    else:
-        # Legacy fallback
-        AGENT_DEFINITIONS_DIR = Path.home() / ".claude" / "agents" / "omniclaude"
+    script_dir = Path(__file__).parent
+    possible_plugin_root = script_dir.parent.parent  # hooks/lib -> hooks -> plugin_root
+    possible_agents_dir = possible_plugin_root / "agents" / "configs"
+
+    if possible_agents_dir.exists() and possible_agents_dir.is_dir():
+        if not plugin_root:
+            logger.info(
+                f"CLAUDE_PLUGIN_ROOT not set. Using script-relative path: {possible_agents_dir}"
+            )
+        return possible_agents_dir
+
+    # Legacy fallback
+    legacy_dir = Path.home() / ".claude" / "agents" / "omniclaude"
+    logger.warning(
+        f"Could not resolve agent definitions directory from CLAUDE_PLUGIN_ROOT or "
+        f"script location. Using legacy fallback: {legacy_dir}"
+    )
+    return legacy_dir
+
+
+AGENT_DEFINITIONS_DIR = _resolve_agent_definitions_dir()
 
 
 class AgentLoadSuccess(TypedDict):
@@ -100,6 +196,7 @@ def load_agent_yaml(agent_name: str) -> str | None:
 
     Raises:
         OSError: If file exists but cannot be read (logged as warning, returns None)
+        ValueError: If agent_name contains invalid characters (path traversal prevention)
 
     Example:
         >>> content = load_agent_yaml("agent-api")
@@ -111,6 +208,12 @@ def load_agent_yaml(agent_name: str) -> str | None:
         >>> # Also works without "agent-" prefix
         >>> content = load_agent_yaml("research")
     """
+    # Security: Validate agent name (defense-in-depth for direct callers)
+    is_valid, error_msg = validate_agent_name(agent_name)
+    if not is_valid:
+        logger.warning(f"load_agent_yaml: {error_msg} (name={agent_name!r})")
+        raise ValueError(error_msg)
+
     search_paths = _get_search_paths(agent_name)
 
     for path in search_paths:
@@ -166,6 +269,19 @@ def load_agent(agent_name: str) -> AgentLoadResult:
         return AgentLoadFailure(
             success=False,
             error="No agent name provided",
+            agent_name=agent_name,
+            searched_paths=[],
+        )
+
+    # Security: Validate agent name to prevent path traversal attacks
+    is_valid, validation_error = validate_agent_name(agent_name)
+    if not is_valid:
+        logger.warning(
+            f"Agent name validation failed: {validation_error} (name={agent_name!r})"
+        )
+        return AgentLoadFailure(
+            success=False,
+            error=validation_error,
             agent_name=agent_name,
             searched_paths=[],
         )

@@ -230,6 +230,10 @@ class TransformationValidator:
         """
         Validate agent transformation.
 
+        DESIGN RULE: Fail Closed
+        If validation encounters ANY internal error, it returns BLOCKED.
+        Never silently passes invalid or unvalidated transformations.
+
         Args:
             from_agent: Source agent name
             to_agent: Target agent name
@@ -239,6 +243,44 @@ class TransformationValidator:
 
         Returns:
             TransformationValidationResult with validation outcome
+        """
+        try:
+            return self._validate_impl(from_agent, to_agent, reason, confidence, user_request)
+        except Exception as e:
+            # FAIL CLOSED: Any internal error results in blocked transformation
+            import logging
+            import traceback
+
+            logger = logging.getLogger(__name__)
+            logger.error(
+                f"Validation failed closed due to internal error: {e}\n"
+                f"Stack trace: {traceback.format_exc()}"
+            )
+            return TransformationValidationResult.blocked(
+                error_message=f"Validation internal error (fail closed): {type(e).__name__}: {e}",
+                metrics={
+                    "transformation_type": "unknown",
+                    "from_agent": from_agent,
+                    "to_agent": to_agent,
+                    "outcome": ValidatorOutcome.BLOCKED.value,
+                    "block_reason": "internal_error",
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                },
+            )
+
+    def _validate_impl(
+        self,
+        from_agent: str,
+        to_agent: str,
+        reason: str,
+        confidence: float | None = None,
+        user_request: str | None = None,
+    ) -> TransformationValidationResult:
+        """
+        Internal validation implementation.
+
+        Separated from validate() to enable fail-closed exception handling.
         """
         # Only validate self-transformations (polly → polly)
         is_self_transformation = self._is_self_transformation(from_agent, to_agent)

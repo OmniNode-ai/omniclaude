@@ -280,17 +280,37 @@ class AgentTransformer:
 
         try:
             # Step 1: Validate transformation (unless skipped)
+            # DESIGN RULE: Fail Closed - validator errors block transformation
             if VALIDATOR_AVAILABLE and not skip_validation:
-                validator = TransformationValidator()
-                validation_result = validator.validate(
-                    from_agent=source_agent,
-                    to_agent=agent_name,
-                    reason=transformation_reason or "",
-                    confidence=routing_confidence,
-                    user_request=user_request,
-                )
-                validation_outcome = validation_result.outcome.value
-                validation_metrics = validation_result.metrics
+                try:
+                    validator = TransformationValidator()
+                    validation_result = validator.validate(
+                        from_agent=source_agent,
+                        to_agent=agent_name,
+                        reason=transformation_reason or "",
+                        confidence=routing_confidence,
+                        user_request=user_request,
+                    )
+                    validation_outcome = validation_result.outcome.value
+                    validation_metrics = validation_result.metrics
+                except Exception as validator_error:
+                    # FAIL CLOSED: Validator internal errors block transformation
+                    # This is defense-in-depth; validator.validate() has its own
+                    # fail-closed handling, but we handle edge cases here too
+                    logger.error(
+                        f"Validator internal error (fail closed): {validator_error}"
+                    )
+                    validation_outcome = ValidatorOutcome.BLOCKED.value
+                    validation_metrics = {
+                        "block_reason": "validator_internal_error",
+                        "error_type": type(validator_error).__name__,
+                    }
+                    validation_result = TransformationValidationResult(
+                        outcome=ValidatorOutcome.BLOCKED,
+                        is_valid=False,
+                        error_message=f"Validator internal error (fail closed): {validator_error}",
+                        metrics=validation_metrics,
+                    )
 
                 # Log validation result
                 if validation_result.warning_message:

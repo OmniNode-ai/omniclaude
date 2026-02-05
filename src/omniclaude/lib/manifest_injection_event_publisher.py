@@ -45,6 +45,8 @@ from enum import Enum
 from typing import Any, cast
 from uuid import UUID, uuid4
 
+from omniclaude.hooks.topics import TopicBase
+
 logger = logging.getLogger(__name__)
 
 # Kafka publish timeout (10 seconds)
@@ -55,14 +57,14 @@ KAFKA_PUBLISH_TIMEOUT_SECONDS = 10.0
 class ManifestInjectionEventType(str, Enum):
     """Agent manifest injection event types with standardized topic routing.
 
-    Topic names MUST match the canonical definitions in omniclaude/hooks/topics.py
-    (TopicBase enum) to ensure consumers receive events correctly.
+    Values are derived from TopicBase to ensure single source of truth.
+    This prevents drift between event types and actual Kafka topics.
     """
 
-    # Topic names use hyphens (not dots) per ONEX naming convention
-    STARTED = "onex.evt.omniclaude.manifest-injection-started.v1"
-    COMPLETED = "onex.evt.omniclaude.manifest-injected.v1"
-    FAILED = "onex.evt.omniclaude.manifest-injection-failed.v1"
+    # Reference TopicBase constants - single source of truth for topic names
+    STARTED = TopicBase.MANIFEST_INJECTION_STARTED.value
+    COMPLETED = TopicBase.MANIFEST_INJECTED.value
+    FAILED = TopicBase.MANIFEST_INJECTION_FAILED.value
 
     def get_topic_name(self) -> str:
         """
@@ -213,7 +215,7 @@ async def _get_kafka_producer() -> Any | None:
 
 async def publish_manifest_injection_event(
     agent_name: str,
-    correlation_id: str | UUID | None = None,
+    correlation_id: str | UUID,
     session_id: str | UUID | None = None,
     agent_domain: str | None = None,
     injection_success: bool = True,
@@ -241,7 +243,7 @@ async def publish_manifest_injection_event(
 
     Args:
         agent_name: Name of the agent being loaded (e.g., "agent-api-architect")
-        correlation_id: Request correlation ID for distributed tracing
+        correlation_id: Required correlation ID for distributed tracing (no auto-generation)
         session_id: Session ID for grouping related executions
         agent_domain: Domain of the agent (e.g., "api-development", "testing")
         injection_success: Whether the manifest injection succeeded
@@ -262,11 +264,8 @@ async def publish_manifest_injection_event(
         bool: True if published successfully, False otherwise
     """
     try:
-        # Generate correlation_id if not provided
-        if correlation_id is None:
-            correlation_id = str(uuid4())
-        else:
-            correlation_id = str(correlation_id)
+        # Convert correlation_id to string (required parameter - no auto-generation)
+        correlation_id_str = str(correlation_id)
 
         if session_id is not None:
             session_id = str(session_id)
@@ -295,7 +294,7 @@ async def publish_manifest_injection_event(
         envelope = _create_event_envelope(
             event_type=event_type,
             payload=payload,
-            correlation_id=correlation_id,
+            correlation_id=correlation_id_str,
             source="omniclaude",
             tenant_id=tenant_id,
             namespace=namespace,
@@ -314,7 +313,7 @@ async def publish_manifest_injection_event(
         topic = event_type.get_topic_name()
 
         # Use correlation_id as partition key for workflow coherence
-        partition_key = correlation_id.encode("utf-8")
+        partition_key = correlation_id_str.encode("utf-8")
 
         # Publish to Kafka with timeout to prevent indefinite hanging
         await asyncio.wait_for(
@@ -325,7 +324,7 @@ async def publish_manifest_injection_event(
         logger.debug(
             f"Published manifest injection event: {event_type.value} | "
             f"agent={agent_name} | "
-            f"correlation_id={correlation_id}"
+            f"correlation_id={correlation_id_str}"
         )
         return True
 
@@ -345,7 +344,7 @@ async def publish_manifest_injection_event(
 
 async def publish_manifest_injection_start(
     agent_name: str,
-    correlation_id: str | UUID | None = None,
+    correlation_id: str | UUID,
     **kwargs: Any,
 ) -> bool:
     """
@@ -364,7 +363,7 @@ async def publish_manifest_injection_start(
 
 async def publish_manifest_injection_complete(
     agent_name: str,
-    correlation_id: str | UUID | None = None,
+    correlation_id: str | UUID,
     injection_duration_ms: int | None = None,
     **kwargs: Any,
 ) -> bool:
@@ -386,8 +385,8 @@ async def publish_manifest_injection_complete(
 
 async def publish_manifest_injection_failed(
     agent_name: str,
+    correlation_id: str | UUID,
     error_message: str,
-    correlation_id: str | UUID | None = None,
     error_type: str | None = None,
     **kwargs: Any,
 ) -> bool:
@@ -546,9 +545,9 @@ if __name__ == "__main__":
         # Test manifest injection failed
         success_failed = await publish_manifest_injection_failed(
             agent_name="agent-nonexistent",
+            correlation_id=str(uuid4()),
             error_message="Agent YAML file not found",
             error_type="FileNotFoundError",
-            correlation_id=str(uuid4()),
             session_id=session_id,
         )
         print(f"Failed event: {'OK' if success_failed else 'FAILED'}")

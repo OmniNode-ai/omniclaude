@@ -41,6 +41,7 @@ import atexit
 import json
 import logging
 import os
+import re
 import threading
 from datetime import UTC, datetime
 from enum import Enum
@@ -48,6 +49,46 @@ from typing import Any, cast
 from uuid import UUID, uuid4
 
 logger = logging.getLogger(__name__)
+
+# Maximum length for user_request in event payloads (security: prevent sensitive data leakage)
+MAX_USER_REQUEST_LENGTH = 500
+
+# Patterns for sensitive data redaction (same patterns used in prompt_preview)
+_SENSITIVE_PATTERNS = [
+    (re.compile(r"sk-[a-zA-Z0-9]{20,}"), "[OPENAI_KEY_REDACTED]"),  # OpenAI API keys
+    (re.compile(r"AKIA[A-Z0-9]{16}"), "[AWS_KEY_REDACTED]"),  # AWS access keys
+    (re.compile(r"ghp_[a-zA-Z0-9]{36}"), "[GITHUB_TOKEN_REDACTED]"),  # GitHub PATs
+    (re.compile(r"gho_[a-zA-Z0-9]{36}"), "[GITHUB_TOKEN_REDACTED]"),  # GitHub OAuth
+    (re.compile(r"xox[baprs]-[a-zA-Z0-9-]+"), "[SLACK_TOKEN_REDACTED]"),  # Slack tokens
+    (re.compile(r"-----BEGIN [A-Z]+ PRIVATE KEY-----"), "[PRIVATE_KEY_REDACTED]"),  # PEM keys
+    (re.compile(r"Bearer [a-zA-Z0-9._-]+"), "[BEARER_TOKEN_REDACTED]"),  # Bearer tokens
+    (re.compile(r":[^:@\s]{8,}@"), ":[PASSWORD_REDACTED]@"),  # Passwords in URLs
+]
+
+
+def _sanitize_user_request(user_request: str | None) -> str | None:
+    """
+    Sanitize user_request for safe inclusion in event payloads.
+
+    - Truncates to MAX_USER_REQUEST_LENGTH characters
+    - Redacts known sensitive patterns (API keys, tokens, passwords)
+    - Returns None if input is None
+
+    This follows the same privacy patterns as prompt_preview in schemas.py.
+    """
+    if user_request is None:
+        return None
+
+    # Redact sensitive patterns
+    sanitized = user_request
+    for pattern, replacement in _SENSITIVE_PATTERNS:
+        sanitized = pattern.sub(replacement, sanitized)
+
+    # Truncate to max length
+    if len(sanitized) > MAX_USER_REQUEST_LENGTH:
+        sanitized = sanitized[:MAX_USER_REQUEST_LENGTH] + "...[TRUNCATED]"
+
+    return sanitized
 
 # Kafka publish timeout (10 seconds)
 # Prevents indefinite blocking if broker is slow/unresponsive
@@ -84,21 +125,23 @@ _producer_lock: asyncio.Lock | None = None
 _lock_creation_lock = threading.Lock()  # Protects asyncio.Lock creation
 
 
-def _get_kafka_bootstrap_servers() -> str:
+def _get_kafka_bootstrap_servers() -> str | None:
     """
     Get Kafka bootstrap servers from environment.
 
     Per CLAUDE.md: No localhost defaults - explicit configuration required.
+    Hardcoded fallbacks are a security/reliability concern in production.
+
+    Returns:
+        Bootstrap servers string, or None if not configured.
     """
     servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS")
     if not servers:
-        # Log warning but provide sensible default for development
-        # Production should always have KAFKA_BOOTSTRAP_SERVERS set
-        servers = "192.168.86.200:29092"
         logger.warning(
-            f"KAFKA_BOOTSTRAP_SERVERS not set, using default: {servers}. "
-            "Set this explicitly in production."
+            "KAFKA_BOOTSTRAP_SERVERS not set. Kafka publishing disabled. "
+            "Set KAFKA_BOOTSTRAP_SERVERS environment variable to enable event publishing."
         )
+        return None
     return servers
 
 
@@ -188,6 +231,8 @@ async def _get_kafka_producer() -> Any | None:
             from aiokafka import AIOKafkaProducer
 
             bootstrap_servers = _get_kafka_bootstrap_servers()
+            if bootstrap_servers is None:
+                return None
 
             producer = AIOKafkaProducer(
                 bootstrap_servers=bootstrap_servers,
@@ -207,7 +252,8 @@ async def _get_kafka_producer() -> Any | None:
         except ImportError:
             logger.warning(
                 "aiokafka not installed. Transformation events will not be published. "
-                "Install with: pip install aiokafka"
+                "aiokafka is an optional dependency for Kafka event publishing. "
+                "Install with: pip install aiokafka>=0.9.0"
             )
             return None
         except Exception as e:
@@ -295,12 +341,15 @@ async def publish_transformation_event(
             session_id = str(session_id)
 
         # Build event payload (everything except envelope metadata)
+        # Sanitize user_request to prevent sensitive data leakage (MAJOR security fix)
+        sanitized_user_request = _sanitize_user_request(user_request)
+
         payload: dict[str, Any] = {
             "source_agent": source_agent,
             "target_agent": target_agent,
             "transformation_reason": transformation_reason,
             "session_id": session_id,
-            "user_request": user_request,
+            "user_request": sanitized_user_request,
             "routing_confidence": routing_confidence,
             "routing_strategy": routing_strategy,
             "transformation_duration_ms": transformation_duration_ms,

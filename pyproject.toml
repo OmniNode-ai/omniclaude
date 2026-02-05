@@ -14,6 +14,13 @@ dependencies = [
     "tiktoken>=0.5.0",
 ]
 
+[project.optional-dependencies]
+# Kafka event publishing support (transformation events, observability)
+# Install with: pip install omniclaude[kafka] or uv sync --extra kafka
+kafka = [
+    "aiokafka>=0.9.0",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8.0.0",

@@ -181,10 +181,28 @@ class TaskClassifier:
         "workflow",
     ]
 
-    # Short keywords (<=3 chars) that need word boundary matching to avoid
-    # substring false positives (e.g., "new" matching "renewed")
+    # Short keywords (<=4 chars) that need word boundary matching to avoid
+    # substring false positives (e.g., "new" matching "renewed", "api" in "capital")
+    # Note: "test" is intentionally excluded - we want "test" to match "unittest"
     _SHORT_KEYWORDS: frozenset[str] = frozenset(
-        {"new", "add", "fix", "bug", "sql", "how", "api"}
+        {
+            # 3-char keywords
+            "new",
+            "add",
+            "fix",
+            "bug",
+            "sql",
+            "how",
+            "api",
+            "llm",
+            # 4-char keywords
+            "http",
+            "rest",
+            "make",
+            "data",
+            "call",
+            "sync",
+        }
     )
 
     def _keyword_in_text(self, keyword: str, text: str) -> bool:
@@ -271,6 +289,7 @@ class TaskClassifier:
                 keywords.append(svc)
 
         # 4. Extract domain-specific terms (technology, patterns)
+        # Use _keyword_in_text for consistent word boundary matching on short terms
         domain_terms = [
             # Technology terms
             "llm",
@@ -309,7 +328,7 @@ class TaskClassifier:
             "command",
         ]
         for term in domain_terms:
-            if term in prompt_lower:
+            if self._keyword_in_text(term, prompt_lower):
                 keywords.append(term)
 
         # 5. Extract significant nouns (simple heuristic: words 3+ chars, not stopwords)
@@ -325,7 +344,9 @@ class TaskClassifier:
             "your",
         }
         words = re.findall(r"\w+", prompt_lower)
-        significant_words = [w for w in words if len(w) >= 3 and w not in stopwords and w.isalpha()]
+        significant_words = [
+            w for w in words if len(w) >= 3 and w not in stopwords and w.isalpha()
+        ]
         keywords.extend(significant_words[:10])  # Limit to 10 most significant
 
         # Extract entities (file names, table names)
