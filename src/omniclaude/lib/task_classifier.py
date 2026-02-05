@@ -195,13 +195,43 @@ class TaskClassifier:
             "how",
             "api",
             "llm",
-            # 4-char keywords
+            # 4-char keywords from INTENT_KEYWORDS
             "http",
             "rest",
             "make",
             "data",
             "call",
             "sync",
+            # Short DOMAIN_INDICATORS (<=4 chars) - need boundary matching
+            # to avoid false positives like "api" in "capital", "node" in "anode"
+            "node",
+            "onex",
+            "mixin",  # 5 chars but common false positive risk
+        }
+    )
+
+    # Known alphanumeric technical tokens that should be preserved during text
+    # processing. These should not be split on numbers (e.g., "http2" -> "http")
+    _TECHNICAL_TOKENS: frozenset[str] = frozenset(
+        {
+            "http2",
+            "http3",
+            "gpt3",
+            "gpt4",
+            "gpt5",
+            "s3",
+            "ec2",
+            "v1",
+            "v2",
+            "v3",
+            "k8s",
+            "utf8",
+            "oauth2",
+            "es6",
+            "es2015",
+            "python3",
+            "node18",
+            "node20",
         }
     )
 
@@ -242,10 +272,11 @@ class TaskClassifier:
             # Boost confidence for IMPLEMENT intent with domain-specific terminology
             # Domain terms are strong implementation signals even without explicit verbs
             if primary_intent == TaskIntent.IMPLEMENT:
+                # Use _keyword_in_text for consistent word boundary matching
                 domain_matches = sum(
                     1
                     for indicator in self.DOMAIN_INDICATORS
-                    if indicator in prompt_lower
+                    if self._keyword_in_text(indicator, prompt_lower)
                 )
 
                 if domain_matches >= 1 and confidence < 0.5:
@@ -257,8 +288,11 @@ class TaskClassifier:
             # domain-specific/technical terms, assume IMPLEMENT intent
             # This catches prompts like "ONEX authentication system" that describe
             # WHAT to build without explicit action verbs
+            # Use _keyword_in_text for consistent word boundary matching
             domain_matches = sum(
-                1 for indicator in self.DOMAIN_INDICATORS if indicator in prompt_lower
+                1
+                for indicator in self.DOMAIN_INDICATORS
+                if self._keyword_in_text(indicator, prompt_lower)
             )
 
             if domain_matches >= 1:
@@ -278,14 +312,14 @@ class TaskClassifier:
                 [kw for kw in kws if self._keyword_in_text(kw, prompt_lower)]
             )
 
-        # 2. Extract node type keywords
+        # 2. Extract node type keywords (use word boundary for short terms)
         for nt in self.NODE_TYPE_PATTERNS:
-            if nt in prompt_lower:
+            if self._keyword_in_text(nt, prompt_lower):
                 keywords.append(nt)
 
-        # 3. Extract service keywords
+        # 3. Extract service keywords (use word boundary for short terms like "onex")
         for svc in self.SERVICE_PATTERNS:
-            if svc in prompt_lower:
+            if self._keyword_in_text(svc, prompt_lower):
                 keywords.append(svc)
 
         # 4. Extract domain-specific terms (technology, patterns)
@@ -345,7 +379,14 @@ class TaskClassifier:
         }
         words = re.findall(r"\w+", prompt_lower)
         significant_words = [
-            w for w in words if len(w) >= 3 and w not in stopwords and w.isalpha()
+            w
+            for w in words
+            if len(w) >= 3
+            and w not in stopwords
+            and (
+                w.isalpha()  # Pure alphabetic words
+                or w in self._TECHNICAL_TOKENS  # Known technical tokens (http2, gpt4, s3)
+            )
         ]
         keywords.extend(significant_words[:10])  # Limit to 10 most significant
 
@@ -353,13 +394,19 @@ class TaskClassifier:
         entities = self._extract_entities(user_prompt)
 
         # Extract mentioned services (sorted for deterministic output)
+        # Use word boundary matching for consistent behavior with short terms
         mentioned_services = sorted(
-            svc for svc in self.SERVICE_PATTERNS if svc in prompt_lower
+            svc
+            for svc in self.SERVICE_PATTERNS
+            if self._keyword_in_text(svc, prompt_lower)
         )
 
         # Extract mentioned node types (sorted for deterministic output)
+        # Use word boundary matching for consistent behavior with short terms
         mentioned_node_types = sorted(
-            nt.upper() for nt in self.NODE_TYPE_PATTERNS if nt in prompt_lower
+            nt.upper()
+            for nt in self.NODE_TYPE_PATTERNS
+            if self._keyword_in_text(nt, prompt_lower)
         )
 
         return TaskContext(

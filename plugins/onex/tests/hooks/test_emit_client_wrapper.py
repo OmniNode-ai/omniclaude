@@ -59,6 +59,7 @@ class TestModuleImport:
             "context.utilization",  # OMN-1889
             "agent.match",  # OMN-1889
             "latency.breakdown",  # OMN-1889
+            "routing.decision",  # Polly-first routing observability
         }
         assert expected_types == SUPPORTED_EVENT_TYPES
 

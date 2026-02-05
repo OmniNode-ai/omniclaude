@@ -48,6 +48,8 @@ from enum import Enum
 from typing import Any, cast
 from uuid import UUID, uuid4
 
+from omniclaude.hooks.topics import TopicBase
+
 logger = logging.getLogger(__name__)
 
 # Maximum length for user_request in event payloads (security: prevent sensitive data leakage)
@@ -98,16 +100,16 @@ KAFKA_PUBLISH_TIMEOUT_SECONDS = 10.0
 class TransformationEventType(str, Enum):
     """Agent transformation event types with standardized topic routing.
 
-    Topic names MUST match the canonical definitions in omniclaude/hooks/topics.py
-    (TopicBase enum) to ensure consumers receive events correctly.
+    Values are derived from TopicBase to ensure single source of truth.
+    This prevents drift between event types and actual Kafka topics.
 
     Topic names use hyphens (not dots) per ONEX naming convention.
     """
 
-    # Topic names use hyphens (not dots) per ONEX naming convention
-    STARTED = "onex.evt.omniclaude.transformation-started.v1"
-    COMPLETED = "onex.evt.omniclaude.transformation-completed.v1"
-    FAILED = "onex.evt.omniclaude.transformation-failed.v1"
+    # Reference TopicBase constants - single source of truth for topic names
+    STARTED = TopicBase.TRANSFORMATION_STARTED.value
+    COMPLETED = TopicBase.TRANSFORMATION_COMPLETED.value
+    FAILED = TopicBase.TRANSFORMATION_FAILED.value
 
     def get_topic_name(self) -> str:
         """
@@ -544,11 +546,22 @@ def _cleanup_producer_sync() -> None:
                 pass
 
             # Event loop is closed - directly close underlying components
+            # NOTE: Accessing _client is necessary because AIOKafkaProducer
+            # doesn't expose a synchronous close() method. When the event loop
+            # is closed (atexit), we can't use async producer.stop().
+            # Using getattr() for safer access that handles aiokafka version changes.
             try:
-                if hasattr(_kafka_producer, "_client") and _kafka_producer._client:
-                    _kafka_producer._client.close()
+                client = getattr(_kafka_producer, "_client", None)
+                if client is not None:
+                    close_method = getattr(client, "close", None)
+                    if close_method is not None and callable(close_method):
+                        close_method()
                 _kafka_producer = None
                 logger.debug("Kafka producer closed (synchronous cleanup)")
+            except (AttributeError, TypeError):
+                # aiokafka internals changed or client not available
+                # Just release the reference, let GC handle it
+                _kafka_producer = None
             except Exception:
                 _kafka_producer = None
 

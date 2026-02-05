@@ -191,6 +191,8 @@ def route_via_events(
     correlation_id: str,
     timeout_ms: int = 5000,  # noqa: ARG001 - Reserved for future event-based routing
     session_id: str | None = None,
+    user_id: str | None = None,
+    repo_path: str | None = None,
 ) -> dict[str, Any]:
     """
     Route user prompt using Polly-first architecture.
@@ -209,21 +211,33 @@ def route_via_events(
         correlation_id: Correlation ID for tracking
         timeout_ms: Timeout in milliseconds (reserved for future event-based routing)
         session_id: Session ID for A/B cohort assignment (optional)
+        user_id: User ID for sticky cohort assignment across sessions (optional)
+        repo_path: Repository path for repo-level cohort stickiness (optional)
 
     Returns:
         Routing decision dictionary with routing_path signal
+
+    Note:
+        Cohort assignment priority: user_id > repo_path > session_id
+        Using user_id or repo_path provides stickier cohort assignment that
+        persists across sessions.
     """
     start_time = time.time()
     event_attempted = False  # Polly-first never attempts event routing
 
     # A/B testing cohort assignment (for experiment tracking)
+    # Priority: user_id > repo_path > session_id for stickier assignment
     cohort: str | None = None
     cohort_seed: int | None = None
+    identity_type: str | None = None
     if _assign_cohort is not None and session_id:
         try:
-            assignment = _assign_cohort(session_id)
+            assignment = _assign_cohort(
+                session_id, user_id=user_id, repo_path=repo_path
+            )
             cohort = assignment.cohort.value
             cohort_seed = assignment.assignment_seed
+            identity_type = assignment.identity_type.value
         except Exception as e:
             logger.debug(f"Cohort assignment failed: {e}")
 
@@ -257,6 +271,8 @@ def route_via_events(
     if cohort is not None:
         result["cohort"] = cohort
         result["cohort_seed"] = cohort_seed
+        if identity_type is not None:
+            result["cohort_identity_type"] = identity_type
 
     # Emit routing decision event for observability (non-blocking)
     _emit_routing_decision(

@@ -82,21 +82,20 @@ _producer_lock: asyncio.Lock | None = None
 _lock_creation_lock = threading.Lock()  # Protects asyncio.Lock creation
 
 
-def _get_kafka_bootstrap_servers() -> str:
+def _get_kafka_bootstrap_servers() -> str | None:
     """
     Get Kafka bootstrap servers from environment.
 
     Per CLAUDE.md: No localhost defaults - explicit configuration required.
+    Returns None if not configured, enabling graceful degradation.
     """
     servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS")
     if not servers:
-        # Log warning but provide sensible default for development
-        # Production should always have KAFKA_BOOTSTRAP_SERVERS set
-        servers = "192.168.86.200:29092"
         logger.warning(
-            f"KAFKA_BOOTSTRAP_SERVERS not set, using default: {servers}. "
-            "Set this explicitly in production."
+            "KAFKA_BOOTSTRAP_SERVERS not set. Event publishing disabled. "
+            "Set this environment variable to enable Kafka integration."
         )
+        return None
     return servers
 
 
@@ -186,6 +185,9 @@ async def _get_kafka_producer() -> Any | None:
             from aiokafka import AIOKafkaProducer
 
             bootstrap_servers = _get_kafka_bootstrap_servers()
+            if bootstrap_servers is None:
+                logger.debug("Kafka not configured - event publishing disabled")
+                return None
 
             producer = AIOKafkaProducer(
                 bootstrap_servers=bootstrap_servers,
