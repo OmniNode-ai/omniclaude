@@ -28,6 +28,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import re
 import subprocess
@@ -38,27 +39,50 @@ from typing import Any, TypedDict
 
 SCRIPT_DIR = Path(__file__).parent
 
-try:
-    from models import (
-        BotType,
-        CommentSeverity,
-        CommentStatus,
-        ModelCollatedIssues,
-        ModelPRIssue,
-        detect_bot_type,
-    )
-except ImportError:
-    # Fallback for standalone execution
-    if str(SCRIPT_DIR) not in sys.path:
-        sys.path.insert(0, str(SCRIPT_DIR))
-    from models import (
-        BotType,
-        CommentSeverity,
-        CommentStatus,
-        ModelCollatedIssues,
-        ModelPRIssue,
-        detect_bot_type,
-    )
+
+def _load_models_module():
+    """Load the models module from the same directory using importlib.
+
+    This avoids sys.path manipulation and provides proper module loading
+    for both package import and standalone script execution scenarios.
+
+    Returns:
+        The loaded models module.
+
+    Raises:
+        ImportError: If models.py cannot be found or loaded.
+    """
+    # First try standard import (works when installed as package)
+    try:
+        from . import models
+
+        return models
+    except ImportError:
+        pass
+
+    # Fallback: load from file path (standalone execution)
+    models_path = SCRIPT_DIR / "models.py"
+    if not models_path.exists():
+        raise ImportError(f"models.py not found at {models_path}")
+
+    spec = importlib.util.spec_from_file_location("models", models_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Could not load spec for {models_path}")
+
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["models"] = module  # Cache for subsequent imports
+    spec.loader.exec_module(module)
+    return module
+
+
+# Load models module and extract needed symbols
+_models = _load_models_module()
+BotType = _models.BotType
+CommentSeverity = _models.CommentSeverity
+CommentStatus = _models.CommentStatus
+ModelCollatedIssues = _models.ModelCollatedIssues
+ModelPRIssue = _models.ModelPRIssue
+detect_bot_type = _models.detect_bot_type
 
 
 # =============================================================================

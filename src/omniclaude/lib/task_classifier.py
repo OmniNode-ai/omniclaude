@@ -235,6 +235,46 @@ class TaskClassifier:
         }
     )
 
+    # Domain-specific terms for keyword extraction
+    # Used to identify technology patterns, patterns, data, and operation terms
+    DOMAIN_TERMS: list[str] = [
+        # Technology terms
+        "llm",
+        "api",
+        "http",
+        "rest",
+        "graphql",
+        "websocket",
+        "async",
+        "sync",
+        "event",
+        "stream",
+        "batch",
+        # Pattern terms
+        "pattern",
+        "template",
+        "mixin",
+        "contract",
+        "model",
+        "node",
+        "service",
+        "client",
+        "server",
+        "handler",
+        # Data terms
+        "data",
+        "schema",
+        "migration",
+        "index",
+        "cache",
+        # Operation terms
+        "request",
+        "response",
+        "call",
+        "query",
+        "command",
+    ]
+
     def _keyword_in_text(self, keyword: str, text: str) -> bool:
         """Check if keyword appears in text, using word boundaries for short keywords."""
         if keyword in self._SHORT_KEYWORDS:
@@ -324,44 +364,7 @@ class TaskClassifier:
 
         # 4. Extract domain-specific terms (technology, patterns)
         # Use _keyword_in_text for consistent word boundary matching on short terms
-        domain_terms = [
-            # Technology terms
-            "llm",
-            "api",
-            "http",
-            "rest",
-            "graphql",
-            "websocket",
-            "async",
-            "sync",
-            "event",
-            "stream",
-            "batch",
-            # Pattern terms
-            "pattern",
-            "template",
-            "mixin",
-            "contract",
-            "model",
-            "node",
-            "service",
-            "client",
-            "server",
-            "handler",
-            # Data terms
-            "data",
-            "schema",
-            "migration",
-            "index",
-            "cache",
-            # Operation terms
-            "request",
-            "response",
-            "call",
-            "query",
-            "command",
-        ]
-        for term in domain_terms:
+        for term in self.DOMAIN_TERMS:
             if self._keyword_in_text(term, prompt_lower):
                 keywords.append(term)
 

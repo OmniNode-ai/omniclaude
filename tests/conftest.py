@@ -734,6 +734,13 @@ def _force_close_producer(producer):
     This directly closes the underlying client connection to prevent
     "Unclosed AIOKafkaProducer" warnings when the event loop is closed.
 
+    Note:
+        This function accesses private attributes of AIOKafkaProducer because
+        the public `close()` method is async and cannot be called from sync
+        pytest hooks where the event loop may not be running. This is intentional
+        for test teardown and uses getattr() for safer access in case internal
+        implementation changes.
+
     Args:
         producer: AIOKafkaProducer instance to force-close
     """
@@ -742,20 +749,24 @@ def _force_close_producer(producer):
 
     try:
         # Cancel background tasks first
-        if (
-            hasattr(producer, "_sender")
-            and producer._sender is not None
-            and hasattr(producer._sender, "_sender_task")
-        ):
-            task = producer._sender._sender_task
-            if task is not None and not task.done():
-                task.cancel()
+        # Note: Accessing private _sender attribute for test cleanup
+        sender = getattr(producer, "_sender", None)
+        if sender is not None:
+            sender_task = getattr(sender, "_sender_task", None)
+            if sender_task is not None and not sender_task.done():
+                sender_task.cancel()
 
         # Close the client connection
-        if hasattr(producer, "_client") and producer._client is not None:
-            producer._client.close()
+        # Note: Accessing private _client attribute because async close()
+        # cannot be called from sync context during pytest teardown
+        client = getattr(producer, "_client", None)
+        if client is not None:
+            close_method = getattr(client, "close", None)
+            if callable(close_method):
+                close_method()
 
         # Mark as closed
+        # Note: Setting private _closed attribute to prevent double-close
         if hasattr(producer, "_closed"):
             producer._closed = True
 
@@ -860,3 +871,145 @@ def _cleanup_kafka_producers():
     # Backup cleanup - primary cleanup is in pytest_sessionfinish
     # This handles edge cases where sessionfinish didn't run
     _cleanup_all_kafka_producers_sync()
+
+
+# -------------------------------------------------------------------------
+# Module Reload Cleanup Fixtures
+# -------------------------------------------------------------------------
+# These fixtures prevent test pollution when tests reload modules or modify
+# global state. PR #92 review identified this as a potential source of flaky
+# tests when module reloads affect subsequent tests.
+
+
+@pytest.fixture
+def restore_sys_modules():
+    """
+    Fixture to capture and restore sys.modules state after a test.
+
+    Use this fixture in tests that modify sys.modules or use importlib.reload()
+    to prevent test pollution affecting subsequent tests.
+
+    Usage:
+        def test_something(restore_sys_modules):
+            # Test that modifies sys.modules
+            import importlib
+            import mymodule
+            importlib.reload(mymodule)
+            # sys.modules will be restored after test
+
+    Warning:
+        This is a function-scoped fixture. For module reloads that affect
+        global state (like singletons), consider using restore_module_globals
+        or creating a custom cleanup fixture.
+    """
+    # Capture the current state of sys.modules
+    original_modules = sys.modules.copy()
+    original_keys = set(sys.modules.keys())
+
+    yield
+
+    # Restore sys.modules to original state
+    # Remove any modules that were added
+    current_keys = set(sys.modules.keys())
+    added_keys = current_keys - original_keys
+    for key in added_keys:
+        del sys.modules[key]
+
+    # Restore any modules that were modified (replaced with different objects)
+    for key, module in original_modules.items():
+        if key in sys.modules and sys.modules[key] is not module:
+            sys.modules[key] = module
+
+
+@pytest.fixture
+def restore_module_globals():
+    """
+    Factory fixture to restore global state in a module after a test.
+
+    Use this when tests modify module-level globals (like singletons) that
+    need to be reset to prevent test pollution.
+
+    Usage:
+        def test_something(restore_module_globals):
+            import mymodule
+
+            # Register the module and globals to restore
+            restore = restore_module_globals(mymodule, ['_singleton', '_cache'])
+
+            # Test that modifies globals
+            mymodule._singleton = "test_value"
+            mymodule._cache = {"key": "value"}
+
+            # Globals will be restored after test
+
+    Args:
+        module: The module object containing globals to restore
+        global_names: List of global variable names to capture and restore
+
+    Returns:
+        A cleanup function (called automatically via fixture teardown)
+    """
+    restore_actions: list[tuple] = []
+
+    def _register_restore(module, global_names: list[str]):
+        """Register a module's globals to be restored after test."""
+        original_values = {}
+        for name in global_names:
+            if hasattr(module, name):
+                original_values[name] = getattr(module, name)
+            else:
+                # Track that the attribute didn't exist (so we can delete it)
+                original_values[name] = _SENTINEL_NOT_EXISTS
+
+        restore_actions.append((module, original_values))
+
+    yield _register_restore
+
+    # Restore all registered globals
+    for module, original_values in restore_actions:
+        for name, value in original_values.items():
+            if value is _SENTINEL_NOT_EXISTS:
+                # Attribute didn't exist before, delete if it was added
+                if hasattr(module, name):
+                    delattr(module, name)
+            else:
+                setattr(module, name, value)
+
+
+# Sentinel value to track attributes that didn't exist
+class _SentinelNotExists:
+    """Sentinel to indicate an attribute did not exist."""
+
+    pass
+
+
+_SENTINEL_NOT_EXISTS = _SentinelNotExists()
+
+
+@pytest.fixture(autouse=True)
+def _cleanup_dynamically_loaded_modules():
+    """
+    Auto-cleanup for dynamically loaded modules added during tests.
+
+    This fixture automatically removes modules that were dynamically loaded
+    via importlib.util.spec_from_file_location() during tests. These modules
+    are registered in sys.modules with custom names (like "transformation_event_publisher")
+    that could pollute subsequent tests.
+
+    Modules cleaned up:
+    - transformation_event_publisher (from test_transformation_event_publisher.py)
+    - Any module with a path containing "omniclaude3/tests" but not the standard
+      package path
+
+    This runs after every test to ensure a clean module state.
+    """
+    yield
+
+    # List of known dynamically-loaded test modules to cleanup
+    dynamic_modules = [
+        "transformation_event_publisher",  # From test_transformation_event_publisher.py
+    ]
+
+    for module_name in dynamic_modules:
+        if module_name in sys.modules:
+            del sys.modules[module_name]

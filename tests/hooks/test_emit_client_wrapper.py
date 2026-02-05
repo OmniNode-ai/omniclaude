@@ -63,6 +63,44 @@ class TestModuleImport:
         }
         assert expected_types == SUPPORTED_EVENT_TYPES
 
+    def test_event_types_are_internal_not_kafka_topics(self) -> None:
+        """Verify emit daemon event types are distinct from Kafka topic names.
+
+        IMPORTANT: Event types in SUPPORTED_EVENT_TYPES are internal identifiers
+        for the emit daemon, NOT Kafka topic names. The emit daemon maps these
+        event types to appropriate Kafka topics.
+
+        For example:
+        - Event type "routing.decision" is routed to Kafka topic "agent-routing-decisions"
+        - Event type "session.started" is routed to Kafka topic "onex.evt.omniclaude.session-started.v1"
+
+        This test documents the naming convention: event types use dotted lowercase
+        names like "category.action" for internal routing, while Kafka topics follow
+        either ONEX canonical format (onex.{kind}.{producer}.{event-name}.v{n}) or
+        legacy hyphenated format (agent-routing-decisions).
+
+        See topics.py for actual Kafka topic definitions.
+        """
+        from plugins.onex.hooks.lib.emit_client_wrapper import SUPPORTED_EVENT_TYPES
+
+        # All event types follow the internal naming convention: lowercase dotted names
+        for event_type in SUPPORTED_EVENT_TYPES:
+            # Should be lowercase
+            assert event_type == event_type.lower(), (
+                f"Event type '{event_type}' should be lowercase"
+            )
+            # Should contain exactly one dot (category.action format)
+            assert event_type.count(".") == 1, (
+                f"Event type '{event_type}' should have exactly one dot (category.action)"
+            )
+            # Should not be a Kafka topic (those start with 'onex.' or are hyphenated)
+            assert not event_type.startswith("onex."), (
+                f"Event type '{event_type}' looks like a Kafka topic name"
+            )
+            assert "-" not in event_type, (
+                f"Event type '{event_type}' contains hyphen (Kafka topic style)"
+            )
+
     def test_default_socket_path_defined(self) -> None:
         """Verify DEFAULT_SOCKET_PATH constant is defined."""
         from plugins.onex.hooks.lib.emit_client_wrapper import DEFAULT_SOCKET_PATH

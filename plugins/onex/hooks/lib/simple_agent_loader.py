@@ -27,6 +27,40 @@ from typing import NotRequired, TypedDict
 
 logger = logging.getLogger(__name__)
 
+# Security: Blocklist of sensitive directory patterns that should never be used as plugin roots
+# Note: We use exact matches and specific subdirectories to avoid blocking legitimate paths
+# like /var/folders (macOS temp) or /tmp which are valid for testing
+_SENSITIVE_PATH_PATTERNS = frozenset(
+    {
+        "/etc",
+        "/var/log",
+        "/var/run",
+        "/var/lib",
+        "/var/cache",
+        "/var/spool",
+        "/usr/bin",
+        "/usr/sbin",
+        "/usr/lib",
+        "/usr/local/bin",
+        "/usr/local/sbin",
+        "/bin",
+        "/sbin",
+        "/lib",
+        "/lib64",
+        "/root",
+        "/proc",
+        "/sys",
+        "/dev",
+        "/boot",
+        "/private/etc",  # macOS
+        "/private/var/log",  # macOS
+        "/private/var/run",  # macOS
+        "/System",  # macOS
+        "/Library/LaunchDaemons",  # macOS system launch daemons
+        "/Library/LaunchAgents",  # macOS system launch agents
+    }
+)
+
 # Security: Pattern for valid agent names (alphanumeric, hyphen, underscore only)
 _VALID_AGENT_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 
@@ -75,6 +109,60 @@ def validate_agent_name(agent_name: str) -> tuple[bool, str]:
     return True, ""
 
 
+def _is_sensitive_path(path: Path) -> bool:
+    """
+    Check if a path is within a sensitive system directory.
+
+    Args:
+        path: Path to check (should be resolved/absolute)
+
+    Returns:
+        True if the path is in a sensitive directory, False otherwise
+    """
+    resolved = path.resolve()
+    path_str = str(resolved)
+
+    for sensitive in _SENSITIVE_PATH_PATTERNS:
+        if path_str == sensitive or path_str.startswith(sensitive + "/"):
+            return True
+
+    return False
+
+
+def _validate_path_within_bounds(
+    file_path: Path, expected_base: Path
+) -> tuple[bool, str]:
+    """
+    Validate that a resolved file path stays within the expected base directory.
+
+    This prevents symlink-based path traversal attacks where a symlink could
+    point outside the expected directory structure.
+
+    Args:
+        file_path: The file path to validate
+        expected_base: The expected base directory that file_path should be within
+
+    Returns:
+        Tuple of (is_valid, error_message). If valid, error_message is empty.
+    """
+    try:
+        # Resolve both paths to handle symlinks
+        resolved_file = file_path.resolve()
+        resolved_base = expected_base.resolve()
+
+        # Check if the resolved file path is within the resolved base directory
+        try:
+            resolved_file.relative_to(resolved_base)
+            return True, ""
+        except ValueError:
+            return (
+                False,
+                f"Path escapes expected directory: {resolved_file} is not within {resolved_base}",
+            )
+    except OSError as e:
+        return False, f"Failed to resolve path: {e}"
+
+
 # Agent definitions directory resolution with hardened validation
 # Priority: CLAUDE_PLUGIN_ROOT/agents/configs (for plugins), then script-relative, then legacy
 def _resolve_agent_definitions_dir() -> Path:
@@ -86,6 +174,11 @@ def _resolve_agent_definitions_dir() -> Path:
     2. Script-relative path detection (hooks/lib -> plugin_root/agents/configs)
     3. Legacy fallback (~/.claude/agents/omniclaude)
 
+    Security validations:
+    - Rejects paths in sensitive system directories (/etc, /var, /usr, etc.)
+    - Validates path exists and is a directory
+    - Checks agents/configs subdirectory exists
+
     Returns:
         Path to the agent definitions directory
 
@@ -96,8 +189,15 @@ def _resolve_agent_definitions_dir() -> Path:
     if plugin_root:
         plugin_path = Path(plugin_root)
 
+        # Security: Validate path is not in sensitive system directories
+        if _is_sensitive_path(plugin_path):
+            logger.warning(
+                f"CLAUDE_PLUGIN_ROOT points to sensitive system directory: {plugin_root}. "
+                "This is not allowed for security reasons. "
+                "Falling back to script-relative detection."
+            )
         # Validate the plugin root exists
-        if not plugin_path.exists():
+        elif not plugin_path.exists():
             logger.warning(
                 f"CLAUDE_PLUGIN_ROOT is set but path does not exist: {plugin_root}. "
                 "Falling back to script-relative detection."
@@ -218,6 +318,17 @@ def load_agent_yaml(agent_name: str) -> str | None:
 
     for path in search_paths:
         if path.exists():
+            # Security: Validate resolved path stays within agents directory
+            # This prevents symlink-based attacks that could read arbitrary files
+            is_within_bounds, bounds_error = _validate_path_within_bounds(
+                path, AGENT_DEFINITIONS_DIR
+            )
+            if not is_within_bounds:
+                logger.warning(
+                    f"load_agent_yaml: Path validation failed for {path}: {bounds_error}"
+                )
+                continue  # Skip this path and try the next one
+
             try:
                 return path.read_text()
             except OSError as e:

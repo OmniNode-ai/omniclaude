@@ -118,6 +118,15 @@ except ImportError:
         "emit_client_wrapper not available, routing events will not be emitted"
     )
 
+# Import secret redaction for prompt_preview sanitization (optional)
+_redact_secrets: Callable[[str], str] | None = None
+try:
+    from secret_redactor import redact_secrets
+
+    _redact_secrets = redact_secrets
+except ImportError:
+    logger.debug("secret_redactor not available, prompt_preview will not be sanitized")
+
 # Import cohort assignment for A/B testing tracking (optional)
 _assign_cohort: Callable[..., Any] | None = None
 try:
@@ -163,6 +172,14 @@ def _emit_routing_decision(
         return
 
     try:
+        # Sanitize prompt_preview before emission to redact secrets
+        sanitized_preview = ""
+        if prompt_preview:
+            sanitized = (
+                _redact_secrets(prompt_preview) if _redact_secrets else prompt_preview
+            )
+            sanitized_preview = sanitized[:100]
+
         event = {
             "event_type": "routing.decision",
             "correlation_id": correlation_id,
@@ -172,7 +189,7 @@ def _emit_routing_decision(
             "routing_policy": routing_policy,
             "routing_path": routing_path,
             "latency_ms": latency_ms,
-            "prompt_preview": prompt_preview[:100] if prompt_preview else "",
+            "prompt_preview": sanitized_preview,
             # A/B testing cohort tracking
             "cohort": cohort,
             "cohort_seed": cohort_seed,

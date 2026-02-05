@@ -222,7 +222,28 @@ class TestLoadAgentYaml:
 
 
 class TestResolveAgentDefinitionsDir:
-    """Tests for CLAUDE_PLUGIN_ROOT resolution with fallbacks."""
+    """Tests for CLAUDE_PLUGIN_ROOT resolution with fallbacks.
+
+    Note: These tests use importlib.reload() to test environment variable
+    handling. A cleanup fixture ensures module state is restored after each
+    test to prevent test pollution.
+    """
+
+    @pytest.fixture(autouse=True)
+    def cleanup_module_reload(self) -> None:
+        """Restore simple_agent_loader module after reload-based tests.
+
+        Module reloads in tests can pollute global state for subsequent tests.
+        This fixture ensures the module's cached AGENT_DEFINITIONS_DIR is reset.
+        """
+        yield
+
+        # Re-import and reload with current environment to restore state
+        import importlib
+
+        import plugins.onex.hooks.lib.simple_agent_loader as loader
+
+        importlib.reload(loader)
 
     def test_uses_plugin_root_when_valid(self) -> None:
         """Should use CLAUDE_PLUGIN_ROOT when set and valid."""

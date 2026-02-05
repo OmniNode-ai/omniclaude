@@ -433,42 +433,55 @@ class AgentTransformer:
         """
         Synchronous wrapper for transform_with_logging.
 
-        Use async version when possible. This creates event loop if needed.
+        Handles both sync and async calling contexts safely:
+        - From sync context: Creates new event loop and runs directly
+        - From async context: Uses ThreadPoolExecutor to avoid nested loop issues
 
-        WARNING: Do not call this from async code (within a running event loop).
-        Doing so will raise RuntimeError. Use `transform_with_logging` directly
-        in async contexts, or call via `asyncio.run_coroutine_threadsafe()`.
+        Note: ThreadPoolExecutor per-call overhead is intentional for correctness.
+        The alternative (reusing executors) adds complexity and state management
+        concerns that aren't justified for transformation use cases.
 
         Args:
-            Same as transform_with_logging
+            agent_name: The agent to transform into
+            source_agent: The source agent (default: polymorphic-agent)
+            transformation_reason: Why the transformation occurred
+            correlation_id: Optional correlation ID for tracing
+            user_request: The user request that triggered transformation
+            routing_confidence: Confidence score from routing
+            routing_strategy: Strategy used for routing
+            skip_validation: Whether to skip validation checks
 
         Returns:
             Formatted prompt for identity assumption
 
         Raises:
             ValueError: If transformation is blocked by validator
-            RuntimeError: If called from within a running event loop
         """
+        import concurrent.futures
+
         # Check if we're already in an async context
         try:
             asyncio.get_running_loop()
-            # If we get here, there IS a running loop - we cannot use run_until_complete
-            raise RuntimeError(
-                "Cannot call transform_sync_with_logging from within a running event loop. "
-                "Use `await transform_with_logging(...)` instead, or run in a separate thread."
-            )
-        except RuntimeError as e:
-            # If the error is our own, re-raise it
-            if "Cannot call transform_sync_with_logging" in str(e):
-                raise
-            # Otherwise, no running loop exists - create one for sync execution
-            pass
-
-        # No running loop - safe to create and run synchronously
-        loop = asyncio.new_event_loop()
-        try:
-            asyncio.set_event_loop(loop)
-            return loop.run_until_complete(
+            # Already in async context - use thread pool to avoid nested loop issues
+            logger.debug("transform_sync_with_logging called from async context, using ThreadPoolExecutor")
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(
+                    asyncio.run,
+                    self.transform_with_logging(
+                        agent_name=agent_name,
+                        source_agent=source_agent,
+                        transformation_reason=transformation_reason,
+                        correlation_id=correlation_id,
+                        user_request=user_request,
+                        routing_confidence=routing_confidence,
+                        routing_strategy=routing_strategy,
+                        skip_validation=skip_validation,
+                    ),
+                )
+                return future.result()
+        except RuntimeError:
+            # No running loop - safe to use asyncio.run() directly
+            return asyncio.run(
                 self.transform_with_logging(
                     agent_name=agent_name,
                     source_agent=source_agent,
@@ -480,8 +493,6 @@ class AgentTransformer:
                     skip_validation=skip_validation,
                 )
             )
-        finally:
-            loop.close()
 
 
 def main() -> None:

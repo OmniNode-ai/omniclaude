@@ -207,7 +207,8 @@ async def _get_kafka_producer() -> Any | None:
         except ImportError:
             logger.warning(
                 "aiokafka not installed. Manifest injection events will not be published. "
-                "Install with: pip install aiokafka"
+                "aiokafka is an optional dependency for Kafka event publishing. "
+                "Install with: pip install aiokafka>=0.9.0"
             )
             return None
         except Exception as e:
@@ -450,11 +451,22 @@ def _cleanup_producer_sync() -> None:
                 pass
 
             # Event loop is closed - directly close underlying components
+            # NOTE: Accessing _client is necessary because AIOKafkaProducer
+            # doesn't expose a synchronous close() method. When the event loop
+            # is closed (atexit), we can't use async producer.stop().
+            # Using getattr() for safer access that handles aiokafka version changes.
             try:
-                if hasattr(_kafka_producer, "_client") and _kafka_producer._client:
-                    _kafka_producer._client.close()
+                client = getattr(_kafka_producer, "_client", None)
+                if client is not None:
+                    close_method = getattr(client, "close", None)
+                    if close_method is not None and callable(close_method):
+                        close_method()
                 _kafka_producer = None
                 logger.debug("Kafka producer closed (synchronous cleanup)")
+            except (AttributeError, TypeError):
+                # aiokafka internals changed or client not available
+                # Just release the reference, let GC handle it
+                _kafka_producer = None
             except Exception:
                 _kafka_producer = None
 
@@ -474,42 +486,45 @@ def publish_manifest_injection_event_sync(
     """
     Synchronous wrapper for publish_manifest_injection_event.
 
-    Creates new event loop if needed. Use async version when possible.
+    Handles both sync and async calling contexts safely:
+    - From sync context: Creates new event loop and runs directly
+    - From async context: Uses ThreadPoolExecutor to avoid nested loop issues
 
-    WARNING: Do not call this from async code (within a running event loop).
-    Doing so will raise RuntimeError. Use `publish_manifest_injection_event` directly
-    in async contexts, or call via `asyncio.run_coroutine_threadsafe()`.
+    Note: ThreadPoolExecutor per-call overhead is intentional for correctness.
+    The alternative (reusing executors) adds complexity and state management
+    concerns that aren't justified for event publishing use cases.
 
-    Raises:
-        RuntimeError: If called from within a running event loop
+    Args:
+        agent_name: The agent whose manifest is being injected
+        **kwargs: Additional arguments passed to publish_manifest_injection_event
+
+    Returns:
+        bool: True if event was published successfully
     """
+    import concurrent.futures
+
     # Check if we're already in an async context
     try:
         asyncio.get_running_loop()
-        # If we get here, there IS a running loop - we cannot use run_until_complete
-        raise RuntimeError(
-            "Cannot call publish_manifest_injection_event_sync from within a running event loop. "
-            "Use `await publish_manifest_injection_event(...)` instead, or run in a separate thread."
-        )
-    except RuntimeError as e:
-        # If the error is our own, re-raise it
-        if "Cannot call publish_manifest_injection_event_sync" in str(e):
-            raise
-        # Otherwise, no running loop exists - create one for sync execution
-        pass
-
-    # No running loop - safe to create and run synchronously
-    loop = asyncio.new_event_loop()
-    try:
-        asyncio.set_event_loop(loop)
-        return loop.run_until_complete(
+        # Already in async context - use thread pool to avoid nested loop issues
+        logger.debug("publish_manifest_injection_event_sync called from async context, using ThreadPoolExecutor")
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(
+                asyncio.run,
+                publish_manifest_injection_event(
+                    agent_name=agent_name,
+                    **kwargs,
+                ),
+            )
+            return future.result()
+    except RuntimeError:
+        # No running loop - safe to use asyncio.run() directly
+        return asyncio.run(
             publish_manifest_injection_event(
                 agent_name=agent_name,
                 **kwargs,
             )
         )
-    finally:
-        loop.close()
 
 
 if __name__ == "__main__":

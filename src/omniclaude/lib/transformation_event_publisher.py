@@ -194,11 +194,25 @@ async def get_producer_lock() -> asyncio.Lock:
     This ensures asyncio.Lock() is never created at module level, which
     would cause RuntimeError in Python 3.12+ when no event loop exists.
 
-    Uses double-checked locking with a threading.Lock to prevent race
-    conditions where multiple coroutines could create duplicate Lock instances.
+    Thread-Safety Guarantee:
+        Uses double-checked locking pattern with a threading.Lock to prevent
+        race conditions where multiple coroutines (potentially from different
+        threads) could create duplicate Lock instances on first call.
+
+        Pattern:
+        1. Fast path: If lock exists, return immediately (no synchronization)
+        2. Slow path: Acquire threading.Lock, check again, create if needed
+
+        This is safe because:
+        - The outer check is a read of a reference (atomic in Python)
+        - The inner check happens under the threading.Lock protection
+        - _producer_lock assignment is atomic (single reference write)
+        - Once created, the lock is never replaced
+
+        See tests/lib/test_transformation_event_publisher.py for concurrency tests.
 
     Returns:
-        asyncio.Lock: The producer lock instance
+        asyncio.Lock: The singleton producer lock instance
     """
     global _producer_lock
     if _producer_lock is None:
@@ -583,35 +597,44 @@ def publish_transformation_event_sync(
     """
     Synchronous wrapper for publish_transformation_event.
 
-    Creates new event loop if needed. Use async version when possible.
+    Handles both sync and async calling contexts safely:
+    - From sync context: Creates new event loop and runs directly
+    - From async context: Uses ThreadPoolExecutor to avoid nested loop issues
 
-    WARNING: Do not call this from async code (within a running event loop).
-    Doing so will raise RuntimeError. Use `publish_transformation_event` directly
-    in async contexts, or call via `asyncio.run_coroutine_threadsafe()`.
+    Note: ThreadPoolExecutor per-call overhead is intentional for correctness.
+    The alternative (reusing executors) adds complexity and state management
+    concerns that aren't justified for event publishing use cases.
 
-    Raises:
-        RuntimeError: If called from within a running event loop
+    Args:
+        source_agent: The agent initiating transformation
+        target_agent: The agent being transformed into
+        transformation_reason: Why the transformation occurred
+        **kwargs: Additional arguments passed to publish_transformation_event
+
+    Returns:
+        bool: True if event was published successfully
     """
+    import concurrent.futures
+
     # Check if we're already in an async context
     try:
         asyncio.get_running_loop()
-        # If we get here, there IS a running loop - we cannot use run_until_complete
-        raise RuntimeError(
-            "Cannot call publish_transformation_event_sync from within a running event loop. "
-            "Use `await publish_transformation_event(...)` instead, or run in a separate thread."
-        )
-    except RuntimeError as e:
-        # If the error is our own, re-raise it
-        if "Cannot call publish_transformation_event_sync" in str(e):
-            raise
-        # Otherwise, no running loop exists - create one for sync execution
-        pass
-
-    # No running loop - safe to create and run synchronously
-    loop = asyncio.new_event_loop()
-    try:
-        asyncio.set_event_loop(loop)
-        return loop.run_until_complete(
+        # Already in async context - use thread pool to avoid nested loop issues
+        logger.debug("publish_transformation_event_sync called from async context, using ThreadPoolExecutor")
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(
+                asyncio.run,
+                publish_transformation_event(
+                    source_agent=source_agent,
+                    target_agent=target_agent,
+                    transformation_reason=transformation_reason,
+                    **kwargs,
+                ),
+            )
+            return future.result()
+    except RuntimeError:
+        # No running loop - safe to use asyncio.run() directly
+        return asyncio.run(
             publish_transformation_event(
                 source_agent=source_agent,
                 target_agent=target_agent,
@@ -619,51 +642,7 @@ def publish_transformation_event_sync(
                 **kwargs,
             )
         )
-    finally:
-        loop.close()
 
 
-if __name__ == "__main__":
-    # Test transformation event publishing
-    async def test() -> None:
-        logging.basicConfig(level=logging.DEBUG)
-
-        correlation_id = str(uuid4())
-
-        print("Testing transformation events...")
-        print(f"Correlation ID: {correlation_id}")
-
-        # Test transformation start
-        success_start = await publish_transformation_start(
-            source_agent="polymorphic-agent",
-            target_agent="agent-api-architect",
-            transformation_reason="API design task detected",
-            correlation_id=correlation_id,
-            routing_confidence=0.92,
-        )
-        print(f"Start event: {'✓' if success_start else '✗'}")
-
-        # Test transformation complete
-        success_complete = await publish_transformation_complete(
-            source_agent="polymorphic-agent",
-            target_agent="agent-api-architect",
-            transformation_reason="API design task detected",
-            correlation_id=correlation_id,
-            transformation_duration_ms=45,
-        )
-        print(f"Complete event: {'✓' if success_complete else '✗'}")
-
-        # Test transformation failed
-        success_failed = await publish_transformation_failed(
-            source_agent="polymorphic-agent",
-            target_agent="agent-api-architect",
-            transformation_reason="API design task detected",
-            error_message="Agent initialization failed",
-            error_type="InitializationError",
-            correlation_id=str(uuid4()),
-        )
-        print(f"Failed event: {'✓' if success_failed else '✗'}")
-
-        await close_producer()
-
-    asyncio.run(test())
+# NOTE: Inline tests moved to tests/lib/test_transformation_event_publisher.py
+# Run tests with: pytest tests/lib/test_transformation_event_publisher.py -v
