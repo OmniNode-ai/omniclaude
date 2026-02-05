@@ -255,26 +255,19 @@ if [[ "$EXECUTE" == "true" ]]; then
         fi
     fi
 
-    # Update namespace symlinks to point to new version
+    # Create namespace symlinks (required until marketplace discovery is fixed)
     CLAUDE_DIR="$HOME/.claude"
-    for ns in omniclaude onex; do
-        # Commands
-        if [[ -d "$CLAUDE_DIR/commands" ]]; then
-            rm -f "$CLAUDE_DIR/commands/$ns"
-            ln -sf "$TARGET/commands" "$CLAUDE_DIR/commands/$ns"
-        fi
-        # Skills
-        if [[ -d "$CLAUDE_DIR/skills" ]]; then
-            rm -f "$CLAUDE_DIR/skills/$ns"
-            ln -sf "$TARGET/skills" "$CLAUDE_DIR/skills/$ns"
-        fi
-        # Agents
-        if [[ -d "$CLAUDE_DIR/agents" ]]; then
-            rm -f "$CLAUDE_DIR/agents/$ns"
-            ln -sf "$TARGET/agents" "$CLAUDE_DIR/agents/$ns"
-        fi
-    done
-    echo -e "${GREEN}  Updated namespace symlinks (commands, skills, agents)${NC}"
+    mkdir -p "$CLAUDE_DIR/commands" "$CLAUDE_DIR/skills" "$CLAUDE_DIR/agents"
+
+    rm -f "$CLAUDE_DIR/commands/onex"
+    rm -f "$CLAUDE_DIR/skills/onex"
+    rm -f "$CLAUDE_DIR/agents/onex"
+
+    ln -sf "$TARGET/commands" "$CLAUDE_DIR/commands/onex"
+    ln -sf "$TARGET/skills" "$CLAUDE_DIR/skills/onex"
+    ln -sf "$TARGET/agents" "$CLAUDE_DIR/agents/onex"
+
+    echo -e "${GREEN}  Created namespace symlinks for 'onex'${NC}"
 
     echo ""
     echo -e "${GREEN}Deployment complete!${NC}"
