@@ -226,7 +226,10 @@ def route_via_events(
     Args:
         prompt: User prompt to route
         correlation_id: Correlation ID for tracking
-        timeout_ms: Timeout in milliseconds (reserved for future event-based routing)
+        timeout_ms: **Reserved for future use - currently ignored.**
+            This parameter is accepted for API compatibility but not used.
+            When event-based routing is implemented, this will control the
+            timeout for the request-response cycle.
         session_id: Session ID for A/B cohort assignment (optional)
         user_id: User ID for sticky cohort assignment across sessions (optional)
         repo_path: Repository path for repo-level cohort stickiness (optional)

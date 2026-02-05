@@ -129,7 +129,12 @@ def _create_mock_kafka_producer():
     mock.__aenter__ = AsyncMock(return_value=mock)
     mock.__aexit__ = AsyncMock(return_value=None)
 
-    # Internal attributes that some code might check
+    # Mock internal AIOKafkaProducer attributes that may be checked for state.
+    # These match the real AIOKafkaProducer implementation to prevent AttributeError
+    # if code defensively checks producer state before operations. This pattern is
+    # acceptable for test doubles but should NOT be used in production code - access
+    # producer state through public methods (e.g., producer._closed should use a
+    # public is_closed() if available, or treat the producer as opaque).
     mock._closed = False
     mock._sender = None
     mock._client = None

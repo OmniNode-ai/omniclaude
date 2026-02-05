@@ -235,15 +235,31 @@ class TestResolveAgentDefinitionsDir:
 
         Module reloads in tests can pollute global state for subsequent tests.
         This fixture ensures the module's cached AGENT_DEFINITIONS_DIR is reset.
+
+        The cleanup is wrapped in try/finally to ensure it runs even if the
+        test fails, and uses exception handling to prevent cleanup failures
+        from masking test failures.
         """
-        yield
-
-        # Re-import and reload with current environment to restore state
         import importlib
+        import sys
 
-        import plugins.onex.hooks.lib.simple_agent_loader as loader
+        # Capture original module state before test
+        module_name = "plugins.onex.hooks.lib.simple_agent_loader"
+        original_module = sys.modules.get(module_name)
 
-        importlib.reload(loader)
+        try:
+            yield
+        finally:
+            # Re-import and reload with current environment to restore state
+            # Use try/except to prevent reload failures from masking test errors
+            try:
+                import plugins.onex.hooks.lib.simple_agent_loader as loader
+
+                importlib.reload(loader)
+            except Exception:
+                # If reload fails, at least restore the original module reference
+                if original_module is not None:
+                    sys.modules[module_name] = original_module
 
     def test_uses_plugin_root_when_valid(self) -> None:
         """Should use CLAUDE_PLUGIN_ROOT when set and valid."""

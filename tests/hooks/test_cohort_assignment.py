@@ -801,3 +801,65 @@ class TestCohortAssignmentImmutability:
 
         assert result1 == result2
         assert hash(result1) == hash(result2)
+
+
+class TestCohortAssignmentRegressionValues:
+    """Regression tests with known input/output values.
+
+    These tests document the exact behavior of the cohort assignment algorithm
+    by asserting specific seeds for specific inputs. If the algorithm changes,
+    these tests will fail, alerting developers that existing cohort assignments
+    may be affected.
+
+    Algorithm: SHA-256(identity:salt) -> first 8 bytes -> mod 100
+    Default salt: "omniclaude-injection-v1"
+    """
+
+    def test_known_session_produces_known_seed(self) -> None:
+        """Regression test: known session ID produces known seed.
+
+        This documents the exact algorithm behavior. If this test fails,
+        it means the cohort assignment algorithm has changed, which would
+        affect all existing users' cohort assignments.
+        """
+        # Use default config (20% control, salt="omniclaude-injection-v1")
+        result = assign_cohort("test-regression-session-12345")
+
+        # Document the expected seed for this input
+        # SHA-256("test-regression-session-12345:omniclaude-injection-v1")
+        # First 8 bytes as int, mod 100 = 83
+        # This seed was computed from the known algorithm and serves as a regression guard
+        assert result.assignment_seed == 83, (
+            f"Regression failure: expected seed 83 for session 'test-regression-session-12345', "
+            f"got {result.assignment_seed}. The cohort assignment algorithm may have changed."
+        )
+
+    def test_known_config_produces_expected_cohort(self) -> None:
+        """Regression test: known config determines correct cohort from seed.
+
+        With 20% control (default), seed 83 should be TREATMENT (>=20).
+        This verifies the threshold logic works correctly.
+        """
+        result = assign_cohort("test-regression-session-12345")
+
+        # seed=83, control_percentage=20, so 83 >= 20 -> TREATMENT
+        assert result.cohort == EnumCohort.TREATMENT, (
+            f"Regression failure: expected TREATMENT for seed {result.assignment_seed} "
+            f"with 20% control threshold, got {result.cohort}"
+        )
+
+    def test_custom_salt_changes_seed_predictably(self) -> None:
+        """Regression test: different salt produces different known seed.
+
+        Documents that changing the salt changes cohort assignments.
+        """
+        config = CohortAssignmentConfig(salt="custom-regression-salt")
+        result = assign_cohort("test-regression-session-12345", config=config)
+
+        # This seed was computed for the custom salt
+        # SHA-256("test-regression-session-12345:custom-regression-salt") = 49
+        # If this fails, the salt handling in the algorithm may have changed
+        assert result.assignment_seed == 49, (
+            f"Regression failure: expected seed 49 for custom salt, "
+            f"got {result.assignment_seed}. Salt handling may have changed."
+        )

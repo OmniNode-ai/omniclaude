@@ -50,27 +50,38 @@ def _load_models_module():
         The loaded models module.
 
     Raises:
-        ImportError: If models.py cannot be found or loaded.
+        ImportError: If models.py cannot be found or loaded, or if models
+            has its own import errors (these are NOT masked by the fallback).
     """
     # First try standard import (works when installed as package)
     try:
         from . import models
 
         return models
-    except ImportError:
-        pass
+    except ImportError as e:
+        # Only use fallback for "no parent package" error (standalone execution)
+        # Let real import errors (missing deps, syntax errors in models.py) propagate
+        error_msg = str(e).lower()
+        if (
+            "no known parent package" not in error_msg
+            and "relative import" not in error_msg
+        ):
+            raise  # Re-raise real import errors to aid debugging
 
-    # Fallback: load from file path (standalone execution)
+    # Fallback: load from file path (standalone execution only)
     models_path = SCRIPT_DIR / "models.py"
     if not models_path.exists():
         raise ImportError(f"models.py not found at {models_path}")
 
-    spec = importlib.util.spec_from_file_location("models", models_path)
+    # Use namespaced module name to avoid polluting sys.modules["models"]
+    # which could conflict with other packages using the same generic name
+    module_name = "omniclaude.pr_review.models"
+    spec = importlib.util.spec_from_file_location(module_name, models_path)
     if spec is None or spec.loader is None:
         raise ImportError(f"Could not load spec for {models_path}")
 
     module = importlib.util.module_from_spec(spec)
-    sys.modules["models"] = module  # Cache for subsequent imports
+    sys.modules[module_name] = module  # Cache for subsequent imports
     spec.loader.exec_module(module)
     return module
 

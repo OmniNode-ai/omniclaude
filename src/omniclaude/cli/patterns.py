@@ -23,7 +23,7 @@ import time
 from datetime import UTC, datetime, timedelta
 
 # ONEX: exempt - CLI debugging tool uses dynamic DB row types
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import click
 from rich.console import Console
@@ -31,6 +31,9 @@ from rich.table import Table
 
 if TYPE_CHECKING:
     from psycopg2.extensions import connection as PgConnection
+
+# Type alias for database rows (RealDictCursor returns dict-like objects)
+Row = dict[str, Any]
 
 # =============================================================================
 # Version Detection
@@ -213,7 +216,7 @@ def cmd_list(
             """  # nosec B608
 
             cur.execute(query, params)
-            rows = cur.fetchall()
+            rows = cast("list[Row]", cur.fetchall())
 
             if as_json:
                 # Convert to JSON-serializable format
@@ -322,7 +325,7 @@ def cmd_get(pattern_id: str, as_json: bool) -> None:
                 """
                 cur.execute(query, (pattern_id,))
 
-            row = cur.fetchone()
+            row = cast("Row | None", cur.fetchone())
 
             if not row:
                 raise click.ClickException(f"Pattern not found: {pattern_id}")
@@ -459,7 +462,9 @@ def cmd_stats(as_json: bool) -> None:
                 GROUP BY status
                 ORDER BY status
             """)
-            status_counts = {row["status"]: row["count"] for row in cur.fetchall()}
+            status_counts = {
+                row["status"]: row["count"] for row in cast("list[Row]", cur.fetchall())
+            }
             stats["by_status"] = status_counts
             stats["total"] = sum(status_counts.values())
 
@@ -475,7 +480,7 @@ def cmd_stats(as_json: bool) -> None:
             """,
                 (yesterday,),
             )
-            row = cur.fetchone()
+            row = cast("Row | None", cur.fetchone())
             stats["new_24h"] = row["count"] if row else 0
 
             # Injections
@@ -487,7 +492,7 @@ def cmd_stats(as_json: bool) -> None:
             """,
                 (yesterday,),
             )
-            row = cur.fetchone()
+            row = cast("Row | None", cur.fetchone())
             stats["injections_24h"] = row["count"] if row else 0
 
             # Feedback events
@@ -499,7 +504,7 @@ def cmd_stats(as_json: bool) -> None:
             """,
                 (yesterday,),
             )
-            row = cur.fetchone()
+            row = cast("Row | None", cur.fetchone())
             stats["feedback_24h"] = row["count"] if row else 0
 
             # Lifecycle events
@@ -511,7 +516,7 @@ def cmd_stats(as_json: bool) -> None:
             """,
                 (yesterday,),
             )
-            row = cur.fetchone()
+            row = cast("Row | None", cur.fetchone())
             stats["lifecycle_events_24h"] = row["count"] if row else 0
 
             if as_json:
@@ -600,7 +605,7 @@ def cmd_tail(follow: bool, limit: int, interval: float) -> None:
             """,
                 (since["injection"], limit),
             )
-            for row in cur.fetchall():
+            for row in cast("list[Row]", cur.fetchall()):
                 events.append(dict(row))
 
             # Pattern lineage events
@@ -621,7 +626,7 @@ def cmd_tail(follow: bool, limit: int, interval: float) -> None:
             """,
                 (since["lineage"], limit),
             )
-            for row in cur.fetchall():
+            for row in cast("list[Row]", cur.fetchall()):
                 events.append(dict(row))
 
             # Pattern feedback
@@ -642,7 +647,7 @@ def cmd_tail(follow: bool, limit: int, interval: float) -> None:
             """,
                 (since["feedback"], limit),
             )
-            for row in cur.fetchall():
+            for row in cast("list[Row]", cur.fetchall()):
                 events.append(dict(row))
 
         # Sort all events by timestamp

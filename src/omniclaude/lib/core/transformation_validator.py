@@ -32,6 +32,7 @@ If the validator encounters an exception:
 - Do NOT silently allow
 """
 
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -151,6 +152,22 @@ class TransformationValidator:
         "dispatch",
         "polly",
         "poly",
+    ])
+
+    # Short keywords (<=5 chars) that need word boundary matching to avoid
+    # substring false positives (e.g., "poly" matching "polygon", "api" in "capital")
+    _SHORT_KEYWORDS: frozenset[str] = frozenset([
+        # From ORCHESTRATION_KEYWORDS
+        "batch",
+        "polly",
+        "poly",
+        # Short terms that could appear in SPECIALIZED_KEYWORDS phrases
+        "api",
+        "ui",
+        "ux",
+        "sql",
+        "orm",
+        "jwt",
     ])
 
     # Specialized task keywords that should route to specialized agents
@@ -362,19 +379,38 @@ class TransformationValidator:
         to_is_polly = to_agent.lower() in polly_names
         return from_is_polly and to_is_polly
 
+    def _keyword_in_text(self, keyword: str, text: str) -> bool:
+        """
+        Check if keyword appears in text, using word boundaries for short keywords.
+
+        This ensures consistent boundary semantics across all keyword collections,
+        preventing false positives like "poly" matching "polygon" or "api" in "capital".
+        """
+        if keyword in self._SHORT_KEYWORDS:
+            # Use word boundary matching for short keywords
+            pattern = rf"\b{re.escape(keyword)}\b"
+            return bool(re.search(pattern, text, re.IGNORECASE))
+        return keyword in text
+
     def _is_orchestration_task(self, text: str) -> bool:
         """Check if text contains orchestration keywords."""
         if not text:
             return False
         text_lower = text.lower()
-        return any(keyword in text_lower for keyword in self.ORCHESTRATION_KEYWORDS)
+        return any(
+            self._keyword_in_text(keyword, text_lower)
+            for keyword in self.ORCHESTRATION_KEYWORDS
+        )
 
     def _is_specialized_task(self, text: str) -> bool:
         """Check if text contains specialized task keywords."""
         if not text:
             return False
         text_lower = text.lower()
-        return any(keyword in text_lower for keyword in self.SPECIALIZED_KEYWORDS)
+        return any(
+            self._keyword_in_text(keyword, text_lower)
+            for keyword in self.SPECIALIZED_KEYWORDS
+        )
 
 
 # Convenience function for quick validation

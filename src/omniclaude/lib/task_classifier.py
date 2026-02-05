@@ -135,7 +135,8 @@ class TaskClassifier:
         ],
     }
 
-    # Service name patterns
+    # Service name patterns - used to identify external service mentions.
+    # Note: "onex" also appears in _SHORT_KEYWORDS for word boundary matching.
     SERVICE_PATTERNS = [
         "kafka",
         "redpanda",
@@ -148,7 +149,11 @@ class TaskClassifier:
         "onex",
     ]
 
-    # ONEX node type patterns
+    # ONEX node type patterns - used to identify ONEX architecture mentions.
+    # Note: These terms (effect, compute, reducer, orchestrator) also appear
+    # in DOMAIN_INDICATORS. This is intentional: NODE_TYPE_PATTERNS extracts
+    # them to mentioned_node_types for filtering, while DOMAIN_INDICATORS
+    # uses them for implementation intent classification.
     NODE_TYPE_PATTERNS = ["effect", "compute", "reducer", "orchestrator"]
 
     # Domain-specific indicators for implementation intent detection
@@ -181,9 +186,16 @@ class TaskClassifier:
         "workflow",
     ]
 
-    # Short keywords (<=4 chars) that need word boundary matching to avoid
-    # substring false positives (e.g., "new" matching "renewed", "api" in "capital")
-    # Note: "test" is intentionally excluded - we want "test" to match "unittest"
+    # Short keywords (<=5 chars) that need word boundary matching to avoid
+    # substring false positives (e.g., "new" matching "renewed", "api" in "capital").
+    # Note: "test" is intentionally excluded - we want "test" to match "unittest".
+    #
+    # Overlap note: Some terms appear in multiple collections (e.g., "node", "onex"
+    # also in SERVICE_PATTERNS/DOMAIN_INDICATORS). This is intentional - each
+    # collection serves a different purpose:
+    # - _SHORT_KEYWORDS: Controls word boundary matching behavior
+    # - SERVICE_PATTERNS: Identifies external service mentions for filtering
+    # - DOMAIN_INDICATORS: Signals implementation intent for classification
     _SHORT_KEYWORDS: frozenset[str] = frozenset(
         {
             # 3-char keywords
@@ -202,11 +214,11 @@ class TaskClassifier:
             "data",
             "call",
             "sync",
-            # Short DOMAIN_INDICATORS (<=4 chars) - need boundary matching
+            # Short DOMAIN_INDICATORS (<=5 chars) - need boundary matching
             # to avoid false positives like "api" in "capital", "node" in "anode"
             "node",
             "onex",
-            "mixin",  # 5 chars but common false positive risk
+            "mixin",
         }
     )
 
@@ -352,12 +364,13 @@ class TaskClassifier:
                 [kw for kw in kws if self._keyword_in_text(kw, prompt_lower)]
             )
 
-        # 2. Extract node type keywords (use word boundary for short terms)
+        # 2. Extract node type keywords (uses _keyword_in_text for consistent matching)
         for nt in self.NODE_TYPE_PATTERNS:
             if self._keyword_in_text(nt, prompt_lower):
                 keywords.append(nt)
 
-        # 3. Extract service keywords (use word boundary for short terms like "onex")
+        # 3. Extract service keywords (uses _keyword_in_text for consistent matching;
+        #    short terms like "onex" get word boundary matching via _SHORT_KEYWORDS)
         for svc in self.SERVICE_PATTERNS:
             if self._keyword_in_text(svc, prompt_lower):
                 keywords.append(svc)
@@ -397,7 +410,7 @@ class TaskClassifier:
         entities = self._extract_entities(user_prompt)
 
         # Extract mentioned services (sorted for deterministic output)
-        # Use word boundary matching for consistent behavior with short terms
+        # Uses _keyword_in_text for consistent matching behavior
         mentioned_services = sorted(
             svc
             for svc in self.SERVICE_PATTERNS
@@ -405,7 +418,7 @@ class TaskClassifier:
         )
 
         # Extract mentioned node types (sorted for deterministic output)
-        # Use word boundary matching for consistent behavior with short terms
+        # Uses _keyword_in_text for consistent matching behavior
         mentioned_node_types = sorted(
             nt.upper()
             for nt in self.NODE_TYPE_PATTERNS

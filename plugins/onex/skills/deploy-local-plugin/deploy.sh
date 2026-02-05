@@ -244,12 +244,18 @@ if [[ "$EXECUTE" == "true" ]]; then
             # Get the plugins directory (parent of SOURCE_ROOT which is the onex plugin)
             PLUGINS_DIR="$(dirname "$SOURCE_ROOT")"
 
-            jq --arg path "$PLUGINS_DIR" '
-                .["omninode-tools"].source.path = $path |
-                .["omninode-tools"].installLocation = $path
+            # source.path: where to find the local marketplace source for updates
+            # installLocation: where plugins are actually installed (the cache base, not version-specific)
+            # Note: installLocation should point to where Claude Code loads plugins from,
+            # which is the cache directory where we deploy, not the source directory
+            INSTALL_LOCATION="$(dirname "$CACHE_BASE")"
+
+            jq --arg source_path "$PLUGINS_DIR" --arg install_loc "$INSTALL_LOCATION" '
+                .["omninode-tools"].source.path = $source_path |
+                .["omninode-tools"].installLocation = $install_loc
             ' "$KNOWN_MARKETPLACES" > "${KNOWN_MARKETPLACES}.tmp" && mv "${KNOWN_MARKETPLACES}.tmp" "$KNOWN_MARKETPLACES"
 
-            echo -e "${GREEN}  Updated known_marketplaces.json source path${NC}"
+            echo -e "${GREEN}  Updated known_marketplaces.json (source: $PLUGINS_DIR, install: $INSTALL_LOCATION)${NC}"
         else
             echo -e "${YELLOW}  Warning: omninode-tools not found in known_marketplaces.json${NC}"
         fi
@@ -259,13 +265,31 @@ if [[ "$EXECUTE" == "true" ]]; then
     CLAUDE_DIR="$HOME/.claude"
     mkdir -p "$CLAUDE_DIR/commands" "$CLAUDE_DIR/skills" "$CLAUDE_DIR/agents"
 
-    rm -f "$CLAUDE_DIR/commands/onex"
-    rm -f "$CLAUDE_DIR/skills/onex"
-    rm -f "$CLAUDE_DIR/agents/onex"
+    # Helper function to safely replace symlink targets
+    # Handles: symlinks, regular files, and directories
+    safe_symlink() {
+        local target="$1"
+        local link_path="$2"
 
-    ln -sf "$TARGET/commands" "$CLAUDE_DIR/commands/onex"
-    ln -sf "$TARGET/skills" "$CLAUDE_DIR/skills/onex"
-    ln -sf "$TARGET/agents" "$CLAUDE_DIR/agents/onex"
+        if [[ -L "$link_path" ]]; then
+            # It's a symlink - remove it
+            rm -f "$link_path"
+        elif [[ -d "$link_path" ]]; then
+            # It's a directory (not a symlink) - back it up and warn
+            local backup_path="${link_path}.backup.$(date +%Y%m%d%H%M%S)"
+            echo -e "${YELLOW}  Warning: $link_path exists as directory, moving to $backup_path${NC}"
+            mv "$link_path" "$backup_path"
+        elif [[ -e "$link_path" ]]; then
+            # It's a regular file - remove it
+            rm -f "$link_path"
+        fi
+
+        ln -sf "$target" "$link_path"
+    }
+
+    safe_symlink "$TARGET/commands" "$CLAUDE_DIR/commands/onex"
+    safe_symlink "$TARGET/skills" "$CLAUDE_DIR/skills/onex"
+    safe_symlink "$TARGET/agents" "$CLAUDE_DIR/agents/onex"
 
     echo -e "${GREEN}  Created namespace symlinks for 'onex'${NC}"
 

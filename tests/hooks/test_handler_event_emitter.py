@@ -33,6 +33,7 @@ from omniclaude.hooks.handler_event_emitter import (
     MAX_PROMPT_SIZE,
     TRUNCATION_MARKER,
     ModelClaudeHookEventConfig,
+    ModelSessionStartedConfig,
     _create_kafka_config,
     _get_event_type,
     _get_topic_base,
@@ -40,7 +41,7 @@ from omniclaude.hooks.handler_event_emitter import (
     emit_hook_event,
     emit_prompt_submitted,
     emit_session_ended,
-    emit_session_started,
+    emit_session_started_from_config,
     emit_tool_executed,
 )
 from omniclaude.hooks.schemas import (
@@ -409,8 +410,8 @@ class TestConvenienceFunctions:
     """Tests for convenience emission functions."""
 
     @pytest.mark.asyncio
-    async def test_emit_session_started(self) -> None:
-        """emit_session_started creates correct payload."""
+    async def test_emit_session_started_from_config(self) -> None:
+        """emit_session_started_from_config creates correct payload."""
         session_id = uuid4()
 
         with patch(
@@ -419,12 +420,13 @@ class TestConvenienceFunctions:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
-            result = await emit_session_started(
+            config = ModelSessionStartedConfig(
                 session_id=session_id,
                 working_directory="/workspace",
                 hook_source=HookSource.STARTUP,
                 git_branch="main",
             )
+            result = await emit_session_started_from_config(config)
 
             assert result.success is True
             assert "session-started" in result.topic
@@ -497,7 +499,7 @@ class TestConvenienceFunctions:
 
     @pytest.mark.asyncio
     async def test_convenience_functions_auto_generate_ids(self) -> None:
-        """Convenience functions auto-generate causation_id if not provided."""
+        """Config-based functions auto-generate causation_id if not provided."""
         session_id = uuid4()
 
         with patch(
@@ -506,18 +508,19 @@ class TestConvenienceFunctions:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
-            # Should not raise even without causation_id
-            result = await emit_session_started(
+            # Should not raise even without causation_id in tracing config
+            config = ModelSessionStartedConfig(
                 session_id=session_id,
                 working_directory="/workspace",
                 hook_source=HookSource.STARTUP,
             )
+            result = await emit_session_started_from_config(config)
 
             assert result.success is True
 
     @pytest.mark.asyncio
     async def test_convenience_functions_auto_timestamp(self) -> None:
-        """Convenience functions auto-generate emitted_at if not provided."""
+        """Config-based functions auto-generate emitted_at if not provided."""
         session_id = uuid4()
 
         with patch(
@@ -526,12 +529,13 @@ class TestConvenienceFunctions:
             mock_bus = AsyncMock()
             mock_bus_class.return_value = mock_bus
 
-            # Should not raise even without emitted_at
-            result = await emit_session_started(
+            # Should not raise even without emitted_at in tracing config
+            config = ModelSessionStartedConfig(
                 session_id=session_id,
                 working_directory="/workspace",
                 hook_source=HookSource.STARTUP,
             )
+            result = await emit_session_started_from_config(config)
 
             assert result.success is True
 

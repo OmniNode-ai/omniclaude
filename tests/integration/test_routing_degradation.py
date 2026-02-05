@@ -14,16 +14,9 @@ Mock-based tests for routing_path are in:
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import pytest
 
-# Add hooks lib to path for imports
-_HOOKS_LIB = Path(__file__).parent.parent.parent / "plugins/onex/hooks/lib"
-if str(_HOOKS_LIB) not in sys.path:
-    sys.path.insert(0, str(_HOOKS_LIB))
-
+# Note: Plugin lib path is added by tests/conftest.py, no need for manual sys.path manipulation
 from route_via_events_wrapper import VALID_ROUTING_PATHS, route_via_events
 
 # Mark all tests as Kafka integration tests - requires real Kafka

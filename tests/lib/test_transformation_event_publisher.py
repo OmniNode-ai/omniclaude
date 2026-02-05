@@ -33,8 +33,10 @@ from omniclaude.hooks.topics import TopicBase
 
 # Import directly from module file to avoid __init__.py chain that pulls in
 # omnibase_infra dependencies not needed for these tests
+# Use namespaced module name to avoid polluting sys.modules with generic names
+_MODULE_NAME = "omniclaude.tests.transformation_event_publisher"
 spec = importlib.util.spec_from_file_location(
-    "transformation_event_publisher",
+    _MODULE_NAME,
     src_path / "omniclaude" / "lib" / "transformation_event_publisher.py",
 )
 assert spec is not None and spec.loader is not None
@@ -42,7 +44,7 @@ tep = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(tep)
 
 # Register the module in sys.modules for patch() to work
-sys.modules["transformation_event_publisher"] = tep
+sys.modules[_MODULE_NAME] = tep
 
 MAX_USER_REQUEST_LENGTH = tep.MAX_USER_REQUEST_LENGTH
 TransformationEventType = tep.TransformationEventType

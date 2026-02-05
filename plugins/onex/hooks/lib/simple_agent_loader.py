@@ -182,39 +182,56 @@ def _resolve_agent_definitions_dir() -> Path:
     Returns:
         Path to the agent definitions directory
 
+    Raises:
+        RuntimeError: If CLAUDE_PLUGIN_ROOT is explicitly set but invalid,
+            and no fallback paths are available. This prevents silent failures
+            where agents would fail to load with confusing errors.
+
     Logs warnings for misconfigurations to aid debugging.
     """
     plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT", "").strip()
+    plugin_root_was_set = bool(plugin_root)
+    plugin_root_error: str | None = None
 
     if plugin_root:
         plugin_path = Path(plugin_root)
 
         # Security: Validate path is not in sensitive system directories
         if _is_sensitive_path(plugin_path):
-            logger.warning(
+            plugin_root_error = (
                 f"CLAUDE_PLUGIN_ROOT points to sensitive system directory: {plugin_root}. "
-                "This is not allowed for security reasons. "
-                "Falling back to script-relative detection."
+                "This is not allowed for security reasons."
+            )
+            logger.warning(
+                f"{plugin_root_error} Falling back to script-relative detection."
             )
         # Validate the plugin root exists
         elif not plugin_path.exists():
-            logger.warning(
+            plugin_root_error = (
                 f"CLAUDE_PLUGIN_ROOT is set but path does not exist: {plugin_root}. "
-                "Falling back to script-relative detection."
+                "Verify the path is correct and the plugin is properly installed."
+            )
+            logger.warning(
+                f"{plugin_root_error} Falling back to script-relative detection."
             )
         elif not plugin_path.is_dir():
+            plugin_root_error = (
+                f"CLAUDE_PLUGIN_ROOT is set but is not a directory: {plugin_root}."
+            )
             logger.warning(
-                f"CLAUDE_PLUGIN_ROOT is set but is not a directory: {plugin_root}. "
-                "Falling back to script-relative detection."
+                f"{plugin_root_error} Falling back to script-relative detection."
             )
         else:
             agents_dir = plugin_path / "agents" / "configs"
             if agents_dir.exists() and agents_dir.is_dir():
                 return agents_dir
             else:
-                logger.warning(
+                plugin_root_error = (
                     f"CLAUDE_PLUGIN_ROOT is set but agents/configs not found: {agents_dir}. "
-                    "Falling back to script-relative detection."
+                    "Expected directory structure: $CLAUDE_PLUGIN_ROOT/agents/configs/*.yaml"
+                )
+                logger.warning(
+                    f"{plugin_root_error} Falling back to script-relative detection."
                 )
 
     # Fallback: try to detect from script location (lib is 2 levels up from agents/configs)
@@ -231,9 +248,33 @@ def _resolve_agent_definitions_dir() -> Path:
 
     # Legacy fallback
     legacy_dir = Path.home() / ".claude" / "agents" / "omniclaude"
+
+    if legacy_dir.exists() and legacy_dir.is_dir():
+        logger.warning(
+            f"Could not resolve agent definitions directory from CLAUDE_PLUGIN_ROOT or "
+            f"script location. Using legacy fallback: {legacy_dir}"
+        )
+        return legacy_dir
+
+    # If CLAUDE_PLUGIN_ROOT was explicitly set but invalid, and no fallbacks exist,
+    # raise an explicit error instead of returning a non-existent path
+    if plugin_root_was_set and plugin_root_error:
+        error_msg = (
+            f"Agent definitions directory resolution failed.\n"
+            f"  CLAUDE_PLUGIN_ROOT error: {plugin_root_error}\n"
+            f"  Script-relative fallback: {possible_agents_dir} (does not exist)\n"
+            f"  Legacy fallback: {legacy_dir} (does not exist)\n"
+            f"  Action required: Either fix CLAUDE_PLUGIN_ROOT or ensure one of the "
+            f"fallback directories exists with agent YAML files."
+        )
+        logger.error(error_msg)
+        raise RuntimeError(error_msg)
+
+    # If CLAUDE_PLUGIN_ROOT was not set and no paths exist, return legacy path
+    # (will fail gracefully at agent load time with helpful error about searched paths)
     logger.warning(
         f"Could not resolve agent definitions directory from CLAUDE_PLUGIN_ROOT or "
-        f"script location. Using legacy fallback: {legacy_dir}"
+        f"script location. Using legacy fallback: {legacy_dir} (note: does not exist)"
     )
     return legacy_dir
 
