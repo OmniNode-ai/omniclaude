@@ -394,7 +394,7 @@ CONFIDENCE_NUM="$(echo "$CONFIDENCE" | awk '{printf "%.2f", $1}')"
 MEETS_THRESHOLD="$(awk -v conf="$CONFIDENCE_NUM" -v thresh="$POLLY_DISPATCH_THRESHOLD" 'BEGIN {print (conf >= thresh) ? "true" : "false"}')"
 
 if [[ "$MEETS_THRESHOLD" == "true" ]] && [[ "$AGENT_NAME" == "polymorphic-agent" ]]; then
-    # High confidence Polly routing - DISPATCH via Task tool
+    # High confidence Polly routing - DISPATCH via /parallel-solve skill
     AGENT_CONTEXT="$(cat <<EOF
 ${AGENT_YAML_INJECTION}
 ${LEARNED_PATTERNS}
@@ -403,43 +403,48 @@ ${LEARNED_PATTERNS}
 POLLY-FIRST DISPATCH DIRECTIVE
 ========================================================================
 
-ROUTING DECISION: Dispatch to polymorphic-agent via Task tool
+ROUTING DECISION: Dispatch via /parallel-solve skill
 Confidence: ${CONFIDENCE} (threshold: ${POLLY_DISPATCH_THRESHOLD})
 Method: ${SELECTION_METHOD} | Latency: ${LATENCY_MS}ms
 Domain: ${AGENT_DOMAIN}
 Purpose: ${AGENT_PURPOSE}
 
 ========================================================================
-EXECUTION MODE: TASK TOOL DISPATCH REQUIRED
+EXECUTION MODE: PARALLEL-SOLVE SKILL DISPATCH REQUIRED
 ========================================================================
 
-You MUST dispatch this work to a polymorphic-agent subagent using the Task tool.
+You MUST use the Skill tool to invoke /parallel-solve for this work.
 
 DISPATCH PATTERN:
 \`\`\`
-Task(
-  subagent_type="polymorphic-agent",
-  description="<3-5 word summary of task>",
-  prompt="<full user request with any relevant context>"
-)
+Skill(skill="parallel-solve", args="<user request summary>")
 \`\`\`
 
+The /parallel-solve skill will:
+  1. Analyze the task and break it into independent subtasks
+  2. Dispatch multiple polymorphic-agents IN PARALLEL (single message, multiple Task calls)
+  3. Aggregate results and report back
+
 DO:
-  - Use the Task tool with subagent_type="polymorphic-agent"
-  - Include the full user request in the prompt
-  - Add relevant context from the conversation if needed
-  - Let Polly handle the actual work
+  - Use the Skill tool with skill="parallel-solve"
+  - Pass the user's request as args (or empty if context is sufficient)
+  - Let /parallel-solve handle task decomposition and parallel execution
 
 DO NOT:
   - Execute the work directly yourself
-  - Skip the Task tool dispatch
-  - Use a different subagent_type unless specifically requested
+  - Use Task tool directly (use Skill tool with parallel-solve instead)
+  - Dispatch tasks sequentially when they could be parallel
 
-WHY POLLY DISPATCH:
-  - Polly subagents have full ONEX capabilities
-  - Enables observability and action logging
-  - Allows transformation to specialized agents when needed
-  - Provides consistent execution patterns
+WHY /parallel-solve:
+  - ENFORCES parallel execution (multiple Pollys in single message)
+  - Automatic task decomposition and dependency analysis
+  - Full ONEX capabilities and observability
+  - Consistent execution patterns across all workflows
+
+EXCEPTION - When to skip /parallel-solve:
+  - Simple questions that need direct answers (no code changes)
+  - Explicit user request to "do X directly" or "don't parallelize"
+  - Single-file trivial changes (< 5 lines)
 
 Intelligence Context Available:
 - Domain: {REPO}/tmp/agent_intelligence_domain_${CORRELATION_ID}.json

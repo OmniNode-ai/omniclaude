@@ -1,7 +1,7 @@
 {
   "name": "onex",
   "description": "Unified ONEX architecture plugin with intelligent agent routing, manifest injection, quality enforcement, 53 polymorphic YAML agents, 40+ reusable skills, and 10+ custom slash commands for comprehensive workflow automation and observability",
-  "version": "2.1.4",
+  "version": "2.1.5",
   "author": {
     "name": "OmniNode",
     "email": "dev@omninode.ai"
