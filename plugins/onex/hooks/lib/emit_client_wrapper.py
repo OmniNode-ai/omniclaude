@@ -92,9 +92,11 @@ SUPPORTED_EVENT_TYPES = frozenset(
         "prompt.submitted",
         "tool.executed",
         "injection.recorded",
-        "context.utilization",  # NEW - OMN-1889
-        "agent.match",  # NEW - OMN-1889
-        "latency.breakdown",  # NEW - OMN-1889
+        "context.utilization",  # OMN-1889
+        "agent.match",  # OMN-1889
+        "latency.breakdown",  # OMN-1889
+        "notification.blocked",  # OMN-1831 - Slack notifications via emit daemon
+        "notification.completed",  # OMN-1831 - Slack notifications via emit daemon
     ]
 )
 
