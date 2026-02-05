@@ -2,38 +2,22 @@
 name: plan-to-tickets
 description: Batch create Linear tickets from a plan markdown file - parses phases/milestones, creates epic if needed, links dependencies
 tags: [linear, tickets, planning, batch, automation]
-args:
-  - name: plan-file
-    description: Path to plan markdown file
-    required: true
-  - name: project
-    description: Linear project name
-    required: false
-  - name: epic-title
-    description: Title for epic (overrides auto-detection from plan)
-    required: false
-  - name: no-create-epic
-    description: Fail if epic doesn't exist (don't auto-create)
-    required: false
-  - name: dry-run
-    description: Show what would be created without creating
-    required: false
-  - name: skip-existing
-    description: Skip tickets that already exist (don't ask)
-    required: false
-  - name: team
-    description: Linear team name (default Omninode)
-    required: false
-    default: "Omninode"
-  - name: repo
-    description: Repository label for all tickets (e.g., omniclaude, omnibase_core)
-    required: false
-  - name: allow-arch-violation
-    description: Bypass architecture dependency validation (use with caution)
-    required: false
 ---
 
 # Batch Create Tickets from Plan
+
+**Usage:** `/plan-to-tickets <plan-file> [options]`
+
+**Arguments:**
+- `plan-file` - Path to plan markdown file (required)
+- `--project <name>` - Linear project name
+- `--epic-title <title>` - Title for epic (overrides auto-detection from plan)
+- `--no-create-epic` - Fail if epic doesn't exist (don't auto-create)
+- `--dry-run` - Show what would be created without creating
+- `--skip-existing` - Skip tickets that already exist (don't ask)
+- `--team <name>` - Linear team name (default: Omninode)
+- `--repo <label>` - Repository label for all tickets (e.g., omniclaude, omnibase_core)
+- `--allow-arch-violation` - Bypass architecture dependency validation
 
 Create Linear tickets from a plan markdown file. Parses phases or milestones, creates/links epic, resolves dependencies.
 
