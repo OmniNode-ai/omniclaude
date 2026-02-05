@@ -64,7 +64,7 @@ import sys
 import threading
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, TypeVar, cast
 
 if TYPE_CHECKING:
     from omnibase_infra.runtime.emit_daemon.client import EmitClient
@@ -119,7 +119,10 @@ def _is_in_async_context() -> bool:
         return False
 
 
-def _run_sync_in_thread[T](func: Callable[[], T]) -> T:
+T = TypeVar("T")
+
+
+def _run_sync_in_thread(func: Callable[[], T]) -> T:  # noqa: UP047 - Python 3.11 compat
     """Run a sync function in a separate thread.
 
     This is used when sync methods that internally call run_until_complete()

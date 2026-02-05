@@ -41,6 +41,7 @@ import atexit
 import json
 import logging
 import os
+import threading
 from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, cast
@@ -80,6 +81,7 @@ class TransformationEventType(str, Enum):
 # Lazy-loaded Kafka producer (singleton)
 _kafka_producer: Any | None = None
 _producer_lock: asyncio.Lock | None = None
+_lock_creation_lock = threading.Lock()  # Protects asyncio.Lock creation
 
 
 def _get_kafka_bootstrap_servers() -> str:
@@ -147,12 +149,17 @@ async def get_producer_lock() -> asyncio.Lock:
     This ensures asyncio.Lock() is never created at module level, which
     would cause RuntimeError in Python 3.12+ when no event loop exists.
 
+    Uses double-checked locking with a threading.Lock to prevent race
+    conditions where multiple coroutines could create duplicate Lock instances.
+
     Returns:
         asyncio.Lock: The producer lock instance
     """
     global _producer_lock
     if _producer_lock is None:
-        _producer_lock = asyncio.Lock()
+        with _lock_creation_lock:
+            if _producer_lock is None:  # Double-check after acquiring lock
+                _producer_lock = asyncio.Lock()
     return _producer_lock
 
 
