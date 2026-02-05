@@ -255,6 +255,27 @@ if [[ "$EXECUTE" == "true" ]]; then
         fi
     fi
 
+    # Update namespace symlinks to point to new version
+    CLAUDE_DIR="$HOME/.claude"
+    for ns in omniclaude onex; do
+        # Commands
+        if [[ -d "$CLAUDE_DIR/commands" ]]; then
+            rm -f "$CLAUDE_DIR/commands/$ns"
+            ln -sf "$TARGET/commands" "$CLAUDE_DIR/commands/$ns"
+        fi
+        # Skills
+        if [[ -d "$CLAUDE_DIR/skills" ]]; then
+            rm -f "$CLAUDE_DIR/skills/$ns"
+            ln -sf "$TARGET/skills" "$CLAUDE_DIR/skills/$ns"
+        fi
+        # Agents
+        if [[ -d "$CLAUDE_DIR/agents" ]]; then
+            rm -f "$CLAUDE_DIR/agents/$ns"
+            ln -sf "$TARGET/agents" "$CLAUDE_DIR/agents/$ns"
+        fi
+    done
+    echo -e "${GREEN}  Updated namespace symlinks (commands, skills, agents)${NC}"
+
     echo ""
     echo -e "${GREEN}Deployment complete!${NC}"
     echo ""
