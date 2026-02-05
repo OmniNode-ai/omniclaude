@@ -64,6 +64,13 @@ _SENSITIVE_PATH_PATTERNS = frozenset(
 # Security: Pattern for valid agent names (alphanumeric, hyphen, underscore only)
 _VALID_AGENT_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 
+# Maximum context length to prevent truncation in hook output
+# Claude Code truncates at 10k chars; we use 6k to leave room for other context
+MAX_CONTEXT_LENGTH = 6000
+_TRUNCATION_MARKER = (
+    "\n\n# ... (truncated for brevity - see full YAML in agents/configs/)\n"
+)
+
 
 def validate_agent_name(agent_name: str) -> tuple[bool, str]:
     """
@@ -445,6 +452,14 @@ def load_agent(agent_name: str) -> AgentLoadResult:
     yaml_content = load_agent_yaml(agent_name)
 
     if yaml_content:
+        # Truncate if exceeds max length to prevent hook output truncation
+        if len(yaml_content) > MAX_CONTEXT_LENGTH:
+            truncated_content = yaml_content[:MAX_CONTEXT_LENGTH] + _TRUNCATION_MARKER
+            logger.info(
+                f"Truncated agent YAML from {len(yaml_content)} to {len(truncated_content)} chars"
+            )
+            yaml_content = truncated_content
+
         return AgentLoadSuccess(
             success=True,
             context_injection=yaml_content,
