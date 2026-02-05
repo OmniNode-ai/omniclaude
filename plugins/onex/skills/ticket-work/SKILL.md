@@ -90,7 +90,61 @@ The skill preserves all existing ticket description content above the contract s
 | implementation → review | "create PR", "ready for review" |
 | review → done | "approve merge", "ship it" |
 
+## Slack Notifications
+
+When waiting for human input or completing work, send a Slack notification via the emit daemon so the user knows action is needed. This uses the event-driven architecture through the runtime.
+
+**When to notify (blocked):**
+- Entering `questions` phase with open questions
+- Hitting any human gate that requires approval
+- Verification failed and blocking further progress
+
+**When to notify (completed):**
+- Ticket work finished and PR merged/ready
+
+**CLI Commands:**
+
+```bash
+# Blocked notification (via emit daemon -> runtime -> Slack)
+python3 -c "
+from plugins.onex.hooks.lib.emit_client_wrapper import emit_event
+emit_event(
+    event_type='notification.blocked',
+    payload={
+        'ticket_id': '{ticket_id}',
+        'reason': '{reason}',
+        'details': ['{detail1}', '{detail2}'],
+        'repo': '{repo}',
+        'session_id': '{session_id}'
+    }
+)
+"
+
+# Completion notification (via emit daemon -> runtime -> Slack)
+python3 -c "
+from plugins.onex.hooks.lib.emit_client_wrapper import emit_event
+emit_event(
+    event_type='notification.completed',
+    payload={
+        'ticket_id': '{ticket_id}',
+        'summary': '{what_was_accomplished}',
+        'repo': '{repo}',
+        'pr_url': '{pr_url}',  # optional
+        'session_id': '{session_id}'
+    }
+)
+"
+```
+
+**Architecture:**
+```
+skill -> emit_event() -> emit daemon -> Kafka -> NotificationConsumer -> Slack
+```
+
+**Important:** Notifications are best-effort and non-blocking. If `SLACK_WEBHOOK_URL` is not configured on the runtime, they silently no-op. Do not let notification failures block workflow progress.
+
 ## See Also
 
 - Linear MCP tools (`mcp__linear-server__*`)
 - Related: OMN-1807 (ModelTicketContract in omnibase_core) - contract schema mirrors this model
+- Related: OMN-1831 (Slack notifications) - notification implementation
