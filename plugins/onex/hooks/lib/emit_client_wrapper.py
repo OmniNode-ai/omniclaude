@@ -92,9 +92,11 @@ SUPPORTED_EVENT_TYPES = frozenset(
         "prompt.submitted",
         "tool.executed",
         "injection.recorded",
-        "context.utilization",  # NEW - OMN-1889
-        "agent.match",  # NEW - OMN-1889
-        "latency.breakdown",  # NEW - OMN-1889
+        "context.utilization",  # OMN-1889
+        "agent.match",  # OMN-1889
+        "latency.breakdown",  # OMN-1889
+        "notification.blocked",  # OMN-1831 - Slack notifications via emit daemon
+        "notification.completed",  # OMN-1831 - Slack notifications via emit daemon
     ]
 )
 
@@ -184,11 +186,9 @@ def emit_event(
     Failures are logged at appropriate levels based on error type.
 
     Args:
-        event_type: Semantic event type. Must be one of:
-            - "session.started"
-            - "session.ended"
-            - "prompt.submitted"
-            - "tool.executed"
+        event_type: Semantic event type. Must be one of the values in
+            SUPPORTED_EVENT_TYPES (e.g., "session.started", "notification.blocked").
+            See SUPPORTED_EVENT_TYPES constant for the full list.
         payload: Event payload dictionary. Required fields depend on event type
             (see daemon's EventRegistry for requirements).
         timeout_ms: **Deprecated: This parameter is accepted but ignored.**
