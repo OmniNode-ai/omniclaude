@@ -855,14 +855,45 @@ def _flatten_capabilities(capabilities: Any) -> list[str]:
 
 
 def _extract_triggers(agent_data: dict[str, Any]) -> list[str]:
-    """Extract activation triggers from agent YAML data."""
+    """Extract activation triggers from agent YAML data.
+
+    Agent YAML files use various key names under activation_patterns.
+    This extracts triggers from ALL known variants to ensure routing works
+    regardless of which schema convention the YAML author used.
+    """
     triggers: list[str] = []
 
-    # Check activation_patterns
+    # Check activation_patterns - extract from ALL known sub-key variants
     activation_patterns = agent_data.get("activation_patterns", {})
     if isinstance(activation_patterns, dict):
-        triggers.extend(activation_patterns.get("explicit_triggers", []))
-        triggers.extend(activation_patterns.get("context_triggers", []))
+        # Trigger keys used across agent YAMLs
+        trigger_keys = (
+            "explicit_triggers",
+            "primary_triggers",
+            "automatic_triggers",
+            "auto_activation_triggers",
+            "trigger_keywords",
+            "trigger_conditions",
+            "triggers",
+            "activation_keywords",
+            "domain_keywords",
+        )
+        # Context keys used across agent YAMLs
+        context_keys = (
+            "context_triggers",
+            "context_indicators",
+            "context_requirements",
+            "contextual_patterns",
+        )
+        for key in trigger_keys + context_keys:
+            value = activation_patterns.get(key, [])
+            if isinstance(value, list):
+                triggers.extend(str(item) for item in value)
+            elif isinstance(value, dict):
+                # Handle nested dicts (e.g., triggers: {primary: [...], domain_specific: [...]})
+                for sub_value in value.values():
+                    if isinstance(sub_value, list):
+                        triggers.extend(str(item) for item in sub_value)
 
     # Check top-level activation_triggers
     if "activation_triggers" in agent_data:
