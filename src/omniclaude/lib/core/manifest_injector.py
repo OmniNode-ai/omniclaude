@@ -983,7 +983,7 @@ class ManifestInjector:
             user = settings.postgres_user
 
             try:
-                password = settings.get_effective_postgres_password()  # noqa: secrets
+                password = settings.get_effective_postgres_password()  # nosec
             except ValueError:
                 return []
 
@@ -995,7 +995,7 @@ class ManifestInjector:
                 port=port,
                 database=database,
                 user=user,
-                password=password,  # noqa: secrets
+                password=password,  # nosec
                 connect_timeout=1,
             )
             try:
@@ -2316,9 +2316,9 @@ class ManifestInjector:
             user = settings.postgres_user
 
             try:
-                password = settings.get_effective_postgres_password()  # noqa: secrets
+                password = settings.get_effective_postgres_password()  # nosec
             except ValueError:
-                password = ""  # noqa: secrets
+                password = ""  # nosec
 
             if not password:
                 return {
@@ -4721,7 +4721,7 @@ class ManifestInjector:
                 for provider_key, provider_config in ai_models.items():
                     provider_name = provider_config.get("provider", provider_key)
                     models = provider_config.get("models", {})
-                    api_key_set = provider_config.get("api_key_set", False)  # noqa: secrets
+                    api_key_set = provider_config.get("api_key_set", False)  # nosec
 
                     # Format models list
                     if isinstance(models, dict):
