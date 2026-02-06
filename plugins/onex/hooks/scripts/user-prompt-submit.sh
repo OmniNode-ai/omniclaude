@@ -82,8 +82,12 @@ SESSION_ID="$(printf %s "$INPUT" | jq -r '.sessionId // .session_id // ""' 2>/de
 [[ -z "$SESSION_ID" ]] && SESSION_ID="$CORRELATION_ID"
 
 if [[ "$KAFKA_ENABLED" == "true" ]] && [ "${SKIP_CLAUDE_HOOK_EVENT_EMIT:-0}" -ne 1 ]; then
-    # Privacy: Only send redacted preview to onex.evt.* topics (max 100 chars).
-    # Full prompts must only go to onex.cmd.omniintelligence.* topics.
+    # Privacy contract for dual-emission via daemon fan-out:
+    #   - onex.evt.* topics receive ONLY prompt_preview (100-char redacted) + prompt_length
+    #   - onex.cmd.omniintelligence.* topics receive the full prompt via prompt_b64
+    # The daemon's EventRegistry handles per-topic field filtering:
+    #   evt payloads MUST NOT include prompt_b64 (daemon strips it).
+    #   cmd payloads include prompt_b64 for intelligence processing.
     PROMPT_PAYLOAD=$(jq -n \
         --arg session_id "$SESSION_ID" \
         --arg prompt_preview "$(printf '%s' "${PROMPT:0:100}" | sed -E \
@@ -95,9 +99,10 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && [ "${SKIP_CLAUDE_HOOK_EVENT_EMIT:-0}" -ne
             -e 's/Bearer [a-zA-Z0-9._-]{20,}/Bearer ***REDACTED***/g' \
             -e 's/-----BEGIN [A-Z ]*PRIVATE KEY-----/-----BEGIN ***REDACTED*** PRIVATE KEY-----/g')" \
         --argjson prompt_length "${#PROMPT}" \
+        --arg prompt_b64 "$PROMPT_B64" \
         --arg correlation_id "$CORRELATION_ID" \
         --arg event_type "UserPromptSubmit" \
-        '{session_id: $session_id, prompt_preview: $prompt_preview, prompt_length: $prompt_length, correlation_id: $correlation_id, event_type: $event_type}' 2>/dev/null)
+        '{session_id: $session_id, prompt_preview: $prompt_preview, prompt_length: $prompt_length, prompt_b64: $prompt_b64, correlation_id: $correlation_id, event_type: $event_type}' 2>/dev/null)
 
     if [[ -n "$PROMPT_PAYLOAD" ]]; then
         emit_via_daemon "prompt.submitted" "$PROMPT_PAYLOAD" 100 &

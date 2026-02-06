@@ -1374,6 +1374,32 @@ class ModelHookManifestInjectedPayload(BaseModel):
         description="Error classification if injection failed",
     )
 
+    @field_validator("correlation_id", mode="after")
+    @classmethod
+    def validate_correlation_id_not_nil(cls, v: UUID) -> UUID:
+        """Ensure correlation_id is an explicit, non-nil UUID.
+
+        Manifest events are critical for distributed tracing. A nil UUID
+        (00000000-0000-0000-0000-000000000000) would break correlation
+        chains and must be rejected. This enforces that callers provide
+        a meaningful correlation identifier, not just a structurally valid one.
+
+        Args:
+            v: The correlation_id UUID value to validate.
+
+        Returns:
+            The validated UUID if non-nil.
+
+        Raises:
+            ValueError: If correlation_id is a nil UUID.
+        """
+        if v.int == 0:
+            raise ValueError(
+                "correlation_id must not be a nil UUID for manifest events; "
+                "manifest injection requires explicit correlation for distributed tracing"
+            )
+        return v
+
 
 # =============================================================================
 # Discriminated Union (for deserialization)

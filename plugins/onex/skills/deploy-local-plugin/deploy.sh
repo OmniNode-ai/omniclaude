@@ -73,10 +73,9 @@ if [[ ! -f "$PLUGIN_JSON" ]]; then
     exit 1
 fi
 
-# Read current version
-CURRENT_VERSION=$(jq -r '.version' "$PLUGIN_JSON")
-
-if [[ -z "$CURRENT_VERSION" || "$CURRENT_VERSION" == "null" ]]; then
+# Read current version (use jq -e to exit non-zero on null/missing rather
+# than relying on fragile string comparison with "null")
+if ! CURRENT_VERSION=$(jq -re '.version' "$PLUGIN_JSON" 2>/dev/null) || [[ -z "$CURRENT_VERSION" ]]; then
     echo -e "${RED}Error: Could not read version from plugin.json${NC}"
     exit 1
 fi

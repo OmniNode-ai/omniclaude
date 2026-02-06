@@ -31,7 +31,7 @@ from pathlib import Path
 _LOG_FILE = os.environ.get("LOG_FILE")
 if _LOG_FILE:
     try:
-        _file_handler = logging.FileHandler(_LOG_FILE)
+        _file_handler = logging.FileHandler(_LOG_FILE, encoding="utf-8")
         _file_handler.setFormatter(
             logging.Formatter("%(asctime)s [%(name)s] %(levelname)s: %(message)s")
         )
@@ -323,7 +323,7 @@ def load_agent_yaml(agent_name: str) -> str | None:
                 continue  # Skip this path and try the next one
 
             try:
-                return path.read_text()
+                return path.read_text(encoding="utf-8")
             except OSError as e:
                 logger.warning("Failed to read %s: %s", path, e)
 

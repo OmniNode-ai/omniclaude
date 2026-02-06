@@ -161,9 +161,9 @@ def _get_mock_kafka_producer(*args, **kwargs):
 # This is *intentional* for CI -- the integration marker exists so that
 # tests requiring a specific Kafka topic layout or consumer group are
 # not accidentally selected in the default "pytest" run, NOT because
-# they require a live broker.  To test against real Kafka, disable
-# the mock in pytest_configure by setting KAFKA_INTEGRATION_TESTS=real
-# (not yet implemented).
+# they require a live broker.  To test against a live Kafka broker,
+# set KAFKA_INTEGRATION_TESTS=real -- this disables the mock in
+# pytest_configure so that AIOKafkaProducer connects to the real broker.
 KAFKA_IS_MOCKED = True
 
 
@@ -491,6 +491,13 @@ def pytest_configure(config):
         "postgres_integration: marks tests as PostgreSQL integration tests",
     )
 
+    # Allow bypassing the Kafka mock for real integration testing.
+    # Set KAFKA_INTEGRATION_TESTS=real to use a live broker instead of mocks.
+    if os.getenv("KAFKA_INTEGRATION_TESTS") == "real":
+        global KAFKA_IS_MOCKED
+        KAFKA_IS_MOCKED = False
+        return  # Skip mock installation -- use real AIOKafkaProducer
+
     # Mock AIOKafkaProducer at the earliest possible point
     # This prevents real Kafka connections during tests, which eliminates
     # the "Task was destroyed but it is pending!" warnings from background tasks
@@ -528,12 +535,13 @@ def pytest_collection_modifyitems(config, items):
     Note: Tests marked with @pytest.mark.postgres_integration will only run when
     POSTGRES_INTEGRATION_TESTS=1, even if KAFKA_INTEGRATION_TESTS=1 is also set.
 
-    IMPORTANT: Even when KAFKA_INTEGRATION_TESTS=1, the mocked AIOKafkaProducer
+    IMPORTANT: When KAFKA_INTEGRATION_TESTS=1, the mocked AIOKafkaProducer
     from pytest_configure() remains active.  This is intentional for CI -- it
     ensures Kafka-dependent tests verify their protocol / call patterns without
-    requiring a live broker.  See KAFKA_IS_MOCKED flag for details.
+    requiring a live broker.  Set KAFKA_INTEGRATION_TESTS=real to disable the
+    mock and test against a live broker.  See KAFKA_IS_MOCKED flag for details.
     """
-    kafka_enabled = os.getenv("KAFKA_INTEGRATION_TESTS") == "1"
+    kafka_enabled = os.getenv("KAFKA_INTEGRATION_TESTS") in ("1", "real")
     postgres_enabled = os.getenv("POSTGRES_INTEGRATION_TESTS") == "1"
 
     # If either integration test type is enabled, check individual tests
@@ -903,12 +911,13 @@ def _mock_kafka_producer_globally():
     confirming the mock is active for the session.
     """
     # Hook has already installed the mock in pytest_configure()
-    # Verify it's active by checking the global instance
+    # Verify it's active by checking the global instance (skip when real Kafka mode)
     global _mock_kafka_producer_instance
-    assert (
-        _mock_kafka_producer_instance is not None
-        or _get_mock_kafka_producer() is not None
-    )
+    if KAFKA_IS_MOCKED:
+        assert (
+            _mock_kafka_producer_instance is not None
+            or _get_mock_kafka_producer() is not None
+        )
 
     # Yield to run all tests with the mock active
     yield

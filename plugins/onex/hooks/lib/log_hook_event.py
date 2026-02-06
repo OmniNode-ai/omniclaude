@@ -68,6 +68,12 @@ def _sanitize_prompt_preview(text: str, max_len: int = 200) -> str:
 
 def _read_stdin_with_timeout(timeout_sec: float = 2.0) -> str:
     """Read stdin with a timeout to avoid blocking when no data is piped."""
+    # Defensive coercion: ensure timeout is a valid positive float even if
+    # caller passes an unexpected type (e.g., int, string, None).
+    try:
+        timeout_sec = max(0.1, float(timeout_sec))
+    except (TypeError, ValueError):
+        timeout_sec = 2.0
     try:
         if select.select([sys.stdin], [], [], timeout_sec)[0]:
             return sys.stdin.read()
@@ -105,7 +111,7 @@ def log_invocation(
             },
         )
     except Exception as e:
-        logger.error(f"Failed to log invocation: {e}")
+        logger.error("Failed to log invocation: %s", e)
         return None
 
 
@@ -129,8 +135,10 @@ def log_routing(
         # Validate routing_path - do not accept arbitrary values
         if routing_path not in VALID_ROUTING_PATHS:
             logger.warning(
-                f"Invalid routing_path '{routing_path}' received - coercing to 'local'. "
-                f"Valid values: {VALID_ROUTING_PATHS}. This indicates instrumentation drift."
+                "Invalid routing_path '%s' received - coercing to 'local'. "
+                "Valid values: %s. This indicates instrumentation drift.",
+                routing_path,
+                VALID_ROUTING_PATHS,
             )
             routing_path = "local"
 
@@ -169,7 +177,7 @@ def log_routing(
             },
         )
     except Exception as e:
-        logger.error(f"Failed to log routing: {e}")
+        logger.error("Failed to log routing: %s", e)
         return None
 
 
@@ -213,7 +221,7 @@ def log_error(
             },
         )
     except Exception as e:
-        logger.error(f"Failed to log error: {e}")
+        logger.error("Failed to log error: %s", e)
         return None
 
 
@@ -261,7 +269,7 @@ def main():
             json.loads(args.context)
         except (json.JSONDecodeError, TypeError) as e:
             logger.warning(
-                f"Malformed JSON in --context ({e}), will be treated as raw string"
+                "Malformed JSON in --context (%s), will be treated as raw string", e
             )
 
     if args.command == "invocation":

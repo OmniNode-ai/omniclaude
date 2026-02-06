@@ -346,7 +346,9 @@ class TestMainCLI:
             sys, "argv", ["route_via_events_wrapper.py", "test prompt", "corr-123"]
         )
 
-        # main() returns normally (no sys.exit) when args are provided
+        # main() returns normally (no sys.exit) when args are provided.
+        # Do NOT catch SystemExit broadly -- unexpected exit codes must
+        # propagate as real test failures.
         main()
 
         captured = capsys.readouterr()
