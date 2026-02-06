@@ -457,7 +457,7 @@ artifacts:"""
         # Find the ## Contract marker and insert before it
         contract_marker = "## Contract"
         if contract_marker in description:
-            idx = description.rfind(contract_marker)
+            idx = description.find(contract_marker)
             description = description[:idx].rstrip() + "\n\n" + pipeline_block.strip() + "\n\n---\n\n" + description[idx:]
         else:
             # No contract section - append at end
@@ -871,18 +871,21 @@ def release_lock(lock_path):
    if [ -n "$TOPIC_FILES" ]; then
        # Check for hardcoded 'dev.' prefix in topic constants
        # Use while-read to handle filenames with spaces safely
+       # NOTE: Requires bash (uses PIPESTATUS). Script should use #!/usr/bin/env bash.
+       # Detect hardcoded 'dev.' environment prefix in topic/constant files.
+       # Topic constants should use KAFKA_ENVIRONMENT variable, not literal 'dev.' prefix.
+       # Flag ANY non-comment line containing 'dev.' — both quoted and unquoted forms.
+       INVARIANT_FAILED=0
        echo "$TOPIC_FILES" | while IFS= read -r f; do
            [ -z "$f" ] && continue
-           # Check for 'dev.' prefix that is NOT inside a quoted string
-           # Use grep -E (portable, works on macOS/BSD) instead of grep -P
-           # Match lines with 'dev.' that don't have it inside quotes
-           if grep -Eq '^[^"'"'"']*dev\.' "$f" 2>/dev/null; then
-               echo "INVARIANT_VIOLATION: Found unquoted 'dev.' prefix in $f"
+           # Match 'dev.' on non-comment lines (skip lines starting with #)
+           if grep -Eq '^[^#]*dev\.' "$f" 2>/dev/null; then
+               echo "INVARIANT_VIOLATION: Hardcoded 'dev.' prefix in $f"
                exit 1
            fi
        done
-       # Propagate subshell exit code from pipe
-       if [ "${PIPESTATUS[1]}" -ne 0 ] 2>/dev/null; then
+       # Propagate subshell exit code from pipe (bash-specific PIPESTATUS)
+       if [ "${PIPESTATUS[1]:-0}" -ne 0 ]; then
            exit 1
        fi
    fi
