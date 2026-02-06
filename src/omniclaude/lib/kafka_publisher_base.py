@@ -228,7 +228,11 @@ async def publish_to_kafka(
         partition_key: Partition key (typically correlation_id).
 
     Returns:
-        True if published successfully, False otherwise.
+        True if published successfully, False if producer unavailable.
+
+    Raises:
+        TimeoutError: If publish exceeds KAFKA_PUBLISH_TIMEOUT_SECONDS.
+        Exception: Other Kafka errors propagate to caller for handling.
     """
     producer = await get_shared_producer()
     if producer is None:

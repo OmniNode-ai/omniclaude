@@ -129,7 +129,7 @@ class TransformationValidator:
         self,
         from_agent: str,
         to_agent: str,
-        reason: str,
+        reason: str | None,
         confidence: float | None = None,
         user_request: str | None = None,
     ) -> TransformationValidationResult:
@@ -182,7 +182,7 @@ class TransformationValidator:
         self,
         from_agent: str,
         to_agent: str,
-        reason: str,
+        reason: str | None,
         confidence: float | None = None,
         user_request: str | None = None,
     ) -> TransformationValidationResult:
@@ -306,7 +306,7 @@ class TransformationValidator:
 def validate_transformation(
     from_agent: str,
     to_agent: str,
-    reason: str,
+    reason: str | None,
     confidence: float | None = None,
     user_request: str | None = None,
 ) -> TransformationValidationResult:
