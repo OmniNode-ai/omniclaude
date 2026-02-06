@@ -130,40 +130,54 @@ STALE_TTL_SECONDS = 7200  # 2 hours
 # For production use, consider fcntl.flock() or atomic O_EXCL file creation
 
 if lock_path.exists():
-    lock_data = json.loads(lock_path.read_text())
-    lock_age = time.time() - lock_data.get("started_at_epoch", 0)
+    try:
+        lock_data = json.loads(lock_path.read_text())
+    except (json.JSONDecodeError, OSError) as e:
+        # Corrupted lock file (e.g., mid-write crash) — break it
+        print(f"Warning: Corrupted lock file for {ticket_id}: {e}. Breaking lock.")
+        lock_path.unlink(missing_ok=True)
+        lock_data = None
 
-    if force_run:
-        # --force-run: break stale lock
-        print(f"Force-run: breaking existing lock (run_id={lock_data.get('run_id')})")
-        lock_path.unlink()
-    elif lock_age > STALE_TTL_SECONDS:
-        # Stale lock: auto-break
-        print(f"Stale lock detected ({lock_age:.0f}s old). Breaking automatically.")
-        lock_path.unlink()
-    elif state_path.exists():
-        # Check if same run_id (resume case)
-        existing_state = yaml.safe_load(state_path.read_text())
-        if existing_state.get("run_id") == lock_data.get("run_id"):
-            # Same run resuming - OK
-            pass
+    if lock_data is not None:
+        lock_age = time.time() - lock_data.get("started_at_epoch", 0)
+
+        if force_run:
+            # --force-run: break stale lock
+            print(f"Force-run: breaking existing lock (run_id={lock_data.get('run_id')})")
+            lock_path.unlink()
+        elif lock_age > STALE_TTL_SECONDS:
+            # Stale lock: auto-break
+            print(f"Stale lock detected ({lock_age:.0f}s old). Breaking automatically.")
+            lock_path.unlink()
+        elif state_path.exists():
+            # Check if same run_id (resume case)
+            try:
+                existing_state = yaml.safe_load(state_path.read_text())
+            except (yaml.YAMLError, OSError) as e:
+                print(f"Warning: Corrupted state file for {ticket_id}: {e}. Use --force-run to create fresh state.")
+                notify_blocked(ticket_id=ticket_id, reason=f"Corrupted state file: {e}", block_kind="failed_exception")
+                exit(1)
+
+            if existing_state.get("run_id") == lock_data.get("run_id"):
+                # Same run resuming - OK
+                pass
+            else:
+                # Different run - block
+                notify_blocked(
+                    ticket_id=ticket_id,
+                    reason=f"Pipeline already running (run_id={lock_data.get('run_id')}, pid={lock_data.get('pid')})",
+                    block_kind="blocked_policy"
+                )
+                print(f"Error: Pipeline already running for {ticket_id}. Use --force-run to override.")
+                exit(1)
         else:
-            # Different run - block
             notify_blocked(
                 ticket_id=ticket_id,
-                reason=f"Pipeline already running (run_id={lock_data.get('run_id')}, pid={lock_data.get('pid')})",
+                reason=f"Lock exists but no state file. Use --force-run to override.",
                 block_kind="blocked_policy"
             )
-            print(f"Error: Pipeline already running for {ticket_id}. Use --force-run to override.")
+            print(f"Error: Lock exists for {ticket_id} but no state file. Use --force-run to override.")
             exit(1)
-    else:
-        notify_blocked(
-            ticket_id=ticket_id,
-            reason=f"Lock exists but no state file. Use --force-run to override.",
-            block_kind="blocked_policy"
-        )
-        print(f"Error: Lock exists for {ticket_id} but no state file. Use --force-run to override.")
-        exit(1)
 
 # Write lock file
 run_id = str(uuid.uuid4())[:8]
@@ -854,9 +868,10 @@ def release_lock(lock_path):
        # Use while-read to handle filenames with spaces safely
        echo "$TOPIC_FILES" | while IFS= read -r f; do
            [ -z "$f" ] && continue
-           # Match 'dev.' that is NOT inside a quoted string (single or double)
-           # Strategy: flag if 'dev.' appears outside of quotes on any line
-           if grep -Pq "(?<!['\"])dev\." "$f" 2>/dev/null; then
+           # Check for 'dev.' prefix that is NOT inside a quoted string
+           # Use grep -E (portable, works on macOS/BSD) instead of grep -P
+           # Match lines with 'dev.' that don't have it inside quotes
+           if grep -Eq '^[^"'"'"']*dev\.' "$f" 2>/dev/null; then
                echo "INVARIANT_VIOLATION: Found unquoted 'dev.' prefix in $f"
                exit 1
            fi
@@ -887,28 +902,32 @@ def release_lock(lock_path):
    # Push branch (safe — we verified no divergence above)
    git push -u origin HEAD
 
-   # Create PR with heredoc-safe title/body
-   gh pr create --title "$(cat <<'EOF'
-   feat({ticket_id}): {ticket_title}
-   EOF
-   )" --body "$(cat <<'EOF'
-   ## Summary
+   # Create PR — use shell variables (not heredoc with 'EOF' which prevents expansion)
+   TICKET_ID="{ticket_id}"   # Set from pipeline state
+   TICKET_TITLE="{ticket_title}"  # Fetched from Linear
+   RUN_ID="{run_id}"         # From pipeline state
+   COMMIT_SUMMARY=$(git log --oneline "$BASE_REF"..HEAD)
 
-   Automated PR created by ticket-pipeline.
+   gh pr create \
+     --title "feat($TICKET_ID): $TICKET_TITLE" \
+     --body "$(cat <<EOF
+## Summary
 
-   **Ticket**: {ticket_id}
-   **Pipeline Run**: {run_id}
+Automated PR created by ticket-pipeline.
 
-   ## Changes
+**Ticket**: $TICKET_ID
+**Pipeline Run**: $RUN_ID
 
-   {commit_summary}
+## Changes
 
-   ## Test Plan
+$COMMIT_SUMMARY
 
-   - [ ] CI passes
-   - [ ] CodeRabbit review addressed
-   EOF
-   )"
+## Test Plan
+
+- [ ] CI passes
+- [ ] CodeRabbit review addressed
+EOF
+)"
    ```
 
 4. **Update Linear:**
