@@ -264,7 +264,9 @@ def _resolve_agent_definitions_dir() -> Path:
         return legacy_dir
 
     # If CLAUDE_PLUGIN_ROOT was explicitly set but invalid, and no fallbacks exist,
-    # raise an explicit error instead of returning a non-existent path
+    # log error but return legacy path for graceful degradation.
+    # Per CLAUDE.md: "Hooks must exit 0 unless blocking is intentional."
+    # Raising RuntimeError at module import time would crash all Python importers.
     if plugin_root_was_set and plugin_root_error:
         error_msg = (
             f"Agent definitions directory resolution failed.\n"
@@ -275,7 +277,6 @@ def _resolve_agent_definitions_dir() -> Path:
             f"fallback directories exists with agent YAML files."
         )
         logger.error(error_msg)
-        raise RuntimeError(error_msg)
 
     # If CLAUDE_PLUGIN_ROOT was not set and no paths exist, return legacy path
     # (will fail gracefully at agent load time with helpful error about searched paths)

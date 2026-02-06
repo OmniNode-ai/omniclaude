@@ -155,7 +155,7 @@ if [[ "$SKIP_IF_SESSION_INJECTED" == "true" ]] && [[ -f "${HOOKS_LIB}/session_ma
 fi
 
 if [[ "$SESSION_ALREADY_INJECTED" == "false" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
-    PATTERN_INPUT="$(jq -n --arg agent "$AGENT_NAME" --arg dom "$AGENT_DOMAIN" '{agent_name: $agent, domain: $dom}')"
+    PATTERN_INPUT="$(jq -n --arg agent "$AGENT_NAME" --arg dom "$AGENT_DOMAIN" --arg sid "$SESSION_ID" --arg cid "$CORRELATION_ID" '{agent_name: $agent, domain: $dom, session_id: $sid, correlation_id: $cid, max_patterns: 5, min_confidence: 0.7}')"
     PATTERN_RESULT="$(echo "$PATTERN_INPUT" | run_with_timeout 2 $PYTHON_CMD "${HOOKS_LIB}/context_injection_wrapper.py" 2>>"$LOG_FILE" || echo '{}')"
     LEARNED_PATTERNS="$(echo "$PATTERN_RESULT" | jq -r '.patterns_context // ""')"
 fi
