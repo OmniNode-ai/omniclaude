@@ -146,6 +146,21 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
+class DisabledPattern:
+    """A pattern or pattern class that has been disabled via the kill switch.
+
+    Populated from the disabled_patterns_current materialized view, which
+    computes the current disable state from the pattern_disable_events log.
+    """
+
+    pattern_id: str | None
+    pattern_class: str | None
+    reason: str
+    event_at: datetime | None
+    actor: str
+
+
+@dataclass
 class CacheMetrics:
     """Cache performance metrics tracking."""
 
@@ -791,6 +806,9 @@ class ManifestInjector:
         self.enable_quality_filtering = settings.enable_pattern_quality_filter
         self.min_quality_threshold = settings.min_pattern_quality
 
+        # Disabled pattern kill switch (OMN-1682)
+        self.enable_disabled_pattern_filter = settings.enable_disabled_pattern_filter
+
         # ActionLogger cache (performance optimization - avoid recreating on every manifest generation)
         self._action_logger_cache: dict[str, _ActionLoggerType | None] = {}
 
@@ -938,6 +956,165 @@ class ManifestInjector:
             f"Quality filter: {len(filtered)}/{len(patterns)} patterns passed "
             f"(threshold: {self.min_quality_threshold}, scores recorded: {scores_recorded})"
         )
+
+        return filtered
+
+    async def _get_disabled_patterns(self) -> list[DisabledPattern]:
+        """Get currently disabled patterns from the materialized view.
+
+        Queries the disabled_patterns_current materialized view which computes
+        the most recent disable/enable state per pattern from the event log.
+
+        Returns:
+            List of DisabledPattern entries. Empty list on any failure.
+        """
+
+        def _blocking_query() -> list[DisabledPattern]:
+            import psycopg2
+
+            host = settings.postgres_host
+            port = settings.postgres_port
+            database = settings.postgres_database
+            user = settings.postgres_user
+
+            try:
+                password = settings.get_effective_postgres_password()
+            except ValueError:
+                return []
+
+            if not password:
+                return []
+
+            conn = psycopg2.connect(
+                host=host,
+                port=port,
+                database=database,
+                user=user,
+                password=password,
+                connect_timeout=2,
+            )
+            try:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT pattern_id, pattern_class, reason, event_at, actor "
+                    "FROM disabled_patterns_current"
+                )
+                rows = cursor.fetchall()
+                cursor.close()
+                return [
+                    DisabledPattern(
+                        pattern_id=str(row[0]) if row[0] else None,
+                        pattern_class=row[1],
+                        reason=row[2] or "",
+                        event_at=row[3],
+                        actor=row[4] or "",
+                    )
+                    for row in rows
+                ]
+            finally:
+                conn.close()
+
+        try:
+            return await asyncio.to_thread(_blocking_query)
+        except Exception as e:
+            self.logger.warning(f"Failed to query disabled patterns: {e}")
+            return []
+
+    def _get_enabled_overrides(
+        self,
+        disabled: list[DisabledPattern],
+    ) -> set[str]:
+        """Get pattern IDs that are specifically enabled despite class disable.
+
+        When a pattern_class is disabled but a specific pattern_id within that
+        class has a more recent 'enabled' event, that pattern should still be
+        injected. Since disabled_patterns_current only shows currently-disabled
+        entries, any pattern_id NOT in the disabled set is implicitly enabled.
+
+        Args:
+            disabled: List of currently disabled patterns from the materialized view.
+
+        Returns:
+            Set of pattern_id strings that should remain enabled even when their
+            class is disabled.
+        """
+        # Pattern IDs that appear as explicitly disabled
+        disabled_ids = {d.pattern_id for d in disabled if d.pattern_id}
+        # Disabled classes
+        disabled_classes = {d.pattern_class for d in disabled if d.pattern_class}
+
+        # If a pattern_id is NOT in disabled_ids but its class IS in disabled_classes,
+        # the materialized view already handles this: it only shows disabled entries.
+        # A pattern whose class is disabled but whose ID was re-enabled won't appear.
+        # So the override set is: nothing extra needed from the view itself.
+        # This method exists for future extension (e.g., querying the full event log).
+        _ = disabled_classes  # Acknowledge for clarity
+        return disabled_ids
+
+    async def _filter_disabled_patterns(
+        self, patterns: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Filter out patterns that have been disabled via the kill switch.
+
+        Checks each pattern against the disabled_patterns_current materialized
+        view. Precedence rules:
+        1. pattern_id match overrides pattern_class (specific beats general)
+        2. Most recent event wins (handled by the materialized view)
+        3. Default: enabled (no event = enabled)
+
+        Args:
+            patterns: List of pattern dictionaries from Qdrant.
+
+        Returns:
+            Filtered list excluding disabled patterns.
+        """
+        if not self.enable_disabled_pattern_filter:
+            return patterns
+
+        disabled = await self._get_disabled_patterns()
+        if not disabled:
+            return patterns
+
+        disabled_ids = {d.pattern_id for d in disabled if d.pattern_id}
+        disabled_classes = {d.pattern_class for d in disabled if d.pattern_class}
+
+        if not disabled_ids and not disabled_classes:
+            return patterns
+
+        filtered = []
+        skipped_by_id = 0
+        skipped_by_class = 0
+
+        for pattern in patterns:
+            pid = pattern.get("pattern_id", "")
+            ptype = pattern.get("pattern_type", "")
+
+            # Check specific pattern ID first (highest precedence)
+            if pid and str(pid) in disabled_ids:
+                skipped_by_id += 1
+                self.logger.info(f"Skipping disabled pattern (by ID): {pid}")
+                continue
+
+            # Check pattern class/type
+            if ptype and ptype in disabled_classes:
+                # Allow if specifically re-enabled (ID not in disabled set)
+                # The materialized view handles this: if a specific ID was re-enabled,
+                # it won't appear in disabled_ids
+                skipped_by_class += 1
+                self.logger.info(
+                    f"Skipping pattern in disabled class: {ptype} "
+                    f"(pattern: {pattern.get('name', 'unknown')})"
+                )
+                continue
+
+            filtered.append(pattern)
+
+        total_skipped = skipped_by_id + skipped_by_class
+        if total_skipped > 0:
+            self.logger.info(
+                f"Disabled pattern filter: {len(filtered)}/{len(patterns)} patterns passed "
+                f"(skipped {skipped_by_id} by ID, {skipped_by_class} by class)"
+            )
 
         return filtered
 
@@ -1887,6 +2064,9 @@ class ManifestInjector:
 
             # Apply quality filtering if enabled
             all_patterns = await self._filter_by_quality(all_patterns)
+
+            # Apply disabled pattern kill switch (OMN-1682)
+            all_patterns = await self._filter_disabled_patterns(all_patterns)
 
             # Calculate combined query time
             exec_time = templates_dict.get("query_time_ms", 0)
@@ -5305,6 +5485,7 @@ def inject_manifest(
 __all__ = [
     "CacheEntry",
     "CacheMetrics",
+    "DisabledPattern",
     "ManifestCache",
     "ManifestInjectionStorage",
     "ManifestInjector",

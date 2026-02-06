@@ -285,6 +285,14 @@ class Settings(BaseSettings):
         le=1.0,
         description="Minimum pattern quality threshold (0.0-1.0)",
     )
+    enable_disabled_pattern_filter: bool = Field(
+        default=True,
+        description=(
+            "Enable runtime kill switch for patterns. When True, ManifestInjector "
+            "checks disabled_patterns_current materialized view before injection. "
+            "Requires ENABLE_POSTGRES=true and disabled_patterns_current view to exist."
+        ),
+    )
 
     # =========================================================================
     # QUALITY ENFORCEMENT PHASES
