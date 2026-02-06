@@ -15,10 +15,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Kafka event publishing support (transformation events, observability)
-# Install with: pip install omniclaude[kafka] or uv sync --extra kafka
+# aiokafka is optional: event publishers gracefully degrade when not installed.
+# Minimum version 0.9.0 required for Python 3.12 support.
 kafka = [
-    "aiokafka>=0.10.0",  # Python 3.12 support added in 0.10.0
+    "aiokafka>=0.9.0",
 ]
 
 [dependency-groups]

@@ -61,7 +61,7 @@ class TestModuleImport:
             "latency.breakdown",  # OMN-1889
             "routing.decision",  # Polly-first routing observability
             "notification.blocked",  # OMN-1831
-            "notification.completed",  # OMN-1831
+            "notification.completed",  # PR-92
         }
         assert expected_types == SUPPORTED_EVENT_TYPES
 

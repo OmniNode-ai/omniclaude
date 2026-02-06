@@ -104,7 +104,10 @@ fi
 # Socket path can be overridden via OMNICLAUDE_EMIT_SOCKET environment variable
 # This enables testing with alternative socket paths and matches emit_client_wrapper.py
 # Note: Not exported because emit_client_wrapper.py reads OMNICLAUDE_EMIT_SOCKET directly
-EMIT_DAEMON_SOCKET="${OMNICLAUDE_EMIT_SOCKET:-/tmp/omniclaude-emit.sock}"
+# Use $TMPDIR for consistency with Python's tempfile.gettempdir() (both check TMPDIR first)
+_TMPDIR="${TMPDIR:-/tmp}"
+_TMPDIR="${_TMPDIR%/}"  # Remove trailing slash (macOS TMPDIR often ends with /)
+EMIT_DAEMON_SOCKET="${OMNICLAUDE_EMIT_SOCKET:-${_TMPDIR}/omniclaude-emit.sock}"
 
 # Check if socket file exists and is writable.
 #
@@ -139,34 +142,36 @@ check_socket_responsive() {
 }
 
 start_emit_daemon_if_needed() {
-    # Check if daemon already running via socket
+    # Check if publisher already running via socket
     if [[ -S "$EMIT_DAEMON_SOCKET" ]]; then
-        # Verify daemon is responsive with quick ping
+        # Verify publisher is responsive with quick ping
         if check_socket_responsive "$EMIT_DAEMON_SOCKET" 0.1; then
-            log "Emit daemon already running and responsive"
+            log "Publisher already running and responsive"
             return 0
         else
-            # Socket exists but daemon not responsive - remove stale socket
-            log "Removing stale daemon socket"
+            # Socket exists but publisher not responsive - remove stale socket
+            log "Removing stale publisher socket"
             rm -f "$EMIT_DAEMON_SOCKET" 2>/dev/null || true
         fi
     fi
 
-    # Check if daemon module is available
-    if ! "$PYTHON_CMD" -c "import omnibase_infra.runtime.emit_daemon" 2>/dev/null; then
-        log "Emit daemon module not available (omnibase_infra.runtime.emit_daemon)"
-        return 0  # Non-fatal, continue without daemon
+    # Check if publisher module is available (omniclaude.publisher, OMN-1944)
+    if ! "$PYTHON_CMD" -c "import omniclaude.publisher" 2>/dev/null; then
+        # Fallback: try legacy omnibase_infra emit daemon
+        if "$PYTHON_CMD" -c "import omnibase_infra.runtime.emit_daemon" 2>/dev/null; then
+            log "Using legacy emit daemon (omnibase_infra)"
+            _start_legacy_emit_daemon
+            return $?
+        fi
+        log "Publisher module not available (omniclaude.publisher)"
+        return 0  # Non-fatal, continue without publisher
     fi
 
-    log "Starting emit daemon..."
+    log "Starting publisher (omniclaude.publisher)..."
 
-    # Ensure logs directory exists for daemon output
+    # Ensure logs directory exists for publisher output
     mkdir -p "${HOOKS_DIR}/logs"
 
-    # Start daemon in background, detached from this process
-    # Redirect output to log file for debugging
-    # Must pass --kafka-servers explicitly (required by CLI)
-    # Supports comma-separated multi-broker strings (e.g., "host1:9092,host2:9092")
     if [[ -z "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
         log "WARNING: KAFKA_BOOTSTRAP_SERVERS not set - Kafka features disabled"
         log "INFO: To enable intelligence gathering, set KAFKA_BOOTSTRAP_SERVERS in your .env file"
@@ -174,16 +179,17 @@ start_emit_daemon_if_needed() {
         write_daemon_status "kafka_not_configured"
         return 0  # Non-fatal - continue without Kafka, hook still provides ticket context
     fi
-    nohup "$PYTHON_CMD" -m omnibase_infra.runtime.emit_daemon.cli start \
+
+    # Start publisher in background, detached from this process (OMN-1944)
+    nohup "$PYTHON_CMD" -m omniclaude.publisher start \
         --kafka-servers "$KAFKA_BOOTSTRAP_SERVERS" \
         --socket-path "$EMIT_DAEMON_SOCKET" \
-        --daemonize \
         >> "${HOOKS_DIR}/logs/emit-daemon.log" 2>&1 &
 
     local daemon_pid=$!
-    log "Daemon started with PID $daemon_pid"
+    log "Publisher started with PID $daemon_pid"
 
-    # Wait briefly for daemon to create socket (max 200ms in 20ms increments)
+    # Wait briefly for publisher to create socket (max 200ms in 20ms increments)
     local wait_count=0
     local max_wait=10
     while [[ ! -S "$EMIT_DAEMON_SOCKET" && $wait_count -lt $max_wait ]]; do
@@ -192,34 +198,52 @@ start_emit_daemon_if_needed() {
     done
 
     # Retry-based socket verification after file appears.
-    # The socket file is created before the daemon calls accept(), so there's a brief
-    # window where the socket exists but isn't ready for connections. Rather than a
-    # fixed sleep (which is fragile across different system loads), we use a retry
-    # loop that adapts: succeeding immediately on fast systems while giving more
-    # time on heavily-loaded systems. Worst-case adds ~50ms (5 retries x 10ms gap).
     if [[ -S "$EMIT_DAEMON_SOCKET" ]]; then
         local verify_attempt=0
         local max_verify_attempts=5  # 5 attempts x 10ms gap = 50ms max additional wait
 
         while [[ $verify_attempt -lt $max_verify_attempts ]]; do
             if check_socket_responsive "$EMIT_DAEMON_SOCKET" 0.1; then
-                log "Emit daemon ready (verified on attempt $((verify_attempt + 1)))"
+                log "Publisher ready (verified on attempt $((verify_attempt + 1)))"
                 write_daemon_status "running"
                 return 0
             fi
             ((verify_attempt++))
-            # Small gap between retries to allow daemon to complete accept() initialization
             sleep 0.01
         done
 
-        # All retries exhausted - socket exists but daemon not responsive
-        log "WARNING: Daemon socket exists but not responsive after $max_verify_attempts verification attempts"
+        log "WARNING: Publisher socket exists but not responsive after $max_verify_attempts verification attempts"
     else
-        log "WARNING: Emit daemon startup timed out after ${max_wait}x20ms, continuing without daemon"
+        log "WARNING: Publisher startup timed out after ${max_wait}x20ms, continuing without publisher"
     fi
 
-    # Daemon failed to start properly - continue without it
-    log "Continuing without emit daemon (session startup not blocked)"
+    # Publisher failed to start properly - continue without it
+    log "Continuing without publisher (session startup not blocked)"
+    return 0
+}
+
+# Legacy fallback: start omnibase_infra emit daemon (will be removed by OMN-1945)
+_start_legacy_emit_daemon() {
+    if [[ -z "${KAFKA_BOOTSTRAP_SERVERS:-}" ]]; then
+        write_daemon_status "kafka_not_configured"
+        return 0
+    fi
+    nohup "$PYTHON_CMD" -m omnibase_infra.runtime.emit_daemon.cli start \
+        --kafka-servers "$KAFKA_BOOTSTRAP_SERVERS" \
+        --socket-path "$EMIT_DAEMON_SOCKET" \
+        --daemonize \
+        >> "${HOOKS_DIR}/logs/emit-daemon.log" 2>&1 &
+    local daemon_pid=$!
+    log "Legacy daemon started with PID $daemon_pid"
+    local wait_count=0
+    local max_wait=10
+    while [[ ! -S "$EMIT_DAEMON_SOCKET" && $wait_count -lt $max_wait ]]; do
+        sleep 0.02
+        ((wait_count++))
+    done
+    if [[ -S "$EMIT_DAEMON_SOCKET" ]]; then
+        write_daemon_status "running"
+    fi
     return 0
 }
 

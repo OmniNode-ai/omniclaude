@@ -1,124 +1,66 @@
-"""
-Transformation Validator
-========================
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 OmniNode Team
+"""Transformation Validator -- Fail Closed.
 
 Validates agent transformations to prevent invalid self-transformations
 (polymorphic-agent -> polymorphic-agent) that indicate routing failures.
 
 Problem:
-- Many transformations are self-transformations (polly → polly)
-- These often represent routing failures, not legitimate orchestration tasks
+- 45.5% of transformations are self-transformations (15/33 cases)
+- Many are routing failures, not legitimate orchestration tasks
 - Examples: "Frontend integration" should go to agent-frontend-developer
 
 Solution:
 - Validate self-transformations require detailed reasoning (min 50 chars)
 - Warn on low confidence (<0.7) self-transformations
 - Block specialized tasks from self-transforming
-- Track metrics with outcome granularity for tuning
+- Track metrics for monitoring
 
-Target: Reduce executed self-transformation rate to <10%
+Design Rule: Fail Closed
+    If any internal error occurs during validation, this module returns
+    is_valid=False (rejects the transformation) rather than allowing the
+    transformation to proceed. This prevents routing failures from being
+    masked by validator errors.
 
-Validator Outcomes (for metrics tuning):
-- ALLOWED: Passed all checks
-- WARNED: Passed with warnings (near threshold)
-- BLOCKED: Failed validation
-
-DESIGN RULE: Fail Closed on Validator Errors
-=============================================
-If the validator encounters an exception:
-- FAIL CLOSED (block transformation)
-- Emit explicit error event
-- Log full stack trace
-- Do NOT silently allow
+Target: Reduce self-transformation rate from 45.5% to <10%
 """
 
+import logging
 import re
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any
 
-
-class ValidatorOutcome(str, Enum):
-    """
-    Validator outcome for metrics tuning.
-
-    These outcomes enable granular tracking:
-    - Track raw self-transformation attempts (any outcome)
-    - Track executed self-transformations (ALLOWED only)
-    - Track near-misses (WARNED) for threshold tuning
-    - Track blocked attempts (BLOCKED) to verify validation is working
-    """
-
-    ALLOWED = "allowed"  # Passed all checks
-    WARNED = "warned"  # Passed with warnings (near threshold)
-    BLOCKED = "blocked"  # Failed validation
+logger = logging.getLogger(__name__)
 
 
 @dataclass
 class TransformationValidationResult:
-    """
-    Result of transformation validation.
+    """Result of transformation validation.
 
     Attributes:
-        outcome: ValidatorOutcome enum (ALLOWED/WARNED/BLOCKED)
-        is_valid: Whether transformation is valid (ALLOWED or WARNED)
-        error_message: Error message if blocked
-        warning_message: Warning message (optional)
-        metrics: Metrics dict for monitoring and tuning
+        is_valid: Whether transformation is valid.
+        error_message: Error message if invalid.
+        warning_message: Warning message (optional).
+        metrics: Metrics dict for monitoring.
     """
 
-    outcome: ValidatorOutcome
     is_valid: bool
     error_message: str = ""
     warning_message: str = ""
-    metrics: dict[str, Any] = field(default_factory=dict)
-
-    @classmethod
-    def allowed(
-        cls,
-        metrics: dict[str, Any] | None = None,
-    ) -> "TransformationValidationResult":
-        """Create an ALLOWED result."""
-        return cls(
-            outcome=ValidatorOutcome.ALLOWED,
-            is_valid=True,
-            metrics=metrics or {},
-        )
-
-    @classmethod
-    def warned(
-        cls,
-        warning_message: str,
-        metrics: dict[str, Any] | None = None,
-    ) -> "TransformationValidationResult":
-        """Create a WARNED result."""
-        return cls(
-            outcome=ValidatorOutcome.WARNED,
-            is_valid=True,
-            warning_message=warning_message,
-            metrics=metrics or {},
-        )
-
-    @classmethod
-    def blocked(
-        cls,
-        error_message: str,
-        metrics: dict[str, Any] | None = None,
-    ) -> "TransformationValidationResult":
-        """Create a BLOCKED result."""
-        return cls(
-            outcome=ValidatorOutcome.BLOCKED,
-            is_valid=False,
-            error_message=error_message,
-            metrics=metrics or {},
-        )
+    metrics: dict = field(default_factory=dict)
 
 
 class TransformationValidator:
-    """
-    Validates agent transformations to prevent invalid self-transformations.
+    """Validates agent transformations to prevent invalid self-transformations.
 
-    Usage:
+    Design Rule: Fail Closed
+        If any internal error occurs during validation, the validate() method
+        returns is_valid=False (rejects the transformation) rather than
+        propagating the exception or allowing the transformation to proceed.
+        This ensures that validator bugs never silently allow invalid
+        transformations.
+
+    Usage::
+
         validator = TransformationValidator()
         result = validator.validate(
             from_agent="polymorphic-agent",
@@ -129,18 +71,14 @@ class TransformationValidator:
         )
 
         if not result.is_valid:
-            # Block the transformation
             raise ValueError(result.error_message)
 
         if result.warning_message:
-            logger.warning(f"Transformation warning: {result.warning_message}")
-
-        # result.outcome is ValidatorOutcome.ALLOWED, WARNED, or BLOCKED
-        # result.metrics contains detailed tracking data
+            logger.warning(result.warning_message)
     """
 
     # Orchestration keywords that indicate legitimate self-transformation
-    ORCHESTRATION_KEYWORDS = frozenset([
+    ORCHESTRATION_KEYWORDS = [
         "orchestrate",
         "coordinate",
         "workflow",
@@ -149,89 +87,40 @@ class TransformationValidator:
         "sequential",
         "batch",
         "pipeline",
-        "dispatch",
-        "polly",
-        "poly",
-    ])
-
-    # Short keywords (<=5 chars) that need word boundary matching to avoid
-    # substring false positives (e.g., "poly" matching "polygon", "api" in "capital")
-    _SHORT_KEYWORDS: frozenset[str] = frozenset([
-        # From ORCHESTRATION_KEYWORDS
-        "batch",
-        "polly",
-        "poly",
-        # Short terms that could appear in SPECIALIZED_KEYWORDS phrases
-        "api",
-        "ui",
-        "ux",
-        "sql",
-        "orm",
-        "jwt",
-    ])
+    ]
 
     # Specialized task keywords that should route to specialized agents
-    # NOTE: Avoid overly broad terms (e.g., "python", "sql") that appear in
-    # general questions. Focus on task-oriented phrases that clearly indicate
-    # specialized work requiring a domain expert.
-    SPECIALIZED_KEYWORDS = frozenset([
-        # Frontend keywords
-        "api design",
-        "api endpoint",
-        "frontend component",
-        "frontend integration",
-        "ui component",
-        "ux design",
-        "react component",
-        "vue component",
-        "angular component",
-        # Backend keywords
-        "backend service",
-        "database schema",
-        "database migration",
-        "orm model",
-        "sql query",
-        "rest api",
-        "graphql schema",
-        "grpc service",
-        # Infrastructure keywords
-        "cache layer",
-        "redis cache",
-        "memcached",
-        "message queue",
-        "kafka topic",
-        "rabbitmq",
-        "celery task",
-        # Security keywords
-        "auth flow",
-        "oauth integration",
-        "jwt token",
-        "authentication",
-        "security audit",
-        "security vulnerability",
-        # Testing keywords
-        "unit test",
-        "integration test",
-        # Debugging keywords
-        "debug issue",
-        "debug error",
-        # DevOps keywords
-        "performance optimization",
-        "deploy to",
-        "deployment pipeline",
-    ])
+    SPECIALIZED_KEYWORDS = [
+        "api",
+        "frontend",
+        "backend",
+        "database",
+        "testing",
+        "debug",
+        "performance",
+        "security",
+        "deployment",
+        "documentation",
+        "ui",
+        "ux",
+        "css",
+        "html",
+        "javascript",
+        "python",
+        "sql",
+    ]
 
-    def __init__(
-        self,
-        min_reason_length: int = 50,
-        min_confidence: float = 0.7,
-    ) -> None:
-        """
-        Initialize validator.
+    # Short keywords (<=4 chars) that need word-boundary matching to prevent
+    # false positives (e.g., "capital" matching "api", "built" matching "ui").
+    # Follows the same pattern as TaskClassifier._SHORT_KEYWORDS.
+    _SHORT_KEYWORDS = frozenset({"api", "ui", "ux", "css", "sql"})
+
+    def __init__(self, min_reason_length: int = 50, min_confidence: float = 0.7):
+        """Initialize validator.
 
         Args:
-            min_reason_length: Minimum reasoning length for self-transformations
-            min_confidence: Minimum confidence threshold for warnings
+            min_reason_length: Minimum reasoning length for self-transformations.
+            min_confidence: Minimum confidence threshold for warnings.
         """
         self.min_reason_length = min_reason_length
         self.min_confidence = min_confidence
@@ -240,81 +129,88 @@ class TransformationValidator:
         self,
         from_agent: str,
         to_agent: str,
-        reason: str,
+        reason: str | None,
         confidence: float | None = None,
         user_request: str | None = None,
     ) -> TransformationValidationResult:
-        """
-        Validate agent transformation.
+        """Validate agent transformation.
 
-        DESIGN RULE: Fail Closed
-        If validation encounters ANY internal error, it returns BLOCKED.
-        Never silently passes invalid or unvalidated transformations.
+        Fail Closed: Any internal error during validation results in
+        is_valid=False. The transformation is rejected, not allowed.
+        This ensures validator bugs never silently permit invalid
+        transformations.
 
         Args:
-            from_agent: Source agent name
-            to_agent: Target agent name
-            reason: Transformation reason/description
-            confidence: Routing confidence score (0.0-1.0)
-            user_request: Original user request (optional)
+            from_agent: Source agent name.
+            to_agent: Target agent name.
+            reason: Transformation reason/description.
+            confidence: Routing confidence score (0.0-1.0).
+            user_request: Original user request (optional).
 
         Returns:
-            TransformationValidationResult with validation outcome
+            TransformationValidationResult with validation outcome.
+            On internal errors, returns is_valid=False with error details.
         """
         try:
-            return self._validate_impl(from_agent, to_agent, reason, confidence, user_request)
-        except Exception as e:
-            # FAIL CLOSED: Any internal error results in blocked transformation
-            import logging
-            import traceback
-
-            logger = logging.getLogger(__name__)
-            logger.error(
-                f"Validation failed closed due to internal error: {e}\n"
-                f"Stack trace: {traceback.format_exc()}"
+            return self._validate_internal(
+                from_agent=from_agent,
+                to_agent=to_agent,
+                reason=reason,
+                confidence=confidence,
+                user_request=user_request,
             )
-            return TransformationValidationResult.blocked(
-                error_message=f"Validation internal error (fail closed): {type(e).__name__}: {e}",
+        except Exception as exc:
+            # Fail closed: internal errors reject the transformation
+            logger.error(
+                "Transformation validator internal error (fail closed): %s", exc
+            )
+            return TransformationValidationResult(
+                is_valid=False,
+                error_message=(
+                    f"Validation failed closed due to internal error: {exc}"
+                ),
                 metrics={
-                    "transformation_type": "unknown",
+                    "transformation_type": "error",
                     "from_agent": from_agent,
                     "to_agent": to_agent,
-                    "outcome": ValidatorOutcome.BLOCKED.value,
-                    "block_reason": "internal_error",
-                    "error_type": type(e).__name__,
-                    "error_message": str(e),
+                    "internal_error": str(exc),
+                    "internal_error_type": type(exc).__name__,
                 },
             )
 
-    def _validate_impl(
+    def _validate_internal(
         self,
         from_agent: str,
         to_agent: str,
-        reason: str,
+        reason: str | None,
         confidence: float | None = None,
         user_request: str | None = None,
     ) -> TransformationValidationResult:
-        """
-        Internal validation implementation.
+        """Internal validation logic, separated for fail-closed wrapping.
 
-        Separated from validate() to enable fail-closed exception handling.
-        """
-        # Only validate self-transformations (polly → polly)
-        is_self_transformation = self._is_self_transformation(from_agent, to_agent)
+        Args:
+            from_agent: Source agent name.
+            to_agent: Target agent name.
+            reason: Transformation reason/description.
+            confidence: Routing confidence score (0.0-1.0).
+            user_request: Original user request (optional).
 
-        if not is_self_transformation:
-            # Non-self transformations are always allowed
-            return TransformationValidationResult.allowed(
+        Returns:
+            TransformationValidationResult with validation outcome.
+        """
+        # Only validate self-transformations
+        if from_agent != "polymorphic-agent" or to_agent != "polymorphic-agent":
+            return TransformationValidationResult(
+                is_valid=True,
                 metrics={
                     "transformation_type": "specialized",
                     "from_agent": from_agent,
                     "to_agent": to_agent,
-                    "outcome": ValidatorOutcome.ALLOWED.value,
                 },
             )
 
-        # Initialize metrics for self-transformation
-        metrics: dict[str, Any] = {
+        # Initialize metrics
+        metrics = {
             "transformation_type": "self",
             "from_agent": from_agent,
             "to_agent": to_agent,
@@ -324,9 +220,8 @@ class TransformationValidator:
 
         # Check if reasoning is provided and sufficient
         if not reason or len(reason) < self.min_reason_length:
-            metrics["outcome"] = ValidatorOutcome.BLOCKED.value
-            metrics["block_reason"] = "insufficient_reasoning"
-            return TransformationValidationResult.blocked(
+            return TransformationValidationResult(
+                is_valid=False,
                 error_message=(
                     f"Self-transformation requires detailed reasoning "
                     f"(min {self.min_reason_length} chars). "
@@ -337,19 +232,25 @@ class TransformationValidator:
             )
 
         # Check if this is a legitimate orchestration task
-        text_to_check = user_request or reason
-        is_orchestration_task = self._is_orchestration_task(text_to_check)
-        is_specialized_task = self._is_specialized_task(text_to_check)
-
+        is_orchestration_task = self._is_orchestration_task(user_request or reason)
         metrics["is_orchestration_task"] = is_orchestration_task
+
+        # Check if this is a specialized task
+        is_specialized_task = self._is_specialized_task(user_request or reason)
         metrics["is_specialized_task"] = is_specialized_task
 
-        # Block specialized tasks with low confidence (routing failure indicator)
+        # Build warning if applicable
+        warning = ""
         if confidence is not None and confidence < self.min_confidence:
+            warning = (
+                f"Low confidence ({confidence:.2%}) self-transformation detected. "
+                f"This may indicate routing failure. "
+            )
+
+            # Block specialized tasks with low confidence
             if is_specialized_task and not is_orchestration_task:
-                metrics["outcome"] = ValidatorOutcome.BLOCKED.value
-                metrics["block_reason"] = "specialized_task_low_confidence"
-                return TransformationValidationResult.blocked(
+                return TransformationValidationResult(
+                    is_valid=False,
                     error_message=(
                         f"Self-transformation blocked: Low confidence ({confidence:.2%}) "
                         f"for specialized task. Expected specialized agent routing. "
@@ -358,44 +259,31 @@ class TransformationValidator:
                     metrics=metrics,
                 )
 
-            # Low confidence but orchestration task - warn but allow
-            metrics["outcome"] = ValidatorOutcome.WARNED.value
-            return TransformationValidationResult.warned(
-                warning_message=(
-                    f"Low confidence ({confidence:.2%}) self-transformation detected. "
-                    f"This may indicate routing failure. Reason: {reason}"
-                ),
-                metrics=metrics,
-            )
+            warning += f"Reason: {reason}"
 
-        # Passed all checks
-        metrics["outcome"] = ValidatorOutcome.ALLOWED.value
-        return TransformationValidationResult.allowed(metrics=metrics)
-
-    def _is_self_transformation(self, from_agent: str, to_agent: str) -> bool:
-        """Check if this is a self-transformation (polly → polly)."""
-        polly_names = {"polymorphic-agent", "polly", "poly"}
-        from_is_polly = from_agent.lower() in polly_names
-        to_is_polly = to_agent.lower() in polly_names
-        return from_is_polly and to_is_polly
+        return TransformationValidationResult(
+            is_valid=True,
+            warning_message=warning,
+            metrics=metrics,
+        )
 
     def _keyword_in_text(self, keyword: str, text: str) -> bool:
-        """
-        Check if keyword appears in text, using word boundaries for short keywords.
+        """Check if keyword appears in text, using word boundaries for short keywords.
 
-        This ensures consistent boundary semantics across all keyword collections,
-        preventing false positives like "poly" matching "polygon" or "api" in "capital".
+        Short keywords (<=4 chars like "api", "ui", "sql") use regex word-boundary
+        matching to prevent false positives (e.g., "capital" matching "api").
+        Follows the same pattern as TaskClassifier._keyword_in_text.
         """
         if keyword in self._SHORT_KEYWORDS:
-            # Use word boundary matching for short keywords
             pattern = rf"\b{re.escape(keyword)}\b"
-            return bool(re.search(pattern, text, re.IGNORECASE))
+            return bool(re.search(pattern, text))
         return keyword in text
 
     def _is_orchestration_task(self, text: str) -> bool:
         """Check if text contains orchestration keywords."""
         if not text:
             return False
+
         text_lower = text.lower()
         return any(
             self._keyword_in_text(keyword, text_lower)
@@ -406,6 +294,7 @@ class TransformationValidator:
         """Check if text contains specialized task keywords."""
         if not text:
             return False
+
         text_lower = text.lower()
         return any(
             self._keyword_in_text(keyword, text_lower)
@@ -417,101 +306,24 @@ class TransformationValidator:
 def validate_transformation(
     from_agent: str,
     to_agent: str,
-    reason: str,
+    reason: str | None,
     confidence: float | None = None,
     user_request: str | None = None,
 ) -> TransformationValidationResult:
-    """
-    Convenience function for quick transformation validation.
+    """Convenience function for quick transformation validation.
+
+    Fail Closed: Inherits fail-closed behavior from TransformationValidator.
+    Any internal error returns is_valid=False.
 
     Args:
-        from_agent: Source agent name
-        to_agent: Target agent name
-        reason: Transformation reason/description
-        confidence: Routing confidence score (0.0-1.0)
-        user_request: Original user request (optional)
+        from_agent: Source agent name.
+        to_agent: Target agent name.
+        reason: Transformation reason/description.
+        confidence: Routing confidence score (0.0-1.0).
+        user_request: Original user request (optional).
 
     Returns:
-        TransformationValidationResult with validation outcome
+        TransformationValidationResult with validation outcome.
     """
     validator = TransformationValidator()
     return validator.validate(from_agent, to_agent, reason, confidence, user_request)
-
-
-if __name__ == "__main__":
-    # Test cases
-    print("Testing TransformationValidator...")
-    print()
-
-    # Test 1: Valid self-transformation with orchestration
-    print("Test 1: Valid self-transformation (orchestration)")
-    result = validate_transformation(
-        from_agent="polymorphic-agent",
-        to_agent="polymorphic-agent",
-        reason="Multi-agent orchestration for complex workflow with parallel execution of 4 specialized agents",
-        confidence=0.85,
-        user_request="orchestrate parallel execution of API, frontend, and database work",
-    )
-    print(f"  Outcome: {result.outcome.value}")
-    print(f"  Valid: {result.is_valid}")
-    assert result.outcome == ValidatorOutcome.ALLOWED
-    print()
-
-    # Test 2: Invalid self-transformation (short reason)
-    print("Test 2: Invalid self-transformation (short reason)")
-    result = validate_transformation(
-        from_agent="polymorphic-agent",
-        to_agent="polymorphic-agent",
-        reason="General task",
-        confidence=0.65,
-    )
-    print(f"  Outcome: {result.outcome.value}")
-    print(f"  Valid: {result.is_valid}")
-    print(f"  Error: {result.error_message[:80]}...")
-    assert result.outcome == ValidatorOutcome.BLOCKED
-    print()
-
-    # Test 3: Invalid self-transformation (specialized task, low confidence)
-    print("Test 3: Invalid self-transformation (specialized task, low confidence)")
-    result = validate_transformation(
-        from_agent="polymorphic-agent",
-        to_agent="polymorphic-agent",
-        reason="Frontend integration with API endpoints and database connections",
-        confidence=0.55,
-        user_request="build a frontend component for the dashboard",
-    )
-    print(f"  Outcome: {result.outcome.value}")
-    print(f"  Valid: {result.is_valid}")
-    print(f"  Error: {result.error_message[:80]}...")
-    assert result.outcome == ValidatorOutcome.BLOCKED
-    print()
-
-    # Test 4: Valid specialized transformation
-    print("Test 4: Valid specialized transformation")
-    result = validate_transformation(
-        from_agent="polymorphic-agent",
-        to_agent="agent-frontend-developer",
-        reason="Frontend development task",
-        confidence=0.92,
-    )
-    print(f"  Outcome: {result.outcome.value}")
-    print(f"  Valid: {result.is_valid}")
-    assert result.outcome == ValidatorOutcome.ALLOWED
-    print()
-
-    # Test 5: Self-transformation with warning (low confidence, orchestration)
-    print("Test 5: Self-transformation with warning (low confidence, orchestration)")
-    result = validate_transformation(
-        from_agent="polymorphic-agent",
-        to_agent="polymorphic-agent",
-        reason="Orchestrate workflow with multiple agents for complex multi-step execution",
-        confidence=0.65,
-        user_request="orchestrate multi-agent workflow",
-    )
-    print(f"  Outcome: {result.outcome.value}")
-    print(f"  Valid: {result.is_valid}")
-    print(f"  Warning: {result.warning_message[:80]}...")
-    assert result.outcome == ValidatorOutcome.WARNED
-    print()
-
-    print("All tests passed!")

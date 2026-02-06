@@ -308,10 +308,14 @@ class TestMainCLI:
         # Import and run main
         from route_via_events_wrapper import main
 
-        with pytest.raises(SystemExit) as exc_info:
+        # Use try/except instead of pytest.raises so that unexpected exit
+        # codes propagate as real failures rather than being silently caught.
+        try:
             main()
-
-        assert exc_info.value.code == 0
+            pytest.fail("Expected SystemExit(0) was not raised")
+        except SystemExit as exc:
+            if exc.code != 0:
+                raise  # Propagate unexpected exit codes
 
         captured = capsys.readouterr()
         result = json.loads(captured.out)

@@ -28,7 +28,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import importlib.util
 import json
 import re
 import subprocess
@@ -39,61 +38,33 @@ from typing import Any, TypedDict
 
 SCRIPT_DIR = Path(__file__).parent
 
-
-def _load_models_module():
-    """Load the models module from the same directory using importlib.
-
-    This avoids sys.path manipulation and provides proper module loading
-    for both package import and standalone script execution scenarios.
-
-    Returns:
-        The loaded models module.
-
-    Raises:
-        ImportError: If models.py cannot be found or loaded, or if models
-            has its own import errors (these are NOT masked by the fallback).
-    """
-    # First try standard import (works when installed as package)
-    try:
-        from . import models
-
-        return models
-    except ImportError as e:
-        # Only use fallback for "no parent package" error (standalone execution)
-        # Let real import errors (missing deps, syntax errors in models.py) propagate
-        error_msg = str(e).lower()
-        if (
-            "no known parent package" not in error_msg
-            and "relative import" not in error_msg
-        ):
-            raise  # Re-raise real import errors to aid debugging
-
-    # Fallback: load from file path (standalone execution only)
-    models_path = SCRIPT_DIR / "models.py"
-    if not models_path.exists():
-        raise ImportError(f"models.py not found at {models_path}")
-
-    # Use namespaced module name to avoid polluting sys.modules["models"]
-    # which could conflict with other packages using the same generic name
-    module_name = "omniclaude.pr_review.models"
-    spec = importlib.util.spec_from_file_location(module_name, models_path)
-    if spec is None or spec.loader is None:
-        raise ImportError(f"Could not load spec for {models_path}")
-
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module  # Cache for subsequent imports
-    spec.loader.exec_module(module)
-    return module
-
-
-# Load models module and extract needed symbols
-_models = _load_models_module()
-BotType = _models.BotType
-CommentSeverity = _models.CommentSeverity
-CommentStatus = _models.CommentStatus
-ModelCollatedIssues = _models.ModelCollatedIssues
-ModelPRIssue = _models.ModelPRIssue
-detect_bot_type = _models.detect_bot_type
+try:
+    from models import (
+        BotType,
+        CommentSeverity,
+        CommentStatus,
+        ModelCollatedIssues,
+        ModelPRIssue,
+        detect_bot_type,
+    )
+except ModuleNotFoundError:
+    # ModuleNotFoundError means the 'models' module is not on sys.path.
+    # This happens during standalone execution (python collate_issues.py)
+    # where the script directory is not automatically on the import path.
+    #
+    # We deliberately catch ModuleNotFoundError (not ImportError) so that
+    # real import failures *within* models.py (e.g. a broken dependency)
+    # propagate as-is rather than being silently retried.
+    if str(SCRIPT_DIR) not in sys.path:
+        sys.path.insert(0, str(SCRIPT_DIR))
+    from models import (
+        BotType,
+        CommentSeverity,
+        CommentStatus,
+        ModelCollatedIssues,
+        ModelPRIssue,
+        detect_bot_type,
+    )
 
 
 # =============================================================================

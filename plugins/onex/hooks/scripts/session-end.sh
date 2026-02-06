@@ -170,6 +170,25 @@ else
     log "Kafka emission skipped (KAFKA_ENABLED=$KAFKA_ENABLED)"
 fi
 
+# Flush and stop the publisher (OMN-1944)
+# Give events a brief window (0.5s) to flush, then send stop signal.
+# This runs in a background subshell to avoid blocking session-end.
+# Known limitation: if emit subshells above take >0.5s (e.g. socket latency),
+# events may not be enqueued before SIGTERM arrives and will be dropped.
+# Acceptable per CLAUDE.md failure modes (data loss OK, UI freeze is not).
+# Override via PUBLISHER_DRAIN_DELAY_SECONDS if needed.
+(
+    # Brief pause to allow async emit subshells above to complete
+    sleep "${PUBLISHER_DRAIN_DELAY_SECONDS:-0.5}"
+
+    # Stop publisher via __main__.py stop command (sends SIGTERM to PID)
+    "$PYTHON_CMD" -m omniclaude.publisher stop >> "$LOG_FILE" 2>&1 || {
+        # Fallback: try legacy daemon stop
+        "$PYTHON_CMD" -m omnibase_infra.runtime.emit_daemon.cli stop >> "$LOG_FILE" 2>&1 || true
+    }
+    log "Publisher stop signal sent"
+) &
+
 # Clean up correlation state
 if [[ -f "${HOOKS_LIB}/correlation_manager.py" ]]; then
     $PYTHON_CMD -c "

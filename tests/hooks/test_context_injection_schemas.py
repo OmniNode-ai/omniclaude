@@ -185,14 +185,12 @@ class TestModelHookContextInjectedPayload:
         assert "entity_id" in str(exc_info.value)
 
     def test_correlation_id_is_required(self) -> None:
-        """correlation_id is required for distributed tracing (explicit injection)."""
-        # correlation_id must be explicitly provided for deterministic testing
-        # (no auto-generation per CLAUDE.md design principles)
+        """correlation_id is required, not auto-generated (ONEX compliance)."""
         with pytest.raises(ValidationError) as exc_info:
             ModelHookContextInjectedPayload(
                 entity_id=make_entity_id(),
                 session_id="test",
-                # correlation_id intentionally omitted
+                # Missing correlation_id - should raise
                 causation_id=make_causation_id(),
                 emitted_at=make_timestamp(),
                 context_source=ContextSource.NONE,

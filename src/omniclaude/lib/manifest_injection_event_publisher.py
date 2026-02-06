@@ -2,368 +2,322 @@
 """
 Manifest Injection Event Publisher - Kafka Integration
 
-Publishes agent manifest injection events to Kafka for async logging and observability.
+Publishes manifest injection events to Kafka for async logging to PostgreSQL.
 Follows EVENT_BUS_INTEGRATION_PATTERNS standards with OnexEnvelopeV1 wrapping.
 
 Usage:
-    from omniclaude.lib.manifest_injection_event_publisher import publish_manifest_injection_event
+    from omniclaude.lib.manifest_injection_event_publisher import (
+        publish_manifest_injection_event,
+    )
 
     await publish_manifest_injection_event(
         agent_name="agent-api-architect",
-        agent_domain="api-development",
+        injection_type=ManifestInjectionEventType.CONTEXT_INJECTED,
         correlation_id=correlation_id,
-        session_id=session_id,
-        injection_success=True,
-        injection_duration_ms=45
+        pattern_count=5,
+        context_size_bytes=2048,
+        retrieval_duration_ms=150,
     )
 
 Features:
 - Non-blocking async publishing
 - Graceful degradation (logs error but doesn't fail execution)
-- Automatic producer connection management
+- Shared producer connection management (via kafka_publisher_base)
 - OnexEnvelopeV1 standard event envelope
+- Event types aligned with TopicBase constants
 - Correlation ID tracking for distributed tracing
-
-DESIGN RULE: Non-Blocking Event Emission
-=========================================
-Event emission is BEST-EFFORT, NEVER blocks execution.
-
-- Manifest injection MUST NOT depend on Kafka
-- If publishing fails: log + metric, never block
-- Buffer briefly, then drop if unavailable
-- This is an INVARIANT - do not "fix" by adding blocking
 """
 
 import asyncio
-import atexit
 import logging
 from datetime import UTC, datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 from uuid import UUID, uuid4
 
-from omniclaude.hooks.topics import TopicBase
-from omniclaude.lib.kafka_producer_utils import (
-    KafkaProducerManager,
+from omniclaude.hooks.topics import TopicBase, build_topic
+from omniclaude.lib.kafka_publisher_base import (
+    KAFKA_PUBLISH_TIMEOUT_SECONDS,
+    close_shared_producer,
     create_event_envelope,
+    get_kafka_topic_prefix,
+    publish_to_kafka,
+    publish_to_kafka_sync,
 )
 
 logger = logging.getLogger(__name__)
 
-class ManifestInjectionEventType(str, Enum):
-    """Agent manifest injection event types with standardized topic routing.
 
-    Values are derived from TopicBase to ensure single source of truth.
-    This prevents drift between event types and actual Kafka topics.
+# Event type enumeration aligned with TopicBase constants.
+# Values are payload discriminators, NOT topic names.
+# Actual Kafka topic is determined by TopicBase via build_topic().
+class ManifestInjectionEventType(StrEnum):
+    """Manifest injection event types aligned with TopicBase constants.
+
+    These values serve as event type discriminators in the payload envelope.
+    The Kafka topic is selected from TopicBase based on the event type:
+    - CONTEXT_INJECTED -> TopicBase.CONTEXT_INJECTED
+    - INJECTION_RECORDED -> TopicBase.INJECTION_RECORDED
+    - CONTEXT_RETRIEVAL_REQUESTED -> TopicBase.CONTEXT_RETRIEVAL_REQUESTED
+    - CONTEXT_RETRIEVAL_COMPLETED -> TopicBase.CONTEXT_RETRIEVAL_COMPLETED
     """
 
-    # Reference TopicBase constants - single source of truth for topic names
-    STARTED = TopicBase.MANIFEST_INJECTION_STARTED.value
-    COMPLETED = TopicBase.MANIFEST_INJECTED.value
-    FAILED = TopicBase.MANIFEST_INJECTION_FAILED.value
-
-    def get_topic_name(self) -> str:
-        """
-        Get Kafka topic name for this event type.
-
-        Returns topic following ONEX topic naming convention:
-        onex.evt.{producer}.{event-name}.v{n}
-        """
-        return self.value
+    CONTEXT_INJECTED = TopicBase.CONTEXT_INJECTED.value
+    INJECTION_RECORDED = TopicBase.INJECTION_RECORDED.value
+    CONTEXT_RETRIEVAL_REQUESTED = TopicBase.CONTEXT_RETRIEVAL_REQUESTED.value
+    CONTEXT_RETRIEVAL_COMPLETED = TopicBase.CONTEXT_RETRIEVAL_COMPLETED.value
 
 
-# Kafka producer manager (shared utilities from kafka_producer_utils)
-_producer_manager = KafkaProducerManager(name="manifest-injection")
-
-
-# Backwards-compatible aliases for tests that reference internal functions
-async def get_producer_lock():
-    """Get producer lock (delegates to KafkaProducerManager)."""
-    return await _producer_manager.get_lock()
-
-
-async def _get_kafka_producer():
-    """Get producer (delegates to KafkaProducerManager)."""
-    return await _producer_manager.get_producer()
+# Mapping from event type to TopicBase for topic routing
+_EVENT_TYPE_TO_TOPIC: dict[ManifestInjectionEventType, TopicBase] = {
+    ManifestInjectionEventType.CONTEXT_INJECTED: TopicBase.CONTEXT_INJECTED,
+    ManifestInjectionEventType.INJECTION_RECORDED: TopicBase.INJECTION_RECORDED,
+    ManifestInjectionEventType.CONTEXT_RETRIEVAL_REQUESTED: TopicBase.CONTEXT_RETRIEVAL_REQUESTED,
+    ManifestInjectionEventType.CONTEXT_RETRIEVAL_COMPLETED: TopicBase.CONTEXT_RETRIEVAL_COMPLETED,
+}
 
 
 async def publish_manifest_injection_event(
     agent_name: str,
-    correlation_id: str | UUID,
+    injection_type: ManifestInjectionEventType = ManifestInjectionEventType.INJECTION_RECORDED,
+    correlation_id: str | UUID | None = None,
     session_id: str | UUID | None = None,
+    pattern_count: int | None = None,
+    context_size_bytes: int | None = None,
+    context_source: str | None = None,
+    retrieval_duration_ms: int | None = None,
     agent_domain: str | None = None,
-    injection_success: bool = True,
-    injection_duration_ms: int | None = None,
-    yaml_path: str | None = None,
-    agent_version: str | None = None,
-    agent_capabilities: list[str] | None = None,
-    activation_patterns: list[str] | None = None,
+    min_confidence_threshold: float | None = None,
+    manifest_sections: list[str] | None = None,
+    injection_metadata: dict[str, Any] | None = None,
+    success: bool = True,
     error_message: str | None = None,
-    error_type: str | None = None,
-    routing_source: str | None = None,
-    event_type: ManifestInjectionEventType = ManifestInjectionEventType.COMPLETED,
     tenant_id: str = "default",
-    namespace: str = "onex",
+    namespace: str = "omninode",
     causation_id: str | None = None,
 ) -> bool:
     """
-    Publish agent manifest injection event to Kafka following EVENT_BUS_INTEGRATION_PATTERNS.
+    Publish manifest injection event to Kafka following EVENT_BUS_INTEGRATION_PATTERNS.
 
-    Events are wrapped in OnexEnvelopeV1 standard envelope and routed to separate topics
-    based on event type (started/completed/failed).
-
-    IMPORTANT: This function is non-blocking and best-effort. It will NOT raise
-    exceptions on failure - failures are logged but execution continues.
+    Events are wrapped in OnexEnvelopeV1 standard envelope and routed to the
+    appropriate TopicBase topic based on injection_type.
 
     Args:
-        agent_name: Name of the agent being loaded (e.g., "agent-api-architect")
-        correlation_id: Required correlation ID for distributed tracing (no auto-generation)
+        agent_name: Agent receiving the manifest injection
+        injection_type: Event type enum (determines topic routing)
+        correlation_id: Request correlation ID for distributed tracing
         session_id: Session ID for grouping related executions
-        agent_domain: Domain of the agent (e.g., "api-development", "testing")
-        injection_success: Whether the manifest injection succeeded
-        injection_duration_ms: Time to load and inject manifest
-        yaml_path: Path to the agent YAML file (optional, for debugging)
-        agent_version: Version of the agent definition
-        agent_capabilities: List of agent capabilities from manifest
-        activation_patterns: Patterns that triggered this agent selection
+        pattern_count: Number of patterns injected
+        context_size_bytes: Size of injected context in bytes
+        context_source: Source of the context (e.g., "database", "rag_query")
+        retrieval_duration_ms: Time to retrieve context in milliseconds
+        agent_domain: Domain of the agent for domain-specific context
+        min_confidence_threshold: Minimum confidence threshold for pattern inclusion
+        manifest_sections: List of manifest sections included
+        injection_metadata: Additional metadata about the injection
+        success: Whether injection succeeded
         error_message: Error details if failed
-        error_type: Error classification
-        routing_source: How the agent was selected (explicit, fuzzy_match, fallback)
-        event_type: Event type enum (STARTED/COMPLETED/FAILED)
         tenant_id: Tenant identifier for multi-tenancy
         namespace: Event namespace for routing
         causation_id: Causation ID for event chains
 
     Returns:
         bool: True if published successfully, False otherwise
+
+    Note:
+        - Uses correlation_id as partition key for workflow coherence
+        - Gracefully degrades when Kafka unavailable
     """
     try:
-        # Convert correlation_id to string (required parameter - no auto-generation)
-        correlation_id_str = str(correlation_id)
+        # Generate correlation_id if not provided
+        if correlation_id is None:
+            correlation_id = str(uuid4())
+        else:
+            correlation_id = str(correlation_id)
 
         if session_id is not None:
             session_id = str(session_id)
 
-        # Build event payload (everything except envelope metadata)
+        # Build event payload
         payload: dict[str, Any] = {
             "agent_name": agent_name,
-            "agent_domain": agent_domain,
             "session_id": session_id,
-            "injection_success": injection_success,
-            "injection_duration_ms": injection_duration_ms,
-            "yaml_path": yaml_path,
-            "agent_version": agent_version,
-            "agent_capabilities": agent_capabilities,
-            "activation_patterns": activation_patterns,
+            "pattern_count": pattern_count,
+            "context_size_bytes": context_size_bytes,
+            "context_source": context_source,
+            "retrieval_duration_ms": retrieval_duration_ms,
+            "agent_domain": agent_domain,
+            "min_confidence_threshold": min_confidence_threshold,
+            "manifest_sections": manifest_sections,
+            "injection_metadata": injection_metadata,
+            "success": success,
             "error_message": error_message,
-            "error_type": error_type,
-            "routing_source": routing_source,
-            "emitted_at": datetime.now(UTC).isoformat(),
+            "recorded_at": datetime.now(UTC).isoformat(),
         }
 
         # Remove None values to keep payload compact
         payload = {k: v for k, v in payload.items() if v is not None}
 
+        # Build schema ref for this event type
+        schema_ref = f"registry://{namespace}/manifest/injection_{injection_type.name.lower()}/v1"
+
         # Wrap payload in OnexEnvelopeV1 standard envelope
         envelope = create_event_envelope(
-            event_type_value=event_type.value,
-            event_type_name=event_type.name.lower(),
+            event_type_value=injection_type.value,
             payload=payload,
-            correlation_id=correlation_id_str,
-            schema_domain="manifest-injection",
+            correlation_id=correlation_id,
+            schema_ref=schema_ref,
             source="omniclaude",
             tenant_id=tenant_id,
             namespace=namespace,
             causation_id=causation_id,
         )
 
-        # Publish via shared producer manager
-        published = await _producer_manager.publish(
-            envelope=envelope,
-            topic_base_value=event_type.get_topic_name(),
-            partition_key=correlation_id_str,
+        # Build ONEX-compliant topic name using TopicBase
+        topic_prefix = get_kafka_topic_prefix()
+        topic_base = _EVENT_TYPE_TO_TOPIC.get(
+            injection_type, TopicBase.INJECTION_RECORDED
         )
+        topic = build_topic(topic_prefix, topic_base)
 
-        if published:
+        # Publish to Kafka
+        result = await publish_to_kafka(topic, envelope, correlation_id)
+
+        if result:
             logger.debug(
-                "Published manifest injection event: "
-                "agent=%s | correlation_id=%s",
+                "Published manifest injection event: %s | agent=%s | "
+                "correlation_id=%s | topic=%s",
+                injection_type.value,
                 agent_name,
-                correlation_id_str,
+                correlation_id,
+                topic,
             )
-        return published
+        return result
 
-    except Exception as e:
-        # Log error but don't fail - observability shouldn't break execution
-        logger.warning(f"Failed to publish manifest injection event: {e}")
+    except TimeoutError:
+        logger.error(
+            "Timeout publishing manifest injection event to Kafka "
+            "(injection_type=%s, agent_name=%s, timeout=%ss)",
+            injection_type.value,
+            agent_name,
+            KAFKA_PUBLISH_TIMEOUT_SECONDS,
+            extra={"correlation_id": correlation_id},
+        )
+        return False
+
+    except Exception:
+        logger.error(
+            "Failed to publish manifest injection event: %s",
+            injection_type.value if isinstance(injection_type, ManifestInjectionEventType) else injection_type,
+            exc_info=True,
+        )
         return False
 
 
-async def publish_manifest_injection_start(
+async def publish_context_injected(
     agent_name: str,
-    correlation_id: str | UUID,
-    **kwargs: Any,
+    correlation_id: str | UUID | None = None,
+    pattern_count: int | None = None,
+    context_size_bytes: int | None = None,
+    context_source: str | None = None,
+    retrieval_duration_ms: int | None = None,
+    **kwargs,
 ) -> bool:
     """
-    Publish manifest injection start event.
+    Publish context injection completed event.
 
-    Convenience method for publishing at the start of manifest injection.
-    Publishes to topic: onex.evt.omniclaude.manifest-injection-started.v1
+    Convenience method for publishing when context has been injected.
+    Routes to TopicBase.CONTEXT_INJECTED.
     """
     return await publish_manifest_injection_event(
         agent_name=agent_name,
+        injection_type=ManifestInjectionEventType.CONTEXT_INJECTED,
         correlation_id=correlation_id,
-        event_type=ManifestInjectionEventType.STARTED,
+        pattern_count=pattern_count,
+        context_size_bytes=context_size_bytes,
+        context_source=context_source,
+        retrieval_duration_ms=retrieval_duration_ms,
         **kwargs,
     )
 
 
-async def publish_manifest_injection_complete(
+async def publish_injection_recorded(
     agent_name: str,
-    correlation_id: str | UUID,
-    injection_duration_ms: int | None = None,
-    **kwargs: Any,
+    correlation_id: str | UUID | None = None,
+    pattern_count: int | None = None,
+    context_size_bytes: int | None = None,
+    **kwargs,
 ) -> bool:
     """
-    Publish manifest injection complete event.
+    Publish injection recorded event.
 
-    Convenience method for publishing after successful manifest injection.
-    Publishes to topic: onex.evt.omniclaude.manifest-injected.v1
+    Convenience method for recording injection metadata.
+    Routes to TopicBase.INJECTION_RECORDED.
     """
     return await publish_manifest_injection_event(
         agent_name=agent_name,
+        injection_type=ManifestInjectionEventType.INJECTION_RECORDED,
         correlation_id=correlation_id,
-        injection_duration_ms=injection_duration_ms,
-        injection_success=True,
-        event_type=ManifestInjectionEventType.COMPLETED,
+        pattern_count=pattern_count,
+        context_size_bytes=context_size_bytes,
         **kwargs,
     )
 
 
-async def publish_manifest_injection_failed(
-    agent_name: str,
-    correlation_id: str | UUID,
-    error_message: str,
-    error_type: str | None = None,
-    **kwargs: Any,
-) -> bool:
-    """
-    Publish manifest injection failed event.
-
-    Convenience method for publishing after manifest injection failure.
-    Publishes to topic: onex.evt.omniclaude.manifest-injection-failed.v1
-    """
-    return await publish_manifest_injection_event(
-        agent_name=agent_name,
-        correlation_id=correlation_id,
-        error_message=error_message,
-        error_type=error_type,
-        injection_success=False,
-        event_type=ManifestInjectionEventType.FAILED,
-        **kwargs,
-    )
-
-
-async def close_producer() -> None:
-    """Close Kafka producer on shutdown."""
-    await _producer_manager.close()
-
-
-# Register cleanup on interpreter exit
-atexit.register(_producer_manager.cleanup_sync)
+# Re-export close for backwards compatibility
+close_producer = close_shared_producer
 
 
 # Synchronous wrapper for backward compatibility
 def publish_manifest_injection_event_sync(
-    agent_name: str,
-    **kwargs: Any,
+    agent_name: str, **kwargs
 ) -> bool:
     """
     Synchronous wrapper for publish_manifest_injection_event.
 
-    Handles both sync and async calling contexts safely:
-    - From sync context: Creates new event loop and runs directly
-    - From async context: Uses ThreadPoolExecutor to avoid nested loop issues
-
-    Note: ThreadPoolExecutor per-call overhead is intentional for correctness.
-    The alternative (reusing executors) adds complexity and state management
-    concerns that aren't justified for event publishing use cases.
-
-    Args:
-        agent_name: The agent whose manifest is being injected
-        **kwargs: Additional arguments passed to publish_manifest_injection_event
-
-    Returns:
-        bool: True if event was published successfully
+    Handles running/non-running event loop scenarios.
+    Use async version when possible for best performance.
     """
-    import concurrent.futures
-
-    # Check if we're already in an async context
-    try:
-        asyncio.get_running_loop()
-        # Already in async context - use thread pool to avoid nested loop issues
-        logger.debug("publish_manifest_injection_event_sync called from async context, using ThreadPoolExecutor")
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            future = executor.submit(
-                asyncio.run,
-                publish_manifest_injection_event(
-                    agent_name=agent_name,
-                    **kwargs,
-                ),
-            )
-            return future.result()
-    except RuntimeError:
-        # No running loop - safe to use asyncio.run() directly
-        return asyncio.run(
-            publish_manifest_injection_event(
-                agent_name=agent_name,
-                **kwargs,
-            )
-        )
+    return publish_to_kafka_sync(
+        publish_manifest_injection_event(agent_name=agent_name, **kwargs)
+    )
 
 
 if __name__ == "__main__":
     # Test manifest injection event publishing
-    async def test() -> None:
+    async def test():
         logging.basicConfig(level=logging.DEBUG)
 
-        correlation_id = str(uuid4())
-        session_id = str(uuid4())
-
-        print("Testing manifest injection events...")
-        print(f"Correlation ID: {correlation_id}")
-
-        # Test manifest injection start
-        success_start = await publish_manifest_injection_start(
+        # Test context injected event
+        print("Testing context injected event...")
+        success_injected = await publish_context_injected(
             agent_name="agent-api-architect",
-            correlation_id=correlation_id,
-            session_id=session_id,
-            agent_domain="api-development",
-        )
-        print(f"Start event: {'OK' if success_start else 'FAILED'}")
-
-        # Test manifest injection complete
-        success_complete = await publish_manifest_injection_complete(
-            agent_name="agent-api-architect",
-            correlation_id=correlation_id,
-            session_id=session_id,
-            agent_domain="api-development",
-            injection_duration_ms=45,
-            yaml_path="/path/to/agent-api-architect.yaml",
-            agent_capabilities=["api_design", "openapi_generation"],
-        )
-        print(f"Complete event: {'OK' if success_complete else 'FAILED'}")
-
-        # Test manifest injection failed
-        success_failed = await publish_manifest_injection_failed(
-            agent_name="agent-nonexistent",
             correlation_id=str(uuid4()),
-            error_message="Agent YAML file not found",
-            error_type="FileNotFoundError",
-            session_id=session_id,
+            pattern_count=5,
+            context_size_bytes=2048,
+            context_source="database",
+            retrieval_duration_ms=150,
         )
-        print(f"Failed event: {'OK' if success_failed else 'FAILED'}")
+        print(f"Context injected event published: {success_injected}")
 
+        # Test injection recorded event
+        print("\nTesting injection recorded event...")
+        success_recorded = await publish_injection_recorded(
+            agent_name="agent-researcher",
+            correlation_id=str(uuid4()),
+            pattern_count=3,
+            context_size_bytes=1024,
+        )
+        print(f"Injection recorded event published: {success_recorded}")
+
+        # Close producer
+        print("\nClosing producer...")
         await close_producer()
+
+        print("\n" + "=" * 60)
+        print("Test Summary:")
+        print(f"  Context Injected: {'OK' if success_injected else 'FAIL'}")
+        print(f"  Injection Recorded: {'OK' if success_recorded else 'FAIL'}")
+        print("=" * 60)
 
     asyncio.run(test())

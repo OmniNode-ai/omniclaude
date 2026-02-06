@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
-"""
-Agent Polymorphic Transformation Helper
+"""Agent Polymorphic Transformation Helper.
 
 Loads YAML agent configs and formats them for identity assumption.
 Enables agent-workflow-coordinator to transform into any agent.
 
 Now with integrated transformation event logging to Kafka for observability.
+
+Design Rule: Fail Closed
+    When the transformation validator raises an unexpected internal error
+    (not a validation failure), this module treats it as a validation failure
+    and rejects the transformation. This prevents validator bugs from silently
+    allowing invalid transformations to proceed.
 """
 
 import asyncio
@@ -29,29 +34,14 @@ try:
 
     KAFKA_AVAILABLE = True
 except ImportError:  # nosec B110 - Optional dependency, graceful degradation
-    logger.debug(
+    logger.warning(
         "transformation_event_publisher not available, transformation events will not be logged"
     )
     KAFKA_AVAILABLE = False
 
-# Import transformation validator
-try:
-    from omniclaude.lib.core.transformation_validator import (
-        TransformationValidationResult,
-        TransformationValidator,
-        ValidatorOutcome,
-    )
-
-    VALIDATOR_AVAILABLE = True
-except ImportError:  # nosec B110 - Optional dependency, graceful degradation
-    logger.debug(
-        "transformation_validator not available, transformations will not be validated"
-    )
-    VALIDATOR_AVAILABLE = False
-    # Stub types for when validator is not available
-    ValidatorOutcome = None  # type: ignore[misc,assignment]
-    TransformationValidator = None  # type: ignore[misc,assignment]
-    TransformationValidationResult = None  # type: ignore[misc,assignment]
+# Import transformation validator (unconditional - always required for routing safety,
+# unlike Kafka which is an optional observability integration)
+from omniclaude.lib.core.transformation_validator import TransformationValidator
 
 
 @dataclass
@@ -135,11 +125,10 @@ class AgentTransformer:
     """Loads and transforms agent identities from YAML configs."""
 
     def __init__(self, config_dir: Path | None = None):
-        """
-        Initialize transformer.
+        """Initialize transformer.
 
         Args:
-            config_dir: Directory containing agent-*.yaml files
+            config_dir: Directory containing agent-*.yaml files.
         """
         if config_dir is None:
             # Default to consolidated agent definitions location (claude/agents/)
@@ -147,6 +136,7 @@ class AgentTransformer:
             config_dir = Path(__file__).parent.parent.parent / "agents"
 
         self.config_dir = Path(config_dir)
+        self._validator = TransformationValidator()
 
         if not self.config_dir.exists():
             raise ValueError(f"Config directory not found: {self.config_dir}")
@@ -247,129 +237,80 @@ class AgentTransformer:
         user_request: str | None = None,
         routing_confidence: float | None = None,
         routing_strategy: str | None = None,
-        skip_validation: bool = False,
     ) -> str:
-        """
-        Load agent, validate transformation, log event to Kafka, and return formatted prompt.
+        """Load agent, log transformation event to Kafka, and return formatted prompt.
 
-        This is the RECOMMENDED method for transformations as it provides:
-        - Transformation validation (prevents invalid self-transformations)
-        - Full observability via Kafka events
-        - Validation outcome tracking for metrics
+        This is the RECOMMENDED method for transformations as it provides full
+        observability. Includes transformation validation with fail-closed
+        error handling.
+
+        Design Rule: Fail Closed
+            If the transformation validator raises an unexpected internal error,
+            this method treats it as a validation failure and raises ValueError
+            rather than allowing the transformation to proceed.
 
         Args:
-            agent_name: Agent to transform into
-            source_agent: Original agent identity (default: "polymorphic-agent")
-            transformation_reason: Why this transformation occurred
-            correlation_id: Request correlation ID for tracing
-            user_request: Original user request
-            routing_confidence: Router confidence score (0.0-1.0)
-            routing_strategy: Routing strategy used
-            skip_validation: Skip validation (use with caution)
+            agent_name: Agent to transform into.
+            source_agent: Original agent identity (default: "polymorphic-agent").
+            transformation_reason: Why this transformation occurred.
+            correlation_id: Request correlation ID for tracing.
+            user_request: Original user request.
+            routing_confidence: Router confidence score (0.0-1.0).
+            routing_strategy: Routing strategy used.
 
         Returns:
-            Formatted prompt for identity assumption
+            Formatted prompt for identity assumption.
 
         Raises:
-            ValueError: If transformation is blocked by validator
+            ValueError: If transformation validation fails or the validator
+                encounters an internal error (fail closed).
         """
         start_time = time.time()
-        validation_result: "TransformationValidationResult | None" = None
-        validation_outcome: str | None = None
-        validation_metrics: dict | None = None
+
+        # Validate transformation before proceeding.
+        # Fail closed: if the validator itself raises an unexpected error,
+        # treat it as a validation failure rather than allowing the
+        # transformation to proceed unchecked.
+        try:
+            validation_result = self._validator.validate(
+                from_agent=source_agent,
+                to_agent=agent_name,
+                reason=transformation_reason or "",
+                confidence=routing_confidence,
+                user_request=user_request,
+            )
+        except Exception as exc:
+            # Fail closed: validator internal errors reject the transformation
+            logger.error(
+                "Transformation validator raised unexpected error (fail closed): %s",
+                exc,
+            )
+            raise ValueError(
+                f"Transformation validation failed closed due to validator error: {exc}"
+            ) from exc
+
+        if not validation_result.is_valid:
+            logger.warning(
+                "Transformation rejected by validator: %s",
+                validation_result.error_message,
+            )
+            raise ValueError(
+                f"Transformation validation failed: {validation_result.error_message}"
+            )
+
+        if validation_result.warning_message:
+            logger.warning(
+                "Transformation warning: %s", validation_result.warning_message
+            )
 
         try:
-            # Step 1: Validate transformation (unless skipped)
-            # DESIGN RULE: Fail Closed - validator errors block transformation
-            if VALIDATOR_AVAILABLE and not skip_validation:
-                try:
-                    validator = TransformationValidator()
-                    validation_result = validator.validate(
-                        from_agent=source_agent,
-                        to_agent=agent_name,
-                        reason=transformation_reason or "",
-                        confidence=routing_confidence,
-                        user_request=user_request,
-                    )
-                    validation_outcome = validation_result.outcome.value
-                    validation_metrics = validation_result.metrics
-                except Exception as validator_error:
-                    # FAIL CLOSED: Validator internal errors block transformation
-                    # This is defense-in-depth; validator.validate() has its own
-                    # fail-closed handling, but we handle edge cases here too
-                    logger.error(
-                        f"Validator internal error (fail closed): {validator_error}"
-                    )
-                    # Guard against ValidatorOutcome being None (defensive: import
-                    # could have partially failed despite VALIDATOR_AVAILABLE=True)
-                    blocked_value = ValidatorOutcome.BLOCKED.value if ValidatorOutcome is not None else "blocked"
-                    blocked_outcome = ValidatorOutcome.BLOCKED if ValidatorOutcome is not None else None
-                    validation_outcome = blocked_value
-                    validation_metrics = {
-                        "block_reason": "validator_internal_error",
-                        "error_type": type(validator_error).__name__,
-                    }
-                    if TransformationValidationResult is not None and blocked_outcome is not None:
-                        validation_result = TransformationValidationResult(
-                            outcome=blocked_outcome,
-                            is_valid=False,
-                            error_message=f"Validator internal error (fail closed): {validator_error}",
-                            metrics=validation_metrics,
-                        )
-                    else:
-                        # Validator types unavailable - create a minimal stub
-                        # that satisfies the is_valid check below
-                        class _BlockedStub:
-                            is_valid = False
-                            error_message = f"Validator internal error (fail closed): {validator_error}"
-                            warning_message = None
-                        validation_result = _BlockedStub()  # type: ignore[assignment]
-
-                # Log validation result
-                if validation_result.warning_message:
-                    logger.warning(
-                        f"Transformation validation warning: {validation_result.warning_message}"
-                    )
-
-                # Block invalid transformations
-                if not validation_result.is_valid:
-                    transformation_duration_ms = int((time.time() - start_time) * 1000)
-
-                    # Emit blocked transformation event
-                    if KAFKA_AVAILABLE:
-                        await publish_transformation_event(
-                            source_agent=source_agent,
-                            target_agent=agent_name,
-                            transformation_reason=transformation_reason
-                            or f"Attempted to transform to {agent_name}",
-                            correlation_id=correlation_id,
-                            user_request=user_request,
-                            routing_confidence=routing_confidence,
-                            routing_strategy=routing_strategy,
-                            transformation_duration_ms=transformation_duration_ms,
-                            success=False,
-                            error_message=validation_result.error_message,
-                            error_type="ValidationError",
-                            event_type=TransformationEventType.FAILED,
-                            validation_outcome=validation_outcome,
-                            validation_metrics=validation_metrics,
-                        )
-
-                    logger.warning(
-                        f"Transformation blocked: {source_agent} → {agent_name} | "
-                        f"Reason: {validation_result.error_message}"
-                    )
-                    raise ValueError(
-                        f"Transformation blocked: {validation_result.error_message}"
-                    )
-
-            # Step 2: Load agent identity
+            # Load agent identity
             identity = self.load_agent(agent_name)
 
             # Calculate transformation duration
             transformation_duration_ms = int((time.time() - start_time) * 1000)
 
-            # Step 3: Log transformation event to Kafka (async, non-blocking)
+            # Log transformation event to Kafka (async, non-blocking)
             if KAFKA_AVAILABLE:
                 await publish_transformation_event(
                     source_agent=source_agent,
@@ -383,28 +324,20 @@ class AgentTransformer:
                     transformation_duration_ms=transformation_duration_ms,
                     success=True,
                     event_type=TransformationEventType.COMPLETED,
-                    validation_outcome=validation_outcome,
-                    validation_metrics=validation_metrics,
                 )
                 logger.debug(
-                    f"Transformation: {source_agent} → {identity.name} | "
-                    f"validation={validation_outcome} | "
-                    f"duration={transformation_duration_ms}ms"
+                    f"Logged transformation: {source_agent} → {identity.name} "
+                    f"(duration={transformation_duration_ms}ms)"
                 )
             else:
-                logger.debug(
-                    f"Transformation {source_agent} → {identity.name} "
-                    f"(validation={validation_outcome}, events unavailable)"
+                logger.warning(
+                    f"Transformation {source_agent} → {identity.name} not logged (Kafka unavailable)"
                 )
 
             return identity.format_assumption_prompt()
 
-        except ValueError:
-            # Re-raise validation errors (already logged above)
-            raise
-
         except Exception as e:
-            # Log failed transformation (non-validation errors)
+            # Log failed transformation
             transformation_duration_ms = int((time.time() - start_time) * 1000)
 
             if KAFKA_AVAILABLE:
@@ -422,11 +355,9 @@ class AgentTransformer:
                     error_message=str(e),
                     error_type=type(e).__name__,
                     event_type=TransformationEventType.FAILED,
-                    validation_outcome=validation_outcome,
-                    validation_metrics=validation_metrics,
                 )
                 logger.error(
-                    f"Failed transformation: {source_agent} → {agent_name} | error={e}"
+                    f"Logged failed transformation: {source_agent} → {agent_name} (error={e})"
                 )
 
             # Re-raise the exception
@@ -441,71 +372,38 @@ class AgentTransformer:
         user_request: str | None = None,
         routing_confidence: float | None = None,
         routing_strategy: str | None = None,
-        skip_validation: bool = False,
     ) -> str:
         """
         Synchronous wrapper for transform_with_logging.
 
-        Handles both sync and async calling contexts safely:
-        - From sync context: Creates new event loop and runs directly
-        - From async context: Uses ThreadPoolExecutor to avoid nested loop issues
-
-        Note: ThreadPoolExecutor per-call overhead is intentional for correctness.
-        The alternative (reusing executors) adds complexity and state management
-        concerns that aren't justified for transformation use cases.
+        Use async version when possible. This creates event loop if needed.
 
         Args:
-            agent_name: The agent to transform into
-            source_agent: The source agent (default: polymorphic-agent)
-            transformation_reason: Why the transformation occurred
-            correlation_id: Optional correlation ID for tracing
-            user_request: The user request that triggered transformation
-            routing_confidence: Confidence score from routing
-            routing_strategy: Strategy used for routing
-            skip_validation: Whether to skip validation checks
+            Same as transform_with_logging
 
         Returns:
             Formatted prompt for identity assumption
-
-        Raises:
-            ValueError: If transformation is blocked by validator
         """
-        import concurrent.futures
-
-        # Check if we're already in an async context
+        # Note: asyncio.get_event_loop() is deprecated since Python 3.10.
+        # Use get_running_loop() to check for existing loop, then create new if needed.
         try:
-            asyncio.get_running_loop()
-            # Already in async context - use thread pool to avoid nested loop issues
-            logger.debug("transform_sync_with_logging called from async context, using ThreadPoolExecutor")
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(
-                    asyncio.run,
-                    self.transform_with_logging(
-                        agent_name=agent_name,
-                        source_agent=source_agent,
-                        transformation_reason=transformation_reason,
-                        correlation_id=correlation_id,
-                        user_request=user_request,
-                        routing_confidence=routing_confidence,
-                        routing_strategy=routing_strategy,
-                        skip_validation=skip_validation,
-                    ),
-                )
-                return future.result()
+            loop = asyncio.get_running_loop()
         except RuntimeError:
-            # No running loop - safe to use asyncio.run() directly
-            return asyncio.run(
-                self.transform_with_logging(
-                    agent_name=agent_name,
-                    source_agent=source_agent,
-                    transformation_reason=transformation_reason,
-                    correlation_id=correlation_id,
-                    user_request=user_request,
-                    routing_confidence=routing_confidence,
-                    routing_strategy=routing_strategy,
-                    skip_validation=skip_validation,
-                )
+            # No running loop - create a new one for sync execution
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        return loop.run_until_complete(
+            self.transform_with_logging(
+                agent_name=agent_name,
+                source_agent=source_agent,
+                transformation_reason=transformation_reason,
+                correlation_id=correlation_id,
+                user_request=user_request,
+                routing_confidence=routing_confidence,
+                routing_strategy=routing_strategy,
             )
+        )
 
 
 def main() -> None:

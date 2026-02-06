@@ -53,6 +53,37 @@ _SCRIPT_DIR = Path(__file__).parent
 if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
 
+# Import hook_event_adapter with graceful fallback
+_get_hook_event_adapter: Callable[[], Any] | None = None
+try:
+    from hook_event_adapter import get_hook_event_adapter
+
+    _get_hook_event_adapter = get_hook_event_adapter
+except ImportError:
+    _get_hook_event_adapter = None
+
+# Import emit_event and secret redactor for routing decision emission.
+# Uses __package__ check for proper import resolution instead of
+# fragile string-based error detection on ImportError messages.
+_emit_event_fn: Callable[..., bool] | None = None
+_redact_secrets_fn: Callable[[str], str] | None = None
+
+try:
+    if __package__:
+        from .emit_client_wrapper import emit_event as _emit_event_fn
+        from .secret_redactor import redact_secrets as _redact_secrets_fn
+    else:
+        from emit_client_wrapper import (
+            emit_event as _emit_event_fn,  # type: ignore[no-redef]
+        )
+        from secret_redactor import (
+            redact_secrets as _redact_secrets_fn,  # type: ignore[no-redef]
+        )
+except ImportError:
+    _emit_event_fn = None
+    _redact_secrets_fn = None
+
+
 logger = logging.getLogger(__name__)
 
 # Canonical routing path values for metrics (from OMN-1893)
@@ -64,10 +95,10 @@ def _compute_routing_path(method: str, event_attempted: bool) -> str:
     Map method to canonical routing_path.
 
     Logic:
-    - event_attempted=False → "local" (never tried event path)
-    - event_attempted=True AND method=event_based → "event"
-    - event_attempted=True AND method=fallback → "hybrid" (tried event, fell back)
-    - Unknown method → "local" with loud warning
+    - event_attempted=False -> "local" (never tried event path)
+    - event_attempted=True AND method=event_based -> "event"
+    - event_attempted=True AND method=fallback -> "hybrid" (tried event, fell back)
+    - Unknown method -> "local" with loud warning
 
     Args:
         method: The routing method used (event_based, fallback, etc.)
@@ -118,48 +149,6 @@ class RoutingPath(str, Enum):
     HYBRID = "hybrid"  # Combination of approaches
 
 
-# Import emit_client_wrapper for event emission (optional)
-_emit_routing_event: Callable[..., bool] | None = None
-try:
-    from emit_client_wrapper import emit_event
-
-    _emit_routing_event = emit_event
-except ImportError:
-    logger.debug(
-        "emit_client_wrapper not available, routing events will not be emitted"
-    )
-
-# Import secret redaction for prompt_preview sanitization (optional)
-_redact_secrets: Callable[[str], str] | None = None
-try:
-    from secret_redactor import redact_secrets
-
-    _redact_secrets = redact_secrets
-except ImportError:
-    logger.debug("secret_redactor not available, prompt_preview will not be sanitized")
-
-# Import cohort assignment for A/B testing tracking (optional)
-_assign_cohort: Callable[..., Any] | None = None
-try:
-    # Find project root by searching for pyproject.toml (more robust than counting parents)
-    _current = Path(__file__).resolve()
-    _project_root: Path | None = None
-    for _parent in [_current] + list(_current.parents):
-        if (_parent / "pyproject.toml").exists():
-            _project_root = _parent
-            break
-
-    if _project_root is not None:
-        _src_dir = _project_root / "src"
-        if _src_dir.exists() and str(_src_dir) not in sys.path:
-            sys.path.insert(0, str(_src_dir))
-
-    from omniclaude.hooks.cohort_assignment import assign_cohort
-
-    _assign_cohort = assign_cohort
-except ImportError:
-    logger.debug("cohort_assignment not available, A/B testing will not be tracked")
-
 # Import AgentRouter for intelligent routing
 _AgentRouter: type | None = None
 _router_instance: Any = None
@@ -209,66 +198,80 @@ def _get_router() -> Any:
     return _router_instance
 
 
-def _emit_routing_decision(
-    correlation_id: str,
-    selected_agent: str,
-    confidence: float,
-    routing_method: str,
-    routing_policy: str,
-    routing_path: str,
-    latency_ms: int,
-    prompt_preview: str,
-    cohort: str | None = None,
-    cohort_seed: int | None = None,
-) -> None:
-    """
-    Emit routing decision event for observability.
+def _sanitize_prompt_preview(prompt: str, max_length: int = 100) -> str:
+    """Create a sanitized, truncated prompt preview.
 
-    Non-blocking, best-effort - failures are logged but don't affect routing.
-    Includes A/B testing cohort assignment for experiment tracking.
+    Truncates to max_length and redacts any secrets using the
+    existing secret_redactor module.
+
+    Args:
+        prompt: Raw user prompt text.
+        max_length: Maximum length for the preview.
+
+    Returns:
+        Sanitized and truncated prompt preview.
     """
-    if _emit_routing_event is None:
+    preview = prompt[:max_length] if prompt else ""
+    if _redact_secrets_fn is not None:
+        preview = _redact_secrets_fn(preview)
+    return preview
+
+
+def _emit_routing_decision(
+    result: dict[str, Any],
+    prompt: str,
+    correlation_id: str,
+) -> None:
+    """Emit routing decision event via the emit daemon.
+
+    Non-blocking: logs at debug level on failure but never raises.
+    Uses emit_event(event_type, payload) with correct argument order.
+
+    The event type ``routing.decision`` follows the daemon's semantic naming
+    convention (``{domain}.{action}``). The daemon's EventRegistry maps this
+    to the appropriate Kafka topic following ONEX canonical format:
+    ``onex.evt.omniclaude.routing-decision.v1``.
+
+    Args:
+        result: Routing decision result dictionary.
+        prompt: Original user prompt (will be sanitized before emission).
+        correlation_id: Correlation ID for tracking.
+    """
+    if _emit_event_fn is None:
+        logger.debug("emit_event not available, skipping routing decision emission")
         return
 
     try:
-        # Sanitize prompt_preview before emission to redact secrets
-        sanitized_preview = ""
-        if prompt_preview:
-            sanitized = (
-                _redact_secrets(prompt_preview) if _redact_secrets else prompt_preview
-            )
-            sanitized_preview = sanitized[:100]
-
-        event = {
-            "event_type": "routing.decision",
+        payload: dict[str, object] = {
             "correlation_id": correlation_id,
-            "selected_agent": selected_agent,
-            "confidence": confidence,
-            "routing_method": routing_method,
-            "routing_policy": routing_policy,
-            "routing_path": routing_path,
-            "latency_ms": latency_ms,
-            "prompt_preview": sanitized_preview,
-            # A/B testing cohort tracking
-            "cohort": cohort,
-            "cohort_seed": cohort_seed,
+            "selected_agent": result.get("selected_agent", DEFAULT_AGENT),
+            "confidence": result.get("confidence", 0.5),
+            "routing_method": result.get(
+                "routing_method", RoutingMethod.FALLBACK.value
+            ),
+            "routing_policy": result.get(
+                "routing_policy", RoutingPolicy.FALLBACK_DEFAULT.value
+            ),
+            "routing_path": result.get("routing_path", "local"),
+            "latency_ms": result.get("latency_ms", 0),
+            "domain": result.get("domain", ""),
+            "reasoning": result.get("reasoning", ""),
+            "prompt_preview": _sanitize_prompt_preview(prompt),
+            "event_attempted": result.get("event_attempted", False),
         }
-        # Remove None values
-        event = {k: v for k, v in event.items() if v is not None}
-        # Fire-and-forget - emit_event is non-blocking
-        _emit_routing_event("routing.decision", event)
+
+        # Correct argument order: emit_event(event_type, payload)
+        _emit_event_fn("routing.decision", payload)
     except Exception as e:
-        # Log but don't fail - observability is best-effort
-        logger.debug(f"Failed to emit routing decision event: {e}")
+        # Non-blocking: routing emission failure must not break routing
+        logger.debug("Failed to emit routing decision: %s", e)
 
 
 def route_via_events(
     prompt: str,
     correlation_id: str,
     timeout_ms: int = 5000,  # noqa: ARG001 - Reserved for future event-based routing
-    session_id: str | None = None,
-    user_id: str | None = None,
-    repo_path: str | None = None,
+    session_id: str | None = None,  # noqa: ARG001 - Reserved for future use
 ) -> dict[str, Any]:
     """
     Route user prompt using intelligent trigger matching and confidence scoring.
@@ -284,41 +287,48 @@ def route_via_events(
             This parameter is accepted for API compatibility but not used.
             When event-based routing is implemented, this will control the
             timeout for the request-response cycle.
-        session_id: Session ID for A/B cohort assignment (optional)
-        user_id: User ID for sticky cohort assignment across sessions (optional)
-        repo_path: Repository path for repo-level cohort stickiness (optional)
+        session_id: Session ID (reserved for future use)
 
     Returns:
         Routing decision dictionary with routing_path signal
-
-    Note:
-        Cohort assignment priority: user_id > repo_path > session_id
-        Using user_id or repo_path provides stickier cohort assignment that
-        persists across sessions.
     """
     start_time = time.time()
     event_attempted = False  # Local routing, no event bus
 
-    # A/B testing cohort assignment (for experiment tracking)
-    # Priority: user_id > repo_path > session_id for stickier assignment
-    cohort: str | None = None
-    cohort_seed: int | None = None
-    identity_type: str | None = None
-    if _assign_cohort is not None and session_id:
-        try:
-            assignment = _assign_cohort(
-                session_id, user_id=user_id, repo_path=repo_path
-            )
-            cohort = assignment.cohort.value
-            cohort_seed = assignment.assignment_seed
-            identity_type = assignment.identity_type.value
-        except Exception as e:
-            logger.debug(f"Cohort assignment failed: {e}")
+    # Validate inputs before processing
+    if not isinstance(prompt, str) or not prompt.strip():
+        logger.warning("Invalid or empty prompt received, using fallback")
+        return {
+            "selected_agent": DEFAULT_AGENT,
+            "confidence": 0.5,
+            "candidates": [],
+            "reasoning": "Invalid input - empty or non-string prompt",
+            "routing_method": RoutingMethod.FALLBACK.value,
+            "routing_policy": RoutingPolicy.FALLBACK_DEFAULT.value,
+            "routing_path": RoutingPath.LOCAL.value,
+            "method": RoutingPolicy.FALLBACK_DEFAULT.value,
+            "latency_ms": 0,
+            "domain": "workflow_coordination",
+            "purpose": "Intelligent coordinator for development workflows",
+            "event_attempted": False,
+        }
 
-    # Build context for routing
-    context: dict[str, Any] = {}
-    if repo_path:
-        context["repo_path"] = repo_path
+    if not isinstance(correlation_id, str) or not correlation_id.strip():
+        logger.warning("Invalid or empty correlation_id, using fallback")
+        return {
+            "selected_agent": DEFAULT_AGENT,
+            "confidence": 0.5,
+            "candidates": [],
+            "reasoning": "Invalid input - empty or non-string correlation_id",
+            "routing_method": RoutingMethod.FALLBACK.value,
+            "routing_policy": RoutingPolicy.FALLBACK_DEFAULT.value,
+            "routing_path": RoutingPath.LOCAL.value,
+            "method": RoutingPolicy.FALLBACK_DEFAULT.value,
+            "latency_ms": 0,
+            "domain": "workflow_coordination",
+            "purpose": "Intelligent coordinator for development workflows",
+            "event_attempted": False,
+        }
 
     # Attempt intelligent routing via AgentRouter
     router = _get_router()
@@ -334,7 +344,7 @@ def route_via_events(
 
     if router is not None:
         try:
-            recommendations = router.route(prompt, context, max_recommendations=5)
+            recommendations = router.route(prompt, max_recommendations=5)
 
             if recommendations:
                 # Build candidates from ALL recommendations (sorted by score descending)
@@ -417,26 +427,8 @@ def route_via_events(
         "event_attempted": event_attempted,
     }
 
-    # Add cohort information if available (for A/B testing)
-    if cohort is not None:
-        result["cohort"] = cohort
-        result["cohort_seed"] = cohort_seed
-        if identity_type is not None:
-            result["cohort_identity_type"] = identity_type
-
     # Emit routing decision event for observability (non-blocking)
-    _emit_routing_decision(
-        correlation_id=correlation_id,
-        selected_agent=result["selected_agent"],
-        confidence=result["confidence"],
-        routing_method=result["routing_method"],
-        routing_policy=result["routing_policy"],
-        routing_path=result["routing_path"],
-        latency_ms=latency_ms,
-        prompt_preview=prompt[:100],
-        cohort=cohort,
-        cohort_seed=cohort_seed,
-    )
+    _emit_routing_decision(result, prompt, correlation_id)
 
     return result
 

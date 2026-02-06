@@ -310,6 +310,53 @@ def temp_models_dir(tmp_path: Path) -> Path:
 
 
 # -------------------------------------------------------------------------
+# sys.modules State Restoration
+# -------------------------------------------------------------------------
+
+
+@pytest.fixture
+def restore_sys_modules():
+    """Save and restore the full state of sys.modules across a test.
+
+    This fixture captures a snapshot of sys.modules before the test runs
+    and restores it completely during teardown. It handles three cases:
+
+    1. Entries that were modified during the test are reverted to their
+       original values.
+    2. Entries that were deleted during the test are re-added from the
+       saved snapshot (prevents missing-module errors in later tests).
+    3. Entries that were added during the test are removed to prevent
+       test pollution.
+
+    Usage:
+        def test_something(restore_sys_modules):
+            # Manipulate sys.modules freely; it will be restored after.
+            sys.modules["my_fake_module"] = MagicMock()
+            del sys.modules["some_real_module"]
+    """
+    # Save a shallow copy of the full mapping (key -> module object)
+    saved_modules = dict(sys.modules)
+    saved_keys = frozenset(sys.modules.keys())
+
+    yield
+
+    current_keys = set(sys.modules.keys())
+
+    # Remove entries that were added during the test
+    for key in current_keys - saved_keys:
+        del sys.modules[key]
+
+    # Restore entries that were modified or deleted during the test
+    for key in saved_keys:
+        if key not in sys.modules:
+            # Was deleted during the test -- re-add it
+            sys.modules[key] = saved_modules[key]
+        elif sys.modules[key] is not saved_modules[key]:
+            # Was replaced during the test -- revert it
+            sys.modules[key] = saved_modules[key]
+
+
+# -------------------------------------------------------------------------
 # Sample Prompt Fixtures
 # -------------------------------------------------------------------------
 
@@ -876,54 +923,6 @@ def _cleanup_kafka_producers():
     # Backup cleanup - primary cleanup is in pytest_sessionfinish
     # This handles edge cases where sessionfinish didn't run
     _cleanup_all_kafka_producers_sync()
-
-
-# -------------------------------------------------------------------------
-# Module Reload Cleanup Fixtures
-# -------------------------------------------------------------------------
-# These fixtures prevent test pollution when tests reload modules or modify
-# global state. PR #92 review identified this as a potential source of flaky
-# tests when module reloads affect subsequent tests.
-
-
-@pytest.fixture
-def restore_sys_modules():
-    """
-    Fixture to capture and restore sys.modules state after a test.
-
-    Use this fixture in tests that modify sys.modules or use importlib.reload()
-    to prevent test pollution affecting subsequent tests.
-
-    Usage:
-        def test_something(restore_sys_modules):
-            # Test that modifies sys.modules
-            import importlib
-            import mymodule
-            importlib.reload(mymodule)
-            # sys.modules will be restored after test
-
-    Warning:
-        This is a function-scoped fixture. For module reloads that affect
-        global state (like singletons), consider using restore_module_globals
-        or creating a custom cleanup fixture.
-    """
-    # Capture the current state of sys.modules
-    original_modules = sys.modules.copy()
-    original_keys = set(sys.modules.keys())
-
-    yield
-
-    # Restore sys.modules to original state
-    # Remove any modules that were added
-    current_keys = set(sys.modules.keys())
-    added_keys = current_keys - original_keys
-    for key in added_keys:
-        del sys.modules[key]
-
-    # Restore any modules that were modified (replaced with different objects)
-    for key, module in original_modules.items():
-        if key in sys.modules and sys.modules[key] is not module:
-            sys.modules[key] = module
 
 
 @pytest.fixture

@@ -70,7 +70,6 @@ from .routing_event_client import (
 from .transformation_validator import (
     TransformationValidationResult,
     TransformationValidator,
-    ValidatorOutcome,
     validate_transformation,
 )
 from .trigger_matcher import TriggerMatcher
@@ -116,6 +115,5 @@ __all__ = [
     # Transformation Validation
     "TransformationValidator",
     "TransformationValidationResult",
-    "ValidatorOutcome",
     "validate_transformation",
 ]

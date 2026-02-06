@@ -20,49 +20,43 @@ Output:
 import json
 import logging
 import os
-import re
 import sys
 from pathlib import Path
-from typing import NotRequired, TypedDict
+
+# --- Early logging setup ---
+# Configure LOG_FILE handler before any module-level log calls so that
+# warnings during import or initialization are captured to disk.
+_LOG_FILE = os.environ.get("LOG_FILE")
+if _LOG_FILE:
+    try:
+        _file_handler = logging.FileHandler(_LOG_FILE)
+        _file_handler.setFormatter(
+            logging.Formatter("%(asctime)s [%(name)s] %(levelname)s: %(message)s")
+        )
+        logging.getLogger().addHandler(_file_handler)
+    except OSError:
+        pass  # If log file is inaccessible, continue without file logging
 
 logger = logging.getLogger(__name__)
 
-# Security: Blocklist of sensitive directory patterns that should never be used as plugin roots
-# Note: We use exact matches and specific subdirectories to avoid blocking legitimate paths
-# like /var/folders (macOS temp) or /tmp which are valid for testing
-_SENSITIVE_PATH_PATTERNS = frozenset(
-    {
-        "/etc",
-        "/var/log",
-        "/var/run",
-        "/var/lib",
-        "/var/cache",
-        "/var/spool",
-        "/usr/bin",
-        "/usr/sbin",
-        "/usr/lib",
-        "/usr/local/bin",
-        "/usr/local/sbin",
-        "/bin",
-        "/sbin",
-        "/lib",
-        "/lib64",
-        "/root",
-        "/proc",
-        "/sys",
-        "/dev",
-        "/boot",
-        "/private/etc",  # macOS
-        "/private/var/log",  # macOS
-        "/private/var/run",  # macOS
-        "/System",  # macOS
-        "/Library/LaunchDaemons",  # macOS system launch daemons
-        "/Library/LaunchAgents",  # macOS system launch agents
-    }
-)
+# Python 3.11+ has Required/NotRequired, for 3.10 use typing_extensions.
+# Graceful degradation: if neither typing nor typing_extensions provides
+# these, we warn and fall back so the hook never crashes at import time.
+try:
+    from typing import NotRequired, TypedDict
+except ImportError:
+    try:
+        from typing import NotRequired
 
-# Security: Pattern for valid agent names (alphanumeric, hyphen, underscore only)
-_VALID_AGENT_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
+        from typing_extensions import TypedDict
+    except ImportError:
+        logger.warning(
+            "Neither typing.NotRequired nor typing_extensions.TypedDict available. "
+            "Agent loader TypedDict definitions will use plain dict fallback."
+        )
+        from typing import TypedDict  # type: ignore[assignment]
+
+        NotRequired = None  # type: ignore[assignment,misc]
 
 # Maximum context length to prevent truncation in hook output
 # Claude Code truncates at 10k chars; we use 6k to leave room for other context
@@ -72,68 +66,92 @@ _TRUNCATION_MARKER = (
 )
 
 
-def validate_agent_name(agent_name: str) -> tuple[bool, str]:
+def _resolve_agent_definitions_dir() -> Path:
     """
-    Validate agent name to prevent path traversal attacks.
+    Resolve the agent definitions directory.
 
-    Only allows alphanumeric characters, hyphens, and underscores.
-    Rejects any path traversal attempts (../, /, \\, etc.).
+    Resolution priority:
+        1. CLAUDE_PLUGIN_ROOT env var  ->  <root>/onex/agents/configs/
+        2. Default fallback            ->  ~/.claude/agents/omniclaude/
 
-    Args:
-        agent_name: The agent name to validate
+    Validates that the resolved directory exists.  If CLAUDE_PLUGIN_ROOT is
+    set but points to a missing or incomplete directory tree, a warning is
+    logged and the default path is returned instead.
 
     Returns:
-        Tuple of (is_valid, error_message). If valid, error_message is empty.
-
-    Example:
-        >>> validate_agent_name("agent-api")
-        (True, "")
-        >>> validate_agent_name("../../../etc/passwd")
-        (False, "Invalid agent name: contains path traversal characters")
+        Resolved Path to the agent definitions directory.
     """
-    if not agent_name:
-        return False, "Agent name cannot be empty"
+    default_dir = Path.home() / ".claude" / "agents" / "omniclaude"
+    plugin_root_env = os.environ.get("CLAUDE_PLUGIN_ROOT")
 
-    # Check for path traversal characters
-    if ".." in agent_name:
-        return False, "Invalid agent name: contains path traversal sequence '..'"
+    if plugin_root_env:
+        plugin_root = Path(plugin_root_env)
+        if not plugin_root.is_dir():
+            logger.warning(
+                "CLAUDE_PLUGIN_ROOT is set but directory does not exist: %s. "
+                "Falling back to default agent definitions directory: %s",
+                plugin_root_env,
+                default_dir,
+            )
+            return default_dir
 
-    if "/" in agent_name or "\\" in agent_name:
-        return False, "Invalid agent name: contains path separator characters"
+        configs_dir = plugin_root / "onex" / "agents" / "configs"
+        if configs_dir.is_dir():
+            return configs_dir
 
-    # Check against allowlist pattern (alphanumeric, hyphen, underscore)
-    if not _VALID_AGENT_NAME_PATTERN.match(agent_name):
-        return (
-            False,
-            "Invalid agent name: must contain only alphanumeric characters, "
-            "hyphens, and underscores",
+        logger.warning(
+            "CLAUDE_PLUGIN_ROOT is set but agents/configs subdirectory not found: %s. "
+            "Falling back to default agent definitions directory: %s",
+            configs_dir,
+            default_dir,
         )
 
-    # Additional length check to prevent DoS via extremely long names
-    if len(agent_name) > 128:
-        return False, "Invalid agent name: exceeds maximum length of 128 characters"
-
-    return True, ""
+    return default_dir
 
 
-def _is_sensitive_path(path: Path) -> bool:
+# Resolved at import time. To change at runtime, reassign before calling
+# load_agent(). See _resolve_agent_definitions_dir() for resolution order.
+AGENT_DEFINITIONS_DIR = _resolve_agent_definitions_dir()
+
+
+def _validate_agent_name(agent_name: str) -> str | None:
     """
-    Check if a path is within a sensitive system directory.
+    Validate an agent name to prevent path traversal attacks.
+
+    Rejects names containing path separators, parent-directory references,
+    or null bytes.  Returns the sanitized name on success, or ``None`` (with
+    a warning) if the name is unsafe.
 
     Args:
-        path: Path to check (should be resolved/absolute)
+        agent_name: Raw agent name string to validate.
 
     Returns:
-        True if the path is in a sensitive directory, False otherwise
+        The validated agent name, or None if the name is unsafe.
     """
-    resolved = path.resolve()
-    path_str = str(resolved)
+    if not agent_name:
+        return None
 
-    for sensitive in _SENSITIVE_PATH_PATTERNS:
-        if path_str == sensitive or path_str.startswith(sensitive + "/"):
-            return True
+    # Reject null bytes, path separators, and parent-directory traversal
+    dangerous_patterns = ("..", "/", "\\", "\x00")
+    for pattern in dangerous_patterns:
+        if pattern in agent_name:
+            logger.warning(
+                "Rejected unsafe agent name containing %r: %s",
+                pattern,
+                repr(agent_name[:80]),
+            )
+            return None
 
-    return False
+    # Reject names that resolve outside the expected directory
+    # (e.g. names starting with ~ or absolute-looking paths on Windows)
+    if agent_name.startswith(("~", "$")):
+        logger.warning(
+            "Rejected agent name with shell expansion characters: %s",
+            repr(agent_name[:80]),
+        )
+        return None
+
+    return agent_name
 
 
 def _validate_path_within_bounds(
@@ -170,126 +188,6 @@ def _validate_path_within_bounds(
         return False, f"Failed to resolve path: {e}"
 
 
-# Agent definitions directory resolution with hardened validation
-# Priority: CLAUDE_PLUGIN_ROOT/agents/configs (for plugins), then script-relative, then legacy
-def _resolve_agent_definitions_dir() -> Path:
-    """
-    Resolve the agent definitions directory with proper validation.
-
-    Resolution order:
-    1. CLAUDE_PLUGIN_ROOT environment variable (if set and valid)
-    2. Script-relative path detection (hooks/lib -> plugin_root/agents/configs)
-    3. Legacy fallback (~/.claude/agents/omniclaude)
-
-    Security validations:
-    - Rejects paths in sensitive system directories (/etc, /var, /usr, etc.)
-    - Validates path exists and is a directory
-    - Checks agents/configs subdirectory exists
-
-    Returns:
-        Path to the agent definitions directory
-
-    Raises:
-        RuntimeError: If CLAUDE_PLUGIN_ROOT is explicitly set but invalid,
-            and no fallback paths are available. This prevents silent failures
-            where agents would fail to load with confusing errors.
-
-    Logs warnings for misconfigurations to aid debugging.
-    """
-    plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT", "").strip()
-    plugin_root_was_set = bool(plugin_root)
-    plugin_root_error: str | None = None
-
-    if plugin_root:
-        plugin_path = Path(plugin_root)
-
-        # Security: Validate path is not in sensitive system directories
-        if _is_sensitive_path(plugin_path):
-            plugin_root_error = (
-                f"CLAUDE_PLUGIN_ROOT points to sensitive system directory: {plugin_root}. "
-                "This is not allowed for security reasons."
-            )
-            logger.warning(
-                f"{plugin_root_error} Falling back to script-relative detection."
-            )
-        # Validate the plugin root exists
-        elif not plugin_path.exists():
-            plugin_root_error = (
-                f"CLAUDE_PLUGIN_ROOT is set but path does not exist: {plugin_root}. "
-                "Verify the path is correct and the plugin is properly installed."
-            )
-            logger.warning(
-                f"{plugin_root_error} Falling back to script-relative detection."
-            )
-        elif not plugin_path.is_dir():
-            plugin_root_error = (
-                f"CLAUDE_PLUGIN_ROOT is set but is not a directory: {plugin_root}."
-            )
-            logger.warning(
-                f"{plugin_root_error} Falling back to script-relative detection."
-            )
-        else:
-            agents_dir = plugin_path / "agents" / "configs"
-            if agents_dir.exists() and agents_dir.is_dir():
-                return agents_dir
-            else:
-                plugin_root_error = (
-                    f"CLAUDE_PLUGIN_ROOT is set but agents/configs not found: {agents_dir}. "
-                    "Expected directory structure: $CLAUDE_PLUGIN_ROOT/agents/configs/*.yaml"
-                )
-                logger.warning(
-                    f"{plugin_root_error} Falling back to script-relative detection."
-                )
-
-    # Fallback: try to detect from script location (lib is 2 levels up from agents/configs)
-    script_dir = Path(__file__).parent
-    possible_plugin_root = script_dir.parent.parent  # hooks/lib -> hooks -> plugin_root
-    possible_agents_dir = possible_plugin_root / "agents" / "configs"
-
-    if possible_agents_dir.exists() and possible_agents_dir.is_dir():
-        if not plugin_root:
-            logger.info(
-                f"CLAUDE_PLUGIN_ROOT not set. Using script-relative path: {possible_agents_dir}"
-            )
-        return possible_agents_dir
-
-    # Legacy fallback
-    legacy_dir = Path.home() / ".claude" / "agents" / "omniclaude"
-
-    if legacy_dir.exists() and legacy_dir.is_dir():
-        logger.warning(
-            f"Could not resolve agent definitions directory from CLAUDE_PLUGIN_ROOT or "
-            f"script location. Using legacy fallback: {legacy_dir}"
-        )
-        return legacy_dir
-
-    # If CLAUDE_PLUGIN_ROOT was explicitly set but invalid, and no fallbacks exist,
-    # log error but return legacy path for graceful degradation.
-    # Per CLAUDE.md: "Hooks must exit 0 unless blocking is intentional."
-    # Raising RuntimeError at module import time would crash all Python importers.
-    if plugin_root_was_set and plugin_root_error:
-        error_msg = (
-            f"Agent definitions directory resolution failed.\n"
-            f"  CLAUDE_PLUGIN_ROOT error: {plugin_root_error}\n"
-            f"  Script-relative fallback: {possible_agents_dir} (does not exist)\n"
-            f"  Legacy fallback: {legacy_dir} (does not exist)\n"
-            f"  Action required: Either fix CLAUDE_PLUGIN_ROOT or ensure one of the "
-            f"fallback directories exists with agent YAML files."
-        )
-        logger.error(error_msg)
-
-    # If CLAUDE_PLUGIN_ROOT was not set and no paths exist, return legacy path
-    # (will fail gracefully at agent load time with helpful error about searched paths)
-    logger.warning(
-        f"Could not resolve agent definitions directory from CLAUDE_PLUGIN_ROOT or "
-        f"script location. Using legacy fallback: {legacy_dir} (note: does not exist)"
-    )
-    return legacy_dir
-
-
-AGENT_DEFINITIONS_DIR = _resolve_agent_definitions_dir()
-
-
 class AgentLoadSuccess(TypedDict):
     """Result when agent is successfully loaded."""
 
@@ -315,11 +213,14 @@ def _get_search_paths(agent_name: str) -> list[Path]:
     """
     Get list of paths to search for agent definition.
 
+    The *agent_name* must already be validated (see ``_validate_agent_name``).
+    No additional sanitisation is performed here.
+
     Args:
-        agent_name: Name of the agent to load
+        agent_name: Pre-validated name of the agent to load.
 
     Returns:
-        List of Path objects to search
+        List of Path objects to search.
     """
     return [
         AGENT_DEFINITIONS_DIR / f"{agent_name}.yaml",
@@ -337,15 +238,15 @@ def load_agent_yaml(agent_name: str) -> str | None:
     Searches for agent definition files in the ONEX agents directory,
     trying multiple filename patterns to find a match.
 
+    The agent name is validated against path traversal before any
+    filesystem access.
+
     Args:
-        agent_name: Name of the agent to load (e.g., "agent-api", "research")
+        agent_name: Name of the agent to load (e.g., "agent-api", "research").
 
     Returns:
-        YAML content as string if found, None otherwise
-
-    Raises:
-        OSError: If file exists but cannot be read (logged as warning, returns None)
-        ValueError: If agent_name contains invalid characters (path traversal prevention)
+        YAML content as string if found, None if not found, if the name
+        fails validation, or if the file cannot be read.
 
     Example:
         >>> content = load_agent_yaml("agent-api")
@@ -357,13 +258,11 @@ def load_agent_yaml(agent_name: str) -> str | None:
         >>> # Also works without "agent-" prefix
         >>> content = load_agent_yaml("research")
     """
-    # Security: Validate agent name (defense-in-depth for direct callers)
-    is_valid, error_msg = validate_agent_name(agent_name)
-    if not is_valid:
-        logger.warning(f"load_agent_yaml: {error_msg} (name={agent_name!r})")
-        raise ValueError(error_msg)
+    safe_name = _validate_agent_name(agent_name)
+    if safe_name is None:
+        return None
 
-    search_paths = _get_search_paths(agent_name)
+    search_paths = _get_search_paths(safe_name)
 
     for path in search_paths:
         if path.exists():
@@ -381,7 +280,7 @@ def load_agent_yaml(agent_name: str) -> str | None:
             try:
                 return path.read_text()
             except OSError as e:
-                logger.warning(f"Failed to read {path}: {e}")
+                logger.warning("Failed to read %s: %s", path, e)
 
     return None
 
@@ -393,6 +292,9 @@ def load_agent(agent_name: str) -> AgentLoadResult:
     This is the main entry point for loading agent definitions. It attempts
     to find and load an agent's YAML configuration file, returning a typed
     result indicating success or failure.
+
+    The agent name is validated against path traversal before any
+    filesystem access.
 
     Args:
         agent_name: Name of the agent to load (e.g., "agent-api", "research").
@@ -410,8 +312,10 @@ def load_agent(agent_name: str) -> AgentLoadResult:
                 - agent_name: The requested agent name
                 - searched_paths: List of paths that were searched
 
-    Raises:
-        No exceptions are raised; all errors are captured in the result dict.
+    Note:
+        No exceptions are raised.  All errors (missing name, unsafe name,
+        file-not-found, I/O errors) are captured in the returned dict so
+        that callers never need try/except.
 
     Example:
         >>> result = load_agent("agent-api")
@@ -429,36 +333,25 @@ def load_agent(agent_name: str) -> AgentLoadResult:
         return AgentLoadFailure(
             success=False,
             error="No agent name provided",
-            agent_name=agent_name,
+            agent_name=agent_name or "",
             searched_paths=[],
         )
 
-    # Security: Validate agent name to prevent path traversal attacks
-    is_valid, validation_error = validate_agent_name(agent_name)
-    if not is_valid:
-        logger.warning(
-            f"Agent name validation failed: {validation_error} (name={agent_name!r})"
-        )
+    # Validate agent name against path traversal
+    safe_name = _validate_agent_name(agent_name)
+    if safe_name is None:
         return AgentLoadFailure(
             success=False,
-            error=validation_error,
+            error=f"Unsafe agent name rejected: '{agent_name}'",
             agent_name=agent_name,
             searched_paths=[],
         )
 
     # Get search paths for error reporting
-    search_paths = _get_search_paths(agent_name)
+    search_paths = _get_search_paths(safe_name)
 
-    # Load YAML content (wrapped to enforce no-exception contract)
-    try:
-        yaml_content = load_agent_yaml(agent_name)
-    except (ValueError, OSError) as e:
-        return AgentLoadFailure(
-            success=False,
-            error=str(e),
-            agent_name=agent_name,
-            searched_paths=[str(p) for p in search_paths],
-        )
+    # Load YAML content
+    yaml_content = load_agent_yaml(safe_name)
 
     if yaml_content:
         # Truncate if exceeds max length to prevent hook output truncation
@@ -472,15 +365,15 @@ def load_agent(agent_name: str) -> AgentLoadResult:
         return AgentLoadSuccess(
             success=True,
             context_injection=yaml_content,
-            agent_name=agent_name,
+            agent_name=safe_name,
         )
     else:
         # Build descriptive error message with searched paths for debugging
         path_list = ", ".join(str(p) for p in search_paths)
         return AgentLoadFailure(
             success=False,
-            error=f"Agent definition not found: '{agent_name}'. Searched: [{path_list}]",
-            agent_name=agent_name,
+            error=f"Agent definition not found: '{safe_name}'. Searched: [{path_list}]",
+            agent_name=safe_name,
             searched_paths=[str(p) for p in search_paths],
         )
 

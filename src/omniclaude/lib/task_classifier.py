@@ -186,70 +186,16 @@ class TaskClassifier:
         "workflow",
     ]
 
-    # Short keywords (<=5 chars) that need word boundary matching to avoid
-    # substring false positives (e.g., "new" matching "renewed", "api" in "capital").
-    # Note: "test" is intentionally excluded - we want "test" to match "unittest".
-    #
-    # Overlap note: Some terms appear in multiple collections (e.g., "node", "onex"
-    # also in SERVICE_PATTERNS/DOMAIN_INDICATORS). This is intentional - each
-    # collection serves a different purpose:
-    # - _SHORT_KEYWORDS: Controls word boundary matching behavior
-    # - SERVICE_PATTERNS: Identifies external service mentions for filtering
-    # - DOMAIN_INDICATORS: Signals implementation intent for classification
+    # Short keywords (<=4 chars) that need word boundary matching to avoid
+    # substring false positives (e.g., "api" matching "capital",
+    # "rest" matching "forest", "node" matching "anode")
     _SHORT_KEYWORDS: frozenset[str] = frozenset(
-        {
-            # 3-char keywords
-            "new",
-            "add",
-            "fix",
-            "bug",
-            "sql",
-            "how",
-            "api",
-            "llm",
-            # 4-char keywords from INTENT_KEYWORDS
-            "http",
-            "rest",
-            "make",
-            "data",
-            "call",
-            "sync",
-            # Short DOMAIN_INDICATORS (<=5 chars) - need boundary matching
-            # to avoid false positives like "api" in "capital", "node" in "anode"
-            "node",
-            "onex",
-            "mixin",
-        }
+        {"new", "add", "fix", "bug", "sql", "how", "api", "llm", "rest", "call", "node", "data"}
     )
 
-    # Known alphanumeric technical tokens that should be preserved during text
-    # processing. These should not be split on numbers (e.g., "http2" -> "http")
-    _TECHNICAL_TOKENS: frozenset[str] = frozenset(
-        {
-            "http2",
-            "http3",
-            "gpt3",
-            "gpt4",
-            "gpt5",
-            "s3",
-            "ec2",
-            "v1",
-            "v2",
-            "v3",
-            "k8s",
-            "utf8",
-            "oauth2",
-            "es6",
-            "es2015",
-            "python3",
-            "node18",
-            "node20",
-        }
-    )
-
-    # Domain-specific terms for keyword extraction
-    # Used to identify technology patterns, patterns, data, and operation terms
-    DOMAIN_TERMS: list[str] = [
+    # Domain-specific terms for keyword extraction.  Kept as a class attribute
+    # so the list is not re-created on every classify() call.
+    _DOMAIN_TERMS: list[str] = [
         # Technology terms
         "llm",
         "api",
@@ -364,7 +310,7 @@ class TaskClassifier:
                 [kw for kw in kws if self._keyword_in_text(kw, prompt_lower)]
             )
 
-        # 2. Extract node type keywords (uses _keyword_in_text for consistent matching)
+        # 2. Extract node type keywords (all 6+ chars, low false-positive risk)
         for nt in self.NODE_TYPE_PATTERNS:
             if self._keyword_in_text(nt, prompt_lower):
                 keywords.append(nt)
@@ -376,8 +322,7 @@ class TaskClassifier:
                 keywords.append(svc)
 
         # 4. Extract domain-specific terms (technology, patterns)
-        # Use _keyword_in_text for consistent word boundary matching on short terms
-        for term in self.DOMAIN_TERMS:
+        for term in self._DOMAIN_TERMS:
             if self._keyword_in_text(term, prompt_lower):
                 keywords.append(term)
 
@@ -399,10 +344,7 @@ class TaskClassifier:
             for w in words
             if len(w) >= 3
             and w not in stopwords
-            and (
-                w.isalpha()  # Pure alphabetic words
-                or w in self._TECHNICAL_TOKENS  # Known technical tokens (http2, gpt4, s3)
-            )
+            and w.isalpha()
         ]
         keywords.extend(significant_words[:10])  # Limit to 10 most significant
 
