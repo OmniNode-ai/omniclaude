@@ -132,10 +132,10 @@ class TestFilterDisabledPatterns:
 
     @pytest.mark.asyncio
     async def test_id_precedence_over_class(self, injector: ManifestInjector) -> None:
-        """A pattern disabled by ID is removed even if its class is not disabled.
+        """ID-based and class-based disables work together correctly.
 
-        Also verifies that a pattern NOT disabled by ID remains even if its
-        class IS disabled (the materialized view handles re-enables).
+        Verifies that a pattern disabled by ID is removed, a pattern in a
+        disabled class is removed, and a pattern matching neither survives.
         """
         patterns = [
             _make_pattern("disabled-by-id", "id-1", "classA"),
