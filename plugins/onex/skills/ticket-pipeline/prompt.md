@@ -851,12 +851,20 @@ def release_lock(lock_path):
 
    if [ -n "$TOPIC_FILES" ]; then
        # Check for hardcoded 'dev.' prefix in topic constants
-       for f in $TOPIC_FILES; do
-           if grep -q 'dev\.' "$f" 2>/dev/null && ! grep -q '"dev\.' "$f" 2>/dev/null; then
-               echo "INVARIANT_VIOLATION: Found 'dev.' prefix in $f"
+       # Use while-read to handle filenames with spaces safely
+       echo "$TOPIC_FILES" | while IFS= read -r f; do
+           [ -z "$f" ] && continue
+           # Match 'dev.' that is NOT inside a quoted string (single or double)
+           # Strategy: flag if 'dev.' appears outside of quotes on any line
+           if grep -Pq "(?<!['\"])dev\." "$f" 2>/dev/null; then
+               echo "INVARIANT_VIOLATION: Found unquoted 'dev.' prefix in $f"
                exit 1
            fi
        done
+       # Propagate subshell exit code from pipe
+       if [ "${PIPESTATUS[1]}" -ne 0 ] 2>/dev/null; then
+           exit 1
+       fi
    fi
    ```
    If violation: block with reason "Topic naming invariant violation: hardcoded 'dev.' prefix detected."
