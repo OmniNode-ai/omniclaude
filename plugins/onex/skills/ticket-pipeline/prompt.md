@@ -914,7 +914,7 @@ def release_lock(lock_path):
 4. **Update Linear:**
    ```python
    try:
-       mcp__linear-server__update_issue(id="{ticket_id}", state="In Review")
+       mcp__linear-server__update_issue(id=ticket_id, state="In Review")
    except Exception as e:
        print(f"Warning: Failed to update Linear issue {ticket_id}: {e}")
        # Non-blocking: Linear update failure is logged but does not stop pipeline
@@ -1012,7 +1012,7 @@ def release_lock(lock_path):
 1. **Add ready-for-merge label to Linear:**
    ```python
    try:
-       mcp__linear-server__update_issue(id="{ticket_id}", labels=["ready-for-merge"])
+       mcp__linear-server__update_issue(id=ticket_id, labels=["ready-for-merge"])
    except Exception as e:
        print(f"Warning: Failed to update Linear issue {ticket_id}: {e}")
        # Non-blocking: Linear label update failure is logged but does not stop pipeline
