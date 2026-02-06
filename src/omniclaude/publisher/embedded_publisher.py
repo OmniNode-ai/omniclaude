@@ -169,7 +169,12 @@ class EmbeddedEventPublisher:
             )
 
     async def stop(self) -> None:
-        """Stop the publisher gracefully."""
+        """Stop the publisher gracefully.
+
+        The total time for draining (publisher loop exit + spool flush) is
+        bounded by ``shutdown_drain_seconds`` so callers can rely on a
+        predictable upper bound.
+        """
         async with self._lock:
             if not self._running:
                 return
@@ -187,33 +192,32 @@ class EmbeddedEventPublisher:
                 await self._server.wait_closed()
                 self._server = None
 
-            if self._publisher_task is not None:
-                # Give the publisher loop time to finish its current in-flight publish.
-                # _running is already False and _shutdown_event is set, so the loop will
-                # exit after its current iteration. We never cancel the task to avoid
-                # interrupting an in-flight Kafka publish.
-                try:
-                    async with asyncio.timeout(self._config.shutdown_drain_seconds):
-                        await self._publisher_task
-                except TimeoutError:
-                    logger.warning(
-                        "Publisher loop did not exit within shutdown_drain_seconds; "
-                        "it will finish its current publish and exit on its own"
-                    )
-                except asyncio.CancelledError:
-                    pass
-                self._publisher_task = None
+            # Single timeout wraps both the publisher-loop exit and the spool
+            # drain so that the *total* graceful-shutdown time never exceeds
+            # shutdown_drain_seconds.
+            try:
+                async with asyncio.timeout(self._config.shutdown_drain_seconds):
+                    if self._publisher_task is not None:
+                        # Give the publisher loop time to finish its current
+                        # in-flight publish. _running is already False and
+                        # _shutdown_event is set, so the loop will exit after
+                        # its current iteration. We never cancel the task to
+                        # avoid interrupting an in-flight Kafka publish.
+                        try:
+                            await self._publisher_task
+                        except asyncio.CancelledError:
+                            pass
+                        self._publisher_task = None
 
-            if self._config.shutdown_drain_seconds > 0:
-                try:
-                    async with asyncio.timeout(self._config.shutdown_drain_seconds):
-                        drained = await self._queue.drain_to_spool()
-                        if drained > 0:
-                            logger.info(f"Drained {drained} events to spool")
-                except TimeoutError:
-                    logger.warning(
-                        "Shutdown drain timeout exceeded, some events may be lost"
-                    )
+                    drained = await self._queue.drain_to_spool()
+                    if drained > 0:
+                        logger.info(f"Drained {drained} events to spool")
+            except TimeoutError:
+                logger.warning(
+                    "Shutdown drain timeout exceeded, some events may be lost"
+                )
+                if self._publisher_task is not None:
+                    self._publisher_task = None
 
             if self._event_bus is not None and hasattr(self._event_bus, "close"):
                 await self._event_bus.close()
