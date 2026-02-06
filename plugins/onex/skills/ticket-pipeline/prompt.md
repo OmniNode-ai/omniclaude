@@ -105,7 +105,7 @@ When `/ticket-pipeline {ticket_id}` is invoked:
 ### 1. Acquire Lock
 
 ```python
-import os, json, time, uuid
+import os, json, time, uuid, yaml
 from pathlib import Path
 from datetime import datetime, timezone
 
@@ -172,8 +172,9 @@ import yaml
 if state_path.exists() and not force_run:
     # Resume existing pipeline
     state = yaml.safe_load(state_path.read_text())
+    previous_run_id = state.get("run_id", "unknown")
     state["run_id"] = run_id  # New run_id for this session
-    print(f"Resuming pipeline for {ticket_id} (previous run: {state.get('run_id', 'unknown')})")
+    print(f"Resuming pipeline for {ticket_id} (previous run: {previous_run_id})")
 else:
     # Create new state
     state = {
@@ -397,10 +398,12 @@ artifacts:"""
         contract_marker = "## Contract"
         if contract_marker in description:
             idx = description.rfind(contract_marker)
-            # Find the --- before ## Contract
-            delimiter_idx = description.rfind("---", 0, idx)
-            if delimiter_idx > 0:
-                description = description[:delimiter_idx] + pipeline_block + "\n---\n" + description[idx:]
+            # Find the --- immediately before ## Contract (within 10 chars, accounting for whitespace)
+            preceding = description[max(0, idx - 10):idx]
+            delimiter_pos = preceding.rfind("---")
+            if delimiter_pos >= 0:
+                absolute_pos = max(0, idx - 10) + delimiter_pos
+                description = description[:absolute_pos] + pipeline_block + "\n---\n" + description[idx:]
             else:
                 description = description[:idx] + pipeline_block + "\n" + description[idx:]
         else:
@@ -466,7 +469,7 @@ def parse_phase_output(raw_output, phase_name):
             result["blocking_issues"] = int(count_match.group(1))
         result["reason"] = "Review iteration limit reached with blocking issues remaining"
 
-    elif "waiting for" in output_lower or "human" in output_lower and "gate" in output_lower:
+    elif "waiting for" in output_lower or ("human" in output_lower and "gate" in output_lower):
         result["status"] = "blocked"
         result["block_kind"] = "blocked_human_gate"
         result["reason"] = "Waiting for human input"
@@ -768,7 +771,7 @@ def release_lock(lock_path):
    if [ -n "$TOPIC_FILES" ]; then
        # Check for hardcoded 'dev.' prefix in topic constants
        for f in $TOPIC_FILES; do
-           if grep -qP '(?<!")dev\.' "$f" 2>/dev/null; then
+           if grep -q 'dev\.' "$f" 2>/dev/null && ! grep -q '"dev\.' "$f" 2>/dev/null; then
                echo "INVARIANT_VIOLATION: Found 'dev.' prefix in $f"
                exit 1
            fi
