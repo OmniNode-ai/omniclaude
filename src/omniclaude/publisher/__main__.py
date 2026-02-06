@@ -39,11 +39,6 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=_default_sock,
         help=f"Unix socket path (default: {_default_sock})",
     )
-    start_parser.add_argument(
-        "--daemonize",
-        action="store_true",
-        help="Run as daemon (detach from terminal)",
-    )
 
     sub.add_parser("stop", help="Stop the publisher")
 
@@ -78,7 +73,20 @@ def _do_stop(args: argparse.Namespace) -> int:  # noqa: ARG001
     """Stop publisher by sending SIGTERM to PID file."""
     import signal
 
-    pid_path = Path(tempfile.gettempdir()) / "omniclaude-emit.pid"
+    from omniclaude.publisher.publisher_config import PublisherConfig
+
+    try:
+        config = PublisherConfig()
+    except Exception:
+        # If config validation fails (e.g. missing kafka_bootstrap_servers),
+        # fall back to default PID path — stop doesn't need Kafka.
+        config = None
+
+    pid_path = (
+        config.pid_path
+        if config is not None
+        else Path(tempfile.gettempdir()) / "omniclaude-emit.pid"
+    )
     if not pid_path.exists():
         print("Publisher is not running (no PID file)")
         return 0

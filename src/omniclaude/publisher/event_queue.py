@@ -192,8 +192,12 @@ class BoundedEventQueue:
         try:
             content = filepath.read_text(encoding="utf-8")
             event = ModelQueuedEvent.model_validate_json(content)
-            file_size = len(content.encode("utf-8"))
-            self._spool_bytes -= file_size
+            # Use stat().st_size for consistency with load_spool()
+            try:
+                file_size = filepath.stat().st_size
+            except OSError:
+                file_size = len(content.encode("utf-8"))
+            self._spool_bytes = max(0, self._spool_bytes - file_size)
         except OSError:
             logger.exception("Failed to read spool file %s", filepath)
             return None

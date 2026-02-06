@@ -349,7 +349,8 @@ class EmbeddedEventPublisher:
         """Background task: dequeue events and publish to Kafka."""
         logger.info("Publisher loop started")
 
-        while self._running or self._queue.total_size() > 0:
+        # Note: stop() cancels this task, then drains remaining events via drain_to_spool().
+        while self._running:
             try:
                 event = await self._queue.dequeue()
 
