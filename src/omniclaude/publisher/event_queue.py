@@ -130,6 +130,16 @@ class BoundedEventQueue:
         ) and self._spool_files:
             await self._drop_oldest_spool()
 
+        # After dropping, check if the single event still exceeds the byte limit
+        if event_bytes > self._max_spool_bytes:
+            logger.warning(
+                "Dropping event %s: serialized size (%d bytes) exceeds max_spool_bytes (%d)",
+                event.event_id,
+                event_bytes,
+                self._max_spool_bytes,
+            )
+            return False
+
         timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S%f")
         filename = f"{timestamp}_{event.event_id}.json"
         filepath = self._spool_dir / filename
@@ -200,6 +210,16 @@ class BoundedEventQueue:
             self._spool_bytes = max(0, self._spool_bytes - file_size)
         except OSError:
             logger.exception("Failed to read spool file %s", filepath)
+            # Decrement spool bytes — file was already popped from _spool_files
+            try:
+                file_size = filepath.stat().st_size
+                self._spool_bytes = max(0, self._spool_bytes - file_size)
+            except OSError:
+                pass  # Can't determine size; accounting will be slightly off
+            try:
+                filepath.unlink()
+            except OSError:
+                pass
             return None
         except Exception:
             logger.exception("Failed to parse spool file %s", filepath)

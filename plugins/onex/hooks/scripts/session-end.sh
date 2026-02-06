@@ -171,7 +171,7 @@ else
 fi
 
 # Flush and stop the publisher (OMN-1944)
-# Give events 2 seconds to flush, then send stop signal.
+# Give events 0.5 seconds to flush, then send stop signal.
 # This runs in a background subshell to avoid blocking session-end.
 (
     # Brief pause to allow async emit subshells above to complete
