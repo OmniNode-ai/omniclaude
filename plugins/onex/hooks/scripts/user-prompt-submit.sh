@@ -121,7 +121,7 @@ WORKFLOW_DETECTED="false"
 # -----------------------------
 # Agent Detection & Routing
 # -----------------------------
-ROUTING_RESULT="$($PYTHON_CMD "${HOOKS_LIB}/route_via_events_wrapper.py" "$PROMPT" "$CORRELATION_ID" 2>>"$LOG_FILE" || echo "")"
+ROUTING_RESULT="$($PYTHON_CMD "${HOOKS_LIB}/route_via_events_wrapper.py" "$PROMPT" "$CORRELATION_ID" "5000" "$SESSION_ID" 2>>"$LOG_FILE" || echo "")"
 
 if [ -z "$ROUTING_RESULT" ]; then
     ROUTING_RESULT='{"selected_agent":"polymorphic-agent","confidence":0.5,"reasoning":"fallback","method":"fallback","domain":"workflow_coordination"}'
@@ -135,15 +135,37 @@ AGENT_DOMAIN="$(echo "$ROUTING_RESULT" | jq -r '.domain // "general"')"
 AGENT_PURPOSE="$(echo "$ROUTING_RESULT" | jq -r '.purpose // ""')"
 SELECTION_REASONING="$(echo "$ROUTING_RESULT" | jq -r '.reasoning // ""')"
 LATENCY_MS="$(echo "$ROUTING_RESULT" | jq -r '.latency_ms // "0"')"
+CANDIDATES_JSON="$(echo "$ROUTING_RESULT" | jq -r '.candidates // "[]"')"
 
 # -----------------------------
-# Agent YAML Loading & Pattern Injection
+# Candidate List Injection & Pattern Injection
 # -----------------------------
 AGENT_YAML_INJECTION=""
-if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
-    INVOKE_INPUT="$(jq -n --arg agent "$AGENT_NAME" '{agent_name: $agent}')"
-    INVOKE_RESULT="$(echo "$INVOKE_INPUT" | run_with_timeout 3 $PYTHON_CMD "${HOOKS_LIB}/simple_agent_loader.py" 2>>"$LOG_FILE" || echo '{}')"
-    AGENT_YAML_INJECTION="$(echo "$INVOKE_RESULT" | jq -r '.context_injection // ""')"
+CANDIDATE_COUNT="$(echo "$CANDIDATES_JSON" | jq 'if type == "array" then length else 0 end' 2>/dev/null || echo "0")"
+
+if [[ "$CANDIDATE_COUNT" -gt 0 ]]; then
+    CANDIDATE_LIST="$(echo "$CANDIDATES_JSON" | jq -r '
+        [to_entries[] | "\(.key + 1). \(.value.name) (\(.value.score)) - \(.value.description // "No description")"] | join("\n")
+    ' 2>/dev/null || echo "")"
+
+    FUZZY_BEST="$(echo "$CANDIDATES_JSON" | jq -r '.[0].name // "polymorphic-agent"' 2>/dev/null || echo "polymorphic-agent")"
+    FUZZY_BEST_SCORE="$(echo "$CANDIDATES_JSON" | jq -r '.[0].score // "0.5"' 2>/dev/null || echo "0.5")"
+
+    AGENT_YAML_INJECTION="========================================================================
+AGENT ROUTING - SELECT AND ACT
+========================================================================
+The following agents matched your request. Pick the best match,
+then read its full YAML from plugins/onex/agents/configs/{name}.yaml
+and follow its behavioral directives.
+
+CANDIDATES (ranked by score):
+${CANDIDATE_LIST}
+
+FUZZY BEST: ${FUZZY_BEST} (${FUZZY_BEST_SCORE})
+YOUR DECISION: Pick the agent that best matches the user's actual intent.
+If no agent fits, default to polymorphic-agent.
+========================================================================
+"
 fi
 
 LEARNED_PATTERNS=""

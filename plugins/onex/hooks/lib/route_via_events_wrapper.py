@@ -19,6 +19,10 @@ Output:
     {
         "selected_agent": "agent-debug",
         "confidence": 0.85,
+        "candidates": [
+            {"name": "agent-debug", "score": 0.85, "description": "Debug agent", "reason": "Exact match: 'debug'"},
+            {"name": "agent-testing", "score": 0.60, "description": "Testing agent", "reason": "Fuzzy match: 'test'"}
+        ],
         "reasoning": "Strong trigger match: 'debug'",
         "routing_method": "local",
         "routing_policy": "trigger_match",
@@ -27,6 +31,11 @@ Output:
         "domain": "debugging",
         "purpose": "Debug and troubleshoot issues"
     }
+
+    The `candidates` array contains the top N agent matches sorted by score
+    descending, allowing downstream consumers (e.g., Claude) to make the final
+    semantic selection. Each candidate includes name, score, description, and
+    match reason. The array is empty when no router is available or routing fails.
 """
 
 import json
@@ -320,11 +329,29 @@ def route_via_events(
     domain = "workflow_coordination"
     purpose = "Intelligent coordinator for development workflows"
 
+    # Candidates list populated from all router recommendations
+    candidates_list: list[dict[str, Any]] = []
+
     if router is not None:
         try:
-            recommendations = router.route(prompt, context, max_recommendations=3)
+            recommendations = router.route(prompt, context, max_recommendations=5)
 
             if recommendations:
+                # Build candidates from ALL recommendations (sorted by score descending)
+                agents_registry = router.registry.get("agents", {})
+                for rec in recommendations:
+                    rec_agent_data = agents_registry.get(rec.agent_name, {})
+                    candidates_list.append(
+                        {
+                            "name": rec.agent_name,
+                            "score": rec.confidence.total,
+                            "description": rec_agent_data.get(
+                                "description", rec.agent_title
+                            ),
+                            "reason": rec.reason,
+                        }
+                    )
+
                 top_rec = recommendations[0]
                 top_confidence = top_rec.confidence.total
 
@@ -336,9 +363,7 @@ def route_via_events(
                     routing_policy = RoutingPolicy.TRIGGER_MATCH
 
                     # Extract domain from agent data if available
-                    agent_data = router.registry.get("agents", {}).get(
-                        selected_agent, {}
-                    )
+                    agent_data = agents_registry.get(selected_agent, {})
                     domain = agent_data.get("domain_context", "general")
                     purpose = agent_data.get("description", top_rec.agent_title)
 
@@ -363,6 +388,7 @@ def route_via_events(
 
         except Exception as e:
             # Router error - fall back gracefully
+            candidates_list = []
             reasoning = f"Routing error: {type(e).__name__}"
             logger.warning(f"AgentRouter error: {e}")
 
@@ -374,6 +400,7 @@ def route_via_events(
     result: dict[str, Any] = {
         "selected_agent": selected_agent,
         "confidence": confidence,
+        "candidates": candidates_list,
         "reasoning": reasoning,
         # Routing semantics - three distinct fields
         "routing_method": RoutingMethod.LOCAL.value,
@@ -427,6 +454,7 @@ def main() -> None:
                 {
                     "selected_agent": DEFAULT_AGENT,
                     "confidence": 0.5,
+                    "candidates": [],
                     "reasoning": "Fallback: missing required arguments",
                     "routing_method": RoutingMethod.LOCAL.value,
                     "routing_policy": RoutingPolicy.FALLBACK_DEFAULT.value,
