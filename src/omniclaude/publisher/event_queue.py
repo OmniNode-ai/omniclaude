@@ -77,7 +77,7 @@ class BoundedEventQueue:
         self._spool_dir = spool_dir or (Path.home() / ".claude" / "event-spool")
 
         self._memory_queue: deque[ModelQueuedEvent] = deque()
-        self._spool_files: list[Path] = []
+        self._spool_files: deque[Path] = deque()
         self._spool_bytes: int = 0
         self._lock = asyncio.Lock()
 
@@ -163,7 +163,7 @@ class BoundedEventQueue:
         if not self._spool_files:
             return
 
-        oldest = self._spool_files.pop(0)
+        oldest = self._spool_files.popleft()
         try:
             file_size = oldest.stat().st_size
             oldest.unlink()
@@ -198,7 +198,7 @@ class BoundedEventQueue:
         if not self._spool_files:
             return None
 
-        filepath = self._spool_files.pop(0)
+        filepath = self._spool_files.popleft()
         try:
             content = filepath.read_text(encoding="utf-8")
             event = ModelQueuedEvent.model_validate_json(content)

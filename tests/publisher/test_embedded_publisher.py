@@ -292,18 +292,29 @@ class TestEmbeddedEventPublisher:
         await publisher.queue.enqueue(event)
         assert publisher.queue.total_size() == 1
 
-        # Patch sleep to avoid real delays during test
+        # Save real sleep before patching — the patch replaces asyncio.sleep
+        # on the shared module object, so we need a direct reference to the
+        # original function for the test's own event-loop yields.
+        real_sleep = asyncio.sleep
+
+        async def mock_sleep(_seconds: float) -> None:
+            """Mock that still yields to event loop (zero real delay)."""
+            await real_sleep(0)
+
         with patch(
             "omniclaude.publisher.embedded_publisher.asyncio.sleep",
-            new_callable=AsyncMock,
+            side_effect=mock_sleep,
         ):
-            # Run the publisher loop briefly — it should retry and eventually drop
             publisher._running = True
             publisher._shutdown_event = asyncio.Event()
 
             loop_task = asyncio.create_task(publisher._publisher_loop())
-            # Give enough time for retries (max_retry_attempts defaults to 3)
-            await asyncio.sleep(0.05)
+
+            # Yield to event loop repeatedly so the publisher loop can run
+            # through all retry attempts (max_retry_attempts defaults to 3)
+            for _ in range(50):
+                await real_sleep(0)
+
             publisher._running = False
             loop_task.cancel()
             try:
@@ -313,6 +324,45 @@ class TestEmbeddedEventPublisher:
 
         # Event should have been dropped after max retries
         assert "retry-test" not in publisher._retry_counts
+        # Verify publish was actually attempted (at least max_retry_attempts times)
+        assert mock_event_bus.publish.await_count >= publisher_config.max_retry_attempts
+
+    @pytest.mark.asyncio
+    async def test_oversized_payload_rejected(
+        self, publisher: EmbeddedEventPublisher
+    ) -> None:
+        """Verify that payloads exceeding max_payload_bytes after enrichment are rejected."""
+        await publisher.start()
+        try:
+            # inject_metadata returns a payload that exceeds max_payload_bytes
+            oversized = {"data": "x" * (publisher.config.max_payload_bytes + 1)}
+            with (
+                patch.object(
+                    publisher._registry, "resolve_topic", return_value="test-topic"
+                ),
+                patch.object(publisher._registry, "validate_payload"),
+                patch.object(
+                    publisher._registry,
+                    "inject_metadata",
+                    return_value=oversized,
+                ),
+            ):
+                request = (
+                    json.dumps(
+                        {
+                            "event_type": "session.started",
+                            "payload": {"session_id": "abc"},
+                        }
+                    ).encode()
+                    + b"\n"
+                )
+                response_json = await publisher._process_request(request)
+                response = json.loads(response_json)
+
+                assert response["status"] == "error"
+                assert "maximum size" in response["reason"]
+        finally:
+            await publisher.stop()
 
     @pytest.mark.asyncio
     async def test_stale_socket_cleanup_with_dead_pid(
