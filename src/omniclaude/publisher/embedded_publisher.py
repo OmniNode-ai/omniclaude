@@ -315,12 +315,12 @@ class EmbeddedEventPublisher:
 
         try:
             topic = self._registry.resolve_topic(event_type)
-        except OnexError as e:
+        except Exception as e:
             return ModelDaemonErrorResponse(reason=str(e)).model_dump_json()
 
         try:
             self._registry.validate_payload(event_type, payload)
-        except OnexError as e:
+        except Exception as e:
             return ModelDaemonErrorResponse(reason=str(e)).model_dump_json()
 
         correlation_id = payload.get("correlation_id")

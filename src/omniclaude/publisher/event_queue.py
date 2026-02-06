@@ -167,7 +167,7 @@ class BoundedEventQueue:
         try:
             file_size = oldest.stat().st_size
             oldest.unlink()
-            self._spool_bytes -= file_size
+            self._spool_bytes = max(0, self._spool_bytes - file_size)
             event_id = (
                 oldest.stem.split("_", 1)[1] if "_" in oldest.stem else oldest.stem
             )

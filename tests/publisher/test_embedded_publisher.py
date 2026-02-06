@@ -412,3 +412,65 @@ class TestEmbeddedEventPublisher:
         ):
             # PermissionError means process exists but we can't signal it — not stale
             assert publisher._check_stale_socket() is False
+
+    @pytest.mark.asyncio
+    async def test_socket_round_trip(self, publisher: EmbeddedEventPublisher) -> None:
+        """Integration test: connect to the real Unix socket and exercise the full I/O path.
+
+        Verifies the newline-delimited JSON protocol, stream buffer handling,
+        and correct response serialization through the actual asyncio server.
+        """
+        await publisher.start()
+        try:
+            reader, writer = await asyncio.open_unix_connection(
+                str(publisher.config.socket_path)
+            )
+
+            # 1. Ping via socket
+            writer.write(b'{"command": "ping"}\n')
+            await writer.drain()
+            response_line = await asyncio.wait_for(reader.readline(), timeout=5.0)
+            response = json.loads(response_line.decode("utf-8"))
+            assert response["status"] == "ok"
+            assert "queue_size" in response
+
+            # 2. Emit via socket (with mocked registry)
+            with (
+                patch.object(
+                    publisher._registry, "resolve_topic", return_value="test-topic"
+                ),
+                patch.object(publisher._registry, "validate_payload"),
+                patch.object(
+                    publisher._registry,
+                    "inject_metadata",
+                    return_value={"enriched": True},
+                ),
+                patch.object(
+                    publisher._registry, "get_partition_key", return_value="key"
+                ),
+            ):
+                emit_request = json.dumps(
+                    {
+                        "event_type": "session.started",
+                        "payload": {"session_id": "socket-test"},
+                    }
+                )
+                writer.write(emit_request.encode("utf-8") + b"\n")
+                await writer.drain()
+                response_line = await asyncio.wait_for(reader.readline(), timeout=5.0)
+                response = json.loads(response_line.decode("utf-8"))
+                assert response["status"] == "queued"
+                assert "event_id" in response
+
+            # 3. Invalid JSON via socket
+            writer.write(b"not valid json\n")
+            await writer.drain()
+            response_line = await asyncio.wait_for(reader.readline(), timeout=5.0)
+            response = json.loads(response_line.decode("utf-8"))
+            assert response["status"] == "error"
+            assert "Invalid JSON" in response["reason"]
+
+            writer.close()
+            await writer.wait_closed()
+        finally:
+            await publisher.stop()
