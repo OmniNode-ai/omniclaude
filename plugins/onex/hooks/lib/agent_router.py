@@ -716,6 +716,7 @@ class AgentRecommendation:
     confidence: ConfidenceScore
     reason: str
     definition_path: str
+    is_explicit: bool = False
 
 
 @dataclass
@@ -767,6 +768,13 @@ def _build_registry_from_configs(configs_dir: Path) -> dict[str, Any]:
             if not agent_name.startswith("agent-"):
                 agent_name = f"agent-{agent_name}"
 
+            # Validate agent name (alphanumeric, hyphens, underscores only)
+            if not re.match(r"^[a-zA-Z0-9_-]+$", agent_name):
+                logger.warning(
+                    f"Skipping agent with invalid name '{agent_name}' from {yaml_file}"
+                )
+                continue
+
             # Build registry entry
             registry["agents"][agent_name] = {
                 "title": agent_data.get("agent_identity", {}).get("name", agent_name),
@@ -775,7 +783,9 @@ def _build_registry_from_configs(configs_dir: Path) -> dict[str, Any]:
                 ),
                 "definition_path": str(yaml_file),
                 "activation_triggers": _extract_triggers(agent_data),
-                "capabilities": agent_data.get("capabilities", []),
+                "capabilities": _flatten_capabilities(
+                    agent_data.get("capabilities", [])
+                ),
                 "domain_context": agent_data.get("domain_context", "general"),
             }
 
@@ -786,6 +796,26 @@ def _build_registry_from_configs(configs_dir: Path) -> dict[str, Any]:
 
     logger.debug(f"Built registry with {len(registry['agents'])} agents")
     return registry
+
+
+def _flatten_capabilities(capabilities: Any) -> list[str]:
+    """Flatten YAML capabilities structure into a list of strings.
+
+    Agent YAML defines capabilities as a nested dict with keys like
+    'primary', 'secondary', 'specialized' each containing a list of strings.
+    This flattens that into a single list for scoring.
+    """
+    if isinstance(capabilities, list):
+        return capabilities
+    if isinstance(capabilities, dict):
+        flat: list[str] = []
+        for value in capabilities.values():
+            if isinstance(value, list):
+                flat.extend(str(item) for item in value)
+            elif isinstance(value, str):
+                flat.append(value)
+        return flat
+    return []
 
 
 def _extract_triggers(agent_data: dict[str, Any]) -> list[str]:
@@ -1108,6 +1138,7 @@ class AgentRouter:
             ),
             reason="Explicitly requested by user",
             definition_path=agent_data.get("definition_path", ""),
+            is_explicit=True,
         )
 
     def get_cache_stats(self) -> dict[str, Any]:

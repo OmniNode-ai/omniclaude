@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Route Via Events Wrapper - Polly-First Agent Routing
+Route Via Events Wrapper - Intelligent Agent Routing
 
-Implements the Polly-first routing architecture where the polymorphic agent
-(Polly) is the intentional default for all requests. This is NOT a fallback -
-it's the primary routing strategy.
+Routes user prompts to the best-matched agent using trigger matching and
+confidence scoring. Falls back to polymorphic-agent only when no good match
+is found (confidence below threshold).
 
 Routing Semantics (three distinct fields):
 - routing_method: HOW routing executed (event_based, local, fallback)
-- routing_policy: WHY this path was chosen (polly_first, safety_gate, cost_gate)
+- routing_policy: WHY this path was chosen (trigger_match, explicit_request, fallback_default)
 - routing_path: WHAT canonical outcome (event, local, hybrid)
 
 Usage:
@@ -17,15 +17,15 @@ Usage:
 Output:
     JSON object with routing decision:
     {
-        "selected_agent": "polymorphic-agent",
-        "confidence": 0.95,
-        "reasoning": "Polly-first routing: intelligent coordinator handles all requests",
+        "selected_agent": "agent-debug",
+        "confidence": 0.85,
+        "reasoning": "Strong trigger match: 'debug'",
         "routing_method": "local",
-        "routing_policy": "polly_first",
+        "routing_policy": "trigger_match",
         "routing_path": "local",
-        "latency_ms": 2,
-        "domain": "workflow_coordination",
-        "purpose": "Intelligent coordinator for development workflows"
+        "latency_ms": 15,
+        "domain": "debugging",
+        "purpose": "Debug and troubleshoot issues"
     }
 """
 
@@ -93,10 +93,11 @@ class RoutingMethod(str, Enum):
 class RoutingPolicy(str, Enum):
     """WHY this routing path was chosen."""
 
-    POLLY_FIRST = "polly_first"  # Intentional Polly-first architecture
+    TRIGGER_MATCH = "trigger_match"  # Matched based on activation triggers
+    EXPLICIT_REQUEST = "explicit_request"  # User explicitly requested an agent
+    FALLBACK_DEFAULT = "fallback_default"  # No good match, using default agent
     SAFETY_GATE = "safety_gate"  # Safety/compliance routing
     COST_GATE = "cost_gate"  # Cost optimization routing
-    EXPLICIT_AGENT = "explicit_agent"  # User explicitly requested an agent
 
 
 class RoutingPath(str, Enum):
@@ -148,6 +149,44 @@ try:
     _assign_cohort = assign_cohort
 except ImportError:
     logger.debug("cohort_assignment not available, A/B testing will not be tracked")
+
+# Import AgentRouter for intelligent routing
+_AgentRouter: type | None = None
+_router_instance: Any = None
+try:
+    from agent_router import AgentRouter
+
+    _AgentRouter = AgentRouter
+except ImportError:
+    logger.debug("agent_router not available, will use fallback routing")
+
+
+# Confidence threshold for accepting a routed agent
+# Below this threshold, we fall back to polymorphic-agent
+CONFIDENCE_THRESHOLD = 0.5
+
+# Default fallback agent when no good match is found
+DEFAULT_AGENT = "polymorphic-agent"
+
+
+def _get_router() -> Any:
+    """
+    Get or create the singleton AgentRouter instance.
+
+    Returns:
+        AgentRouter instance or None if unavailable
+    """
+    global _router_instance
+    if _router_instance is None and _AgentRouter is not None:
+        try:
+            _router_instance = _AgentRouter()
+            logger.info(
+                f"AgentRouter initialized with {len(_router_instance.registry.get('agents', {}))} agents"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to initialize AgentRouter: {e}")
+            return None
+    return _router_instance
 
 
 def _emit_routing_decision(
@@ -212,16 +251,11 @@ def route_via_events(
     repo_path: str | None = None,
 ) -> dict[str, Any]:
     """
-    Route user prompt using Polly-first architecture.
+    Route user prompt using intelligent trigger matching and confidence scoring.
 
-    The polymorphic agent (Polly) is the INTENTIONAL default for all requests.
-    This is the primary routing strategy, not a fallback.
-
-    Polly-first benefits:
-    - Single point of coordination for all workflows
-    - Dynamic transformation to specialized agents when needed
-    - Consistent observability and action logging
-    - Transformation validation prevents routing bypasses
+    Uses AgentRouter to analyze the prompt and match against agent activation
+    triggers. Falls back to polymorphic-agent only when no good match is found
+    (confidence below threshold).
 
     Args:
         prompt: User prompt to route
@@ -243,7 +277,7 @@ def route_via_events(
         persists across sessions.
     """
     start_time = time.time()
-    event_attempted = False  # Polly-first never attempts event routing
+    event_attempted = False  # Local routing, no event bus
 
     # A/B testing cohort assignment (for experiment tracking)
     # Priority: user_id > repo_path > session_id for stickier assignment
@@ -261,28 +295,86 @@ def route_via_events(
         except Exception as e:
             logger.debug(f"Cohort assignment failed: {e}")
 
-    # Polly-first: Always route to polymorphic-agent with high confidence
-    # This is INTENTIONAL, not a fallback
+    # Build context for routing
+    context: dict[str, Any] = {}
+    if repo_path:
+        context["repo_path"] = repo_path
+
+    # Attempt intelligent routing via AgentRouter
+    router = _get_router()
+    selected_agent = DEFAULT_AGENT
+    confidence = 0.5
+    reasoning = "Fallback: no router available"
+    routing_policy = RoutingPolicy.FALLBACK_DEFAULT
+    domain = "workflow_coordination"
+    purpose = "Intelligent coordinator for development workflows"
+
+    if router is not None:
+        try:
+            recommendations = router.route(prompt, context, max_recommendations=3)
+
+            if recommendations:
+                top_rec = recommendations[0]
+                top_confidence = top_rec.confidence.total
+
+                if top_confidence >= CONFIDENCE_THRESHOLD:
+                    # Good match found - use the recommended agent
+                    selected_agent = top_rec.agent_name
+                    confidence = top_confidence
+                    reasoning = f"{top_rec.reason} - {top_rec.confidence.explanation}"
+                    routing_policy = RoutingPolicy.TRIGGER_MATCH
+
+                    # Extract domain from agent data if available
+                    agent_data = router.registry.get("agents", {}).get(
+                        selected_agent, {}
+                    )
+                    domain = agent_data.get("domain_context", "general")
+                    purpose = agent_data.get("description", top_rec.agent_title)
+
+                    # Check if this was an explicit request
+                    if getattr(top_rec, "is_explicit", False):
+                        routing_policy = RoutingPolicy.EXPLICIT_REQUEST
+
+                    logger.info(
+                        f"Routed to {selected_agent} (confidence={confidence:.2f}): {reasoning}"
+                    )
+                else:
+                    # Low confidence - fall back to polymorphic-agent
+                    reasoning = (
+                        f"Low confidence ({top_confidence:.2f} < {CONFIDENCE_THRESHOLD}), "
+                        f"best match was {top_rec.agent_name}"
+                    )
+                    logger.debug(f"Falling back to {DEFAULT_AGENT}: {reasoning}")
+            else:
+                # No matches found
+                reasoning = "No trigger matches found in prompt"
+                logger.debug(f"No matches, using {DEFAULT_AGENT}")
+
+        except Exception as e:
+            # Router error - fall back gracefully
+            reasoning = f"Routing error: {type(e).__name__}"
+            logger.warning(f"AgentRouter error: {e}")
+
     latency_ms = int((time.time() - start_time) * 1000)
 
     # Compute routing_path using the helper (for consistency with observability)
     routing_path = _compute_routing_path(RoutingMethod.LOCAL.value, event_attempted)
 
     result: dict[str, Any] = {
-        "selected_agent": "polymorphic-agent",
-        "confidence": 0.95,
-        "reasoning": "Polly-first routing: intelligent coordinator handles all requests",
+        "selected_agent": selected_agent,
+        "confidence": confidence,
+        "reasoning": reasoning,
         # Routing semantics - three distinct fields
         "routing_method": RoutingMethod.LOCAL.value,
-        "routing_policy": RoutingPolicy.POLLY_FIRST.value,
+        "routing_policy": routing_policy.value,
         "routing_path": routing_path,
         # Legacy field for backward compatibility
-        "method": RoutingPolicy.POLLY_FIRST.value,
+        "method": routing_policy.value,
         # Performance tracking
         "latency_ms": latency_ms,
         # Agent metadata
-        "domain": "workflow_coordination",
-        "purpose": "Intelligent coordinator for development workflows",
+        "domain": domain,
+        "purpose": purpose,
         # Observability signal (from OMN-1893)
         "event_attempted": event_attempted,
     }
@@ -318,17 +410,17 @@ def main() -> None:
         python route_via_events_wrapper.py "prompt" "correlation-id" [timeout_ms] [session_id]
     """
     if len(sys.argv) < 3:
-        # Still use Polly-first even with missing args (graceful degradation)
+        # Graceful degradation with fallback agent when args missing
         print(
             json.dumps(
                 {
-                    "selected_agent": "polymorphic-agent",
-                    "confidence": 0.95,
-                    "reasoning": "Polly-first routing (missing args, using defaults)",
+                    "selected_agent": DEFAULT_AGENT,
+                    "confidence": 0.5,
+                    "reasoning": "Fallback: missing required arguments",
                     "routing_method": RoutingMethod.LOCAL.value,
-                    "routing_policy": RoutingPolicy.POLLY_FIRST.value,
+                    "routing_policy": RoutingPolicy.FALLBACK_DEFAULT.value,
                     "routing_path": RoutingPath.LOCAL.value,
-                    "method": RoutingPolicy.POLLY_FIRST.value,
+                    "method": RoutingPolicy.FALLBACK_DEFAULT.value,
                     "latency_ms": 0,
                     "domain": "workflow_coordination",
                     "purpose": "Intelligent coordinator for development workflows",
