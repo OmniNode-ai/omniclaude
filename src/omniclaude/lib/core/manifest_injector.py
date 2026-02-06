@@ -968,7 +968,9 @@ class ManifestInjector:
         Returns:
             List of DisabledPattern entries. Empty list on any failure.
         """
-        # Fast-path: skip DB query when Postgres is disabled
+        # Fast-path: skip when feature or Postgres is disabled
+        if not self.enable_disabled_pattern_filter:
+            return []
         if not settings.enable_postgres:
             return []
 
@@ -997,13 +999,12 @@ class ManifestInjector:
                 connect_timeout=1,
             )
             try:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT pattern_id, pattern_class, reason, event_at, actor "
-                    "FROM disabled_patterns_current"
-                )
-                rows = cursor.fetchall()
-                cursor.close()
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "SELECT pattern_id, pattern_class, reason, event_at, actor "
+                        "FROM disabled_patterns_current"
+                    )
+                    rows = cursor.fetchall()
                 return [
                     DisabledPattern(
                         pattern_id=str(row[0]) if row[0] else None,

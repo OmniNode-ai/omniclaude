@@ -266,6 +266,7 @@ class TestGetDisabledPatterns:
     ) -> None:
         """Returns empty list when psycopg2 connect raises (graceful degradation)."""
         with patch("omniclaude.lib.core.manifest_injector.settings") as mock_settings:
+            mock_settings.enable_postgres = True
             mock_settings.postgres_host = "unreachable-host"
             mock_settings.postgres_port = 5436
             mock_settings.postgres_database = "test_db"
@@ -281,6 +282,7 @@ class TestGetDisabledPatterns:
     ) -> None:
         """Returns empty list when POSTGRES_PASSWORD is not set."""
         with patch("omniclaude.lib.core.manifest_injector.settings") as mock_settings:
+            mock_settings.enable_postgres = True
             mock_settings.postgres_host = "localhost"
             mock_settings.postgres_port = 5436
             mock_settings.postgres_database = "test_db"

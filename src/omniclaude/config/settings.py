@@ -290,7 +290,7 @@ class Settings(BaseSettings):
         description=(
             "Enable runtime kill switch for patterns. When True, ManifestInjector "
             "checks disabled_patterns_current materialized view before injection. "
-            "Requires ENABLE_POSTGRES=true and disabled_patterns_current view to exist."
+            "Requires ENABLE_POSTGRES=true; effectively a no-op when Postgres is disabled."
         ),
     )
 
