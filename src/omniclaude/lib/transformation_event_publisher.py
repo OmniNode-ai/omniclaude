@@ -38,53 +38,40 @@ Event emission is BEST-EFFORT, NEVER blocks execution.
 
 import asyncio
 import atexit
-import json
 import logging
-import os
-import re
-import threading
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, cast
+from typing import Any
 from uuid import UUID, uuid4
 
-from omniclaude.hooks.topics import TopicBase, build_topic
+from omniclaude.hooks.schemas import sanitize_text
+from omniclaude.hooks.topics import TopicBase
+from omniclaude.lib.kafka_producer_utils import (
+    KAFKA_PUBLISH_TIMEOUT_SECONDS,
+    KafkaProducerManager,
+    build_kafka_topic,
+    create_event_envelope,
+)
 
 logger = logging.getLogger(__name__)
 
 # Maximum length for user_request in event payloads (security: prevent sensitive data leakage)
 MAX_USER_REQUEST_LENGTH = 500
 
-# Patterns for sensitive data redaction (same patterns used in prompt_preview)
-_SENSITIVE_PATTERNS = [
-    (re.compile(r"sk-[a-zA-Z0-9]{20,}"), "[OPENAI_KEY_REDACTED]"),  # OpenAI API keys
-    (re.compile(r"AKIA[A-Z0-9]{16}"), "[AWS_KEY_REDACTED]"),  # AWS access keys
-    (re.compile(r"ghp_[a-zA-Z0-9]{36}"), "[GITHUB_TOKEN_REDACTED]"),  # GitHub PATs
-    (re.compile(r"gho_[a-zA-Z0-9]{36}"), "[GITHUB_TOKEN_REDACTED]"),  # GitHub OAuth
-    (re.compile(r"xox[baprs]-[a-zA-Z0-9-]+"), "[SLACK_TOKEN_REDACTED]"),  # Slack tokens
-    (re.compile(r"-----BEGIN [A-Z]+ PRIVATE KEY-----"), "[PRIVATE_KEY_REDACTED]"),  # PEM keys
-    (re.compile(r"Bearer [a-zA-Z0-9._-]+"), "[BEARER_TOKEN_REDACTED]"),  # Bearer tokens
-    (re.compile(r":[^:@\s]{8,}@"), ":[PASSWORD_REDACTED]@"),  # Passwords in URLs
-]
-
 
 def _sanitize_user_request(user_request: str | None) -> str | None:
     """
     Sanitize user_request for safe inclusion in event payloads.
 
+    - Redacts known sensitive patterns using canonical patterns from schemas.py
     - Truncates to MAX_USER_REQUEST_LENGTH characters
-    - Redacts known sensitive patterns (API keys, tokens, passwords)
     - Returns None if input is None
-
-    This follows the same privacy patterns as prompt_preview in schemas.py.
     """
     if user_request is None:
         return None
 
-    # Redact sensitive patterns
-    sanitized = user_request
-    for pattern, replacement in _SENSITIVE_PATTERNS:
-        sanitized = pattern.sub(replacement, sanitized)
+    # Use canonical redaction from schemas.py (single source of truth)
+    sanitized = sanitize_text(user_request)
 
     # Truncate to max length
     if len(sanitized) > MAX_USER_REQUEST_LENGTH:
@@ -121,169 +108,19 @@ class TransformationEventType(str, Enum):
         return self.value
 
 
-# Lazy-loaded Kafka producer (singleton)
-_kafka_producer: Any | None = None
-_producer_lock: asyncio.Lock | None = None
-_producer_lock_loop: asyncio.AbstractEventLoop | None = None
-_lock_creation_lock = threading.Lock()  # Protects asyncio.Lock creation
+# Kafka producer manager (shared utilities from kafka_producer_utils)
+_producer_manager = KafkaProducerManager(name="transformation")
 
 
-def _get_kafka_topic_prefix() -> str:
-    """Get Kafka topic prefix (environment) from environment.
-
-    Returns:
-        Topic prefix (e.g., "dev", "staging", "prod"). Defaults to "dev".
-    """
-    env_prefix = os.getenv("KAFKA_TOPIC_PREFIX") or os.getenv("KAFKA_ENVIRONMENT")
-    return env_prefix if env_prefix else "dev"
+# Backwards-compatible aliases for tests that reference internal functions
+async def get_producer_lock():
+    """Get producer lock (delegates to KafkaProducerManager)."""
+    return await _producer_manager.get_lock()
 
 
-def _get_kafka_bootstrap_servers() -> str | None:
-    """
-    Get Kafka bootstrap servers from environment.
-
-    Per CLAUDE.md: No localhost defaults - explicit configuration required.
-    Hardcoded fallbacks are a security/reliability concern in production.
-
-    Returns:
-        Bootstrap servers string, or None if not configured.
-    """
-    servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS")
-    if not servers:
-        logger.warning(
-            "KAFKA_BOOTSTRAP_SERVERS not set. Kafka publishing disabled. "
-            "Set KAFKA_BOOTSTRAP_SERVERS environment variable to enable event publishing."
-        )
-        return None
-    return servers
-
-
-def _create_event_envelope(
-    event_type: TransformationEventType,
-    payload: dict[str, Any],
-    correlation_id: str,
-    source: str = "omniclaude",
-    tenant_id: str = "default",
-    namespace: str = "onex",
-    causation_id: str | None = None,
-) -> dict[str, Any]:
-    """
-    Create OnexEnvelopeV1 standard event envelope.
-
-    Following EVENT_BUS_INTEGRATION_PATTERNS standards for consistent event structure.
-
-    Args:
-        event_type: Transformation event type enum
-        payload: Event payload containing transformation data
-        correlation_id: Correlation ID for distributed tracing
-        source: Source service name (default: omniclaude)
-        tenant_id: Tenant identifier (default: default)
-        namespace: Event namespace (default: onex)
-        causation_id: Optional causation ID for event chains
-
-    Returns:
-        Dict containing OnexEnvelopeV1 wrapped event
-    """
-    return {
-        "event_type": event_type.value,
-        "event_id": str(uuid4()),  # Unique event ID for idempotency
-        "timestamp": datetime.now(UTC).isoformat(),  # RFC3339 format
-        "tenant_id": tenant_id,
-        "namespace": namespace,
-        "source": source,
-        "correlation_id": correlation_id,
-        "causation_id": causation_id,
-        "schema_ref": f"registry://{namespace}/transformation/{event_type.name.lower()}/v1",
-        "payload": payload,
-    }
-
-
-async def get_producer_lock() -> asyncio.Lock:
-    """
-    Get or create the producer lock lazily under a running event loop.
-
-    This ensures asyncio.Lock() is never created at module level, which
-    would cause RuntimeError in Python 3.12+ when no event loop exists.
-
-    The lock is bound to the event loop that created it. If called from a
-    different loop (e.g., via ThreadPoolExecutor+asyncio.run()), a new lock
-    is created to avoid cross-loop RuntimeError in Python 3.12+.
-
-    Thread-Safety Guarantee:
-        Uses double-checked locking pattern with a threading.Lock to prevent
-        race conditions where multiple coroutines (potentially from different
-        threads) could create duplicate Lock instances on first call.
-        - Once created, the lock is never replaced
-
-        See tests/lib/test_transformation_event_publisher.py for concurrency tests.
-
-    Returns:
-        asyncio.Lock: The singleton producer lock instance
-    """
-    global _producer_lock, _producer_lock_loop
-    current_loop = asyncio.get_running_loop()
-    if _producer_lock is not None and _producer_lock_loop is current_loop:
-        return _producer_lock
-    with _lock_creation_lock:
-        if _producer_lock is None or _producer_lock_loop is not current_loop:
-            _producer_lock = asyncio.Lock()
-            _producer_lock_loop = current_loop
-    return _producer_lock
-
-
-async def _get_kafka_producer() -> Any | None:
-    """
-    Get or create Kafka producer (async singleton pattern).
-
-    Returns:
-        AIOKafkaProducer instance or None if unavailable
-    """
-    global _kafka_producer
-
-    if _kafka_producer is not None:
-        return _kafka_producer
-
-    # Get the lock (created lazily under running event loop)
-    async with await get_producer_lock():
-        # Re-read global after acquiring lock - another coroutine may have created it
-        # cast() required because mypy narrows _kafka_producer to None after line 161
-        # but async yield point allows other coroutines to modify the global
-        current_producer = cast("Any | None", _kafka_producer)
-        if current_producer is not None:
-            return current_producer
-
-        try:
-            from aiokafka import AIOKafkaProducer
-
-            bootstrap_servers = _get_kafka_bootstrap_servers()
-            if bootstrap_servers is None:
-                return None
-
-            producer = AIOKafkaProducer(
-                bootstrap_servers=bootstrap_servers,
-                value_serializer=lambda v: json.dumps(v).encode("utf-8"),
-                compression_type="gzip",
-                linger_ms=10,  # Batch for 10ms
-                acks=1,  # Leader acknowledgment (balance speed/reliability)
-                max_batch_size=16384,  # 16KB batches
-                request_timeout_ms=5000,  # 5 second timeout
-            )
-
-            await producer.start()
-            _kafka_producer = producer
-            logger.info(f"Kafka producer initialized: {bootstrap_servers}")
-            return producer
-
-        except ImportError:
-            logger.warning(
-                "aiokafka not installed. Transformation events will not be published. "
-                "aiokafka is an optional dependency for Kafka event publishing. "
-                "Install with: pip install aiokafka>=0.9.0"
-            )
-            return None
-        except Exception as e:
-            logger.warning(f"Failed to initialize Kafka producer: {e}")
-            return None
+async def _get_kafka_producer():
+    """Get producer (delegates to KafkaProducerManager)."""
+    return await _producer_manager.get_producer()
 
 
 async def publish_transformation_event(
@@ -400,17 +237,19 @@ async def publish_transformation_event(
         payload = {k: v for k, v in payload.items() if v is not None}
 
         # Wrap payload in OnexEnvelopeV1 standard envelope
-        envelope = _create_event_envelope(
-            event_type=event_type,
+        envelope = create_event_envelope(
+            event_type_value=event_type.value,
+            event_type_name=event_type.name.lower(),
             payload=payload,
             correlation_id=correlation_id,
+            schema_domain="transformation",
             source="omniclaude",
             tenant_id=tenant_id,
             namespace=namespace,
             causation_id=causation_id,
         )
 
-        # Get producer
+        # Get producer (uses module-level function for testability)
         producer = await _get_kafka_producer()
         if producer is None:
             logger.debug(
@@ -419,8 +258,7 @@ async def publish_transformation_event(
             return False
 
         # Build ONEX-compliant topic name with environment prefix
-        topic_prefix = _get_kafka_topic_prefix()
-        topic = build_topic(topic_prefix, event_type.get_topic_name())
+        topic = build_kafka_topic(event_type.get_topic_name())
 
         # Use correlation_id as partition key for workflow coherence
         partition_key = correlation_id.encode("utf-8")
@@ -432,14 +270,13 @@ async def publish_transformation_event(
         )
 
         logger.debug(
-            f"Published transformation event: {topic} | "
+            f"Published transformation event: "
             f"{source_agent} → {target_agent} | "
             f"correlation_id={correlation_id}"
         )
         return True
 
     except TimeoutError:
-        # Handle timeout specifically for better observability
         logger.warning(
             f"Timeout publishing transformation event "
             f"(event_type={event_type.value}, timeout={KAFKA_PUBLISH_TIMEOUT_SECONDS}s)"
@@ -531,69 +368,11 @@ async def publish_transformation_failed(
 
 async def close_producer() -> None:
     """Close Kafka producer on shutdown."""
-    global _kafka_producer
-    if _kafka_producer is not None:
-        try:
-            await _kafka_producer.stop()
-            logger.info("Kafka producer closed")
-        except Exception as e:
-            logger.warning(f"Error closing Kafka producer: {e}")
-        finally:
-            _kafka_producer = None
-
-
-def _cleanup_producer_sync() -> None:
-    """
-    Synchronous wrapper for close_producer() to be called by atexit.
-
-    This ensures the Kafka producer is closed when the Python interpreter
-    exits, preventing resource leak warnings.
-    """
-    global _kafka_producer
-    if _kafka_producer is not None:
-        try:
-            # Try to get existing event loop
-            try:
-                asyncio.get_running_loop()
-                # Loop is running, can't cleanup synchronously
-                return
-            except RuntimeError:
-                pass
-
-            # Create a new event loop for cleanup (asyncio.get_event_loop()
-            # is deprecated in Python 3.12+)
-            loop = asyncio.new_event_loop()
-            try:
-                loop.run_until_complete(close_producer())
-            except Exception:
-                # If async cleanup fails, fall through to direct cleanup below
-                pass
-            finally:
-                loop.close()
-
-            if _kafka_producer is not None:
-                # Async cleanup didn't fully work - directly close underlying components
-                # NOTE: Accessing _client is necessary because AIOKafkaProducer
-                # doesn't expose a synchronous close() method.
-                try:
-                    client = getattr(_kafka_producer, "_client", None)
-                    if client is not None:
-                        close_method = getattr(client, "close", None)
-                        if close_method is not None and callable(close_method):
-                            close_method()
-                    _kafka_producer = None
-                    logger.debug("Kafka producer closed (synchronous cleanup)")
-                except (AttributeError, TypeError):
-                    _kafka_producer = None
-                except Exception:
-                    _kafka_producer = None
-
-        except Exception:
-            _kafka_producer = None
+    await _producer_manager.close()
 
 
 # Register cleanup on interpreter exit
-atexit.register(_cleanup_producer_sync)
+atexit.register(_producer_manager.cleanup_sync)
 
 
 # Synchronous wrapper for backward compatibility

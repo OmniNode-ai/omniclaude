@@ -48,8 +48,31 @@ sys.modules[_MODULE_NAME] = tep
 
 MAX_USER_REQUEST_LENGTH = tep.MAX_USER_REQUEST_LENGTH
 TransformationEventType = tep.TransformationEventType
-_create_event_envelope = tep._create_event_envelope
 _sanitize_user_request = tep._sanitize_user_request
+
+# Import shared envelope creation from kafka_producer_utils
+from omniclaude.lib.kafka_producer_utils import (
+    create_event_envelope as _create_event_envelope_base,
+)
+
+
+def _create_event_envelope(
+    event_type,
+    payload,
+    correlation_id,
+    **kwargs,
+):
+    """Test adapter: wraps create_event_envelope with the old API signature."""
+    return _create_event_envelope_base(
+        event_type_value=event_type.value,
+        event_type_name=event_type.name.lower(),
+        payload=payload,
+        correlation_id=correlation_id,
+        schema_domain="transformation",
+        **kwargs,
+    )
+
+
 close_producer = tep.close_producer
 get_producer_lock = tep.get_producer_lock
 publish_transformation_complete = tep.publish_transformation_complete
@@ -191,36 +214,37 @@ class TestUserRequestSanitization:
         assert result == short_request
 
     def test_sanitize_redacts_openai_keys(self) -> None:
-        """Test OpenAI API keys are redacted."""
+        """Test OpenAI API keys are redacted (uses canonical patterns from schemas.py)."""
         request = "Use this key: sk-1234567890abcdefghijklmnop"
         result = _sanitize_user_request(request)
         assert result is not None
-        assert "sk-" not in result
-        assert "[OPENAI_KEY_REDACTED]" in result
+        # Canonical pattern: sk-***REDACTED*** (preserves prefix for identification)
+        assert "1234567890abcdefghijklmnop" not in result
+        assert "***REDACTED***" in result
 
     def test_sanitize_redacts_aws_keys(self) -> None:
         """Test AWS access keys are redacted."""
         request = "AWS key: AKIA1234567890ABCDEF"
         result = _sanitize_user_request(request)
         assert result is not None
-        assert "AKIA" not in result
-        assert "[AWS_KEY_REDACTED]" in result
+        assert "1234567890ABCDEF" not in result
+        assert "***REDACTED***" in result
 
     def test_sanitize_redacts_github_tokens(self) -> None:
         """Test GitHub tokens are redacted."""
         request = "Token: ghp_1234567890abcdefghijklmnopqrstuvwxyz"
         result = _sanitize_user_request(request)
         assert result is not None
-        assert "ghp_" not in result
-        assert "[GITHUB_TOKEN_REDACTED]" in result
+        assert "1234567890abcdefghijklmnopqrstuvwxyz" not in result
+        assert "***REDACTED***" in result
 
     def test_sanitize_redacts_bearer_tokens(self) -> None:
         """Test Bearer tokens are redacted."""
         request = "Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
         result = _sanitize_user_request(request)
         assert result is not None
-        assert "Bearer eyJ" not in result
-        assert "[BEARER_TOKEN_REDACTED]" in result
+        assert "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" not in result
+        assert "***REDACTED***" in result
 
     def test_sanitize_redacts_passwords_in_urls(self) -> None:
         """Test passwords in URLs are redacted."""
@@ -228,7 +252,7 @@ class TestUserRequestSanitization:
         result = _sanitize_user_request(request)
         assert result is not None
         assert "mysecretpassword" not in result
-        assert "[PASSWORD_REDACTED]" in result
+        assert "***REDACTED***" in result
 
 
 class TestProducerLock:
@@ -236,10 +260,12 @@ class TestProducerLock:
 
     @pytest.fixture(autouse=True)
     def reset_producer_lock(self) -> None:
-        """Reset the global producer lock before each test."""
-        tep._producer_lock = None
+        """Reset the producer lock before each test."""
+        tep._producer_manager._lock = None
+        tep._producer_manager._lock_loop = None
         yield
-        tep._producer_lock = None
+        tep._producer_manager._lock = None
+        tep._producer_manager._lock_loop = None
 
     @pytest.mark.asyncio
     async def test_get_producer_lock_returns_asyncio_lock(self) -> None:
@@ -386,9 +412,8 @@ class TestPublishTransformationEvent:
                     new_callable=AsyncMock,
                     return_value=mock_producer,
                 ),
-                patch.object(
-                    tep,
-                    "_get_kafka_topic_prefix",
+                patch(
+                    "omniclaude.lib.kafka_producer_utils.get_kafka_topic_prefix",
                     return_value="dev",
                 ),
             ):
@@ -502,10 +527,10 @@ class TestCloseProducer:
 
     @pytest.fixture(autouse=True)
     def reset_producer(self) -> None:
-        """Reset the global producer before each test."""
-        tep._kafka_producer = None
+        """Reset the producer manager before each test."""
+        tep._producer_manager._producer = None
         yield
-        tep._kafka_producer = None
+        tep._producer_manager._producer = None
 
     @pytest.mark.asyncio
     async def test_close_producer_when_none(self) -> None:
@@ -518,12 +543,12 @@ class TestCloseProducer:
         """Test close_producer calls stop on the producer."""
         mock_producer = AsyncMock()
         mock_producer.stop = AsyncMock()
-        tep._kafka_producer = mock_producer
+        tep._producer_manager._producer = mock_producer
 
         await close_producer()
 
         mock_producer.stop.assert_called_once()
-        assert tep._kafka_producer is None
+        assert tep._producer_manager._producer is None
 
 
 class TestIntegrationScenarios:
@@ -547,9 +572,8 @@ class TestIntegrationScenarios:
                 new_callable=AsyncMock,
                 return_value=mock_producer,
             ),
-            patch.object(
-                tep,
-                "_get_kafka_topic_prefix",
+            patch(
+                "omniclaude.lib.kafka_producer_utils.get_kafka_topic_prefix",
                 return_value="dev",
             ),
         ):
@@ -598,9 +622,8 @@ class TestIntegrationScenarios:
                 new_callable=AsyncMock,
                 return_value=mock_producer,
             ),
-            patch.object(
-                tep,
-                "_get_kafka_topic_prefix",
+            patch(
+                "omniclaude.lib.kafka_producer_utils.get_kafka_topic_prefix",
                 return_value="dev",
             ),
         ):

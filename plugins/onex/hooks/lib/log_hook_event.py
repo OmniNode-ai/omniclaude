@@ -189,7 +189,12 @@ def main():
     # Invocation subcommand
     invoc_parser = subparsers.add_parser("invocation", help="Log hook invocation")
     invoc_parser.add_argument("--hook-name", required=True)
-    invoc_parser.add_argument("--prompt", required=True)
+    invoc_parser.add_argument("--prompt", required=False, default=None)
+    invoc_parser.add_argument(
+        "--prompt-stdin",
+        action="store_true",
+        help="Read prompt from stdin (avoids exposing prompt in process table)",
+    )
     invoc_parser.add_argument("--correlation-id", required=True)
 
     # Routing subcommand
@@ -215,9 +220,13 @@ def main():
     args = parser.parse_args()
 
     if args.command == "invocation":
+        # Read prompt from stdin if --prompt-stdin is set (prevents process table exposure)
+        prompt = args.prompt
+        if getattr(args, "prompt_stdin", False) or prompt is None:
+            prompt = sys.stdin.read()
         event_id = log_invocation(
             hook_name=args.hook_name,
-            prompt=args.prompt,
+            prompt=prompt,
             correlation_id=args.correlation_id,
         )
     elif args.command == "routing":

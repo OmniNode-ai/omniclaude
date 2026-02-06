@@ -300,17 +300,30 @@ class AgentTransformer:
                     logger.error(
                         f"Validator internal error (fail closed): {validator_error}"
                     )
-                    validation_outcome = ValidatorOutcome.BLOCKED.value
+                    # Guard against ValidatorOutcome being None (defensive: import
+                    # could have partially failed despite VALIDATOR_AVAILABLE=True)
+                    blocked_value = ValidatorOutcome.BLOCKED.value if ValidatorOutcome is not None else "blocked"
+                    blocked_outcome = ValidatorOutcome.BLOCKED if ValidatorOutcome is not None else None
+                    validation_outcome = blocked_value
                     validation_metrics = {
                         "block_reason": "validator_internal_error",
                         "error_type": type(validator_error).__name__,
                     }
-                    validation_result = TransformationValidationResult(
-                        outcome=ValidatorOutcome.BLOCKED,
-                        is_valid=False,
-                        error_message=f"Validator internal error (fail closed): {validator_error}",
-                        metrics=validation_metrics,
-                    )
+                    if TransformationValidationResult is not None and blocked_outcome is not None:
+                        validation_result = TransformationValidationResult(
+                            outcome=blocked_outcome,
+                            is_valid=False,
+                            error_message=f"Validator internal error (fail closed): {validator_error}",
+                            metrics=validation_metrics,
+                        )
+                    else:
+                        # Validator types unavailable - create a minimal stub
+                        # that satisfies the is_valid check below
+                        class _BlockedStub:
+                            is_valid = False
+                            error_message = f"Validator internal error (fail closed): {validator_error}"
+                            warning_message = None
+                        validation_result = _BlockedStub()  # type: ignore[assignment]
 
                 # Log validation result
                 if validation_result.warning_message:

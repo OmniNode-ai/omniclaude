@@ -47,8 +47,6 @@ run_with_timeout() {
     perl -e 'alarm shift; exec @ARGV' "$timeout_sec" "$@"
 }
 
-mkdir -p "$PROJECT_ROOT/tmp"
-
 # -----------------------------
 # Input Processing
 # -----------------------------
@@ -71,10 +69,11 @@ else
 fi
 
 # Log hook invocation (non-blocking)
+# Pass prompt via stdin to avoid exposing it in process table (ps aux / /proc/PID/cmdline)
 (
-    $PYTHON_CMD "${HOOKS_LIB}/log_hook_event.py" invocation \
+    printf '%s' "$PROMPT" | $PYTHON_CMD "${HOOKS_LIB}/log_hook_event.py" invocation \
         --hook-name "UserPromptSubmit" \
-        --prompt "$PROMPT" \
+        --prompt-stdin \
         --correlation-id "$CORRELATION_ID" \
         2>>"$LOG_FILE" || true
 ) &
@@ -86,7 +85,14 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && [ "${SKIP_CLAUDE_HOOK_EVENT_EMIT:-0}" -ne
     PROMPT_PAYLOAD=$(jq -n \
         --arg session_id "$SESSION_ID" \
         --arg prompt "$PROMPT" \
-        --arg prompt_preview "${PROMPT:0:100}" \
+        --arg prompt_preview "$(printf '%s' "${PROMPT:0:100}" | sed -E \
+            -e 's/sk-[a-zA-Z0-9]{20,}/sk-***REDACTED***/g' \
+            -e 's/AKIA[A-Z0-9]{16}/AKIA***REDACTED***/g' \
+            -e 's/ghp_[a-zA-Z0-9]{36}/ghp_***REDACTED***/g' \
+            -e 's/gho_[a-zA-Z0-9]{36}/gho_***REDACTED***/g' \
+            -e 's/xox[baprs]-[a-zA-Z0-9-]+/xox*-***REDACTED***/g' \
+            -e 's/Bearer [a-zA-Z0-9._-]{20,}/Bearer ***REDACTED***/g' \
+            -e 's/-----BEGIN [A-Z ]*PRIVATE KEY-----/-----BEGIN ***REDACTED*** PRIVATE KEY-----/g')" \
         --argjson prompt_length "${#PROMPT}" \
         --arg correlation_id "$CORRELATION_ID" \
         --arg event_type "UserPromptSubmit" \

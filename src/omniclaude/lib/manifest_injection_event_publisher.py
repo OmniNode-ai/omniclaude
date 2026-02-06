@@ -36,23 +36,21 @@ Event emission is BEST-EFFORT, NEVER blocks execution.
 
 import asyncio
 import atexit
-import json
 import logging
-import os
-import threading
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, cast
+from typing import Any
 from uuid import UUID, uuid4
 
-from omniclaude.hooks.topics import TopicBase, build_topic
+from omniclaude.hooks.topics import TopicBase
+from omniclaude.lib.kafka_producer_utils import (
+    KAFKA_PUBLISH_TIMEOUT_SECONDS,
+    KafkaProducerManager,
+    build_kafka_topic,
+    create_event_envelope,
+)
 
 logger = logging.getLogger(__name__)
-
-# Kafka publish timeout (10 seconds)
-# Prevents indefinite blocking if broker is slow/unresponsive
-KAFKA_PUBLISH_TIMEOUT_SECONDS = 10.0
-
 
 class ManifestInjectionEventType(str, Enum):
     """Agent manifest injection event types with standardized topic routing.
@@ -76,158 +74,19 @@ class ManifestInjectionEventType(str, Enum):
         return self.value
 
 
-# Lazy-loaded Kafka producer (singleton)
-_kafka_producer: Any | None = None
-_producer_lock: asyncio.Lock | None = None
-_producer_lock_loop: asyncio.AbstractEventLoop | None = None
-_lock_creation_lock = threading.Lock()  # Protects asyncio.Lock creation
+# Kafka producer manager (shared utilities from kafka_producer_utils)
+_producer_manager = KafkaProducerManager(name="manifest-injection")
 
 
-def _get_kafka_topic_prefix() -> str:
-    """Get Kafka topic prefix (environment) from environment.
-
-    Returns:
-        Topic prefix (e.g., "dev", "staging", "prod"). Defaults to "dev".
-    """
-    env_prefix = os.getenv("KAFKA_TOPIC_PREFIX") or os.getenv("KAFKA_ENVIRONMENT")
-    return env_prefix if env_prefix else "dev"
+# Backwards-compatible aliases for tests that reference internal functions
+async def get_producer_lock():
+    """Get producer lock (delegates to KafkaProducerManager)."""
+    return await _producer_manager.get_lock()
 
 
-def _get_kafka_bootstrap_servers() -> str | None:
-    """
-    Get Kafka bootstrap servers from environment.
-
-    Per CLAUDE.md: No localhost defaults - explicit configuration required.
-    Returns None if not configured, enabling graceful degradation.
-    """
-    servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS")
-    if not servers:
-        logger.warning(
-            "KAFKA_BOOTSTRAP_SERVERS not set. Event publishing disabled. "
-            "Set this environment variable to enable Kafka integration."
-        )
-        return None
-    return servers
-
-
-def _create_event_envelope(
-    event_type: ManifestInjectionEventType,
-    payload: dict[str, Any],
-    correlation_id: str,
-    source: str = "omniclaude",
-    tenant_id: str = "default",
-    namespace: str = "onex",
-    causation_id: str | None = None,
-) -> dict[str, Any]:
-    """
-    Create OnexEnvelopeV1 standard event envelope.
-
-    Following EVENT_BUS_INTEGRATION_PATTERNS standards for consistent event structure.
-
-    Args:
-        event_type: Manifest injection event type enum
-        payload: Event payload containing injection data
-        correlation_id: Correlation ID for distributed tracing
-        source: Source service name (default: omniclaude)
-        tenant_id: Tenant identifier (default: default)
-        namespace: Event namespace (default: onex)
-        causation_id: Optional causation ID for event chains
-
-    Returns:
-        Dict containing OnexEnvelopeV1 wrapped event
-    """
-    return {
-        "event_type": event_type.value,
-        "event_id": str(uuid4()),  # Unique event ID for idempotency
-        "timestamp": datetime.now(UTC).isoformat(),  # RFC3339 format
-        "tenant_id": tenant_id,
-        "namespace": namespace,
-        "source": source,
-        "correlation_id": correlation_id,
-        "causation_id": causation_id,
-        "schema_ref": f"registry://{namespace}/manifest-injection/{event_type.name.lower()}/v1",
-        "payload": payload,
-    }
-
-
-async def get_producer_lock() -> asyncio.Lock:
-    """
-    Get or create the producer lock lazily under a running event loop.
-
-    This ensures asyncio.Lock() is never created at module level, which
-    would cause RuntimeError in Python 3.12+ when no event loop exists.
-
-    Uses double-checked locking with a threading.Lock to prevent race
-    conditions where multiple coroutines could create duplicate Lock instances.
-
-    Returns:
-        asyncio.Lock: The producer lock instance
-    """
-    global _producer_lock, _producer_lock_loop
-    current_loop = asyncio.get_running_loop()
-    if _producer_lock is not None and _producer_lock_loop is current_loop:
-        return _producer_lock
-    with _lock_creation_lock:
-        if _producer_lock is None or _producer_lock_loop is not current_loop:
-            _producer_lock = asyncio.Lock()
-            _producer_lock_loop = current_loop
-    return _producer_lock
-
-
-async def _get_kafka_producer() -> Any | None:
-    """
-    Get or create Kafka producer (async singleton pattern).
-
-    Returns:
-        AIOKafkaProducer instance or None if unavailable
-    """
-    global _kafka_producer
-
-    if _kafka_producer is not None:
-        return _kafka_producer
-
-    # Get the lock (created lazily under running event loop)
-    async with await get_producer_lock():
-        # Re-read global after acquiring lock - another coroutine may have created it
-        # cast() required because mypy narrows _kafka_producer to None after line 161
-        # but async yield point allows other coroutines to modify the global
-        current_producer = cast("Any | None", _kafka_producer)
-        if current_producer is not None:
-            return current_producer
-
-        try:
-            from aiokafka import AIOKafkaProducer
-
-            bootstrap_servers = _get_kafka_bootstrap_servers()
-            if bootstrap_servers is None:
-                logger.debug("Kafka not configured - event publishing disabled")
-                return None
-
-            producer = AIOKafkaProducer(
-                bootstrap_servers=bootstrap_servers,
-                value_serializer=lambda v: json.dumps(v).encode("utf-8"),
-                compression_type="gzip",
-                linger_ms=10,  # Batch for 10ms
-                acks=1,  # Leader acknowledgment (balance speed/reliability)
-                max_batch_size=16384,  # 16KB batches
-                request_timeout_ms=5000,  # 5 second timeout
-            )
-
-            await producer.start()
-            _kafka_producer = producer
-            logger.info(f"Kafka producer initialized: {bootstrap_servers}")
-            return producer
-
-        except ImportError:
-            logger.warning(
-                "aiokafka not installed. Manifest injection events will not be published. "
-                "aiokafka is an optional dependency for Kafka event publishing. "
-                "Install with: pip install aiokafka>=0.9.0"
-            )
-            return None
-        except Exception as e:
-            logger.warning(f"Failed to initialize Kafka producer: {e}")
-            return None
+async def _get_kafka_producer():
+    """Get producer (delegates to KafkaProducerManager)."""
+    return await _producer_manager.get_producer()
 
 
 async def publish_manifest_injection_event(
@@ -308,17 +167,19 @@ async def publish_manifest_injection_event(
         payload = {k: v for k, v in payload.items() if v is not None}
 
         # Wrap payload in OnexEnvelopeV1 standard envelope
-        envelope = _create_event_envelope(
-            event_type=event_type,
+        envelope = create_event_envelope(
+            event_type_value=event_type.value,
+            event_type_name=event_type.name.lower(),
             payload=payload,
             correlation_id=correlation_id_str,
+            schema_domain="manifest-injection",
             source="omniclaude",
             tenant_id=tenant_id,
             namespace=namespace,
             causation_id=causation_id,
         )
 
-        # Get producer
+        # Get producer (uses module-level function for testability)
         producer = await _get_kafka_producer()
         if producer is None:
             logger.debug(
@@ -327,8 +188,7 @@ async def publish_manifest_injection_event(
             return False
 
         # Build ONEX-compliant topic name with environment prefix
-        topic_prefix = _get_kafka_topic_prefix()
-        topic = build_topic(topic_prefix, event_type.get_topic_name())
+        topic = build_kafka_topic(event_type.get_topic_name())
 
         # Use correlation_id as partition key for workflow coherence
         partition_key = correlation_id_str.encode("utf-8")
@@ -340,14 +200,13 @@ async def publish_manifest_injection_event(
         )
 
         logger.debug(
-            f"Published manifest injection event: {topic} | "
+            f"Published manifest injection event: "
             f"agent={agent_name} | "
             f"correlation_id={correlation_id_str}"
         )
         return True
 
     except TimeoutError:
-        # Handle timeout specifically for better observability
         logger.warning(
             f"Timeout publishing manifest injection event "
             f"(event_type={event_type.value}, timeout={KAFKA_PUBLISH_TIMEOUT_SECONDS}s)"
@@ -427,66 +286,11 @@ async def publish_manifest_injection_failed(
 
 async def close_producer() -> None:
     """Close Kafka producer on shutdown."""
-    global _kafka_producer
-    if _kafka_producer is not None:
-        try:
-            await _kafka_producer.stop()
-            logger.info("Kafka producer closed")
-        except Exception as e:
-            logger.warning(f"Error closing Kafka producer: {e}")
-        finally:
-            _kafka_producer = None
-
-
-def _cleanup_producer_sync() -> None:
-    """
-    Synchronous wrapper for close_producer() to be called by atexit.
-
-    This ensures the Kafka producer is closed when the Python interpreter
-    exits, preventing resource leak warnings.
-    """
-    global _kafka_producer
-    if _kafka_producer is not None:
-        try:
-            # Try to get existing event loop
-            try:
-                asyncio.get_running_loop()
-                # Loop is running, can't cleanup synchronously
-                return
-            except RuntimeError:
-                pass
-
-            # Create a new event loop for cleanup (asyncio.get_event_loop()
-            # is deprecated in Python 3.12+)
-            loop = asyncio.new_event_loop()
-            try:
-                loop.run_until_complete(close_producer())
-            except Exception:
-                pass
-            finally:
-                loop.close()
-
-            if _kafka_producer is not None:
-                # Async cleanup didn't fully work - directly close underlying components
-                try:
-                    client = getattr(_kafka_producer, "_client", None)
-                    if client is not None:
-                        close_method = getattr(client, "close", None)
-                        if close_method is not None and callable(close_method):
-                            close_method()
-                    _kafka_producer = None
-                    logger.debug("Kafka producer closed (synchronous cleanup)")
-                except (AttributeError, TypeError):
-                    _kafka_producer = None
-                except Exception:
-                    _kafka_producer = None
-
-        except Exception:
-            _kafka_producer = None
+    await _producer_manager.close()
 
 
 # Register cleanup on interpreter exit
-atexit.register(_cleanup_producer_sync)
+atexit.register(_producer_manager.cleanup_sync)
 
 
 # Synchronous wrapper for backward compatibility
