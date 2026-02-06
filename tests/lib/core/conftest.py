@@ -22,13 +22,26 @@ from unittest.mock import MagicMock
 
 
 def _setup_omnibase_mocks() -> None:
-    """Setup comprehensive mocks for omnibase_infra and omnibase_core."""
+    """Setup comprehensive mocks for omnibase_infra and omnibase_core.
 
+    Only mocks when the real package is NOT installed. If omnibase_infra
+    is available, we skip mocking entirely to avoid poisoning sys.modules
+    (which breaks subpackage imports like omnibase_infra.runtime.emit_daemon
+    when running the full test suite).
+    """
     # Skip if already mocked (allows re-running)
     if "omnibase_infra" in sys.modules and hasattr(
         sys.modules["omnibase_infra"], "_is_mock"
     ):
         return
+
+    # Skip if the real package is available — mocking would shadow it
+    try:
+        import omnibase_infra  # noqa: F401
+
+        return
+    except ImportError:
+        pass
 
     # Create mock for omnibase_infra.utils.ensure_timezone_aware
     def mock_ensure_timezone_aware(dt: datetime | None) -> datetime | None:

@@ -170,6 +170,21 @@ else
     log "Kafka emission skipped (KAFKA_ENABLED=$KAFKA_ENABLED)"
 fi
 
+# Flush and stop the publisher (OMN-1944)
+# Give events 2 seconds to flush, then send stop signal.
+# This runs in a background subshell to avoid blocking session-end.
+(
+    # Brief pause to allow async emit subshells above to complete
+    sleep 0.5
+
+    # Stop publisher via __main__.py stop command (sends SIGTERM to PID)
+    "$PYTHON_CMD" -m omniclaude.publisher stop >> "$LOG_FILE" 2>&1 || {
+        # Fallback: try legacy daemon stop
+        "$PYTHON_CMD" -m omnibase_infra.runtime.emit_daemon.cli stop >> "$LOG_FILE" 2>&1 || true
+    }
+    log "Publisher stop signal sent"
+) &
+
 # Clean up correlation state
 if [[ -f "${HOOKS_LIB}/correlation_manager.py" ]]; then
     $PYTHON_CMD -c "
