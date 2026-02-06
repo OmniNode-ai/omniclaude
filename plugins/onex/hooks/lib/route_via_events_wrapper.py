@@ -32,6 +32,7 @@ Output:
 import json
 import logging
 import sys
+import threading
 import time
 from collections.abc import Callable
 from enum import Enum
@@ -153,6 +154,7 @@ except ImportError:
 # Import AgentRouter for intelligent routing
 _AgentRouter: type | None = None
 _router_instance: Any = None
+_router_lock = threading.Lock()
 try:
     from agent_router import AgentRouter
 
@@ -173,11 +175,20 @@ def _get_router() -> Any:
     """
     Get or create the singleton AgentRouter instance.
 
+    Uses double-checked locking for thread safety.
+
     Returns:
         AgentRouter instance or None if unavailable
     """
     global _router_instance
-    if _router_instance is None and _AgentRouter is not None:
+    if _router_instance is not None:
+        return _router_instance
+    if _AgentRouter is None:
+        return None
+    with _router_lock:
+        # Double-check after acquiring lock
+        if _router_instance is not None:
+            return _router_instance
         try:
             _router_instance = _AgentRouter()
             logger.info(

@@ -43,6 +43,26 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
+_SENSITIVE_PREFIXES = frozenset(
+    {
+        "/etc",
+        "/var/log",
+        "/var/run",
+        "/usr/bin",
+        "/usr/sbin",
+        "/bin",
+        "/sbin",
+        "/root",
+        "/proc",
+        "/sys",
+        "/dev",
+        "/boot",
+        "/private/etc",
+        "/System",
+    }
+)
+
+
 def _resolve_agent_configs_dir() -> Path:
     """
     Resolve the agent configs directory for routing.
@@ -56,6 +76,22 @@ def _resolve_agent_configs_dir() -> Path:
         Path to the agent configs directory
     """
     plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT", "").strip()
+
+    if plugin_root:
+        plugin_path = Path(plugin_root)
+        # Security: reject sensitive system directories
+        try:
+            resolved = str(plugin_path.resolve())
+            if any(
+                resolved == s or resolved.startswith(s + "/")
+                for s in _SENSITIVE_PREFIXES
+            ):
+                logger.warning(
+                    f"CLAUDE_PLUGIN_ROOT points to sensitive directory: {plugin_root}"
+                )
+                plugin_root = ""  # Fall through to script-relative detection
+        except (OSError, ValueError):
+            plugin_root = ""
 
     if plugin_root:
         plugin_path = Path(plugin_root)
