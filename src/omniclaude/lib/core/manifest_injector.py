@@ -978,7 +978,7 @@ class ManifestInjector:
             user = settings.postgres_user
 
             try:
-                password = settings.get_effective_postgres_password()
+                password = settings.get_effective_postgres_password()  # noqa: secrets
             except ValueError:
                 return []
 
@@ -990,7 +990,7 @@ class ManifestInjector:
                 port=port,
                 database=database,
                 user=user,
-                password=password,
+                password=password,  # noqa: secrets
                 connect_timeout=1,
             )
             try:
