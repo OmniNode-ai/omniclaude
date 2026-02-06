@@ -13,6 +13,13 @@ Parse arguments from the skill invocation:
 ```python
 args = "$ARGUMENTS".split()
 ticket_id = args[0]  # Required: e.g., "OMN-1234"
+
+# Validate ticket_id format
+import re
+if not re.match(r'^[A-Z]+-\d+$', ticket_id):
+    print(f"Error: Invalid ticket_id format '{ticket_id}'. Expected pattern like 'OMN-1234'.")
+    exit(1)
+
 dry_run = "--dry-run" in args
 force_run = "--force-run" in args
 
@@ -116,6 +123,12 @@ state_path = pipeline_dir / "state.yaml"
 
 STALE_TTL_SECONDS = 7200  # 2 hours
 
+# NOTE: Lock acquisition is not fully atomic (TOCTOU). Practical mitigation:
+# - Only one Claude session should run pipeline for a given ticket
+# - Stale TTL (2h) auto-recovers from crashed sessions
+# - --force-run allows manual override
+# For production use, consider fcntl.flock() or atomic O_EXCL file creation
+
 if lock_path.exists():
     lock_data = json.loads(lock_path.read_text())
     lock_age = time.time() - lock_data.get("started_at_epoch", 0)
@@ -170,6 +183,13 @@ lock_path.write_text(json.dumps(lock_data))
 if state_path.exists() and not force_run:
     # Resume existing pipeline — preserve stable correlation ID
     state = yaml.safe_load(state_path.read_text())
+
+    # Version migration check
+    state_version = state.get("pipeline_state_version", "0.0")
+    if state_version != "1.0":
+        print(f"Warning: State file version {state_version} differs from expected 1.0. "
+              f"Pipeline may behave unexpectedly. Use --force-run to create fresh state.")
+
     run_id = state.get("run_id", run_id)
     # Update lock to match preserved run_id
     lock_data["run_id"] = run_id
@@ -279,7 +299,12 @@ def get_current_phase(state):
 
 ```python
 def notify_blocked(ticket_id, reason, block_kind, run_id=None, phase=None):
-    """Send Slack notification for blocked pipeline. Best-effort, non-blocking."""
+    """Send Slack notification for blocked pipeline. Best-effort, non-blocking.
+
+    NOTE: No rate limiting. If pipeline hits rapid failures, Slack may be spammed.
+    Mitigation: pipeline exits on first block/fail (no retry loops).
+    Future: add per-ticket rate limiting if retry patterns are added.
+    """
     prefix = f"[{ticket_id}]"
     if phase:
         prefix += f"[pipeline:{phase}]"
@@ -306,7 +331,12 @@ def notify_blocked(ticket_id, reason, block_kind, run_id=None, phase=None):
 
 ```python
 def notify_completed(ticket_id, summary, run_id=None, phase=None, pr_url=None):
-    """Send Slack notification for completed phase. Best-effort, non-blocking."""
+    """Send Slack notification for completed phase. Best-effort, non-blocking.
+
+    NOTE: No rate limiting. If pipeline hits rapid failures, Slack may be spammed.
+    Mitigation: pipeline exits on first block/fail (no retry loops).
+    Future: add per-ticket rate limiting if retry patterns are added.
+    """
     prefix = f"[{ticket_id}]"
     if phase:
         prefix += f"[pipeline:{phase}]"
@@ -382,46 +412,56 @@ artifacts:"""
         summary_yaml += " {}"
 
     # Fetch current description
-    issue = mcp__linear-server__get_issue(id=ticket_id)
-    description = issue["description"]
+    try:
+        issue = mcp__linear-server__get_issue(id=ticket_id)
+        description = issue["description"] or ""
+    except Exception as e:
+        print(f"Warning: Failed to fetch Linear issue {ticket_id}: {e}")
+        return  # Non-blocking: Linear is not critical path
 
-    # Marker-based patching
-    pipeline_marker = "## Pipeline Status"
-    pipeline_block = f"\n\n{pipeline_marker}\n\n```yaml\n{summary_yaml}\n```\n"
+    # Marker-based patching with explicit end marker for safety
+    pipeline_start = "## Pipeline Status"
+    pipeline_end = "<!-- /pipeline-status -->"
+    pipeline_block = f"\n\n{pipeline_start}\n\n```yaml\n{summary_yaml}\n```\n\n{pipeline_end}\n"
 
-    if pipeline_marker in description:
-        # Find and replace existing pipeline status section
+    if pipeline_start in description and pipeline_end in description:
+        # Safe: replace between known markers
+        start_idx = description.index(pipeline_start)
+        end_idx = description.index(pipeline_end) + len(pipeline_end)
+        description = description[:start_idx] + pipeline_block.strip() + description[end_idx:]
+    elif pipeline_start in description:
+        # Legacy: has start but no end marker — use heading-based regex
         import re
-        # Match from ## Pipeline Status to the next ## heading or end of string
-        pattern = r'\n*## Pipeline Status\n+```(?:yaml)?\n.*?\n```\n*'
-        description = re.sub(pattern, pipeline_block, description, flags=re.DOTALL)
+        pattern = r'## Pipeline Status\n+```(?:yaml)?\n.*?\n```'
+        description = re.sub(pattern, pipeline_block.strip(), description, count=1, flags=re.DOTALL)
     else:
         # Find the ## Contract marker and insert before it
         contract_marker = "## Contract"
         if contract_marker in description:
             idx = description.rfind(contract_marker)
-            # Find the --- immediately before ## Contract (within 10 chars, accounting for whitespace)
-            preceding = description[max(0, idx - 10):idx]
-            delimiter_pos = preceding.rfind("---")
-            if delimiter_pos >= 0:
-                absolute_pos = max(0, idx - 10) + delimiter_pos
-                description = description[:absolute_pos] + pipeline_block + "\n---\n" + description[idx:]
-            else:
-                description = description[:idx] + pipeline_block + "\n" + description[idx:]
+            description = description[:idx].rstrip() + "\n\n" + pipeline_block.strip() + "\n\n---\n\n" + description[idx:]
         else:
             # No contract section - append at end
-            description = description.rstrip() + pipeline_block
+            description = description.rstrip() + "\n\n" + pipeline_block
 
     # Validate YAML in pipeline block before writing
     try:
-        yaml.safe_load(summary_yaml)
-    except yaml.YAMLError as e:
+        parsed = yaml.safe_load(summary_yaml)
+        # Basic schema validation: required keys must be present
+        required_keys = {"run_id", "phase"}
+        if not isinstance(parsed, dict) or not required_keys.issubset(parsed.keys()):
+            raise ValueError(f"Missing required keys: {required_keys - set(parsed.keys() if isinstance(parsed, dict) else [])}")
+    except (yaml.YAMLError, ValueError) as e:
         print(f"Warning: Pipeline summary YAML validation failed: {e}")
         notify_blocked(ticket_id, f"YAML validation failed for pipeline summary: {e}", "failed_exception",
                        run_id=state.get("run_id"))
         return  # Do not write invalid YAML
 
-    mcp__linear-server__update_issue(id=ticket_id, description=description)
+    try:
+        mcp__linear-server__update_issue(id=ticket_id, description=description)
+    except Exception as e:
+        print(f"Warning: Failed to update Linear issue {ticket_id}: {e}")
+        # Non-blocking: Linear update failure is logged but does not stop pipeline
 ```
 
 ### parse_phase_output
@@ -442,6 +482,12 @@ def parse_phase_output(raw_output, phase_name):
 
     Since upstream skills (ticket-work, local-review, pr-release-ready) don't return
     structured output yet, this adapter infers status from observable signals.
+
+    KNOWN LIMITATION: This is fragile string parsing. Expected output format contract:
+    - Local-review should output status lines like "clean - ready to push" or "clean with nits"
+    - Blocked states should mention "blocked by", "max iterations", or "waiting for"
+    - Error states should include "error", "failed", or "parse failed"
+    If no recognized pattern is found, defaults to "failed" status.
     """
     result = {
         "status": "completed",
@@ -496,6 +542,18 @@ def parse_phase_output(raw_output, phase_name):
         result["status"] = "completed"
         result["blocking_issues"] = 0
 
+    # If no known status indicator was found and status is still "completed" (default),
+    # check if the output contains enough signal to confirm success
+    if result["status"] == "completed" and output_lower:
+        # Only return "completed" if we found positive confirmation
+        if not any(indicator in output_lower for indicator in [
+            "clean - ready to push", "clean - no issues found", "clean with nits",
+            "report only", "changes staged", "completed", "success", "ready"
+        ]):
+            result["status"] = "failed"
+            result["block_kind"] = "failed_exception"
+            result["reason"] = "Could not determine phase status from output (no recognized status indicator)"
+
     return result
 ```
 
@@ -521,6 +579,9 @@ for phase_name in phase_order:
     phase_data["started_at"] = datetime.now(timezone.utc).isoformat()
     save_state(state, state_path)
 
+    # NOTE: Phase execution has no explicit timeout. The stale lock TTL (2h)
+    # serves as an implicit upper bound. For future: add policy.phase_timeout_seconds
+    # and enforce with signal.alarm() or threading.Timer.
     try:
         result = execute_phase(phase_name, state)
     except Exception as e:
@@ -612,9 +673,12 @@ def release_lock(lock_path):
    # Get the repo root
    REPO_ROOT=$(git rev-parse --show-toplevel)
 
-   # Check all changed and untracked files
-   for file in $(git diff --name-only HEAD && git ls-files --others --exclude-standard); do
-       REAL_PATH=$(realpath "$file" 2>/dev/null || echo "$file")
+   # Check all changed and untracked files using null-delimited output
+   {
+       git diff -z --name-only HEAD
+       git ls-files -z --others --exclude-standard
+   } | while IFS= read -r -d '' file; do
+       REAL_PATH=$(realpath "$file" 2>/dev/null) || continue
        if [[ ! "$REAL_PATH" == "$REPO_ROOT"* ]]; then
            echo "CROSS_REPO_VIOLATION: $file resolves outside $REPO_ROOT"
            exit 1
@@ -651,7 +715,7 @@ def release_lock(lock_path):
    }
    ```
 
-5. **Dry-run behavior:** ticket-work human gates still fire, but any commits/pushes are skipped. The pipeline checks implementation status but does not enforce it strictly in dry-run mode.
+5. **Dry-run behavior:** In dry-run mode, Phase 1 runs ticket-work normally (including human gates) because ticket-work does not support a dry-run flag. The pipeline tracks state as `dry_run: true` but cannot prevent ticket-work from making commits. Dry-run is fully effective starting from Phase 2 onward. To safely dry-run Phase 1, run `/ticket-work` separately first, then use `--skip-to local_review --dry-run`.
 
 **Mutations:**
 - `phases.implement.started_at`
@@ -732,6 +796,17 @@ def release_lock(lock_path):
    gh pr view --json url,number 2>/dev/null
    ```
    If PR exists: skip creation, record artifacts, advance.
+   ```python
+   # If PR exists: skip creation, record artifacts, advance
+   if pr_exists:
+       pr_info = json.loads(pr_check_output)
+       result["artifacts"]["pr_url"] = pr_info["url"]
+       result["artifacts"]["pr_number"] = pr_info["number"]
+       result["artifacts"]["branch_name"] = branch_name
+       result["status"] = "completed"
+       print(f"PR already exists: {pr_info['url']}. Skipping creation.")
+       return result
+   ```
 
    b. **Clean working tree:**
    ```bash
@@ -784,7 +859,20 @@ def release_lock(lock_path):
 
 3. **Push and create PR:**
    ```bash
-   # Push branch
+   # Fetch latest remote state
+   git fetch origin
+
+   # Check if branch exists on remote and has diverged
+   BRANCH=$(git rev-parse --abbrev-ref HEAD)
+   if git rev-parse --verify "origin/$BRANCH" >/dev/null 2>&1; then
+       # Remote branch exists — check if we're ahead
+       if ! git merge-base --is-ancestor "origin/$BRANCH" HEAD; then
+           echo "Error: Remote branch has diverged. Pull or rebase before pushing."
+           exit 1
+       fi
+   fi
+
+   # Push branch (safe — we verified no divergence above)
    git push -u origin HEAD
 
    # Create PR with heredoc-safe title/body
@@ -812,8 +900,12 @@ def release_lock(lock_path):
    ```
 
 4. **Update Linear:**
-   ```
-   mcp__linear-server__update_issue(id="{ticket_id}", state="In Review")
+   ```python
+   try:
+       mcp__linear-server__update_issue(id="{ticket_id}", state="In Review")
+   except Exception as e:
+       print(f"Warning: Failed to update Linear issue {ticket_id}: {e}")
+       # Non-blocking: Linear update failure is logged but does not stop pipeline
    ```
 
 5. **Record artifacts:**
@@ -849,24 +941,41 @@ def release_lock(lock_path):
 
 **Actions:**
 
-1. **Invoke pr-release-ready:**
+1. **Pre-check: Verify PR exists:**
+   ```python
+   # Pre-check: verify PR exists (required if Phase 3 was skipped via --skip-to)
+   try:
+       pr_check = subprocess.check_output(["gh", "pr", "view", "--json", "url,number"], stderr=subprocess.DEVNULL)
+       pr_info = json.loads(pr_check)
+       # Record PR artifacts if not already captured (e.g., Phase 3 was skipped)
+       if not state["phases"]["create_pr"]["artifacts"].get("pr_url"):
+           state["phases"]["create_pr"]["artifacts"]["pr_url"] = pr_info["url"]
+           state["phases"]["create_pr"]["artifacts"]["pr_number"] = pr_info["number"]
+           save_state(state, state_path)
+   except (subprocess.CalledProcessError, json.JSONDecodeError):
+       result = {"status": "blocked", "block_kind": "blocked_policy",
+                 "reason": "No PR found on current branch. Cannot run pr-release-ready without a PR. Create one first or use --skip-to create_pr."}
+       return result
+   ```
+
+2. **Invoke pr-release-ready:**
    ```
    Skill(skill="pr-release-ready")
    ```
    This fetches CodeRabbit review issues and invokes `/parallel-solve` to fix them.
 
-2. **Parse result:**
+3. **Parse result:**
    Use `parse_phase_output()` to determine status:
    - `status`: completed (all issues fixed) or blocked (issues remain)
    - `blocking_issues`: remaining critical/major/minor
    - `nit_count`: remaining nits
 
-3. **Push fixes** (if any commits were made):
+4. **Push fixes** (if any commits were made):
    ```bash
    git push
    ```
 
-4. **Dry-run behavior:** pr-release-ready runs in report-only mode. No fixes are committed or pushed.
+5. **Dry-run behavior:** pr-release-ready runs in report-only mode. No fixes are committed or pushed.
 
 **Mutations:**
 - `phases.pr_release_ready.started_at`
@@ -889,8 +998,12 @@ def release_lock(lock_path):
 **Actions:**
 
 1. **Add ready-for-merge label to Linear:**
-   ```
-   mcp__linear-server__update_issue(id="{ticket_id}", labels=["ready-for-merge"])
+   ```python
+   try:
+       mcp__linear-server__update_issue(id="{ticket_id}", labels=["ready-for-merge"])
+   except Exception as e:
+       print(f"Warning: Failed to update Linear issue {ticket_id}: {e}")
+       # Non-blocking: Linear label update failure is logged but does not stop pipeline
    ```
 
 2. **Send Slack notification:**
