@@ -296,12 +296,6 @@ class EmbeddedEventPublisher:
 
         payload: dict[str, object] = cast("dict[str, object]", raw_payload)
 
-        payload_json = json.dumps(payload)
-        if len(payload_json.encode("utf-8")) > self._config.max_payload_bytes:
-            return ModelDaemonErrorResponse(
-                reason=f"Payload exceeds maximum size of {self._config.max_payload_bytes} bytes"
-            ).model_dump_json()
-
         try:
             topic = self._registry.resolve_topic(event_type)
         except OnexError as e:
@@ -321,6 +315,13 @@ class EmbeddedEventPublisher:
             payload,
             correlation_id=correlation_id,
         )
+
+        enriched_json = json.dumps(enriched_payload)
+        if len(enriched_json.encode("utf-8")) > self._config.max_payload_bytes:
+            return ModelDaemonErrorResponse(
+                reason=f"Payload exceeds maximum size of {self._config.max_payload_bytes} bytes"
+            ).model_dump_json()
+
         partition_key = self._registry.get_partition_key(event_type, enriched_payload)
 
         event_id = str(uuid4())

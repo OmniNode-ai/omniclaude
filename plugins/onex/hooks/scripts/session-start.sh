@@ -104,7 +104,10 @@ fi
 # Socket path can be overridden via OMNICLAUDE_EMIT_SOCKET environment variable
 # This enables testing with alternative socket paths and matches emit_client_wrapper.py
 # Note: Not exported because emit_client_wrapper.py reads OMNICLAUDE_EMIT_SOCKET directly
-EMIT_DAEMON_SOCKET="${OMNICLAUDE_EMIT_SOCKET:-/tmp/omniclaude-emit.sock}"
+# Use $TMPDIR for consistency with Python's tempfile.gettempdir() (both check TMPDIR first)
+_TMPDIR="${TMPDIR:-/tmp}"
+_TMPDIR="${_TMPDIR%/}"  # Remove trailing slash (macOS TMPDIR often ends with /)
+EMIT_DAEMON_SOCKET="${OMNICLAUDE_EMIT_SOCKET:-${_TMPDIR}/omniclaude-emit.sock}"
 
 # Check if socket file exists and is writable.
 #

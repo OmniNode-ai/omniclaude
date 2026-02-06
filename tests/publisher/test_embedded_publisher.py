@@ -313,3 +313,50 @@ class TestEmbeddedEventPublisher:
 
         # Event should have been dropped after max retries
         assert "retry-test" not in publisher._retry_counts
+
+    @pytest.mark.asyncio
+    async def test_stale_socket_cleanup_with_dead_pid(
+        self, publisher_config: PublisherConfig, mock_event_bus: MagicMock
+    ) -> None:
+        """Test cleanup when PID file exists but referenced process is dead."""
+        # Create stale socket and PID file pointing to a dead process
+        publisher_config.socket_path.touch()
+        publisher_config.pid_path.parent.mkdir(parents=True, exist_ok=True)
+        publisher_config.pid_path.write_text("12345")
+
+        publisher = EmbeddedEventPublisher(
+            config=publisher_config, event_bus=mock_event_bus
+        )
+
+        # Mock os.kill to simulate dead process (ProcessLookupError)
+        with patch(
+            "omniclaude.publisher.embedded_publisher.os.kill",
+            side_effect=ProcessLookupError("No such process"),
+        ):
+            # _check_stale_socket should detect dead process via ProcessLookupError
+            assert publisher._check_stale_socket() is True
+
+            # Publisher should start successfully after stale cleanup
+            await publisher.start()
+
+        assert publisher.config.socket_path.exists()
+        await publisher.stop()
+
+    @pytest.mark.asyncio
+    async def test_stale_socket_live_process_permission_error(
+        self, publisher_config: PublisherConfig, mock_event_bus: MagicMock
+    ) -> None:
+        """Test that PermissionError (live process, different user) is not treated as stale."""
+        publisher_config.pid_path.parent.mkdir(parents=True, exist_ok=True)
+        publisher_config.pid_path.write_text("12345")
+
+        publisher = EmbeddedEventPublisher(
+            config=publisher_config, event_bus=mock_event_bus
+        )
+
+        with patch(
+            "omniclaude.publisher.embedded_publisher.os.kill",
+            side_effect=PermissionError("Operation not permitted"),
+        ):
+            # PermissionError means process exists but we can't signal it — not stale
+            assert publisher._check_stale_socket() is False
