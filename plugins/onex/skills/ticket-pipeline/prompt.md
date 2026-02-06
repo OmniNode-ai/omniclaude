@@ -674,16 +674,20 @@ def release_lock(lock_path):
    REPO_ROOT=$(git rev-parse --show-toplevel)
 
    # Check all changed and untracked files using null-delimited output
-   {
-       git diff -z --name-only HEAD
-       git ls-files -z --others --exclude-standard
-   } | while IFS= read -r -d '' file; do
+   # NOTE: Use process substitution (not pipe) so exit 1 affects main shell
+   CROSS_REPO_VIOLATION=""
+   while IFS= read -r -d '' file; do
        REAL_PATH=$(realpath "$file" 2>/dev/null) || continue
        if [[ ! "$REAL_PATH" == "$REPO_ROOT"* ]]; then
-           echo "CROSS_REPO_VIOLATION: $file resolves outside $REPO_ROOT"
-           exit 1
+           CROSS_REPO_VIOLATION="$file resolves outside $REPO_ROOT"
+           break
        fi
-   done
+   done < <(git diff -z --name-only HEAD && git ls-files -z --others --exclude-standard)
+
+   if [ -n "$CROSS_REPO_VIOLATION" ]; then
+       echo "CROSS_REPO_VIOLATION: $CROSS_REPO_VIOLATION"
+       exit 1
+   fi
    ```
 
    If cross-repo violation detected:
