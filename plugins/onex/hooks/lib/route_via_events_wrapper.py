@@ -45,6 +45,27 @@ try:
 except ImportError:
     _get_hook_event_adapter = None
 
+# Import emit_event and secret redactor for routing decision emission.
+# Uses __package__ check for proper import resolution instead of
+# fragile string-based error detection on ImportError messages.
+_emit_event_fn: Callable[..., bool] | None = None
+_redact_secrets_fn: Callable[[str], str] | None = None
+
+try:
+    if __package__:
+        from .emit_client_wrapper import emit_event as _emit_event_fn
+        from .secret_redactor import redact_secrets as _redact_secrets_fn
+    else:
+        from emit_client_wrapper import (
+            emit_event as _emit_event_fn,  # type: ignore[no-redef]
+        )
+        from secret_redactor import (
+            redact_secrets as _redact_secrets_fn,  # type: ignore[no-redef]
+        )
+except ImportError:
+    _emit_event_fn = None
+    _redact_secrets_fn = None
+
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +106,70 @@ def _compute_routing_path(method: str, event_attempted: bool) -> str:
         return "local"
 
 
+def _sanitize_prompt_preview(prompt: str, max_length: int = 100) -> str:
+    """Create a sanitized, truncated prompt preview.
+
+    Truncates to max_length and redacts any secrets using the
+    existing secret_redactor module.
+
+    Args:
+        prompt: Raw user prompt text.
+        max_length: Maximum length for the preview.
+
+    Returns:
+        Sanitized and truncated prompt preview.
+    """
+    preview = prompt[:max_length] if prompt else ""
+    if _redact_secrets_fn is not None:
+        preview = _redact_secrets_fn(preview)
+    return preview
+
+
+def _emit_routing_decision(
+    result: dict[str, Any],
+    prompt: str,
+    correlation_id: str,
+) -> None:
+    """Emit routing decision event via the emit daemon.
+
+    Non-blocking: logs at debug level on failure but never raises.
+    Uses emit_event(event_type, payload) with correct argument order.
+
+    The event type ``routing.decision`` follows the daemon's semantic naming
+    convention (``{domain}.{action}``). The daemon's EventRegistry maps this
+    to the appropriate Kafka topic following ONEX canonical format:
+    ``onex.evt.omniclaude.routing-decision.v1``.
+
+    Args:
+        result: Routing decision result dictionary.
+        prompt: Original user prompt (will be sanitized before emission).
+        correlation_id: Correlation ID for tracking.
+    """
+    if _emit_event_fn is None:
+        logger.debug("emit_event not available, skipping routing decision emission")
+        return
+
+    try:
+        payload: dict[str, object] = {
+            "correlation_id": correlation_id,
+            "selected_agent": result.get("selected_agent", "polymorphic-agent"),
+            "confidence": result.get("confidence", 0.5),
+            "method": result.get("method", "fallback"),
+            "routing_path": result.get("routing_path", "local"),
+            "latency_ms": result.get("latency_ms", 0),
+            "domain": result.get("domain", ""),
+            "reasoning": result.get("reasoning", ""),
+            "prompt_preview": _sanitize_prompt_preview(prompt),
+            "event_attempted": result.get("event_attempted", False),
+        }
+
+        # Correct argument order: emit_event(event_type, payload)
+        _emit_event_fn("routing.decision", payload)
+    except Exception as e:
+        # Non-blocking: routing emission failure must not break routing
+        logger.debug("Failed to emit routing decision: %s", e)
+
+
 def route_via_events(
     prompt: str,
     correlation_id: str,
@@ -103,6 +188,35 @@ def route_via_events(
     """
     start_time = time.time()
     event_attempted = False
+
+    # Validate inputs before processing
+    if not isinstance(prompt, str) or not prompt.strip():
+        logger.warning("Invalid or empty prompt received, using fallback")
+        return {
+            "selected_agent": "polymorphic-agent",
+            "confidence": 0.5,
+            "reasoning": "Invalid input - empty or non-string prompt",
+            "method": "fallback",
+            "latency_ms": 0,
+            "domain": "workflow_coordination",
+            "purpose": "Intelligent coordinator for development workflows",
+            "event_attempted": False,
+            "routing_path": "local",
+        }
+
+    if not isinstance(correlation_id, str) or not correlation_id.strip():
+        logger.warning("Invalid or empty correlation_id, using fallback")
+        return {
+            "selected_agent": "polymorphic-agent",
+            "confidence": 0.5,
+            "reasoning": "Invalid input - empty or non-string correlation_id",
+            "method": "fallback",
+            "latency_ms": 0,
+            "domain": "workflow_coordination",
+            "purpose": "Intelligent coordinator for development workflows",
+            "event_attempted": False,
+            "routing_path": "local",
+        }
 
     try:
         # Check if adapter is available (pre-imported at module level)
@@ -133,6 +247,7 @@ def route_via_events(
                     result["method"] = method
                     result["event_attempted"] = True
                     result["routing_path"] = _compute_routing_path(method, True)
+                    _emit_routing_decision(result, prompt, correlation_id)
                     return result
 
     except Exception as e:
@@ -147,7 +262,7 @@ def route_via_events(
     method = "fallback"
     routing_path = _compute_routing_path(method, event_attempted)
 
-    return {
+    result = {
         "selected_agent": "polymorphic-agent",
         "confidence": 0.5,
         "reasoning": "Event-based routing unavailable - using default agent",
@@ -158,6 +273,8 @@ def route_via_events(
         "event_attempted": event_attempted,
         "routing_path": routing_path,
     }
+    _emit_routing_decision(result, prompt, correlation_id)
+    return result
 
 
 def main():

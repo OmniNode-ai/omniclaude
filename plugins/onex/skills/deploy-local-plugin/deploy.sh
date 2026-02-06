@@ -232,6 +232,83 @@ if [[ "$EXECUTE" == "true" ]]; then
         echo -e "${YELLOW}  Warning: Registry not found at ${REGISTRY}${NC}"
     fi
 
+    # Update known_marketplaces.json ONLY if using directory source (not GitHub)
+    KNOWN_MARKETPLACES="$HOME/.claude/plugins/known_marketplaces.json"
+    if [[ -f "$KNOWN_MARKETPLACES" ]]; then
+        CURRENT_SOURCE_TYPE="$(jq -r '.["omninode-tools"].source.source // "unknown"' "$KNOWN_MARKETPLACES")"
+
+        if [[ "$CURRENT_SOURCE_TYPE" == "github" ]]; then
+            echo -e "${YELLOW}  Note: Marketplace uses GitHub source - not modifying known_marketplaces.json${NC}"
+            echo -e "${YELLOW}  Push changes to GitHub and restart Claude Code to deploy${NC}"
+        elif jq -e '.["omninode-tools"]' "$KNOWN_MARKETPLACES" >/dev/null 2>&1; then
+            # Get the plugins directory (parent of SOURCE_ROOT which is the onex plugin)
+            PLUGINS_DIR="$(dirname "$SOURCE_ROOT")"
+
+            # For directory-source deployments, installLocation must equal PLUGINS_DIR.
+            # This is the directory containing the plugin subdirectories that Claude Code
+            # uses for discovery and loading. Using the cache directory here would cause
+            # Claude Code to look in the wrong location for directory-source plugins.
+            INSTALL_LOCATION="$PLUGINS_DIR"
+
+            jq --arg source_path "$PLUGINS_DIR" --arg install_loc "$INSTALL_LOCATION" '
+                .["omninode-tools"].source.path = $source_path |
+                .["omninode-tools"].installLocation = $install_loc
+            ' "$KNOWN_MARKETPLACES" > "${KNOWN_MARKETPLACES}.tmp" && mv "${KNOWN_MARKETPLACES}.tmp" "$KNOWN_MARKETPLACES"
+
+            echo -e "${GREEN}  Updated known_marketplaces.json (source: $PLUGINS_DIR, install: $INSTALL_LOCATION)${NC}"
+        else
+            echo -e "${YELLOW}  Warning: omninode-tools not found in known_marketplaces.json${NC}"
+        fi
+    fi
+
+    # Create namespace symlinks (required until marketplace discovery is fixed)
+    CLAUDE_DIR="$HOME/.claude"
+    mkdir -p "$CLAUDE_DIR/commands" "$CLAUDE_DIR/skills" "$CLAUDE_DIR/agents"
+
+    # Helper function to safely create or update a symlink.
+    # Handles pre-existing symlinks, directories, and regular files at the target.
+    #   - If symlink already points to correct target: skip (idempotent)
+    #   - If symlink points elsewhere: warn and replace
+    #   - If real directory exists: back it up with timestamp, warn, create symlink
+    #   - If regular file exists: remove and create symlink
+    #   - Otherwise: create symlink
+    safe_symlink() {
+        local target="$1"
+        local link_path="$2"
+        local label="${3:-$link_path}"
+
+        if [[ -L "$link_path" ]]; then
+            local current_target
+            current_target="$(readlink "$link_path")"
+            if [[ "$current_target" == "$target" ]]; then
+                echo -e "  = $label (symlink already correct)"
+                return 0
+            fi
+            echo -e "${YELLOW}  Warning: $label symlink points to $current_target, updating to $target${NC}"
+            rm -f "$link_path"
+        elif [[ -d "$link_path" ]]; then
+            # Real directory (not a symlink) - back it up, never delete
+            local backup_path="${link_path}.backup.$(date +%Y%m%d%H%M%S)"
+            echo -e "${YELLOW}  Warning: $label exists as a real directory, backing up to $backup_path${NC}"
+            mv "$link_path" "$backup_path"
+        elif [[ -e "$link_path" ]]; then
+            # Regular file - back it up before replacing (same safety as directories)
+            local backup_path="${link_path}.backup.$(date +%Y%m%d%H%M%S)"
+            echo -e "${YELLOW}  Warning: $label exists as a regular file, backing up to $backup_path${NC}"
+            mv "$link_path" "$backup_path"
+        fi
+
+        # Use ln -sfn: -s for symbolic, -f to force, -n to not follow existing symlink target
+        ln -sfn "$target" "$link_path"
+        echo -e "  + $label -> $target"
+    }
+
+    safe_symlink "$TARGET/commands" "$CLAUDE_DIR/commands/onex" "commands/onex"
+    safe_symlink "$TARGET/skills" "$CLAUDE_DIR/skills/onex" "skills/onex"
+    safe_symlink "$TARGET/agents" "$CLAUDE_DIR/agents/onex" "agents/onex"
+
+    echo -e "${GREEN}  Namespace symlinks updated${NC}"
+
     echo ""
     echo -e "${GREEN}Deployment complete!${NC}"
     echo ""
