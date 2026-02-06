@@ -305,6 +305,53 @@ def temp_models_dir(tmp_path: Path) -> Path:
 
 
 # -------------------------------------------------------------------------
+# sys.modules State Restoration
+# -------------------------------------------------------------------------
+
+
+@pytest.fixture
+def restore_sys_modules():
+    """Save and restore the full state of sys.modules across a test.
+
+    This fixture captures a snapshot of sys.modules before the test runs
+    and restores it completely during teardown. It handles three cases:
+
+    1. Entries that were modified during the test are reverted to their
+       original values.
+    2. Entries that were deleted during the test are re-added from the
+       saved snapshot (prevents missing-module errors in later tests).
+    3. Entries that were added during the test are removed to prevent
+       test pollution.
+
+    Usage:
+        def test_something(restore_sys_modules):
+            # Manipulate sys.modules freely; it will be restored after.
+            sys.modules["my_fake_module"] = MagicMock()
+            del sys.modules["some_real_module"]
+    """
+    # Save a shallow copy of the full mapping (key -> module object)
+    saved_modules = dict(sys.modules)
+    saved_keys = frozenset(sys.modules.keys())
+
+    yield
+
+    current_keys = set(sys.modules.keys())
+
+    # Remove entries that were added during the test
+    for key in current_keys - saved_keys:
+        del sys.modules[key]
+
+    # Restore entries that were modified or deleted during the test
+    for key in saved_keys:
+        if key not in sys.modules:
+            # Was deleted during the test -- re-add it
+            sys.modules[key] = saved_modules[key]
+        elif sys.modules[key] is not saved_modules[key]:
+            # Was replaced during the test -- revert it
+            sys.modules[key] = saved_modules[key]
+
+
+# -------------------------------------------------------------------------
 # Sample Prompt Fixtures
 # -------------------------------------------------------------------------
 

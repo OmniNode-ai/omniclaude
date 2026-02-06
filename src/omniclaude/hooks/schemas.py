@@ -66,7 +66,7 @@ import warnings
 from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Literal
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from omnibase_core.enums import EnumClaudeCodeSessionOutcome
 from omnibase_infra.utils import ensure_timezone_aware
@@ -934,7 +934,7 @@ class ModelHookContextInjectedPayload(BaseModel):
 
     # Tracing and causation
     correlation_id: UUID = Field(
-        default_factory=uuid4,
+        ...,
         description="Correlation ID for distributed tracing",
     )
     causation_id: UUID = Field(

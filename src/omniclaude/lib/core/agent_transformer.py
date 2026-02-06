@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
-"""
-Agent Polymorphic Transformation Helper
+"""Agent Polymorphic Transformation Helper.
 
 Loads YAML agent configs and formats them for identity assumption.
 Enables agent-workflow-coordinator to transform into any agent.
 
 Now with integrated transformation event logging to Kafka for observability.
+
+Design Rule: Fail Closed
+    When the transformation validator raises an unexpected internal error
+    (not a validation failure), this module treats it as a validation failure
+    and rejects the transformation. This prevents validator bugs from silently
+    allowing invalid transformations to proceed.
 """
 
 import asyncio
@@ -13,7 +18,6 @@ import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 from uuid import UUID
 
 import yaml
@@ -34,6 +38,9 @@ except ImportError:  # nosec B110 - Optional dependency, graceful degradation
         "transformation_event_publisher not available, transformation events will not be logged"
     )
     KAFKA_AVAILABLE = False
+
+# Import transformation validator
+from omniclaude.lib.core.transformation_validator import TransformationValidator
 
 
 @dataclass
@@ -117,11 +124,10 @@ class AgentTransformer:
     """Loads and transforms agent identities from YAML configs."""
 
     def __init__(self, config_dir: Path | None = None):
-        """
-        Initialize transformer.
+        """Initialize transformer.
 
         Args:
-            config_dir: Directory containing agent-*.yaml files
+            config_dir: Directory containing agent-*.yaml files.
         """
         if config_dir is None:
             # Default to consolidated agent definitions location (claude/agents/)
@@ -129,6 +135,7 @@ class AgentTransformer:
             config_dir = Path(__file__).parent.parent.parent / "agents"
 
         self.config_dir = Path(config_dir)
+        self._validator = TransformationValidator()
 
         if not self.config_dir.exists():
             raise ValueError(f"Config directory not found: {self.config_dir}")
@@ -230,24 +237,70 @@ class AgentTransformer:
         routing_confidence: float | None = None,
         routing_strategy: str | None = None,
     ) -> str:
-        """
-        Load agent, log transformation event to Kafka, and return formatted prompt.
+        """Load agent, log transformation event to Kafka, and return formatted prompt.
 
-        This is the RECOMMENDED method for transformations as it provides full observability.
+        This is the RECOMMENDED method for transformations as it provides full
+        observability. Includes transformation validation with fail-closed
+        error handling.
+
+        Design Rule: Fail Closed
+            If the transformation validator raises an unexpected internal error,
+            this method treats it as a validation failure and raises ValueError
+            rather than allowing the transformation to proceed.
 
         Args:
-            agent_name: Agent to transform into
-            source_agent: Original agent identity (default: "polymorphic-agent")
-            transformation_reason: Why this transformation occurred
-            correlation_id: Request correlation ID for tracing
-            user_request: Original user request
-            routing_confidence: Router confidence score (0.0-1.0)
-            routing_strategy: Routing strategy used
+            agent_name: Agent to transform into.
+            source_agent: Original agent identity (default: "polymorphic-agent").
+            transformation_reason: Why this transformation occurred.
+            correlation_id: Request correlation ID for tracing.
+            user_request: Original user request.
+            routing_confidence: Router confidence score (0.0-1.0).
+            routing_strategy: Routing strategy used.
 
         Returns:
-            Formatted prompt for identity assumption
+            Formatted prompt for identity assumption.
+
+        Raises:
+            ValueError: If transformation validation fails or the validator
+                encounters an internal error (fail closed).
         """
         start_time = time.time()
+
+        # Validate transformation before proceeding.
+        # Fail closed: if the validator itself raises an unexpected error,
+        # treat it as a validation failure rather than allowing the
+        # transformation to proceed unchecked.
+        try:
+            validation_result = self._validator.validate(
+                from_agent=source_agent,
+                to_agent=agent_name,
+                reason=transformation_reason or "",
+                confidence=routing_confidence,
+                user_request=user_request,
+            )
+        except Exception as exc:
+            # Fail closed: validator internal errors reject the transformation
+            logger.error(
+                "Transformation validator raised unexpected error (fail closed): %s",
+                exc,
+            )
+            raise ValueError(
+                f"Transformation validation failed closed due to validator error: {exc}"
+            ) from exc
+
+        if not validation_result.is_valid:
+            logger.warning(
+                "Transformation rejected by validator: %s",
+                validation_result.error_message,
+            )
+            raise ValueError(
+                f"Transformation validation failed: {validation_result.error_message}"
+            )
+
+        if validation_result.warning_message:
+            logger.warning(
+                "Transformation warning: %s", validation_result.warning_message
+            )
 
         try:
             # Load agent identity

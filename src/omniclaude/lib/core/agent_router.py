@@ -29,6 +29,7 @@ import asyncio
 import logging
 import os
 import re
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -178,7 +179,11 @@ class AgentRouter:
             self.capability_index = CapabilityIndex(registry_path)
             self.cache = ResultCache(default_ttl_seconds=cache_ttl)
 
-            # Track routing stats
+            # Lock protecting routing_stats and last_routing_timing which
+            # may be read/written from multiple threads concurrently.
+            self._stats_lock = threading.Lock()
+
+            # Track routing stats (guarded by _stats_lock)
             self.routing_stats = {
                 "total_routes": 0,
                 "cache_hits": 0,
@@ -187,7 +192,7 @@ class AgentRouter:
                 "fuzzy_matches": 0,
             }
 
-            # Track performance timing for most recent route
+            # Track performance timing for most recent route (guarded by _stats_lock)
             self.last_routing_timing: RoutingTiming | None = None
 
             logger.info("AgentRouter initialized successfully")
@@ -261,7 +266,8 @@ class AgentRouter:
             # Start overall timing
             routing_start_us = time.perf_counter_ns() // 1000
 
-            self.routing_stats["total_routes"] += 1
+            with self._stats_lock:
+                self.routing_stats["total_routes"] += 1
             context = context or {}
 
             logger.debug(
@@ -278,30 +284,34 @@ class AgentRouter:
             cache_lookup_time_us = cache_lookup_end_us - cache_lookup_start_us
 
             if cached is not None:
-                self.routing_stats["cache_hits"] += 1
-                logger.debug(
-                    "Cache hit - returning cached recommendations",
-                    extra={"cached_count": len(cached)},
-                )
-
                 # Record timing for cache hit
                 routing_end_us = time.perf_counter_ns() // 1000
-                self.last_routing_timing = RoutingTiming(
+                timing = RoutingTiming(
                     total_routing_time_us=routing_end_us - routing_start_us,
                     cache_lookup_us=cache_lookup_time_us,
                     trigger_matching_us=0,
                     confidence_scoring_us=0,
                     cache_hit=True,
                 )
+                with self._stats_lock:
+                    self.routing_stats["cache_hits"] += 1
+                    self.last_routing_timing = timing
+
+                logger.debug(
+                    "Cache hit - returning cached recommendations",
+                    extra={"cached_count": len(cached)},
+                )
 
                 return cast("list[AgentRecommendation]", cached)
 
-            self.routing_stats["cache_misses"] += 1
+            with self._stats_lock:
+                self.routing_stats["cache_misses"] += 1
 
             # 2. Check for explicit agent request
             explicit_agent = self._extract_explicit_agent(user_request)
             if explicit_agent:
-                self.routing_stats["explicit_requests"] += 1
+                with self._stats_lock:
+                    self.routing_stats["explicit_requests"] += 1
                 recommendation = self._create_explicit_recommendation(explicit_agent)
                 if recommendation:
                     result = [recommendation]
@@ -313,18 +323,21 @@ class AgentRouter:
 
                     # Record timing for explicit request
                     routing_end_us = time.perf_counter_ns() // 1000
-                    self.last_routing_timing = RoutingTiming(
+                    timing = RoutingTiming(
                         total_routing_time_us=routing_end_us - routing_start_us,
                         cache_lookup_us=cache_lookup_time_us,
                         trigger_matching_us=0,
                         confidence_scoring_us=0,
                         cache_hit=False,
                     )
+                    with self._stats_lock:
+                        self.last_routing_timing = timing
 
                     return result
 
             # 3. Trigger-based matching with scoring
-            self.routing_stats["fuzzy_matches"] += 1
+            with self._stats_lock:
+                self.routing_stats["fuzzy_matches"] += 1
 
             trigger_matching_start_us = time.perf_counter_ns() // 1000
             trigger_matches = self.trigger_matcher.match(user_request)
@@ -396,13 +409,15 @@ class AgentRouter:
             routing_end_us = time.perf_counter_ns() // 1000
 
             # Record detailed timing
-            self.last_routing_timing = RoutingTiming(
+            timing = RoutingTiming(
                 total_routing_time_us=routing_end_us - routing_start_us,
                 cache_lookup_us=cache_lookup_time_us,
                 trigger_matching_us=trigger_matching_time_us,
                 confidence_scoring_us=confidence_scoring_time_us,
                 cache_hit=False,
             )
+            with self._stats_lock:
+                self.last_routing_timing = timing
 
             # 8. Log routing decision
             logger.info(
@@ -416,7 +431,7 @@ class AgentRouter:
                         recommendations[0].confidence.total if recommendations else 0.0
                     ),
                     "total_candidates": len(trigger_matches),
-                    "routing_time_us": self.last_routing_timing.total_routing_time_us,
+                    "routing_time_us": timing.total_routing_time_us,
                 },
             )
 
@@ -689,10 +704,11 @@ class AgentRouter:
             Dictionary with cache performance metrics
         """
         cache_stats: dict[str, Any] = self.cache.stats()
+        with self._stats_lock:
+            cache_hits = self.routing_stats["cache_hits"]
+            total_routes = self.routing_stats["total_routes"]
         cache_stats["cache_hit_rate"] = (
-            self.routing_stats["cache_hits"] / self.routing_stats["total_routes"]
-            if self.routing_stats["total_routes"] > 0
-            else 0.0
+            cache_hits / total_routes if total_routes > 0 else 0.0
         )
         return cache_stats
 
@@ -703,7 +719,8 @@ class AgentRouter:
         Returns:
             Dictionary with routing performance metrics
         """
-        stats: dict[str, Any] = dict(self.routing_stats)
+        with self._stats_lock:
+            stats: dict[str, Any] = dict(self.routing_stats)
 
         # Calculate rates
         total = stats["total_routes"]

@@ -181,11 +181,52 @@ class TaskClassifier:
         "workflow",
     ]
 
-    # Short keywords (<=3 chars) that need word boundary matching to avoid
-    # substring false positives (e.g., "new" matching "renewed")
+    # Short keywords (<=4 chars) that need word boundary matching to avoid
+    # substring false positives (e.g., "api" matching "capital",
+    # "rest" matching "forest", "node" matching "anode")
     _SHORT_KEYWORDS: frozenset[str] = frozenset(
-        {"new", "add", "fix", "bug", "sql", "how", "api"}
+        {"new", "add", "fix", "bug", "sql", "how", "api", "llm", "rest", "call", "node", "data"}
     )
+
+    # Domain-specific terms for keyword extraction.  Kept as a class attribute
+    # so the list is not re-created on every classify() call.
+    _DOMAIN_TERMS: list[str] = [
+        # Technology terms
+        "llm",
+        "api",
+        "http",
+        "rest",
+        "graphql",
+        "websocket",
+        "async",
+        "sync",
+        "event",
+        "stream",
+        "batch",
+        # Pattern terms
+        "pattern",
+        "template",
+        "mixin",
+        "contract",
+        "model",
+        "node",
+        "service",
+        "client",
+        "server",
+        "handler",
+        # Data terms
+        "data",
+        "schema",
+        "migration",
+        "index",
+        "cache",
+        # Operation terms
+        "request",
+        "response",
+        "call",
+        "query",
+        "command",
+    ]
 
     def _keyword_in_text(self, keyword: str, text: str) -> bool:
         """Check if keyword appears in text, using word boundaries for short keywords."""
@@ -227,7 +268,7 @@ class TaskClassifier:
                 domain_matches = sum(
                     1
                     for indicator in self.DOMAIN_INDICATORS
-                    if indicator in prompt_lower
+                    if self._keyword_in_text(indicator, prompt_lower)
                 )
 
                 if domain_matches >= 1 and confidence < 0.5:
@@ -240,7 +281,9 @@ class TaskClassifier:
             # This catches prompts like "ONEX authentication system" that describe
             # WHAT to build without explicit action verbs
             domain_matches = sum(
-                1 for indicator in self.DOMAIN_INDICATORS if indicator in prompt_lower
+                1
+                for indicator in self.DOMAIN_INDICATORS
+                if self._keyword_in_text(indicator, prompt_lower)
             )
 
             if domain_matches >= 1:
@@ -260,56 +303,19 @@ class TaskClassifier:
                 [kw for kw in kws if self._keyword_in_text(kw, prompt_lower)]
             )
 
-        # 2. Extract node type keywords
+        # 2. Extract node type keywords (all 6+ chars, low false-positive risk)
         for nt in self.NODE_TYPE_PATTERNS:
-            if nt in prompt_lower:
+            if self._keyword_in_text(nt, prompt_lower):
                 keywords.append(nt)
 
         # 3. Extract service keywords
         for svc in self.SERVICE_PATTERNS:
-            if svc in prompt_lower:
+            if self._keyword_in_text(svc, prompt_lower):
                 keywords.append(svc)
 
         # 4. Extract domain-specific terms (technology, patterns)
-        domain_terms = [
-            # Technology terms
-            "llm",
-            "api",
-            "http",
-            "rest",
-            "graphql",
-            "websocket",
-            "async",
-            "sync",
-            "event",
-            "stream",
-            "batch",
-            # Pattern terms
-            "pattern",
-            "template",
-            "mixin",
-            "contract",
-            "model",
-            "node",
-            "service",
-            "client",
-            "server",
-            "handler",
-            # Data terms
-            "data",
-            "schema",
-            "migration",
-            "index",
-            "cache",
-            # Operation terms
-            "request",
-            "response",
-            "call",
-            "query",
-            "command",
-        ]
-        for term in domain_terms:
-            if term in prompt_lower:
+        for term in self._DOMAIN_TERMS:
+            if self._keyword_in_text(term, prompt_lower):
                 keywords.append(term)
 
         # 5. Extract significant nouns (simple heuristic: words 3+ chars, not stopwords)
@@ -333,12 +339,16 @@ class TaskClassifier:
 
         # Extract mentioned services (sorted for deterministic output)
         mentioned_services = sorted(
-            svc for svc in self.SERVICE_PATTERNS if svc in prompt_lower
+            svc
+            for svc in self.SERVICE_PATTERNS
+            if self._keyword_in_text(svc, prompt_lower)
         )
 
         # Extract mentioned node types (sorted for deterministic output)
         mentioned_node_types = sorted(
-            nt.upper() for nt in self.NODE_TYPE_PATTERNS if nt in prompt_lower
+            nt.upper()
+            for nt in self.NODE_TYPE_PATTERNS
+            if self._keyword_in_text(nt, prompt_lower)
         )
 
         return TaskContext(

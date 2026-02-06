@@ -97,6 +97,7 @@ SUPPORTED_EVENT_TYPES = frozenset(
         "latency.breakdown",  # OMN-1889
         "notification.blocked",  # OMN-1831 - Slack notifications via emit daemon
         "notification.completed",  # OMN-1831 - Slack notifications via emit daemon
+        "routing.decision",  # PR-92 - Routing decision emission via daemon
     ]
 )
 

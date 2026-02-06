@@ -47,8 +47,14 @@ try:
         ModelPRIssue,
         detect_bot_type,
     )
-except ImportError:
-    # Fallback for standalone execution
+except ModuleNotFoundError:
+    # ModuleNotFoundError means the 'models' module is not on sys.path.
+    # This happens during standalone execution (python collate_issues.py)
+    # where the script directory is not automatically on the import path.
+    #
+    # We deliberately catch ModuleNotFoundError (not ImportError) so that
+    # real import failures *within* models.py (e.g. a broken dependency)
+    # propagate as-is rather than being silently retried.
     if str(SCRIPT_DIR) not in sys.path:
         sys.path.insert(0, str(SCRIPT_DIR))
     from models import (
