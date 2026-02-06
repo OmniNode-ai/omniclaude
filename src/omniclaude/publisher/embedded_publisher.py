@@ -138,9 +138,13 @@ class EmbeddedEventPublisher:
                 if self._config.socket_path.exists():
                     self._config.socket_path.unlink()
 
+                # Set readline buffer limit to match max_payload_bytes + overhead
+                # (default 64KB is too small for large event payloads)
+                stream_limit = self._config.max_payload_bytes + 4096
                 self._server = await asyncio.start_unix_server(
                     self._handle_client,
                     path=str(self._config.socket_path),
+                    limit=stream_limit,
                 )
                 self._config.socket_path.chmod(self._config.socket_permissions)
 
