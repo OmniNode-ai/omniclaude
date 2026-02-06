@@ -118,39 +118,43 @@ class EmbeddedEventPublisher:
 
             self._write_pid_file()
 
-            spool_count = await self._queue.load_spool()
-            if spool_count > 0:
-                logger.info(f"Loaded {spool_count} events from spool")
+            try:
+                spool_count = await self._queue.load_spool()
+                if spool_count > 0:
+                    logger.info(f"Loaded {spool_count} events from spool")
 
-            if self._event_bus is None:
-                kafka_config = ModelKafkaEventBusConfig(
-                    bootstrap_servers=self._config.kafka_bootstrap_servers,
-                    environment=self._config.environment,
-                    timeout_seconds=int(self._config.kafka_timeout_seconds),
+                if self._event_bus is None:
+                    kafka_config = ModelKafkaEventBusConfig(
+                        bootstrap_servers=self._config.kafka_bootstrap_servers,
+                        environment=self._config.environment,
+                        timeout_seconds=int(self._config.kafka_timeout_seconds),
+                    )
+                    self._event_bus = EventBusKafka(config=kafka_config)
+
+                if hasattr(self._event_bus, "start"):
+                    await self._event_bus.start()
+
+                self._config.socket_path.parent.mkdir(parents=True, exist_ok=True)
+                if self._config.socket_path.exists():
+                    self._config.socket_path.unlink()
+
+                self._server = await asyncio.start_unix_server(
+                    self._handle_client,
+                    path=str(self._config.socket_path),
                 )
-                self._event_bus = EventBusKafka(config=kafka_config)
+                self._config.socket_path.chmod(self._config.socket_permissions)
 
-            if hasattr(self._event_bus, "start"):
-                await self._event_bus.start()
+                self._publisher_task = asyncio.create_task(self._publisher_loop())
 
-            self._config.socket_path.parent.mkdir(parents=True, exist_ok=True)
-            if self._config.socket_path.exists():
-                self._config.socket_path.unlink()
+                loop = asyncio.get_running_loop()
+                for sig in (signal.SIGTERM, signal.SIGINT):
+                    loop.add_signal_handler(sig, self._signal_handler)
 
-            self._server = await asyncio.start_unix_server(
-                self._handle_client,
-                path=str(self._config.socket_path),
-            )
-            self._config.socket_path.chmod(self._config.socket_permissions)
-
-            self._publisher_task = asyncio.create_task(self._publisher_loop())
-
-            loop = asyncio.get_running_loop()
-            for sig in (signal.SIGTERM, signal.SIGINT):
-                loop.add_signal_handler(sig, self._signal_handler)
-
-            self._running = True
-            self._shutdown_event.clear()
+                self._running = True
+                self._shutdown_event.clear()
+            except Exception:
+                self._remove_pid_file()
+                raise
 
             logger.info(
                 "EmbeddedEventPublisher started",
@@ -310,19 +314,37 @@ class EmbeddedEventPublisher:
         if not isinstance(correlation_id, str):
             correlation_id = None
 
-        enriched_payload = self._registry.inject_metadata(
-            event_type,
-            payload,
-            correlation_id=correlation_id,
-        )
+        try:
+            enriched_payload = self._registry.inject_metadata(
+                event_type,
+                payload,
+                correlation_id=correlation_id,
+            )
+        except Exception as e:
+            return ModelDaemonErrorResponse(
+                reason=f"Metadata enrichment failed: {e}"
+            ).model_dump_json()
 
-        enriched_json = json.dumps(enriched_payload)
+        try:
+            enriched_json = json.dumps(enriched_payload)
+        except (TypeError, ValueError) as e:
+            return ModelDaemonErrorResponse(
+                reason=f"Payload serialization failed: {e}"
+            ).model_dump_json()
+
         if len(enriched_json.encode("utf-8")) > self._config.max_payload_bytes:
             return ModelDaemonErrorResponse(
                 reason=f"Payload exceeds maximum size of {self._config.max_payload_bytes} bytes"
             ).model_dump_json()
 
-        partition_key = self._registry.get_partition_key(event_type, enriched_payload)
+        try:
+            partition_key = self._registry.get_partition_key(
+                event_type, enriched_payload
+            )
+        except Exception as e:
+            return ModelDaemonErrorResponse(
+                reason=f"Partition key resolution failed: {e}"
+            ).model_dump_json()
 
         event_id = str(uuid4())
         queued_event = ModelQueuedEvent(
