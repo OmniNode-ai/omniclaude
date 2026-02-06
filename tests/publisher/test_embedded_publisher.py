@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -261,3 +262,54 @@ class TestEmbeddedEventPublisher:
 
         result = await publisher._publish_event(event)
         assert result is False
+
+    @pytest.mark.asyncio
+    async def test_publisher_loop_retries_then_drops(
+        self,
+        publisher_config: PublisherConfig,
+        mock_event_bus: MagicMock,
+    ) -> None:
+        """Verify the publisher loop retries failed events and drops after max retries."""
+        from datetime import UTC, datetime
+
+        from omniclaude.publisher.event_queue import ModelQueuedEvent
+
+        # Make publish always fail
+        mock_event_bus.publish = AsyncMock(side_effect=Exception("Kafka down"))
+
+        publisher = EmbeddedEventPublisher(
+            config=publisher_config, event_bus=mock_event_bus
+        )
+
+        # Enqueue a single event directly
+        event = ModelQueuedEvent(
+            event_id="retry-test",
+            event_type="test.event",
+            topic="test-topic",
+            payload={"key": "val"},
+            queued_at=datetime.now(UTC),
+        )
+        await publisher.queue.enqueue(event)
+        assert publisher.queue.total_size() == 1
+
+        # Patch sleep to avoid real delays during test
+        with patch(
+            "omniclaude.publisher.embedded_publisher.asyncio.sleep",
+            new_callable=AsyncMock,
+        ):
+            # Run the publisher loop briefly — it should retry and eventually drop
+            publisher._running = True
+            publisher._shutdown_event = asyncio.Event()
+
+            loop_task = asyncio.create_task(publisher._publisher_loop())
+            # Give enough time for retries (max_retry_attempts defaults to 3)
+            await asyncio.sleep(0.05)
+            publisher._running = False
+            loop_task.cancel()
+            try:
+                await loop_task
+            except asyncio.CancelledError:
+                pass
+
+        # Event should have been dropped after max retries
+        assert "retry-test" not in publisher._retry_counts

@@ -133,16 +133,16 @@ class PublisherConfig(BaseSettings):
                 )
             try:
                 port = int(port_str)
-                if port < 1 or port > 65535:
-                    raise ValueError(
-                        f"Invalid port {port} in '{server}'. "
-                        "Port must be between 1 and 65535"
-                    )
             except ValueError as e:
                 raise ValueError(
                     f"Invalid port '{port_str}' in '{server}'. "
                     "Port must be a valid integer"
                 ) from e
+            if port < 1 or port > 65535:
+                raise ValueError(
+                    f"Invalid port {port} in '{server}'. "
+                    "Port must be between 1 and 65535"
+                )
         return v.strip()
 
     @model_validator(mode="after")
