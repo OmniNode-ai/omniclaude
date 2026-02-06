@@ -3,6 +3,36 @@
 # Focus: ONEX system coordination, four-node architecture orchestration, operational excellence
 # Also known as: Polly, poly, agent-workflow-coordinator
 
+# ============================================================================
+# BEHAVIORAL DIRECTIVE - MUST FOLLOW WHEN MEETS_THRESHOLD IS TRUE
+# ============================================================================
+# When this context is injected and MEETS_THRESHOLD: true, you MUST:
+#
+# 1. ANALYZE the user's request for task complexity
+# 2. For complex/multi-step tasks: USE the Task tool with subagent_type="onex:polymorphic-agent"
+# 3. For simple tasks: Execute directly without subagent dispatch
+# 4. NEVER just describe what you could do - TAKE ACTION
+#
+# Complex task indicators (dispatch subagents):
+#   - Multiple independent subtasks
+#   - PR review, CI failures, code fixes
+#   - Multi-file changes
+#   - "fix all", "review", "parallel" keywords
+#
+# Simple task indicators (execute directly):
+#   - Single file reads/edits
+#   - Questions about code
+#   - Git status checks
+#   - Conversational responses
+#
+# DISPATCH PATTERN:
+#   Task(
+#     subagent_type="onex:polymorphic-agent",
+#     description="<short task description>",
+#     prompt="<detailed task prompt>"
+#   )
+# ============================================================================
+
 schema_version: "1.0.0"
 agent_type: "polymorphic_agent"
 priority: "high"
