@@ -148,7 +148,7 @@ class Settings(BaseSettings):
             "No default to prevent unauthorized access attempts."
         ),
     )
-    postgres_password: str = Field(
+    postgres_password: str = Field(  # nosec: Pydantic field, reads from env
         default="",
         description="PostgreSQL password. REQUIRED when ENABLE_POSTGRES=true.",
     )
@@ -285,6 +285,14 @@ class Settings(BaseSettings):
         le=1.0,
         description="Minimum pattern quality threshold (0.0-1.0)",
     )
+    enable_disabled_pattern_filter: bool = Field(
+        default=True,
+        description=(
+            "Enable runtime kill switch for patterns. When True, ManifestInjector "
+            "checks disabled_patterns_current materialized view before injection. "
+            "Requires ENABLE_POSTGRES=true; effectively a no-op when Postgres is disabled."
+        ),
+    )
 
     # =========================================================================
     # QUALITY ENFORCEMENT PHASES
@@ -368,7 +376,7 @@ class Settings(BaseSettings):
             Full PostgreSQL DSN connection string.
         """
         driver = "postgresql+asyncpg" if async_driver else "postgresql"
-        password = self.get_effective_postgres_password()
+        password = self.get_effective_postgres_password()  # nosec
 
         # URL-encode special characters in username and password.
         # Both may contain URL-unsafe characters like @, :, /, ?, #, %, etc.
@@ -376,7 +384,7 @@ class Settings(BaseSettings):
         # including spaces as %20 (more compatible than quote_plus's + encoding).
         encoded_user = quote(self.postgres_user, safe="")
         if password:
-            encoded_password = quote(password, safe="")
+            encoded_password = quote(password, safe="")  # nosec
             return (
                 f"{driver}://{encoded_user}:{encoded_password}"
                 f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_database}"
