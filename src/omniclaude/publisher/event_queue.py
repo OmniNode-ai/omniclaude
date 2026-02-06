@@ -204,11 +204,16 @@ class BoundedEventQueue:
         except Exception:
             logger.exception("Failed to parse spool file %s", filepath)
             # Decrement spool bytes to maintain accurate accounting — file was
-            # already popped from _spool_files and its size was counted during load_spool
+            # already popped from _spool_files and its size was counted during load_spool.
+            # Note: content may be unbound if read_text() raised a non-OSError
+            # (e.g. UnicodeDecodeError), so fall back to 0 if stat also fails.
             try:
                 file_size = filepath.stat().st_size
             except OSError:
-                file_size = len(content.encode("utf-8"))
+                try:
+                    file_size = len(content.encode("utf-8"))
+                except NameError:
+                    file_size = 0
             self._spool_bytes = max(0, self._spool_bytes - file_size)
             try:
                 filepath.unlink()
