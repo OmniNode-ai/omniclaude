@@ -45,7 +45,7 @@ from enum import Enum
 from typing import Any, cast
 from uuid import UUID, uuid4
 
-from omniclaude.hooks.topics import TopicBase
+from omniclaude.hooks.topics import TopicBase, build_topic
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +79,18 @@ class ManifestInjectionEventType(str, Enum):
 # Lazy-loaded Kafka producer (singleton)
 _kafka_producer: Any | None = None
 _producer_lock: asyncio.Lock | None = None
+_producer_lock_loop: asyncio.AbstractEventLoop | None = None
 _lock_creation_lock = threading.Lock()  # Protects asyncio.Lock creation
+
+
+def _get_kafka_topic_prefix() -> str:
+    """Get Kafka topic prefix (environment) from environment.
+
+    Returns:
+        Topic prefix (e.g., "dev", "staging", "prod"). Defaults to "dev".
+    """
+    env_prefix = os.getenv("KAFKA_TOPIC_PREFIX") or os.getenv("KAFKA_ENVIRONMENT")
+    return env_prefix if env_prefix else "dev"
 
 
 def _get_kafka_bootstrap_servers() -> str | None:
@@ -152,11 +163,14 @@ async def get_producer_lock() -> asyncio.Lock:
     Returns:
         asyncio.Lock: The producer lock instance
     """
-    global _producer_lock
-    if _producer_lock is None:
-        with _lock_creation_lock:
-            if _producer_lock is None:  # Double-check after acquiring lock
-                _producer_lock = asyncio.Lock()
+    global _producer_lock, _producer_lock_loop
+    current_loop = asyncio.get_running_loop()
+    if _producer_lock is not None and _producer_lock_loop is current_loop:
+        return _producer_lock
+    with _lock_creation_lock:
+        if _producer_lock is None or _producer_lock_loop is not current_loop:
+            _producer_lock = asyncio.Lock()
+            _producer_lock_loop = current_loop
     return _producer_lock
 
 
@@ -312,8 +326,9 @@ async def publish_manifest_injection_event(
             )
             return False
 
-        # Get topic name from event type enum (separate topics per event type)
-        topic = event_type.get_topic_name()
+        # Build ONEX-compliant topic name with environment prefix
+        topic_prefix = _get_kafka_topic_prefix()
+        topic = build_topic(topic_prefix, event_type.get_topic_name())
 
         # Use correlation_id as partition key for workflow coherence
         partition_key = correlation_id_str.encode("utf-8")
@@ -325,7 +340,7 @@ async def publish_manifest_injection_event(
         )
 
         logger.debug(
-            f"Published manifest injection event: {event_type.value} | "
+            f"Published manifest injection event: {topic} | "
             f"agent={agent_name} | "
             f"correlation_id={correlation_id_str}"
         )
@@ -441,34 +456,30 @@ def _cleanup_producer_sync() -> None:
             except RuntimeError:
                 pass
 
-            # Try to use existing event loop if available and not closed
+            # Create a new event loop for cleanup (asyncio.get_event_loop()
+            # is deprecated in Python 3.12+)
+            loop = asyncio.new_event_loop()
             try:
-                loop = asyncio.get_event_loop()
-                if not loop.is_closed():
-                    loop.run_until_complete(close_producer())
-                    return
-            except RuntimeError:
-                pass
-
-            # Event loop is closed - directly close underlying components
-            # NOTE: Accessing _client is necessary because AIOKafkaProducer
-            # doesn't expose a synchronous close() method. When the event loop
-            # is closed (atexit), we can't use async producer.stop().
-            # Using getattr() for safer access that handles aiokafka version changes.
-            try:
-                client = getattr(_kafka_producer, "_client", None)
-                if client is not None:
-                    close_method = getattr(client, "close", None)
-                    if close_method is not None and callable(close_method):
-                        close_method()
-                _kafka_producer = None
-                logger.debug("Kafka producer closed (synchronous cleanup)")
-            except (AttributeError, TypeError):
-                # aiokafka internals changed or client not available
-                # Just release the reference, let GC handle it
-                _kafka_producer = None
+                loop.run_until_complete(close_producer())
             except Exception:
-                _kafka_producer = None
+                pass
+            finally:
+                loop.close()
+
+            if _kafka_producer is not None:
+                # Async cleanup didn't fully work - directly close underlying components
+                try:
+                    client = getattr(_kafka_producer, "_client", None)
+                    if client is not None:
+                        close_method = getattr(client, "close", None)
+                        if close_method is not None and callable(close_method):
+                            close_method()
+                    _kafka_producer = None
+                    logger.debug("Kafka producer closed (synchronous cleanup)")
+                except (AttributeError, TypeError):
+                    _kafka_producer = None
+                except Exception:
+                    _kafka_producer = None
 
         except Exception:
             _kafka_producer = None

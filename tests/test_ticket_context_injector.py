@@ -406,8 +406,8 @@ class TestCliMain:
         assert output["ticket_id"] is None
         assert "retrieval_ms" in output
 
-    def test_cli_main_empty_string_input(self, tmp_path: Path) -> None:
-        """CLI handles completely empty input gracefully."""
+    def test_cli_main_nonexistent_tickets_dir(self, tmp_path: Path) -> None:
+        """CLI handles nonexistent tickets directory gracefully."""
         # Use isolated nonexistent tickets_dir to avoid reading real ~/.claude/tickets/
         # Note: Empty string input means we can't pass tickets_dir via JSON,
         # so we use a directory that doesn't exist yet (tmp_path subdir)

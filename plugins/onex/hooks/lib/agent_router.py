@@ -29,7 +29,6 @@ import math
 import os
 import re
 import time
-import unicodedata
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -68,19 +67,6 @@ _SENSITIVE_PREFIXES = frozenset(
 # Safety invariant for candidate filtering. Not agent- or registry-configurable.
 # Changes require code review. See docs/proposals/FUZZY_MATCHER_IMPROVEMENTS.md.
 HARD_FLOOR = 0.55
-
-
-def _normalize(text: str) -> str:
-    """Canonical normalization for trigger matching.
-
-    Applied to both triggers and prompt tokens. Ensures deterministic
-    comparison across platforms and input sources.
-    """
-    text = unicodedata.normalize("NFKC", text)
-    text = text.lower()
-    text = text.replace("-", " ").replace("_", " ")
-    text = re.sub(r"[^\w\s]", "", text)
-    return text.strip()
 
 
 def _resolve_agent_configs_dir() -> Path:
@@ -381,6 +367,21 @@ class TriggerMatcher:
         }
     )
 
+    # Pre-compiled technical patterns that indicate discussion ABOUT agents
+    # rather than an agent invocation request (avoids recompilation per call)
+    _TECHNICAL_PATTERNS = [
+        re.compile(
+            r"\bpolymorphic\s+(architecture|design|pattern|approach|system|code|style)\b"
+        ),
+        re.compile(r"\bpolymorphism\b"),
+        re.compile(r"\bpollyanna\b"),
+        re.compile(
+            r"\b(the|a|an)\s+polymorphic\s+(design|pattern|architecture|approach)\b"
+        ),
+        re.compile(r"\busing\s+polymorphi"),
+        re.compile(r"\b(poly|polly)\s+(suggested|mentioned|said|thinks|believes)\b"),
+    ]
+
     # High-confidence technical triggers that don't need action context
     HIGH_CONFIDENCE_TRIGGERS = frozenset(
         {
@@ -633,17 +634,8 @@ class TriggerMatcher:
             return True
 
         # Technical/architectural patterns indicate NOT an agent invocation
-        technical_patterns = [
-            r"\bpolymorphic\s+(architecture|design|pattern|approach|system|code|style)\b",
-            r"\bpolymorphism\b",
-            r"\bpollyanna\b",
-            r"\b(the|a|an)\s+polymorphic\s+(design|pattern|architecture|approach)\b",
-            r"\busing\s+polymorphi",
-            r"\b(poly|polly)\s+(suggested|mentioned|said|thinks|believes)\b",
-        ]
-
-        for pattern in technical_patterns:
-            if re.search(pattern, request_lower):
+        for pattern in self._TECHNICAL_PATTERNS:
+            if pattern.search(request_lower):
                 return False
 
         # Multi-word triggers are high confidence

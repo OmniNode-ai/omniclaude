@@ -376,14 +376,21 @@ class TestPublishTransformationEvent:
             ),
         ]
 
-        for event_type, expected_topic in test_cases:
+        for event_type, expected_base_topic in test_cases:
             mock_producer.send_and_wait.reset_mock()
 
-            with patch.object(
-                tep,
-                "_get_kafka_producer",
-                new_callable=AsyncMock,
-                return_value=mock_producer,
+            with (
+                patch.object(
+                    tep,
+                    "_get_kafka_producer",
+                    new_callable=AsyncMock,
+                    return_value=mock_producer,
+                ),
+                patch.object(
+                    tep,
+                    "_get_kafka_topic_prefix",
+                    return_value="dev",
+                ),
             ):
                 await publish_transformation_event(
                     source_agent="agent-a",
@@ -394,6 +401,8 @@ class TestPublishTransformationEvent:
 
                 call_args = mock_producer.send_and_wait.call_args
                 actual_topic = call_args[0][0]
+                # Topic should be env-prefixed (e.g., "dev.onex.evt...")
+                expected_topic = f"dev.{expected_base_topic}"
                 assert actual_topic == expected_topic, (
                     f"Event type {event_type} should route to {expected_topic}, "
                     f"got {actual_topic}"
@@ -531,11 +540,18 @@ class TestIntegrationScenarios:
         mock_producer.send_and_wait = AsyncMock()
         correlation_id = str(uuid4())
 
-        with patch.object(
-            tep,
-            "_get_kafka_producer",
-            new_callable=AsyncMock,
-            return_value=mock_producer,
+        with (
+            patch.object(
+                tep,
+                "_get_kafka_producer",
+                new_callable=AsyncMock,
+                return_value=mock_producer,
+            ),
+            patch.object(
+                tep,
+                "_get_kafka_topic_prefix",
+                return_value="dev",
+            ),
         ):
             # Start transformation
             success_start = await publish_transformation_start(
@@ -560,13 +576,13 @@ class TestIntegrationScenarios:
         # Verify two events were sent
         assert mock_producer.send_and_wait.call_count == 2
 
-        # Verify first event is STARTED
+        # Verify first event is STARTED (with env prefix)
         first_call = mock_producer.send_and_wait.call_args_list[0]
-        assert first_call[0][0] == TopicBase.TRANSFORMATION_STARTED.value
+        assert first_call[0][0] == f"dev.{TopicBase.TRANSFORMATION_STARTED.value}"
 
-        # Verify second event is COMPLETED
+        # Verify second event is COMPLETED (with env prefix)
         second_call = mock_producer.send_and_wait.call_args_list[1]
-        assert second_call[0][0] == TopicBase.TRANSFORMATION_COMPLETED.value
+        assert second_call[0][0] == f"dev.{TopicBase.TRANSFORMATION_COMPLETED.value}"
 
     @pytest.mark.asyncio
     async def test_transformation_failure_scenario(self) -> None:
@@ -575,11 +591,18 @@ class TestIntegrationScenarios:
         mock_producer.send_and_wait = AsyncMock()
         correlation_id = str(uuid4())
 
-        with patch.object(
-            tep,
-            "_get_kafka_producer",
-            new_callable=AsyncMock,
-            return_value=mock_producer,
+        with (
+            patch.object(
+                tep,
+                "_get_kafka_producer",
+                new_callable=AsyncMock,
+                return_value=mock_producer,
+            ),
+            patch.object(
+                tep,
+                "_get_kafka_topic_prefix",
+                return_value="dev",
+            ),
         ):
             # Start transformation
             success_start = await publish_transformation_start(
@@ -604,9 +627,9 @@ class TestIntegrationScenarios:
         # Verify events were sent to correct topics
         assert mock_producer.send_and_wait.call_count == 2
 
-        # Second event should be FAILED
+        # Second event should be FAILED (with env prefix)
         second_call = mock_producer.send_and_wait.call_args_list[1]
-        assert second_call[0][0] == TopicBase.TRANSFORMATION_FAILED.value
+        assert second_call[0][0] == f"dev.{TopicBase.TRANSFORMATION_FAILED.value}"
 
         # Verify error details in payload
         envelope = second_call[1]["value"]

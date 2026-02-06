@@ -77,20 +77,18 @@ class TestRealKafkaRouting:
             correlation_id="consistency-test-001",
         )
 
-        # If event was not attempted, routing_path must be 'local'
-        if not result["event_attempted"]:
-            assert result["routing_path"] == "local", (
-                "Non-attempted event must have routing_path='local'"
-            )
-
-        # If method is 'event_based', routing_path must be 'event'
-        if result["method"] == "event_based":
-            assert result["routing_path"] == "event", (
-                "event_based method must have routing_path='event'"
-            )
-            assert result["event_attempted"], (
-                "event_based requires event_attempted=True"
-            )
+        # In the current architecture, routing is always local (no event-based routing)
+        assert result["event_attempted"] is False, (
+            "Current architecture does not use event-based routing"
+        )
+        assert result["routing_path"] == "local", (
+            "Non-attempted event must have routing_path='local'"
+        )
+        # Verify method is one of the valid intelligent routing policies
+        valid_methods = {"trigger_match", "explicit_request", "fallback_default"}
+        assert result["method"] in valid_methods, (
+            f"Expected method in {valid_methods}, got '{result['method']}'"
+        )
 
     def test_multiple_routing_requests(self):
         """Verify consistent behavior across multiple requests."""

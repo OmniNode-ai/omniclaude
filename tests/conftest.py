@@ -998,13 +998,10 @@ def _cleanup_dynamically_loaded_modules():
 
     This fixture automatically removes modules that were dynamically loaded
     via importlib.util.spec_from_file_location() during tests. These modules
-    are registered in sys.modules with custom names (like "transformation_event_publisher")
-    that could pollute subsequent tests.
+    are registered in sys.modules with namespaced names that could pollute subsequent tests.
 
     Modules cleaned up:
-    - transformation_event_publisher (from test_transformation_event_publisher.py)
-    - Any module with a path containing "omniclaude3/tests" but not the standard
-      package path
+    - omniclaude.tests.transformation_event_publisher (from test_transformation_event_publisher.py)
 
     This runs after every test to ensure a clean module state.
     """
@@ -1012,7 +1009,7 @@ def _cleanup_dynamically_loaded_modules():
 
     # List of known dynamically-loaded test modules to cleanup
     dynamic_modules = [
-        "transformation_event_publisher",  # From test_transformation_event_publisher.py
+        "omniclaude.tests.transformation_event_publisher",  # From test_transformation_event_publisher.py
     ]
 
     for module_name in dynamic_modules:

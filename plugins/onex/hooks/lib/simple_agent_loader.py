@@ -449,8 +449,16 @@ def load_agent(agent_name: str) -> AgentLoadResult:
     # Get search paths for error reporting
     search_paths = _get_search_paths(agent_name)
 
-    # Load YAML content
-    yaml_content = load_agent_yaml(agent_name)
+    # Load YAML content (wrapped to enforce no-exception contract)
+    try:
+        yaml_content = load_agent_yaml(agent_name)
+    except (ValueError, OSError) as e:
+        return AgentLoadFailure(
+            success=False,
+            error=str(e),
+            agent_name=agent_name,
+            searched_paths=[str(p) for p in search_paths],
+        )
 
     if yaml_content:
         # Truncate if exceeds max length to prevent hook output truncation

@@ -56,6 +56,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import atexit
 import concurrent.futures
 import json
 import logging
@@ -124,6 +125,11 @@ def _is_in_async_context() -> bool:
 
 T = TypeVar("T")
 
+# Module-level executor for _run_sync_in_thread to avoid per-call thread
+# creation/teardown overhead. Cleaned up on interpreter exit via atexit.
+_thread_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+atexit.register(_thread_executor.shutdown, wait=False)
+
 
 def _run_sync_in_thread(func: Callable[[], T]) -> T:  # noqa: UP047 - Python 3.11 compat
     """Run a sync function in a separate thread.
@@ -141,9 +147,8 @@ def _run_sync_in_thread(func: Callable[[], T]) -> T:  # noqa: UP047 - Python 3.1
     Raises:
         Exception: Any exception raised by func() is re-raised.
     """
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(func)
-        return future.result()
+    future = _thread_executor.submit(func)
+    return future.result()
 
 
 # =============================================================================

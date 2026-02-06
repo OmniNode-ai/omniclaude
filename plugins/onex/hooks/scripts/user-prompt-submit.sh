@@ -121,7 +121,17 @@ WORKFLOW_DETECTED="false"
 # -----------------------------
 # Agent Detection & Routing
 # -----------------------------
-ROUTING_RESULT="$($PYTHON_CMD "${HOOKS_LIB}/route_via_events_wrapper.py" "$PROMPT" "$CORRELATION_ID" "5000" "$SESSION_ID" 2>>"$LOG_FILE" || echo "")"
+
+# Slash commands manage their own agent dispatch — skip routing to avoid
+# the router matching on command *arguments* (e.g. "code review" in
+# "/local-review ...code review..." would incorrectly match code-quality-analyzer).
+if [[ "$PROMPT" =~ ^/[a-zA-Z_-] ]]; then
+    SLASH_CMD="$(echo "$PROMPT" | grep -oE '^/[a-zA-Z_-]+' || echo "")"
+    log "Slash command detected: ${SLASH_CMD} — skipping agent routing, defaulting to polymorphic-agent"
+    ROUTING_RESULT='{"selected_agent":"polymorphic-agent","confidence":1.0,"reasoning":"slash_command_bypass","method":"slash_command","domain":"workflow_coordination","purpose":"Slash commands manage their own agent dispatch","candidates":[]}'
+else
+    ROUTING_RESULT="$($PYTHON_CMD "${HOOKS_LIB}/route_via_events_wrapper.py" "$PROMPT" "$CORRELATION_ID" "5000" "$SESSION_ID" 2>>"$LOG_FILE" || echo "")"
+fi
 
 if [ -z "$ROUTING_RESULT" ]; then
     ROUTING_RESULT='{"selected_agent":"polymorphic-agent","confidence":0.5,"reasoning":"fallback","method":"fallback","domain":"workflow_coordination"}'
@@ -176,7 +186,7 @@ if [[ "$SKIP_IF_SESSION_INJECTED" == "true" ]] && [[ -f "${HOOKS_LIB}/session_ma
     fi
 fi
 
-if [[ "$SESSION_ALREADY_INJECTED" == "false" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
+if [[ "$SESSION_ALREADY_INJECTED" == "false" ]] && [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
     PATTERN_INPUT="$(jq -n --arg agent "$AGENT_NAME" --arg dom "$AGENT_DOMAIN" --arg sid "$SESSION_ID" --arg cid "$CORRELATION_ID" '{agent_name: $agent, domain: $dom, session_id: $sid, correlation_id: $cid, max_patterns: 5, min_confidence: 0.7}')"
     PATTERN_RESULT="$(echo "$PATTERN_INPUT" | run_with_timeout 2 $PYTHON_CMD "${HOOKS_LIB}/context_injection_wrapper.py" 2>>"$LOG_FILE" || echo '{}')"
     LEARNED_PATTERNS="$(echo "$PATTERN_RESULT" | jq -r '.patterns_context // ""')"
@@ -217,4 +227,5 @@ AGENT_CONTEXT=$(jq -rn \
 # Final Output via jq to ensure JSON integrity
 printf %s "$INPUT" | jq --arg ctx "$AGENT_CONTEXT" \
     '.hookSpecificOutput.hookEventName = "UserPromptSubmit" |
-     .hookSpecificOutput.additionalContext = $ctx' 2>>"$LOG_FILE"
+     .hookSpecificOutput.additionalContext = $ctx' 2>>"$LOG_FILE" \
+    || { log "ERROR: Final jq output failed, passing through raw input"; printf %s "$INPUT"; }

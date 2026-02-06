@@ -433,7 +433,7 @@ def route_via_events(
         routing_policy=result["routing_policy"],
         routing_path=result["routing_path"],
         latency_ms=latency_ms,
-        prompt_preview=prompt,
+        prompt_preview=prompt[:100],
         cohort=cohort,
         cohort_seed=cohort_seed,
     )

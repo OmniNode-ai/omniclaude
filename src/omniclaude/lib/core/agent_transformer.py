@@ -274,7 +274,7 @@ class AgentTransformer:
             ValueError: If transformation is blocked by validator
         """
         start_time = time.time()
-        validation_result: TransformationValidationResult | None = None
+        validation_result: "TransformationValidationResult | None" = None
         validation_outcome: str | None = None
         validation_metrics: dict | None = None
 
