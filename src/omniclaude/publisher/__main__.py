@@ -92,7 +92,14 @@ def _do_stop(args: argparse.Namespace) -> int:  # noqa: ARG001
         return 0
 
     try:
-        pid = int(pid_path.read_text().strip())
+        pid_str = pid_path.read_text().strip()
+        pid = int(pid_str)
+    except (OSError, ValueError):
+        print("Corrupt or unreadable PID file, cleaning up")
+        pid_path.unlink(missing_ok=True)
+        return 0
+
+    try:
         os.kill(pid, signal.SIGTERM)
         print(f"Sent SIGTERM to publisher (PID {pid})")
         return 0
