@@ -7,10 +7,19 @@ No CLI support — publisher is started/stopped programmatically.
 
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _default_socket_path() -> Path:
+    return Path(tempfile.gettempdir()) / "omniclaude-emit.sock"
+
+
+def _default_pid_path() -> Path:
+    return Path(tempfile.gettempdir()) / "omniclaude-emit.pid"
 
 
 class PublisherConfig(BaseSettings):
@@ -25,11 +34,11 @@ class PublisherConfig(BaseSettings):
 
     # Path configurations
     socket_path: Path = Field(
-        default=Path("/tmp/omniclaude-emit.sock"),  # noqa: S108
+        default_factory=_default_socket_path,
         description="Unix domain socket path",
     )
     pid_path: Path = Field(
-        default=Path("/tmp/omniclaude-emit.pid"),  # noqa: S108
+        default_factory=_default_pid_path,
         description="PID file path",
     )
     spool_dir: Path = Field(

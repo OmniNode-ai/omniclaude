@@ -14,6 +14,7 @@ import asyncio
 import logging
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -32,10 +33,11 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         required=True,
         help="Kafka bootstrap servers (host:port, comma-separated)",
     )
+    _default_sock = str(Path(tempfile.gettempdir()) / "omniclaude-emit.sock")
     start_parser.add_argument(
         "--socket-path",
-        default="/tmp/omniclaude-emit.sock",  # noqa: S108
-        help="Unix socket path (default: /tmp/omniclaude-emit.sock)",
+        default=_default_sock,
+        help=f"Unix socket path (default: {_default_sock})",
     )
     start_parser.add_argument(
         "--daemonize",
@@ -76,7 +78,7 @@ def _do_stop(args: argparse.Namespace) -> int:  # noqa: ARG001
     """Stop publisher by sending SIGTERM to PID file."""
     import signal
 
-    pid_path = Path("/tmp/omniclaude-emit.pid")  # noqa: S108
+    pid_path = Path(tempfile.gettempdir()) / "omniclaude-emit.pid"
     if not pid_path.exists():
         print("Publisher is not running (no PID file)")
         return 0
