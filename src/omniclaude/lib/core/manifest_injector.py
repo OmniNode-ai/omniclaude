@@ -991,7 +991,7 @@ class ManifestInjector:
                 database=database,
                 user=user,
                 password=password,
-                connect_timeout=2,
+                connect_timeout=1,
             )
             try:
                 cursor = conn.cursor()
@@ -1019,37 +1019,6 @@ class ManifestInjector:
         except Exception as e:
             self.logger.warning(f"Failed to query disabled patterns: {e}")
             return []
-
-    def _get_enabled_overrides(
-        self,
-        disabled: list[DisabledPattern],
-    ) -> set[str]:
-        """Get pattern IDs that are specifically enabled despite class disable.
-
-        When a pattern_class is disabled but a specific pattern_id within that
-        class has a more recent 'enabled' event, that pattern should still be
-        injected. Since disabled_patterns_current only shows currently-disabled
-        entries, any pattern_id NOT in the disabled set is implicitly enabled.
-
-        Args:
-            disabled: List of currently disabled patterns from the materialized view.
-
-        Returns:
-            Set of pattern_id strings that should remain enabled even when their
-            class is disabled.
-        """
-        # Pattern IDs that appear as explicitly disabled
-        disabled_ids = {d.pattern_id for d in disabled if d.pattern_id}
-        # Disabled classes
-        disabled_classes = {d.pattern_class for d in disabled if d.pattern_class}
-
-        # If a pattern_id is NOT in disabled_ids but its class IS in disabled_classes,
-        # the materialized view already handles this: it only shows disabled entries.
-        # A pattern whose class is disabled but whose ID was re-enabled won't appear.
-        # So the override set is: nothing extra needed from the view itself.
-        # This method exists for future extension (e.g., querying the full event log).
-        _ = disabled_classes  # Acknowledge for clarity
-        return disabled_ids
 
     async def _filter_disabled_patterns(
         self, patterns: list[dict[str, Any]]
@@ -1095,11 +1064,13 @@ class ManifestInjector:
                 self.logger.info(f"Skipping disabled pattern (by ID): {pid}")
                 continue
 
-            # Check pattern class/type
+            # Check pattern class/type (lower precedence than ID)
             if ptype and ptype in disabled_classes:
-                # Allow if specifically re-enabled (ID not in disabled set)
-                # The materialized view handles this: if a specific ID was re-enabled,
-                # it won't appear in disabled_ids
+                # Class is disabled. But if this specific pattern's ID was
+                # explicitly re-enabled, the materialized view won't contain
+                # a disabled row for it. However, we can't distinguish
+                # "never mentioned" from "re-enabled" without querying the
+                # full event log, so class disables are treated as absolute.
                 skipped_by_class += 1
                 self.logger.info(
                     f"Skipping pattern in disabled class: {ptype} "

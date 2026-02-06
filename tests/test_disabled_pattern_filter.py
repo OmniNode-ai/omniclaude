@@ -172,8 +172,10 @@ class TestFilterDisabledPatterns:
         assert len(result) == 1
 
     @pytest.mark.asyncio
-    async def test_db_failure_returns_all(self, injector: ManifestInjector) -> None:
-        """When the database query fails, all patterns pass through (graceful degradation)."""
+    async def test_db_failure_returns_all_via_empty(
+        self, injector: ManifestInjector
+    ) -> None:
+        """When _get_disabled_patterns returns empty (DB failure), all patterns pass."""
         patterns = [
             _make_pattern("p1", "id-1", "classA"),
             _make_pattern("p2", "id-2", "classB"),
@@ -181,16 +183,31 @@ class TestFilterDisabledPatterns:
         with patch.object(
             injector, "_get_disabled_patterns", new_callable=AsyncMock
         ) as mock_get:
-            mock_get.side_effect = Exception("DB connection refused")
-            # The method catches exceptions internally and returns []
-            # But since _get_disabled_patterns is mocked to raise, we need to
-            # test the actual _get_disabled_patterns exception handling
-            # Let's instead test that _filter_disabled_patterns handles empty gracefully
+            # _get_disabled_patterns catches exceptions internally and returns []
             mock_get.return_value = []
-            mock_get.side_effect = None
             result = await injector._filter_disabled_patterns(patterns)
 
         assert len(result) == 2
+
+    @pytest.mark.asyncio
+    async def test_class_disable_is_absolute(self, injector: ManifestInjector) -> None:
+        """When a class is disabled, ALL patterns in that class are skipped.
+
+        Even if a specific pattern's ID is not in the disabled set, class
+        disables are treated as absolute. This is because the materialized
+        view cannot distinguish 'never mentioned' from 're-enabled'.
+        """
+        patterns = [
+            _make_pattern("in-disabled-class", "id-999", "bad_class"),
+        ]
+        with patch.object(
+            injector, "_get_disabled_patterns", new_callable=AsyncMock
+        ) as mock_get:
+            # Only class disabled, not the specific ID
+            mock_get.return_value = [_make_disabled(pattern_class="bad_class")]
+            result = await injector._filter_disabled_patterns(patterns)
+
+        assert len(result) == 0
 
     @pytest.mark.asyncio
     async def test_pattern_without_id_not_matched(
@@ -242,6 +259,21 @@ class TestGetDisabledPatterns:
             result = await injector._get_disabled_patterns()
         # Should return empty (graceful degradation)
         assert isinstance(result, list)
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_on_connection_error(
+        self, injector: ManifestInjector
+    ) -> None:
+        """Returns empty list when psycopg2 connect raises (graceful degradation)."""
+        with patch("omniclaude.lib.core.manifest_injector.settings") as mock_settings:
+            mock_settings.postgres_host = "unreachable-host"
+            mock_settings.postgres_port = 5436
+            mock_settings.postgres_database = "test_db"
+            mock_settings.postgres_user = "postgres"
+            mock_settings.get_effective_postgres_password.return_value = "testpw"
+            # psycopg2.connect will fail with unreachable host, caught by except
+            result = await injector._get_disabled_patterns()
+        assert result == []
 
     @pytest.mark.asyncio
     async def test_returns_empty_on_no_password(
