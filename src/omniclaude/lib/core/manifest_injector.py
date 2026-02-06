@@ -968,6 +968,9 @@ class ManifestInjector:
         Returns:
             List of DisabledPattern entries. Empty list on any failure.
         """
+        # Fast-path: skip DB query when Postgres is disabled
+        if not settings.enable_postgres:
+            return []
 
         def _blocking_query() -> list[DisabledPattern]:
             import psycopg2
