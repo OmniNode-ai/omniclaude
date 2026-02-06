@@ -292,8 +292,10 @@ if [[ "$EXECUTE" == "true" ]]; then
             echo -e "${YELLOW}  Warning: $label exists as a real directory, backing up to $backup_path${NC}"
             mv "$link_path" "$backup_path"
         elif [[ -e "$link_path" ]]; then
-            echo -e "${YELLOW}  Warning: $label exists as a regular file, replacing with symlink${NC}"
-            rm -f "$link_path"
+            # Regular file - back it up before replacing (same safety as directories)
+            local backup_path="${link_path}.backup.$(date +%Y%m%d%H%M%S)"
+            echo -e "${YELLOW}  Warning: $label exists as a regular file, backing up to $backup_path${NC}"
+            mv "$link_path" "$backup_path"
         fi
 
         # Use ln -sfn: -s for symbolic, -f to force, -n to not follow existing symlink target

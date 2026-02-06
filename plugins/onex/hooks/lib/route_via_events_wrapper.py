@@ -167,7 +167,7 @@ def _emit_routing_decision(
         _emit_event_fn("routing.decision", payload)
     except Exception as e:
         # Non-blocking: routing emission failure must not break routing
-        logger.debug(f"Failed to emit routing decision: {e}")
+        logger.debug("Failed to emit routing decision: %s", e)
 
 
 def route_via_events(

@@ -26,6 +26,7 @@ Target: Reduce self-transformation rate from 45.5% to <10%
 """
 
 import logging
+import re
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
@@ -108,6 +109,11 @@ class TransformationValidator:
         "python",
         "sql",
     ]
+
+    # Short keywords (<=4 chars) that need word-boundary matching to prevent
+    # false positives (e.g., "capital" matching "api", "built" matching "ui").
+    # Follows the same pattern as TaskClassifier._SHORT_KEYWORDS.
+    _SHORT_KEYWORDS = frozenset({"api", "ui", "ux", "css", "sql"})
 
     def __init__(self, min_reason_length: int = 50, min_confidence: float = 0.7):
         """Initialize validator.
@@ -261,13 +267,28 @@ class TransformationValidator:
             metrics=metrics,
         )
 
+    def _keyword_in_text(self, keyword: str, text: str) -> bool:
+        """Check if keyword appears in text, using word boundaries for short keywords.
+
+        Short keywords (<=4 chars like "api", "ui", "sql") use regex word-boundary
+        matching to prevent false positives (e.g., "capital" matching "api").
+        Follows the same pattern as TaskClassifier._keyword_in_text.
+        """
+        if keyword in self._SHORT_KEYWORDS:
+            pattern = rf"\b{re.escape(keyword)}\b"
+            return bool(re.search(pattern, text))
+        return keyword in text
+
     def _is_orchestration_task(self, text: str) -> bool:
         """Check if text contains orchestration keywords."""
         if not text:
             return False
 
         text_lower = text.lower()
-        return any(keyword in text_lower for keyword in self.ORCHESTRATION_KEYWORDS)
+        return any(
+            self._keyword_in_text(keyword, text_lower)
+            for keyword in self.ORCHESTRATION_KEYWORDS
+        )
 
     def _is_specialized_task(self, text: str) -> bool:
         """Check if text contains specialized task keywords."""
@@ -275,7 +296,10 @@ class TransformationValidator:
             return False
 
         text_lower = text.lower()
-        return any(keyword in text_lower for keyword in self.SPECIALIZED_KEYWORDS)
+        return any(
+            self._keyword_in_text(keyword, text_lower)
+            for keyword in self.SPECIALIZED_KEYWORDS
+        )
 
 
 # Convenience function for quick validation

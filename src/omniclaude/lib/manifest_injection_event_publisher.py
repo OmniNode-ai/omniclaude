@@ -22,32 +22,30 @@ Usage:
 Features:
 - Non-blocking async publishing
 - Graceful degradation (logs error but doesn't fail execution)
-- Automatic producer connection management
+- Shared producer connection management (via kafka_publisher_base)
 - OnexEnvelopeV1 standard event envelope
 - Event types aligned with TopicBase constants
 - Correlation ID tracking for distributed tracing
-- Thread-safe singleton producer with double-checked locking
 """
 
 import asyncio
-import atexit
-import concurrent.futures
-import json
 import logging
-import os
-import threading
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 from uuid import UUID, uuid4
 
 from omniclaude.hooks.topics import TopicBase, build_topic
+from omniclaude.lib.kafka_publisher_base import (
+    KAFKA_PUBLISH_TIMEOUT_SECONDS,
+    close_shared_producer,
+    create_event_envelope,
+    get_kafka_topic_prefix,
+    publish_to_kafka,
+    publish_to_kafka_sync,
+)
 
 logger = logging.getLogger(__name__)
-
-# Kafka publish timeout (10 seconds)
-# Prevents indefinite blocking if broker is slow/unresponsive
-KAFKA_PUBLISH_TIMEOUT_SECONDS = 10.0
 
 
 # Event type enumeration aligned with TopicBase constants.
@@ -71,200 +69,12 @@ class ManifestInjectionEventType(StrEnum):
 
 
 # Mapping from event type to TopicBase for topic routing
-_EVENT_TYPE_TO_TOPIC: dict[ManifestInjectionEventType, str] = {
+_EVENT_TYPE_TO_TOPIC: dict[ManifestInjectionEventType, TopicBase] = {
     ManifestInjectionEventType.CONTEXT_INJECTED: TopicBase.CONTEXT_INJECTED,
     ManifestInjectionEventType.INJECTION_RECORDED: TopicBase.INJECTION_RECORDED,
     ManifestInjectionEventType.CONTEXT_RETRIEVAL_REQUESTED: TopicBase.CONTEXT_RETRIEVAL_REQUESTED,
     ManifestInjectionEventType.CONTEXT_RETRIEVAL_COMPLETED: TopicBase.CONTEXT_RETRIEVAL_COMPLETED,
 }
-
-
-# Lazy-loaded Kafka producer (singleton)
-_kafka_producer: Any | None = None
-_producer_lock: asyncio.Lock | None = None
-
-# Threading lock for thread-safe asyncio.Lock creation (double-checked locking)
-_lock_creation_lock = threading.Lock()
-
-# Shared ThreadPoolExecutor for sync-from-async fallback
-_thread_pool: concurrent.futures.ThreadPoolExecutor | None = None
-_thread_pool_lock = threading.Lock()
-
-
-def _get_thread_pool() -> concurrent.futures.ThreadPoolExecutor:
-    """Get or create a shared ThreadPoolExecutor for sync wrapper fallback.
-
-    Uses double-checked locking for thread safety.
-
-    Returns:
-        ThreadPoolExecutor instance (shared singleton).
-    """
-    global _thread_pool
-    if _thread_pool is None:
-        with _thread_pool_lock:
-            if _thread_pool is None:
-                _thread_pool = concurrent.futures.ThreadPoolExecutor(
-                    max_workers=1,
-                    thread_name_prefix="manifest-injection-event-publisher",
-                )
-    return _thread_pool
-
-
-def _get_kafka_bootstrap_servers() -> str:
-    """Get Kafka bootstrap servers from environment.
-
-    Resolution order:
-    1. KAFKA_BOOTSTRAP_SERVERS environment variable
-    2. Configurable fallback via KAFKA_FALLBACK_HOST and KAFKA_FALLBACK_PORT
-    3. localhost:9092 as safe default
-
-    Returns:
-        Kafka bootstrap servers connection string.
-    """
-    servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS")
-    if servers:
-        return servers
-
-    # Use configurable fallback - no hardcoded IPs
-    fallback_host = os.environ.get("KAFKA_FALLBACK_HOST", "localhost")
-    fallback_port = os.environ.get("KAFKA_FALLBACK_PORT", "9092")
-    default_servers = f"{fallback_host}:{fallback_port}"
-    logger.warning(
-        f"KAFKA_BOOTSTRAP_SERVERS not set, using fallback: {default_servers}. "
-        f"Set KAFKA_BOOTSTRAP_SERVERS environment variable for production use."
-    )
-    return default_servers
-
-
-def _get_kafka_topic_prefix() -> str:
-    """Get Kafka topic prefix (environment) from environment variables.
-
-    Returns:
-        Topic prefix (e.g., "dev", "staging", "prod"). Defaults to "dev".
-    """
-    env_prefix = os.environ.get("KAFKA_TOPIC_PREFIX") or os.environ.get(
-        "KAFKA_ENVIRONMENT"
-    )
-    return env_prefix if env_prefix else "dev"
-
-
-def _create_event_envelope(
-    event_type: ManifestInjectionEventType,
-    payload: dict[str, Any],
-    correlation_id: str,
-    source: str = "omniclaude",
-    tenant_id: str = "default",
-    namespace: str = "omninode",
-    causation_id: str | None = None,
-) -> dict[str, Any]:
-    """
-    Create OnexEnvelopeV1 standard event envelope.
-
-    Following EVENT_BUS_INTEGRATION_PATTERNS standards for consistent event structure.
-
-    Args:
-        event_type: Manifest injection event type enum
-        payload: Event payload containing injection data
-        correlation_id: Correlation ID for distributed tracing
-        source: Source service name (default: omniclaude)
-        tenant_id: Tenant identifier (default: default)
-        namespace: Event namespace (default: omninode)
-        causation_id: Optional causation ID for event chains
-
-    Returns:
-        Dict containing OnexEnvelopeV1 wrapped event
-    """
-    return {
-        "event_type": event_type.value,
-        "event_id": str(uuid4()),  # Unique event ID for idempotency
-        "timestamp": datetime.now(UTC).isoformat(),  # RFC3339 format
-        "tenant_id": tenant_id,
-        "namespace": namespace,
-        "source": source,
-        "correlation_id": correlation_id,
-        "causation_id": causation_id,
-        "schema_ref": f"registry://{namespace}/manifest/injection_{event_type.name.lower()}/v1",
-        "payload": payload,
-    }
-
-
-async def get_producer_lock() -> asyncio.Lock:
-    """
-    Get or create the producer lock lazily under a running event loop.
-
-    Uses double-checked locking with a threading.Lock to ensure thread-safe
-    creation of the asyncio.Lock. This prevents race conditions where multiple
-    coroutines could create separate lock instances.
-
-    This ensures asyncio.Lock() is never created at module level, which
-    would cause RuntimeError in Python 3.12+ when no event loop exists.
-
-    Returns:
-        asyncio.Lock: The producer lock instance
-    """
-    global _producer_lock
-
-    # First check (no lock) - fast path for already-initialized case
-    if _producer_lock is None:
-        # Acquire threading lock for creation
-        with _lock_creation_lock:
-            # Second check (with lock) - ensures only one coroutine creates the lock
-            if _producer_lock is None:
-                _producer_lock = asyncio.Lock()
-
-    return _producer_lock
-
-
-async def _get_kafka_producer():
-    """
-    Get or create Kafka producer (async singleton pattern).
-
-    Returns:
-        AIOKafkaProducer instance or None if unavailable
-    """
-    global _kafka_producer
-
-    # Check if producer already exists - use local reference for type narrowing
-    producer = _kafka_producer
-    if producer is not None:
-        return producer
-
-    # Get the lock (created lazily under running event loop)
-    lock = await get_producer_lock()
-    async with lock:
-        # Double-check after acquiring lock
-        producer = _kafka_producer
-        if producer is not None:
-            return producer
-
-        try:
-            from aiokafka import AIOKafkaProducer
-
-            bootstrap_servers = _get_kafka_bootstrap_servers()
-
-            producer = AIOKafkaProducer(
-                bootstrap_servers=bootstrap_servers,
-                value_serializer=lambda v: json.dumps(v).encode("utf-8"),
-                compression_type="gzip",
-                linger_ms=10,  # Batch for 10ms
-                acks=1,  # Leader acknowledgment (balance speed/reliability)
-                max_batch_size=16384,  # 16KB batches
-                request_timeout_ms=5000,  # 5 second timeout
-            )
-
-            await producer.start()
-            _kafka_producer = producer
-            logger.info(f"Kafka producer initialized: {bootstrap_servers}")
-            return producer
-
-        except ImportError:
-            logger.error(
-                "aiokafka not installed. Install with: pip install aiokafka"
-            )
-            return None
-        except Exception as e:
-            logger.error(f"Failed to initialize Kafka producer: {e}")
-            return None
 
 
 async def publish_manifest_injection_event(
@@ -348,62 +158,57 @@ async def publish_manifest_injection_event(
         # Remove None values to keep payload compact
         payload = {k: v for k, v in payload.items() if v is not None}
 
+        # Build schema ref for this event type
+        schema_ref = f"registry://{namespace}/manifest/injection_{injection_type.name.lower()}/v1"
+
         # Wrap payload in OnexEnvelopeV1 standard envelope
-        envelope = _create_event_envelope(
-            event_type=injection_type,
+        envelope = create_event_envelope(
+            event_type_value=injection_type.value,
             payload=payload,
             correlation_id=correlation_id,
+            schema_ref=schema_ref,
             source="omniclaude",
             tenant_id=tenant_id,
             namespace=namespace,
             causation_id=causation_id,
         )
 
-        # Get producer
-        producer = await _get_kafka_producer()
-        if producer is None:
-            logger.warning(
-                "Kafka producer unavailable, manifest injection event not published"
-            )
-            return False
-
         # Build ONEX-compliant topic name using TopicBase
-        topic_prefix = _get_kafka_topic_prefix()
+        topic_prefix = get_kafka_topic_prefix()
         topic_base = _EVENT_TYPE_TO_TOPIC.get(
             injection_type, TopicBase.INJECTION_RECORDED
         )
         topic = build_topic(topic_prefix, topic_base)
 
-        # Use correlation_id as partition key for workflow coherence
-        partition_key = correlation_id.encode("utf-8")
+        # Publish to Kafka
+        result = await publish_to_kafka(topic, envelope, correlation_id)
 
-        # Publish to Kafka with timeout to prevent indefinite hanging
-        await asyncio.wait_for(
-            producer.send_and_wait(topic, value=envelope, key=partition_key),
-            timeout=KAFKA_PUBLISH_TIMEOUT_SECONDS,
-        )
-
-        logger.debug(
-            f"Published manifest injection event: {injection_type.value} | "
-            f"agent={agent_name} | "
-            f"correlation_id={correlation_id} | "
-            f"topic={topic}"
-        )
-        return True
+        if result:
+            logger.debug(
+                "Published manifest injection event: %s | agent=%s | "
+                "correlation_id=%s | topic=%s",
+                injection_type.value,
+                agent_name,
+                correlation_id,
+                topic,
+            )
+        return result
 
     except TimeoutError:
         logger.error(
-            f"Timeout publishing manifest injection event to Kafka "
-            f"(injection_type={injection_type.value}, agent_name={agent_name}, "
-            f"timeout={KAFKA_PUBLISH_TIMEOUT_SECONDS}s)",
+            "Timeout publishing manifest injection event to Kafka "
+            "(injection_type=%s, agent_name=%s, timeout=%ss)",
+            injection_type.value,
+            agent_name,
+            KAFKA_PUBLISH_TIMEOUT_SECONDS,
             extra={"correlation_id": correlation_id},
         )
         return False
 
     except Exception:
         logger.error(
-            f"Failed to publish manifest injection event: "
-            f"{injection_type.value if isinstance(injection_type, ManifestInjectionEventType) else injection_type}",
+            "Failed to publish manifest injection event: %s",
+            injection_type.value if isinstance(injection_type, ManifestInjectionEventType) else injection_type,
             exc_info=True,
         )
         return False
@@ -459,100 +264,8 @@ async def publish_injection_recorded(
     )
 
 
-async def close_producer():
-    """Close Kafka producer on shutdown."""
-    global _kafka_producer
-    if _kafka_producer is not None:
-        try:
-            await _kafka_producer.stop()
-            logger.info("Kafka producer closed")
-        except Exception as e:
-            logger.error(f"Error closing Kafka producer: {e}")
-        finally:
-            _kafka_producer = None
-
-
-def _cleanup_producer_sync():
-    """
-    Synchronous wrapper for close_producer() to be called by atexit.
-
-    This ensures the Kafka producer is closed when the Python interpreter
-    exits, preventing resource leak warnings.
-
-    Uses a new event loop for cleanup, properly closing it afterwards.
-    If an event loop is already running (should not happen at atexit),
-    defers to async cleanup.
-    """
-    global _kafka_producer, _thread_pool
-    if _kafka_producer is not None:
-        try:
-            # Check if an event loop is already running
-            try:
-                asyncio.get_running_loop()
-                # Loop is running, can't cleanup synchronously.
-                # This will be handled by async cleanup.
-                return
-            except RuntimeError:
-                # No running loop - expected at atexit, proceed with cleanup
-                pass
-
-            # Create a new event loop for cleanup, ensuring it is closed after use
-            loop = asyncio.new_event_loop()
-            try:
-                loop.run_until_complete(close_producer())
-            finally:
-                loop.close()
-
-        except Exception as e:
-            # Best effort cleanup - don't raise on exit
-            logger.debug(f"Error during atexit producer cleanup: {e}")
-            # Ensure producer is cleared to avoid repeated cleanup attempts
-            _kafka_producer = None
-
-    # Clean up shared thread pool
-    if _thread_pool is not None:
-        try:
-            _thread_pool.shutdown(wait=False)
-        except Exception:
-            pass
-        _thread_pool = None
-
-
-# Register cleanup on interpreter exit
-atexit.register(_cleanup_producer_sync)
-
-
-def _run_async_in_new_thread(coro) -> Any:
-    """Run an async coroutine in a new thread with its own event loop.
-
-    Used as a fallback when the sync wrapper is called from within
-    an already-running event loop (e.g., Jupyter notebooks, nested async).
-
-    Args:
-        coro: The coroutine to execute.
-
-    Returns:
-        The result of the coroutine.
-    """
-    pool = _get_thread_pool()
-    future = pool.submit(_run_in_new_loop, coro)
-    return future.result(timeout=KAFKA_PUBLISH_TIMEOUT_SECONDS + 5)
-
-
-def _run_in_new_loop(coro) -> Any:
-    """Create a new event loop in the current thread and run the coroutine.
-
-    Args:
-        coro: The coroutine to execute.
-
-    Returns:
-        The result of the coroutine.
-    """
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
+# Re-export close for backwards compatibility
+close_producer = close_shared_producer
 
 
 # Synchronous wrapper for backward compatibility
@@ -562,43 +275,12 @@ def publish_manifest_injection_event_sync(
     """
     Synchronous wrapper for publish_manifest_injection_event.
 
-    Handles three scenarios:
-    1. No event loop running: Creates a new loop, runs, and closes it.
-    2. Event loop running: Delegates to a background thread to avoid
-       RuntimeError from nested run_until_complete calls.
-    3. Fallback: Returns False on any unexpected error.
-
+    Handles running/non-running event loop scenarios.
     Use async version when possible for best performance.
     """
-    try:
-        # Check if there's already a running event loop
-        try:
-            asyncio.get_running_loop()
-            # Running loop exists - use thread-based fallback
-            return _run_async_in_new_thread(
-                publish_manifest_injection_event(
-                    agent_name=agent_name,
-                    **kwargs,
-                )
-            )
-        except RuntimeError:
-            # No running loop - create one, run, and close
-            pass
-
-        loop = asyncio.new_event_loop()
-        try:
-            return loop.run_until_complete(
-                publish_manifest_injection_event(
-                    agent_name=agent_name,
-                    **kwargs,
-                )
-            )
-        finally:
-            loop.close()
-
-    except Exception as e:
-        logger.error(f"Error in sync wrapper: {e}", exc_info=True)
-        return False
+    return publish_to_kafka_sync(
+        publish_manifest_injection_event(agent_name=agent_name, **kwargs)
+    )
 
 
 if __name__ == "__main__":

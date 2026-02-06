@@ -121,6 +121,10 @@ import os, json, time, uuid, yaml
 from pathlib import Path
 from datetime import datetime, timezone
 
+# NOTE: Helper functions (notify_blocked, etc.) are defined in the
+# "Helper Functions" section below. They are referenced before their
+# definition for readability but must be available before execution.
+
 pipeline_dir = Path.home() / ".claude" / "pipelines" / ticket_id
 pipeline_dir.mkdir(parents=True, exist_ok=True)
 lock_path = pipeline_dir / "lock"

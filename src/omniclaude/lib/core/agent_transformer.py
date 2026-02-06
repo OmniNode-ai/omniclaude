@@ -39,7 +39,8 @@ except ImportError:  # nosec B110 - Optional dependency, graceful degradation
     )
     KAFKA_AVAILABLE = False
 
-# Import transformation validator
+# Import transformation validator (unconditional - always required for routing safety,
+# unlike Kafka which is an optional observability integration)
 from omniclaude.lib.core.transformation_validator import TransformationValidator
 
 
