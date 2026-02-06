@@ -25,9 +25,11 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import math
 import os
 import re
 import time
+import unicodedata
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -61,6 +63,24 @@ _SENSITIVE_PREFIXES = frozenset(
         "/System",
     }
 )
+
+
+# Safety invariant for candidate filtering. Not agent- or registry-configurable.
+# Changes require code review. See docs/proposals/FUZZY_MATCHER_IMPROVEMENTS.md.
+HARD_FLOOR = 0.55
+
+
+def _normalize(text: str) -> str:
+    """Canonical normalization for trigger matching.
+
+    Applied to both triggers and prompt tokens. Ensures deterministic
+    comparison across platforms and input sources.
+    """
+    text = unicodedata.normalize("NFKC", text)
+    text = text.lower()
+    text = text.replace("-", " ").replace("_", " ")
+    text = re.sub(r"[^\w\s]", "", text)
+    return text.strip()
 
 
 def _resolve_agent_configs_dir() -> Path:
@@ -466,7 +486,9 @@ class TriggerMatcher:
 
         keywords = self._extract_keywords(user_request)
 
-        for agent_name, agent_data in self.registry.get("agents", {}).items():
+        # Sort agents by name for deterministic iteration order.
+        # See docs/proposals/FUZZY_MATCHER_IMPROVEMENTS.md (Determinism Guarantees).
+        for agent_name, agent_data in sorted(self.registry.get("agents", {}).items()):
             triggers = agent_data.get("activation_triggers", [])
             scores: list[tuple[float, str]] = []
 
@@ -476,14 +498,22 @@ class TriggerMatcher:
                     if self._is_context_appropriate(trigger, user_request, agent_name):
                         scores.append((1.0, f"Exact match: '{trigger}'"))
 
-            # 2. Fuzzy trigger match
+            # 2. Fuzzy trigger match (tiered thresholds, multi-word bonus)
             for trigger in triggers:
                 similarity = self._fuzzy_match(trigger.lower(), user_lower)
                 if similarity > 0.7:
                     if self._is_context_appropriate(trigger, user_request, agent_name):
+                        # Multi-word triggers are more specific -> monotonic bonus
+                        word_count = len(trigger.split())
+                        specificity_bonus = (
+                            min(math.log(word_count) * 0.05, 0.08)
+                            if word_count > 1
+                            else 0.0
+                        )
+                        rank_score = similarity * 0.9 + specificity_bonus
                         scores.append(
                             (
-                                similarity * 0.9,
+                                rank_score,
                                 f"Fuzzy match: '{trigger}' ({similarity:.0%})",
                             )
                         )
@@ -505,6 +535,14 @@ class TriggerMatcher:
                 best_score, reason = max(scores, key=lambda x: x[0])
                 matches.append((agent_name, best_score, reason))
 
+        # Hard floor: remove matches below noise threshold.
+        # HARD_FLOOR is a safety invariant, not a tuning knob.
+        matches = [
+            (name, score, reason)
+            for name, score, reason in matches
+            if score >= HARD_FLOOR
+        ]
+
         matches.sort(key=lambda x: x[1], reverse=True)
         return matches
 
@@ -513,19 +551,41 @@ class TriggerMatcher:
         words = re.findall(r"\b\w+\b", text.lower())
         return [w for w in words if w not in self.STOPWORDS and len(w) > 2]
 
+    @staticmethod
+    def _fuzzy_threshold(trigger: str) -> float:
+        """Dynamic threshold: shorter triggers need higher similarity.
+
+        Short words (<=6 chars) like "react", "debug" have high character
+        overlap with unrelated words. Longer triggers are more specific.
+        """
+        n = len(trigger)
+        if n <= 6:
+            return 0.85
+        elif n <= 10:
+            return 0.78
+        else:
+            return 0.72
+
     def _fuzzy_match(self, trigger: str, text: str) -> float:
-        """Calculate fuzzy match score using SequenceMatcher."""
+        """Calculate fuzzy match score using SequenceMatcher.
+
+        Uses tiered thresholds based on trigger length to prevent
+        false positives from short-word character overlap.
+        Full-text comparison is intentionally omitted (pure noise).
+        """
         if self._exact_match_with_word_boundaries(trigger, text):
             return 1.0
+
+        min_threshold = self._fuzzy_threshold(trigger)
 
         words = re.findall(r"\b\w+\b", text.lower())
         best_word_score = 0.0
         for word in words:
             word_score = SequenceMatcher(None, trigger, word).ratio()
-            best_word_score = max(best_word_score, word_score)
+            if word_score >= min_threshold:
+                best_word_score = max(best_word_score, word_score)
 
-        full_text_score = SequenceMatcher(None, trigger, text).ratio()
-        return max(best_word_score, full_text_score)
+        return best_word_score
 
     def _keyword_overlap_score(self, keywords: list[str], triggers: list[str]) -> float:
         """Calculate keyword overlap score."""
