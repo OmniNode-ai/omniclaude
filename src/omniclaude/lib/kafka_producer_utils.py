@@ -67,6 +67,7 @@ def create_event_envelope(
     tenant_id: str = "default",
     namespace: str = "onex",
     causation_id: str | None = None,
+    timestamp: str | None = None,
 ) -> dict[str, Any]:
     """
     Create OnexEnvelopeV1 standard event envelope.
@@ -81,6 +82,7 @@ def create_event_envelope(
         tenant_id: Tenant identifier (default: default)
         namespace: Event namespace (default: onex)
         causation_id: Optional causation ID for event chains
+        timestamp: Explicit timestamp (ISO 8601). If None, uses datetime.now(UTC).
 
     Returns:
         Dict containing OnexEnvelopeV1 wrapped event
@@ -88,7 +90,7 @@ def create_event_envelope(
     return {
         "event_type": event_type_value,
         "event_id": str(uuid4()),
-        "timestamp": datetime.now(UTC).isoformat(),
+        "timestamp": timestamp or datetime.now(UTC).isoformat(),
         "tenant_id": tenant_id,
         "namespace": namespace,
         "source": source,
@@ -124,6 +126,7 @@ class KafkaProducerManager:
     def __init__(self, name: str = "default") -> None:
         self._name = name
         self._producer: Any | None = None
+        self._producer_loop: asyncio.AbstractEventLoop | None = None
         self._lock: asyncio.Lock | None = None
         self._lock_loop: asyncio.AbstractEventLoop | None = None
         self._lock_creation_lock = threading.Lock()
@@ -144,9 +147,23 @@ class KafkaProducerManager:
         return self._lock
 
     async def get_producer(self) -> Any | None:
-        """Get or create Kafka producer (async singleton pattern)."""
+        """Get or create Kafka producer (async singleton pattern).
+
+        AIOKafkaProducer is bound to the event loop it was started in.
+        If the loop changes (e.g., sync wrappers calling asyncio.run()),
+        the cached producer is invalidated to prevent stale-loop errors.
+        """
+        current_loop = asyncio.get_running_loop()
         if self._producer is not None:
-            return self._producer
+            if self._producer_loop is current_loop:
+                return self._producer
+            # Loop changed - invalidate stale producer
+            logger.debug(
+                "Event loop changed, invalidating stale Kafka producer [%s]",
+                self._name,
+            )
+            self._producer = None
+            self._producer_loop = None
 
         async with await self.get_lock():
             current_producer = cast("Any | None", self._producer)
@@ -172,8 +189,11 @@ class KafkaProducerManager:
 
                 await producer.start()
                 self._producer = producer
+                self._producer_loop = asyncio.get_running_loop()
                 logger.info(
-                    f"Kafka producer [{self._name}] initialized: {bootstrap_servers}"
+                    "Kafka producer [%s] initialized: %s",
+                    self._name,
+                    bootstrap_servers,
                 )
                 return producer
 

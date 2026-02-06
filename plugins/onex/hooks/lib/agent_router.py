@@ -44,36 +44,41 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 
-_SENSITIVE_PREFIXES = frozenset(
-    {
-        "/etc",
-        "/var/log",
-        "/var/run",
-        "/var/lib",
-        "/var/cache",
-        "/var/spool",
-        "/usr/bin",
-        "/usr/sbin",
-        "/usr/lib",
-        "/usr/local/bin",
-        "/usr/local/sbin",
-        "/bin",
-        "/sbin",
-        "/lib",
-        "/lib64",
-        "/root",
-        "/proc",
-        "/sys",
-        "/dev",
-        "/boot",
-        "/private/etc",
-        "/private/var/log",
-        "/private/var/run",
-        "/System",
-        "/Library/LaunchDaemons",
-        "/Library/LaunchAgents",
-    }
-)
+# Import canonical sensitive path blocklist from simple_agent_loader (single source of truth)
+try:
+    from simple_agent_loader import _SENSITIVE_PATH_PATTERNS as _SENSITIVE_PREFIXES
+except ImportError:
+    # Fallback if simple_agent_loader not importable (e.g., standalone CLI usage)
+    _SENSITIVE_PREFIXES = frozenset(
+        {
+            "/etc",
+            "/var/log",
+            "/var/run",
+            "/var/lib",
+            "/var/cache",
+            "/var/spool",
+            "/usr/bin",
+            "/usr/sbin",
+            "/usr/lib",
+            "/usr/local/bin",
+            "/usr/local/sbin",
+            "/bin",
+            "/sbin",
+            "/lib",
+            "/lib64",
+            "/root",
+            "/proc",
+            "/sys",
+            "/dev",
+            "/boot",
+            "/private/etc",
+            "/private/var/log",
+            "/private/var/run",
+            "/System",
+            "/Library/LaunchDaemons",
+            "/Library/LaunchAgents",
+        }
+    )
 
 
 # Safety invariant for candidate filtering. Not agent- or registry-configurable.

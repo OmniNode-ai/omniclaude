@@ -44,9 +44,7 @@ from uuid import UUID, uuid4
 
 from omniclaude.hooks.topics import TopicBase
 from omniclaude.lib.kafka_producer_utils import (
-    KAFKA_PUBLISH_TIMEOUT_SECONDS,
     KafkaProducerManager,
-    build_kafka_topic,
     create_event_envelope,
 )
 
@@ -179,39 +177,21 @@ async def publish_manifest_injection_event(
             causation_id=causation_id,
         )
 
-        # Get producer (uses module-level function for testability)
-        producer = await _get_kafka_producer()
-        if producer is None:
+        # Publish via shared producer manager
+        published = await _producer_manager.publish(
+            envelope=envelope,
+            topic_base_value=event_type.get_topic_name(),
+            partition_key=correlation_id_str,
+        )
+
+        if published:
             logger.debug(
-                "Kafka producer unavailable, manifest injection event not published"
+                "Published manifest injection event: "
+                "agent=%s | correlation_id=%s",
+                agent_name,
+                correlation_id_str,
             )
-            return False
-
-        # Build ONEX-compliant topic name with environment prefix
-        topic = build_kafka_topic(event_type.get_topic_name())
-
-        # Use correlation_id as partition key for workflow coherence
-        partition_key = correlation_id_str.encode("utf-8")
-
-        # Publish to Kafka with timeout to prevent indefinite hanging
-        await asyncio.wait_for(
-            producer.send_and_wait(topic, value=envelope, key=partition_key),
-            timeout=KAFKA_PUBLISH_TIMEOUT_SECONDS,
-        )
-
-        logger.debug(
-            f"Published manifest injection event: "
-            f"agent={agent_name} | "
-            f"correlation_id={correlation_id_str}"
-        )
-        return True
-
-    except TimeoutError:
-        logger.warning(
-            f"Timeout publishing manifest injection event "
-            f"(event_type={event_type.value}, timeout={KAFKA_PUBLISH_TIMEOUT_SECONDS}s)"
-        )
-        return False
+        return published
 
     except Exception as e:
         # Log error but don't fail - observability shouldn't break execution

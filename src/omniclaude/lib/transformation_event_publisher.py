@@ -47,9 +47,7 @@ from uuid import UUID, uuid4
 from omniclaude.hooks.schemas import sanitize_text
 from omniclaude.hooks.topics import TopicBase
 from omniclaude.lib.kafka_producer_utils import (
-    KAFKA_PUBLISH_TIMEOUT_SECONDS,
     KafkaProducerManager,
-    build_kafka_topic,
     create_event_envelope,
 )
 
@@ -78,10 +76,6 @@ def _sanitize_user_request(user_request: str | None) -> str | None:
         sanitized = sanitized[:MAX_USER_REQUEST_LENGTH] + "...[TRUNCATED]"
 
     return sanitized
-
-# Kafka publish timeout (10 seconds)
-# Prevents indefinite blocking if broker is slow/unresponsive
-KAFKA_PUBLISH_TIMEOUT_SECONDS = 10.0
 
 
 class TransformationEventType(str, Enum):
@@ -249,39 +243,22 @@ async def publish_transformation_event(
             causation_id=causation_id,
         )
 
-        # Get producer (uses module-level function for testability)
-        producer = await _get_kafka_producer()
-        if producer is None:
+        # Publish via shared producer manager
+        published = await _producer_manager.publish(
+            envelope=envelope,
+            topic_base_value=event_type.get_topic_name(),
+            partition_key=correlation_id,
+        )
+
+        if published:
             logger.debug(
-                "Kafka producer unavailable, transformation event not published"
+                "Published transformation event: "
+                "%s -> %s | correlation_id=%s",
+                source_agent,
+                target_agent,
+                correlation_id,
             )
-            return False
-
-        # Build ONEX-compliant topic name with environment prefix
-        topic = build_kafka_topic(event_type.get_topic_name())
-
-        # Use correlation_id as partition key for workflow coherence
-        partition_key = correlation_id.encode("utf-8")
-
-        # Publish to Kafka with timeout to prevent indefinite hanging
-        await asyncio.wait_for(
-            producer.send_and_wait(topic, value=envelope, key=partition_key),
-            timeout=KAFKA_PUBLISH_TIMEOUT_SECONDS,
-        )
-
-        logger.debug(
-            f"Published transformation event: "
-            f"{source_agent} → {target_agent} | "
-            f"correlation_id={correlation_id}"
-        )
-        return True
-
-    except TimeoutError:
-        logger.warning(
-            f"Timeout publishing transformation event "
-            f"(event_type={event_type.value}, timeout={KAFKA_PUBLISH_TIMEOUT_SECONDS}s)"
-        )
-        return False
+        return published
 
     except Exception as e:
         # Log error but don't fail - observability shouldn't break execution

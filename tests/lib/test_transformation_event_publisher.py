@@ -321,8 +321,8 @@ class TestPublishTransformationEvent:
     async def test_returns_false_when_producer_unavailable(self) -> None:
         """Test returns False when Kafka producer cannot be created."""
         with patch.object(
-            tep,
-            "_get_kafka_producer",
+            tep._producer_manager,
+            "get_producer",
             new_callable=AsyncMock,
             return_value=None,
         ):
@@ -340,8 +340,8 @@ class TestPublishTransformationEvent:
         mock_producer.send_and_wait = AsyncMock()
 
         with patch.object(
-            tep,
-            "_get_kafka_producer",
+            tep._producer_manager,
+            "get_producer",
             new_callable=AsyncMock,
             return_value=mock_producer,
         ):
@@ -365,8 +365,8 @@ class TestPublishTransformationEvent:
         expected_corr_id = "my-custom-correlation-id"
 
         with patch.object(
-            tep,
-            "_get_kafka_producer",
+            tep._producer_manager,
+            "get_producer",
             new_callable=AsyncMock,
             return_value=mock_producer,
         ):
@@ -407,8 +407,8 @@ class TestPublishTransformationEvent:
 
             with (
                 patch.object(
-                    tep,
-                    "_get_kafka_producer",
+                    tep._producer_manager,
+                    "get_producer",
                     new_callable=AsyncMock,
                     return_value=mock_producer,
                 ),
@@ -440,8 +440,8 @@ class TestPublishTransformationEvent:
         mock_producer.send_and_wait = AsyncMock(side_effect=Exception("Kafka error"))
 
         with patch.object(
-            tep,
-            "_get_kafka_producer",
+            tep._producer_manager,
+            "get_producer",
             new_callable=AsyncMock,
             return_value=mock_producer,
         ):
@@ -567,8 +567,8 @@ class TestIntegrationScenarios:
 
         with (
             patch.object(
-                tep,
-                "_get_kafka_producer",
+                tep._producer_manager,
+                "get_producer",
                 new_callable=AsyncMock,
                 return_value=mock_producer,
             ),
@@ -617,8 +617,8 @@ class TestIntegrationScenarios:
 
         with (
             patch.object(
-                tep,
-                "_get_kafka_producer",
+                tep._producer_manager,
+                "get_producer",
                 new_callable=AsyncMock,
                 return_value=mock_producer,
             ),
