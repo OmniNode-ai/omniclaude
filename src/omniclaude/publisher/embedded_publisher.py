@@ -188,9 +188,18 @@ class EmbeddedEventPublisher:
                 self._server = None
 
             if self._publisher_task is not None:
-                self._publisher_task.cancel()
+                # Give the publisher loop time to finish its current in-flight publish
+                # before force-cancelling. _running is already False, so the loop will
+                # exit after its current iteration.
                 try:
-                    await self._publisher_task
+                    async with asyncio.timeout(self._config.shutdown_drain_seconds):
+                        await self._publisher_task
+                except TimeoutError:
+                    self._publisher_task.cancel()
+                    try:
+                        await self._publisher_task
+                    except asyncio.CancelledError:
+                        pass
                 except asyncio.CancelledError:
                     pass
                 self._publisher_task = None
@@ -376,7 +385,8 @@ class EmbeddedEventPublisher:
         """Background task: dequeue events and publish to Kafka."""
         logger.info("Publisher loop started")
 
-        # Note: stop() cancels this task, then drains remaining events via drain_to_spool().
+        # Note: stop() sets _running=False and waits for this loop to exit gracefully,
+        # then drains remaining events via drain_to_spool().
         while self._running:
             try:
                 event = await self._queue.dequeue()

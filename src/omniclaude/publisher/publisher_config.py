@@ -56,7 +56,7 @@ class PublisherConfig(BaseSettings):
     kafka_bootstrap_servers: str = Field(
         ...,
         min_length=1,
-        description="Kafka broker addresses (host:port, comma-separated)",
+        description="Kafka broker addresses (host:port, comma-separated). IPv6 addresses must use bracket notation, e.g. [::1]:9092",
     )
     kafka_client_id: str = Field(
         default="omniclaude-publisher",

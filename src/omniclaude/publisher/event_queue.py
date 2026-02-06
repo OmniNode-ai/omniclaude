@@ -176,7 +176,7 @@ class BoundedEventQueue:
             )
         except OSError:
             logger.exception("Failed to delete oldest spool file %s", oldest)
-            self._spool_bytes = max(0, self._spool_bytes)
+            # File removal failed; _spool_bytes was not decremented, no adjustment needed
 
     async def dequeue(self) -> ModelQueuedEvent | None:
         async with self._lock:
@@ -219,7 +219,10 @@ class BoundedEventQueue:
             try:
                 filepath.unlink()
             except OSError:
-                pass
+                logger.warning(
+                    "Failed to delete unreadable spool file %s, file may be orphaned",
+                    filepath,
+                )
             return None
         except Exception:
             logger.exception("Failed to parse spool file %s", filepath)

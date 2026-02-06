@@ -212,11 +212,13 @@ class TestEmbeddedEventPublisher:
 
         await publisher.stop()
 
-        # Check spool directory has events
+        # Check spool directory for events
         spool_files = list(publisher_config.spool_dir.glob("*.json"))
         # Events may have been published by the publisher loop before shutdown,
         # or drained to spool — either way, nothing should be lost
         assert publisher.queue.memory_size() == 0
+        # Verify events were either published or spooled (not silently lost)
+        assert mock_event_bus.publish.await_count + len(spool_files) >= 3
 
     @pytest.mark.asyncio
     async def test_publish_event_success(

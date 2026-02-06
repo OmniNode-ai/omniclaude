@@ -82,11 +82,15 @@ def _do_stop(args: argparse.Namespace) -> int:  # noqa: ARG001
         # fall back to default PID path — stop doesn't need Kafka.
         config = None
 
-    pid_path = (
-        config.pid_path
-        if config is not None
-        else Path(tempfile.gettempdir()) / "omniclaude-emit.pid"
-    )
+    if config is not None:
+        pid_path = config.pid_path
+    else:
+        env_pid = os.environ.get("OMNICLAUDE_PUBLISHER_PID_PATH")
+        pid_path = (
+            Path(env_pid)
+            if env_pid
+            else Path(tempfile.gettempdir()) / "omniclaude-emit.pid"
+        )
     if not pid_path.exists():
         print("Publisher is not running (no PID file)")
         return 0

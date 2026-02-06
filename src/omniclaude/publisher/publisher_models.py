@@ -8,10 +8,13 @@ Protocol: newline-delimited JSON over Unix socket.
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated, Literal
 
 from omnibase_core.types import JsonType  # noqa: TC002 - runtime use by Pydantic
 from pydantic import BaseModel, ConfigDict, Field
+
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # Request Models
@@ -50,6 +53,10 @@ def parse_daemon_request(
     - "command" -> ModelDaemonPingRequest
     - "event_type" -> ModelDaemonEmitRequest
     """
+    if "command" in data and "event_type" in data:
+        logger.warning(
+            "Ambiguous request contains both 'command' and 'event_type'; treating as ping"
+        )
     if "command" in data:
         return ModelDaemonPingRequest.model_validate(data)
     elif "event_type" in data:

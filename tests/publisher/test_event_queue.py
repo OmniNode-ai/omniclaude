@@ -28,8 +28,10 @@ class TestModelQueuedEvent:
         assert event.event_id == "test-001"
 
     def test_frozen(self) -> None:
+        from pydantic import ValidationError
+
         event = _make_event()
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             event.event_id = "mutated"  # type: ignore[misc]
 
     def test_naive_datetime_gets_utc(self) -> None:
