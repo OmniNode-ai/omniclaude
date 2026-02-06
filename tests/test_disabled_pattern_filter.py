@@ -255,10 +255,14 @@ class TestGetDisabledPatterns:
         self, injector: ManifestInjector
     ) -> None:
         """Returns empty list when psycopg2 is not available."""
-        with patch.dict("sys.modules", {"psycopg2": None}):
+        with (
+            patch("omniclaude.lib.core.manifest_injector.settings") as mock_settings,
+            patch.dict("sys.modules", {"psycopg2": None}),
+        ):
+            mock_settings.enable_postgres = True
             result = await injector._get_disabled_patterns()
         # Should return empty (graceful degradation)
-        assert isinstance(result, list)
+        assert result == []
 
     @pytest.mark.asyncio
     async def test_returns_empty_on_connection_error(
