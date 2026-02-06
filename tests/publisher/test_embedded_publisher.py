@@ -217,8 +217,12 @@ class TestEmbeddedEventPublisher:
         # Events may have been published by the publisher loop before shutdown,
         # or drained to spool — either way, nothing should be lost
         assert publisher.queue.memory_size() == 0
-        # Verify events were either published or spooled (not silently lost)
-        assert mock_event_bus.publish.await_count + len(spool_files) >= 3
+        # All 3 events must be accounted for: either published or spooled
+        published = mock_event_bus.publish.await_count
+        spooled = len(spool_files)
+        assert published + spooled == 3, (
+            f"Event leak: {published} published + {spooled} spooled != 3 enqueued"
+        )
 
     @pytest.mark.asyncio
     async def test_publish_event_success(
@@ -279,8 +283,15 @@ class TestEmbeddedEventPublisher:
         # Make publish always fail
         mock_event_bus.publish = AsyncMock(side_effect=Exception("Kafka down"))
 
+        # Use near-zero backoff so retries complete quickly.  Backoff sleeps use
+        # asyncio.wait_for(shutdown_event.wait(), timeout=backoff), so they
+        # resolve in ~1ms each with this value.
+        short_config = publisher_config.model_copy(
+            update={"backoff_base_seconds": 0.001}
+        )
+
         publisher = EmbeddedEventPublisher(
-            config=publisher_config, event_bus=mock_event_bus
+            config=short_config, event_bus=mock_event_bus
         )
 
         # Enqueue a single event directly
@@ -294,30 +305,22 @@ class TestEmbeddedEventPublisher:
         await publisher.queue.enqueue(event)
         assert publisher.queue.total_size() == 1
 
-        # Save real sleep before patching — the patch replaces asyncio.sleep
-        # on the shared module object, so we need a direct reference to the
-        # original function for the test's own event-loop yields.
-        real_sleep = asyncio.sleep
+        publisher._running = True
+        publisher._shutdown_event = asyncio.Event()
 
-        async def mock_sleep(_seconds: float) -> None:
-            """Mock that still yields to event loop (zero real delay)."""
-            await real_sleep(0)
+        loop_task = asyncio.create_task(publisher._publisher_loop())
 
-        with patch(
-            "omniclaude.publisher.embedded_publisher.asyncio.sleep",
-            side_effect=mock_sleep,
-        ):
-            publisher._running = True
-            publisher._shutdown_event = asyncio.Event()
+        # Give enough real time for the retries to complete.
+        # With backoff_base_seconds=0.001, total backoff is ~3ms across retries.
+        await asyncio.sleep(0.5)
 
-            loop_task = asyncio.create_task(publisher._publisher_loop())
+        # Signal graceful shutdown (matches new stop() behaviour — no cancel)
+        publisher._running = False
+        publisher._shutdown_event.set()
 
-            # Yield to event loop repeatedly so the publisher loop can run
-            # through all retry attempts (max_retry_attempts defaults to 3)
-            for _ in range(50):
-                await real_sleep(0)
-
-            publisher._running = False
+        try:
+            await asyncio.wait_for(loop_task, timeout=2.0)
+        except TimeoutError:
             loop_task.cancel()
             try:
                 await loop_task
@@ -327,7 +330,7 @@ class TestEmbeddedEventPublisher:
         # Event should have been dropped after max retries
         assert "retry-test" not in publisher._retry_counts
         # Verify publish was actually attempted (at least max_retry_attempts times)
-        assert mock_event_bus.publish.await_count >= publisher_config.max_retry_attempts
+        assert mock_event_bus.publish.await_count >= short_config.max_retry_attempts
 
     @pytest.mark.asyncio
     async def test_oversized_payload_rejected(

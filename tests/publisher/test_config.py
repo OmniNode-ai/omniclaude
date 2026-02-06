@@ -96,6 +96,14 @@ class TestPublisherConfig:
         config = PublisherConfig()  # type: ignore[call-arg]
         assert config.kafka_bootstrap_servers == "env-kafka:9092"
 
+    def test_ipv6_unbracketed_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="bracket notation"):
+            PublisherConfig(kafka_bootstrap_servers="::1:9092")
+
+    def test_ipv6_bracketed_accepted(self) -> None:
+        config = PublisherConfig(kafka_bootstrap_servers="[::1]:9092")
+        assert config.kafka_bootstrap_servers == "[::1]:9092"
+
     def test_environment_pattern_validation(self) -> None:
         # Valid
         PublisherConfig(kafka_bootstrap_servers="localhost:9092", environment="dev")

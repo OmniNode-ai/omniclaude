@@ -46,6 +46,12 @@ class TestParseArgs:
     def test_stop_command(self) -> None:
         args = _parse_args(["stop"])
         assert args.command == "stop"
+        assert args.pid_path is None
+
+    def test_stop_custom_pid_path(self) -> None:
+        args = _parse_args(["stop", "--pid-path", "/custom/publisher.pid"])
+        assert args.command == "stop"
+        assert args.pid_path == "/custom/publisher.pid"
 
     def test_no_command_exits(self) -> None:
         with pytest.raises(SystemExit):
@@ -96,6 +102,36 @@ class TestDoStop:
             result = _do_stop(args)
         assert result == 0
         assert not custom_pid.exists()
+
+    def test_stop_cli_pid_path_overrides_config(self, tmp_path: Path) -> None:
+        """--pid-path CLI arg should take priority over config."""
+        cli_pid = tmp_path / "cli.pid"
+        cli_pid.write_text("999999999")
+
+        # Config points to a different path — should be ignored
+        config_pid = tmp_path / "config.pid"
+        config_pid.write_text("111111111")
+        mock_config = type("MockConfig", (), {"pid_path": config_pid})()
+
+        with patch(_CONFIG_TARGET, return_value=mock_config):
+            args = _parse_args(["stop", "--pid-path", str(cli_pid)])
+            result = _do_stop(args)
+
+        assert result == 0
+        # CLI pid file was used (stale PID cleaned up)
+        assert not cli_pid.exists()
+        # Config pid file was NOT touched
+        assert config_pid.exists()
+
+    def test_stop_cli_pid_path_no_file(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """--pid-path pointing to missing file should report not running."""
+        missing_pid = tmp_path / "missing.pid"
+        args = _parse_args(["stop", "--pid-path", str(missing_pid)])
+        result = _do_stop(args)
+        assert result == 0
+        assert "not running" in capsys.readouterr().out
 
 
 class TestMain:

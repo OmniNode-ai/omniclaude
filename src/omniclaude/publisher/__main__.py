@@ -40,7 +40,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help=f"Unix socket path (default: {_default_sock})",
     )
 
-    sub.add_parser("stop", help="Stop the publisher")
+    stop_parser = sub.add_parser("stop", help="Stop the publisher")
+    stop_parser.add_argument(
+        "--pid-path",
+        default=None,
+        help="PID file path (default: auto-detect from config or env)",
+    )
 
     return parser.parse_args(argv)
 
@@ -69,28 +74,41 @@ def _do_start(args: argparse.Namespace) -> int:
     return 0
 
 
-def _do_stop(args: argparse.Namespace) -> int:  # noqa: ARG001
-    """Stop publisher by sending SIGTERM to PID file."""
+def _do_stop(args: argparse.Namespace) -> int:
+    """Stop publisher by sending SIGTERM to PID file.
+
+    PID path resolution priority:
+      1. --pid-path CLI argument (explicit override)
+      2. PublisherConfig (pydantic-settings, reads OMNICLAUDE_PUBLISHER_PID_PATH)
+      3. OMNICLAUDE_PUBLISHER_PID_PATH env var (fallback when config fails)
+      4. Default: $TMPDIR/omniclaude-emit.pid
+    """
     import signal
 
     from omniclaude.publisher.publisher_config import PublisherConfig
 
-    try:
-        config = PublisherConfig()
-    except Exception:
-        # If config validation fails (e.g. missing kafka_bootstrap_servers),
-        # fall back to default PID path — stop doesn't need Kafka.
-        config = None
-
-    if config is not None:
-        pid_path = config.pid_path
+    if args.pid_path is not None:
+        # Explicit CLI override — highest priority
+        pid_path = Path(args.pid_path)
     else:
-        env_pid = os.environ.get("OMNICLAUDE_PUBLISHER_PID_PATH")
-        pid_path = (
-            Path(env_pid)
-            if env_pid
-            else Path(tempfile.gettempdir()) / "omniclaude-emit.pid"
-        )
+        try:
+            config = PublisherConfig()
+        except Exception:
+            # If config validation fails (e.g. missing kafka_bootstrap_servers),
+            # fall back to env var / default — stop doesn't need Kafka.
+            config = None
+
+        if config is not None:
+            pid_path = config.pid_path
+        else:
+            # Honor the same env var that pydantic-settings would use
+            # (prefix OMNICLAUDE_PUBLISHER_ + field PID_PATH).
+            env_pid = os.environ.get("OMNICLAUDE_PUBLISHER_PID_PATH")
+            pid_path = (
+                Path(env_pid)
+                if env_pid
+                else Path(tempfile.gettempdir()) / "omniclaude-emit.pid"
+            )
     if not pid_path.exists():
         print("Publisher is not running (no PID file)")
         return 0

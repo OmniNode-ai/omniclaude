@@ -54,8 +54,9 @@ def parse_daemon_request(
     - "event_type" -> ModelDaemonEmitRequest
     """
     if "command" in data and "event_type" in data:
-        logger.warning(
-            "Ambiguous request contains both 'command' and 'event_type'; treating as ping"
+        raise ValueError(
+            "Ambiguous request: contains both 'command' and 'event_type' fields. "
+            "Send separate requests for ping and emit operations."
         )
     if "command" in data:
         return ModelDaemonPingRequest.model_validate(data)

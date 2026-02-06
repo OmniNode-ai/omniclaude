@@ -127,6 +127,11 @@ class PublisherConfig(BaseSettings):
                     f"Invalid bootstrap server format '{server}'. Expected 'host:port'"
                 )
             host, port_str = server.rsplit(":", 1)
+            if ":" in host and not host.startswith("["):
+                raise ValueError(
+                    f"IPv6 address in '{server}' must use bracket notation, "
+                    "e.g. '[::1]:9092'"
+                )
             if not host:
                 raise ValueError(
                     f"Invalid bootstrap server format '{server}'. Host cannot be empty"

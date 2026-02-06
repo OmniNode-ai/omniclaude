@@ -188,18 +188,18 @@ class EmbeddedEventPublisher:
                 self._server = None
 
             if self._publisher_task is not None:
-                # Give the publisher loop time to finish its current in-flight publish
-                # before force-cancelling. _running is already False, so the loop will
-                # exit after its current iteration.
+                # Give the publisher loop time to finish its current in-flight publish.
+                # _running is already False and _shutdown_event is set, so the loop will
+                # exit after its current iteration. We never cancel the task to avoid
+                # interrupting an in-flight Kafka publish.
                 try:
                     async with asyncio.timeout(self._config.shutdown_drain_seconds):
                         await self._publisher_task
                 except TimeoutError:
-                    self._publisher_task.cancel()
-                    try:
-                        await self._publisher_task
-                    except asyncio.CancelledError:
-                        pass
+                    logger.warning(
+                        "Publisher loop did not exit within shutdown_drain_seconds; "
+                        "it will finish its current publish and exit on its own"
+                    )
                 except asyncio.CancelledError:
                     pass
                 self._publisher_task = None
@@ -261,8 +261,8 @@ class EmbeddedEventPublisher:
 
         except ConnectionResetError:
             pass
-        except Exception as e:
-            logger.exception(f"Error handling client: {e}")
+        except Exception:
+            logger.exception("Error handling client")
         finally:
             try:
                 writer.close()
@@ -392,8 +392,14 @@ class EmbeddedEventPublisher:
                 event = await self._queue.dequeue()
 
                 if event is None:
-                    await asyncio.sleep(PUBLISHER_POLL_INTERVAL_SECONDS)
-                    continue
+                    try:
+                        await asyncio.wait_for(
+                            self._shutdown_event.wait(),
+                            timeout=PUBLISHER_POLL_INTERVAL_SECONDS,
+                        )
+                        break  # Shutdown requested
+                    except TimeoutError:
+                        continue
 
                 success = await self._publish_event(event)
 
@@ -424,7 +430,20 @@ class EmbeddedEventPublisher:
                             f"retry {retries}/{self._config.max_retry_attempts} "
                             f"in {backoff}s",
                         )
-                        await asyncio.sleep(backoff)
+                        try:
+                            await asyncio.wait_for(
+                                self._shutdown_event.wait(), timeout=backoff
+                            )
+                            # Shutdown requested during backoff — re-enqueue event and exit
+                            requeue_success = await self._queue.enqueue(event)
+                            if not requeue_success:
+                                logger.error(
+                                    f"Failed to re-enqueue event {event.event_id}, event lost"
+                                )
+                                self._retry_counts.pop(event.event_id, None)
+                            break
+                        except TimeoutError:
+                            pass  # Normal backoff completed, continue with re-enqueue
 
                         requeue_success = await self._queue.enqueue(event)
                         if not requeue_success:
@@ -436,8 +455,8 @@ class EmbeddedEventPublisher:
             except asyncio.CancelledError:
                 logger.info("Publisher loop cancelled")
                 break
-            except Exception as e:
-                logger.exception(f"Unexpected error in publisher loop: {e}")
+            except Exception:
+                logger.exception("Unexpected error in publisher loop")
                 await asyncio.sleep(1.0)
 
         logger.info("Publisher loop stopped")

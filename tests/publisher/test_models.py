@@ -62,6 +62,12 @@ class TestParseDaemonRequest:
         assert isinstance(req, ModelDaemonEmitRequest)
         assert req.event_type == "session.started"
 
+    def test_parse_ambiguous_raises(self) -> None:
+        with pytest.raises(ValueError, match="Ambiguous request"):
+            parse_daemon_request(
+                {"command": "ping", "event_type": "session.started", "payload": {}}
+            )
+
     def test_parse_invalid(self) -> None:
         with pytest.raises(ValueError, match="must contain either"):
             parse_daemon_request({"unknown": "field"})

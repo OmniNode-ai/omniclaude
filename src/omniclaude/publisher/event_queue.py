@@ -167,6 +167,8 @@ class BoundedEventQueue:
         try:
             file_size = oldest.stat().st_size
             oldest.unlink()
+            # Guard against theoretical underflow if stat().st_size differs from
+            # the byte count originally tracked during _spool_event
             self._spool_bytes = max(0, self._spool_bytes - file_size)
             event_id = (
                 oldest.stem.split("_", 1)[1] if "_" in oldest.stem else oldest.stem
@@ -211,6 +213,7 @@ class BoundedEventQueue:
         except OSError:
             logger.exception("Failed to read spool file %s", filepath)
             # Decrement spool bytes — file was already popped from _spool_files
+            file_size = 0
             try:
                 file_size = filepath.stat().st_size
                 self._spool_bytes = max(0, self._spool_bytes - file_size)
@@ -220,9 +223,12 @@ class BoundedEventQueue:
                 filepath.unlink()
             except OSError:
                 logger.warning(
-                    "Failed to delete unreadable spool file %s, file may be orphaned",
+                    "Failed to delete unreadable spool file %s, re-adding to tracking",
                     filepath,
                 )
+                # Re-add so it's not orphaned; restore byte count if we decremented
+                self._spool_files.append(filepath)
+                self._spool_bytes += file_size
             return None
         except Exception:
             logger.exception("Failed to parse spool file %s", filepath)
@@ -241,7 +247,13 @@ class BoundedEventQueue:
             try:
                 filepath.unlink()
             except OSError:
-                pass
+                logger.warning(
+                    "Failed to delete unparseable spool file %s, re-adding to tracking",
+                    filepath,
+                )
+                # Re-add so it's not orphaned; restore byte count if we decremented
+                self._spool_files.append(filepath)
+                self._spool_bytes += file_size
             return None
 
         try:
