@@ -55,13 +55,17 @@ Related Tickets:
 from __future__ import annotations
 
 import argparse
+import asyncio
+import atexit
+import concurrent.futures
 import json
 import logging
 import os
 import sys
 import threading
+from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, TypeVar, cast
 
 if TYPE_CHECKING:
     from omnibase_infra.runtime.emit_daemon.client import EmitClient
@@ -95,11 +99,57 @@ SUPPORTED_EVENT_TYPES = frozenset(
         "context.utilization",  # OMN-1889
         "agent.match",  # OMN-1889
         "latency.breakdown",  # OMN-1889
+        "routing.decision",  # PR-92 - Routing decision emission via daemon
         "notification.blocked",  # OMN-1831 - Slack notifications via emit daemon
         "notification.completed",  # OMN-1831 - Slack notifications via emit daemon
-        "routing.decision",  # PR-92 - Routing decision emission via daemon
     ]
 )
+
+# =============================================================================
+# Async Context Detection and Thread Execution
+# =============================================================================
+
+
+def _is_in_async_context() -> bool:
+    """Check if we're currently inside a running event loop.
+
+    Returns:
+        True if called from within a running async event loop, False otherwise.
+    """
+    try:
+        asyncio.get_running_loop()
+        return True
+    except RuntimeError:
+        return False
+
+
+T = TypeVar("T")
+
+# Module-level executor for _run_sync_in_thread to avoid per-call thread
+# creation/teardown overhead. Cleaned up on interpreter exit via atexit.
+_thread_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+atexit.register(_thread_executor.shutdown, wait=False)
+
+
+def _run_sync_in_thread(func: Callable[[], T]) -> T:  # noqa: UP047 - Python 3.11 compat
+    """Run a sync function in a separate thread.
+
+    This is used when sync methods that internally call run_until_complete()
+    are invoked from within an async context. Running in a thread avoids
+    the "cannot use sync methods from async context" error.
+
+    Args:
+        func: Zero-argument callable to execute in the thread.
+
+    Returns:
+        The result of calling func().
+
+    Raises:
+        Exception: Any exception raised by func() is re-raised.
+    """
+    future = _thread_executor.submit(func)
+    return future.result()
+
 
 # =============================================================================
 # Client Initialization (thread-safe, lazy)
@@ -246,7 +296,14 @@ def emit_event(
 
     try:
         # Use sync method for hooks (simpler, no event loop needed)
-        event_id = client.emit_sync(event_type, payload)
+        # If we're inside an async context, run in a thread to avoid
+        # "cannot use sync methods from async context" error
+        if _is_in_async_context():
+            event_id = _run_sync_in_thread(
+                lambda: client.emit_sync(event_type, payload)
+            )
+        else:
+            event_id = client.emit_sync(event_type, payload)
         logger.debug(f"Event emitted: {event_id}")
         return True
 
@@ -287,7 +344,12 @@ def daemon_available() -> bool:
         return False
 
     try:
-        return cast("bool", client.is_daemon_running_sync())
+        # If we're inside an async context, run in a thread to avoid
+        # "cannot use sync methods from async context" error
+        if _is_in_async_context():
+            return cast("bool", _run_sync_in_thread(client.is_daemon_running_sync))
+        else:
+            return cast("bool", client.is_daemon_running_sync())
     except Exception as e:
         logger.debug(f"Daemon ping failed: {e}")
         return False

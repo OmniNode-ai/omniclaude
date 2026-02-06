@@ -35,6 +35,7 @@ Part of OMN-1889: Emit injection metrics + utilization signal.
 
 from __future__ import annotations
 
+import datetime
 import logging
 import os
 import re
@@ -244,8 +245,6 @@ def _log_with_guaranteed_visibility(message: str, level: str = "WARNING") -> Non
         level: Log level string (WARNING, ERROR, etc).
     """
     # Format with timestamp and level for consistency
-    import datetime
-
     timestamp = datetime.datetime.now(datetime.UTC).isoformat()
     formatted = f"[{timestamp}] {level}: {message}"
 

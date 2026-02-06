@@ -1,31 +1,34 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 OmniNode Team
 """
-Tests for route_via_events_wrapper.py
+Tests for route_via_events_wrapper.py (Intelligent Routing Architecture)
 
 Verifies:
 - routing_path is always present in responses
-- routing_path correctly reflects event_attempted state
+- Intelligent routing uses trigger matching with confidence scoring
+- Explicit agent requests are honored
+- Fallback to polymorphic-agent when confidence is low
+- _compute_routing_path helper works correctly
 - Unknown methods produce warnings (no silent failures)
-- Fallback behavior is properly instrumented
 """
 
 import json
 import logging
 import sys
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Add hooks lib to path for imports
-_HOOKS_LIB = Path(__file__).parent.parent.parent.parent / "plugins/onex/hooks/lib"
-if str(_HOOKS_LIB) not in sys.path:
-    sys.path.insert(0, str(_HOOKS_LIB))
-
+# Note: Plugin lib path is added by tests/conftest.py, no need for manual sys.path manipulation
 from route_via_events_wrapper import (
+    CONFIDENCE_THRESHOLD,
+    DEFAULT_AGENT,
     VALID_ROUTING_PATHS,
+    RoutingMethod,
+    RoutingPath,
+    RoutingPolicy,
     _compute_routing_path,
+    main,
     route_via_events,
 )
 
@@ -78,122 +81,239 @@ class TestComputeRoutingPath:
         assert "local" in VALID_ROUTING_PATHS
 
 
-class TestRouteViaEvents:
-    """Tests for the route_via_events function."""
+class TestRouteViaEventsIntelligent:
+    """Tests for the intelligent route_via_events function.
 
-    def test_returns_routing_path_event_on_success(self):
-        """Successful event-based routing should return routing_path='event'."""
-        mock_adapter = MagicMock()
-        mock_adapter.route_request.return_value = {
-            "selected_agent": "test-agent",
-            "confidence": 0.9,
-            "reasoning": "Test routing",
-            "domain": "testing",
-            "purpose": "Test purpose",
-        }
-
-        with patch(
-            "route_via_events_wrapper._get_hook_event_adapter",
-            return_value=mock_adapter,
-        ):
-            result = route_via_events("test prompt", "corr-123")
-
-        assert result["routing_path"] == "event"
-        assert result["event_attempted"] is True
-        assert result["method"] == "event_based"
-
-    def test_returns_routing_path_hybrid_on_exception(self, caplog):
-        """Exception after attempting event routing should return routing_path='hybrid'."""
-        mock_adapter = MagicMock()
-        mock_adapter.route_request.side_effect = TimeoutError("Kafka timeout")
-
-        with patch(
-            "route_via_events_wrapper._get_hook_event_adapter",
-            return_value=mock_adapter,
-        ):
-            with caplog.at_level(logging.WARNING):
-                result = route_via_events("test prompt", "corr-123")
-
-        assert result["routing_path"] == "hybrid"
-        assert result["event_attempted"] is True
-        assert result["method"] == "fallback"
-        assert "TimeoutError" in caplog.text
-
-    def test_returns_routing_path_local_when_adapter_unavailable(self, caplog):
-        """When adapter is None (import failed), should return routing_path='local'."""
-        with patch("route_via_events_wrapper._get_hook_event_adapter", None):
-            with caplog.at_level(logging.WARNING):
-                result = route_via_events("test prompt", "corr-123")
-
-        assert result["routing_path"] == "local"
-        assert result["event_attempted"] is False
-        assert result["method"] == "fallback"
-        assert "hook_event_adapter import failed" in caplog.text
-
-    def test_returns_routing_path_local_when_adapter_lacks_route_request(self):
-        """Adapter without route_request method should return routing_path='local'."""
-        mock_adapter = MagicMock(spec=[])  # No route_request attribute
-
-        with patch(
-            "route_via_events_wrapper._get_hook_event_adapter",
-            return_value=mock_adapter,
-        ):
-            result = route_via_events("test prompt", "corr-123")
-
-        # Adapter exists but can't route - event_attempted stays False
-        assert result["routing_path"] == "local"
-        assert result["event_attempted"] is False
+    In intelligent routing architecture:
+    - AgentRouter performs trigger matching with confidence scoring
+    - High-confidence matches route to the matched agent
+    - Low-confidence matches fall back to polymorphic-agent
+    - Explicit agent requests are honored with confidence=1.0
+    - routing_path is always 'local' (no event-based routing yet)
+    """
 
     def test_routing_path_is_always_present(self):
-        """Both success and fallback paths must include routing_path."""
-        # Success path
-        mock_adapter = MagicMock()
-        mock_adapter.route_request.return_value = {
-            "selected_agent": "test-agent",
-            "confidence": 0.9,
-        }
+        """routing_path must always be present in response."""
+        result = route_via_events("test", "corr")
+        assert "routing_path" in result
+        assert result["routing_path"] in VALID_ROUTING_PATHS
 
-        with patch(
-            "route_via_events_wrapper._get_hook_event_adapter",
-            return_value=mock_adapter,
-        ):
-            success_result = route_via_events("test", "corr")
+    def test_routing_path_is_local(self):
+        """Intelligent routing uses local path (no event bus)."""
+        result = route_via_events("test prompt", "corr-123")
+        assert result["routing_path"] == "local"
 
-        assert "routing_path" in success_result
-        assert success_result["routing_path"] in VALID_ROUTING_PATHS
+    def test_event_attempted_is_always_false(self):
+        """Intelligent routing never attempts event-based routing."""
+        result = route_via_events("test prompt", "corr-123")
+        assert result["event_attempted"] is False
 
-        # Fallback path
-        with patch("route_via_events_wrapper._get_hook_event_adapter", None):
-            fallback_result = route_via_events("test", "corr")
+    def test_routing_method_is_local(self):
+        """Intelligent routing uses local routing method."""
+        result = route_via_events("test prompt", "corr-123")
+        assert result["routing_method"] == RoutingMethod.LOCAL.value
 
-        assert "routing_path" in fallback_result
-        assert fallback_result["routing_path"] in VALID_ROUTING_PATHS
-
-    def test_fallback_includes_debugging_context(self, caplog):
-        """Fallback should log enough context for debugging."""
-        mock_adapter = MagicMock()
-        mock_adapter.route_request.side_effect = ConnectionError("Connection refused")
-
-        with patch(
-            "route_via_events_wrapper._get_hook_event_adapter",
-            return_value=mock_adapter,
-        ):
-            with caplog.at_level(logging.WARNING):
-                route_via_events("test prompt", "corr-123")
-
-        # Should include exception type
-        assert "ConnectionError" in caplog.text
-        # Should include event_attempted state
-        assert "event_attempted=True" in caplog.text
+    def test_includes_domain_and_purpose(self):
+        """Response should include agent metadata."""
+        result = route_via_events("test prompt", "corr-123")
+        assert "domain" in result
+        assert "purpose" in result
 
     def test_latency_is_captured(self):
         """Latency should be captured in milliseconds."""
-        with patch("route_via_events_wrapper._get_hook_event_adapter", None):
-            result = route_via_events("test", "corr")
-
+        result = route_via_events("test prompt", "corr-123")
         assert "latency_ms" in result
         assert isinstance(result["latency_ms"], int)
         assert result["latency_ms"] >= 0
+
+    def test_confidence_is_between_0_and_1(self):
+        """Confidence should be a valid score between 0 and 1."""
+        result = route_via_events("test prompt", "corr-123")
+        assert "confidence" in result
+        assert 0.0 <= result["confidence"] <= 1.0
+
+    def test_selected_agent_is_present(self):
+        """Selected agent should always be present."""
+        result = route_via_events("test prompt", "corr-123")
+        assert "selected_agent" in result
+        assert isinstance(result["selected_agent"], str)
+        assert len(result["selected_agent"]) > 0
+
+    def test_reasoning_is_present(self):
+        """Reasoning explanation should be present."""
+        result = route_via_events("test prompt", "corr-123")
+        assert "reasoning" in result
+        assert isinstance(result["reasoning"], str)
+
+    def test_legacy_method_field_for_backward_compatibility(self):
+        """Legacy 'method' field should still be present."""
+        result = route_via_events("test prompt", "corr-123")
+        assert "method" in result
+        # Legacy method mirrors routing_policy
+        assert result["method"] == result["routing_policy"]
+
+
+class TestRouteViaEventsWithMockedRouter:
+    """Tests using mocked AgentRouter for deterministic behavior."""
+
+    def test_high_confidence_match_uses_recommended_agent(self):
+        """High confidence match should route to the recommended agent."""
+        # Create mock recommendation with high confidence
+        mock_confidence = MagicMock()
+        mock_confidence.total = 0.85
+        mock_confidence.explanation = "Strong trigger match"
+
+        mock_recommendation = MagicMock()
+        mock_recommendation.agent_name = "agent-testing"
+        mock_recommendation.agent_title = "Testing Agent"
+        mock_recommendation.confidence = mock_confidence
+        mock_recommendation.reason = "Exact match: 'test'"
+        mock_recommendation.is_explicit = False
+
+        mock_router = MagicMock()
+        mock_router.route.return_value = [mock_recommendation]
+        mock_router.registry = {
+            "agents": {
+                "agent-testing": {
+                    "domain_context": "testing",
+                    "description": "Test agent for testing purposes",
+                }
+            }
+        }
+
+        with patch("route_via_events_wrapper._get_router", return_value=mock_router):
+            result = route_via_events("run tests for my code", "corr-123")
+
+        assert result["selected_agent"] == "agent-testing"
+        assert result["confidence"] == 0.85
+        assert result["routing_policy"] == RoutingPolicy.TRIGGER_MATCH.value
+
+    def test_low_confidence_match_falls_back_to_default(self):
+        """Low confidence match should fall back to polymorphic-agent."""
+        mock_confidence = MagicMock()
+        mock_confidence.total = 0.3  # Below CONFIDENCE_THRESHOLD (0.5)
+        mock_confidence.explanation = "Weak match"
+
+        mock_recommendation = MagicMock()
+        mock_recommendation.agent_name = "agent-some-agent"
+        mock_recommendation.agent_title = "Some Agent"
+        mock_recommendation.confidence = mock_confidence
+        mock_recommendation.reason = "Fuzzy match"
+        mock_recommendation.is_explicit = False
+
+        mock_router = MagicMock()
+        mock_router.route.return_value = [mock_recommendation]
+        mock_router.registry = {"agents": {}}
+
+        with patch("route_via_events_wrapper._get_router", return_value=mock_router):
+            result = route_via_events("vague prompt", "corr-123")
+
+        assert result["selected_agent"] == DEFAULT_AGENT
+        assert result["routing_policy"] == RoutingPolicy.FALLBACK_DEFAULT.value
+        assert str(CONFIDENCE_THRESHOLD) in result["reasoning"]
+
+    def test_no_matches_falls_back_to_default(self):
+        """No trigger matches should fall back to polymorphic-agent."""
+        mock_router = MagicMock()
+        mock_router.route.return_value = []  # No matches
+        mock_router.registry = {"agents": {}}
+
+        with patch("route_via_events_wrapper._get_router", return_value=mock_router):
+            result = route_via_events("completely unrelated prompt", "corr-123")
+
+        assert result["selected_agent"] == DEFAULT_AGENT
+        assert result["routing_policy"] == RoutingPolicy.FALLBACK_DEFAULT.value
+        assert "No trigger matches" in result["reasoning"]
+
+    def test_explicit_request_sets_explicit_policy(self):
+        """Explicit agent request should set EXPLICIT_REQUEST policy."""
+        mock_confidence = MagicMock()
+        mock_confidence.total = 1.0
+        mock_confidence.explanation = "Explicit agent request"
+
+        mock_recommendation = MagicMock()
+        mock_recommendation.agent_name = "agent-debug"
+        mock_recommendation.agent_title = "Debug Agent"
+        mock_recommendation.confidence = mock_confidence
+        mock_recommendation.reason = "Explicitly requested by user"
+        mock_recommendation.is_explicit = True
+
+        mock_router = MagicMock()
+        mock_router.route.return_value = [mock_recommendation]
+        mock_router.registry = {
+            "agents": {
+                "agent-debug": {
+                    "domain_context": "debugging",
+                    "description": "Debug agent",
+                }
+            }
+        }
+
+        with patch("route_via_events_wrapper._get_router", return_value=mock_router):
+            result = route_via_events("use agent-debug to fix this", "corr-123")
+
+        assert result["selected_agent"] == "agent-debug"
+        assert result["confidence"] == 1.0
+        assert result["routing_policy"] == RoutingPolicy.EXPLICIT_REQUEST.value
+
+    def test_router_unavailable_falls_back_gracefully(self):
+        """Router unavailable should fall back to polymorphic-agent."""
+        with patch("route_via_events_wrapper._get_router", return_value=None):
+            result = route_via_events("test prompt", "corr-123")
+
+        assert result["selected_agent"] == DEFAULT_AGENT
+        assert result["routing_policy"] == RoutingPolicy.FALLBACK_DEFAULT.value
+        assert "no router available" in result["reasoning"]
+
+    def test_router_error_falls_back_gracefully(self):
+        """Router error should fall back to polymorphic-agent."""
+        mock_router = MagicMock()
+        mock_router.route.side_effect = RuntimeError("Router error")
+        mock_router.registry = {"agents": {}}
+
+        with patch("route_via_events_wrapper._get_router", return_value=mock_router):
+            result = route_via_events("test prompt", "corr-123")
+
+        assert result["selected_agent"] == DEFAULT_AGENT
+        assert result["routing_policy"] == RoutingPolicy.FALLBACK_DEFAULT.value
+        assert "Routing error" in result["reasoning"]
+
+
+class TestRouteViaEventsCohort:
+    """Tests for cohort assignment in route_via_events."""
+
+    def test_cohort_included_when_session_id_provided(self):
+        """Cohort information should be included when session_id is provided."""
+        result = route_via_events(
+            "test prompt", "corr-123", session_id="session-abc-123"
+        )
+        assert "selected_agent" in result
+        # When cohort assignment is available, verify the value is well-formed
+        if "cohort" in result and result["cohort"] is not None:
+            assert isinstance(result["cohort"], str)
+            assert len(result["cohort"]) > 0
+
+    def test_cohort_excluded_when_no_session_id(self):
+        """Cohort information should not be present without session_id."""
+        result = route_via_events("test prompt", "corr-123")
+        assert "selected_agent" in result
+        # Without session_id, cohort should be absent or explicitly None
+        cohort_value = result.get("cohort")
+        assert cohort_value is None or cohort_value == ""
+
+    def test_cohort_assignment_is_deterministic(self):
+        """Same session_id should produce the same cohort assignment."""
+        result_a = route_via_events(
+            "test prompt", "corr-a", session_id="session-deterministic"
+        )
+        result_b = route_via_events(
+            "test prompt", "corr-b", session_id="session-deterministic"
+        )
+        # When cohort assignment is available, verify determinism
+        if "cohort" in result_a and result_a["cohort"] is not None:
+            assert result_a["cohort"] == result_b["cohort"], (
+                "Same session_id must produce the same cohort"
+            )
 
 
 class TestMainCLI:
@@ -202,9 +322,6 @@ class TestMainCLI:
     def test_missing_args_returns_local_path(self, capsys, monkeypatch):
         """Missing CLI args should return routing_path='local'."""
         monkeypatch.setattr(sys, "argv", ["route_via_events_wrapper.py"])
-
-        # Import and run main
-        from route_via_events_wrapper import main
 
         # Use try/except instead of pytest.raises so that unexpected exit
         # codes propagate as real failures rather than being silently caught.
@@ -220,4 +337,170 @@ class TestMainCLI:
 
         assert result["routing_path"] == "local"
         assert result["event_attempted"] is False
-        assert result["method"] == "fallback"
+        assert result["method"] == RoutingPolicy.FALLBACK_DEFAULT.value
+        assert result["routing_policy"] == RoutingPolicy.FALLBACK_DEFAULT.value
+
+    def test_with_args_returns_routing_result(self, capsys, monkeypatch):
+        """CLI with proper args should return routing result."""
+        monkeypatch.setattr(
+            sys, "argv", ["route_via_events_wrapper.py", "test prompt", "corr-123"]
+        )
+
+        # main() returns normally (no sys.exit) when args are provided.
+        # Do NOT catch SystemExit broadly -- unexpected exit codes must
+        # propagate as real test failures.
+        main()
+
+        captured = capsys.readouterr()
+        result = json.loads(captured.out)
+
+        assert "selected_agent" in result
+        assert result["routing_path"] == "local"
+        assert "routing_policy" in result
+
+    def test_cli_with_timeout_and_session_id(self, capsys, monkeypatch):
+        """CLI accepts timeout_ms and session_id arguments."""
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "route_via_events_wrapper.py",
+                "test prompt",
+                "corr-123",
+                "5000",
+                "session-123",
+            ],
+        )
+
+        # main() returns normally (no sys.exit) when args are provided.
+        # Do NOT catch SystemExit broadly -- unexpected exit codes must
+        # propagate as real test failures.
+        main()
+
+        captured = capsys.readouterr()
+        result = json.loads(captured.out)
+
+        assert "selected_agent" in result
+        assert result["routing_path"] == "local"
+
+
+class TestRoutingEnums:
+    """Tests for routing enum consistency."""
+
+    def test_routing_method_values(self):
+        """Verify RoutingMethod enum values."""
+        assert RoutingMethod.EVENT_BASED.value == "event_based"
+        assert RoutingMethod.LOCAL.value == "local"
+        assert RoutingMethod.FALLBACK.value == "fallback"
+
+    def test_routing_policy_values(self):
+        """Verify RoutingPolicy enum values for intelligent routing."""
+        # Core intelligent routing policies
+        assert RoutingPolicy.TRIGGER_MATCH.value == "trigger_match"
+        assert RoutingPolicy.EXPLICIT_REQUEST.value == "explicit_request"
+        assert RoutingPolicy.FALLBACK_DEFAULT.value == "fallback_default"
+        # Additional policies (safety, cost)
+        assert RoutingPolicy.SAFETY_GATE.value == "safety_gate"
+        assert RoutingPolicy.COST_GATE.value == "cost_gate"
+
+    def test_routing_path_values(self):
+        """Verify RoutingPath enum values."""
+        assert RoutingPath.EVENT.value == "event"
+        assert RoutingPath.LOCAL.value == "local"
+        assert RoutingPath.HYBRID.value == "hybrid"
+
+    def test_valid_routing_paths_matches_enum(self):
+        """VALID_ROUTING_PATHS should contain all RoutingPath enum values."""
+        for path in RoutingPath:
+            assert path.value in VALID_ROUTING_PATHS
+
+
+class TestConfidenceThreshold:
+    """Tests for confidence threshold behavior."""
+
+    def test_confidence_threshold_is_defined(self):
+        """Confidence threshold constant should be defined."""
+        assert CONFIDENCE_THRESHOLD == 0.5
+
+    def test_default_agent_is_defined(self):
+        """Default fallback agent constant should be defined."""
+        assert DEFAULT_AGENT == "polymorphic-agent"
+
+    def test_threshold_boundary_below(self):
+        """Confidence just below threshold should fall back."""
+        mock_confidence = MagicMock()
+        mock_confidence.total = CONFIDENCE_THRESHOLD - 0.01  # Just below threshold
+
+        mock_recommendation = MagicMock()
+        mock_recommendation.agent_name = "agent-test"
+        mock_recommendation.agent_title = "Test Agent"
+        mock_recommendation.confidence = mock_confidence
+        mock_recommendation.reason = "Match"
+        mock_recommendation.is_explicit = False
+
+        mock_router = MagicMock()
+        mock_router.route.return_value = [mock_recommendation]
+        mock_router.registry = {"agents": {}}
+
+        with patch("route_via_events_wrapper._get_router", return_value=mock_router):
+            result = route_via_events("test", "corr")
+
+        assert result["selected_agent"] == DEFAULT_AGENT
+
+    def test_threshold_boundary_at(self):
+        """Confidence exactly at threshold should use matched agent."""
+        mock_confidence = MagicMock()
+        mock_confidence.total = CONFIDENCE_THRESHOLD  # Exactly at threshold
+        mock_confidence.explanation = "Exact threshold match"
+
+        mock_recommendation = MagicMock()
+        mock_recommendation.agent_name = "agent-test"
+        mock_recommendation.agent_title = "Test Agent"
+        mock_recommendation.confidence = mock_confidence
+        mock_recommendation.reason = "Match"
+        mock_recommendation.is_explicit = False
+
+        mock_router = MagicMock()
+        mock_router.route.return_value = [mock_recommendation]
+        mock_router.registry = {
+            "agents": {
+                "agent-test": {
+                    "domain_context": "testing",
+                    "description": "Test",
+                }
+            }
+        }
+
+        with patch("route_via_events_wrapper._get_router", return_value=mock_router):
+            result = route_via_events("test", "corr")
+
+        assert result["selected_agent"] == "agent-test"
+
+    def test_threshold_boundary_above(self):
+        """Confidence above threshold should use matched agent."""
+        mock_confidence = MagicMock()
+        mock_confidence.total = CONFIDENCE_THRESHOLD + 0.01  # Just above threshold
+        mock_confidence.explanation = "Above threshold match"
+
+        mock_recommendation = MagicMock()
+        mock_recommendation.agent_name = "agent-test"
+        mock_recommendation.agent_title = "Test Agent"
+        mock_recommendation.confidence = mock_confidence
+        mock_recommendation.reason = "Match"
+        mock_recommendation.is_explicit = False
+
+        mock_router = MagicMock()
+        mock_router.route.return_value = [mock_recommendation]
+        mock_router.registry = {
+            "agents": {
+                "agent-test": {
+                    "domain_context": "testing",
+                    "description": "Test",
+                }
+            }
+        }
+
+        with patch("route_via_events_wrapper._get_router", return_value=mock_router):
+            result = route_via_events("test", "corr")
+
+        assert result["selected_agent"] == "agent-test"

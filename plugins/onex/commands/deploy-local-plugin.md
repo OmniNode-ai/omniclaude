@@ -2,16 +2,15 @@
 name: deploy-local-plugin
 description: Deploy local plugin files to Claude Code plugin cache for testing
 tags: [tooling, deployment, plugin]
-args:
-  - name: execute
-    description: Actually perform deployment (default is dry-run)
-    required: false
-  - name: no-version-bump
-    description: Skip auto-incrementing the patch version
-    required: false
 ---
 
 # Deploy Local Plugin
+
+**Usage:** `/deploy-local-plugin [--execute] [--no-version-bump]`
+
+**Arguments:**
+- `--execute` - Actually perform deployment (default is dry-run)
+- `--no-version-bump` - Skip auto-incrementing the patch version
 
 Deploy the local plugin source to the Claude Code plugin cache for testing.
 

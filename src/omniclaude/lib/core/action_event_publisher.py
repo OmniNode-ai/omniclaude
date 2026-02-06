@@ -44,6 +44,7 @@ from uuid import UUID, uuid4
 
 # FAIL FAST: Required configuration
 from omniclaude.config import settings
+from omniclaude.hooks.topics import TopicBase, build_topic
 
 # Import Prometheus metrics (optional integration)
 try:

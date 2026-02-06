@@ -38,34 +38,24 @@ from typing import Any, TypedDict
 
 SCRIPT_DIR = Path(__file__).parent
 
-try:
-    from models import (
-        BotType,
-        CommentSeverity,
-        CommentStatus,
-        ModelCollatedIssues,
-        ModelPRIssue,
-        detect_bot_type,
-    )
-except ModuleNotFoundError:
-    # ModuleNotFoundError means the 'models' module is not on sys.path.
-    # This happens during standalone execution (python collate_issues.py)
-    # where the script directory is not automatically on the import path.
-    #
-    # We deliberately catch ModuleNotFoundError (not ImportError) so that
-    # real import failures *within* models.py (e.g. a broken dependency)
-    # propagate as-is rather than being silently retried.
+# When running standalone (python collate_issues.py), __package__ is None/empty
+# and the script directory is not on sys.path.  Add it so the sibling 'models'
+# module is importable.  When imported as part of a package, __package__ is set
+# and the normal import machinery handles resolution -- any ImportError raised
+# *inside* models.py (e.g. a broken dependency) will surface naturally rather
+# than being masked by a fallback retry.
+if not __package__:
     if str(SCRIPT_DIR) not in sys.path:
         sys.path.insert(0, str(SCRIPT_DIR))
-    from models import (
-        BotType,
-        CommentSeverity,
-        CommentStatus,
-        ModelCollatedIssues,
-        ModelPRIssue,
-        detect_bot_type,
-    )
 
+from models import (
+    BotType,
+    CommentSeverity,
+    CommentStatus,
+    ModelCollatedIssues,
+    ModelPRIssue,
+    detect_bot_type,
+)
 
 # =============================================================================
 # ONEX-Compliant Error Handling

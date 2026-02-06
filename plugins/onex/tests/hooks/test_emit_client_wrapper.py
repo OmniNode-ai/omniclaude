@@ -59,6 +59,7 @@ class TestModuleImport:
             "context.utilization",  # OMN-1889
             "agent.match",  # OMN-1889
             "latency.breakdown",  # OMN-1889
+            "routing.decision",  # Polly-first routing observability
             "notification.blocked",  # OMN-1831
             "notification.completed",  # OMN-1831
         }

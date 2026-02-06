@@ -622,6 +622,151 @@ class TestStickyIdentityAssignment:
         assert isinstance(result.identity_type, IdentityType)
 
 
+class TestCohortAssignmentHashAlgorithm:
+    """Verify hash algorithm correctness and boundary behavior.
+
+    These tests document the cohort assignment algorithm:
+    - SHA-256(identity + ":" + salt) -> first 8 bytes -> mod 100
+
+    This ensures the algorithm is deterministic and produces expected seeds.
+    """
+
+    def test_hash_algorithm_produces_expected_seed(self) -> None:
+        """Verify hash algorithm produces expected seed for known input.
+
+        Algorithm: SHA-256(identity:salt) -> first 8 bytes -> mod 100
+        This test documents the exact algorithm for ONEX compliance.
+        """
+        import hashlib
+
+        # Test with known values
+        identity = "test-session"
+        salt = "test-salt"
+        config = CohortAssignmentConfig(salt=salt, control_percentage=50)
+
+        # Compute expected seed manually
+        seed_input = f"{identity}:{salt}"
+        hash_bytes = hashlib.sha256(seed_input.encode("utf-8")).digest()
+        expected_seed = int.from_bytes(hash_bytes[:8], byteorder="big") % 100
+
+        # Verify assign_cohort produces the same seed
+        result = assign_cohort(identity, config=config)
+        assert result.assignment_seed == expected_seed, (
+            f"Expected seed {expected_seed}, got {result.assignment_seed}. "
+            f"Algorithm: SHA-256('{seed_input}') first 8 bytes mod 100"
+        )
+
+    def test_seed_zero_is_possible(self) -> None:
+        """Verify seed=0 is a valid assignment result.
+
+        This tests the boundary condition at seed=0 (should be CONTROL
+        when control_percentage > 0).
+        """
+        # Search for a session that produces seed=0
+        # Note: Finding seed=0 may take many iterations
+        for i in range(100000):
+            result = assign_cohort(f"seed-zero-search-{i}")
+            if result.assignment_seed == 0:
+                # Found seed=0, verify it's in control (default 20% control)
+                assert result.cohort == EnumCohort.CONTROL
+                return
+
+        # Skip if not found - this is probabilistic
+        pytest.skip("Could not find seed=0 in 100000 iterations (probabilistic)")
+
+    def test_seed_99_is_possible(self) -> None:
+        """Verify seed=99 is a valid assignment result.
+
+        This tests the upper boundary (should be TREATMENT when
+        control_percentage < 100).
+        """
+        for i in range(100000):
+            result = assign_cohort(f"seed-99-search-{i}")
+            if result.assignment_seed == 99:
+                # Found seed=99, verify it's in treatment (default 20% control)
+                assert result.cohort == EnumCohort.TREATMENT
+                return
+
+        pytest.skip("Could not find seed=99 in 100000 iterations (probabilistic)")
+
+    def test_boundary_at_control_percentage_minus_one(self) -> None:
+        """Test seed exactly at control_percentage-1 is CONTROL."""
+        config = CohortAssignmentConfig(control_percentage=50)
+
+        # Find a session with seed=49 (last control seed for 50% control)
+        for i in range(100000):
+            result = assign_cohort(f"boundary-49-{i}", config=config)
+            if result.assignment_seed == 49:
+                assert result.cohort == EnumCohort.CONTROL, (
+                    "Seed 49 should be CONTROL with control_percentage=50"
+                )
+                return
+
+        pytest.skip("Could not find seed=49 in 100000 iterations")
+
+    def test_boundary_at_control_percentage(self) -> None:
+        """Test seed exactly at control_percentage is TREATMENT."""
+        config = CohortAssignmentConfig(control_percentage=50)
+
+        # Find a session with seed=50 (first treatment seed for 50% control)
+        for i in range(100000):
+            result = assign_cohort(f"boundary-50-{i}", config=config)
+            if result.assignment_seed == 50:
+                assert result.cohort == EnumCohort.TREATMENT, (
+                    "Seed 50 should be TREATMENT with control_percentage=50"
+                )
+                return
+
+        pytest.skip("Could not find seed=50 in 100000 iterations")
+
+    def test_all_seeds_in_valid_range(self) -> None:
+        """Verify all seeds are in valid range 0-99 across many samples."""
+        seeds_seen = set()
+        for i in range(10000):
+            result = assign_cohort(f"range-test-{i}")
+            assert 0 <= result.assignment_seed < 100, (
+                f"Seed {result.assignment_seed} out of valid range [0, 100)"
+            )
+            seeds_seen.add(result.assignment_seed)
+
+        # With 10000 samples, should see most of the 100 possible seeds
+        # (birthday paradox: very high probability of seeing all 100)
+        assert len(seeds_seen) > 80, (
+            f"Expected to see most seeds in 10000 samples, only saw {len(seeds_seen)}"
+        )
+
+    def test_uniform_distribution_chi_squared(self) -> None:
+        """Verify seed distribution is approximately uniform using chi-squared.
+
+        This statistical test verifies the hash function produces a uniform
+        distribution across [0, 100) which is essential for correct cohort splits.
+        """
+
+        n_samples = 10000
+        expected_per_bucket = n_samples / 100  # 100 expected per seed value
+
+        # Count occurrences of each seed
+        seed_counts = [0] * 100
+        for i in range(n_samples):
+            result = assign_cohort(f"uniform-test-{i}")
+            seed_counts[result.assignment_seed] += 1
+
+        # Calculate chi-squared statistic
+        chi_squared = sum(
+            (observed - expected_per_bucket) ** 2 / expected_per_bucket
+            for observed in seed_counts
+        )
+
+        # Critical value for df=99, alpha=0.01 is approximately 134.6
+        # If chi-squared < critical, distribution is uniform (fail to reject H0)
+        critical_value = 134.6
+        assert chi_squared < critical_value, (
+            f"Chi-squared {chi_squared:.2f} exceeds critical value {critical_value}. "
+            f"Distribution may not be uniform. "
+            f"Min bucket: {min(seed_counts)}, Max bucket: {max(seed_counts)}"
+        )
+
+
 class TestCohortAssignmentImmutability:
     """Test that CohortAssignment is immutable (NamedTuple guarantee)."""
 
@@ -656,3 +801,65 @@ class TestCohortAssignmentImmutability:
 
         assert result1 == result2
         assert hash(result1) == hash(result2)
+
+
+class TestCohortAssignmentRegressionValues:
+    """Regression tests with known input/output values.
+
+    These tests document the exact behavior of the cohort assignment algorithm
+    by asserting specific seeds for specific inputs. If the algorithm changes,
+    these tests will fail, alerting developers that existing cohort assignments
+    may be affected.
+
+    Algorithm: SHA-256(identity:salt) -> first 8 bytes -> mod 100
+    Default salt: "omniclaude-injection-v1"
+    """
+
+    def test_known_session_produces_known_seed(self) -> None:
+        """Regression test: known session ID produces known seed.
+
+        This documents the exact algorithm behavior. If this test fails,
+        it means the cohort assignment algorithm has changed, which would
+        affect all existing users' cohort assignments.
+        """
+        # Use default config (20% control, salt="omniclaude-injection-v1")
+        result = assign_cohort("test-regression-session-12345")
+
+        # Document the expected seed for this input
+        # SHA-256("test-regression-session-12345:omniclaude-injection-v1")
+        # First 8 bytes as int, mod 100 = 83
+        # This seed was computed from the known algorithm and serves as a regression guard
+        assert result.assignment_seed == 83, (
+            f"Regression failure: expected seed 83 for session 'test-regression-session-12345', "
+            f"got {result.assignment_seed}. The cohort assignment algorithm may have changed."
+        )
+
+    def test_known_config_produces_expected_cohort(self) -> None:
+        """Regression test: known config determines correct cohort from seed.
+
+        With 20% control (default), seed 83 should be TREATMENT (>=20).
+        This verifies the threshold logic works correctly.
+        """
+        result = assign_cohort("test-regression-session-12345")
+
+        # seed=83, control_percentage=20, so 83 >= 20 -> TREATMENT
+        assert result.cohort == EnumCohort.TREATMENT, (
+            f"Regression failure: expected TREATMENT for seed {result.assignment_seed} "
+            f"with 20% control threshold, got {result.cohort}"
+        )
+
+    def test_custom_salt_changes_seed_predictably(self) -> None:
+        """Regression test: different salt produces different known seed.
+
+        Documents that changing the salt changes cohort assignments.
+        """
+        config = CohortAssignmentConfig(salt="custom-regression-salt")
+        result = assign_cohort("test-regression-session-12345", config=config)
+
+        # This seed was computed for the custom salt
+        # SHA-256("test-regression-session-12345:custom-regression-salt") = 49
+        # If this fails, the salt handling in the algorithm may have changed
+        assert result.assignment_seed == 49, (
+            f"Regression failure: expected seed 49 for custom salt, "
+            f"got {result.assignment_seed}. Salt handling may have changed."
+        )

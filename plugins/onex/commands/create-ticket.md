@@ -2,41 +2,28 @@
 name: create-ticket
 description: Create a single Linear ticket from args, contract file, or plan milestone with conflict resolution
 tags: [linear, tickets, automation]
-args:
-  - name: title
-    description: Ticket title (mutually exclusive with --from-contract, --from-plan)
-    required: false
-  - name: from-contract
-    description: Path to YAML contract file
-    required: false
-  - name: from-plan
-    description: Path to plan markdown file
-    required: false
-  - name: milestone
-    description: Milestone ID when using --from-plan (e.g., M4)
-    required: false
-  - name: repo
-    description: Repository label (e.g., omniclaude, omnibase_core)
-    required: false
-  - name: parent
-    description: Parent issue ID for epic relationship (e.g., OMN-1800)
-    required: false
-  - name: blocked-by
-    description: Comma-separated issue IDs that block this ticket
-    required: false
-  - name: project
-    description: Linear project name
-    required: false
-  - name: team
-    description: Linear team name (default Omninode)
-    required: false
-    default: "Omninode"
-  - name: allow-arch-violation
-    description: Bypass architecture dependency validation (use with caution)
-    required: false
 ---
 
 # Create Linear Ticket
+
+**Usage:**
+```
+/create-ticket <title>
+/create-ticket --from-contract <path>
+/create-ticket --from-plan <path> --milestone <M1-M5>
+```
+
+**Arguments:**
+- `title` - Ticket title (mutually exclusive with --from-contract, --from-plan)
+- `--from-contract <path>` - Path to YAML contract file
+- `--from-plan <path>` - Path to plan markdown file
+- `--milestone <id>` - Milestone ID when using --from-plan (e.g., M4)
+- `--repo <label>` - Repository label (e.g., omniclaude, omnibase_core)
+- `--parent <id>` - Parent issue ID for epic relationship (e.g., OMN-1800)
+- `--blocked-by <ids>` - Comma-separated issue IDs that block this ticket
+- `--project <name>` - Linear project name
+- `--team <name>` - Linear team name (default: Omninode)
+- `--allow-arch-violation` - Bypass architecture dependency validation
 
 You are creating a Linear ticket with standardized format and conflict resolution.
 

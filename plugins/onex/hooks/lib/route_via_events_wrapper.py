@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 """
-Route Via Events Wrapper - Synchronous wrapper for event-based routing
+Route Via Events Wrapper - Intelligent Agent Routing
 
-Provides a synchronous CLI interface for the event-based agent routing system.
-Publishes routing requests to Kafka and waits for responses.
+Routes user prompts to the best-matched agent using trigger matching and
+confidence scoring. Falls back to polymorphic-agent only when no good match
+is found (confidence below threshold).
+
+Routing Semantics (three distinct fields):
+- routing_method: HOW routing executed (event_based, local, fallback)
+- routing_policy: WHY this path was chosen (trigger_match, explicit_request, fallback_default)
+- routing_path: WHAT canonical outcome (event, local, hybrid)
 
 Usage:
     python3 route_via_events_wrapper.py "user prompt" "correlation-id"
@@ -11,27 +17,38 @@ Usage:
 Output:
     JSON object with routing decision:
     {
-        "selected_agent": "agent-name",
-        "confidence": 0.95,
-        "reasoning": "...",
-        "method": "event_based",
-        "latency_ms": 45,
-        "domain": "general",
-        "purpose": "..."
+        "selected_agent": "agent-debug",
+        "confidence": 0.85,
+        "candidates": [
+            {"name": "agent-debug", "score": 0.85, "description": "Debug agent", "reason": "Exact match: 'debug'"},
+            {"name": "agent-testing", "score": 0.60, "description": "Testing agent", "reason": "Fuzzy match: 'test'"}
+        ],
+        "reasoning": "Strong trigger match: 'debug'",
+        "routing_method": "local",
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "latency_ms": 15,
+        "domain": "debugging",
+        "purpose": "Debug and troubleshoot issues"
     }
+
+    The `candidates` array contains the top N agent matches sorted by score
+    descending, allowing downstream consumers (e.g., Claude) to make the final
+    semantic selection. Each candidate includes name, score, description, and
+    match reason. The array is empty when no router is available or routing fails.
 """
 
 import json
 import logging
 import sys
+import threading
 import time
 from collections.abc import Callable
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
 # Add script directory to path for sibling imports
-# This enables imports like 'from hook_event_adapter import ...' to work
-# regardless of the current working directory
 _SCRIPT_DIR = Path(__file__).parent
 if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
@@ -48,28 +65,35 @@ except ImportError:
 # Import emit_event and secret redactor for routing decision emission.
 # Uses __package__ check for proper import resolution instead of
 # fragile string-based error detection on ImportError messages.
+# Each import is in its own try block so a failure in one does not
+# suppress the other (e.g., redactor failure must not disable emission).
 _emit_event_fn: Callable[..., bool] | None = None
 _redact_secrets_fn: Callable[[str], str] | None = None
 
 try:
     if __package__:
         from .emit_client_wrapper import emit_event as _emit_event_fn
-        from .secret_redactor import redact_secrets as _redact_secrets_fn
     else:
         from emit_client_wrapper import (
             emit_event as _emit_event_fn,  # type: ignore[no-redef]
         )
+except ImportError:
+    _emit_event_fn = None
+
+try:
+    if __package__:
+        from .secret_redactor import redact_secrets as _redact_secrets_fn
+    else:
         from secret_redactor import (
             redact_secrets as _redact_secrets_fn,  # type: ignore[no-redef]
         )
 except ImportError:
-    _emit_event_fn = None
     _redact_secrets_fn = None
 
 
 logger = logging.getLogger(__name__)
 
-# Canonical routing path values for metrics
+# Canonical routing path values for metrics (from OMN-1893)
 VALID_ROUTING_PATHS = frozenset({"event", "local", "hybrid"})
 
 
@@ -78,10 +102,10 @@ def _compute_routing_path(method: str, event_attempted: bool) -> str:
     Map method to canonical routing_path.
 
     Logic:
-    - event_attempted=False → "local" (never tried event path)
-    - event_attempted=True AND method=event_based → "event"
-    - event_attempted=True AND method=fallback → "hybrid" (tried event, fell back)
-    - Unknown method → "local" with loud warning
+    - event_attempted=False -> "local" (never tried event path)
+    - event_attempted=True AND method=event_based -> "event"
+    - event_attempted=True AND method=fallback -> "hybrid" (tried event, fell back)
+    - Unknown method -> "local" with loud warning
 
     Args:
         method: The routing method used (event_based, fallback, etc.)
@@ -106,23 +130,101 @@ def _compute_routing_path(method: str, event_attempted: bool) -> str:
         return "local"
 
 
+class RoutingMethod(str, Enum):
+    """HOW the routing decision was made."""
+
+    EVENT_BASED = "event_based"  # Via Kafka request-response
+    LOCAL = "local"  # Local decision without external service
+    FALLBACK = "fallback"  # Error recovery path
+
+
+class RoutingPolicy(str, Enum):
+    """WHY this routing path was chosen."""
+
+    TRIGGER_MATCH = "trigger_match"  # Matched based on activation triggers
+    EXPLICIT_REQUEST = "explicit_request"  # User explicitly requested an agent
+    FALLBACK_DEFAULT = "fallback_default"  # No good match, using default agent
+    SAFETY_GATE = "safety_gate"  # Safety/compliance routing
+    COST_GATE = "cost_gate"  # Cost optimization routing
+
+
+class RoutingPath(str, Enum):
+    """WHAT canonical routing outcome."""
+
+    EVENT = "event"  # Event-based routing used
+    LOCAL = "local"  # Local routing used
+    HYBRID = "hybrid"  # Combination of approaches
+
+
+# Import AgentRouter for intelligent routing
+_AgentRouter: type | None = None
+_router_instance: Any = None
+_router_lock = threading.Lock()
+try:
+    from agent_router import AgentRouter
+
+    _AgentRouter = AgentRouter
+except ImportError:
+    logger.debug("agent_router not available, will use fallback routing")
+
+
+# Confidence threshold for accepting a routed agent
+# Below this threshold, we fall back to polymorphic-agent
+CONFIDENCE_THRESHOLD = 0.5
+
+# Default fallback agent when no good match is found
+DEFAULT_AGENT = "polymorphic-agent"
+
+
+def _get_router() -> Any:
+    """
+    Get or create the singleton AgentRouter instance.
+
+    Uses double-checked locking for thread safety.
+
+    Returns:
+        AgentRouter instance or None if unavailable
+    """
+    global _router_instance
+    if _router_instance is not None:
+        return _router_instance
+    if _AgentRouter is None:
+        return None
+    with _router_lock:
+        # Double-check after acquiring lock
+        if _router_instance is not None:
+            return _router_instance
+        try:
+            _router_instance = _AgentRouter()
+            logger.info(
+                f"AgentRouter initialized with {len(_router_instance.registry.get('agents', {}))} agents"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to initialize AgentRouter: {e}")
+            return None
+    return _router_instance
+
+
 def _sanitize_prompt_preview(prompt: str, max_length: int = 100) -> str:
     """Create a sanitized, truncated prompt preview.
 
     Truncates to max_length and redacts any secrets using the
-    existing secret_redactor module.
+    existing secret_redactor module.  If the redactor is unavailable,
+    returns a placeholder to avoid emitting raw prompt text.
 
     Args:
         prompt: Raw user prompt text.
         max_length: Maximum length for the preview.
 
     Returns:
-        Sanitized and truncated prompt preview.
+        Sanitized and truncated prompt preview, or a safe placeholder
+        when the redaction module is not available.
     """
+    if _redact_secrets_fn is None:
+        # Redaction unavailable - never emit raw prompt text
+        return "[redaction unavailable]"
     preview = prompt[:max_length] if prompt else ""
-    if _redact_secrets_fn is not None:
-        preview = _redact_secrets_fn(preview)
-    return preview
+    return _redact_secrets_fn(preview)
 
 
 def _emit_routing_decision(
@@ -152,9 +254,14 @@ def _emit_routing_decision(
     try:
         payload: dict[str, object] = {
             "correlation_id": correlation_id,
-            "selected_agent": result.get("selected_agent", "polymorphic-agent"),
+            "selected_agent": result.get("selected_agent", DEFAULT_AGENT),
             "confidence": result.get("confidence", 0.5),
-            "method": result.get("method", "fallback"),
+            "routing_method": result.get(
+                "routing_method", RoutingMethod.FALLBACK.value
+            ),
+            "routing_policy": result.get(
+                "routing_policy", RoutingPolicy.FALLBACK_DEFAULT.value
+            ),
             "routing_path": result.get("routing_path", "local"),
             "latency_ms": result.get("latency_ms", 0),
             "domain": result.get("domain", ""),
@@ -163,8 +270,7 @@ def _emit_routing_decision(
             "event_attempted": result.get("event_attempted", False),
         }
 
-        # Correct argument order: emit_event(event_type, payload)
-        _emit_event_fn("routing.decision", payload)
+        _emit_event_fn(event_type="routing.decision", payload=payload)
     except Exception as e:
         # Non-blocking: routing emission failure must not break routing
         logger.debug("Failed to emit routing decision: %s", e)
@@ -174,125 +280,207 @@ def route_via_events(
     prompt: str,
     correlation_id: str,
     timeout_ms: int = 5000,
+    session_id: str | None = None,  # noqa: ARG001 - Reserved for future use
 ) -> dict[str, Any]:
     """
-    Route user prompt via event-based routing system.
+    Route user prompt using intelligent trigger matching and confidence scoring.
+
+    Uses AgentRouter to analyze the prompt and match against agent activation
+    triggers. Falls back to polymorphic-agent only when no good match is found
+    (confidence below threshold).
 
     Args:
         prompt: User prompt to route
         correlation_id: Correlation ID for tracking
-        timeout_ms: Timeout in milliseconds
+        timeout_ms: Maximum allowed routing time in milliseconds (default 5000).
+            If the routing operation exceeds this budget, the result is
+            discarded and a fallback to the default agent is returned.
+        session_id: Session ID (reserved for future use)
 
     Returns:
         Routing decision dictionary with routing_path signal
     """
     start_time = time.time()
-    event_attempted = False
+    event_attempted = False  # Local routing, no event bus
 
     # Validate inputs before processing
     if not isinstance(prompt, str) or not prompt.strip():
         logger.warning("Invalid or empty prompt received, using fallback")
         return {
-            "selected_agent": "polymorphic-agent",
+            "selected_agent": DEFAULT_AGENT,
             "confidence": 0.5,
+            "candidates": [],
             "reasoning": "Invalid input - empty or non-string prompt",
-            "method": "fallback",
+            "routing_method": RoutingMethod.FALLBACK.value,
+            "routing_policy": RoutingPolicy.FALLBACK_DEFAULT.value,
+            "routing_path": RoutingPath.LOCAL.value,
+            "method": RoutingPolicy.FALLBACK_DEFAULT.value,
             "latency_ms": 0,
             "domain": "workflow_coordination",
             "purpose": "Intelligent coordinator for development workflows",
             "event_attempted": False,
-            "routing_path": "local",
         }
 
     if not isinstance(correlation_id, str) or not correlation_id.strip():
         logger.warning("Invalid or empty correlation_id, using fallback")
         return {
-            "selected_agent": "polymorphic-agent",
+            "selected_agent": DEFAULT_AGENT,
             "confidence": 0.5,
+            "candidates": [],
             "reasoning": "Invalid input - empty or non-string correlation_id",
-            "method": "fallback",
+            "routing_method": RoutingMethod.FALLBACK.value,
+            "routing_policy": RoutingPolicy.FALLBACK_DEFAULT.value,
+            "routing_path": RoutingPath.LOCAL.value,
+            "method": RoutingPolicy.FALLBACK_DEFAULT.value,
             "latency_ms": 0,
             "domain": "workflow_coordination",
             "purpose": "Intelligent coordinator for development workflows",
             "event_attempted": False,
-            "routing_path": "local",
         }
 
-    try:
-        # Check if adapter is available (pre-imported at module level)
-        if _get_hook_event_adapter is None:
-            logger.warning(
-                "Event routing not available: hook_event_adapter import failed"
-            )
-            # event_attempted stays False - adapter never available
-        else:
-            adapter = _get_hook_event_adapter()
+    # Attempt intelligent routing via AgentRouter
+    router = _get_router()
+    selected_agent = DEFAULT_AGENT
+    confidence = 0.5
+    reasoning = "Fallback: no router available"
+    routing_policy = RoutingPolicy.FALLBACK_DEFAULT
+    domain = "workflow_coordination"
+    purpose = "Intelligent coordinator for development workflows"
 
-            # Publish routing request and wait for response
-            # Note: This is a simplified implementation
-            # Full implementation would use Kafka request-response pattern
+    # Candidates list populated from all router recommendations
+    candidates_list: list[dict[str, Any]] = []
 
-            # For now, use the adapter's routing capability if available
-            if hasattr(adapter, "route_request"):
-                event_attempted = True  # We're about to try event routing
-                result = adapter.route_request(
-                    prompt=prompt,
-                    correlation_id=correlation_id,
-                    timeout_ms=timeout_ms,
-                )
-                if result:
-                    latency_ms = int((time.time() - start_time) * 1000)
-                    method = "event_based"
-                    result["latency_ms"] = latency_ms
-                    result["method"] = method
-                    result["event_attempted"] = True
-                    result["routing_path"] = _compute_routing_path(method, True)
-                    _emit_routing_decision(result, prompt, correlation_id)
-                    return result
+    if router is not None:
+        try:
+            recommendations = router.route(prompt, max_recommendations=5)
 
-    except Exception as e:
-        logger.warning(
-            f"Event routing failed with {type(e).__name__}: {e}. "
-            f"event_attempted={event_attempted}"
-        )
-        # event_attempted is True if we got past the adapter check
+            if recommendations:
+                # Build candidates from ALL recommendations (sorted by score descending)
+                agents_registry = router.registry.get("agents", {})
+                for rec in recommendations:
+                    rec_agent_data = agents_registry.get(rec.agent_name, {})
+                    candidates_list.append(
+                        {
+                            "name": rec.agent_name,
+                            "score": rec.confidence.total,
+                            "description": rec_agent_data.get(
+                                "description", rec.agent_title
+                            ),
+                            "reason": rec.reason,
+                        }
+                    )
 
-    # Fallback: Return polymorphic-agent as default
+                top_rec = recommendations[0]
+                top_confidence = top_rec.confidence.total
+
+                if top_confidence >= CONFIDENCE_THRESHOLD:
+                    # Good match found - use the recommended agent
+                    selected_agent = top_rec.agent_name
+                    confidence = top_confidence
+                    reasoning = f"{top_rec.reason} - {top_rec.confidence.explanation}"
+                    routing_policy = RoutingPolicy.TRIGGER_MATCH
+
+                    # Extract domain from agent data if available
+                    agent_data = agents_registry.get(selected_agent, {})
+                    domain = agent_data.get("domain_context", "general")
+                    purpose = agent_data.get("description", top_rec.agent_title)
+
+                    # Check if this was an explicit request
+                    if getattr(top_rec, "is_explicit", False):
+                        routing_policy = RoutingPolicy.EXPLICIT_REQUEST
+
+                    logger.info(
+                        f"Routed to {selected_agent} (confidence={confidence:.2f}): {reasoning}"
+                    )
+                else:
+                    # Low confidence - fall back to polymorphic-agent
+                    reasoning = (
+                        f"Low confidence ({top_confidence:.2f} < {CONFIDENCE_THRESHOLD}), "
+                        f"best match was {top_rec.agent_name}"
+                    )
+                    logger.debug(f"Falling back to {DEFAULT_AGENT}: {reasoning}")
+            else:
+                # No matches found
+                reasoning = "No trigger matches found in prompt"
+                logger.debug(f"No matches, using {DEFAULT_AGENT}")
+
+        except Exception as e:
+            # Router error - fall back gracefully
+            candidates_list = []
+            reasoning = f"Routing error: {type(e).__name__}"
+            logger.warning(f"AgentRouter error: {e}")
+
     latency_ms = int((time.time() - start_time) * 1000)
-    method = "fallback"
-    routing_path = _compute_routing_path(method, event_attempted)
 
-    result = {
-        "selected_agent": "polymorphic-agent",
-        "confidence": 0.5,
-        "reasoning": "Event-based routing unavailable - using default agent",
-        "method": method,
-        "latency_ms": latency_ms,
-        "domain": "workflow_coordination",
-        "purpose": "Intelligent coordinator for development workflows",
-        "event_attempted": event_attempted,
+    # Enforce timeout: if routing exceeded the budget, discard result and
+    # force fallback so callers never wait longer than they specified.
+    if latency_ms > timeout_ms:
+        logger.warning(
+            "Routing exceeded %dms timeout (%dms elapsed), forcing fallback to %s",
+            timeout_ms,
+            latency_ms,
+            DEFAULT_AGENT,
+        )
+        selected_agent = DEFAULT_AGENT
+        confidence = 0.5
+        candidates_list = []
+        reasoning = f"Routing timeout ({latency_ms}ms > {timeout_ms}ms limit)"
+        routing_policy = RoutingPolicy.FALLBACK_DEFAULT
+        domain = "workflow_coordination"
+        purpose = "Intelligent coordinator for development workflows"
+
+    # Compute routing_path using the helper (for consistency with observability)
+    routing_path = _compute_routing_path(RoutingMethod.LOCAL.value, event_attempted)
+
+    result: dict[str, Any] = {
+        "selected_agent": selected_agent,
+        "confidence": confidence,
+        "candidates": candidates_list,
+        "reasoning": reasoning,
+        # Routing semantics - three distinct fields
+        "routing_method": RoutingMethod.LOCAL.value,
+        "routing_policy": routing_policy.value,
         "routing_path": routing_path,
+        # Legacy field for backward compatibility
+        "method": routing_policy.value,
+        # Performance tracking
+        "latency_ms": latency_ms,
+        # Agent metadata
+        "domain": domain,
+        "purpose": purpose,
+        # Observability signal (from OMN-1893)
+        "event_attempted": event_attempted,
     }
-    _emit_routing_decision(result, prompt, correlation_id)
+
+    # Emit routing decision event for observability (non-blocking)
+    _emit_routing_decision(result=result, prompt=prompt, correlation_id=correlation_id)
+
     return result
 
 
-def main():
-    """CLI entry point."""
+def main() -> None:
+    """CLI entry point.
+
+    Usage:
+        python route_via_events_wrapper.py "prompt" "correlation-id" [timeout_ms] [session_id]
+    """
     if len(sys.argv) < 3:
-        # Missing args - never attempted event routing
+        # Graceful degradation with fallback agent when args missing
         print(
             json.dumps(
                 {
-                    "selected_agent": "polymorphic-agent",
+                    "selected_agent": DEFAULT_AGENT,
                     "confidence": 0.5,
-                    "reasoning": "Missing arguments - using fallback",
-                    "method": "fallback",
+                    "candidates": [],
+                    "reasoning": "Fallback: missing required arguments",
+                    "routing_method": RoutingMethod.LOCAL.value,
+                    "routing_policy": RoutingPolicy.FALLBACK_DEFAULT.value,
+                    "routing_path": RoutingPath.LOCAL.value,
+                    "method": RoutingPolicy.FALLBACK_DEFAULT.value,
                     "latency_ms": 0,
                     "domain": "workflow_coordination",
                     "purpose": "Intelligent coordinator for development workflows",
                     "event_attempted": False,
-                    "routing_path": "local",
                 }
             )
         )
@@ -301,8 +489,9 @@ def main():
     prompt = sys.argv[1]
     correlation_id = sys.argv[2]
     timeout_ms = int(sys.argv[3]) if len(sys.argv) > 3 else 5000
+    session_id = sys.argv[4] if len(sys.argv) > 4 else None
 
-    result = route_via_events(prompt, correlation_id, timeout_ms)
+    result = route_via_events(prompt, correlation_id, timeout_ms, session_id)
     print(json.dumps(result))
 
 

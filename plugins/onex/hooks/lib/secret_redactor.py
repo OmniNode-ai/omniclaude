@@ -20,16 +20,63 @@ try:
     SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = _SECRET_PATTERNS
 except ImportError:
     # Fallback if schemas not available (e.g., standalone usage)
-    # This should not happen in normal operation
+    # This should not happen in normal operation.
+    # These patterns mirror _SECRET_PATTERNS in schemas.py — keep in sync.
     import logging
 
-    logging.getLogger(__name__).warning(
-        "Could not import _SECRET_PATTERNS from schemas, using minimal fallback"
-    )
     SECRET_PATTERNS = [
-        (re.compile(r"sk-[a-zA-Z0-9]{20,}"), "sk-***REDACTED***"),
-        (re.compile(r"ghp_[a-zA-Z0-9]{36}"), "ghp_***REDACTED***"),
+        # OpenAI API keys
+        (re.compile(r"\bsk-[a-zA-Z0-9]{20,}", re.IGNORECASE), "sk-***REDACTED***"),
+        # AWS Access Keys
+        (re.compile(r"\bAKIA[A-Z0-9]{16}", re.IGNORECASE), "AKIA***REDACTED***"),
+        # GitHub tokens (personal access, OAuth)
+        (re.compile(r"\bghp_[a-zA-Z0-9]{36}", re.IGNORECASE), "ghp_***REDACTED***"),
+        (re.compile(r"\bgho_[a-zA-Z0-9]{36}", re.IGNORECASE), "gho_***REDACTED***"),
+        # Slack tokens
+        (
+            re.compile(r"\bxox[baprs]-[a-zA-Z0-9-]{10,}", re.IGNORECASE),
+            "xox*-***REDACTED***",
+        ),
+        # Stripe API keys (publishable, secret, and restricted)
+        (
+            re.compile(r"\b(?:sk|pk|rk)_(?:live|test)_[a-zA-Z0-9]{24,}", re.IGNORECASE),
+            "stripe_***REDACTED***",
+        ),
+        # Google Cloud Platform API keys
+        (re.compile(r"\bAIza[0-9A-Za-z\-_]{35}"), "AIza***REDACTED***"),
+        # JWT tokens
+        (
+            re.compile(r"\beyJ[a-zA-Z0-9_-]*\.eyJ[a-zA-Z0-9_-]*\.[a-zA-Z0-9_-]*"),
+            "jwt_***REDACTED***",
+        ),
+        # Private keys (PEM format)
+        (
+            re.compile(
+                r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----"
+            ),
+            "-----BEGIN ***REDACTED*** PRIVATE KEY-----",
+        ),
+        # Bearer tokens
+        (
+            re.compile(r"(Bearer\s+)[a-zA-Z0-9._-]{20,}", re.IGNORECASE),
+            r"\1***REDACTED***",
+        ),
+        # Password in URLs
+        (re.compile(r"(://[^:]+:)[^@]+(@)"), r"\1***REDACTED***\2"),
+        # Generic secret patterns in key=value format
+        (
+            re.compile(
+                r"(\b(?:password|passwd|secret|token|api_key|apikey|auth)\s*[=:]\s*)['\"]?[^\s'\"]{8,}['\"]?",
+                re.IGNORECASE,
+            ),
+            r"\1***REDACTED***",
+        ),
     ]
+
+    logging.getLogger(__name__).warning(
+        "Could not import _SECRET_PATTERNS from schemas, using standalone fallback "
+        f"({len(SECRET_PATTERNS)} patterns)"
+    )
 
 
 class RedactionResult(NamedTuple):

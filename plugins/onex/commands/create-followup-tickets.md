@@ -2,44 +2,24 @@
 name: create-followup-tickets
 description: Create Linear tickets from code review issues found in the current session
 tags: [linear, tickets, review, batch]
-args:
-  - name: project
-    description: Linear project name (supports partial/fuzzy matching)
-    required: true
-  - name: from-file
-    description: Path to review file (optional fallback, uses session context by default)
-    required: false
-  - name: repo
-    description: Repository label override (auto-detected by default)
-    required: false
-  - name: no-repo-label
-    description: Skip adding repository label
-    required: false
-  - name: parent
-    description: Parent issue ID for all created tickets (e.g., OMN-1850)
-    required: false
-  - name: include-nits
-    description: Include nitpick-level issues
-    required: false
-  - name: only-critical
-    description: Only create tickets for critical issues
-    required: false
-  - name: only-major
-    description: Only create tickets for critical and major issues
-    required: false
-  - name: dry-run
-    description: Preview tickets without creating them
-    required: false
-  - name: auto
-    description: Skip confirmation and create all tickets
-    required: false
-  - name: team
-    description: Linear team name (default Omninode)
-    required: false
-    default: "Omninode"
 ---
 
 # Create Follow-up Tickets from Code Review
+
+**Usage:** `/create-followup-tickets <project> [options]`
+
+**Arguments:**
+- `project` - Linear project name (required, supports partial/fuzzy matching)
+- `--from-file <path>` - Path to review file (optional, uses session context by default)
+- `--repo <label>` - Repository label override (auto-detected by default)
+- `--no-repo-label` - Skip adding repository label
+- `--parent <id>` - Parent issue ID for all created tickets (e.g., OMN-1850)
+- `--include-nits` - Include nitpick-level issues
+- `--only-critical` - Only create tickets for critical issues
+- `--only-major` - Only create tickets for critical and major issues
+- `--dry-run` - Preview tickets without creating them
+- `--auto` - Skip confirmation and create all tickets
+- `--team <name>` - Linear team name (default: Omninode)
 
 Create Linear tickets from unresolved code review issues. Uses the current session's review output (from `/local-review` or `/pr-review-dev`) as the source.
 

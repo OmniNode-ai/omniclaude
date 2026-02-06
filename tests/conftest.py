@@ -129,7 +129,12 @@ def _create_mock_kafka_producer():
     mock.__aenter__ = AsyncMock(return_value=mock)
     mock.__aexit__ = AsyncMock(return_value=None)
 
-    # Internal attributes that some code might check
+    # Mock internal AIOKafkaProducer attributes that may be checked for state.
+    # These match the real AIOKafkaProducer implementation to prevent AttributeError
+    # if code defensively checks producer state before operations. This pattern is
+    # acceptable for test doubles but should NOT be used in production code - access
+    # producer state through public methods (e.g., producer._closed should use a
+    # public is_closed() if available, or treat the producer as opaque).
     mock._closed = False
     mock._sender = None
     mock._client = None
@@ -149,7 +154,16 @@ def _get_mock_kafka_producer(*args, **kwargs):
     return _mock_kafka_producer_instance
 
 
-# Flag to indicate if Kafka is mocked (used by integration tests)
+# Flag to indicate if Kafka is mocked (used by integration tests).
+#
+# DESIGN NOTE (issue #2): Integration tests that are gated behind
+# KAFKA_INTEGRATION_TESTS=1 still execute against the mocked producer.
+# This is *intentional* for CI -- the integration marker exists so that
+# tests requiring a specific Kafka topic layout or consumer group are
+# not accidentally selected in the default "pytest" run, NOT because
+# they require a live broker.  To test against a live Kafka broker,
+# set KAFKA_INTEGRATION_TESTS=real -- this disables the mock in
+# pytest_configure so that AIOKafkaProducer connects to the real broker.
 KAFKA_IS_MOCKED = True
 
 
@@ -477,6 +491,13 @@ def pytest_configure(config):
         "postgres_integration: marks tests as PostgreSQL integration tests",
     )
 
+    # Allow bypassing the Kafka mock for real integration testing.
+    # Set KAFKA_INTEGRATION_TESTS=real to use a live broker instead of mocks.
+    if os.getenv("KAFKA_INTEGRATION_TESTS") == "real":
+        global KAFKA_IS_MOCKED
+        KAFKA_IS_MOCKED = False
+        return  # Skip mock installation -- use real AIOKafkaProducer
+
     # Mock AIOKafkaProducer at the earliest possible point
     # This prevents real Kafka connections during tests, which eliminates
     # the "Task was destroyed but it is pending!" warnings from background tasks
@@ -513,8 +534,14 @@ def pytest_collection_modifyitems(config, items):
 
     Note: Tests marked with @pytest.mark.postgres_integration will only run when
     POSTGRES_INTEGRATION_TESTS=1, even if KAFKA_INTEGRATION_TESTS=1 is also set.
+
+    IMPORTANT: When KAFKA_INTEGRATION_TESTS=1, the mocked AIOKafkaProducer
+    from pytest_configure() remains active.  This is intentional for CI -- it
+    ensures Kafka-dependent tests verify their protocol / call patterns without
+    requiring a live broker.  Set KAFKA_INTEGRATION_TESTS=real to disable the
+    mock and test against a live broker.  See KAFKA_IS_MOCKED flag for details.
     """
-    kafka_enabled = os.getenv("KAFKA_INTEGRATION_TESTS") == "1"
+    kafka_enabled = os.getenv("KAFKA_INTEGRATION_TESTS") in ("1", "real")
     postgres_enabled = os.getenv("POSTGRES_INTEGRATION_TESTS") == "1"
 
     # If either integration test type is enabled, check individual tests
@@ -781,6 +808,13 @@ def _force_close_producer(producer):
     This directly closes the underlying client connection to prevent
     "Unclosed AIOKafkaProducer" warnings when the event loop is closed.
 
+    Note:
+        This function accesses private attributes of AIOKafkaProducer because
+        the public `close()` method is async and cannot be called from sync
+        pytest hooks where the event loop may not be running. This is intentional
+        for test teardown and uses getattr() for safer access in case internal
+        implementation changes.
+
     Args:
         producer: AIOKafkaProducer instance to force-close
     """
@@ -789,20 +823,24 @@ def _force_close_producer(producer):
 
     try:
         # Cancel background tasks first
-        if (
-            hasattr(producer, "_sender")
-            and producer._sender is not None
-            and hasattr(producer._sender, "_sender_task")
-        ):
-            task = producer._sender._sender_task
-            if task is not None and not task.done():
-                task.cancel()
+        # Note: Accessing private _sender attribute for test cleanup
+        sender = getattr(producer, "_sender", None)
+        if sender is not None:
+            sender_task = getattr(sender, "_sender_task", None)
+            if sender_task is not None and not sender_task.done():
+                sender_task.cancel()
 
         # Close the client connection
-        if hasattr(producer, "_client") and producer._client is not None:
-            producer._client.close()
+        # Note: Accessing private _client attribute because async close()
+        # cannot be called from sync context during pytest teardown
+        client = getattr(producer, "_client", None)
+        if client is not None:
+            close_method = getattr(client, "close", None)
+            if callable(close_method):
+                close_method()
 
         # Mark as closed
+        # Note: Setting private _closed attribute to prevent double-close
         if hasattr(producer, "_closed"):
             producer._closed = True
 
@@ -873,12 +911,13 @@ def _mock_kafka_producer_globally():
     confirming the mock is active for the session.
     """
     # Hook has already installed the mock in pytest_configure()
-    # Verify it's active by checking the global instance
+    # Verify it's active by checking the global instance (skip when real Kafka mode)
     global _mock_kafka_producer_instance
-    assert (
-        _mock_kafka_producer_instance is not None
-        or _get_mock_kafka_producer() is not None
-    )
+    if KAFKA_IS_MOCKED:
+        assert (
+            _mock_kafka_producer_instance is not None
+            or _get_mock_kafka_producer() is not None
+        )
 
     # Yield to run all tests with the mock active
     yield
@@ -907,3 +946,97 @@ def _cleanup_kafka_producers():
     # Backup cleanup - primary cleanup is in pytest_sessionfinish
     # This handles edge cases where sessionfinish didn't run
     _cleanup_all_kafka_producers_sync()
+
+
+@pytest.fixture
+def restore_module_globals():
+    """
+    Factory fixture to restore global state in a module after a test.
+
+    Use this when tests modify module-level globals (like singletons) that
+    need to be reset to prevent test pollution.
+
+    Usage:
+        def test_something(restore_module_globals):
+            import mymodule
+
+            # Register the module and globals to restore
+            restore = restore_module_globals(mymodule, ['_singleton', '_cache'])
+
+            # Test that modifies globals
+            mymodule._singleton = "test_value"
+            mymodule._cache = {"key": "value"}
+
+            # Globals will be restored after test
+
+    Args:
+        module: The module object containing globals to restore
+        global_names: List of global variable names to capture and restore
+
+    Returns:
+        A cleanup function (called automatically via fixture teardown)
+    """
+    restore_actions: list[tuple] = []
+
+    def _register_restore(module, global_names: list[str]):
+        """Register a module's globals to be restored after test."""
+        original_values = {}
+        for name in global_names:
+            if hasattr(module, name):
+                original_values[name] = getattr(module, name)
+            else:
+                # Track that the attribute didn't exist (so we can delete it)
+                original_values[name] = _SENTINEL_NOT_EXISTS
+
+        restore_actions.append((module, original_values))
+
+    yield _register_restore
+
+    # Restore all registered globals
+    for module, original_values in restore_actions:
+        for name, value in original_values.items():
+            if value is _SENTINEL_NOT_EXISTS:
+                # Attribute didn't exist before, delete if it was added
+                if hasattr(module, name):
+                    delattr(module, name)
+            else:
+                setattr(module, name, value)
+
+
+# Sentinel value to track attributes that didn't exist
+class _SentinelNotExists:
+    """Sentinel to indicate an attribute did not exist."""
+
+    pass
+
+
+_SENTINEL_NOT_EXISTS = _SentinelNotExists()
+
+
+@pytest.fixture(autouse=True)
+def _cleanup_dynamically_loaded_modules():
+    """
+    Auto-cleanup for dynamically loaded modules added during tests.
+
+    This fixture automatically removes modules that were dynamically loaded
+    via importlib.util.spec_from_file_location() during tests. These modules
+    are registered in sys.modules with namespaced names that could pollute subsequent tests.
+
+    Modules cleaned up:
+    - omniclaude.tests.transformation_event_publisher (from test_transformation_event_publisher.py)
+
+    This runs after every test to ensure a clean module state.
+    """
+    yield
+
+    # List of known dynamically-loaded test modules to cleanup.
+    # Keep this in sync whenever a new spec_from_file_location() call
+    # or sys.path manipulation adds a module during tests.
+    dynamic_modules = [
+        "omniclaude.tests.transformation_event_publisher",  # From test_transformation_event_publisher.py
+        "test_simple_agent_loader__sentinel",  # From test_simple_agent_loader.py (via restore_sys_modules)
+    ]
+
+    for module_name in dynamic_modules:
+        if module_name in sys.modules:
+            del sys.modules[module_name]

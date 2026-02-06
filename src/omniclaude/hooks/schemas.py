@@ -93,6 +93,7 @@ class HookEventType(StrEnum):
     CONTEXT_UTILIZATION = "hook.context.utilization"
     AGENT_MATCH = "hook.agent.match"
     LATENCY_BREAKDOWN = "hook.latency.breakdown"
+    MANIFEST_INJECTED = "hook.manifest.injected"
 
 
 class HookSource(StrEnum):
@@ -1241,6 +1242,166 @@ class ModelLatencyBreakdownPayload(BaseModel):
 
 
 # =============================================================================
+# Manifest Injection Events
+# =============================================================================
+
+
+class ModelHookManifestInjectedPayload(BaseModel):
+    """Event payload for agent manifest injection during UserPromptSubmit.
+
+    Emitted when an agent manifest (YAML) is loaded and injected into the session.
+    This provides observability into which agents are being loaded, how long it takes,
+    and whether the injection succeeds.
+
+    Attributes:
+        entity_id: Session identifier as UUID (partition key for ordering).
+        session_id: Session identifier string.
+        correlation_id: Correlation ID for distributed tracing.
+        causation_id: ID of the prompt event that triggered manifest injection.
+        emitted_at: Timestamp when the hook emitted this event (UTC).
+        agent_name: Name of the agent being loaded (e.g., "agent-api-architect").
+        agent_domain: Domain of the agent (e.g., "api-development", "testing").
+        injection_success: Whether the manifest injection succeeded.
+        injection_duration_ms: Time to load and inject manifest in milliseconds.
+        yaml_path: Path to the agent YAML file (optional, for debugging).
+        agent_version: Version of the agent definition if specified.
+        agent_capabilities: List of capabilities from the agent manifest.
+        routing_source: How the agent was selected (explicit, fuzzy_match, fallback).
+        error_message: Error details if injection failed.
+        error_type: Error classification if injection failed.
+
+    Example:
+        >>> from datetime import UTC, datetime
+        >>> from uuid import uuid4
+        >>> session_id = uuid4()
+        >>> event = ModelHookManifestInjectedPayload(
+        ...     entity_id=session_id,
+        ...     session_id=str(session_id),
+        ...     correlation_id=session_id,
+        ...     causation_id=uuid4(),
+        ...     emitted_at=datetime(2025, 1, 15, 12, 5, 0, tzinfo=UTC),
+        ...     agent_name="agent-api-architect",
+        ...     agent_domain="api-development",
+        ...     injection_success=True,
+        ...     injection_duration_ms=45,
+        ...     yaml_path="/path/to/agent-api-architect.yaml",
+        ...     routing_source="explicit",
+        ... )
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+        from_attributes=True,
+    )
+
+    # Entity identification (partition key)
+    entity_id: UUID = Field(
+        ...,
+        description="Session identifier as UUID (partition key for ordering)",
+    )
+    session_id: str = Field(
+        ...,
+        min_length=1,
+        description="Session identifier string",
+    )
+
+    # Tracing and causation
+    correlation_id: UUID = Field(
+        ...,
+        description="Correlation ID for distributed tracing",
+    )
+    causation_id: UUID = Field(
+        ...,
+        description="ID of the prompt event that triggered manifest injection",
+    )
+
+    # Timestamps
+    emitted_at: TimezoneAwareDatetime = Field(
+        ...,
+        description="Timestamp when the hook emitted this event (UTC)",
+    )
+
+    # Agent identification
+    agent_name: str = Field(
+        ...,
+        min_length=1,
+        description="Name of the agent being loaded",
+    )
+    agent_domain: str = Field(
+        ...,
+        min_length=1,
+        description="Domain of the agent",
+    )
+
+    # Injection result
+    injection_success: bool = Field(
+        ...,
+        description="Whether the manifest injection succeeded",
+    )
+    injection_duration_ms: int = Field(
+        ...,
+        ge=0,
+        le=60000,
+        description="Time to load and inject manifest in milliseconds",
+    )
+
+    # Optional metadata
+    yaml_path: str | None = Field(
+        default=None,
+        description="Path to the agent YAML file",
+    )
+    agent_version: str | None = Field(
+        default=None,
+        description="Version of the agent definition",
+    )
+    agent_capabilities: list[str] | None = Field(
+        default=None,
+        description="List of capabilities from the agent manifest",
+    )
+    routing_source: str | None = Field(
+        default=None,
+        description="How the agent was selected (explicit, fuzzy_match, fallback)",
+    )
+
+    # Error tracking
+    error_message: str | None = Field(
+        default=None,
+        description="Error details if injection failed",
+    )
+    error_type: str | None = Field(
+        default=None,
+        description="Error classification if injection failed",
+    )
+
+    @field_validator("correlation_id", mode="after")
+    @classmethod
+    def validate_correlation_id_not_nil(cls, v: UUID) -> UUID:
+        """Ensure correlation_id is an explicit, non-nil UUID.
+
+        Manifest events are critical for distributed tracing. A nil UUID
+        (00000000-0000-0000-0000-000000000000) would break correlation
+        chains and must be rejected. This enforces that callers provide
+        a meaningful correlation identifier, not just a structurally valid one.
+
+        Args:
+            v: The correlation_id UUID value to validate.
+
+        Returns:
+            The validated UUID if non-nil.
+
+        Raises:
+            ValueError: If correlation_id is a nil UUID.
+        """
+        if v.int == 0:
+            raise ValueError(
+                "correlation_id must not be a nil UUID for manifest events; "
+                "manifest injection requires explicit correlation for distributed tracing"
+            )
+        return v
+
+
+# =============================================================================
 # Discriminated Union (for deserialization)
 # =============================================================================
 
@@ -1299,6 +1460,7 @@ class ModelHookEventEnvelope(BaseModel):
         | ModelContextUtilizationPayload
         | ModelAgentMatchPayload
         | ModelLatencyBreakdownPayload
+        | ModelHookManifestInjectedPayload
     ) = Field(
         ...,
         description="The event payload",
@@ -1326,6 +1488,7 @@ class ModelHookEventEnvelope(BaseModel):
             HookEventType.CONTEXT_UTILIZATION: ModelContextUtilizationPayload,
             HookEventType.AGENT_MATCH: ModelAgentMatchPayload,
             HookEventType.LATENCY_BREAKDOWN: ModelLatencyBreakdownPayload,
+            HookEventType.MANIFEST_INJECTED: ModelHookManifestInjectedPayload,
         }
         expected = expected_types.get(self.event_type)
         if expected and not isinstance(self.payload, expected):
@@ -1345,7 +1508,8 @@ ModelHookPayload = Annotated[
     | ModelHookContextInjectedPayload
     | ModelContextUtilizationPayload
     | ModelAgentMatchPayload
-    | ModelLatencyBreakdownPayload,
+    | ModelLatencyBreakdownPayload
+    | ModelHookManifestInjectedPayload,
     Field(description="Union of all hook event payload types"),
 ]
 
@@ -1373,6 +1537,7 @@ __all__ = [
     "ModelContextUtilizationPayload",
     "ModelAgentMatchPayload",
     "ModelLatencyBreakdownPayload",
+    "ModelHookManifestInjectedPayload",
     # Envelope and types
     "ModelHookEventEnvelope",
     "ModelHookPayload",

@@ -73,10 +73,9 @@ if [[ ! -f "$PLUGIN_JSON" ]]; then
     exit 1
 fi
 
-# Read current version
-CURRENT_VERSION=$(jq -r '.version' "$PLUGIN_JSON")
-
-if [[ -z "$CURRENT_VERSION" || "$CURRENT_VERSION" == "null" ]]; then
+# Read current version (use jq -e to exit non-zero on null/missing rather
+# than relying on fragile string comparison with "null")
+if ! CURRENT_VERSION=$(jq -re '.version' "$PLUGIN_JSON" 2>/dev/null) || [[ -z "$CURRENT_VERSION" ]]; then
     echo -e "${RED}Error: Could not read version from plugin.json${NC}"
     exit 1
 fi
@@ -244,11 +243,11 @@ if [[ "$EXECUTE" == "true" ]]; then
             # Get the plugins directory (parent of SOURCE_ROOT which is the onex plugin)
             PLUGINS_DIR="$(dirname "$SOURCE_ROOT")"
 
-            # For directory-source deployments, installLocation must equal PLUGINS_DIR.
-            # This is the directory containing the plugin subdirectories that Claude Code
-            # uses for discovery and loading. Using the cache directory here would cause
-            # Claude Code to look in the wrong location for directory-source plugins.
-            INSTALL_LOCATION="$PLUGINS_DIR"
+            # For directory-source deployments, installLocation must be SOURCE_ROOT.
+            # SOURCE_ROOT is the actual plugin directory containing .claude-plugin/,
+            # commands/, agents/, hooks/ etc. PLUGINS_DIR (its parent) would be one
+            # level too high and cause Claude Code to mislocate plugin content.
+            INSTALL_LOCATION="$SOURCE_ROOT"
 
             jq --arg source_path "$PLUGINS_DIR" --arg install_loc "$INSTALL_LOCATION" '
                 .["omninode-tools"].source.path = $source_path |

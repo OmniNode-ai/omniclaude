@@ -2,13 +2,11 @@
 name: ticket-work
 description: Contract-driven ticket execution with Linear integration - orchestrates intake, research, questions, spec, implementation, review, and done phases with explicit human gates
 tags: [linear, tickets, automation, workflow, contract-driven]
-args:
-  - name: ticket_id
-    description: Linear ticket ID (e.g., OMN-1807)
-    required: true
 ---
 
 # Contract-Driven Ticket Execution
+
+**Usage:** `/ticket-work <ticket_id>` (e.g., `/ticket-work OMN-1807`)
 
 You are executing contract-driven ticket work. Load and follow the full orchestration logic from the `ticket-work` skill.
 
