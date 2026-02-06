@@ -209,8 +209,10 @@ if state_path.exists() and not force_run:
         print(f"Warning: State file version {state_version} differs from expected 1.0. "
               f"Pipeline may behave unexpectedly. Use --force-run to create fresh state.")
 
+    # Preserve the stable correlation ID from the existing state.
+    # Falls back to the freshly generated run_id only if state lacks one.
     run_id = state.get("run_id", run_id)
-    # Update lock to match preserved run_id
+    # Update lock to match the (possibly restored) run_id so lock and state stay in sync
     lock_data["run_id"] = run_id
     lock_path.write_text(json.dumps(lock_data))
     print(f"Resuming pipeline for {ticket_id} (run_id: {run_id})")
@@ -667,6 +669,42 @@ def release_lock(lock_path):
         pass  # Best-effort
 ```
 
+### execute_phase
+
+```python
+def execute_phase(phase_name, state):
+    """Dispatch to the appropriate phase handler.
+
+    Each phase handler returns a result dict with:
+        status: completed | blocked | failed
+        blocking_issues: int
+        nit_count: int
+        artifacts: dict
+        reason: str | None
+        block_kind: str | None
+    """
+    handlers = {
+        "implement": execute_implement,
+        "local_review": execute_local_review,
+        "create_pr": execute_create_pr,
+        "pr_release_ready": execute_pr_release_ready,
+        "ready_for_merge": execute_ready_for_merge,
+    }
+
+    handler = handlers.get(phase_name)
+    if handler is None:
+        return {
+            "status": "failed",
+            "blocking_issues": 0,
+            "nit_count": 0,
+            "artifacts": {},
+            "reason": f"Unknown phase: {phase_name}",
+            "block_kind": "failed_exception",
+        }
+
+    return handler(state)
+```
+
 ---
 
 ## Phase Handlers
@@ -701,7 +739,7 @@ def release_lock(lock_path):
            CROSS_REPO_VIOLATION="$file resolves outside $REPO_ROOT"
            break
        fi
-   done < <(git diff -z --name-only HEAD && git ls-files -z --others --exclude-standard)
+   done < <(git diff -z --name-only origin/main...HEAD && git diff -z --name-only HEAD && git ls-files -z --others --exclude-standard)
 
    if [ -n "$CROSS_REPO_VIOLATION" ]; then
        echo "CROSS_REPO_VIOLATION: $CROSS_REPO_VIOLATION"
@@ -878,6 +916,8 @@ def release_lock(lock_path):
        INVARIANT_FAILED=0
        echo "$TOPIC_FILES" | while IFS= read -r f; do
            [ -z "$f" ] && continue
+           # Intentionally matches both quoted and unquoted 'dev.' — topic constants
+           # should use KAFKA_ENVIRONMENT variable, never a hardcoded env prefix.
            # Match 'dev.' on non-comment lines (skip lines starting with #)
            if grep -Eq '^[^#]*dev\.' "$f" 2>/dev/null; then
                echo "INVARIANT_VIOLATION: Hardcoded 'dev.' prefix in $f"
@@ -910,6 +950,8 @@ def release_lock(lock_path):
    # Push branch (safe — we verified no divergence above)
    git push -u origin HEAD
 
+   # NOTE: The following is a bash command sequence for the agent to execute
+   # via the Bash tool. Variables like $TICKET_ID are set from pipeline state above.
    # Create PR — use shell variables (not heredoc with 'EOF' which prevents expansion)
    TICKET_ID="{ticket_id}"   # Set from pipeline state
    TICKET_TITLE="{ticket_title}"  # Fetched from Linear
@@ -1040,7 +1082,12 @@ EOF
 1. **Add ready-for-merge label to Linear:**
    ```python
    try:
-       mcp__linear-server__update_issue(id=ticket_id, labels=["ready-for-merge"])
+       # Fetch existing labels to avoid overwriting them
+       issue = mcp__linear-server__get_issue(id=ticket_id)
+       existing_labels = [label["name"] for label in issue.get("labels", {}).get("nodes", [])]
+       if "ready-for-merge" not in existing_labels:
+           existing_labels.append("ready-for-merge")
+       mcp__linear-server__update_issue(id=ticket_id, labels=existing_labels)
    except Exception as e:
        print(f"Warning: Failed to update Linear issue {ticket_id}: {e}")
        # Non-blocking: Linear label update failure is logged but does not stop pipeline

@@ -56,34 +56,34 @@ stateDiagram-v2
     ready_for_merge --> [*] : manual merge
 ```
 
-### Phase 1: IMPLEMENT
+### Phase 1: implement
 
 - Invokes `ticket-work` skill (human gates still fire for questions/spec)
 - Cross-repo detection: blocks if changes touch multiple repo roots
 - Slack: `notification.blocked` when waiting for human input
 - AUTO-ADVANCE to Phase 2
 
-### Phase 2: LOCAL REVIEW
+### Phase 2: local_review
 
 - Invokes `local-review` with `--max-iterations` from policy
 - Autonomous: loops until clean or policy limits hit
 - Stop on: 0 blocking issues, max iterations, repeat issues, new major after iteration 1
 - AUTO-ADVANCE to Phase 3 (only if 0 blocking issues)
 
-### Phase 3: CREATE PR
+### Phase 3: create_pr
 
 - Idempotent: skips creation if PR already exists on branch
 - Pre-checks: clean tree, branch tracks remote, branch name pattern, gh auth, realm/topic invariant
 - Pushes branch, creates PR via `gh`, updates Linear status
 - AUTO-ADVANCE to Phase 4
 
-### Phase 4: PR RELEASE READY
+### Phase 4: pr_release_ready
 
 - Invokes `pr-release-ready` to fix CodeRabbit issues
 - Same iteration limits as Phase 2
 - AUTO-ADVANCE to Phase 5 (only if 0 blocking issues)
 
-### Phase 5: READY FOR MERGE
+### Phase 5: ready_for_merge
 
 - Adds `ready-for-merge` label to Linear
 - Slack notification with blocking/nit counts
