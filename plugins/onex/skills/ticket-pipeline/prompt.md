@@ -12,6 +12,9 @@ Parse arguments from the skill invocation:
 
 ```python
 args = "$ARGUMENTS".split()
+if len(args) == 0:
+    print("Error: ticket_id is required. Usage: /ticket-pipeline OMN-1234")
+    exit(1)
 ticket_id = args[0]  # Required: e.g., "OMN-1234"
 
 # Validate ticket_id format
@@ -26,12 +29,14 @@ force_run = "--force-run" in args
 skip_to = None
 if "--skip-to" in args:
     idx = args.index("--skip-to")
-    if idx + 1 < len(args):
-        skip_to = args[idx + 1]
-        valid_phases = ["implement", "local_review", "create_pr", "pr_release_ready", "ready_for_merge"]
-        if skip_to not in valid_phases:
-            print(f"Error: Invalid phase '{skip_to}'. Valid: {valid_phases}")
-            exit(1)
+    if idx + 1 >= len(args) or args[idx + 1].startswith("--"):
+        print("Error: --skip-to requires a phase argument (implement|local_review|create_pr|pr_release_ready|ready_for_merge)")
+        exit(1)
+    skip_to = args[idx + 1]
+    valid_phases = ["implement", "local_review", "create_pr", "pr_release_ready", "ready_for_merge"]
+    if skip_to not in valid_phases:
+        print(f"Error: Invalid phase '{skip_to}'. Valid: {valid_phases}")
+        exit(1)
 ```
 
 ---
@@ -906,6 +911,7 @@ def release_lock(lock_path):
    TICKET_ID="{ticket_id}"   # Set from pipeline state
    TICKET_TITLE="{ticket_title}"  # Fetched from Linear
    RUN_ID="{run_id}"         # From pipeline state
+   BASE_REF=$(git merge-base origin/main HEAD)
    COMMIT_SUMMARY=$(git log --oneline "$BASE_REF"..HEAD)
 
    gh pr create \
