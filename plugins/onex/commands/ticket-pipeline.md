@@ -19,7 +19,7 @@ args:
 
 # Ticket Pipeline
 
-Autonomous per-ticket pipeline. Chains: implement -> local-review -> PR -> pr-release-ready -> merge readiness.
+Autonomous per-ticket pipeline. Chains: implement -> local_review -> create_pr -> pr_release_ready -> ready_for_merge.
 
 **Announce at start:** "I'm using the ticket-pipeline command to run the pipeline for {ticket_id}."
 

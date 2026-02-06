@@ -31,7 +31,7 @@ args:
 
 ## Overview
 
-Chain existing skills into an autonomous per-ticket pipeline: implement -> local-review -> PR -> pr-release-ready -> merge readiness. Slack notifications fire at each phase transition. Policy switches (not agent judgment) control auto-advance.
+Chain existing skills into an autonomous per-ticket pipeline: implement -> local_review -> create_pr -> pr_release_ready -> ready_for_merge. Slack notifications fire at each phase transition. Policy switches (not agent judgment) control auto-advance.
 
 **Announce at start:** "I'm using the ticket-pipeline skill to run the pipeline for {ticket_id}."
 

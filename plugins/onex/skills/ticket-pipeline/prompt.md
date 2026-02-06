@@ -167,14 +167,14 @@ lock_path.write_text(json.dumps(lock_data))
 ### 2. Load or Create State
 
 ```python
-import yaml
-
 if state_path.exists() and not force_run:
-    # Resume existing pipeline
+    # Resume existing pipeline — preserve stable correlation ID
     state = yaml.safe_load(state_path.read_text())
-    previous_run_id = state.get("run_id", "unknown")
-    state["run_id"] = run_id  # New run_id for this session
-    print(f"Resuming pipeline for {ticket_id} (previous run: {previous_run_id})")
+    run_id = state.get("run_id", run_id)
+    # Update lock to match preserved run_id
+    lock_data["run_id"] = run_id
+    lock_path.write_text(json.dumps(lock_data))
+    print(f"Resuming pipeline for {ticket_id} (run_id: {run_id})")
 else:
     # Create new state
     state = {
@@ -353,6 +353,8 @@ def update_linear_pipeline_summary(ticket_id, state, dry_run=False):
     - If markers missing, appends new section (never rewrites full description)
     - If dry_run=True, skips the actual Linear update
     """
+    import yaml
+
     if dry_run:
         print("[DRY RUN] Skipping Linear pipeline summary update")
         return
