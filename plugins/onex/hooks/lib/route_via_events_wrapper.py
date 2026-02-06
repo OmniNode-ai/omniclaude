@@ -65,22 +65,29 @@ except ImportError:
 # Import emit_event and secret redactor for routing decision emission.
 # Uses __package__ check for proper import resolution instead of
 # fragile string-based error detection on ImportError messages.
+# Each import is in its own try block so a failure in one does not
+# suppress the other (e.g., redactor failure must not disable emission).
 _emit_event_fn: Callable[..., bool] | None = None
 _redact_secrets_fn: Callable[[str], str] | None = None
 
 try:
     if __package__:
         from .emit_client_wrapper import emit_event as _emit_event_fn
-        from .secret_redactor import redact_secrets as _redact_secrets_fn
     else:
         from emit_client_wrapper import (
             emit_event as _emit_event_fn,  # type: ignore[no-redef]
         )
+except ImportError:
+    _emit_event_fn = None
+
+try:
+    if __package__:
+        from .secret_redactor import redact_secrets as _redact_secrets_fn
+    else:
         from secret_redactor import (
             redact_secrets as _redact_secrets_fn,  # type: ignore[no-redef]
         )
 except ImportError:
-    _emit_event_fn = None
     _redact_secrets_fn = None
 
 
@@ -202,19 +209,22 @@ def _sanitize_prompt_preview(prompt: str, max_length: int = 100) -> str:
     """Create a sanitized, truncated prompt preview.
 
     Truncates to max_length and redacts any secrets using the
-    existing secret_redactor module.
+    existing secret_redactor module.  If the redactor is unavailable,
+    returns a placeholder to avoid emitting raw prompt text.
 
     Args:
         prompt: Raw user prompt text.
         max_length: Maximum length for the preview.
 
     Returns:
-        Sanitized and truncated prompt preview.
+        Sanitized and truncated prompt preview, or a safe placeholder
+        when the redaction module is not available.
     """
+    if _redact_secrets_fn is None:
+        # Redaction unavailable - never emit raw prompt text
+        return "[redaction unavailable]"
     preview = prompt[:max_length] if prompt else ""
-    if _redact_secrets_fn is not None:
-        preview = _redact_secrets_fn(preview)
-    return preview
+    return _redact_secrets_fn(preview)
 
 
 def _emit_routing_decision(
@@ -260,8 +270,7 @@ def _emit_routing_decision(
             "event_attempted": result.get("event_attempted", False),
         }
 
-        # Correct argument order: emit_event(event_type, payload)
-        _emit_event_fn("routing.decision", payload)
+        _emit_event_fn(event_type="routing.decision", payload=payload)
     except Exception as e:
         # Non-blocking: routing emission failure must not break routing
         logger.debug("Failed to emit routing decision: %s", e)
@@ -270,7 +279,7 @@ def _emit_routing_decision(
 def route_via_events(
     prompt: str,
     correlation_id: str,
-    timeout_ms: int = 5000,  # noqa: ARG001 - Reserved for future event-based routing
+    timeout_ms: int = 5000,
     session_id: str | None = None,  # noqa: ARG001 - Reserved for future use
 ) -> dict[str, Any]:
     """
@@ -283,10 +292,9 @@ def route_via_events(
     Args:
         prompt: User prompt to route
         correlation_id: Correlation ID for tracking
-        timeout_ms: **Reserved for future use - currently ignored.**
-            This parameter is accepted for API compatibility but not used.
-            When event-based routing is implemented, this will control the
-            timeout for the request-response cycle.
+        timeout_ms: Maximum allowed routing time in milliseconds (default 5000).
+            If the routing operation exceeds this budget, the result is
+            discarded and a fallback to the default agent is returned.
         session_id: Session ID (reserved for future use)
 
     Returns:
@@ -404,6 +412,23 @@ def route_via_events(
 
     latency_ms = int((time.time() - start_time) * 1000)
 
+    # Enforce timeout: if routing exceeded the budget, discard result and
+    # force fallback so callers never wait longer than they specified.
+    if latency_ms > timeout_ms:
+        logger.warning(
+            "Routing exceeded %dms timeout (%dms elapsed), forcing fallback to %s",
+            timeout_ms,
+            latency_ms,
+            DEFAULT_AGENT,
+        )
+        selected_agent = DEFAULT_AGENT
+        confidence = 0.5
+        candidates_list = []
+        reasoning = f"Routing timeout ({latency_ms}ms > {timeout_ms}ms limit)"
+        routing_policy = RoutingPolicy.FALLBACK_DEFAULT
+        domain = "workflow_coordination"
+        purpose = "Intelligent coordinator for development workflows"
+
     # Compute routing_path using the helper (for consistency with observability)
     routing_path = _compute_routing_path(RoutingMethod.LOCAL.value, event_attempted)
 
@@ -428,7 +453,7 @@ def route_via_events(
     }
 
     # Emit routing decision event for observability (non-blocking)
-    _emit_routing_decision(result, prompt, correlation_id)
+    _emit_routing_decision(result=result, prompt=prompt, correlation_id=correlation_id)
 
     return result
 

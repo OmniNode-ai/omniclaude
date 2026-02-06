@@ -28,6 +28,7 @@ from route_via_events_wrapper import (
     RoutingPath,
     RoutingPolicy,
     _compute_routing_path,
+    main,
     route_via_events,
 )
 
@@ -286,16 +287,33 @@ class TestRouteViaEventsCohort:
         result = route_via_events(
             "test prompt", "corr-123", session_id="session-abc-123"
         )
-        # Cohort may or may not be present depending on whether
-        # cohort_assignment module is available - just verify no errors
         assert "selected_agent" in result
+        # When cohort assignment is available, verify the value is well-formed
+        if "cohort" in result and result["cohort"] is not None:
+            assert isinstance(result["cohort"], str)
+            assert len(result["cohort"]) > 0
 
     def test_cohort_excluded_when_no_session_id(self):
         """Cohort information should not be present without session_id."""
         result = route_via_events("test prompt", "corr-123")
-        # Without session_id, cohort assignment is skipped
-        # (cohort field won't be present or will be None)
         assert "selected_agent" in result
+        # Without session_id, cohort should be absent or explicitly None
+        cohort_value = result.get("cohort")
+        assert cohort_value is None or cohort_value == ""
+
+    def test_cohort_assignment_is_deterministic(self):
+        """Same session_id should produce the same cohort assignment."""
+        result_a = route_via_events(
+            "test prompt", "corr-a", session_id="session-deterministic"
+        )
+        result_b = route_via_events(
+            "test prompt", "corr-b", session_id="session-deterministic"
+        )
+        # When cohort assignment is available, verify determinism
+        if "cohort" in result_a and result_a["cohort"] is not None:
+            assert result_a["cohort"] == result_b["cohort"], (
+                "Same session_id must produce the same cohort"
+            )
 
 
 class TestMainCLI:
@@ -304,9 +322,6 @@ class TestMainCLI:
     def test_missing_args_returns_local_path(self, capsys, monkeypatch):
         """Missing CLI args should return routing_path='local'."""
         monkeypatch.setattr(sys, "argv", ["route_via_events_wrapper.py"])
-
-        # Import and run main
-        from route_via_events_wrapper import main
 
         # Use try/except instead of pytest.raises so that unexpected exit
         # codes propagate as real failures rather than being silently caught.
@@ -331,9 +346,7 @@ class TestMainCLI:
             sys, "argv", ["route_via_events_wrapper.py", "test prompt", "corr-123"]
         )
 
-        from route_via_events_wrapper import main
-
-        # main() doesn't call sys.exit on success - it just returns
+        # main() returns normally (no sys.exit) when args are provided
         main()
 
         captured = capsys.readouterr()
@@ -357,13 +370,10 @@ class TestMainCLI:
             ],
         )
 
-        from route_via_events_wrapper import main
-
-        # Run main - it should not raise
-        try:
-            main()
-        except SystemExit:
-            pass  # Expected - main doesn't exit normally
+        # main() returns normally (no sys.exit) when args are provided.
+        # Do NOT catch SystemExit broadly -- unexpected exit codes must
+        # propagate as real test failures.
+        main()
 
         captured = capsys.readouterr()
         result = json.loads(captured.out)

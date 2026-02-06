@@ -14,6 +14,8 @@ Usage:
 import argparse
 import json
 import logging
+import re
+import select
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -41,6 +43,40 @@ logger = logging.getLogger(__name__)
 # Canonical routing path values - must match route_via_events_wrapper.py
 VALID_ROUTING_PATHS = frozenset({"event", "local", "hybrid"})
 
+# Secret patterns for prompt redaction - mirrors user-prompt-submit.sh patterns
+_SECRET_PATTERNS = [
+    (re.compile(r"sk-[a-zA-Z0-9]{20,}"), "sk-***REDACTED***"),
+    (re.compile(r"AKIA[A-Z0-9]{16}"), "AKIA***REDACTED***"),
+    (re.compile(r"ghp_[a-zA-Z0-9]{36}"), "ghp_***REDACTED***"),
+    (re.compile(r"gho_[a-zA-Z0-9]{36}"), "gho_***REDACTED***"),
+    (re.compile(r"xox[baprs]-[a-zA-Z0-9-]+"), "xox*-***REDACTED***"),
+    (re.compile(r"Bearer [a-zA-Z0-9._-]{20,}"), "Bearer ***REDACTED***"),
+    (
+        re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
+        "-----BEGIN ***REDACTED*** PRIVATE KEY-----",
+    ),
+]
+
+
+def _sanitize_prompt_preview(text: str, max_len: int = 200) -> str:
+    """Truncate and redact secrets from a prompt before logging."""
+    preview = text[:max_len] if text else ""
+    for pattern, replacement in _SECRET_PATTERNS:
+        preview = pattern.sub(replacement, preview)
+    return preview
+
+
+def _read_stdin_with_timeout(timeout_sec: float = 2.0) -> str:
+    """Read stdin with a timeout to avoid blocking when no data is piped."""
+    try:
+        if select.select([sys.stdin], [], [], timeout_sec)[0]:
+            return sys.stdin.read()
+        logger.warning("Timed out waiting for prompt data on stdin")
+    except (ValueError, OSError):
+        # select() may fail if stdin is closed or invalid
+        logger.warning("Cannot select on stdin, skipping read")
+    return ""
+
 
 def log_invocation(
     hook_name: str,
@@ -60,7 +96,7 @@ def log_invocation(
             resource="hook",
             resource_id=hook_name,
             payload={
-                "prompt_preview": prompt[:200] if prompt else "",
+                "prompt_preview": _sanitize_prompt_preview(prompt),
                 "timestamp": datetime.now(UTC).isoformat(),
             },
             metadata={
@@ -219,11 +255,23 @@ def main():
 
     args = parser.parse_args()
 
+    # Validate JSON context early if provided (defense in depth)
+    if hasattr(args, "context") and args.context is not None:
+        try:
+            json.loads(args.context)
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.warning(
+                f"Malformed JSON in --context ({e}), will be treated as raw string"
+            )
+
     if args.command == "invocation":
-        # Read prompt from stdin if --prompt-stdin is set (prevents process table exposure)
+        # Read prompt from stdin only when --prompt-stdin is explicitly set.
+        # Use timeout to prevent blocking if no data is piped.
         prompt = args.prompt
-        if getattr(args, "prompt_stdin", False) or prompt is None:
-            prompt = sys.stdin.read()
+        if getattr(args, "prompt_stdin", False):
+            prompt = _read_stdin_with_timeout(timeout_sec=2.0)
+        elif prompt is None:
+            prompt = ""
         event_id = log_invocation(
             hook_name=args.hook_name,
             prompt=prompt,
@@ -251,15 +299,24 @@ def main():
         )
     else:
         print(f"Unknown command: {args.command}", file=sys.stderr)
-        sys.exit(1)
+        sys.exit(0)
 
     if event_id:
         print(f"Event logged: {event_id}")
-        sys.exit(0)
     else:
-        print("Failed to log event", file=sys.stderr)
-        sys.exit(1)
+        # Non-fatal: hook logging failures must not propagate errors
+        print("Failed to log event (non-fatal)", file=sys.stderr)
+    sys.exit(0)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit as e:
+        # Normalize non-zero exits (e.g. argparse error code 2) to 0.
+        # Hook logging is best-effort; failures must not block Claude Code.
+        sys.exit(0)
+    except Exception as e:
+        # Graceful degradation: emit diagnostic and exit cleanly
+        print(f"log_hook_event: unhandled error: {e}", file=sys.stderr)
+        sys.exit(0)

@@ -154,7 +154,16 @@ def _get_mock_kafka_producer(*args, **kwargs):
     return _mock_kafka_producer_instance
 
 
-# Flag to indicate if Kafka is mocked (used by integration tests)
+# Flag to indicate if Kafka is mocked (used by integration tests).
+#
+# DESIGN NOTE (issue #2): Integration tests that are gated behind
+# KAFKA_INTEGRATION_TESTS=1 still execute against the mocked producer.
+# This is *intentional* for CI -- the integration marker exists so that
+# tests requiring a specific Kafka topic layout or consumer group are
+# not accidentally selected in the default "pytest" run, NOT because
+# they require a live broker.  To test against real Kafka, disable
+# the mock in pytest_configure by setting KAFKA_INTEGRATION_TESTS=real
+# (not yet implemented).
 KAFKA_IS_MOCKED = True
 
 
@@ -518,6 +527,11 @@ def pytest_collection_modifyitems(config, items):
 
     Note: Tests marked with @pytest.mark.postgres_integration will only run when
     POSTGRES_INTEGRATION_TESTS=1, even if KAFKA_INTEGRATION_TESTS=1 is also set.
+
+    IMPORTANT: Even when KAFKA_INTEGRATION_TESTS=1, the mocked AIOKafkaProducer
+    from pytest_configure() remains active.  This is intentional for CI -- it
+    ensures Kafka-dependent tests verify their protocol / call patterns without
+    requiring a live broker.  See KAFKA_IS_MOCKED flag for details.
     """
     kafka_enabled = os.getenv("KAFKA_INTEGRATION_TESTS") == "1"
     postgres_enabled = os.getenv("POSTGRES_INTEGRATION_TESTS") == "1"
@@ -1006,9 +1020,12 @@ def _cleanup_dynamically_loaded_modules():
     """
     yield
 
-    # List of known dynamically-loaded test modules to cleanup
+    # List of known dynamically-loaded test modules to cleanup.
+    # Keep this in sync whenever a new spec_from_file_location() call
+    # or sys.path manipulation adds a module during tests.
     dynamic_modules = [
         "omniclaude.tests.transformation_event_publisher",  # From test_transformation_event_publisher.py
+        "test_simple_agent_loader__sentinel",  # From test_simple_agent_loader.py (via restore_sys_modules)
     ]
 
     for module_name in dynamic_modules:

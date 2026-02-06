@@ -46,9 +46,11 @@ spec.loader.exec_module(tep)
 # Register the module in sys.modules for patch() to work
 sys.modules[_MODULE_NAME] = tep
 
-MAX_USER_REQUEST_LENGTH = tep.MAX_USER_REQUEST_LENGTH
 TransformationEventType = tep.TransformationEventType
-_sanitize_user_request = tep._sanitize_user_request
+_redact_user_request = tep._redact_user_request
+
+# The canonical max length is PROMPT_PREVIEW_MAX_LENGTH from schemas (100 chars)
+from omniclaude.hooks.schemas import PROMPT_PREVIEW_MAX_LENGTH
 
 # Import shared envelope creation from kafka_producer_utils
 from omniclaude.lib.kafka_producer_utils import (
@@ -74,49 +76,53 @@ def _create_event_envelope(
 
 
 close_producer = tep.close_producer
-get_producer_lock = tep.get_producer_lock
 publish_transformation_complete = tep.publish_transformation_complete
 publish_transformation_event = tep.publish_transformation_event
 publish_transformation_failed = tep.publish_transformation_failed
 publish_transformation_start = tep.publish_transformation_start
 
+# Producer lock moved to shared kafka_publisher_base
+from omniclaude.lib import kafka_publisher_base as _kpb
+
+_get_producer_lock = _kpb._get_producer_lock
+
 pytestmark = pytest.mark.unit
 
 
 class TestTransformationEventType:
-    """Test TransformationEventType enum."""
+    """Test TransformationEventType enum.
 
-    def test_started_value_matches_topic_base(self) -> None:
-        """Test STARTED enum value matches TopicBase.TRANSFORMATION_STARTED."""
-        assert (
-            TransformationEventType.STARTED.value
-            == TopicBase.TRANSFORMATION_STARTED.value
-        )
+    TransformationEventType values are semantic discriminator strings
+    (e.g., 'transformation.started'). Topic routing is handled by
+    _EVENT_TYPE_TO_TOPIC mapping in the publisher module.
+    """
 
-    def test_completed_value_matches_topic_base(self) -> None:
-        """Test COMPLETED enum value matches TopicBase.TRANSFORMATION_COMPLETED."""
-        assert (
-            TransformationEventType.COMPLETED.value
-            == TopicBase.TRANSFORMATION_COMPLETED.value
-        )
+    def test_started_value_is_discriminator(self) -> None:
+        """Test STARTED enum value is a semantic discriminator string."""
+        assert TransformationEventType.STARTED.value == "transformation.started"
 
-    def test_failed_value_matches_topic_base(self) -> None:
-        """Test FAILED enum value matches TopicBase.TRANSFORMATION_FAILED."""
-        assert (
-            TransformationEventType.FAILED.value
-            == TopicBase.TRANSFORMATION_FAILED.value
-        )
+    def test_completed_value_is_discriminator(self) -> None:
+        """Test COMPLETED enum value is a semantic discriminator string."""
+        assert TransformationEventType.COMPLETED.value == "transformation.completed"
 
-    def test_get_topic_name_returns_value(self) -> None:
-        """Test get_topic_name returns the enum value (topic name)."""
+    def test_failed_value_is_discriminator(self) -> None:
+        """Test FAILED enum value is a semantic discriminator string."""
+        assert TransformationEventType.FAILED.value == "transformation.failed"
+
+    def test_event_type_to_topic_mapping_exists(self) -> None:
+        """Test each event type has a TopicBase mapping for ONEX routing."""
+        event_type_to_topic = tep._EVENT_TYPE_TO_TOPIC
         for event_type in TransformationEventType:
-            assert event_type.get_topic_name() == event_type.value
+            assert event_type in event_type_to_topic, (
+                f"{event_type} missing from _EVENT_TYPE_TO_TOPIC"
+            )
 
-    def test_topic_names_follow_onex_convention(self) -> None:
-        """Test all topic names follow ONEX naming convention."""
+    def test_topic_routing_follows_onex_convention(self) -> None:
+        """Test mapped topics follow ONEX naming convention."""
         # ONEX convention: onex.{kind}.{producer}.{event-name}.v{n}
+        event_type_to_topic = tep._EVENT_TYPE_TO_TOPIC
         for event_type in TransformationEventType:
-            topic = event_type.get_topic_name()
+            topic = event_type_to_topic[event_type].value
             parts = topic.split(".")
             assert len(parts) == 5, f"Topic {topic} should have 5 parts"
             assert parts[0] == "onex", f"Topic {topic} should start with 'onex'"
@@ -192,31 +198,31 @@ class TestUserRequestSanitization:
 
     def test_sanitize_none_returns_none(self) -> None:
         """Test None input returns None."""
-        assert _sanitize_user_request(None) is None
+        assert _redact_user_request(None) is None
 
     def test_sanitize_empty_string_returns_empty(self) -> None:
         """Test empty string is returned as-is."""
-        assert _sanitize_user_request("") == ""
+        assert _redact_user_request("") == ""
 
     def test_sanitize_truncates_long_requests(self) -> None:
-        """Test long requests are truncated to MAX_USER_REQUEST_LENGTH."""
-        long_request = "a" * (MAX_USER_REQUEST_LENGTH + 100)
-        result = _sanitize_user_request(long_request)
+        """Test long requests are truncated to PROMPT_PREVIEW_MAX_LENGTH."""
+        long_request = "a" * (PROMPT_PREVIEW_MAX_LENGTH + 100)
+        result = _redact_user_request(long_request)
 
         assert result is not None
-        assert len(result) <= MAX_USER_REQUEST_LENGTH + len("...[TRUNCATED]")
-        assert result.endswith("...[TRUNCATED]")
+        assert len(result) <= PROMPT_PREVIEW_MAX_LENGTH + len("...")
+        assert result.endswith("...")
 
     def test_sanitize_preserves_short_requests(self) -> None:
         """Test short requests are preserved without truncation."""
         short_request = "This is a short request"
-        result = _sanitize_user_request(short_request)
+        result = _redact_user_request(short_request)
         assert result == short_request
 
     def test_sanitize_redacts_openai_keys(self) -> None:
         """Test OpenAI API keys are redacted (uses canonical patterns from schemas.py)."""
         request = "Use this key: sk-1234567890abcdefghijklmnop"
-        result = _sanitize_user_request(request)
+        result = _redact_user_request(request)
         assert result is not None
         # Canonical pattern: sk-***REDACTED*** (preserves prefix for identification)
         assert "1234567890abcdefghijklmnop" not in result
@@ -225,7 +231,7 @@ class TestUserRequestSanitization:
     def test_sanitize_redacts_aws_keys(self) -> None:
         """Test AWS access keys are redacted."""
         request = "AWS key: AKIA1234567890ABCDEF"
-        result = _sanitize_user_request(request)
+        result = _redact_user_request(request)
         assert result is not None
         assert "1234567890ABCDEF" not in result
         assert "***REDACTED***" in result
@@ -233,7 +239,7 @@ class TestUserRequestSanitization:
     def test_sanitize_redacts_github_tokens(self) -> None:
         """Test GitHub tokens are redacted."""
         request = "Token: ghp_1234567890abcdefghijklmnopqrstuvwxyz"
-        result = _sanitize_user_request(request)
+        result = _redact_user_request(request)
         assert result is not None
         assert "1234567890abcdefghijklmnopqrstuvwxyz" not in result
         assert "***REDACTED***" in result
@@ -241,7 +247,7 @@ class TestUserRequestSanitization:
     def test_sanitize_redacts_bearer_tokens(self) -> None:
         """Test Bearer tokens are redacted."""
         request = "Auth: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
-        result = _sanitize_user_request(request)
+        result = _redact_user_request(request)
         assert result is not None
         assert "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" not in result
         assert "***REDACTED***" in result
@@ -249,7 +255,7 @@ class TestUserRequestSanitization:
     def test_sanitize_redacts_passwords_in_urls(self) -> None:
         """Test passwords in URLs are redacted."""
         request = "Connect to postgres://user:mysecretpassword@localhost:5432/db"
-        result = _sanitize_user_request(request)
+        result = _redact_user_request(request)
         assert result is not None
         assert "mysecretpassword" not in result
         assert "***REDACTED***" in result
@@ -261,30 +267,28 @@ class TestProducerLock:
     @pytest.fixture(autouse=True)
     def reset_producer_lock(self) -> None:
         """Reset the producer lock before each test."""
-        tep._producer_manager._lock = None
-        tep._producer_manager._lock_loop = None
+        _kpb._producer_lock = None
         yield
-        tep._producer_manager._lock = None
-        tep._producer_manager._lock_loop = None
+        _kpb._producer_lock = None
 
     @pytest.mark.asyncio
     async def test_get_producer_lock_returns_asyncio_lock(self) -> None:
-        """Test get_producer_lock returns an asyncio.Lock instance."""
-        lock = await get_producer_lock()
+        """Test _get_producer_lock returns an asyncio.Lock instance."""
+        lock = await _get_producer_lock()
         assert isinstance(lock, asyncio.Lock)
 
     @pytest.mark.asyncio
     async def test_get_producer_lock_returns_singleton(self) -> None:
-        """Test get_producer_lock returns the same instance on multiple calls."""
-        lock1 = await get_producer_lock()
-        lock2 = await get_producer_lock()
-        lock3 = await get_producer_lock()
+        """Test _get_producer_lock returns the same instance on multiple calls."""
+        lock1 = await _get_producer_lock()
+        lock2 = await _get_producer_lock()
+        lock3 = await _get_producer_lock()
         assert lock1 is lock2 is lock3
 
     @pytest.mark.asyncio
     async def test_lock_can_be_acquired_and_released(self) -> None:
         """Test the lock can be used for synchronization."""
-        lock = await get_producer_lock()
+        lock = await _get_producer_lock()
 
         async with lock:
             # Lock is held
@@ -295,14 +299,14 @@ class TestProducerLock:
 
     @pytest.mark.asyncio
     async def test_concurrent_lock_creation_returns_same_instance(self) -> None:
-        """Test concurrent calls to get_producer_lock return the same lock.
+        """Test concurrent calls to _get_producer_lock return the same lock.
 
         This tests the double-checked locking pattern for thread-safety.
         """
         results: list[asyncio.Lock] = []
 
         async def get_lock() -> None:
-            lock = await get_producer_lock()
+            lock = await _get_producer_lock()
             results.append(lock)
 
         # Create multiple concurrent tasks
@@ -315,16 +319,20 @@ class TestProducerLock:
 
 
 class TestPublishTransformationEvent:
-    """Test the main publish_transformation_event function."""
+    """Test the main publish_transformation_event function.
+
+    Tests patch publish_to_kafka from kafka_publisher_base (the shared
+    Kafka infrastructure layer) rather than a per-module producer manager.
+    """
 
     @pytest.mark.asyncio
-    async def test_returns_false_when_producer_unavailable(self) -> None:
-        """Test returns False when Kafka producer cannot be created."""
+    async def test_returns_false_when_publish_fails(self) -> None:
+        """Test returns False when Kafka publish fails."""
         with patch.object(
-            tep._producer_manager,
-            "get_producer",
+            tep,
+            "publish_to_kafka",
             new_callable=AsyncMock,
-            return_value=None,
+            return_value=False,
         ):
             result = await publish_transformation_event(
                 source_agent="agent-a",
@@ -336,40 +344,28 @@ class TestPublishTransformationEvent:
     @pytest.mark.asyncio
     async def test_generates_correlation_id_when_not_provided(self) -> None:
         """Test correlation_id is generated if not provided."""
-        mock_producer = AsyncMock()
-        mock_producer.send_and_wait = AsyncMock()
+        mock_publish = AsyncMock(return_value=True)
 
-        with patch.object(
-            tep._producer_manager,
-            "get_producer",
-            new_callable=AsyncMock,
-            return_value=mock_producer,
-        ):
+        with patch.object(tep, "publish_to_kafka", mock_publish):
             await publish_transformation_event(
                 source_agent="agent-a",
                 target_agent="agent-b",
                 transformation_reason="test",
             )
 
-            # Verify send_and_wait was called with a generated correlation_id
-            call_args = mock_producer.send_and_wait.call_args
-            envelope = call_args[1]["value"]
+            # publish_to_kafka(topic, envelope, partition_key)
+            call_args = mock_publish.call_args
+            envelope = call_args[0][1]
             assert envelope["correlation_id"] is not None
             assert len(envelope["correlation_id"]) > 0
 
     @pytest.mark.asyncio
     async def test_uses_provided_correlation_id(self) -> None:
         """Test provided correlation_id is used."""
-        mock_producer = AsyncMock()
-        mock_producer.send_and_wait = AsyncMock()
         expected_corr_id = "my-custom-correlation-id"
+        mock_publish = AsyncMock(return_value=True)
 
-        with patch.object(
-            tep._producer_manager,
-            "get_producer",
-            new_callable=AsyncMock,
-            return_value=mock_producer,
-        ):
+        with patch.object(tep, "publish_to_kafka", mock_publish):
             await publish_transformation_event(
                 source_agent="agent-a",
                 target_agent="agent-b",
@@ -377,16 +373,13 @@ class TestPublishTransformationEvent:
                 correlation_id=expected_corr_id,
             )
 
-            call_args = mock_producer.send_and_wait.call_args
-            envelope = call_args[1]["value"]
+            call_args = mock_publish.call_args
+            envelope = call_args[0][1]
             assert envelope["correlation_id"] == expected_corr_id
 
     @pytest.mark.asyncio
     async def test_routes_to_correct_topic_by_event_type(self) -> None:
         """Test events are routed to correct topic based on event_type."""
-        mock_producer = AsyncMock()
-        mock_producer.send_and_wait = AsyncMock()
-
         test_cases = [
             (
                 TransformationEventType.STARTED,
@@ -403,15 +396,10 @@ class TestPublishTransformationEvent:
         ]
 
         for event_type, expected_base_topic in test_cases:
-            mock_producer.send_and_wait.reset_mock()
+            mock_publish = AsyncMock(return_value=True)
 
             with (
-                patch.object(
-                    tep._producer_manager,
-                    "get_producer",
-                    new_callable=AsyncMock,
-                    return_value=mock_producer,
-                ),
+                patch.object(tep, "publish_to_kafka", mock_publish),
                 patch(
                     "omniclaude.lib.kafka_producer_utils.get_kafka_topic_prefix",
                     return_value="dev",
@@ -424,7 +412,7 @@ class TestPublishTransformationEvent:
                     event_type=event_type,
                 )
 
-                call_args = mock_producer.send_and_wait.call_args
+                call_args = mock_publish.call_args
                 actual_topic = call_args[0][0]
                 # Topic should be env-prefixed (e.g., "dev.onex.evt...")
                 expected_topic = f"dev.{expected_base_topic}"
@@ -436,14 +424,11 @@ class TestPublishTransformationEvent:
     @pytest.mark.asyncio
     async def test_non_blocking_on_exception(self) -> None:
         """Test function returns False on exception, doesn't raise."""
-        mock_producer = AsyncMock()
-        mock_producer.send_and_wait = AsyncMock(side_effect=Exception("Kafka error"))
-
         with patch.object(
-            tep._producer_manager,
-            "get_producer",
+            tep,
+            "publish_to_kafka",
             new_callable=AsyncMock,
-            return_value=mock_producer,
+            side_effect=Exception("Kafka error"),
         ):
             # Should not raise, should return False
             result = await publish_transformation_event(
@@ -523,14 +508,14 @@ class TestConvenienceMethods:
 
 
 class TestCloseProducer:
-    """Test producer cleanup."""
+    """Test producer cleanup via shared kafka_publisher_base."""
 
     @pytest.fixture(autouse=True)
     def reset_producer(self) -> None:
-        """Reset the producer manager before each test."""
-        tep._producer_manager._producer = None
+        """Reset the shared producer before each test."""
+        _kpb._kafka_producer = None
         yield
-        tep._producer_manager._producer = None
+        _kpb._kafka_producer = None
 
     @pytest.mark.asyncio
     async def test_close_producer_when_none(self) -> None:
@@ -543,12 +528,12 @@ class TestCloseProducer:
         """Test close_producer calls stop on the producer."""
         mock_producer = AsyncMock()
         mock_producer.stop = AsyncMock()
-        tep._producer_manager._producer = mock_producer
+        _kpb._kafka_producer = mock_producer
 
         await close_producer()
 
         mock_producer.stop.assert_called_once()
-        assert tep._producer_manager._producer is None
+        assert _kpb._kafka_producer is None
 
 
 class TestIntegrationScenarios:
@@ -561,17 +546,11 @@ class TestIntegrationScenarios:
     @pytest.mark.asyncio
     async def test_full_transformation_lifecycle(self) -> None:
         """Test complete transformation lifecycle: start -> complete."""
-        mock_producer = AsyncMock()
-        mock_producer.send_and_wait = AsyncMock()
+        mock_publish = AsyncMock(return_value=True)
         correlation_id = str(uuid4())
 
         with (
-            patch.object(
-                tep._producer_manager,
-                "get_producer",
-                new_callable=AsyncMock,
-                return_value=mock_producer,
-            ),
+            patch.object(tep, "publish_to_kafka", mock_publish),
             patch(
                 "omniclaude.lib.kafka_producer_utils.get_kafka_topic_prefix",
                 return_value="dev",
@@ -598,30 +577,25 @@ class TestIntegrationScenarios:
             assert success_complete is True
 
         # Verify two events were sent
-        assert mock_producer.send_and_wait.call_count == 2
+        assert mock_publish.call_count == 2
 
+        # publish_to_kafka(topic, envelope, partition_key)
         # Verify first event is STARTED (with env prefix)
-        first_call = mock_producer.send_and_wait.call_args_list[0]
+        first_call = mock_publish.call_args_list[0]
         assert first_call[0][0] == f"dev.{TopicBase.TRANSFORMATION_STARTED.value}"
 
         # Verify second event is COMPLETED (with env prefix)
-        second_call = mock_producer.send_and_wait.call_args_list[1]
+        second_call = mock_publish.call_args_list[1]
         assert second_call[0][0] == f"dev.{TopicBase.TRANSFORMATION_COMPLETED.value}"
 
     @pytest.mark.asyncio
     async def test_transformation_failure_scenario(self) -> None:
         """Test transformation failure event publishing."""
-        mock_producer = AsyncMock()
-        mock_producer.send_and_wait = AsyncMock()
+        mock_publish = AsyncMock(return_value=True)
         correlation_id = str(uuid4())
 
         with (
-            patch.object(
-                tep._producer_manager,
-                "get_producer",
-                new_callable=AsyncMock,
-                return_value=mock_producer,
-            ),
+            patch.object(tep, "publish_to_kafka", mock_publish),
             patch(
                 "omniclaude.lib.kafka_producer_utils.get_kafka_topic_prefix",
                 return_value="dev",
@@ -648,14 +622,15 @@ class TestIntegrationScenarios:
             assert success_failed is True
 
         # Verify events were sent to correct topics
-        assert mock_producer.send_and_wait.call_count == 2
+        assert mock_publish.call_count == 2
 
+        # publish_to_kafka(topic, envelope, partition_key)
         # Second event should be FAILED (with env prefix)
-        second_call = mock_producer.send_and_wait.call_args_list[1]
+        second_call = mock_publish.call_args_list[1]
         assert second_call[0][0] == f"dev.{TopicBase.TRANSFORMATION_FAILED.value}"
 
         # Verify error details in payload
-        envelope = second_call[1]["value"]
+        envelope = second_call[0][1]
         assert envelope["payload"]["error_message"] == "Agent initialization failed"
         assert envelope["payload"]["error_type"] == "InitializationError"
         assert envelope["payload"]["success"] is False

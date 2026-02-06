@@ -48,24 +48,26 @@ from omniclaude.lib.kafka_publisher_base import (
 logger = logging.getLogger(__name__)
 
 
-# Event type enumeration aligned with TopicBase constants.
+# Event type enumeration with simple discriminator values.
 # Values are payload discriminators, NOT topic names.
-# Actual Kafka topic is determined by TopicBase via build_topic().
+# Actual Kafka topic is determined by TopicBase via _EVENT_TYPE_TO_TOPIC mapping.
 class ManifestInjectionEventType(StrEnum):
-    """Manifest injection event types aligned with TopicBase constants.
+    """Manifest injection event types with TopicBase-aligned routing.
 
     These values serve as event type discriminators in the payload envelope.
-    The Kafka topic is selected from TopicBase based on the event type:
+    They are intentionally simple strings (not full topic names) to separate
+    the concerns of event identification from topic routing. The Kafka topic
+    is selected from TopicBase based on the _EVENT_TYPE_TO_TOPIC mapping:
     - CONTEXT_INJECTED -> TopicBase.CONTEXT_INJECTED
     - INJECTION_RECORDED -> TopicBase.INJECTION_RECORDED
     - CONTEXT_RETRIEVAL_REQUESTED -> TopicBase.CONTEXT_RETRIEVAL_REQUESTED
     - CONTEXT_RETRIEVAL_COMPLETED -> TopicBase.CONTEXT_RETRIEVAL_COMPLETED
     """
 
-    CONTEXT_INJECTED = TopicBase.CONTEXT_INJECTED.value
-    INJECTION_RECORDED = TopicBase.INJECTION_RECORDED.value
-    CONTEXT_RETRIEVAL_REQUESTED = TopicBase.CONTEXT_RETRIEVAL_REQUESTED.value
-    CONTEXT_RETRIEVAL_COMPLETED = TopicBase.CONTEXT_RETRIEVAL_COMPLETED.value
+    CONTEXT_INJECTED = "manifest.context-injected"
+    INJECTION_RECORDED = "manifest.injection-recorded"
+    CONTEXT_RETRIEVAL_REQUESTED = "manifest.context-retrieval-requested"
+    CONTEXT_RETRIEVAL_COMPLETED = "manifest.context-retrieval-completed"
 
 
 # Mapping from event type to TopicBase for topic routing
@@ -79,8 +81,8 @@ _EVENT_TYPE_TO_TOPIC: dict[ManifestInjectionEventType, TopicBase] = {
 
 async def publish_manifest_injection_event(
     agent_name: str,
+    correlation_id: str | UUID,
     injection_type: ManifestInjectionEventType = ManifestInjectionEventType.INJECTION_RECORDED,
-    correlation_id: str | UUID | None = None,
     session_id: str | UUID | None = None,
     pattern_count: int | None = None,
     context_size_bytes: int | None = None,
@@ -104,8 +106,11 @@ async def publish_manifest_injection_event(
 
     Args:
         agent_name: Agent receiving the manifest injection
+        correlation_id: Request correlation ID for distributed tracing (required).
+            Callers must provide an explicit correlation_id to ensure proper
+            correlation across distributed events. Auto-generation is not
+            supported to prevent orphaned correlation chains.
         injection_type: Event type enum (determines topic routing)
-        correlation_id: Request correlation ID for distributed tracing
         session_id: Session ID for grouping related executions
         pattern_count: Number of patterns injected
         context_size_bytes: Size of injected context in bytes
@@ -129,11 +134,8 @@ async def publish_manifest_injection_event(
         - Gracefully degrades when Kafka unavailable
     """
     try:
-        # Generate correlation_id if not provided
-        if correlation_id is None:
-            correlation_id = str(uuid4())
-        else:
-            correlation_id = str(correlation_id)
+        # correlation_id is required - convert to string for Kafka serialization
+        correlation_id = str(correlation_id)
 
         if session_id is not None:
             session_id = str(session_id)
@@ -216,7 +218,7 @@ async def publish_manifest_injection_event(
 
 async def publish_context_injected(
     agent_name: str,
-    correlation_id: str | UUID | None = None,
+    correlation_id: str | UUID,
     pattern_count: int | None = None,
     context_size_bytes: int | None = None,
     context_source: str | None = None,
@@ -231,8 +233,8 @@ async def publish_context_injected(
     """
     return await publish_manifest_injection_event(
         agent_name=agent_name,
-        injection_type=ManifestInjectionEventType.CONTEXT_INJECTED,
         correlation_id=correlation_id,
+        injection_type=ManifestInjectionEventType.CONTEXT_INJECTED,
         pattern_count=pattern_count,
         context_size_bytes=context_size_bytes,
         context_source=context_source,
@@ -243,7 +245,7 @@ async def publish_context_injected(
 
 async def publish_injection_recorded(
     agent_name: str,
-    correlation_id: str | UUID | None = None,
+    correlation_id: str | UUID,
     pattern_count: int | None = None,
     context_size_bytes: int | None = None,
     **kwargs,
@@ -256,8 +258,8 @@ async def publish_injection_recorded(
     """
     return await publish_manifest_injection_event(
         agent_name=agent_name,
-        injection_type=ManifestInjectionEventType.INJECTION_RECORDED,
         correlation_id=correlation_id,
+        injection_type=ManifestInjectionEventType.INJECTION_RECORDED,
         pattern_count=pattern_count,
         context_size_bytes=context_size_bytes,
         **kwargs,
@@ -270,16 +272,27 @@ close_producer = close_shared_producer
 
 # Synchronous wrapper for backward compatibility
 def publish_manifest_injection_event_sync(
-    agent_name: str, **kwargs
+    agent_name: str,
+    correlation_id: str | UUID,
+    **kwargs,
 ) -> bool:
     """
     Synchronous wrapper for publish_manifest_injection_event.
 
     Handles running/non-running event loop scenarios.
     Use async version when possible for best performance.
+
+    Args:
+        agent_name: Agent receiving the manifest injection.
+        correlation_id: Request correlation ID (required for proper tracing).
+        **kwargs: Additional keyword arguments forwarded to the async function.
     """
     return publish_to_kafka_sync(
-        publish_manifest_injection_event(agent_name=agent_name, **kwargs)
+        publish_manifest_injection_event(
+            agent_name=agent_name,
+            correlation_id=correlation_id,
+            **kwargs,
+        )
     )
 
 

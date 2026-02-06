@@ -99,10 +99,9 @@ SUPPORTED_EVENT_TYPES = frozenset(
         "context.utilization",  # OMN-1889
         "agent.match",  # OMN-1889
         "latency.breakdown",  # OMN-1889
-        "routing.decision",  # Polly-first routing observability
+        "routing.decision",  # PR-92 - Routing decision emission via daemon
         "notification.blocked",  # OMN-1831 - Slack notifications via emit daemon
         "notification.completed",  # OMN-1831 - Slack notifications via emit daemon
-        "routing.decision",  # PR-92 - Routing decision emission via daemon
     ]
 )
 

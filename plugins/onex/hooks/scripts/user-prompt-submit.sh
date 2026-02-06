@@ -82,9 +82,10 @@ SESSION_ID="$(printf %s "$INPUT" | jq -r '.sessionId // .session_id // ""' 2>/de
 [[ -z "$SESSION_ID" ]] && SESSION_ID="$CORRELATION_ID"
 
 if [[ "$KAFKA_ENABLED" == "true" ]] && [ "${SKIP_CLAUDE_HOOK_EVENT_EMIT:-0}" -ne 1 ]; then
+    # Privacy: Only send redacted preview to onex.evt.* topics (max 100 chars).
+    # Full prompts must only go to onex.cmd.omniintelligence.* topics.
     PROMPT_PAYLOAD=$(jq -n \
         --arg session_id "$SESSION_ID" \
-        --arg prompt "$PROMPT" \
         --arg prompt_preview "$(printf '%s' "${PROMPT:0:100}" | sed -E \
             -e 's/sk-[a-zA-Z0-9]{20,}/sk-***REDACTED***/g' \
             -e 's/AKIA[A-Z0-9]{16}/AKIA***REDACTED***/g' \
@@ -96,7 +97,7 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && [ "${SKIP_CLAUDE_HOOK_EVENT_EMIT:-0}" -ne
         --argjson prompt_length "${#PROMPT}" \
         --arg correlation_id "$CORRELATION_ID" \
         --arg event_type "UserPromptSubmit" \
-        '{session_id: $session_id, prompt: $prompt, prompt_preview: $prompt_preview, prompt_length: $prompt_length, correlation_id: $correlation_id, event_type: $event_type}' 2>/dev/null)
+        '{session_id: $session_id, prompt_preview: $prompt_preview, prompt_length: $prompt_length, correlation_id: $correlation_id, event_type: $event_type}' 2>/dev/null)
 
     if [[ -n "$PROMPT_PAYLOAD" ]]; then
         emit_via_daemon "prompt.submitted" "$PROMPT_PAYLOAD" 100 &

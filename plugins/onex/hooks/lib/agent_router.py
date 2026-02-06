@@ -28,6 +28,7 @@ import logging
 import math
 import os
 import re
+import threading
 import time
 from dataclasses import dataclass
 from difflib import SequenceMatcher
@@ -399,7 +400,10 @@ class TriggerMatcher:
         re.compile(r"\b(poly|polly)\s+(suggested|mentioned|said|thinks|believes)\b"),
     ]
 
-    # High-confidence technical triggers that don't need action context
+    # High-confidence technical triggers that don't need action context.
+    # NOTE: Some terms overlap with TransformationValidator.SPECIALIZED_KEYWORDS
+    # and TaskClassifier.INTENT_KEYWORDS by design -- each collection serves a
+    # different purpose (context gating vs. validation vs. intent classification).
     HIGH_CONFIDENCE_TRIGGERS = frozenset(
         {
             "debug",
@@ -465,6 +469,11 @@ class TriggerMatcher:
             "fastapi",
         }
     )
+
+    # Short alphanumeric technical tokens that should be preserved during
+    # keyword extraction even when below the default length threshold.
+    # These tokens are domain-significant (e.g., cloud services, protocols).
+    _TECHNICAL_TOKENS = frozenset({"s3", "k8", "ec2", "ml", "ai", "ci", "cd", "db"})
 
     def __init__(self, agent_registry: dict[str, Any]) -> None:
         """
@@ -565,9 +574,17 @@ class TriggerMatcher:
         return matches
 
     def _extract_keywords(self, text: str) -> list[str]:
-        """Extract meaningful keywords from text."""
+        """Extract meaningful keywords from text.
+
+        Preserves short alphanumeric technical tokens (e.g., "s3", "k8", "ec2")
+        that would otherwise be dropped by the length filter.
+        """
         words = re.findall(r"\b\w+\b", text.lower())
-        return [w for w in words if w not in self.STOPWORDS and len(w) > 2]
+        return [
+            w
+            for w in words
+            if w not in self.STOPWORDS and (len(w) > 2 or w in self._TECHNICAL_TOKENS)
+        ]
 
     @staticmethod
     def _fuzzy_threshold(trigger: str) -> float:
@@ -590,6 +607,7 @@ class TriggerMatcher:
         Uses tiered thresholds based on trigger length to prevent
         false positives from short-word character overlap.
         Full-text comparison is intentionally omitted (pure noise).
+        Terminates early on perfect word match to avoid unnecessary iteration.
         """
         if self._exact_match_with_word_boundaries(trigger, text):
             return 1.0
@@ -602,6 +620,8 @@ class TriggerMatcher:
             word_score = SequenceMatcher(None, trigger, word).ratio()
             if word_score >= min_threshold:
                 best_word_score = max(best_word_score, word_score)
+                if best_word_score >= 1.0:
+                    break  # Perfect match; no further iteration needed
 
         return best_word_score
 
@@ -716,6 +736,7 @@ class ResultCache:
             default_ttl_seconds: Default time-to-live in seconds (default: 1 hour)
             max_entries: Maximum number of cache entries before LRU eviction (default: 1000)
         """
+        self._lock = threading.Lock()
         self.cache: dict[str, dict[str, Any]] = {}
         self.default_ttl = default_ttl_seconds
         self.max_entries = max_entries
@@ -724,26 +745,31 @@ class ResultCache:
         """Generate cache key from query and context."""
         key_data = query
         if context:
-            key_data += str(sorted(context.items()))
+            try:
+                key_data += str(sorted(context.items()))
+            except TypeError:
+                # Unhashable or uncomparable context values; fall back to repr
+                key_data += repr(context)
         return hashlib.sha256(key_data.encode()).hexdigest()
 
     def get(self, query: str, context: dict[str, Any] | None = None) -> Any | None:
         """Get cached result if valid."""
         key = self._generate_key(query, context)
 
-        if key not in self.cache:
-            return None
+        with self._lock:
+            if key not in self.cache:
+                return None
 
-        entry = self.cache[key]
+            entry = self.cache[key]
 
-        if time.time() > entry["expires_at"]:
-            del self.cache[key]
-            return None
+            if time.time() > entry["expires_at"]:
+                del self.cache[key]
+                return None
 
-        entry["hits"] += 1
-        entry["last_accessed"] = time.time()
+            entry["hits"] += 1
+            entry["last_accessed"] = time.time()
 
-        return entry["value"]
+            return entry["value"]
 
     def _evict_lru(self) -> None:
         """Evict least-recently-accessed entries when cache exceeds max_entries."""
@@ -762,40 +788,45 @@ class ResultCache:
         key = self._generate_key(query, context)
         ttl = ttl_seconds or self.default_ttl
 
-        # Evict LRU entries if at capacity (skip if updating existing key)
-        if key not in self.cache:
-            self._evict_lru()
+        with self._lock:
+            # Evict LRU entries if at capacity (skip if updating existing key)
+            if key not in self.cache:
+                self._evict_lru()
 
-        current_time = time.time()
-        self.cache[key] = {
-            "value": value,
-            "created_at": current_time,
-            "expires_at": current_time + ttl,
-            "last_accessed": current_time,
-            "hits": 0,
-        }
+            current_time = time.time()
+            self.cache[key] = {
+                "value": value,
+                "created_at": current_time,
+                "expires_at": current_time + ttl,
+                "last_accessed": current_time,
+                "hits": 0,
+            }
 
     def clear(self) -> None:
         """Clear entire cache."""
-        self.cache.clear()
+        with self._lock:
+            self.cache.clear()
 
     def stats(self) -> dict[str, Any]:
         """Get cache statistics."""
-        if not self.cache:
+        with self._lock:
+            if not self.cache:
+                return {
+                    "entries": 0,
+                    "total_hits": 0,
+                    "avg_hits_per_entry": 0.0,
+                }
+
+            total_hits = sum(entry["hits"] for entry in self.cache.values())
+            total_entries = len(self.cache)
+
             return {
-                "entries": 0,
-                "total_hits": 0,
-                "avg_hits_per_entry": 0.0,
+                "entries": total_entries,
+                "total_hits": total_hits,
+                "avg_hits_per_entry": total_hits / total_entries
+                if total_entries
+                else 0,
             }
-
-        total_hits = sum(entry["hits"] for entry in self.cache.values())
-        total_entries = len(self.cache)
-
-        return {
-            "entries": total_entries,
-            "total_hits": total_hits,
-            "avg_hits_per_entry": total_hits / total_entries if total_entries else 0,
-        }
 
 
 # =============================================================================
@@ -1014,6 +1045,10 @@ class AgentRouter:
         self.confidence_scorer = ConfidenceScorer()
         self.cache = ResultCache(default_ttl_seconds=cache_ttl)
 
+        # Lock protecting routing_stats and last_routing_timing from
+        # concurrent mutation in multi-threaded environments.
+        self._stats_lock = threading.Lock()
+
         # Track routing stats
         self.routing_stats: dict[str, int] = {
             "total_routes": 0,
@@ -1052,7 +1087,8 @@ class AgentRouter:
         try:
             routing_start_us = time.perf_counter_ns() // 1000
 
-            self.routing_stats["total_routes"] += 1
+            with self._stats_lock:
+                self.routing_stats["total_routes"] += 1
             context = context or {}
 
             logger.debug(f"Routing request: {user_request[:100]}...")
@@ -1066,28 +1102,30 @@ class AgentRouter:
             cache_lookup_time_us = cache_lookup_end_us - cache_lookup_start_us
 
             if cached is not None:
-                self.routing_stats["cache_hits"] += 1
+                routing_end_us = time.perf_counter_ns() // 1000
+                with self._stats_lock:
+                    self.routing_stats["cache_hits"] += 1
+                    self.last_routing_timing = RoutingTiming(
+                        total_routing_time_us=routing_end_us - routing_start_us,
+                        cache_lookup_us=cache_lookup_time_us,
+                        trigger_matching_us=0,
+                        confidence_scoring_us=0,
+                        cache_hit=True,
+                    )
                 logger.debug(
                     f"Cache hit - returning {len(cached)} cached recommendations"
                 )
 
-                routing_end_us = time.perf_counter_ns() // 1000
-                self.last_routing_timing = RoutingTiming(
-                    total_routing_time_us=routing_end_us - routing_start_us,
-                    cache_lookup_us=cache_lookup_time_us,
-                    trigger_matching_us=0,
-                    confidence_scoring_us=0,
-                    cache_hit=True,
-                )
-
                 return cached  # type: ignore[return-value]
 
-            self.routing_stats["cache_misses"] += 1
+            with self._stats_lock:
+                self.routing_stats["cache_misses"] += 1
 
             # 2. Check for explicit agent request
             explicit_agent = self._extract_explicit_agent(user_request)
             if explicit_agent:
-                self.routing_stats["explicit_requests"] += 1
+                with self._stats_lock:
+                    self.routing_stats["explicit_requests"] += 1
                 recommendation = self._create_explicit_recommendation(explicit_agent)
                 if recommendation:
                     result = [recommendation]
@@ -1095,18 +1133,20 @@ class AgentRouter:
                     logger.info(f"Explicit agent request: {explicit_agent}")
 
                     routing_end_us = time.perf_counter_ns() // 1000
-                    self.last_routing_timing = RoutingTiming(
-                        total_routing_time_us=routing_end_us - routing_start_us,
-                        cache_lookup_us=cache_lookup_time_us,
-                        trigger_matching_us=0,
-                        confidence_scoring_us=0,
-                        cache_hit=False,
-                    )
+                    with self._stats_lock:
+                        self.last_routing_timing = RoutingTiming(
+                            total_routing_time_us=routing_end_us - routing_start_us,
+                            cache_lookup_us=cache_lookup_time_us,
+                            trigger_matching_us=0,
+                            confidence_scoring_us=0,
+                            cache_hit=False,
+                        )
 
                     return result
 
             # 3. Trigger-based matching with scoring
-            self.routing_stats["fuzzy_matches"] += 1
+            with self._stats_lock:
+                self.routing_stats["fuzzy_matches"] += 1
 
             trigger_matching_start_us = time.perf_counter_ns() // 1000
             trigger_matches = self.trigger_matcher.match(user_request)
@@ -1169,13 +1209,14 @@ class AgentRouter:
             # Calculate total routing time
             routing_end_us = time.perf_counter_ns() // 1000
 
-            self.last_routing_timing = RoutingTiming(
-                total_routing_time_us=routing_end_us - routing_start_us,
-                cache_lookup_us=cache_lookup_time_us,
-                trigger_matching_us=trigger_matching_time_us,
-                confidence_scoring_us=confidence_scoring_time_us,
-                cache_hit=False,
-            )
+            with self._stats_lock:
+                self.last_routing_timing = RoutingTiming(
+                    total_routing_time_us=routing_end_us - routing_start_us,
+                    cache_lookup_us=cache_lookup_time_us,
+                    trigger_matching_us=trigger_matching_time_us,
+                    confidence_scoring_us=confidence_scoring_time_us,
+                    cache_hit=False,
+                )
 
             logger.info(
                 f"Routed request to {len(recommendations)} agents, "
@@ -1280,16 +1321,18 @@ class AgentRouter:
     def get_cache_stats(self) -> dict[str, Any]:
         """Get cache statistics."""
         cache_stats: dict[str, Any] = self.cache.stats()
-        cache_stats["cache_hit_rate"] = (
-            self.routing_stats["cache_hits"] / self.routing_stats["total_routes"]
-            if self.routing_stats["total_routes"] > 0
-            else 0.0
-        )
+        with self._stats_lock:
+            cache_stats["cache_hit_rate"] = (
+                self.routing_stats["cache_hits"] / self.routing_stats["total_routes"]
+                if self.routing_stats["total_routes"] > 0
+                else 0.0
+            )
         return cache_stats
 
     def get_routing_stats(self) -> dict[str, Any]:
         """Get routing statistics."""
-        stats: dict[str, Any] = dict(self.routing_stats)
+        with self._stats_lock:
+            stats: dict[str, Any] = dict(self.routing_stats)
 
         total = stats["total_routes"]
         if total > 0:
