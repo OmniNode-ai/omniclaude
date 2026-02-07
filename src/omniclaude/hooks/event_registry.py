@@ -326,9 +326,6 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         required_fields=["tool_name", "session_id"],
     ),
     # =========================================================================
-    # Injection Tracking Events (OMN-1673 INJECT-004)
-    # =========================================================================
-    # =========================================================================
     # Routing Feedback Events (OMN-1892)
     # =========================================================================
     "routing.feedback": EventRegistration(

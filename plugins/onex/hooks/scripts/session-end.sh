@@ -194,6 +194,18 @@ print(result.outcome)
     # Runs in a separate backgrounded subshell to stay within 50ms sync budget.
     # Re-derives OUTCOME independently because subshell variables are isolated.
     (
+        # Validate SESSION_ID before constructing payload
+        if [[ -z "$SESSION_ID" ]]; then
+            log "WARNING: SESSION_ID is empty, skipping routing feedback evaluation"
+            exit 0  # Exit the subshell cleanly
+        fi
+
+        # Validate UUID format (8-4-4-4-12 structure, case-insensitive)
+        if [[ ! "$SESSION_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+            log "WARNING: SESSION_ID '$SESSION_ID' is not valid UUID format, skipping routing feedback evaluation"
+            exit 0
+        fi
+
         # Convert duration (same as above -- subshell isolation requires re-computation)
         DURATION_SECONDS="0"
         if [[ -n "$SESSION_DURATION" && "$SESSION_DURATION" != "0" ]]; then
