@@ -872,7 +872,7 @@ CI failures analysis uses direct GitHub API calls (via `gh` CLI) rather than eve
 ## Related Skills
 
 **Debugging & Analysis**:
-- `${CLAUDE_PLUGIN_ROOT}/skills/pr-review/` - PR review and feedback analysis
+- `${CLAUDE_PLUGIN_ROOT}/skills/local-review/` - Local code review loop
 - `${CLAUDE_PLUGIN_ROOT}/skills/system-status/` - System health monitoring
 - `${CLAUDE_PLUGIN_ROOT}/skills/agent-tracking/` - Agent execution tracking
 
