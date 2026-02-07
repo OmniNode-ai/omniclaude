@@ -288,7 +288,7 @@ class TriggerMatcher:
             for trigger in triggers:
                 if self._exact_match_with_word_boundaries(trigger, user_lower):
                     # Apply context filtering for short triggers
-                    if self._is_context_appropriate(trigger, user_request, agent_name):
+                    if self._is_context_appropriate(trigger, user_request):
                         scores.append((1.0, f"Exact match: '{trigger}'"))
 
             # 2. Fuzzy trigger match (tiered thresholds, multi-word bonus)
@@ -296,7 +296,7 @@ class TriggerMatcher:
                 similarity = self._fuzzy_match(trigger.lower(), user_lower)
                 if similarity > 0.7:
                     # Apply context filtering for short triggers
-                    if self._is_context_appropriate(trigger, user_request, agent_name):
+                    if self._is_context_appropriate(trigger, user_request):
                         # Multi-word triggers are more specific -> monotonic bonus
                         word_count = len(trigger.split())
                         specificity_bonus = (
@@ -485,9 +485,7 @@ class TriggerMatcher:
         pattern = r"\b" + re.escape(trigger_lower) + r"\b"
         return bool(re.search(pattern, text))
 
-    def _is_context_appropriate(
-        self, trigger: str, user_request: str, agent_name: str
-    ) -> bool:
+    def _is_context_appropriate(self, trigger: str, user_request: str) -> bool:
         """Check if trigger match is contextually appropriate.
 
         Filters out false positives where triggers like "poly" or "polly"
@@ -496,7 +494,6 @@ class TriggerMatcher:
         Args:
             trigger: Matched trigger
             user_request: Full user request
-            agent_name: Agent name being evaluated
 
         Returns:
             True if context suggests agent invocation, False for technical/casual usage

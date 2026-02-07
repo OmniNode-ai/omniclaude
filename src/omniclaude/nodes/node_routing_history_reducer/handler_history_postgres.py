@@ -37,6 +37,11 @@ _DEFAULT_SUCCESS_RATE = 0.5
 # Max tracked correlation_ids before eviction (Phase 1 in-memory limit)
 _MAX_DEDUP_ENTRIES = 10_000
 
+# Max entries per agent in the in-memory store before eviction.
+# Phase 1 only: limits memory growth for long-lived processes.
+# Phase 2+ will use PostgreSQL with proper retention policies.
+_MAX_STORE_ENTRIES_PER_AGENT = 10_000
+
 
 class HandlerHistoryPostgres:
     """Handler for routing history storage via PostgreSQL.
@@ -138,6 +143,18 @@ class HandlerHistoryPostgres:
             if entry.agent_name not in self._store:
                 self._store[entry.agent_name] = []
             self._store[entry.agent_name].append(entry)
+
+            # Evict oldest half when per-agent cap reached (mirrors dedup eviction)
+            agent_entries = self._store[entry.agent_name]
+            if len(agent_entries) > _MAX_STORE_ENTRIES_PER_AGENT:
+                evict_count = _MAX_STORE_ENTRIES_PER_AGENT // 2
+                self._store[entry.agent_name] = agent_entries[evict_count:]
+                logger.info(
+                    "Store evicted %d oldest entries for agent=%s, %d remain",
+                    evict_count,
+                    entry.agent_name,
+                    len(self._store[entry.agent_name]),
+                )
 
             logger.debug(
                 "Recorded routing decision for agent=%s "
@@ -294,10 +311,10 @@ class HandlerHistoryPostgres:
             success_rate = _DEFAULT_SUCCESS_RATE
 
         # Weighted average confidence (by total_routings per entry)
-        total_weight = sum(e.total_routings for e in entries)
-        if total_weight > 0:
+        if total_routings > 0:
             avg_confidence = (
-                sum(e.avg_confidence * e.total_routings for e in entries) / total_weight
+                sum(e.avg_confidence * e.total_routings for e in entries)
+                / total_routings
             )
         else:
             # Fall back to simple average when no routings recorded

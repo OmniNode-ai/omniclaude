@@ -109,6 +109,9 @@ class HandlerRoutingDefault:
             trigger_matches = []
 
         # 4. For each match, run ConfidenceScorer.score()
+        # Phase 1: context={} means historical_score always returns 0.5 (default).
+        # request.historical_stats is accepted but not yet forwarded to the scorer.
+        # Phase 2+ will populate context with historical_stats for real scoring.
         scorer = ConfidenceScorer()
         candidates: list[ModelRoutingCandidate] = []
 
@@ -119,7 +122,7 @@ class HandlerRoutingDefault:
                     agent_name=agent_name,
                     agent_data=agent_data,
                     user_request=request.prompt,
-                    context={},
+                    context={},  # Phase 1: no historical context yet
                     trigger_score=trigger_score,
                 )
             except Exception:
@@ -232,7 +235,7 @@ class HandlerRoutingDefault:
             }}
 
         The mapping is:
-            ModelAgentDefinition.explicit_triggers -> activation_triggers
+            ModelAgentDefinition.explicit_triggers + context_triggers -> activation_triggers
             ModelAgentDefinition.description       -> title
             ModelAgentDefinition.capabilities      -> capabilities
             ModelAgentDefinition.domain_context     -> domain_context
@@ -273,8 +276,9 @@ class HandlerRoutingDefault:
             text_lower = text.lower()
 
             # Patterns for specific agent requests (with agent name)
+            # \b prevents false positives: "reuse agent-X", "misuse agent-X"
             specific_patterns = [
-                r"use\s+(agent-[\w-]+)",  # "use agent-researcher"
+                r"\buse\s+(agent-[\w-]+)",  # "use agent-researcher"
                 r"@(agent-[\w-]+)",  # "@agent-researcher"
                 r"^(agent-[\w-]+)",  # "agent-researcher" at start
             ]
