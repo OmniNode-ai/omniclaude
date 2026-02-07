@@ -53,7 +53,7 @@ def calculate_agent_match_score(
         agent_triggers: Activation patterns from the agent's YAML config
             (explicit_triggers + context_triggers).
         context_signals: Observed session signals (tool names, file paths,
-            prompt keywords, etc.). Should be lowercase for comparison.
+            prompt keywords, etc.). Case-insensitive (normalized internally).
 
     Returns:
         AgentMatchResult with score, method, and match details.
