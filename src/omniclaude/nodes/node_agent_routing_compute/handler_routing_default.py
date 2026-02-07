@@ -21,12 +21,15 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any
 from uuid import UUID
 
 from omniclaude.nodes.node_agent_routing_compute._internal import (
     ConfidenceScorer,
     TriggerMatcher,
+)
+from omniclaude.nodes.node_agent_routing_compute._internal._types import (
+    AgentData,
+    AgentRegistry,
 )
 from omniclaude.nodes.node_agent_routing_compute.models import (
     ModelConfidenceBreakdown,
@@ -215,7 +218,7 @@ class HandlerRoutingDefault:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _build_registry_dict(request: ModelRoutingRequest) -> dict[str, Any]:
+    def _build_registry_dict(request: ModelRoutingRequest) -> AgentRegistry:
         """Convert typed ModelAgentDefinition tuple to dict format.
 
         TriggerMatcher expects::
@@ -238,7 +241,7 @@ class HandlerRoutingDefault:
             ModelAgentDefinition.domain_context     -> domain_context
             ModelAgentDefinition.definition_path   -> definition_path
         """
-        agents: dict[str, dict[str, Any]] = {}
+        agents: dict[str, AgentData] = {}
         for agent_def in request.agent_registry:
             agents[agent_def.name] = {
                 "activation_triggers": list(agent_def.explicit_triggers)

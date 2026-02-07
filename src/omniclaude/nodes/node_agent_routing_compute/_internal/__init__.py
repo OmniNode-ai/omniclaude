@@ -3,8 +3,9 @@
 """Internal pure-Python routing logic.
 
 This package contains the ported routing algorithms with ZERO ONEX imports.
-All modules use dict[str, Any] interfaces. The handler layer adapts between
-typed ONEX models and these pure-Python internals.
+Interfaces use narrow TypedDicts (defined in ``_types``) instead of
+``dict[str, Any]``.  The handler layer adapts between typed ONEX models
+and these pure-Python internals.
 
 Exported:
     TriggerMatcher: Fuzzy trigger matching with scoring
