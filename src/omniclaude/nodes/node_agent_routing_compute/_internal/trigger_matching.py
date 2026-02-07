@@ -18,7 +18,7 @@ invariants preserved:
 - Technical token preservation (s3, ml, ai, etc.)
 - No full-text SequenceMatcher comparison (intentionally omitted)
 
-Pure Python - NO ONEX imports.
+Pure Python with typed interfaces from _types. No ONEX framework imports.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ from omniclaude.nodes.node_agent_routing_compute._internal._types import (
     AgentRegistry,
 )
 
-__all__ = ["AgentRegistry", "TriggerMatcher"]
+__all__ = ["TriggerMatcher"]
 
 
 # Hard floor: remove matches below noise threshold.

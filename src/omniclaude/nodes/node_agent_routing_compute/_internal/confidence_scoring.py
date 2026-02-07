@@ -12,7 +12,7 @@ Confidence Components (weighted):
 
 Based on agent_router.py ConfidenceScorer with intentional refinements:
 - Word-level capability matching (prevents 'api' matching inside 'rapidly')
-Pure Python - NO ONEX imports.
+Pure Python with typed interfaces from _types. No ONEX framework imports.
 """
 
 from __future__ import annotations

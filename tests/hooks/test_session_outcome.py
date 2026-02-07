@@ -150,11 +150,11 @@ class TestFailedOutcome:
         """Error markers take priority over completion markers (Gate 1 before Gate 2)."""
         result = derive_session_outcome(
             exit_code=0,
-            session_output="Task completed but Error: validation failed",
+            session_output="Task completed but\nError: validation failed",
             tool_calls_completed=5,
             duration_seconds=300.0,
         )
-        # Even though "completed" is present, "Error:" triggers FAILED first
+        # Even though "completed" is present, "Error:" at line start triggers FAILED first
         assert result.outcome == OUTCOME_FAILED
 
 
@@ -506,20 +506,20 @@ class TestEdgeCases:
         )
         assert result.outcome == OUTCOME_UNKNOWN
 
-    def test_error_marker_embedded_in_word(self) -> None:
-        """Error marker within a compound word does NOT trigger FAILED.
+    def test_error_marker_mid_sentence_does_not_trigger(self) -> None:
+        """Error marker in mid-sentence text does NOT trigger FAILED.
 
-        With word boundary matching, 'Error:' only matches at word boundaries,
-        so 'SomeError:' does not match the pattern (no boundary between 'e'
-        and 'E' since both are word characters).
+        With line-start anchoring, 'Error:' only triggers when it appears
+        at the beginning of a line (possibly with leading whitespace or
+        a type prefix like 'ValueError:').
         """
         result = derive_session_outcome(
             exit_code=0,
-            session_output="SomeError: unexpected value",
+            session_output="Found SomeError: unexpected value in logs",
             tool_calls_completed=5,
             duration_seconds=200.0,
         )
-        # "SomeError:" does not match \bError: (no word boundary before "E")
+        # "SomeError:" mid-sentence does not match line-start anchored pattern
         # No completion markers either, duration > 60s -> UNKNOWN
         assert result.outcome == OUTCOME_UNKNOWN
 
@@ -570,6 +570,135 @@ class TestEdgeCases:
             duration_seconds=100.0,
         )
         assert result.outcome == OUTCOME_SUCCESS
+
+
+# =============================================================================
+# False Positive Rejection (Tightened Patterns)
+# =============================================================================
+
+
+class TestFalsePositiveRejection:
+    """Verify that benign text does NOT trigger error markers."""
+
+    def test_fix_failed_test_does_not_trigger(self) -> None:
+        """'fix FAILED test' is a benign reference and should NOT trigger FAILED."""
+        result = derive_session_outcome(
+            exit_code=0,
+            session_output="fix FAILED test",
+            tool_calls_completed=0,
+            duration_seconds=10.0,
+        )
+        # No error markers should match; short session -> ABANDONED
+        assert result.outcome != OUTCOME_FAILED
+
+    def test_previously_failed_build_does_not_trigger(self) -> None:
+        """'previously FAILED build' is a benign reference and should NOT trigger."""
+        result = derive_session_outcome(
+            exit_code=0,
+            session_output="previously FAILED build",
+            tool_calls_completed=0,
+            duration_seconds=10.0,
+        )
+        assert result.outcome != OUTCOME_FAILED
+
+    def test_error_colon_mid_sentence_does_not_trigger(self) -> None:
+        """'This is an Error: none found' mid-sentence should NOT trigger."""
+        result = derive_session_outcome(
+            exit_code=0,
+            session_output="This is an Error: none found",
+            tool_calls_completed=0,
+            duration_seconds=10.0,
+        )
+        assert result.outcome != OUTCOME_FAILED
+
+
+# =============================================================================
+# True Positive Confirmation (Tightened Patterns)
+# =============================================================================
+
+
+class TestTruePositiveConfirmation:
+    """Verify that real error text still triggers error markers."""
+
+    def test_count_failed_triggers(self) -> None:
+        """'3 FAILED' (count + FAILED) should trigger FAILED."""
+        result = derive_session_outcome(
+            exit_code=0,
+            session_output="3 FAILED",
+            tool_calls_completed=5,
+            duration_seconds=120.0,
+        )
+        assert result.outcome == OUTCOME_FAILED
+
+    def test_test_failed_triggers(self) -> None:
+        """'test FAILED' should trigger FAILED."""
+        result = derive_session_outcome(
+            exit_code=0,
+            session_output="test FAILED",
+            tool_calls_completed=5,
+            duration_seconds=120.0,
+        )
+        assert result.outcome == OUTCOME_FAILED
+
+    def test_error_colon_after_newline_triggers(self) -> None:
+        """Error: at start of a line (after newline) should trigger FAILED."""
+        result = derive_session_outcome(
+            exit_code=0,
+            session_output="Some preamble\nError: connection refused",
+            tool_calls_completed=5,
+            duration_seconds=120.0,
+        )
+        assert result.outcome == OUTCOME_FAILED
+
+    def test_valueerror_at_line_start_triggers(self) -> None:
+        """'  ValueError: invalid input' at line start should trigger FAILED."""
+        result = derive_session_outcome(
+            exit_code=0,
+            session_output="  ValueError: invalid input",
+            tool_calls_completed=5,
+            duration_seconds=120.0,
+        )
+        assert result.outcome == OUTCOME_FAILED
+
+    def test_failed_at_end_of_line_triggers(self) -> None:
+        """'FAILED' at end of a line should trigger FAILED."""
+        result = derive_session_outcome(
+            exit_code=0,
+            session_output="some test FAILED",
+            tool_calls_completed=5,
+            duration_seconds=120.0,
+        )
+        assert result.outcome == OUTCOME_FAILED
+
+    def test_failed_at_end_of_string_triggers(self) -> None:
+        """'FAILED' at end of multiline string should trigger FAILED."""
+        result = derive_session_outcome(
+            exit_code=0,
+            session_output="line 1\nline 2\nFAILED",
+            tool_calls_completed=5,
+            duration_seconds=120.0,
+        )
+        assert result.outcome == OUTCOME_FAILED
+
+    def test_error_type_at_start_of_string_triggers(self) -> None:
+        """'TypeError: ...' at start of string should trigger FAILED."""
+        result = derive_session_outcome(
+            exit_code=0,
+            session_output="TypeError: unsupported operand",
+            tool_calls_completed=5,
+            duration_seconds=120.0,
+        )
+        assert result.outcome == OUTCOME_FAILED
+
+    def test_exception_after_newline_triggers(self) -> None:
+        """'RuntimeException:' after newline should trigger FAILED."""
+        result = derive_session_outcome(
+            exit_code=0,
+            session_output="Output:\nRuntimeException: something broke",
+            tool_calls_completed=5,
+            duration_seconds=120.0,
+        )
+        assert result.outcome == OUTCOME_FAILED
 
 
 # =============================================================================

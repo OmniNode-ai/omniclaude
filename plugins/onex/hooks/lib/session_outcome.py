@@ -26,16 +26,17 @@ from typing import NamedTuple
 # 60 seconds: a quick open-and-close with no meaningful work done.
 ABANDON_THRESHOLD_SECONDS: float = 60.0
 
-# Patterns that indicate a session ended with errors.
-# Matched case-sensitively against session output text.
-ERROR_MARKER_PATTERNS: tuple[str, ...] = (
-    "Error:",
-    "Exception:",
-    "Traceback",
-    # NOTE: "FAILED" as a standalone word may false-positive on historical
-    # references (e.g. "fix FAILED test") once real session output is wired.
-    # Tighten to line-start anchor or context pattern in Phase 2+.
-    "FAILED",
+# Compiled patterns that indicate a session ended with errors.
+# Each pattern controls its own anchoring and context to reduce false positives.
+ERROR_MARKER_REGEXES: tuple[re.Pattern[str], ...] = (
+    # "Error:", "ValueError:", "TypeError:", etc. at start of a line
+    re.compile(r"(?:^|\n)\s*\w*Error:"),
+    # "Exception:", "RuntimeException:", etc. at start of a line
+    re.compile(r"(?:^|\n)\s*\w*Exception:"),
+    # "Traceback" as a standalone word (already distinctive)
+    re.compile(r"\bTraceback\b"),
+    # "FAILED" preceded by a count or test-related word, or at end of a line
+    re.compile(r"\d+\s+FAILED\b|[Tt]ests?\s+FAILED\b|\bFAILED\s*$", re.MULTILINE),
 )
 
 # Patterns that indicate a session completed meaningful work.
@@ -77,20 +78,14 @@ class SessionOutcomeResult(NamedTuple):
 
 
 def _has_error_markers(session_output: str) -> bool:
-    """Check if session output contains error markers (case-sensitive).
+    """Check if session output contains error markers.
 
-    Uses word boundary matching at the start of each marker to avoid false
-    positives from substrings (e.g., compound variable names containing
-    'Error:'). Trailing word boundary is only applied when the marker ends
-    with a word character, since markers ending with punctuation (like
-    'Error:') would not have a word boundary after the final character.
+    Uses pre-compiled regexes with line-start anchoring and contextual
+    patterns to reduce false positives from benign references to errors
+    (e.g., 'fix FAILED test' or 'This is an Error: none found').
     """
-    for marker in ERROR_MARKER_PATTERNS:
-        pattern = r"\b" + re.escape(marker)
-        # Add trailing word boundary only if marker ends with a word character
-        if marker and (marker[-1].isalnum() or marker[-1] == "_"):
-            pattern += r"\b"
-        if re.search(pattern, session_output):
+    for pattern in ERROR_MARKER_REGEXES:
+        if pattern.search(session_output):
             return True
     return False
 
@@ -192,7 +187,7 @@ __all__ = [
     # Constants
     "ABANDON_THRESHOLD_SECONDS",
     "COMPLETION_MARKER_PATTERNS",
-    "ERROR_MARKER_PATTERNS",
+    "ERROR_MARKER_REGEXES",
     "OUTCOME_ABANDONED",
     "OUTCOME_FAILED",
     "OUTCOME_SUCCESS",
