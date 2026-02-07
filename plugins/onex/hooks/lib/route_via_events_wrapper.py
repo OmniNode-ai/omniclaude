@@ -38,8 +38,10 @@ Output:
     match reason. The array is empty when no router is available or routing fails.
 """
 
+import asyncio
 import json
 import logging
+import os
 import sys
 import threading
 import time
@@ -92,6 +94,30 @@ except ImportError:
 
 
 logger = logging.getLogger(__name__)
+
+# ONEX routing node imports (for USE_ONEX_ROUTING_NODES feature flag)
+_onex_nodes_available = False
+try:
+    from omniclaude.nodes.node_agent_routing_compute.handler_routing_default import (
+        HandlerRoutingDefault,
+    )
+    from omniclaude.nodes.node_agent_routing_compute.models import (
+        ModelAgentDefinition,
+        ModelRoutingRequest,
+    )
+    from omniclaude.nodes.node_routing_emission_effect.handler_routing_emitter import (
+        HandlerRoutingEmitter,
+    )
+    from omniclaude.nodes.node_routing_emission_effect.models import (
+        ModelEmissionRequest,
+    )
+    from omniclaude.nodes.node_routing_history_reducer.handler_history_postgres import (
+        HandlerHistoryPostgres,
+    )
+
+    _onex_nodes_available = True
+except ImportError:
+    logger.debug("ONEX routing nodes not available, USE_ONEX_ROUTING_NODES ignored")
 
 # Canonical routing path values for metrics (from OMN-1893)
 VALID_ROUTING_PATHS = frozenset({"event", "local", "hybrid"})
@@ -276,18 +302,241 @@ def _emit_routing_decision(
         logger.debug("Failed to emit routing decision: %s", e)
 
 
+# ONEX routing node singletons (USE_ONEX_ROUTING_NODES)
+_compute_handler: Any = None
+_emit_handler: Any = None
+_history_handler: Any = None
+_onex_handler_lock = threading.Lock()
+_cached_stats: Any = None
+_stats_lock = threading.Lock()
+
+
+def _use_onex_routing_nodes() -> bool:
+    """Check if ONEX routing nodes feature flag is enabled."""
+    if not _onex_nodes_available:
+        return False
+    return os.environ.get("USE_ONEX_ROUTING_NODES", "false").lower() in (
+        "true",
+        "1",
+        "yes",
+        "on",
+        "y",
+        "t",
+    )
+
+
+def _get_onex_handlers() -> tuple[Any, Any, Any] | None:
+    """Get or create singleton ONEX handlers (compute, emitter, history)."""
+    global _compute_handler, _emit_handler, _history_handler
+    if _compute_handler is not None:
+        return _compute_handler, _emit_handler, _history_handler
+    if not _onex_nodes_available:
+        return None
+    with _onex_handler_lock:
+        if _compute_handler is not None:
+            return _compute_handler, _emit_handler, _history_handler
+        try:
+            # Assign to locals first — only promote to globals after all
+            # three handlers construct successfully, avoiding a stale
+            # non-None _compute_handler when a later constructor fails.
+            compute = HandlerRoutingDefault()
+            emitter = HandlerRoutingEmitter()
+            history = HandlerHistoryPostgres()
+        except Exception as e:
+            logger.warning("Failed to initialize ONEX handlers: %s", e)
+            return None
+        # Assign the sentinel (_compute_handler) LAST so that concurrent
+        # threads bypassing the lock never see a non-None sentinel while
+        # _emit_handler / _history_handler are still None.
+        _emit_handler = emitter
+        _history_handler = history
+        _compute_handler = compute
+    return _compute_handler, _emit_handler, _history_handler
+
+
+def _get_cached_stats() -> Any:
+    """Pre-fetch routing stats once per process. Returns None on failure."""
+    global _cached_stats
+    if _cached_stats is not None:
+        return _cached_stats
+    handlers = _get_onex_handlers()
+    if handlers is None:
+        return None
+    _, _, history = handlers
+    with _stats_lock:
+        if _cached_stats is not None:
+            return _cached_stats
+        try:
+            _cached_stats = asyncio.run(history.query_routing_stats())
+        except Exception as e:
+            logger.debug("Failed to pre-fetch routing stats: %s", e)
+    return _cached_stats
+
+
+def _build_agent_definitions(registry: dict[str, Any]) -> tuple[Any, ...]:
+    """Convert AgentRouter registry to ModelAgentDefinition tuple."""
+    defs: list[Any] = []
+    for name, data in registry.get("agents", {}).items():
+        try:
+            # domain_context may be a dict in some YAML configs; extract primary
+            dc = data.get("domain_context", "general")
+            if isinstance(dc, dict):
+                dc = dc.get("primary", "general")
+            defs.append(
+                ModelAgentDefinition(
+                    name=name,
+                    agent_type=data.get(
+                        "agent_type",
+                        name.replace("agent-", "").replace("-", "_"),
+                    ),
+                    description=data.get("description", data.get("title", "")),
+                    domain_context=str(dc),
+                    explicit_triggers=tuple(data.get("activation_triggers", [])),
+                    context_triggers=(),
+                    capabilities=tuple(data.get("capabilities", [])),
+                    definition_path=data.get("definition_path"),
+                )
+            )
+        except Exception as e:
+            logger.debug("Skipping agent %s in ONEX conversion: %s", name, e)
+    return tuple(defs)
+
+
+def _route_via_onex_nodes(
+    prompt: str,
+    correlation_id: str,
+    timeout_ms: int,
+    session_id: str | None,
+) -> dict[str, Any] | None:
+    """Route via ONEX compute + effect nodes. Returns None to fall back."""
+    from datetime import UTC, datetime
+    from uuid import UUID, uuid4
+
+    handlers = _get_onex_handlers()
+    if handlers is None:
+        return None
+    compute, emitter, _ = handlers
+
+    router = _get_router()
+    if router is None:
+        return None
+
+    agent_defs = _build_agent_definitions(router.registry)
+    if not agent_defs:
+        return None
+
+    try:
+        cid = UUID(correlation_id)
+    except (ValueError, AttributeError):
+        cid = uuid4()
+
+    stats = _get_cached_stats()
+    start_time = time.time()
+
+    try:
+        request = ModelRoutingRequest(
+            prompt=prompt,
+            correlation_id=cid,
+            agent_registry=agent_defs,
+            historical_stats=stats,
+            confidence_threshold=CONFIDENCE_THRESHOLD,
+        )
+
+        async def _compute() -> Any:
+            """Compute routing only (no emission)."""
+            return await compute.compute_routing(request, correlation_id=cid)
+
+        async def _emit(r: Any) -> None:
+            """Emit routing decision (best-effort, non-blocking)."""
+            emit_req = ModelEmissionRequest(
+                correlation_id=cid,
+                session_id=session_id or "unknown",
+                selected_agent=r.selected_agent,
+                confidence=r.confidence,
+                confidence_breakdown=r.confidence_breakdown,
+                routing_policy=r.routing_policy,
+                routing_path=r.routing_path,
+                prompt_preview=_sanitize_prompt_preview(prompt),
+                prompt_length=len(prompt),
+                emitted_at=datetime.now(UTC),
+            )
+            await emitter.emit_routing_decision(emit_req, correlation_id=cid)
+
+        result = asyncio.run(_compute())
+        latency_ms = int((time.time() - start_time) * 1000)
+
+        # Check timeout BEFORE emission — avoids emitting a routing decision
+        # that will be discarded (which would conflict with the legacy
+        # fallback's own emission).
+        if latency_ms > timeout_ms:
+            logger.warning(
+                "ONEX routing exceeded %dms budget (%dms), falling back",
+                timeout_ms,
+                latency_ms,
+            )
+            return None
+
+        # Emit routing decision (best-effort, only if within budget)
+        try:
+            asyncio.run(_emit(result))
+        except Exception as exc:
+            logger.debug("ONEX emission failed (non-blocking): %s", exc)
+
+        # Result shaping: ModelRoutingResult → wrapper dict
+        agents_reg = router.registry.get("agents", {})
+        agent_info = agents_reg.get(result.selected_agent, {})
+        # Validate routing_path against canonical set (matches legacy path behavior)
+        onex_routing_path = result.routing_path
+        if onex_routing_path not in VALID_ROUTING_PATHS:
+            logger.warning(
+                "ONEX routing returned invalid routing_path '%s', defaulting to 'local'",
+                onex_routing_path,
+            )
+            onex_routing_path = "local"
+        return {
+            "selected_agent": result.selected_agent,
+            "confidence": result.confidence,
+            "candidates": [
+                {
+                    "name": c.agent_name,
+                    "score": c.confidence,
+                    "description": agents_reg.get(c.agent_name, {}).get(
+                        "description",
+                        agents_reg.get(c.agent_name, {}).get("title", c.agent_name),
+                    ),
+                    "reason": c.match_reason,
+                }
+                for c in result.candidates
+            ],
+            "reasoning": result.fallback_reason
+            or result.confidence_breakdown.explanation,
+            "routing_method": RoutingMethod.LOCAL.value,
+            "routing_policy": result.routing_policy,
+            "routing_path": onex_routing_path,
+            "method": result.routing_policy,
+            "latency_ms": latency_ms,
+            "domain": agent_info.get("domain_context", "general"),
+            "purpose": agent_info.get("description", agent_info.get("title", "")),
+            "event_attempted": False,
+        }
+
+    except Exception as e:
+        logger.warning("ONEX routing failed, falling back to legacy: %s", e)
+        return None
+
+
 def route_via_events(
     prompt: str,
     correlation_id: str,
     timeout_ms: int = 5000,
-    session_id: str | None = None,  # noqa: ARG001 - Reserved for future use
+    session_id: str | None = None,  # Used by ONEX emission path
 ) -> dict[str, Any]:
     """
     Route user prompt using intelligent trigger matching and confidence scoring.
 
-    Uses AgentRouter to analyze the prompt and match against agent activation
-    triggers. Falls back to polymorphic-agent only when no good match is found
-    (confidence below threshold).
+    When USE_ONEX_ROUTING_NODES is enabled, delegates to ONEX compute and
+    effect nodes. Otherwise uses AgentRouter directly. Falls back to
+    polymorphic-agent only when no good match is found.
 
     Args:
         prompt: User prompt to route
@@ -295,7 +544,7 @@ def route_via_events(
         timeout_ms: Maximum allowed routing time in milliseconds (default 5000).
             If the routing operation exceeds this budget, the result is
             discarded and a fallback to the default agent is returned.
-        session_id: Session ID (reserved for future use)
+        session_id: Session ID for emission tracking
 
     Returns:
         Routing decision dictionary with routing_path signal
@@ -337,6 +586,15 @@ def route_via_events(
             "purpose": "Intelligent coordinator for development workflows",
             "event_attempted": False,
         }
+
+    # ONEX node routing path (when feature flag is enabled)
+    if _use_onex_routing_nodes():
+        onex_result = _route_via_onex_nodes(
+            prompt, correlation_id, timeout_ms, session_id
+        )
+        if onex_result is not None:
+            return onex_result
+        logger.debug("ONEX routing returned None, falling through to legacy path")
 
     # Attempt intelligent routing via AgentRouter
     router = _get_router()

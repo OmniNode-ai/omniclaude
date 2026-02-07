@@ -26,9 +26,17 @@ from __future__ import annotations
 import math
 import re
 from difflib import SequenceMatcher
-from typing import Any
+from typing import TypedDict
 
-__all__ = ["TriggerMatcher"]
+from .confidence_scoring import AgentData
+
+__all__ = ["AgentRegistry", "TriggerMatcher"]
+
+
+class AgentRegistry(TypedDict):
+    """Agent registry structure expected by TriggerMatcher."""
+
+    agents: dict[str, AgentData]
 
 
 # Hard floor: remove matches below noise threshold.
@@ -200,9 +208,9 @@ class TriggerMatcher:
     # Short alphanumeric technical tokens that should be preserved during
     # keyword extraction even when below the default length threshold.
     # These tokens are domain-significant (e.g., cloud services, protocols).
-    _TECHNICAL_TOKENS = frozenset({"s3", "k8", "ec2", "ml", "ai", "ci", "cd", "db"})
+    _TECHNICAL_TOKENS = frozenset({"s3", "k8", "ec2", "ml", "ai", "ci", "cd", "db"})  # noqa: secrets
 
-    def __init__(self, agent_registry: dict[str, Any]):
+    def __init__(self, agent_registry: AgentRegistry):
         """Initialize matcher with agent registry.
 
         Args:
@@ -216,7 +224,7 @@ class TriggerMatcher:
         self.registry = agent_registry
         self.trigger_index = self._build_trigger_index()
 
-    def _validate_registry(self, registry: dict[str, Any]) -> None:
+    def _validate_registry(self, registry: AgentRegistry) -> None:
         """Validate registry structure before use.
 
         Args:

@@ -19,9 +19,42 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import TypedDict
 
-__all__ = ["ConfidenceScore", "ConfidenceScorer"]
+__all__ = [
+    "AgentData",
+    "AgentHistory",
+    "ConfidenceScore",
+    "ConfidenceScorer",
+    "RoutingContext",
+]
+
+
+class AgentData(TypedDict, total=False):
+    """Agent registry entry data.
+
+    Fields are optional (total=False) because agents have varying metadata.
+    """
+
+    activation_triggers: list[str]
+    capabilities: list[str]
+    domain_context: str
+    description: str
+    title: str
+    definition_path: str
+    agent_type: str
+
+
+class RoutingContext(TypedDict, total=False):
+    """Execution context for routing."""
+
+    domain: str
+
+
+class AgentHistory(TypedDict, total=False):
+    """Historical agent performance data."""
+
+    overall: float
 
 
 @dataclass
@@ -65,14 +98,14 @@ class ConfidenceScorer:
         """Initialize confidence scorer."""
         # Historical success rates (loaded from tracking data)
         # In Phase 2+, this would come from actual usage tracking
-        self.historical_success: dict[str, dict[str, Any]] = {}
+        self.historical_success: dict[str, AgentHistory] = {}
 
     def score(
         self,
         agent_name: str,
-        agent_data: dict[str, Any],
+        agent_data: AgentData,
         user_request: str,
-        context: dict[str, Any],
+        context: RoutingContext,
         trigger_score: float,
     ) -> ConfidenceScore:
         """Calculate comprehensive confidence score.
@@ -126,7 +159,7 @@ class ConfidenceScorer:
         )
 
     def _calculate_context_score(
-        self, agent_data: dict[str, Any], context: dict[str, Any]
+        self, agent_data: AgentData, context: RoutingContext
     ) -> float:
         """Score based on context alignment.
 
@@ -154,9 +187,7 @@ class ConfidenceScorer:
             # Domain mismatch
             return 0.4
 
-    def _calculate_capability_score(
-        self, agent_data: dict[str, Any], request: str
-    ) -> float:
+    def _calculate_capability_score(self, agent_data: AgentData, request: str) -> float:
         """Score based on capability match.
 
         Measures how many agent capabilities are mentioned in request.
