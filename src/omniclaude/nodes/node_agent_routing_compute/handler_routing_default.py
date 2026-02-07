@@ -117,7 +117,7 @@ class HandlerRoutingDefault:
                     agent_name=agent_name,
                     agent_data=agent_data,
                     user_request=request.prompt,
-                    context={"domain": agent_data.get("domain_context", "general")},
+                    context={},
                     trigger_score=trigger_score,
                 )
             except Exception:
