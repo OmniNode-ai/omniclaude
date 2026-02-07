@@ -297,7 +297,8 @@ def notify_blocked(ticket_id, reason, block_kind, run_id=None, phase=None):
         prefix += f"[run:{run_id}]"
 
     try:
-        from plugins.onex.hooks.lib.emit_client_wrapper import emit_event
+        # emit_client_wrapper is at ${CLAUDE_PLUGIN_ROOT}/hooks/lib/emit_client_wrapper.py
+        from emit_client_wrapper import emit_event
         emit_event(
             event_type='notification.blocked',
             payload={
@@ -324,7 +325,8 @@ def notify_completed(ticket_id, summary, run_id=None, phase=None, pr_url=None):
         prefix += f"[run:{run_id}]"
 
     try:
-        from plugins.onex.hooks.lib.emit_client_wrapper import emit_event
+        # emit_client_wrapper is at ${CLAUDE_PLUGIN_ROOT}/hooks/lib/emit_client_wrapper.py
+        from emit_client_wrapper import emit_event
         emit_event(
             event_type='notification.completed',
             payload={
