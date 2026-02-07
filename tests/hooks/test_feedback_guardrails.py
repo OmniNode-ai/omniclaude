@@ -9,6 +9,7 @@ Tests verify:
 - All gates passing allows reinforcement
 - Gate evaluation order (short-circuit semantics)
 - Result structure invariants
+- Routing feedback emission path (frozen schema integration)
 
 Part of OMN-1892: Add feedback loop with guardrails.
 """
@@ -22,8 +23,10 @@ from plugins.onex.hooks.lib.feedback_guardrails import (
     MIN_ACCURACY_THRESHOLD,
     MIN_UTILIZATION_THRESHOLD,
     SKIP_BELOW_SCORE_THRESHOLD,
+    SKIP_INVALID_OUTCOME,
     SKIP_NO_INJECTION,
     SKIP_UNCLEAR_OUTCOME,
+    VALID_OUTCOMES,
     GuardrailResult,
     should_reinforce_routing,
 )
@@ -116,7 +119,7 @@ class TestGate2UnclearOutcome:
         assert result.skip_reason != SKIP_UNCLEAR_OUTCOME
 
     def test_empty_string_outcome_returns_false(self) -> None:
-        """Empty string is not a clear outcome."""
+        """Empty string is not a valid outcome; rejected before gate evaluation."""
         result = should_reinforce_routing(
             injection_occurred=True,
             utilization_score=0.8,
@@ -124,10 +127,10 @@ class TestGate2UnclearOutcome:
             session_outcome="",
         )
         assert result.should_reinforce is False
-        assert result.skip_reason == SKIP_UNCLEAR_OUTCOME
+        assert result.skip_reason == SKIP_INVALID_OUTCOME
 
     def test_arbitrary_string_outcome_returns_false(self) -> None:
-        """Arbitrary strings that are not 'success' or 'failed' are unclear."""
+        """Arbitrary strings not in VALID_OUTCOMES are rejected as invalid."""
         result = should_reinforce_routing(
             injection_occurred=True,
             utilization_score=0.8,
@@ -135,7 +138,49 @@ class TestGate2UnclearOutcome:
             session_outcome="partial",
         )
         assert result.should_reinforce is False
-        assert result.skip_reason == SKIP_UNCLEAR_OUTCOME
+        assert result.skip_reason == SKIP_INVALID_OUTCOME
+
+
+class TestInvalidOutcomeValidation:
+    """Pre-gate validation: session_outcome must be in VALID_OUTCOMES."""
+
+    def test_typo_outcome_returns_invalid(self) -> None:
+        """A typo like 'typo_sucess' is rejected before gate evaluation."""
+        result = should_reinforce_routing(
+            injection_occurred=True,
+            utilization_score=0.8,
+            agent_match_score=0.9,
+            session_outcome="typo_sucess",
+        )
+        assert result.should_reinforce is False
+        assert result.skip_reason == SKIP_INVALID_OUTCOME
+        assert result.details["session_outcome"] == "typo_sucess"
+
+    def test_invalid_outcome_precedes_gate_1(self) -> None:
+        """Invalid outcome is checked before gate 1 (no injection).
+
+        Even with injection_occurred=False, an invalid outcome should
+        report INVALID_OUTCOME, not NO_INJECTION.
+        """
+        result = should_reinforce_routing(
+            injection_occurred=False,
+            utilization_score=0.0,
+            agent_match_score=0.0,
+            session_outcome="bogus",
+        )
+        assert result.should_reinforce is False
+        assert result.skip_reason == SKIP_INVALID_OUTCOME
+
+    def test_case_sensitive_outcome_validation(self) -> None:
+        """Outcome validation is case-sensitive: 'Success' is invalid."""
+        result = should_reinforce_routing(
+            injection_occurred=True,
+            utilization_score=0.8,
+            agent_match_score=0.9,
+            session_outcome="Success",
+        )
+        assert result.should_reinforce is False
+        assert result.skip_reason == SKIP_INVALID_OUTCOME
 
 
 class TestGate3LowUtilizationAndAccuracy:
@@ -512,6 +557,15 @@ class TestConstants:
         assert "unknown" not in CLEAR_OUTCOMES
         assert "" not in CLEAR_OUTCOMES
 
+    def test_valid_outcomes_is_frozenset(self) -> None:
+        """VALID_OUTCOMES is a frozenset containing all four recognized values."""
+        assert isinstance(VALID_OUTCOMES, frozenset)
+        assert {"success", "failed", "abandoned", "unknown"} == VALID_OUTCOMES
+
+    def test_clear_outcomes_is_subset_of_valid_outcomes(self) -> None:
+        """CLEAR_OUTCOMES is a strict subset of VALID_OUTCOMES."""
+        assert CLEAR_OUTCOMES < VALID_OUTCOMES
+
 
 class TestInputValidation:
     """Test input clamping and NaN/inf handling."""
@@ -659,3 +713,104 @@ class TestPureFunctionProperties:
         result_a.details["extra_key"] = "mutation"
         # result_b should be unaffected
         assert "extra_key" not in result_b.details
+
+
+class TestRoutingFeedbackEmissionPath:
+    """Test the routing.feedback emission path end-to-end.
+
+    Verifies that when guardrails allow reinforcement, the frozen
+    Pydantic schema ModelRoutingFeedbackPayload can be constructed
+    with the guardrail result and realistic session data.
+    """
+
+    def test_feedback_payload_from_successful_reinforcement(self) -> None:
+        """Happy path: guardrails pass, and feedback payload is constructable.
+
+        Simulates the real emission path:
+        1. Call should_reinforce_routing with realistic above-threshold inputs
+        2. Verify reinforcement is allowed
+        3. Construct ModelRoutingFeedbackPayload with the result
+        4. Verify the payload is frozen and fields match
+        """
+        from datetime import UTC, datetime
+
+        from omniclaude.hooks.schemas import ModelRoutingFeedbackPayload
+
+        # Step 1: Evaluate guardrails with realistic inputs
+        result = should_reinforce_routing(
+            injection_occurred=True,
+            utilization_score=0.65,
+            agent_match_score=0.82,
+            session_outcome="success",
+        )
+
+        # Step 2: Verify reinforcement is allowed
+        assert result.should_reinforce is True
+        assert result.skip_reason is None
+
+        # Step 3: Construct the frozen Pydantic payload
+        now = datetime(2025, 6, 15, 14, 30, 0, tzinfo=UTC)
+        payload = ModelRoutingFeedbackPayload(
+            session_id="abc12345-1234-5678-abcd-1234567890ab",
+            outcome=str(result.details["session_outcome"]),
+            emitted_at=now,
+        )
+
+        # Step 4: Verify payload fields
+        assert payload.event_name == "routing.feedback"
+        assert payload.session_id == "abc12345-1234-5678-abcd-1234567890ab"
+        assert payload.outcome == "success"
+        assert payload.emitted_at == now
+
+        # Verify frozen (immutable)
+        with pytest.raises(Exception):
+            payload.outcome = "failed"  # type: ignore[misc]
+
+    def test_feedback_payload_with_failed_outcome(self) -> None:
+        """Failed sessions also produce valid feedback payloads."""
+        from datetime import UTC, datetime
+
+        from omniclaude.hooks.schemas import ModelRoutingFeedbackPayload
+
+        result = should_reinforce_routing(
+            injection_occurred=True,
+            utilization_score=0.4,
+            agent_match_score=0.7,
+            session_outcome="failed",
+        )
+        assert result.should_reinforce is True
+
+        payload = ModelRoutingFeedbackPayload(
+            session_id="def12345-5678-abcd-1234-567890abcdef",
+            outcome="failed",
+            emitted_at=datetime(2025, 6, 15, 15, 0, 0, tzinfo=UTC),
+        )
+        assert payload.event_name == "routing.feedback"
+        assert payload.outcome == "failed"
+
+    def test_skipped_payload_from_failed_guardrail(self) -> None:
+        """When guardrails reject, ModelRoutingFeedbackSkippedPayload is constructable."""
+        from datetime import UTC, datetime
+
+        from omniclaude.hooks.schemas import ModelRoutingFeedbackSkippedPayload
+
+        result = should_reinforce_routing(
+            injection_occurred=False,
+            utilization_score=0.9,
+            agent_match_score=0.9,
+            session_outcome="success",
+        )
+        assert result.should_reinforce is False
+        assert result.skip_reason == SKIP_NO_INJECTION
+
+        payload = ModelRoutingFeedbackSkippedPayload(
+            session_id="abc12345-1234-5678-abcd-1234567890ab",
+            skip_reason=result.skip_reason,
+            emitted_at=datetime(2025, 6, 15, 14, 30, 0, tzinfo=UTC),
+        )
+        assert payload.event_name == "routing.skipped"
+        assert payload.skip_reason == "NO_INJECTION"
+
+        # Verify frozen (immutable)
+        with pytest.raises(Exception):
+            payload.skip_reason = "OTHER"  # type: ignore[misc]

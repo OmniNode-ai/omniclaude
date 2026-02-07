@@ -391,18 +391,31 @@ class TestEdgeCases:
         )
         assert result.score == pytest.approx(0.5)  # Only "api" matches, not "openapi"
 
-    def test_empty_string_trigger(self) -> None:
-        """Empty string trigger matches any non-empty signal set.
+    def test_empty_string_trigger_filtered_out(self) -> None:
+        """Empty string triggers are filtered out before matching.
 
-        An empty string is a substring of any string, so it will always match
-        when there are signals present.
+        Previously, an empty string was a substring of any string and would
+        always match. Now empty triggers are removed as noise, so a list
+        containing only empty strings yields no_triggers / score=0.0.
         """
         result = calculate_agent_match_score(
             agent_triggers=[""],
             context_signals=["anything"],
         )
-        # "" in "anything" is True in Python
-        assert result.score == 1.0
+        assert result.score == 0.0
+        assert result.method == "no_triggers"
+        assert result.total_triggers == 0
+
+    def test_mixed_empty_and_real_triggers(self) -> None:
+        """Empty strings are removed but real triggers are still evaluated."""
+        result = calculate_agent_match_score(
+            agent_triggers=["", "api", "", "debug", ""],
+            context_signals=["api design"],
+        )
+        # After filtering: ["api", "debug"] -> 1 of 2 matches
+        assert result.total_triggers == 2
+        assert result.score == pytest.approx(0.5)
+        assert result.matched_triggers == ["api"]
 
     def test_unicode_in_triggers_and_signals(self) -> None:
         """Unicode characters in triggers and signals are handled."""

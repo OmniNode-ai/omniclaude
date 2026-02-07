@@ -14,8 +14,11 @@ Part of OMN-1892: Add feedback loop with guardrails.
 
 from __future__ import annotations
 
+import logging
 import math
 from typing import NamedTuple
+
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # Constants
@@ -33,6 +36,13 @@ MIN_ACCURACY_THRESHOLD: float = 0.5
 SKIP_NO_INJECTION = "NO_INJECTION"
 SKIP_UNCLEAR_OUTCOME = "UNCLEAR_OUTCOME"
 SKIP_BELOW_SCORE_THRESHOLD = "BELOW_SCORE_THRESHOLD"
+SKIP_INVALID_OUTCOME = "INVALID_OUTCOME"
+
+# All valid values for session_outcome. Any value not in this set is rejected
+# before gate evaluation begins.
+VALID_OUTCOMES: frozenset[str] = frozenset(
+    {"success", "failed", "abandoned", "unknown"}
+)
 
 # Outcomes that provide a clear signal for reinforcement.
 CLEAR_OUTCOMES: frozenset[str] = frozenset({"success", "failed"})
@@ -76,6 +86,25 @@ def should_reinforce_routing(
     Returns:
         GuardrailResult with decision, skip reason, and diagnostic details.
     """
+    # Validate session_outcome before any processing.
+    # Log a warning but never raise — hooks must not block.
+    if session_outcome not in VALID_OUTCOMES:
+        logger.warning(
+            "Invalid session_outcome %r; expected one of %s",
+            session_outcome,
+            sorted(VALID_OUTCOMES),
+        )
+        return GuardrailResult(
+            should_reinforce=False,
+            skip_reason=SKIP_INVALID_OUTCOME,
+            details={
+                "injection_occurred": injection_occurred,
+                "utilization_score_raw": utilization_score,
+                "agent_match_score_raw": agent_match_score,
+                "session_outcome": session_outcome,
+            },
+        )
+
     # Store raw values before clamping for debugging
     details: dict[str, object] = {
         "injection_occurred": injection_occurred,
@@ -139,8 +168,10 @@ __all__ = [
     "MIN_ACCURACY_THRESHOLD",
     "MIN_UTILIZATION_THRESHOLD",
     "SKIP_BELOW_SCORE_THRESHOLD",
+    "SKIP_INVALID_OUTCOME",
     "SKIP_NO_INJECTION",
     "SKIP_UNCLEAR_OUTCOME",
+    "VALID_OUTCOMES",
     # Types
     "GuardrailResult",
     # Functions

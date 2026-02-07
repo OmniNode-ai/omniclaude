@@ -58,6 +58,9 @@ def calculate_agent_match_score(
     Returns:
         AgentMatchResult with score, method, and match details.
     """
+    # Filter out empty strings — they are noise, not real triggers.
+    agent_triggers = [t for t in agent_triggers if t]
+
     if not agent_triggers:
         return AgentMatchResult(
             score=0.0,

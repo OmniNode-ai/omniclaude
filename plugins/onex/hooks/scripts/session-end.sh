@@ -96,80 +96,33 @@ fi
         >> "$LOG_FILE" 2>&1 || { rc=$?; log "Session end logging failed (exit=$rc)"; }
 ) &
 
-# Emit session.ended event to Kafka (async, non-blocking)
-# Uses emit_client_wrapper with daemon fan-out (OMN-1632)
-if [[ "$KAFKA_ENABLED" == "true" ]]; then
-    (
-        # Convert duration from ms to seconds (using Python instead of bc for reliability)
-        DURATION_SECONDS=""
-        if [[ -n "$SESSION_DURATION" && "$SESSION_DURATION" != "0" ]]; then
-            DURATION_SECONDS=$($PYTHON_CMD -c "import sys; print(f'{float(sys.argv[1])/1000:.3f}')" "$SESSION_DURATION" 2>/dev/null || echo "")
-        fi
+# Convert duration from ms to seconds once (used by all subshells below)
+DURATION_SECONDS="0"
+if [[ -n "$SESSION_DURATION" && "$SESSION_DURATION" != "0" ]]; then
+    DURATION_SECONDS=$($PYTHON_CMD -c "import sys; print(f'{float(sys.argv[1])/1000:.3f}')" "$SESSION_DURATION" 2>/dev/null || echo "0")
+fi
 
-        # Build JSON payload for emit daemon (includes active_ticket for OMN-1830)
-        SESSION_PAYLOAD=$(jq -n \
-            --arg session_id "$SESSION_ID" \
-            --arg reason "$SESSION_REASON" \
-            --arg duration_seconds "${DURATION_SECONDS:-}" \
-            --arg active_ticket "$ACTIVE_TICKET" \
-            '{
-                session_id: $session_id,
-                reason: $reason,
-                duration_seconds: (if $duration_seconds == "" then null else ($duration_seconds | tonumber) end),
-                active_ticket: (if $active_ticket == "" then null else $active_ticket end)
-            }' 2>/dev/null)
-
-        # Validate payload was constructed successfully
-        if [[ -z "$SESSION_PAYLOAD" || "$SESSION_PAYLOAD" == "null" ]]; then
-            log "WARNING: Failed to construct session payload (jq failed), skipping emission"
-        else
-            emit_via_daemon "session.ended" "$SESSION_PAYLOAD" 100
-        fi
-    ) &
-
-    # Emit session.outcome event for feedback loop (OMN-1735, OMN-1892)
-    # Uses ClaudeCodeSessionOutcome enum values: success, failed, abandoned, unknown
-    # Derives outcome from session signals via session_outcome.py
-    (
-        # Validate SESSION_ID before constructing payload
-        if [[ -z "$SESSION_ID" ]]; then
-            log "WARNING: SESSION_ID is empty, skipping session.outcome emission"
-            exit 0  # Exit the subshell cleanly
-        fi
-
-        # Validate UUID format (8-4-4-4-12 structure, case-insensitive)
-        if [[ ! "$SESSION_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
-            log "WARNING: SESSION_ID '$SESSION_ID' is not valid UUID format, skipping session.outcome emission"
-            exit 0
-        fi
-
-        # Convert duration from ms to seconds for outcome derivation
-        # (SESSION_DURATION is from parent scope; DURATION_SECONDS must be
-        #  computed here because the session.ended subshell's copy is isolated)
-        DURATION_SECONDS="0"
-        if [[ -n "$SESSION_DURATION" && "$SESSION_DURATION" != "0" ]]; then
-            DURATION_SECONDS=$($PYTHON_CMD -c "import sys; print(f'{float(sys.argv[1])/1000:.3f}')" "$SESSION_DURATION" 2>/dev/null || echo "0")
-        fi
-
-        # ===================================================================
-        # PHASE 1 PLUMBING (OMN-1892): Outcome derivation inputs are
-        # partially hardcoded. Current state:
-        #   - exit_code=0: Always 0 (hooks must never exit non-zero per CLAUDE.md)
-        #   - session_output: Uses session reason (clear/logout/prompt_input_exit/
-        #     other), NOT captured stdout. Outcome will not resolve to FAILED
-        #     until session_output carries error markers (Error:, Exception:, etc.)
-        #   - tool_calls_completed: Extracted from numTurns (best-effort);
-        #     may still be 0 if field is absent from SessionEnd payload.
-        #     SUCCESS requires tool_calls > 0 AND completion markers.
-        # Result: Outcome currently resolves to abandoned or unknown only.
-        # Future tickets:
-        #   - tool_calls_completed: Wire from session aggregation service
-        #   - session_output: Wire from captured session output/stdout
-        # ===================================================================
-        # Derive outcome using session signals (OMN-1892)
-        # Falls back to "unknown" if Python call fails (graceful degradation)
-        OUTCOME=$(HOOKS_LIB="$HOOKS_LIB" SESSION_REASON="$SESSION_REASON" DURATION_SECONDS="$DURATION_SECONDS" TOOL_CALLS_COMPLETED="$TOOL_CALLS_COMPLETED" \
-            "$PYTHON_CMD" -c "
+# ===================================================================
+# PHASE 1 PLUMBING (OMN-1892): Outcome derivation inputs are
+# partially hardcoded. Current state:
+#   - exit_code=0: Always 0 (hooks must never exit non-zero per CLAUDE.md)
+#   - session_output: Uses session reason (clear/logout/prompt_input_exit/
+#     other), NOT captured stdout. Outcome will not resolve to FAILED
+#     until session_output carries error markers (Error:, Exception:, etc.)
+#   - tool_calls_completed: Extracted from numTurns (best-effort);
+#     may still be 0 if field is absent from SessionEnd payload.
+#     SUCCESS requires tool_calls > 0 AND completion markers.
+# Result: Outcome currently resolves to abandoned or unknown only.
+# Future tickets:
+#   - tool_calls_completed: Wire from session aggregation service
+#   - session_output: Wire from captured session output/stdout
+# ===================================================================
+# Derive session outcome ONCE (OMN-1892)
+# Used by both session.outcome emission and feedback guardrail check.
+# Pure Python with no I/O -- synchronous cost is negligible (<5ms).
+# Falls back to "unknown" if Python call fails (graceful degradation).
+DERIVED_OUTCOME=$(HOOKS_LIB="$HOOKS_LIB" SESSION_REASON="$SESSION_REASON" DURATION_SECONDS="$DURATION_SECONDS" TOOL_CALLS_COMPLETED="$TOOL_CALLS_COMPLETED" \
+    "$PYTHON_CMD" -c "
 import os, sys
 sys.path.insert(0, os.environ['HOOKS_LIB'])
 from session_outcome import derive_session_outcome
@@ -183,14 +136,57 @@ result = derive_session_outcome(
     duration_seconds=float(duration_str if duration_str else '0'),
 )
 print(result.outcome)
-" 2>>"$LOG_FILE") || OUTCOME="unknown"
+" 2>>"$LOG_FILE") || DERIVED_OUTCOME="unknown"
 
-        log "Session outcome derived: ${OUTCOME}"
+log "Session outcome derived: ${DERIVED_OUTCOME}"
+
+# Emit session.ended event to Kafka (async, non-blocking)
+# Uses emit_client_wrapper with daemon fan-out (OMN-1632)
+if [[ "$KAFKA_ENABLED" == "true" ]]; then
+    (
+        # Build JSON payload for emit daemon (includes active_ticket for OMN-1830)
+        # DURATION_SECONDS pre-computed in main shell; map "0" to null (no duration info)
+        SESSION_PAYLOAD=$(jq -n \
+            --arg session_id "$SESSION_ID" \
+            --arg reason "$SESSION_REASON" \
+            --arg duration_seconds "$DURATION_SECONDS" \
+            --arg active_ticket "$ACTIVE_TICKET" \
+            '{
+                session_id: $session_id,
+                reason: $reason,
+                duration_seconds: (if $duration_seconds == "0" then null else ($duration_seconds | tonumber) end),
+                active_ticket: (if $active_ticket == "" then null else $active_ticket end)
+            }' 2>/dev/null)
+
+        # Validate payload was constructed successfully
+        if [[ -z "$SESSION_PAYLOAD" || "$SESSION_PAYLOAD" == "null" ]]; then
+            log "WARNING: Failed to construct session payload (jq failed), skipping emission"
+        else
+            emit_via_daemon "session.ended" "$SESSION_PAYLOAD" 100
+        fi
+    ) &
+
+    # Emit session.outcome event for feedback loop (OMN-1735, OMN-1892)
+    # Uses ClaudeCodeSessionOutcome enum values: success, failed, abandoned, unknown
+    # Outcome was derived synchronously above; subshell uses pre-computed DERIVED_OUTCOME.
+    (
+        # Validate SESSION_ID before constructing payload
+        if [[ -z "$SESSION_ID" ]]; then
+            log "WARNING: SESSION_ID is empty, skipping session.outcome emission"
+            exit 0  # Exit the subshell cleanly
+        fi
+
+        # Validate UUID format (8-4-4-4-12 structure, case-insensitive)
+        if [[ ! "$SESSION_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+            log "WARNING: SESSION_ID '$SESSION_ID' is not valid UUID format, skipping session.outcome emission"
+            exit 0
+        fi
+
         EMITTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
         OUTCOME_PAYLOAD=$(jq -n \
             --arg session_id "$SESSION_ID" \
-            --arg outcome "$OUTCOME" \
+            --arg outcome "$DERIVED_OUTCOME" \
             --arg emitted_at "$EMITTED_AT" \
             --arg active_ticket "$ACTIVE_TICKET" \
             '{
@@ -210,8 +206,8 @@ print(result.outcome)
 
     # Feedback guardrail check (OMN-1892)
     # Evaluates whether routing feedback should be recorded.
-    # Runs in a separate backgrounded subshell to stay within 50ms sync budget.
-    # Re-derives OUTCOME independently because subshell variables are isolated.
+    # Runs in a backgrounded subshell to stay within 50ms sync budget.
+    # Uses pre-computed DERIVED_OUTCOME from main shell.
     (
         # Validate SESSION_ID before constructing payload
         if [[ -z "$SESSION_ID" ]]; then
@@ -225,74 +221,39 @@ print(result.outcome)
             exit 0
         fi
 
-        # Convert duration (same as above -- subshell isolation requires re-computation)
-        DURATION_SECONDS="0"
-        if [[ -n "$SESSION_DURATION" && "$SESSION_DURATION" != "0" ]]; then
-            DURATION_SECONDS=$($PYTHON_CMD -c "import sys; print(f'{float(sys.argv[1])/1000:.3f}')" "$SESSION_DURATION" 2>/dev/null || echo "0")
-        fi
-
-        # Single Python call: derive outcome then evaluate guardrails
-        # Combines session_outcome + feedback_guardrails to avoid extra subprocess
+        # Evaluate guardrails using pre-computed DERIVED_OUTCOME
         # ===================================================================
-        # PHASE 1 PLUMBING (OMN-1892): Outcome derivation inputs are
-        # partially hardcoded. Current state:
-        #   - exit_code=0: Always 0 (hooks must never exit non-zero per CLAUDE.md)
-        #   - session_output: Uses session reason (clear/logout/prompt_input_exit/
-        #     other), NOT captured stdout. Outcome will not resolve to FAILED
-        #     until session_output carries error markers (Error:, Exception:, etc.)
-        #   - tool_calls_completed: Extracted from numTurns (best-effort);
-        #     may still be 0 if field is absent from SessionEnd payload.
-        #     SUCCESS requires tool_calls > 0 AND completion markers.
-        # Result: Outcome currently resolves to abandoned or unknown only.
-        # Future tickets:
-        #   - tool_calls_completed: Wire from session aggregation service
-        #   - session_output: Wire from captured session output/stdout
+        # PHASE 1 PLUMBING (OMN-1892): Guardrail logic is wired but inputs
+        # are hardcoded. Feedback will always be skipped (NO_INJECTION).
+        # Future tickets to wire real values:
+        #   - injection_occurred: Read from session injection marker
+        #   - utilization_score: Read from PostToolUse utilization metrics
+        #   - agent_match_score: Read from UserPromptSubmit routing decision
         # ===================================================================
-        FEEDBACK_RESULT=$(HOOKS_LIB="$HOOKS_LIB" SESSION_REASON="$SESSION_REASON" DURATION_SECONDS="$DURATION_SECONDS" TOOL_CALLS_COMPLETED="$TOOL_CALLS_COMPLETED" \
+        FEEDBACK_RESULT=$(HOOKS_LIB="$HOOKS_LIB" DERIVED_OUTCOME="$DERIVED_OUTCOME" \
             "$PYTHON_CMD" -c "
 import os, sys, json
 sys.path.insert(0, os.environ['HOOKS_LIB'])
-from session_outcome import derive_session_outcome
 from feedback_guardrails import should_reinforce_routing
-
-session_reason = os.environ.get('SESSION_REASON', 'other')
-duration_str = os.environ.get('DURATION_SECONDS', '0')
-tool_calls_str = os.environ.get('TOOL_CALLS_COMPLETED', '0')
-outcome_result = derive_session_outcome(
-    exit_code=0,
-    session_output=session_reason,
-    tool_calls_completed=int(tool_calls_str) if tool_calls_str.isdigit() else 0,
-    duration_seconds=float(duration_str if duration_str else '0'),
-)
-# ===================================================================
-# PHASE 1 PLUMBING (OMN-1892): Guardrail logic is wired but inputs
-# are hardcoded. Feedback will always be skipped (NO_INJECTION).
-# Future tickets to wire real values:
-#   - injection_occurred: Read from session injection marker
-#   - utilization_score: Read from PostToolUse utilization metrics
-#   - agent_match_score: Read from UserPromptSubmit routing decision
-# ===================================================================
 result = should_reinforce_routing(
     injection_occurred=False,
     utilization_score=0.0,
     agent_match_score=0.0,
-    session_outcome=outcome_result.outcome,
+    session_outcome=os.environ['DERIVED_OUTCOME'],
 )
 print(json.dumps({
-    'outcome': outcome_result.outcome,
     'should_reinforce': result.should_reinforce,
     'skip_reason': result.skip_reason,
 }))
-" 2>>"$LOG_FILE") || FEEDBACK_RESULT='{"outcome":"unknown","should_reinforce":false,"skip_reason":"PYTHON_ERROR"}'
+" 2>>"$LOG_FILE") || FEEDBACK_RESULT='{"should_reinforce":false,"skip_reason":"PYTHON_ERROR"}'
 
-        OUTCOME=$(echo "$FEEDBACK_RESULT" | jq -r '.outcome' 2>/dev/null) || OUTCOME="unknown"
         SHOULD_REINFORCE=$(echo "$FEEDBACK_RESULT" | jq -r '.should_reinforce' 2>/dev/null) || SHOULD_REINFORCE="false"
         SKIP_REASON=$(echo "$FEEDBACK_RESULT" | jq -r '.skip_reason // empty' 2>/dev/null) || SKIP_REASON=""
 
         if [[ "$SHOULD_REINFORCE" == "true" ]] && [[ "$KAFKA_ENABLED" == "true" ]]; then
             if ! FEEDBACK_PAYLOAD=$(jq -n \
                 --arg session_id "$SESSION_ID" \
-                --arg outcome "$OUTCOME" \
+                --arg outcome "$DERIVED_OUTCOME" \
                 --arg emitted_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
                 '{session_id: $session_id, outcome: $outcome, emitted_at: $emitted_at}' 2>/dev/null); then
                 log "WARNING: Failed to construct routing.feedback payload (jq failed), skipping emission"
