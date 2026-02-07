@@ -38,7 +38,8 @@ class ModelRoutingRequest(BaseModel):
     prompt: str = Field(
         ...,
         min_length=1,
-        description="User's input text to route",
+        max_length=50_000,
+        description="User's input text to route (bounded to protect routing budget)",
     )
     correlation_id: UUID = Field(
         ...,
