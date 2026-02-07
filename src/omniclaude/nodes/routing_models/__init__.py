@@ -1,21 +1,24 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 OmniNode Team
-"""Strongly-typed Pydantic models for agent routing.
+"""Routing models - re-exports from canonical node model locations.
 
-This package contains data-only models (no logic) for the routing subsystem.
-Models are grouped by their future node affinity:
+This package provides convenient access to all routing-related models
+without requiring knowledge of which node owns each model. The canonical
+definitions live in each node's ``models/`` sub-package; this module
+simply re-exports them.
 
-Compute Node Models:
+Compute Node Models (node_agent_routing_compute):
     - ModelRoutingRequest: Input to the routing compute node
     - ModelRoutingResult: Output from the routing compute node
+    - ModelRoutingCandidate: Single routing candidate with confidence
     - ModelConfidenceBreakdown: Detailed confidence scoring breakdown
     - ModelAgentDefinition: Agent identity and activation patterns
 
-Effect Node Models:
+Effect Node Models (node_routing_emission_effect):
     - ModelEmissionRequest: Input to the emission effect node
     - ModelEmissionResult: Output from the emission effect node
 
-Reducer Models:
+Reducer Models (node_routing_history_reducer):
     - ModelAgentRoutingStats: Aggregated routing statistics
     - ModelAgentStatsEntry: Per-agent statistics entry
 
@@ -28,14 +31,21 @@ Invariant:
     No calculate_* methods. No validate_* beyond Pydantic field validation.
 """
 
-from .model_agent_definition import ModelAgentDefinition
-from .model_agent_routing_stats import ModelAgentRoutingStats
-from .model_agent_stats_entry import ModelAgentStatsEntry
-from .model_confidence_breakdown import ModelConfidenceBreakdown
-from .model_emission_request import ModelEmissionRequest
-from .model_emission_result import ModelEmissionResult
-from .model_routing_request import ModelRoutingRequest
-from .model_routing_result import ModelRoutingResult
+from omniclaude.nodes.node_agent_routing_compute.models import (
+    ModelAgentDefinition,
+    ModelConfidenceBreakdown,
+    ModelRoutingCandidate,
+    ModelRoutingRequest,
+    ModelRoutingResult,
+)
+from omniclaude.nodes.node_routing_emission_effect.models import (
+    ModelEmissionRequest,
+    ModelEmissionResult,
+)
+from omniclaude.nodes.node_routing_history_reducer.models import (
+    ModelAgentRoutingStats,
+    ModelAgentStatsEntry,
+)
 
 __all__ = [
     "ModelAgentDefinition",
@@ -44,6 +54,7 @@ __all__ = [
     "ModelConfidenceBreakdown",
     "ModelEmissionRequest",
     "ModelEmissionResult",
+    "ModelRoutingCandidate",
     "ModelRoutingRequest",
     "ModelRoutingResult",
 ]
