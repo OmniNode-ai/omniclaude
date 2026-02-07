@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from omniclaude.nodes.node_routing_history_reducer.models.model_agent_stats_entry import (
     ModelAgentStatsEntry,
@@ -47,6 +47,14 @@ class ModelAgentRoutingStats(BaseModel):
         default=None,
         description="When this statistics snapshot was taken",
     )
+
+    @field_validator("snapshot_at")
+    @classmethod
+    def _require_timezone_aware(cls, v: datetime | None) -> datetime | None:
+        """Reject naive datetimes to enforce the explicit-timestamp invariant."""
+        if v is not None and v.tzinfo is None:
+            raise ValueError("snapshot_at must be timezone-aware (got naive datetime)")
+        return v
 
 
 __all__ = ["ModelAgentRoutingStats"]
