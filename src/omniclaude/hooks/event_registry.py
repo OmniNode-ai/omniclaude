@@ -328,6 +328,36 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
     # =========================================================================
     # Injection Tracking Events (OMN-1673 INJECT-004)
     # =========================================================================
+    # =========================================================================
+    # Routing Feedback Events (OMN-1892)
+    # =========================================================================
+    "routing.feedback": EventRegistration(
+        event_type="routing.feedback",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.ROUTING_FEEDBACK,
+                transform=None,  # Passthrough
+                description="Routing feedback for reinforcement learning",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "outcome"],
+    ),
+    "routing.skipped": EventRegistration(
+        event_type="routing.skipped",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.ROUTING_FEEDBACK_SKIPPED,
+                transform=None,  # Passthrough
+                description="Routing feedback skipped (guardrail gate failed)",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "skip_reason"],
+    ),
+    # =========================================================================
+    # Injection Tracking Events (OMN-1673 INJECT-004)
+    # =========================================================================
     "injection.recorded": EventRegistration(
         event_type="injection.recorded",
         fan_out=[

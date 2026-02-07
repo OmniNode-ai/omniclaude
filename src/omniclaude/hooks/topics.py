@@ -84,6 +84,12 @@ class TopicBase(StrEnum):
     LATENCY_BREAKDOWN = "onex.evt.omniclaude.latency-breakdown.v1"
 
     # ==========================================================================
+    # Routing feedback topics (OMN-1892)
+    # ==========================================================================
+    ROUTING_FEEDBACK = "onex.evt.omniclaude.routing-feedback.v1"
+    ROUTING_FEEDBACK_SKIPPED = "onex.evt.omniclaude.routing-feedback-skipped.v1"
+
+    # ==========================================================================
     # Manifest injection topics (agent loading observability)
     # ==========================================================================
     MANIFEST_INJECTION_STARTED = "onex.evt.omniclaude.manifest-injection-started.v1"

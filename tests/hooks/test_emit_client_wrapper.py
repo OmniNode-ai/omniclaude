@@ -60,6 +60,8 @@ class TestModuleImport:
             "agent.match",  # OMN-1889
             "latency.breakdown",  # OMN-1889
             "routing.decision",  # Polly-first routing observability
+            "routing.feedback",  # OMN-1892 - Routing feedback for reinforcement
+            "routing.skipped",  # OMN-1892 - Routing feedback skipped
             "notification.blocked",  # OMN-1831
             "notification.completed",  # PR-92
         }

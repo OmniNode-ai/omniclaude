@@ -260,7 +260,7 @@ print(json.dumps({
                 '{session_id: $session_id, skip_reason: $skip_reason, emitted_at: $emitted_at}' 2>/dev/null)
 
             if [[ -n "$SKIP_PAYLOAD" ]]; then
-                emit_via_daemon "routing.feedback.skipped" "$SKIP_PAYLOAD" 100
+                emit_via_daemon "routing.skipped" "$SKIP_PAYLOAD" 100
             fi
         fi
 
