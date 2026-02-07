@@ -456,22 +456,15 @@ def validate_plan_dependencies(
             print(f"  - {dep}")
         return (True, False)  # proceed, no violations overridden (can't know in dry run)
 
-    # Validate each external dependency
-    all_errors = []
-    all_warnings = []
+    # Validate all external dependencies in a single batch call
+    violations = validate_dependencies(
+        ticket_repo=plan_repo,
+        blocked_by_ids=external_deps,
+        fetch_ticket_fn=lambda id: mcp__linear-server__get_issue(id=id)
+    )
 
-    for dep in external_deps:
-        violations = validate_dependencies(
-            ticket_repo=plan_repo,
-            blocked_by_ids=[dep],
-            fetch_ticket_fn=lambda id: mcp__linear-server__get_issue(id=id)
-        )
-
-        errors = filter_errors(violations)
-        warnings = filter_warnings(violations)
-
-        all_errors.extend(errors)
-        all_warnings.extend(warnings)
+    all_errors = filter_errors(violations)
+    all_warnings = filter_warnings(violations)
 
     # Report warnings
     for w in all_warnings:

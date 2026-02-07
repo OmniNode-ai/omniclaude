@@ -103,11 +103,19 @@ from difflib import SequenceMatcher
 def title_similarity(a, b):
     return SequenceMatcher(None, a.lower().strip(), b.lower().strip()).ratio()
 
+# Pre-group by first 3 words to reduce comparisons from O(n^2) to O(n * bucket_size)
+from collections import defaultdict
+buckets = defaultdict(list)
+for issue in all_issues:
+    key = " ".join(issue["title"].lower().split()[:3])
+    buckets[key].append(issue)
+
 potential_duplicates = []
-for i, issue_a in enumerate(all_issues):
-    for issue_b in all_issues[i+1:]:
-        if title_similarity(issue_a["title"], issue_b["title"]) > 0.8:
-            potential_duplicates.append((issue_a, issue_b))
+for key, group in buckets.items():
+    for i, issue_a in enumerate(group):
+        for issue_b in group[i+1:]:
+            if title_similarity(issue_a["title"], issue_b["title"]) > 0.8:
+                potential_duplicates.append((issue_a, issue_b))
 ```
 
 For each pair, record:

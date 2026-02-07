@@ -573,6 +573,7 @@ for phase_name in phase_order:
         update_linear_pipeline_summary(ticket_id, state, dry_run)
 
         print(f"\nPipeline stopped at {phase_name}: {result.get('reason')}")
+        # Lock intentionally NOT released on failure — preserved for resume (TTL: 2h). See release_lock docs.
         exit(1)
 
 print(f"\nPipeline completed for {ticket_id}!")

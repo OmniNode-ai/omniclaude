@@ -528,8 +528,8 @@ When dispatched for a phase on an existing contract:
 When waiting for human input or completing work, send a Slack notification via the emit daemon:
 
 ```python
-# Blocked notification
-from plugins.onex.hooks.lib.emit_client_wrapper import emit_event
+# Blocked notification — emit_client_wrapper is at ${CLAUDE_PLUGIN_ROOT}/hooks/lib/emit_client_wrapper.py
+from emit_client_wrapper import emit_event
 emit_event(
     event_type='notification.blocked',
     payload={

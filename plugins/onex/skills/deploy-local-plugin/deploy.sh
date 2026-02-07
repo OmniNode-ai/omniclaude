@@ -265,7 +265,7 @@ if [[ "$EXECUTE" == "true" ]]; then
     if [[ -f "$SETTINGS_FILE" ]]; then
         # Check if statusLine.command points to our plugin cache
         if jq -e '.statusLine.command' "$SETTINGS_FILE" 2>/dev/null | grep -q 'omninode-tools/onex/'; then
-            STATUSLINE_PATH="~/.claude/plugins/cache/omninode-tools/onex/${NEW_VERSION}/hooks/scripts/statusline.sh"
+            STATUSLINE_PATH="$HOME/.claude/plugins/cache/omninode-tools/onex/${NEW_VERSION}/hooks/scripts/statusline.sh"
             jq --arg cmd "$STATUSLINE_PATH" '.statusLine.command = $cmd' "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp" \
                 && mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
             echo -e "${GREEN}  Updated statusLine command to version ${NEW_VERSION}${NC}"

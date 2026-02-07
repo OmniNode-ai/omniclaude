@@ -18,10 +18,7 @@ args:
 
 1. Parse `ticket_id` from `$ARGUMENTS`. Validate format matches `^[A-Z]+-\d+$`.
 2. Fetch the ticket: `mcp__linear-server__get_issue(id="{ticket_id}")`
-3. Parse the contract from the ticket description (look for `## Contract` section with a YAML code block).
-   - If no contract exists, the poly will create one during the intake phase.
-4. Determine the current phase from the contract (`phase` field, default: `intake`).
-5. Read the poly prompt from `${CLAUDE_PLUGIN_ROOT}/skills/ticket-work/POLY_PROMPT.md`
+3. Read the poly prompt from `${CLAUDE_PLUGIN_ROOT}/skills/ticket-work/POLY_PROMPT.md`
 
 ## Phase Loop
 

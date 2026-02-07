@@ -145,7 +145,9 @@ def parse_issue_line(line: str) -> dict | None:
 # Fetch all projects (use high limit to avoid missing projects in large orgs)
 projects = mcp__linear-server__list_projects(limit=200)
 
-# Validate API response (may return None or error object)
+# Validate API response (may return list or dict with 'projects' key)
+if isinstance(projects, dict):
+    projects = projects.get('projects', projects.get('nodes', []))
 if not isinstance(projects, list):
     raise ValueError(f"Unexpected response from Linear API: {type(projects).__name__}")
 
