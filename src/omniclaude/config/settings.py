@@ -275,6 +275,15 @@ class Settings(BaseSettings):
             "Defaults to False for safety."
         ),
     )
+    use_onex_routing_nodes: bool = Field(
+        default=False,
+        description=(
+            "Enable ONEX routing nodes for agent routing. When True, "
+            "route_via_events_wrapper calls HandlerRoutingDefault (compute) "
+            "and HandlerRoutingEmitter (effect) instead of direct AgentRouter. "
+            "Defaults to False for safety."
+        ),
+    )
     enable_pattern_quality_filter: bool = Field(
         default=False,
         description="Enable pattern quality filtering",

@@ -63,7 +63,9 @@ EXCLUDED_FILENAMES: Final[frozenset[str]] = frozenset(
     {
         "__init__.py",
         "conftest.py",
-        "node.py",  # Expected in every ONEX node directory
+        # ONEX convention: each node has a node.py entry point.
+        # These are expected duplicates across node directories.
+        "node.py",
     }
 )
 
