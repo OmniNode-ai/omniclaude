@@ -260,6 +260,20 @@ if [[ "$EXECUTE" == "true" ]]; then
         fi
     fi
 
+    # Update statusLine command in settings.json to point to new version
+    SETTINGS_FILE="$HOME/.claude/settings.json"
+    if [[ -f "$SETTINGS_FILE" ]]; then
+        # Check if statusLine.command points to our plugin cache
+        if jq -e '.statusLine.command' "$SETTINGS_FILE" 2>/dev/null | grep -q 'omninode-tools/onex/'; then
+            STATUSLINE_PATH="~/.claude/plugins/cache/omninode-tools/onex/${NEW_VERSION}/hooks/scripts/statusline.sh"
+            jq --arg cmd "$STATUSLINE_PATH" '.statusLine.command = $cmd' "$SETTINGS_FILE" > "${SETTINGS_FILE}.tmp" \
+                && mv "${SETTINGS_FILE}.tmp" "$SETTINGS_FILE"
+            echo -e "${GREEN}  Updated statusLine command to version ${NEW_VERSION}${NC}"
+        else
+            echo -e "${YELLOW}  Note: statusLine not pointing to plugin cache, skipping update${NC}"
+        fi
+    fi
+
     # Create namespace symlinks (required until marketplace discovery is fixed)
     CLAUDE_DIR="$HOME/.claude"
     mkdir -p "$CLAUDE_DIR/commands" "$CLAUDE_DIR/skills" "$CLAUDE_DIR/agents"
