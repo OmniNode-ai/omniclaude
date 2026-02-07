@@ -381,8 +381,8 @@ def _build_agent_definitions(registry: dict[str, Any]) -> tuple[Any, ...]:
                     definition_path=data.get("definition_path"),
                 )
             )
-        except Exception:
-            logger.debug("Skipping agent %s in ONEX conversion", name)
+        except Exception as e:
+            logger.debug("Skipping agent %s in ONEX conversion: %s", name, e)
     return tuple(defs)
 
 
@@ -461,6 +461,14 @@ def _route_via_onex_nodes(
         # Result shaping: ModelRoutingResult → wrapper dict
         agents_reg = router.registry.get("agents", {})
         agent_info = agents_reg.get(result.selected_agent, {})
+        # Validate routing_path against canonical set (matches legacy path behavior)
+        onex_routing_path = result.routing_path
+        if onex_routing_path not in VALID_ROUTING_PATHS:
+            logger.warning(
+                "ONEX routing returned invalid routing_path '%s', defaulting to 'local'",
+                onex_routing_path,
+            )
+            onex_routing_path = "local"
         return {
             "selected_agent": result.selected_agent,
             "confidence": result.confidence,
@@ -480,7 +488,7 @@ def _route_via_onex_nodes(
             or result.confidence_breakdown.explanation,
             "routing_method": RoutingMethod.LOCAL.value,
             "routing_policy": result.routing_policy,
-            "routing_path": result.routing_path,
+            "routing_path": onex_routing_path,
             "method": result.routing_policy,
             "latency_ms": latency_ms,
             "domain": agent_info.get("domain_context", "general"),
