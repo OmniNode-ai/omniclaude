@@ -18,7 +18,7 @@ Analyze the codebase deeply and generate a thorough validation command that cove
 
 ```
 Task(
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   description="Generate comprehensive codebase validation command",
   prompt="<POLY_PROMPT content>\n\n## Context\nWorking directory: $CWD"
 )

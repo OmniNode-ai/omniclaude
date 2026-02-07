@@ -34,7 +34,7 @@ Generate comprehensive daily work analysis reports from Linear, GitHub, and git 
 
 ```
 Task(
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   description="Generate deep dive daily work analysis report",
   prompt="<POLY_PROMPT content>\n\n## Context\nArguments: $ARGUMENTS\nWorking directory: $CWD\nDate: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 )

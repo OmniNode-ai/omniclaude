@@ -34,7 +34,7 @@ Calculate project velocity from historical data and estimate milestone completio
 
 ```
 Task(
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   description="Calculate project velocity and estimate completion dates",
   prompt="<POLY_PROMPT content>\n\n## Context\nArguments: $ARGUMENTS\nWorking directory: $CWD"
 )

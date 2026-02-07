@@ -49,7 +49,7 @@ Create a single Linear ticket from a title, contract file, or plan milestone wit
 
 ```
 Task(
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   description="Create Linear ticket with conflict resolution",
   prompt="<POLY_PROMPT content>\n\n## Context\nTITLE: {title}\nFROM_CONTRACT: {from_contract}\nFROM_PLAN: {from_plan}\nMILESTONE: {milestone}\nREPO: {repo}\nPARENT: {parent}\nBLOCKED_BY: {blocked_by}\nPROJECT: {project}\nTEAM: {team}\nALLOW_ARCH_VIOLATION: {allow_arch_violation}"
 )

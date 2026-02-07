@@ -25,7 +25,7 @@ Analyze CI/CD failures and provide a concise summary with severity classificatio
 
 ```
 Task(
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   description="Analyze CI failures",
   prompt="<POLY_PROMPT content>\n\n## Context\nPR_OR_BRANCH: {pr_or_branch}\nWORKFLOW_FILTER: {workflow_filter}"
 )

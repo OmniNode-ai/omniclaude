@@ -31,7 +31,7 @@ Get highest priority unblocked issues from your Linear backlog with intelligent 
 
 ```
 Task(
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   description="Suggest highest priority unblocked backlog items",
   prompt="<POLY_PROMPT content>\n\n## Context\nArguments: $ARGUMENTS\nWorking directory: $CWD\nRepo context: $(basename $CWD)"
 )

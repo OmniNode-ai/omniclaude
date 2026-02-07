@@ -46,7 +46,7 @@ Create Linear tickets from a plan markdown file with phase/milestone parsing, ep
 
 ```
 Task(
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   description="Batch create Linear tickets from plan file",
   prompt="<POLY_PROMPT content>\n\n## Context\nPLAN_FILE: {plan_file}\nPROJECT: {project}\nEPIC_TITLE: {epic_title}\nNO_CREATE_EPIC: {no_create_epic}\nDRY_RUN: {dry_run}\nSKIP_EXISTING: {skip_existing}\nTEAM: {team}\nREPO: {repo}\nALLOW_ARCH_VIOLATION: {allow_arch_violation}"
 )

@@ -25,7 +25,7 @@ Deploy the local plugin source to the Claude Code plugin cache for testing.
 
 ```
 Task(
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   description="Deploy local plugin",
   prompt="<POLY_PROMPT content>\n\n## Context\nEXECUTE: {execute}\nNO_VERSION_BUMP: {no_version_bump}"
 )

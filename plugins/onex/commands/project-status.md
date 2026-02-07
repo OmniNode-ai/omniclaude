@@ -34,7 +34,7 @@ Quick health dashboard for Linear projects including progress, velocity, blocker
 
 ```
 Task(
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   description="Generate project status dashboard from Linear data",
   prompt="<POLY_PROMPT content>\n\n## Context\nArguments: $ARGUMENTS\nWorking directory: $CWD"
 )

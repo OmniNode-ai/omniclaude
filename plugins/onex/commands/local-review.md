@@ -37,7 +37,7 @@ Review local changes, fix issues, commit fixes, and iterate until clean or max i
 
 ```
 Task(
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   description="Run local review loop on current changes",
   prompt="<POLY_PROMPT content>\n\n## Context\nUNCOMMITTED: {uncommitted}\nSINCE_REF: {since_ref}\nMAX_ITERATIONS: {max_iterations}\nFILES_GLOB: {files_glob}\nNO_FIX: {no_fix}\nNO_COMMIT: {no_commit}\nWORKING_DIR: {cwd}"
 )
