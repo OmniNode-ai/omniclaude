@@ -34,6 +34,9 @@ logger = logging.getLogger(__name__)
 # Default success rate matching ConfidenceScorer._calculate_historical_score
 _DEFAULT_SUCCESS_RATE = 0.5
 
+# Max tracked correlation_ids before eviction (Phase 1 in-memory limit)
+_MAX_DEDUP_ENTRIES = 10_000
+
 
 class HandlerHistoryPostgres:
     """Handler for routing history storage via PostgreSQL.
@@ -116,6 +119,12 @@ class HandlerHistoryPostgres:
                 )
                 return self._build_stats_snapshot()
 
+            # Evict oldest entries when cap reached (Phase 1 approximation;
+            # Phase 2+ will use database-level UPSERT for true idempotency)
+            if len(self._seen_correlation_ids) >= _MAX_DEDUP_ENTRIES:
+                self._seen_correlation_ids.clear()
+                logger.info("Dedup cache evicted at %d entries", _MAX_DEDUP_ENTRIES)
+
             self._seen_correlation_ids.add(cid)
 
             if entry.agent_name not in self._store:
@@ -175,11 +184,20 @@ class HandlerHistoryPostgres:
     # Private helpers (must be called while holding self._lock)
     # ------------------------------------------------------------------
 
+    def _total_decisions(self) -> int:
+        """Count total routing decisions across all agents.
+
+        Per ProtocolHistoryStore contract, total_routing_decisions is always
+        global (across all agents) regardless of query filter.
+        """
+        return sum(len(entries) for entries in self._store.values())
+
     def _build_stats_for_agent(self, agent_name: str) -> ModelAgentRoutingStats:
         """Build a stats snapshot for a single agent.
 
         If the agent has no recorded history, returns default stats with
-        success_rate=0.5.
+        success_rate=0.5. The total_routing_decisions count is always global
+        (across all agents) per the protocol specification.
 
         Args:
             agent_name: The agent to build stats for.
@@ -188,6 +206,7 @@ class HandlerHistoryPostgres:
             ModelAgentRoutingStats containing a single entry for the agent.
         """
         entries_list = self._store.get(agent_name)
+        global_total = self._total_decisions()
 
         if not entries_list:
             # No history: return default stats matching ConfidenceScorer
@@ -201,14 +220,14 @@ class HandlerHistoryPostgres:
             )
             return ModelAgentRoutingStats(
                 entries=(default_entry,),
-                total_routing_decisions=0,
+                total_routing_decisions=global_total,
                 snapshot_at=self._clock(),
             )
 
         aggregate_entry = self._aggregate_entries(agent_name, entries_list)
         return ModelAgentRoutingStats(
             entries=(aggregate_entry,),
-            total_routing_decisions=len(entries_list),
+            total_routing_decisions=global_total,
             snapshot_at=self._clock(),
         )
 
