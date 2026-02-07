@@ -1006,6 +1006,10 @@ def _extract_triggers(agent_data: dict[str, Any]) -> list[str]:
         value = agent_data["triggers"]
         if isinstance(value, list):
             triggers.extend(str(item) for item in value)
+        elif isinstance(value, dict):
+            for sub_value in value.values():
+                if isinstance(sub_value, list):
+                    triggers.extend(str(item) for item in sub_value)
 
     # Check agent_identity for keywords
     identity = agent_data.get("agent_identity", {})
