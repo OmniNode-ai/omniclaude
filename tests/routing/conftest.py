@@ -3,6 +3,12 @@ Fixtures for routing regression tests.
 
 Provides shared AgentRouter instances, golden corpus loading, and
 tolerance definitions used by the regression harness.
+
+Scope: Tests the src/omniclaude/lib/core/agent_router.py (installable
+package). The plugins/onex/hooks/lib/agent_router.py is a separate
+standalone implementation exercised indirectly via Layer 2 integration
+tests (route_via_events_wrapper). Direct plugins-version unit tests
+are tracked separately.
 """
 
 import json
