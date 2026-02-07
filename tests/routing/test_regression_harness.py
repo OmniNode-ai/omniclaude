@@ -36,21 +36,21 @@ DEFAULT_AGENT = "polymorphic-agent"
 
 
 def _determine_expected_agent_and_policy(
-    router: AgentRouter,
-    prompt: str,
     recommendations: list,
 ) -> tuple[str, float, str]:
     """
     Replicate the logic of route_via_events() to determine what the
     wrapper layer would produce given the router's output.
 
+    This mirrors the wrapper's decision logic exactly. The wrapper never
+    returns 'explicit_request' because AgentRecommendation lacks an
+    is_explicit attribute (getattr always returns False). So we only
+    distinguish trigger_match vs fallback_default.
+
+    Cross-validated by TestCrossValidation.test_inference_matches_wrapper.
+
     Returns (selected_agent, confidence, routing_policy).
     """
-    # Check explicit agent request first (mirrors wrapper logic)
-    explicit = router._extract_explicit_agent(prompt)
-    if explicit:
-        return explicit, 1.0, "explicit_request"
-
     if not recommendations:
         return DEFAULT_AGENT, 0.5, "fallback_default"
 
@@ -121,71 +121,73 @@ class TestAgentRouterRegression:
         assert tolerance["selected_agent"] == "exact"
         assert tolerance["routing_policy"] == "exact"
 
-    @pytest.mark.parametrize(
-        "entry_index",
-        range(104),  # Parametrize over all entries
-        indirect=False,
-    )
-    def test_router_layer_regression(
+    def test_router_layer_regression_all(
         self,
         router: AgentRouter,
         corpus_entries: list[dict[str, Any]],
-        entry_index: int,
     ) -> None:
         """
-        Core regression test: run each prompt through AgentRouter.route()
+        Core regression test: run every corpus prompt through AgentRouter.route()
         and validate against golden corpus.
 
-        Checks:
+        Dynamically iterates all corpus entries (no hardcoded count).
+        Collects all failures and reports them at the end.
+
+        Checks per entry:
           - selected_agent: exact match
           - confidence: within ±0.05 tolerance
           - routing_policy: exact match
-          - routing_path: exact match (always "local" for now)
         """
-        if entry_index >= len(corpus_entries):
-            pytest.skip(f"Entry index {entry_index} out of range")
+        failures: list[str] = []
 
-        entry = corpus_entries[entry_index]
-        prompt = entry["prompt"]
-        expected = entry["expected"]
+        for entry in corpus_entries:
+            prompt = entry["prompt"]
+            expected = entry["expected"]
 
-        # Clear cache for determinism
-        router.invalidate_cache()
+            # Clear cache for determinism
+            router.invalidate_cache()
 
-        # Run the prompt through the router
-        recommendations = router.route(prompt, max_recommendations=5)
+            # Run the prompt through the router
+            recommendations = router.route(prompt, max_recommendations=5)
 
-        # Determine what route_via_events would produce
-        actual_agent, actual_confidence, actual_policy = (
-            _determine_expected_agent_and_policy(router, prompt, recommendations)
-        )
+            # Determine what route_via_events would produce
+            actual_agent, actual_confidence, actual_policy = (
+                _determine_expected_agent_and_policy(recommendations)
+            )
 
-        # ── Assert selected_agent (exact match) ──────────────────────
-        assert actual_agent == expected["selected_agent"], (
-            f"Entry {entry['id']}: Agent mismatch\n"
-            f"  Prompt:   {prompt!r}\n"
-            f"  Expected: {expected['selected_agent']}\n"
-            f"  Actual:   {actual_agent}\n"
-            f"  Category: {entry['category']}\n"
-            f"  Notes:    {entry['notes']}"
-        )
+            # ── Check selected_agent (exact match) ────────────────────
+            if actual_agent != expected["selected_agent"]:
+                failures.append(
+                    f"Entry {entry['id']}: Agent mismatch\n"
+                    f"  Prompt:   {prompt!r}\n"
+                    f"  Expected: {expected['selected_agent']}\n"
+                    f"  Actual:   {actual_agent}\n"
+                    f"  Category: {entry['category']}"
+                )
+                continue
 
-        # ── Assert confidence (±0.05 tolerance) ──────────────────────
-        expected_conf = expected["confidence"]
-        assert abs(actual_confidence - expected_conf) <= TOLERANCE_CONFIDENCE, (
-            f"Entry {entry['id']}: Confidence outside tolerance\n"
-            f"  Prompt:   {prompt!r}\n"
-            f"  Expected: {expected_conf} (±{TOLERANCE_CONFIDENCE})\n"
-            f"  Actual:   {actual_confidence}\n"
-            f"  Delta:    {abs(actual_confidence - expected_conf):.6f}"
-        )
+            # ── Check confidence (±0.05 tolerance) ────────────────────
+            expected_conf = expected["confidence"]
+            if abs(actual_confidence - expected_conf) > TOLERANCE_CONFIDENCE:
+                failures.append(
+                    f"Entry {entry['id']}: Confidence outside tolerance\n"
+                    f"  Prompt:   {prompt!r}\n"
+                    f"  Expected: {expected_conf} (±{TOLERANCE_CONFIDENCE})\n"
+                    f"  Actual:   {actual_confidence}"
+                )
+                continue
 
-        # ── Assert routing_policy (exact match) ──────────────────────
-        assert actual_policy == expected["routing_policy"], (
-            f"Entry {entry['id']}: Policy mismatch\n"
-            f"  Prompt:   {prompt!r}\n"
-            f"  Expected: {expected['routing_policy']}\n"
-            f"  Actual:   {actual_policy}"
+            # ── Check routing_policy (exact match) ────────────────────
+            if actual_policy != expected["routing_policy"]:
+                failures.append(
+                    f"Entry {entry['id']}: Policy mismatch\n"
+                    f"  Prompt:   {prompt!r}\n"
+                    f"  Expected: {expected['routing_policy']}\n"
+                    f"  Actual:   {actual_policy}"
+                )
+
+        assert not failures, f"{len(failures)} regression failures:\n\n" + "\n\n".join(
+            failures
         )
 
     def test_category_coverage(self, corpus_entries: list[dict[str, Any]]) -> None:
@@ -202,10 +204,17 @@ class TestAgentRouterRegression:
         missing = required - categories
         assert not missing, f"Golden corpus missing required categories: {missing}"
 
-    def test_explicit_agent_entries(
+    def test_explicit_request_category_routes_correctly(
         self, router: AgentRouter, corpus_entries: list[dict[str, Any]]
     ) -> None:
-        """Verify all explicit_request entries route to the correct agent."""
+        """
+        Verify explicit_request category entries route to correct agents.
+
+        Note: The wrapper never returns 'explicit_request' policy because
+        AgentRecommendation lacks is_explicit. These entries test that
+        explicit patterns (@ prefix, "use agent-X") still route to the
+        correct agent via trigger matching or explicit recommendation.
+        """
         explicit_entries = [
             e for e in corpus_entries if e["category"] == "explicit_request"
         ]
@@ -216,15 +225,15 @@ class TestAgentRouterRegression:
             prompt = entry["prompt"]
             expected = entry["expected"]
 
-            explicit = router._extract_explicit_agent(prompt)
-            if expected["routing_policy"] == "explicit_request":
-                assert explicit is not None, (
-                    f"Entry {entry['id']}: Expected explicit agent extraction for {prompt!r}"
-                )
-                assert explicit == expected["selected_agent"], (
-                    f"Entry {entry['id']}: Explicit agent mismatch: "
-                    f"{explicit} != {expected['selected_agent']}"
-                )
+            recommendations = router.route(prompt, max_recommendations=5)
+            actual_agent, _, _ = _determine_expected_agent_and_policy(recommendations)
+
+            assert actual_agent == expected["selected_agent"], (
+                f"Entry {entry['id']}: Explicit routing mismatch\n"
+                f"  Prompt:   {prompt!r}\n"
+                f"  Expected: {expected['selected_agent']}\n"
+                f"  Actual:   {actual_agent}"
+            )
 
     def test_fallback_entries(
         self, router: AgentRouter, corpus_entries: list[dict[str, Any]]
@@ -243,7 +252,7 @@ class TestAgentRouterRegression:
 
             recommendations = router.route(prompt, max_recommendations=5)
             _, _actual_confidence, actual_policy = _determine_expected_agent_and_policy(
-                router, prompt, recommendations
+                recommendations
             )
 
             assert actual_policy == "fallback_default", (
@@ -265,9 +274,7 @@ class TestAgentRouterRegression:
             expected = entry["expected"]
 
             recommendations = router.route(prompt, max_recommendations=5)
-            actual_agent, _, _ = _determine_expected_agent_and_policy(
-                router, prompt, recommendations
-            )
+            actual_agent, _, _ = _determine_expected_agent_and_policy(recommendations)
 
             assert actual_agent == expected["selected_agent"], (
                 f"Entry {entry['id']}: Context filter mismatch\n"
@@ -315,10 +322,13 @@ class TestRouteViaEventsIntegration:
 
         importlib.reload(route_via_events_wrapper)
 
-        # Patch the singleton router to use our project-registry router.
-        # This ensures the wrapper uses the same agent names as the golden
-        # corpus (which was generated from the project registry).
-        route_via_events_wrapper._router_instance = self._router
+        # Inject the test router into the wrapper's singleton slot so
+        # it uses the same project-registry as the golden corpus.
+        # This is intentionally reaching into a private to align
+        # both test layers on the same registry. If the wrapper
+        # refactors singleton management, this test will correctly
+        # break (signaling the need to update the injection approach).
+        route_via_events_wrapper._router_instance = self._router  # noqa: SLF001
         return route_via_events_wrapper.route_via_events
 
     def test_empty_prompt_returns_fallback(self) -> None:
@@ -437,6 +447,84 @@ class TestRouteViaEventsIntegration:
         route_via_events = self._get_route_via_events()
         result = route_via_events("debug this error", "corr-123")
         assert result["method"] == result["routing_policy"]
+
+
+# --------------------------------------------------------------------------
+# Cross-validation: inference helper vs actual wrapper (addresses Major 1+2)
+# --------------------------------------------------------------------------
+
+
+class TestCrossValidation:
+    """
+    Validates that _determine_expected_agent_and_policy produces the same
+    results as actual route_via_events() for ALL corpus entries.
+
+    This eliminates the circular validation concern: Layer 1 uses the
+    inference helper, and this class proves the helper matches actual
+    wrapper behavior for every prompt. If they diverge, this test fails.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _setup_wrapper(self, registry_path: str, router: AgentRouter) -> None:
+        hooks_lib = Path(__file__).parents[2] / "plugins" / "onex" / "hooks" / "lib"
+        if str(hooks_lib) not in sys.path:
+            sys.path.insert(0, str(hooks_lib))
+        self._router = router
+
+    def test_inference_matches_wrapper(
+        self,
+        router: AgentRouter,
+        corpus_entries: list[dict[str, Any]],
+    ) -> None:
+        """
+        For every corpus entry with a non-empty prompt, verify that the
+        inference helper produces the same (agent, policy) as the actual
+        route_via_events() wrapper.
+        """
+        import importlib
+
+        import route_via_events_wrapper
+
+        importlib.reload(route_via_events_wrapper)
+        route_via_events_wrapper._router_instance = self._router  # noqa: SLF001
+
+        mismatches: list[str] = []
+
+        for entry in corpus_entries:
+            prompt = entry["prompt"]
+            # Skip empty/whitespace prompts - the wrapper short-circuits
+            # before reaching the router, so inference is not applicable
+            if not prompt.strip():
+                continue
+
+            router.invalidate_cache()
+
+            # Inference path (Layer 1 approach)
+            recommendations = router.route(prompt, max_recommendations=5)
+            inferred_agent, _inferred_conf, inferred_policy = (
+                _determine_expected_agent_and_policy(recommendations)
+            )
+
+            # Actual wrapper path (Layer 2 approach)
+            result = route_via_events_wrapper.route_via_events(
+                prompt, f"xval-{entry['id']}"
+            )
+
+            if result["selected_agent"] != inferred_agent:
+                mismatches.append(
+                    f"Entry {entry['id']}: agent mismatch - "
+                    f"inferred={inferred_agent}, wrapper={result['selected_agent']}"
+                )
+            if result["routing_policy"] != inferred_policy:
+                mismatches.append(
+                    f"Entry {entry['id']}: policy mismatch - "
+                    f"inferred={inferred_policy}, wrapper={result['routing_policy']}"
+                )
+
+        assert not mismatches, (
+            f"Inference/wrapper drift detected ({len(mismatches)} mismatches):\n"
+            + "\n".join(mismatches)
+        )
 
 
 # --------------------------------------------------------------------------

@@ -586,14 +586,11 @@ def generate_corpus(
             explanation = ""
             candidates = []
 
-        # Determine routing_policy based on what route_via_events would do
-        # Check for explicit agent requests
-        explicit = router._extract_explicit_agent(prompt)
-        if explicit:
-            routing_policy = "explicit_request"
-            selected_agent = explicit
-            confidence = 1.0
-        elif confidence >= 0.5 and recommendations:
+        # Determine routing_policy by mirroring route_via_events wrapper logic.
+        # The wrapper never returns 'explicit_request' because
+        # AgentRecommendation lacks is_explicit (getattr always returns False).
+        # Cross-validated by TestCrossValidation in the harness.
+        if confidence >= 0.5 and recommendations:
             routing_policy = "trigger_match"
         else:
             routing_policy = "fallback_default"
