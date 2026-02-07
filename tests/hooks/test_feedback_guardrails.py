@@ -21,7 +21,7 @@ from plugins.onex.hooks.lib.feedback_guardrails import (
     CLEAR_OUTCOMES,
     MIN_ACCURACY_THRESHOLD,
     MIN_UTILIZATION_THRESHOLD,
-    SKIP_LOW_UTILIZATION_AND_ACCURACY,
+    SKIP_BELOW_SCORE_THRESHOLD,
     SKIP_NO_INJECTION,
     SKIP_UNCLEAR_OUTCOME,
     GuardrailResult,
@@ -150,7 +150,7 @@ class TestGate3LowUtilizationAndAccuracy:
             session_outcome="success",
         )
         assert result.should_reinforce is False
-        assert result.skip_reason == SKIP_LOW_UTILIZATION_AND_ACCURACY
+        assert result.skip_reason == SKIP_BELOW_SCORE_THRESHOLD
 
     def test_low_accuracy_returns_false(self) -> None:
         """Accuracy below threshold skips reinforcement."""
@@ -161,7 +161,7 @@ class TestGate3LowUtilizationAndAccuracy:
             session_outcome="success",
         )
         assert result.should_reinforce is False
-        assert result.skip_reason == SKIP_LOW_UTILIZATION_AND_ACCURACY
+        assert result.skip_reason == SKIP_BELOW_SCORE_THRESHOLD
 
     def test_both_below_thresholds_returns_false(self) -> None:
         """Both scores below thresholds skips reinforcement."""
@@ -172,7 +172,7 @@ class TestGate3LowUtilizationAndAccuracy:
             session_outcome="success",
         )
         assert result.should_reinforce is False
-        assert result.skip_reason == SKIP_LOW_UTILIZATION_AND_ACCURACY
+        assert result.skip_reason == SKIP_BELOW_SCORE_THRESHOLD
 
     def test_zero_utilization_returns_false(self) -> None:
         """Zero utilization score skips reinforcement."""
@@ -183,7 +183,7 @@ class TestGate3LowUtilizationAndAccuracy:
             session_outcome="success",
         )
         assert result.should_reinforce is False
-        assert result.skip_reason == SKIP_LOW_UTILIZATION_AND_ACCURACY
+        assert result.skip_reason == SKIP_BELOW_SCORE_THRESHOLD
 
     def test_zero_accuracy_returns_false(self) -> None:
         """Zero accuracy score skips reinforcement."""
@@ -194,7 +194,7 @@ class TestGate3LowUtilizationAndAccuracy:
             session_outcome="success",
         )
         assert result.should_reinforce is False
-        assert result.skip_reason == SKIP_LOW_UTILIZATION_AND_ACCURACY
+        assert result.skip_reason == SKIP_BELOW_SCORE_THRESHOLD
 
     def test_utilization_just_below_threshold_returns_false(self) -> None:
         """Utilization just below the threshold (0.2) fails gate 3."""
@@ -205,7 +205,7 @@ class TestGate3LowUtilizationAndAccuracy:
             session_outcome="success",
         )
         assert result.should_reinforce is False
-        assert result.skip_reason == SKIP_LOW_UTILIZATION_AND_ACCURACY
+        assert result.skip_reason == SKIP_BELOW_SCORE_THRESHOLD
 
     def test_accuracy_just_below_threshold_returns_false(self) -> None:
         """Accuracy just below the threshold (0.5) fails gate 3."""
@@ -216,7 +216,7 @@ class TestGate3LowUtilizationAndAccuracy:
             session_outcome="success",
         )
         assert result.should_reinforce is False
-        assert result.skip_reason == SKIP_LOW_UTILIZATION_AND_ACCURACY
+        assert result.skip_reason == SKIP_BELOW_SCORE_THRESHOLD
 
 
 class TestBoundaryValues:
@@ -330,7 +330,7 @@ class TestGatePriority:
         """When both gate 2 and gate 3 would fail, gate 2 reason wins.
 
         unclear outcome (gate 2 fail) + low scores (gate 3 fail)
-        should report UNCLEAR_OUTCOME, not LOW_UTILIZATION_AND_ACCURACY.
+        should report UNCLEAR_OUTCOME, not BELOW_SCORE_THRESHOLD.
         """
         result = should_reinforce_routing(
             injection_occurred=True,
@@ -372,7 +372,7 @@ class TestGatePriority:
             session_outcome="success",
         )
         assert result.should_reinforce is False
-        assert result.skip_reason == SKIP_LOW_UTILIZATION_AND_ACCURACY
+        assert result.skip_reason == SKIP_BELOW_SCORE_THRESHOLD
 
 
 class TestResultStructure:
@@ -494,7 +494,7 @@ class TestConstants:
         for constant in [
             SKIP_NO_INJECTION,
             SKIP_UNCLEAR_OUTCOME,
-            SKIP_LOW_UTILIZATION_AND_ACCURACY,
+            SKIP_BELOW_SCORE_THRESHOLD,
         ]:
             assert isinstance(constant, str)
             assert len(constant) > 0
@@ -525,7 +525,7 @@ class TestInputValidation:
             session_outcome="success",
         )
         assert result.should_reinforce is False
-        assert result.skip_reason == SKIP_LOW_UTILIZATION_AND_ACCURACY
+        assert result.skip_reason == SKIP_BELOW_SCORE_THRESHOLD
         assert result.details["utilization_score"] == 0.0
 
     def test_nan_agent_match_score_treated_as_zero(self) -> None:
@@ -537,7 +537,7 @@ class TestInputValidation:
             session_outcome="success",
         )
         assert result.should_reinforce is False
-        assert result.skip_reason == SKIP_LOW_UTILIZATION_AND_ACCURACY
+        assert result.skip_reason == SKIP_BELOW_SCORE_THRESHOLD
         assert result.details["agent_match_score"] == 0.0
 
     def test_negative_utilization_score_clamped_to_zero(self) -> None:
@@ -549,7 +549,7 @@ class TestInputValidation:
             session_outcome="success",
         )
         assert result.should_reinforce is False
-        assert result.skip_reason == SKIP_LOW_UTILIZATION_AND_ACCURACY
+        assert result.skip_reason == SKIP_BELOW_SCORE_THRESHOLD
         assert result.details["utilization_score"] == 0.0
 
     def test_negative_agent_match_score_clamped_to_zero(self) -> None:
@@ -561,7 +561,7 @@ class TestInputValidation:
             session_outcome="success",
         )
         assert result.should_reinforce is False
-        assert result.skip_reason == SKIP_LOW_UTILIZATION_AND_ACCURACY
+        assert result.skip_reason == SKIP_BELOW_SCORE_THRESHOLD
         assert result.details["agent_match_score"] == 0.0
 
     def test_utilization_score_above_one_clamped(self) -> None:
@@ -595,7 +595,7 @@ class TestInputValidation:
             session_outcome="success",
         )
         assert result.should_reinforce is False
-        assert result.skip_reason == SKIP_LOW_UTILIZATION_AND_ACCURACY
+        assert result.skip_reason == SKIP_BELOW_SCORE_THRESHOLD
         assert result.details["utilization_score"] == 0.0
 
     def test_negative_inf_agent_match_treated_as_zero(self) -> None:
@@ -607,7 +607,7 @@ class TestInputValidation:
             session_outcome="success",
         )
         assert result.should_reinforce is False
-        assert result.skip_reason == SKIP_LOW_UTILIZATION_AND_ACCURACY
+        assert result.skip_reason == SKIP_BELOW_SCORE_THRESHOLD
         assert result.details["agent_match_score"] == 0.0
 
     def test_both_nan_scores_treated_as_zero(self) -> None:
@@ -619,7 +619,7 @@ class TestInputValidation:
             session_outcome="success",
         )
         assert result.should_reinforce is False
-        assert result.skip_reason == SKIP_LOW_UTILIZATION_AND_ACCURACY
+        assert result.skip_reason == SKIP_BELOW_SCORE_THRESHOLD
         assert result.details["utilization_score"] == 0.0
         assert result.details["agent_match_score"] == 0.0
 

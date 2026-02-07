@@ -5,7 +5,7 @@ Gates whether a session's routing decision should be used to reinforce
 the routing model. Prevents learning from noise by requiring:
     1. Context injection actually occurred (no injection = no signal)
     2. Clear session outcome (success or failed, not abandoned/unknown)
-    3. Minimum utilization AND accuracy thresholds met
+    3. Minimum utilization OR accuracy thresholds met
 
 All functions are pure — no network calls, no datetime.now(), no side effects.
 
@@ -32,7 +32,7 @@ MIN_ACCURACY_THRESHOLD: float = 0.5
 # Skip reason constants for observability and Slack messaging.
 SKIP_NO_INJECTION = "NO_INJECTION"
 SKIP_UNCLEAR_OUTCOME = "UNCLEAR_OUTCOME"
-SKIP_LOW_UTILIZATION_AND_ACCURACY = "LOW_UTILIZATION_AND_ACCURACY"
+SKIP_BELOW_SCORE_THRESHOLD = "BELOW_SCORE_THRESHOLD"
 
 # Outcomes that provide a clear signal for reinforcement.
 CLEAR_OUTCOMES: frozenset[str] = frozenset({"success", "failed"})
@@ -114,11 +114,14 @@ def should_reinforce_routing(
             details=details,
         )
 
-    # Gate 3: Utilization AND accuracy must meet minimums
-    if utilization_score < MIN_UTILIZATION_THRESHOLD or agent_match_score < MIN_ACCURACY_THRESHOLD:
+    # Gate 3: Both utilization and accuracy must meet minimums
+    if (
+        utilization_score < MIN_UTILIZATION_THRESHOLD
+        or agent_match_score < MIN_ACCURACY_THRESHOLD
+    ):
         return GuardrailResult(
             should_reinforce=False,
-            skip_reason=SKIP_LOW_UTILIZATION_AND_ACCURACY,
+            skip_reason=SKIP_BELOW_SCORE_THRESHOLD,
             details=details,
         )
 
@@ -135,7 +138,7 @@ __all__ = [
     "CLEAR_OUTCOMES",
     "MIN_ACCURACY_THRESHOLD",
     "MIN_UTILIZATION_THRESHOLD",
-    "SKIP_LOW_UTILIZATION_AND_ACCURACY",
+    "SKIP_BELOW_SCORE_THRESHOLD",
     "SKIP_NO_INJECTION",
     "SKIP_UNCLEAR_OUTCOME",
     # Types
