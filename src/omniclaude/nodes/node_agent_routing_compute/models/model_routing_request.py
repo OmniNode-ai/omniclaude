@@ -14,6 +14,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from omniclaude.nodes.node_agent_routing_compute.models.model_agent_definition import (
     ModelAgentDefinition,
 )
+
+# NOTE: Intentional cross-node dependency. The compute node requires the
+# reducer's stats model as input for historical-score routing.  Both nodes
+# are in the same package and share ownership.  Phase 2+ may extract a
+# shared models package if additional nodes need this type.
 from omniclaude.nodes.node_routing_history_reducer.models.model_agent_routing_stats import (
     ModelAgentRoutingStats,
 )

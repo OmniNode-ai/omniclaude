@@ -8,7 +8,7 @@ Phase 2+: Will use actual PostgreSQL queries for real historical data.
 Implements ProtocolHistoryStore.
 
 Design Notes:
-    - Thread-safe via threading.Lock on the in-memory store
+    - Async-safe via asyncio.Lock on the in-memory store
     - No external dependencies (pure Python for Phase 1)
     - Default success_rate of 0.5 matches existing ConfidenceScorer behavior
       (see confidence_scorer.py: _calculate_historical_score)
@@ -18,8 +18,8 @@ Design Notes:
 
 from __future__ import annotations
 
+import asyncio
 import logging
-import threading
 from collections.abc import Callable
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
@@ -46,10 +46,10 @@ class HandlerHistoryPostgres:
 
     Implements ProtocolHistoryStore.
 
-    Thread Safety:
-        All access to the in-memory store is protected by a threading.Lock.
-        This ensures correctness when hooks or async tasks access the handler
-        concurrently from different threads.
+    Concurrency Safety:
+        All access to the in-memory store is protected by an asyncio.Lock.
+        This ensures correctness when concurrent async tasks access the handler
+        within the same event loop.
 
     Example:
         >>> handler = HandlerHistoryPostgres()
@@ -71,7 +71,7 @@ class HandlerHistoryPostgres:
                 Defaults to ``lambda: datetime.now(UTC)``.
                 Inject a deterministic clock for testing.
         """
-        self._lock = threading.Lock()
+        self._lock = asyncio.Lock()
         self._clock = clock or (lambda: datetime.now(UTC))
         # agent_name -> list of recorded entries (append-only)
         self._store: dict[str, list[ModelAgentStatsEntry]] = {}
@@ -110,7 +110,7 @@ class HandlerHistoryPostgres:
         """
         cid = correlation_id or uuid4()
 
-        with self._lock:
+        async with self._lock:
             # Idempotency: skip duplicate correlation_ids
             if cid in self._seen_correlation_ids:
                 logger.debug(
@@ -173,7 +173,7 @@ class HandlerHistoryPostgres:
         """
         cid = correlation_id or uuid4()
 
-        with self._lock:
+        async with self._lock:
             if agent_name is not None:
                 logger.debug(
                     "Querying routing stats for agent=%s correlation_id=%s",

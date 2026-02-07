@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class ModelAgentStatsEntry(BaseModel):
@@ -60,6 +60,16 @@ class ModelAgentStatsEntry(BaseModel):
         default=None,
         description="When this agent was last selected",
     )
+
+    @field_validator("last_routed_at")
+    @classmethod
+    def _require_timezone_aware(cls, v: datetime | None) -> datetime | None:
+        """Reject naive datetimes to enforce the explicit-timestamp invariant."""
+        if v is not None and v.tzinfo is None:
+            raise ValueError(
+                "last_routed_at must be timezone-aware (got naive datetime)"
+            )
+        return v
 
     @model_validator(mode="after")
     def _validate_routings(self) -> ModelAgentStatsEntry:
