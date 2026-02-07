@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections.abc import Callable
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -56,11 +57,23 @@ class HandlerHistoryPostgres:
         >>> assert stats.total_routing_decisions == 1
     """
 
-    def __init__(self) -> None:
-        """Initialize the handler with an empty in-memory store."""
+    def __init__(
+        self,
+        clock: Callable[[], datetime] | None = None,
+    ) -> None:
+        """Initialize the handler with an empty in-memory store.
+
+        Args:
+            clock: Optional callable returning current UTC datetime.
+                Defaults to ``lambda: datetime.now(UTC)``.
+                Inject a deterministic clock for testing.
+        """
         self._lock = threading.Lock()
+        self._clock = clock or (lambda: datetime.now(UTC))
         # agent_name -> list of recorded entries (append-only)
         self._store: dict[str, list[ModelAgentStatsEntry]] = {}
+        # Track seen correlation_ids for idempotency
+        self._seen_correlation_ids: set[UUID] = set()
 
     @property
     def handler_key(self) -> str:
@@ -94,6 +107,17 @@ class HandlerHistoryPostgres:
         cid = correlation_id or uuid4()
 
         with self._lock:
+            # Idempotency: skip duplicate correlation_ids
+            if cid in self._seen_correlation_ids:
+                logger.debug(
+                    "Duplicate correlation_id=%s for agent=%s, skipping",
+                    cid,
+                    entry.agent_name,
+                )
+                return self._build_stats_snapshot()
+
+            self._seen_correlation_ids.add(cid)
+
             if entry.agent_name not in self._store:
                 self._store[entry.agent_name] = []
             self._store[entry.agent_name].append(entry)
@@ -178,14 +202,14 @@ class HandlerHistoryPostgres:
             return ModelAgentRoutingStats(
                 entries=(default_entry,),
                 total_routing_decisions=0,
-                snapshot_at=datetime.now(UTC),
+                snapshot_at=self._clock(),
             )
 
         aggregate_entry = self._aggregate_entries(agent_name, entries_list)
         return ModelAgentRoutingStats(
             entries=(aggregate_entry,),
             total_routing_decisions=len(entries_list),
-            snapshot_at=datetime.now(UTC),
+            snapshot_at=self._clock(),
         )
 
     def _build_stats_snapshot(self) -> ModelAgentRoutingStats:
@@ -199,7 +223,7 @@ class HandlerHistoryPostgres:
             return ModelAgentRoutingStats(
                 entries=(),
                 total_routing_decisions=0,
-                snapshot_at=datetime.now(UTC),
+                snapshot_at=self._clock(),
             )
 
         agent_entries: list[ModelAgentStatsEntry] = []
@@ -213,7 +237,7 @@ class HandlerHistoryPostgres:
         return ModelAgentRoutingStats(
             entries=tuple(agent_entries),
             total_routing_decisions=total_decisions,
-            snapshot_at=datetime.now(UTC),
+            snapshot_at=self._clock(),
         )
 
     @staticmethod

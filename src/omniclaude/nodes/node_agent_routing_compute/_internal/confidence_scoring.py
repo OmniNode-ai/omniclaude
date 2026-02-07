@@ -16,6 +16,7 @@ Pure Python - NO ONEX imports.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -172,9 +173,9 @@ class ConfidenceScorer:
             # No capabilities defined - neutral score
             return 0.5
 
-        # Extract words from request for token-based matching
-        # This prevents false positives like "debug" matching "debugging"
-        request_words = set(request.lower().split())
+        # Extract words from request using word-boundary regex
+        # Consistent with TriggerMatcher._extract_keywords tokenization
+        request_words = set(re.findall(r"\b\w+\b", request.lower()))
 
         # Check if any capability matches as a complete token
         matches = 0

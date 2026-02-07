@@ -339,7 +339,6 @@ class HandlerRoutingDefault:
 
         Args:
             agent_name: The explicitly requested agent name.
-            agent_data: Agent data dict from the converted registry.
 
         Returns:
             ModelRoutingResult with routing_policy="explicit_request" and
