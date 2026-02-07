@@ -67,6 +67,11 @@ def golden_corpus() -> dict[str, Any]:
 def corpus_entries(golden_corpus: dict[str, Any]) -> list[dict[str, Any]]:
     """Extract entries list from golden corpus."""
     entries = golden_corpus["entries"]
+    # 100 is the minimum viable corpus size for statistical significance
+    # across the 6 routing categories (direct_trigger, explicit_request,
+    # fallback, ambiguity, context_filter, fuzzy_match). Below this
+    # threshold, per-category coverage becomes too sparse to detect
+    # regressions reliably.
     assert len(entries) >= 100, (
         f"Golden corpus has {len(entries)} entries, need 100+. "
         f"Regenerate with: python -m tests.routing.generate_corpus"
