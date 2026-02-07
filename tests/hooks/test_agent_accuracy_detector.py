@@ -572,10 +572,10 @@ class TestRealisticScenarios:
 
     def test_deterministic_results(self) -> None:
         """Same inputs always produce the same output (pure function)."""
-        kwargs = dict(
-            agent_triggers=["debug", "trace", "log"],
-            context_signals=["debug session active", "reading log file"],
-        )
+        kwargs = {
+            "agent_triggers": ["debug", "trace", "log"],
+            "context_signals": ["debug session active", "reading log file"],
+        }
         results = [calculate_agent_match_score(**kwargs) for _ in range(10)]
         for r in results:
             assert r == results[0]

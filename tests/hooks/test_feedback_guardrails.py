@@ -629,12 +629,12 @@ class TestPureFunctionProperties:
 
     def test_deterministic_output(self) -> None:
         """Same inputs always produce same outputs."""
-        kwargs = dict(
-            injection_occurred=True,
-            utilization_score=0.5,
-            agent_match_score=0.7,
-            session_outcome="success",
-        )
+        kwargs = {
+            "injection_occurred": True,
+            "utilization_score": 0.5,
+            "agent_match_score": 0.7,
+            "session_outcome": "success",
+        }
         results = [should_reinforce_routing(**kwargs) for _ in range(10)]
         for result in results:
             assert result.should_reinforce == results[0].should_reinforce
