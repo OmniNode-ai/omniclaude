@@ -1,7 +1,7 @@
 ---
 name: ticket-pipeline
 description: Autonomous per-ticket pipeline that chains ticket-work, local-review, PR creation, pr-release-ready, and merge readiness into a single unattended workflow with Slack notifications and policy guardrails
-version: 1.0.0
+version: 1.1.0
 category: workflow
 tags:
   - pipeline
@@ -65,9 +65,12 @@ stateDiagram-v2
 
 ### Phase 2: local_review
 
-- Invokes `local-review` with `--max-iterations` from policy
-- Autonomous: loops until clean or policy limits hit
-- Stop on: 0 blocking issues, max iterations, repeat issues, new major after iteration 1
+- Invokes `local-review` in a review iteration loop controlled by pipeline policy
+- Issue fingerprinting: each iteration's findings are normalized to `{file, rule_id, severity}` tuples
+- Mechanical stop conditions (policy switches, not agent judgment):
+  - `max_review_iterations`: cap on total iterations
+  - `stop_on_repeat`: stops if current fingerprints are a subset of any previous iteration (no progress)
+  - `stop_on_major`: stops if new major/critical issues appear after iteration 1
 - AUTO-ADVANCE to Phase 3 (only if 0 blocking issues)
 
 ### Phase 3: create_pr
@@ -79,8 +82,8 @@ stateDiagram-v2
 
 ### Phase 4: pr_release_ready
 
-- Invokes `pr-release-ready` to fix CodeRabbit issues
-- Same iteration limits as Phase 2
+- Invokes `pr-release-ready` in a review iteration loop (same as Phase 2)
+- Same fingerprinting and mechanical stop conditions as Phase 2
 - AUTO-ADVANCE to Phase 5 (only if 0 blocking issues)
 
 ### Phase 5: ready_for_merge
@@ -106,9 +109,21 @@ All auto-advance behavior is governed by explicit policy switches, not agent jud
 | `stop_on_cross_repo` | `true` | Stop if changes touch multiple repo roots |
 | `stop_on_invariant` | `true` | Stop if realm/topic naming violation detected |
 
+## Issue Fingerprinting
+
+Review phases (Phase 2 and 4) track issue fingerprints across iterations for mechanical repeat detection:
+
+- Each review finding is normalized to a `{file, rule_id, severity}` tuple
+- Fingerprint sets are stored per iteration in `issue_fingerprints` within phase state
+- `stop_on_repeat`: compares current fingerprints against all previous iterations — if current is a subset (no progress), pipeline stops
+- `stop_on_major`: if new major/critical findings appear after iteration 1, pipeline stops
+- All comparisons are set-based and deterministic — no agent judgment involved
+
+Python implementation: `src/omniclaude/lib/pipeline/` (models, fingerprint_engine, review_loop_controller)
+
 ## State Management
 
-Pipeline state is stored at `~/.claude/pipelines/{ticket_id}/state.yaml` as the primary state machine. Linear ticket gets a compact summary mirror (run_id, current phase, blocked reason, artifacts).
+Pipeline state is stored at `~/.claude/pipelines/{ticket_id}/state.yaml` as the primary state machine. Linear ticket gets a compact summary mirror (run_id, current phase, blocked reason, artifacts). Review phases include `issue_fingerprints` for per-iteration fingerprint records.
 
 ## Dry Run Mode
 
