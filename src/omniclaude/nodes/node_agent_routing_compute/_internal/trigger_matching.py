@@ -43,6 +43,96 @@ class TriggerMatcher:
     multiple matching strategies with confidence scoring.
     """
 
+    # HIGH-CONFIDENCE TECHNICAL TRIGGERS
+    # These domain-specific keywords are unambiguous and don't require action context.
+    # They should always match when present in user requests.
+    _HIGH_CONFIDENCE_TRIGGERS = frozenset(
+        {
+            # Debugging & Error Handling
+            "debug",
+            "error",
+            "bug",
+            "troubleshoot",
+            "investigate",
+            "diagnose",
+            "fix",
+            "resolve",
+            "issue",
+            "problem",
+            "failure",
+            "crash",
+            # Testing & Quality
+            "test",
+            "testing",
+            "quality",
+            "coverage",
+            "validate",
+            "verify",
+            # Performance & Optimization
+            "optimize",
+            "performance",
+            "benchmark",
+            "bottleneck",
+            "profile",
+            "efficiency",
+            "speed",
+            "slow",
+            "latency",
+            # Security & Compliance
+            "security",
+            "audit",
+            "vulnerability",
+            "penetration",
+            "compliance",
+            "threat",
+            "risk",
+            "secure",
+            # Development Operations
+            "deploy",
+            "deployment",
+            "infrastructure",
+            "devops",
+            "pipeline",
+            "container",
+            "kubernetes",
+            "docker",
+            "monitor",
+            "observability",
+            # Documentation & Research
+            "document",
+            "docs",
+            "research",
+            "analyze",
+            "analysis",
+            # API & Architecture
+            "api",
+            "endpoint",
+            "microservice",
+            "architecture",
+            "design",
+            # Frontend & Backend
+            "frontend",
+            "backend",
+            "react",
+            "typescript",
+            "python",
+            "fastapi",
+        }
+    )
+
+    # Patterns that indicate technical/architectural usage, NOT agent invocation.
+    _TECHNICAL_PATTERNS = tuple(
+        re.compile(p)
+        for p in (
+            r"\bpolymorphic\s+(architecture|design|pattern|approach|system|code|style)\b",
+            r"\bpolymorphism\b",
+            r"\bpollyanna\b",
+            r"\b(the|a|an)\s+polymorphic\s+(design|pattern|architecture|approach)\b",
+            r"\busing\s+polymorphi",
+            r"\b(poly|polly)\s+(suggested|mentioned|said|thinks|believes)\b",
+        )
+    )
+
     # Common stopwords to filter from keyword extraction
     STOPWORDS = frozenset(
         {
@@ -414,98 +504,14 @@ class TriggerMatcher:
         trigger_lower = trigger.lower()
         request_lower = user_request.lower()
 
-        # HIGH-CONFIDENCE TECHNICAL TRIGGERS
-        # These domain-specific keywords are unambiguous and don't require action context
-        # They should always match when present in user requests
-        high_confidence_triggers = {
-            # Debugging & Error Handling
-            "debug",
-            "error",
-            "bug",
-            "troubleshoot",
-            "investigate",
-            "diagnose",
-            "fix",
-            "resolve",
-            "issue",
-            "problem",
-            "failure",
-            "crash",
-            # Testing & Quality
-            "test",
-            "testing",
-            "quality",
-            "coverage",
-            "validate",
-            "verify",
-            # Performance & Optimization
-            "optimize",
-            "performance",
-            "benchmark",
-            "bottleneck",
-            "profile",
-            "efficiency",
-            "speed",
-            "slow",
-            "latency",
-            # Security & Compliance
-            "security",
-            "audit",
-            "vulnerability",
-            "penetration",
-            "compliance",
-            "threat",
-            "risk",
-            "secure",
-            # Development Operations
-            "deploy",
-            "deployment",
-            "infrastructure",
-            "devops",
-            "pipeline",
-            "container",
-            "kubernetes",
-            "docker",
-            "monitor",
-            "observability",
-            # Documentation & Research
-            "document",
-            "docs",
-            "research",
-            "analyze",
-            "analysis",
-            # API & Architecture
-            "api",
-            "endpoint",
-            "microservice",
-            "architecture",
-            "design",
-            # Frontend & Backend
-            "frontend",
-            "backend",
-            "react",
-            "typescript",
-            "python",
-            "fastapi",
-        }
-
         # Bypass strict action context requirement for high-confidence triggers
-        if trigger_lower in high_confidence_triggers:
+        if trigger_lower in self._HIGH_CONFIDENCE_TRIGGERS:
             return True
 
         # Check for technical/architectural context first (strongest signal)
         # These patterns indicate NOT an agent invocation
-        technical_patterns = [
-            r"\bpolymorphic\s+(architecture|design|pattern|approach|system|code|style)\b",
-            r"\bpolymorphism\b",
-            r"\bpollyanna\b",
-            r"\b(the|a|an)\s+polymorphic\s+(design|pattern|architecture|approach)\b",
-            r"\busing\s+polymorphi",  # "using polymorphism"
-            r"\b(poly|polly)\s+(suggested|mentioned|said|thinks|believes)\b",  # Casual reference
-        ]
-
-        for pattern in technical_patterns:
-            if re.search(pattern, request_lower):
+        for pattern in self._TECHNICAL_PATTERNS:
+            if pattern.search(request_lower):
                 return False  # Strong signal of technical/casual usage
 
         # For multi-word triggers, allow them (high confidence they're agent references)

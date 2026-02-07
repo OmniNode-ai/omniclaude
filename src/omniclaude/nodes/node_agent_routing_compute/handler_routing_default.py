@@ -239,7 +239,8 @@ class HandlerRoutingDefault:
         agents: dict[str, dict[str, Any]] = {}
         for agent_def in request.agent_registry:
             agents[agent_def.name] = {
-                "activation_triggers": list(agent_def.explicit_triggers),
+                "activation_triggers": list(agent_def.explicit_triggers)
+                + list(agent_def.context_triggers),
                 "title": agent_def.description or agent_def.name,
                 "capabilities": list(agent_def.capabilities),
                 "domain_context": agent_def.domain_context,

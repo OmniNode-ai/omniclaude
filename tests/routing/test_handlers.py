@@ -42,11 +42,13 @@ def _make_agent(
     triggers: tuple[str, ...] = (),
     capabilities: tuple[str, ...] = (),
     domain: str = "general",
+    context_triggers: tuple[str, ...] = (),
 ) -> ModelAgentDefinition:
     return ModelAgentDefinition(
         name=name,
         agent_type=name.replace("agent-", "").replace("-", "_"),
         explicit_triggers=triggers,
+        context_triggers=context_triggers,
         capabilities=capabilities,
         domain_context=domain,
     )
@@ -169,6 +171,26 @@ class TestHandlerRoutingDefault:
         result = await handler.compute_routing(request)
 
         assert len(result.candidates) <= 5
+
+    @pytest.mark.asyncio
+    async def test_context_triggers_included_in_routing(
+        self, handler: HandlerRoutingDefault
+    ) -> None:
+        """Context triggers should be merged into activation_triggers for matching."""
+        agents = (
+            _make_agent(
+                "agent-security-auditor",
+                triggers=("security audit",),
+                context_triggers=("vulnerability", "penetration testing"),
+            ),
+            _make_agent("polymorphic-agent", triggers=("poly",)),
+        )
+        # Request matches context_trigger "vulnerability" but not explicit_trigger
+        request = _make_request("check for vulnerability in auth module", agents)
+        result = await handler.compute_routing(request)
+
+        assert result.selected_agent == "agent-security-auditor"
+        assert result.routing_policy == "trigger_match"
 
     @pytest.mark.asyncio
     async def test_confidence_breakdown_populated(
