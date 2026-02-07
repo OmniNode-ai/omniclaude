@@ -473,7 +473,9 @@ class TriggerMatcher:
     # Short alphanumeric technical tokens that should be preserved during
     # keyword extraction even when below the default length threshold.
     # These tokens are domain-significant (e.g., cloud services, protocols).
-    _TECHNICAL_TOKENS = frozenset({"s3", "k8", "ec2", "ml", "ai", "ci", "cd", "db"})
+    _TECHNICAL_TOKENS = frozenset(  # secret-ok: domain keyword tokens
+        {"s3", "k8", "ec2", "ml", "ai", "ci", "cd", "db"}
+    )
 
     def __init__(self, agent_registry: dict[str, Any]) -> None:
         """
@@ -891,7 +893,7 @@ def _build_registry_from_configs(configs_dir: Path) -> dict[str, Any]:
         logger.warning(f"Agent configs directory not found: {configs_dir}")
         return registry
 
-    for yaml_file in configs_dir.glob("*.yaml"):
+    for yaml_file in sorted(configs_dir.glob("*.yaml")):
         try:
             with open(yaml_file) as f:
                 agent_data = yaml.safe_load(f)
@@ -998,6 +1000,16 @@ def _extract_triggers(agent_data: dict[str, Any]) -> list[str]:
     # Check top-level activation_triggers
     if "activation_triggers" in agent_data:
         triggers.extend(agent_data["activation_triggers"])
+
+    # Check top-level triggers (alternative YAML convention)
+    if "triggers" in agent_data:
+        value = agent_data["triggers"]
+        if isinstance(value, list):
+            triggers.extend(str(item) for item in value)
+        elif isinstance(value, dict):
+            for sub_value in value.values():
+                if isinstance(sub_value, list):
+                    triggers.extend(str(item) for item in sub_value)
 
     # Check agent_identity for keywords
     identity = agent_data.get("agent_identity", {})
