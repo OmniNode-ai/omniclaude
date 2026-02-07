@@ -36,7 +36,6 @@ class AgentMatchResult(NamedTuple):
 
 
 def calculate_agent_match_score(
-    selected_agent: str,
     agent_triggers: list[str],
     context_signals: list[str],
 ) -> AgentMatchResult:
@@ -51,7 +50,6 @@ def calculate_agent_match_score(
         If no triggers defined, score = 0.0 (no signal).
 
     Args:
-        selected_agent: Name of the agent that was selected (for logging).
         agent_triggers: Activation patterns from the agent's YAML config
             (explicit_triggers + context_triggers).
         context_signals: Observed session signals (tool names, file paths,
@@ -70,7 +68,7 @@ def calculate_agent_match_score(
 
     # Normalize signals for case-insensitive comparison.
     # Use a list (not a set) to preserve input order for deterministic matching.
-    # Deduplicate while preserving order to avoid non-deterministic join results.
+    # Deduplicate while preserving order to avoid inflated scoring.
     seen: set[str] = set()
     signals_lower: list[str] = []
     for s in context_signals:
@@ -78,14 +76,15 @@ def calculate_agent_match_score(
         if low not in seen:
             seen.add(low)
             signals_lower.append(low)
-    signals_joined = " ".join(signals_lower)
 
     matched: list[str] = []
     for trigger in agent_triggers:
         trigger_lower = trigger.lower()
-        # Check if trigger appears as substring in any signal
-        if trigger_lower in signals_joined:
-            matched.append(trigger)
+        # Check if trigger appears in ANY individual signal (not across boundaries)
+        for signal in signals_lower:
+            if trigger_lower in signal:
+                matched.append(trigger)
+                break  # Found a match, no need to check more signals
 
     total = len(agent_triggers)
     score = len(matched) / total if total > 0 else 0.0

@@ -76,6 +76,14 @@ def should_reinforce_routing(
     Returns:
         GuardrailResult with decision, skip reason, and diagnostic details.
     """
+    # Store raw values before clamping for debugging
+    details: dict[str, object] = {
+        "injection_occurred": injection_occurred,
+        "utilization_score_raw": utilization_score,
+        "agent_match_score_raw": agent_match_score,
+        "session_outcome": session_outcome,
+    }
+
     # Clamp scores to valid range; treat NaN as 0.0 (no signal)
     if math.isnan(utilization_score) or math.isinf(utilization_score):
         utilization_score = 0.0
@@ -87,12 +95,8 @@ def should_reinforce_routing(
     else:
         agent_match_score = max(0.0, min(1.0, agent_match_score))
 
-    details: dict[str, object] = {
-        "injection_occurred": injection_occurred,
-        "utilization_score": utilization_score,
-        "agent_match_score": agent_match_score,
-        "session_outcome": session_outcome,
-    }
+    details["utilization_score"] = utilization_score
+    details["agent_match_score"] = agent_match_score
 
     # Gate 1: Must have injected context (no injection = no feedback signal)
     if not injection_occurred:

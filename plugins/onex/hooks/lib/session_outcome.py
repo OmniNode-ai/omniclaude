@@ -44,8 +44,9 @@ COMPLETION_MARKER_PATTERNS: tuple[str, ...] = (
     "success",
 )
 
-# Regex for commit hash detection (7-40 hex chars, standalone).
-_COMMIT_HASH_RE = re.compile(r"\b[0-9a-f]{7,40}\b")
+# Commit hash: 7-40 lowercase hex chars, NOT preceded or followed by a dash.
+# This avoids matching hex segments of UUIDs (which use dashes as separators).
+_COMMIT_HASH_RE = re.compile(r"(?<!-)\b[0-9a-f]{7,40}\b(?!-)")
 
 # Valid outcome values (matches EnumClaudeCodeSessionOutcome from omnibase_core.enums).
 OUTCOME_SUCCESS = "success"

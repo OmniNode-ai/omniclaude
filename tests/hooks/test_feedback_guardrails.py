@@ -433,7 +433,7 @@ class TestResultStructure:
         assert result.skip_reason is None
 
     def test_details_contains_all_input_parameters(self) -> None:
-        """details dict contains all four input parameters."""
+        """details dict contains all input parameters (raw and clamped)."""
         result = should_reinforce_routing(
             injection_occurred=True,
             utilization_score=0.42,
@@ -442,6 +442,8 @@ class TestResultStructure:
         )
         assert isinstance(result.details, dict)
         assert result.details["injection_occurred"] is True
+        assert result.details["utilization_score_raw"] == 0.42
+        assert result.details["agent_match_score_raw"] == 0.73
         assert result.details["utilization_score"] == 0.42
         assert result.details["agent_match_score"] == 0.73
         assert result.details["session_outcome"] == "failed"
@@ -457,6 +459,8 @@ class TestResultStructure:
         assert result.should_reinforce is False
         assert isinstance(result.details, dict)
         assert result.details["injection_occurred"] is False
+        assert result.details["utilization_score_raw"] == 0.1
+        assert result.details["agent_match_score_raw"] == 0.2
         assert result.details["utilization_score"] == 0.1
         assert result.details["agent_match_score"] == 0.2
         assert result.details["session_outcome"] == "abandoned"
