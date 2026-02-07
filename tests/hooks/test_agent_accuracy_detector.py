@@ -339,7 +339,11 @@ class TestEdgeCases:
         """Triggers containing special characters are handled."""
         result = calculate_agent_match_score(
             agent_triggers=["c++", "node.js", "model-contract"],
-            context_signals=["c++ compiler error", "node.js server", "model-contract validation"],
+            context_signals=[
+                "c++ compiler error",
+                "node.js server",
+                "model-contract validation",
+            ],
         )
         assert result.score == 1.0
         assert len(result.matched_triggers) == 3
@@ -352,7 +356,11 @@ class TestEdgeCases:
         """
         result = calculate_agent_match_score(
             agent_triggers=["file.py", "a+b", "[config]"],
-            context_signals=["editing file.py now", "compute a+b result", "[config] loaded"],
+            context_signals=[
+                "editing file.py now",
+                "compute a+b result",
+                "[config] loaded",
+            ],
         )
         assert result.score == 1.0
 

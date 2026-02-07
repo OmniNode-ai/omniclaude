@@ -623,13 +623,18 @@ class TestResultStructure:
 
     def test_outcome_is_always_valid_string(self) -> None:
         """Outcome is always one of the four valid values."""
-        valid_outcomes = {OUTCOME_SUCCESS, OUTCOME_FAILED, OUTCOME_ABANDONED, OUTCOME_UNKNOWN}
+        valid_outcomes = {
+            OUTCOME_SUCCESS,
+            OUTCOME_FAILED,
+            OUTCOME_ABANDONED,
+            OUTCOME_UNKNOWN,
+        }
         test_cases = [
-            (1, "", 0, 0.0),          # FAILED (exit code)
+            (1, "", 0, 0.0),  # FAILED (exit code)
             (0, "Error: x", 0, 0.0),  # FAILED (marker)
-            (0, "Done", 1, 100.0),    # SUCCESS
-            (0, "", 0, 5.0),          # ABANDONED
-            (0, "", 0, 300.0),        # UNKNOWN
+            (0, "Done", 1, 100.0),  # SUCCESS
+            (0, "", 0, 5.0),  # ABANDONED
+            (0, "", 0, 300.0),  # UNKNOWN
         ]
         for exit_code, output, tools, duration in test_cases:
             result = derive_session_outcome(exit_code, output, tools, duration)
@@ -811,13 +816,33 @@ class TestDeterminism:
         """Each gate classification is deterministic across repeated calls."""
         gate_inputs = [
             # Gate 1: FAILED
-            dict(exit_code=1, session_output="", tool_calls_completed=0, duration_seconds=0.0),
+            dict(
+                exit_code=1,
+                session_output="",
+                tool_calls_completed=0,
+                duration_seconds=0.0,
+            ),
             # Gate 2: SUCCESS
-            dict(exit_code=0, session_output="Done", tool_calls_completed=1, duration_seconds=100.0),
+            dict(
+                exit_code=0,
+                session_output="Done",
+                tool_calls_completed=1,
+                duration_seconds=100.0,
+            ),
             # Gate 3: ABANDONED
-            dict(exit_code=0, session_output="", tool_calls_completed=0, duration_seconds=5.0),
+            dict(
+                exit_code=0,
+                session_output="",
+                tool_calls_completed=0,
+                duration_seconds=5.0,
+            ),
             # Gate 4: UNKNOWN
-            dict(exit_code=0, session_output="", tool_calls_completed=0, duration_seconds=300.0),
+            dict(
+                exit_code=0,
+                session_output="",
+                tool_calls_completed=0,
+                duration_seconds=300.0,
+            ),
         ]
         for kwargs in gate_inputs:
             first = derive_session_outcome(**kwargs)

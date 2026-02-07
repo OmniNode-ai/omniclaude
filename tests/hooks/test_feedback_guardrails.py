@@ -491,7 +491,11 @@ class TestConstants:
 
     def test_skip_reason_constants_are_strings(self) -> None:
         """Skip reason constants are non-empty strings."""
-        for constant in [SKIP_NO_INJECTION, SKIP_UNCLEAR_OUTCOME, SKIP_LOW_UTILIZATION_AND_ACCURACY]:
+        for constant in [
+            SKIP_NO_INJECTION,
+            SKIP_UNCLEAR_OUTCOME,
+            SKIP_LOW_UTILIZATION_AND_ACCURACY,
+        ]:
             assert isinstance(constant, str)
             assert len(constant) > 0
 
