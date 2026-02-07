@@ -48,6 +48,9 @@ SESSION_ID=$(echo "$INPUT" | jq -r '.sessionId // ""' 2>/dev/null || echo "")
 SESSION_DURATION=$(echo "$INPUT" | jq -r '.durationMs // 0' 2>/dev/null || echo "0")
 SESSION_REASON=$(echo "$INPUT" | jq -r '.reason // "other"' 2>/dev/null || echo "other")
 
+# Extract tool call count from session payload (if available)
+TOOL_CALLS_COMPLETED=$(echo "$INPUT" | jq -r '.numTurns // 0' 2>/dev/null || echo "0")
+
 # Validate reason is one of the allowed values
 case "$SESSION_REASON" in
     clear|logout|prompt_input_exit|other) ;;
@@ -148,19 +151,35 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
             DURATION_SECONDS=$($PYTHON_CMD -c "import sys; print(f'{float(sys.argv[1])/1000:.3f}')" "$SESSION_DURATION" 2>/dev/null || echo "0")
         fi
 
+        # ===================================================================
+        # PHASE 1 PLUMBING (OMN-1892): Outcome derivation inputs are
+        # partially hardcoded. Current state:
+        #   - exit_code=0: Always 0 (hooks must never exit non-zero per CLAUDE.md)
+        #   - session_output: Uses session reason (clear/logout/prompt_input_exit/
+        #     other), NOT captured stdout. Outcome will not resolve to FAILED
+        #     until session_output carries error markers (Error:, Exception:, etc.)
+        #   - tool_calls_completed: Extracted from numTurns (best-effort);
+        #     may still be 0 if field is absent from SessionEnd payload.
+        #     SUCCESS requires tool_calls > 0 AND completion markers.
+        # Result: Outcome currently resolves to abandoned or unknown only.
+        # Future tickets:
+        #   - tool_calls_completed: Wire from session aggregation service
+        #   - session_output: Wire from captured session output/stdout
+        # ===================================================================
         # Derive outcome using session signals (OMN-1892)
         # Falls back to "unknown" if Python call fails (graceful degradation)
-        OUTCOME=$(HOOKS_LIB="$HOOKS_LIB" SESSION_REASON="$SESSION_REASON" DURATION_SECONDS="$DURATION_SECONDS" \
+        OUTCOME=$(HOOKS_LIB="$HOOKS_LIB" SESSION_REASON="$SESSION_REASON" DURATION_SECONDS="$DURATION_SECONDS" TOOL_CALLS_COMPLETED="$TOOL_CALLS_COMPLETED" \
             "$PYTHON_CMD" -c "
 import os, sys
 sys.path.insert(0, os.environ['HOOKS_LIB'])
 from session_outcome import derive_session_outcome
 session_reason = os.environ.get('SESSION_REASON', 'other')
 duration_str = os.environ.get('DURATION_SECONDS', '0')
+tool_calls_str = os.environ.get('TOOL_CALLS_COMPLETED', '0')
 result = derive_session_outcome(
     exit_code=0,
     session_output=session_reason,
-    tool_calls_completed=0,
+    tool_calls_completed=int(tool_calls_str) if tool_calls_str.isdigit() else 0,
     duration_seconds=float(duration_str if duration_str else '0'),
 )
 print(result.outcome)
@@ -214,7 +233,22 @@ print(result.outcome)
 
         # Single Python call: derive outcome then evaluate guardrails
         # Combines session_outcome + feedback_guardrails to avoid extra subprocess
-        FEEDBACK_RESULT=$(HOOKS_LIB="$HOOKS_LIB" SESSION_REASON="$SESSION_REASON" DURATION_SECONDS="$DURATION_SECONDS" \
+        # ===================================================================
+        # PHASE 1 PLUMBING (OMN-1892): Outcome derivation inputs are
+        # partially hardcoded. Current state:
+        #   - exit_code=0: Always 0 (hooks must never exit non-zero per CLAUDE.md)
+        #   - session_output: Uses session reason (clear/logout/prompt_input_exit/
+        #     other), NOT captured stdout. Outcome will not resolve to FAILED
+        #     until session_output carries error markers (Error:, Exception:, etc.)
+        #   - tool_calls_completed: Extracted from numTurns (best-effort);
+        #     may still be 0 if field is absent from SessionEnd payload.
+        #     SUCCESS requires tool_calls > 0 AND completion markers.
+        # Result: Outcome currently resolves to abandoned or unknown only.
+        # Future tickets:
+        #   - tool_calls_completed: Wire from session aggregation service
+        #   - session_output: Wire from captured session output/stdout
+        # ===================================================================
+        FEEDBACK_RESULT=$(HOOKS_LIB="$HOOKS_LIB" SESSION_REASON="$SESSION_REASON" DURATION_SECONDS="$DURATION_SECONDS" TOOL_CALLS_COMPLETED="$TOOL_CALLS_COMPLETED" \
             "$PYTHON_CMD" -c "
 import os, sys, json
 sys.path.insert(0, os.environ['HOOKS_LIB'])
@@ -223,10 +257,11 @@ from feedback_guardrails import should_reinforce_routing
 
 session_reason = os.environ.get('SESSION_REASON', 'other')
 duration_str = os.environ.get('DURATION_SECONDS', '0')
+tool_calls_str = os.environ.get('TOOL_CALLS_COMPLETED', '0')
 outcome_result = derive_session_outcome(
     exit_code=0,
     session_output=session_reason,
-    tool_calls_completed=0,
+    tool_calls_completed=int(tool_calls_str) if tool_calls_str.isdigit() else 0,
     duration_seconds=float(duration_str if duration_str else '0'),
 )
 # ===================================================================
@@ -255,23 +290,29 @@ print(json.dumps({
         SKIP_REASON=$(echo "$FEEDBACK_RESULT" | jq -r '.skip_reason // empty' 2>/dev/null) || SKIP_REASON=""
 
         if [[ "$SHOULD_REINFORCE" == "true" ]] && [[ "$KAFKA_ENABLED" == "true" ]]; then
-            FEEDBACK_PAYLOAD=$(jq -n \
+            if ! FEEDBACK_PAYLOAD=$(jq -n \
                 --arg session_id "$SESSION_ID" \
                 --arg outcome "$OUTCOME" \
                 --arg emitted_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-                '{session_id: $session_id, outcome: $outcome, emitted_at: $emitted_at}' 2>/dev/null)
+                '{session_id: $session_id, outcome: $outcome, emitted_at: $emitted_at}' 2>/dev/null); then
+                log "WARNING: Failed to construct routing.feedback payload (jq failed), skipping emission"
+                exit 0
+            fi
 
-            if [[ -n "$FEEDBACK_PAYLOAD" ]]; then
+            if [[ -n "$FEEDBACK_PAYLOAD" && "$FEEDBACK_PAYLOAD" != "null" ]]; then
                 emit_via_daemon "routing.feedback" "$FEEDBACK_PAYLOAD" 100
             fi
         elif [[ -n "$SKIP_REASON" ]] && [[ "$KAFKA_ENABLED" == "true" ]]; then
-            SKIP_PAYLOAD=$(jq -n \
+            if ! SKIP_PAYLOAD=$(jq -n \
                 --arg session_id "$SESSION_ID" \
                 --arg skip_reason "$SKIP_REASON" \
                 --arg emitted_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-                '{session_id: $session_id, skip_reason: $skip_reason, emitted_at: $emitted_at}' 2>/dev/null)
+                '{session_id: $session_id, skip_reason: $skip_reason, emitted_at: $emitted_at}' 2>/dev/null); then
+                log "WARNING: Failed to construct routing.skipped payload (jq failed), skipping emission"
+                exit 0
+            fi
 
-            if [[ -n "$SKIP_PAYLOAD" ]]; then
+            if [[ -n "$SKIP_PAYLOAD" && "$SKIP_PAYLOAD" != "null" ]]; then
                 emit_via_daemon "routing.skipped" "$SKIP_PAYLOAD" 100
             fi
         fi

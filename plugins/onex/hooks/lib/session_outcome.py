@@ -32,6 +32,9 @@ ERROR_MARKER_PATTERNS: tuple[str, ...] = (
     "Error:",
     "Exception:",
     "Traceback",
+    # NOTE: "FAILED" as a standalone word may false-positive on historical
+    # references (e.g. "fix FAILED test") once real session output is wired.
+    # Tighten to line-start anchor or context pattern in Phase 2+.
     "FAILED",
 )
 
