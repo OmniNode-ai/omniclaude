@@ -46,6 +46,16 @@ class ProtocolAgentRouting(Protocol):
         result = await handler.compute_routing(request, correlation_id=cid)
     """
 
+    @property
+    def handler_key(self) -> str:
+        """Backend identifier (e.g., 'default', 'weighted', 'llm').
+
+        This key is used for handler routing when multiple backends are
+        registered. The node contract's handler_routing.backends configuration
+        maps backend keys to handler implementations.
+        """
+        ...
+
     async def compute_routing(
         self,
         request: ModelRoutingRequest,
