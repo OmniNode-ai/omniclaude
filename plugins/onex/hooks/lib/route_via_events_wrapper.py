@@ -315,7 +315,14 @@ def _use_onex_routing_nodes() -> bool:
     """Check if ONEX routing nodes feature flag is enabled."""
     if not _onex_nodes_available:
         return False
-    return os.environ.get("USE_ONEX_ROUTING_NODES", "false").lower() in ("true", "1")
+    return os.environ.get("USE_ONEX_ROUTING_NODES", "false").lower() in (
+        "true",
+        "1",
+        "yes",
+        "on",
+        "y",
+        "t",
+    )
 
 
 def _get_onex_handlers() -> tuple[Any, Any, Any] | None:
@@ -329,12 +336,18 @@ def _get_onex_handlers() -> tuple[Any, Any, Any] | None:
         if _compute_handler is not None:
             return _compute_handler, _emit_handler, _history_handler
         try:
-            _compute_handler = HandlerRoutingDefault()
-            _emit_handler = HandlerRoutingEmitter()
-            _history_handler = HandlerHistoryPostgres()
+            # Assign to locals first — only promote to globals after all
+            # three handlers construct successfully, avoiding a stale
+            # non-None _compute_handler when a later constructor fails.
+            compute = HandlerRoutingDefault()
+            emitter = HandlerRoutingEmitter()
+            history = HandlerHistoryPostgres()
         except Exception as e:
             logger.warning("Failed to initialize ONEX handlers: %s", e)
             return None
+        _compute_handler = compute
+        _emit_handler = emitter
+        _history_handler = history
     return _compute_handler, _emit_handler, _history_handler
 
 
@@ -426,30 +439,32 @@ def _route_via_onex_nodes(
             confidence_threshold=CONFIDENCE_THRESHOLD,
         )
 
-        async def _run() -> Any:
-            """Single event loop: compute routing then emit (best-effort)."""
-            r = await compute.compute_routing(request, correlation_id=cid)
-            try:
-                emit_req = ModelEmissionRequest(
-                    correlation_id=cid,
-                    session_id=session_id or "unknown",
-                    selected_agent=r.selected_agent,
-                    confidence=r.confidence,
-                    confidence_breakdown=r.confidence_breakdown,
-                    routing_policy=r.routing_policy,
-                    routing_path=r.routing_path,
-                    prompt_preview=_sanitize_prompt_preview(prompt),
-                    prompt_length=len(prompt),
-                    emitted_at=datetime.now(UTC),
-                )
-                await emitter.emit_routing_decision(emit_req, correlation_id=cid)
-            except Exception as exc:
-                logger.debug("ONEX emission failed (non-blocking): %s", exc)
-            return r
+        async def _compute() -> Any:
+            """Compute routing only (no emission)."""
+            return await compute.compute_routing(request, correlation_id=cid)
 
-        result = asyncio.run(_run())
+        async def _emit(r: Any) -> None:
+            """Emit routing decision (best-effort, non-blocking)."""
+            emit_req = ModelEmissionRequest(
+                correlation_id=cid,
+                session_id=session_id or "unknown",
+                selected_agent=r.selected_agent,
+                confidence=r.confidence,
+                confidence_breakdown=r.confidence_breakdown,
+                routing_policy=r.routing_policy,
+                routing_path=r.routing_path,
+                prompt_preview=_sanitize_prompt_preview(prompt),
+                prompt_length=len(prompt),
+                emitted_at=datetime.now(UTC),
+            )
+            await emitter.emit_routing_decision(emit_req, correlation_id=cid)
+
+        result = asyncio.run(_compute())
         latency_ms = int((time.time() - start_time) * 1000)
 
+        # Check timeout BEFORE emission — avoids emitting a routing decision
+        # that will be discarded (which would conflict with the legacy
+        # fallback's own emission).
         if latency_ms > timeout_ms:
             logger.warning(
                 "ONEX routing exceeded %dms budget (%dms), falling back",
@@ -457,6 +472,12 @@ def _route_via_onex_nodes(
                 latency_ms,
             )
             return None
+
+        # Emit routing decision (best-effort, only if within budget)
+        try:
+            asyncio.run(_emit(result))
+        except Exception as exc:
+            logger.debug("ONEX emission failed (non-blocking): %s", exc)
 
         # Result shaping: ModelRoutingResult → wrapper dict
         agents_reg = router.registry.get("agents", {})

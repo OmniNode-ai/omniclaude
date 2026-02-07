@@ -475,6 +475,35 @@ class TestOnexGracefulFallback:
         assert result["selected_agent"] is not None
         assert "routing_path" in result
 
+    def test_partial_handler_init_does_not_cache_stale_state(self, monkeypatch):
+        """Partial handler init (first succeeds, second raises) returns None
+        and does NOT leave stale globals that corrupt subsequent calls."""
+        monkeypatch.setenv("USE_ONEX_ROUTING_NODES", "true")
+
+        import route_via_events_wrapper as mod
+
+        # Ensure singletons are reset
+        mod._compute_handler = None
+        mod._emit_handler = None
+        mod._history_handler = None
+
+        with (
+            patch.object(mod, "HandlerRoutingDefault", return_value=MagicMock()),
+            patch.object(
+                mod,
+                "HandlerRoutingEmitter",
+                side_effect=RuntimeError("Emitter init failed"),
+            ),
+        ):
+            result = mod._get_onex_handlers()
+
+        # Should return None (not a partial tuple)
+        assert result is None
+        # Globals must remain None — no stale partial state
+        assert mod._compute_handler is None
+        assert mod._emit_handler is None
+        assert mod._history_handler is None
+
     def test_handlers_unavailable_falls_back(self, monkeypatch):
         """When ONEX handlers can't be created, falls back to legacy."""
         monkeypatch.setenv("USE_ONEX_ROUTING_NODES", "true")
