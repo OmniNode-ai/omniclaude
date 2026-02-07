@@ -394,13 +394,30 @@ class TestHandlerHistoryPostgres:
 
     @pytest.mark.asyncio
     async def test_dedup_eviction_preserves_recent(
-        self, handler: HandlerHistoryPostgres
+        self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Dedup cache evicts oldest half, not everything."""
         import omniclaude.nodes.node_routing_history_reducer.handler_history_postgres as mod
 
-        original_max = mod._MAX_DEDUP_ENTRIES
-        mod._MAX_DEDUP_ENTRIES = 10  # Small cap for fast test
+        monkeypatch.setattr(mod, "_MAX_DEDUP_ENTRIES", 10)  # Small cap for fast test
+        test_handler = HandlerHistoryPostgres(clock=lambda: datetime.now(UTC))
+        for i in range(12):
+            entry = ModelAgentStatsEntry(agent_name="agent-test")
+            await test_handler.record_routing_decision(entry, correlation_id=uuid4())
+
+        # After eviction, handler should still have entries
+        stats = await test_handler.query_routing_stats()
+        assert stats.total_routing_decisions == 12
+
+    @pytest.mark.asyncio
+    async def test_store_eviction_preserves_recent(
+        self, handler: HandlerHistoryPostgres
+    ) -> None:
+        """Per-agent store evicts oldest half when cap exceeded."""
+        import omniclaude.nodes.node_routing_history_reducer.handler_history_postgres as mod
+
+        original_max = mod._MAX_STORE_ENTRIES_PER_AGENT
+        mod._MAX_STORE_ENTRIES_PER_AGENT = 10  # Small cap for fast test
         try:
             test_handler = HandlerHistoryPostgres(clock=lambda: datetime.now(UTC))
             for i in range(12):
@@ -409,11 +426,17 @@ class TestHandlerHistoryPostgres:
                     entry, correlation_id=uuid4()
                 )
 
-            # After eviction, handler should still have entries
-            stats = await test_handler.query_routing_stats()
-            assert stats.total_routing_decisions == 12
+            # After eviction: store should have fewer entries than inserted
+            # (oldest half evicted). 11 entries triggers eviction at >10,
+            # evicts 5, leaving 6; then entry 12 appends -> 7 remain.
+            assert len(test_handler._store["agent-test"]) == 7
+            # total_routing_decisions reflects current store size (evicted
+            # entries are gone in Phase 1 in-memory store)
+            stats = await test_handler.query_routing_stats(agent_name="agent-test")
+            assert stats.entries[0].agent_name == "agent-test"
+            assert stats.total_routing_decisions == 7
         finally:
-            mod._MAX_DEDUP_ENTRIES = original_max
+            mod._MAX_STORE_ENTRIES_PER_AGENT = original_max
 
     @pytest.mark.asyncio
     async def test_snapshot_timestamp_uses_clock(
