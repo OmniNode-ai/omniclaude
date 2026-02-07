@@ -76,7 +76,7 @@ io_operations:
     description: Query historical routing statistics for agents
     protocol_method: query_routing_stats  # -> ProtocolHistoryStore.query_routing_stats()
     input_fields:
-      - agent_name: str
+      - agent_name: str | None
       - correlation_id: UUID | None
     output_fields:
       - result: ModelAgentRoutingStats

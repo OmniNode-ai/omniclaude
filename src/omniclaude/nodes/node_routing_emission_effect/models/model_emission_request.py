@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from omniclaude.nodes.node_agent_routing_compute.models.model_confidence_breakdown import (
     ModelConfidenceBreakdown,
@@ -86,6 +86,14 @@ class ModelEmissionRequest(BaseModel):
         ...,
         description="Explicit emission timestamp (no datetime.now() defaults)",
     )
+
+    @field_validator("emitted_at")
+    @classmethod
+    def _require_timezone_aware(cls, v: datetime) -> datetime:
+        """Reject naive datetimes to enforce the explicit-timestamp invariant."""
+        if v.tzinfo is None:
+            raise ValueError("emitted_at must be timezone-aware (got naive datetime)")
+        return v
 
 
 __all__ = ["ModelEmissionRequest"]
