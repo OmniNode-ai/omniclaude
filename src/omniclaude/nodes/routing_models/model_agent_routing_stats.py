@@ -22,7 +22,7 @@ class ModelAgentRoutingStats(BaseModel):
     statistics to inform the historical_score dimension of confidence.
 
     Attributes:
-        entries: Per-agent statistics, keyed by agent name.
+        entries: Per-agent statistics entries.
         total_decisions: Total routing decisions in the stats window.
         stats_window_seconds: Time window these statistics cover.
     """
