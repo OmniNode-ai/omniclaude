@@ -276,8 +276,9 @@ class HandlerRoutingDefault:
             text_lower = text.lower()
 
             # Patterns for specific agent requests (with agent name)
+            # \b prevents false positives: "reuse agent-X", "misuse agent-X"
             specific_patterns = [
-                r"use\s+(agent-[\w-]+)",  # "use agent-researcher"
+                r"\buse\s+(agent-[\w-]+)",  # "use agent-researcher"
                 r"@(agent-[\w-]+)",  # "@agent-researcher"
                 r"^(agent-[\w-]+)",  # "agent-researcher" at start
             ]

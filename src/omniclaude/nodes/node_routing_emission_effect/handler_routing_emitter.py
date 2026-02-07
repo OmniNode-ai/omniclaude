@@ -28,6 +28,7 @@ Design Decisions:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from collections.abc import Callable
@@ -166,7 +167,11 @@ class HandlerRoutingEmitter:
 
         try:
             payload = self._build_payload(request, resolved_cid)
-            emitted = self._emit_fn(EVENT_TYPE_ROUTING_DECISION, payload)
+            # Wrap synchronous emit_fn in asyncio.to_thread to avoid blocking
+            # the event loop in long-lived async services.
+            emitted = await asyncio.to_thread(
+                self._emit_fn, EVENT_TYPE_ROUTING_DECISION, payload
+            )
             elapsed_ms = (time.monotonic() - start) * 1000.0
 
             if emitted:
