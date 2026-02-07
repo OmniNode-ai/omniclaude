@@ -32,7 +32,10 @@ def normalize_finding(file: str, rule_id: str, severity: str) -> IssueFingerprin
     - Rule ID: strip whitespace, lowercase.
     - Severity: lowercase, must be a valid level.
     """
-    norm_file = file.strip().lstrip("./").lower()
+    norm_file = file.strip()
+    if norm_file.startswith("./"):
+        norm_file = norm_file[2:]
+    norm_file = norm_file.lower()
     norm_rule = rule_id.strip().lower()
     norm_severity = severity.strip().lower()
     return IssueFingerprint(file=norm_file, rule_id=norm_rule, severity=norm_severity)

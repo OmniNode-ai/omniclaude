@@ -99,14 +99,17 @@ class TestStopOnMajor:
         assert can_continue is True
 
     def test_same_major_from_iteration_1_ok(self) -> None:
-        policy = PipelinePolicy(max_review_iterations=10, stop_on_major=True)
+        policy = PipelinePolicy(
+            max_review_iterations=10, stop_on_major=True, stop_on_repeat=False
+        )
         controller = ReviewLoopController(policy)
         fp_major = IssueFingerprint(file="a.py", rule_id="r1", severity="major")
 
         controller.should_continue(1, [fp_major])
-        _can_continue, _reason = controller.should_continue(2, [fp_major])
-        # Same major from iteration 1 is NOT a "new" major - but it IS a repeat
-        # stop_on_repeat may catch this first
+        can_continue, _reason = controller.should_continue(2, [fp_major])
+        # Same major from iteration 1 is NOT a "new" major
+        # With stop_on_repeat=False, this should continue
+        assert can_continue is True
 
     def test_not_triggered_on_iteration_1(self) -> None:
         policy = PipelinePolicy(max_review_iterations=10, stop_on_major=True)

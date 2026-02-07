@@ -17,12 +17,14 @@ from omniclaude.lib.pipeline.models import (
     PhaseResult,
     PipelinePolicy,
 )
+from omniclaude.lib.pipeline.review_loop_controller import ReviewLoopController
 
 __all__ = [
     "PipelinePolicy",
     "IssueFingerprint",
     "PhaseResult",
     "IterationRecord",
+    "ReviewLoopController",
     "normalize_finding",
     "compute_fingerprint_set",
     "detect_repeat_issues",
