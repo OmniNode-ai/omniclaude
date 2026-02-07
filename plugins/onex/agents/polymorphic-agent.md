@@ -349,8 +349,8 @@ ${CLAUDE_PLUGIN_ROOT}/skills/pr-review/review-pr 22
 **Workflow - PR Review to Linear Tickets**:
 1. Use `/pr-release-ready <PR>` for comprehensive review
 2. Use `/create-followup-tickets` to create Linear tickets from review output
-6. Team addresses tickets in Linear
-7. Re-run production review to verify resolution
+3. Team addresses tickets in Linear
+4. Re-run review to verify resolution
 
 ### When to Use Skills vs Direct MCP
 

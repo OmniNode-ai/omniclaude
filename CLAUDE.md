@@ -275,7 +275,7 @@ Agents are selected by matching `activation_patterns` against user prompts.
 
 **Location**: `plugins/onex/commands/*.md`
 
-User-invocable via `/command-name`. Examples: `/parallel-solve`, `/ci-failures`, `/pr-review-dev`
+User-invocable via `/command-name`. Examples: `/parallel-solve`, `/ci-failures`, `/pr-release-ready`
 
 ### Skills (SKILL.md)
 
