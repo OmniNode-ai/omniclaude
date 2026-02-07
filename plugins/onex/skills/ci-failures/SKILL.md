@@ -973,6 +973,6 @@ ${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/get-ci-job-details 56174634733
 
 - GitHub Actions API: https://docs.github.com/en/rest/actions
 - GitHub CLI Manual: https://cli.github.com/manual/
-- PR Review Skills: `${CLAUDE_PLUGIN_ROOT}/skills/pr-review/SKILL.md`
+- PR Review: Use `/pr-release-ready` or `/local-review` commands
 - System Status Skills: `${CLAUDE_PLUGIN_ROOT}/skills/system-status/SKILL.md`
 - Event Alignment Plan: `/docs/events/EVENT_ALIGNMENT_PLAN.md`

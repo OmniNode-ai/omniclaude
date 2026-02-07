@@ -4,7 +4,6 @@ You are running a local code review loop: review changes, fix issues, commit fix
 
 > **Classification System**: Uses onex pr-review keyword-based classification (not confidence scoring).
 > ALL Critical/Major/Minor issues MUST be resolved. Only Nits are optional.
-> See: `${CLAUDE_PLUGIN_ROOT}/skills/pr-review/SKILL.md` for full priority definitions.
 
 ## Arguments
 

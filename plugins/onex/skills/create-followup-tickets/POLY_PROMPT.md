@@ -1,6 +1,6 @@
 # Create Follow-up Tickets -- Poly Worker Prompt
 
-You are creating Linear tickets from unresolved code review issues. Uses the current session's review output (from `/local-review` or `/pr-review-dev`) or an explicit review file as the source.
+You are creating Linear tickets from unresolved code review issues. Uses the current session's review output (from `/local-review` or `/pr-release-ready`) or an explicit review file as the source.
 
 ## Arguments
 
@@ -47,15 +47,15 @@ Look backward in the conversation for review output. The review JSON has this st
 **Search patterns** in session:
 - JSON blocks with `critical`, `major`, `minor`, `nit` arrays
 - Markdown sections with "Critical Issues", "Major Issues" headings
-- Output from `pr-quick-review`, `local-review`, `collate-issues`
+- Output from `local-review`, `pr-release-ready`, `collate-issues`
 
 If no review data found in session:
 ```
 No review data found in current session.
 
 Run one of these first:
-  /local-review          # Review local changes
-  /pr-review-dev <PR#>   # Review a PR
+  /local-review             # Review local changes
+  /pr-release-ready <PR#>   # Review a PR
 
 Or provide a file:
   /create-followup-tickets "project" --from-file ./tmp/pr-review-78.md

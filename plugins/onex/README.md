@@ -94,7 +94,7 @@ User-facing slash commands for common workflows:
 - `/project-status` - Linear insights dashboard
 - `/deep-dive` - Daily work analysis report
 - `/ci-failures` - CI/CD quick review
-- `/pr-review-dev` - PR review + CI failures
+- `/pr-release-ready` - Fix all PR issues
 
 ## Installation
 

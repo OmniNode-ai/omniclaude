@@ -72,7 +72,7 @@ Task tool (general-purpose):
 **Dispatch code-reviewer subagent:**
 ```
 Task tool (code-reviewer):
-  Use template at ${CLAUDE_PLUGIN_ROOT}/skills/requesting-code-review/code-reviewer.md
+  Use /local-review --no-commit to review the subagent's changes
 
   WHAT_WAS_IMPLEMENTED: [from subagent's report]
   PLAN_OR_REQUIREMENTS: Task N from [plan-file]
@@ -195,4 +195,4 @@ Done!
 **Alternative workflow:**
 - **executing-plans** - Use for parallel session instead of same-session execution
 
-See code-reviewer template: `${CLAUDE_PLUGIN_ROOT}/skills/requesting-code-review/code-reviewer.md`
+Code review: Use `/local-review --no-commit` to review subagent work
