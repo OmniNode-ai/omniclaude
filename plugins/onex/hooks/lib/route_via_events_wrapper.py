@@ -345,9 +345,12 @@ def _get_onex_handlers() -> tuple[Any, Any, Any] | None:
         except Exception as e:
             logger.warning("Failed to initialize ONEX handlers: %s", e)
             return None
-        _compute_handler = compute
+        # Assign the sentinel (_compute_handler) LAST so that concurrent
+        # threads bypassing the lock never see a non-None sentinel while
+        # _emit_handler / _history_handler are still None.
         _emit_handler = emitter
         _history_handler = history
+        _compute_handler = compute
     return _compute_handler, _emit_handler, _history_handler
 
 
