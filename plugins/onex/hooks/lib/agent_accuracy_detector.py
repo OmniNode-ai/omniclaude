@@ -68,8 +68,16 @@ def calculate_agent_match_score(
             total_triggers=0,
         )
 
-    # Normalize signals for case-insensitive comparison
-    signals_lower = {s.lower() for s in context_signals}
+    # Normalize signals for case-insensitive comparison.
+    # Use a list (not a set) to preserve input order for deterministic matching.
+    # Deduplicate while preserving order to avoid non-deterministic join results.
+    seen: set[str] = set()
+    signals_lower: list[str] = []
+    for s in context_signals:
+        low = s.lower()
+        if low not in seen:
+            seen.add(low)
+            signals_lower.append(low)
     signals_joined = " ".join(signals_lower)
 
     matched: list[str] = []

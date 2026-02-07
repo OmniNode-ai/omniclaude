@@ -507,9 +507,11 @@ class TestEdgeCases:
         assert result.outcome == OUTCOME_UNKNOWN
 
     def test_error_marker_embedded_in_word(self) -> None:
-        """Error marker substring within a word still triggers FAILED.
+        """Error marker within a compound word does NOT trigger FAILED.
 
-        'Error:' is matched via 'in' operator, so 'SomeError: ...' matches.
+        With word boundary matching, 'Error:' only matches at word boundaries,
+        so 'SomeError:' does not match the pattern (no boundary between 'e'
+        and 'E' since both are word characters).
         """
         result = derive_session_outcome(
             exit_code=0,
@@ -517,13 +519,16 @@ class TestEdgeCases:
             tool_calls_completed=5,
             duration_seconds=200.0,
         )
-        assert result.outcome == OUTCOME_FAILED
+        # "SomeError:" does not match \bError: (no word boundary before "E")
+        # No completion markers either, duration > 60s -> UNKNOWN
+        assert result.outcome == OUTCOME_UNKNOWN
 
     def test_completion_marker_embedded_in_word(self) -> None:
-        """Completion marker substring within a word still triggers.
+        """Completion marker within a compound word does NOT trigger.
 
-        'done' is matched case-insensitively via 'in' on lowered text,
-        so 'abandoned' contains 'done' and triggers completion detection.
+        With word boundary matching, 'done' only matches as a standalone word,
+        so 'abandoned' does not match the 'done' pattern (no word boundary
+        between 'n' and 'd' within the word).
         """
         result = derive_session_outcome(
             exit_code=0,
@@ -531,8 +536,9 @@ class TestEdgeCases:
             tool_calls_completed=1,
             duration_seconds=120.0,
         )
-        # "abandoned" contains "done" (case-insensitive), so completion detected
-        assert result.outcome == OUTCOME_SUCCESS
+        # "abandoned" does not match \bdone\b (no word boundary)
+        # No completion markers, duration > 60s -> UNKNOWN
+        assert result.outcome == OUTCOME_UNKNOWN
 
     def test_commit_hash_with_uppercase_hex_not_matched(self) -> None:
         """Commit hash regex only matches lowercase hex characters."""

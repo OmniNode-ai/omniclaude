@@ -14,6 +14,7 @@ Part of OMN-1892: Add feedback loop with guardrails.
 
 from __future__ import annotations
 
+import math
 from typing import NamedTuple
 
 # =============================================================================
@@ -75,6 +76,17 @@ def should_reinforce_routing(
     Returns:
         GuardrailResult with decision, skip reason, and diagnostic details.
     """
+    # Clamp scores to valid range; treat NaN as 0.0 (no signal)
+    if math.isnan(utilization_score) or math.isinf(utilization_score):
+        utilization_score = 0.0
+    else:
+        utilization_score = max(0.0, min(1.0, utilization_score))
+
+    if math.isnan(agent_match_score) or math.isinf(agent_match_score):
+        agent_match_score = 0.0
+    else:
+        agent_match_score = max(0.0, min(1.0, agent_match_score))
+
     details: dict[str, object] = {
         "injection_occurred": injection_occurred,
         "utilization_score": utilization_score,

@@ -505,6 +505,117 @@ class TestConstants:
         assert "" not in CLEAR_OUTCOMES
 
 
+class TestInputValidation:
+    """Test input clamping and NaN/inf handling."""
+
+    def test_nan_utilization_score_treated_as_zero(self) -> None:
+        """NaN utilization_score is treated as 0.0, should fail Gate 3."""
+        result = should_reinforce_routing(
+            injection_occurred=True,
+            utilization_score=float("nan"),
+            agent_match_score=0.8,
+            session_outcome="success",
+        )
+        assert result.should_reinforce is False
+        assert result.skip_reason == SKIP_LOW_UTILIZATION_AND_ACCURACY
+        assert result.details["utilization_score"] == 0.0
+
+    def test_nan_agent_match_score_treated_as_zero(self) -> None:
+        """NaN agent_match_score is treated as 0.0, should fail Gate 3."""
+        result = should_reinforce_routing(
+            injection_occurred=True,
+            utilization_score=0.5,
+            agent_match_score=float("nan"),
+            session_outcome="success",
+        )
+        assert result.should_reinforce is False
+        assert result.skip_reason == SKIP_LOW_UTILIZATION_AND_ACCURACY
+        assert result.details["agent_match_score"] == 0.0
+
+    def test_negative_utilization_score_clamped_to_zero(self) -> None:
+        """Negative utilization_score is clamped to 0.0."""
+        result = should_reinforce_routing(
+            injection_occurred=True,
+            utilization_score=-0.5,
+            agent_match_score=0.8,
+            session_outcome="success",
+        )
+        assert result.should_reinforce is False
+        assert result.skip_reason == SKIP_LOW_UTILIZATION_AND_ACCURACY
+        assert result.details["utilization_score"] == 0.0
+
+    def test_negative_agent_match_score_clamped_to_zero(self) -> None:
+        """Negative agent_match_score is clamped to 0.0."""
+        result = should_reinforce_routing(
+            injection_occurred=True,
+            utilization_score=0.5,
+            agent_match_score=-1.0,
+            session_outcome="success",
+        )
+        assert result.should_reinforce is False
+        assert result.skip_reason == SKIP_LOW_UTILIZATION_AND_ACCURACY
+        assert result.details["agent_match_score"] == 0.0
+
+    def test_utilization_score_above_one_clamped(self) -> None:
+        """Utilization score > 1.0 is clamped to 1.0."""
+        result = should_reinforce_routing(
+            injection_occurred=True,
+            utilization_score=5.0,
+            agent_match_score=0.8,
+            session_outcome="success",
+        )
+        assert result.should_reinforce is True
+        assert result.details["utilization_score"] == 1.0
+
+    def test_agent_match_score_above_one_clamped(self) -> None:
+        """Agent match score > 1.0 is clamped to 1.0."""
+        result = should_reinforce_routing(
+            injection_occurred=True,
+            utilization_score=0.5,
+            agent_match_score=99.0,
+            session_outcome="success",
+        )
+        assert result.should_reinforce is True
+        assert result.details["agent_match_score"] == 1.0
+
+    def test_positive_inf_utilization_treated_as_zero(self) -> None:
+        """Positive inf utilization_score is treated as 0.0."""
+        result = should_reinforce_routing(
+            injection_occurred=True,
+            utilization_score=float("inf"),
+            agent_match_score=0.8,
+            session_outcome="success",
+        )
+        assert result.should_reinforce is False
+        assert result.skip_reason == SKIP_LOW_UTILIZATION_AND_ACCURACY
+        assert result.details["utilization_score"] == 0.0
+
+    def test_negative_inf_agent_match_treated_as_zero(self) -> None:
+        """Negative inf agent_match_score is treated as 0.0."""
+        result = should_reinforce_routing(
+            injection_occurred=True,
+            utilization_score=0.5,
+            agent_match_score=float("-inf"),
+            session_outcome="success",
+        )
+        assert result.should_reinforce is False
+        assert result.skip_reason == SKIP_LOW_UTILIZATION_AND_ACCURACY
+        assert result.details["agent_match_score"] == 0.0
+
+    def test_both_nan_scores_treated_as_zero(self) -> None:
+        """Both scores as NaN are treated as 0.0, fails Gate 3."""
+        result = should_reinforce_routing(
+            injection_occurred=True,
+            utilization_score=float("nan"),
+            agent_match_score=float("nan"),
+            session_outcome="success",
+        )
+        assert result.should_reinforce is False
+        assert result.skip_reason == SKIP_LOW_UTILIZATION_AND_ACCURACY
+        assert result.details["utilization_score"] == 0.0
+        assert result.details["agent_match_score"] == 0.0
+
+
 class TestPureFunctionProperties:
     """Test that should_reinforce_routing is a pure function."""
 

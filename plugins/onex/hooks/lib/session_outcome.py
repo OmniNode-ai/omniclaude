@@ -73,18 +73,35 @@ class SessionOutcomeResult(NamedTuple):
 
 
 def _has_error_markers(session_output: str) -> bool:
-    """Check if session output contains error markers (case-sensitive)."""
+    """Check if session output contains error markers (case-sensitive).
+
+    Uses word boundary matching at the start of each marker to avoid false
+    positives from substrings (e.g., compound variable names containing
+    'Error:'). Trailing word boundary is only applied when the marker ends
+    with a word character, since markers ending with punctuation (like
+    'Error:') would not have a word boundary after the final character.
+    """
     for marker in ERROR_MARKER_PATTERNS:
-        if marker in session_output:
+        pattern = r"\b" + re.escape(marker)
+        # Add trailing word boundary only if marker ends with a word character
+        if marker and (marker[-1].isalnum() or marker[-1] == "_"):
+            pattern += r"\b"
+        if re.search(pattern, session_output):
             return True
     return False
 
 
 def _has_completion_markers(session_output: str) -> bool:
-    """Check if session output contains completion markers (case-insensitive)."""
+    """Check if session output contains completion markers (case-insensitive).
+
+    Uses word boundary matching to avoid false positives from substrings
+    (e.g., 'abandoned' should not match 'done', 'unsuccessful' should not
+    match 'success').
+    """
     output_lower = session_output.lower()
     for marker in COMPLETION_MARKER_PATTERNS:
-        if marker in output_lower:
+        # Use word boundary to avoid false positives from substrings
+        if re.search(r"\b" + re.escape(marker) + r"\b", output_lower):
             return True
     # Also check for commit hashes as completion signal
     if _COMMIT_HASH_RE.search(session_output):

@@ -307,9 +307,9 @@ class TestSubstringMatching:
     def test_trigger_matches_within_single_signal(self) -> None:
         """Multi-word trigger matches when contained in a single signal.
 
-        Signals are lowercased into a set (losing order), then joined.
-        A multi-word trigger reliably matches only when it appears within
-        a single signal string, not across signal boundaries.
+        Signals are lowercased into a list (preserving order), deduplicated,
+        then joined. A multi-word trigger reliably matches only when it
+        appears within a single signal string, not across signal boundaries.
         """
         result = calculate_agent_match_score(
             selected_agent="agent-api-architect",

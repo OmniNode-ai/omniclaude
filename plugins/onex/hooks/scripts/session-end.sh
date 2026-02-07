@@ -150,15 +150,18 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
 
         # Derive outcome using session signals (OMN-1892)
         # Falls back to "unknown" if Python call fails (graceful degradation)
-        OUTCOME=$("$PYTHON_CMD" -c "
-import sys
-sys.path.insert(0, '${HOOKS_LIB}')
+        OUTCOME=$(HOOKS_LIB="$HOOKS_LIB" SESSION_REASON="$SESSION_REASON" DURATION_SECONDS="$DURATION_SECONDS" \
+            "$PYTHON_CMD" -c "
+import os, sys
+sys.path.insert(0, os.environ['HOOKS_LIB'])
 from session_outcome import derive_session_outcome
+session_reason = os.environ.get('SESSION_REASON', 'other')
+duration_str = os.environ.get('DURATION_SECONDS', '0')
 result = derive_session_outcome(
     exit_code=0,
-    session_output='${SESSION_REASON}',
+    session_output=session_reason,
     tool_calls_completed=0,
-    duration_seconds=float('${DURATION_SECONDS}' if '${DURATION_SECONDS}' else '0'),
+    duration_seconds=float(duration_str if duration_str else '0'),
 )
 print(result.outcome)
 " 2>>"$LOG_FILE") || OUTCOME="unknown"
@@ -199,22 +202,33 @@ print(result.outcome)
 
         # Single Python call: derive outcome then evaluate guardrails
         # Combines session_outcome + feedback_guardrails to avoid extra subprocess
-        FEEDBACK_RESULT=$("$PYTHON_CMD" -c "
-import sys, json
-sys.path.insert(0, '${HOOKS_LIB}')
+        FEEDBACK_RESULT=$(HOOKS_LIB="$HOOKS_LIB" SESSION_REASON="$SESSION_REASON" DURATION_SECONDS="$DURATION_SECONDS" \
+            "$PYTHON_CMD" -c "
+import os, sys, json
+sys.path.insert(0, os.environ['HOOKS_LIB'])
 from session_outcome import derive_session_outcome
 from feedback_guardrails import should_reinforce_routing
 
+session_reason = os.environ.get('SESSION_REASON', 'other')
+duration_str = os.environ.get('DURATION_SECONDS', '0')
 outcome_result = derive_session_outcome(
     exit_code=0,
-    session_output='${SESSION_REASON}',
+    session_output=session_reason,
     tool_calls_completed=0,
-    duration_seconds=float('${DURATION_SECONDS}' if '${DURATION_SECONDS}' else '0'),
+    duration_seconds=float(duration_str if duration_str else '0'),
 )
+# ===================================================================
+# PHASE 1 PLUMBING (OMN-1892): Guardrail logic is wired but inputs
+# are hardcoded. Feedback will always be skipped (NO_INJECTION).
+# Future tickets to wire real values:
+#   - injection_occurred: Read from session injection marker
+#   - utilization_score: Read from PostToolUse utilization metrics
+#   - agent_match_score: Read from UserPromptSubmit routing decision
+# ===================================================================
 result = should_reinforce_routing(
-    injection_occurred=False,  # TODO: read from session state when available
-    utilization_score=0.0,     # TODO: read from session metrics when available
-    agent_match_score=0.0,     # TODO: read from session metrics when available
+    injection_occurred=False,
+    utilization_score=0.0,
+    agent_match_score=0.0,
     session_outcome=outcome_result.outcome,
 )
 print(json.dumps({
@@ -279,9 +293,9 @@ fi
 
 # Clean up correlation state
 if [[ -f "${HOOKS_LIB}/correlation_manager.py" ]]; then
-    $PYTHON_CMD -c "
-import sys
-sys.path.insert(0, '${HOOKS_LIB}')
+    HOOKS_LIB="$HOOKS_LIB" $PYTHON_CMD -c "
+import os, sys
+sys.path.insert(0, os.environ['HOOKS_LIB'])
 from correlation_manager import get_registry
 get_registry().clear()
 " 2>/dev/null || true
