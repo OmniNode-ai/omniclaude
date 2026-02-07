@@ -57,7 +57,10 @@ class HandlerRoutingDefault:
         handler_key: Registry key for handler lookup.
     """
 
-    handler_key: str = "default"
+    @property
+    def handler_key(self) -> str:
+        """Backend identifier for handler routing."""
+        return "default"
 
     async def compute_routing(
         self,

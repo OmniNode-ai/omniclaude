@@ -10,7 +10,8 @@ Confidence Components (weighted):
 3. Capability Score (20%) - Capability relevance
 4. Historical Score (10%) - Past success rates
 
-Ported AS-IS from omniclaude.lib.core.confidence_scorer.
+Based on agent_router.py ConfidenceScorer with intentional refinements:
+- Word-level capability matching (prevents 'api' matching inside 'rapidly')
 Pure Python - NO ONEX imports.
 """
 

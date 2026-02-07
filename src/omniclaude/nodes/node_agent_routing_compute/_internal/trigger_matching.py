@@ -5,21 +5,35 @@
 Provides fuzzy matching and scoring for agent triggers.
 Uses multiple matching strategies:
 - Exact substring matching
-- Fuzzy string similarity (SequenceMatcher)
+- Fuzzy string similarity (SequenceMatcher) with tiered thresholds
 - Keyword overlap scoring
 - Capability matching
 
-Ported AS-IS from omniclaude.lib.core.trigger_matcher.
+Ported from agent_router.py TriggerMatcher with the following source
+invariants preserved:
+- Deterministic iteration (sorted agent names)
+- HARD_FLOOR (0.55) noise filtering
+- Tiered fuzzy thresholds by trigger length
+- Multi-word specificity bonus
+- Technical token preservation (s3, ml, ai, etc.)
+- No full-text SequenceMatcher comparison (intentionally omitted)
+
 Pure Python - NO ONEX imports.
 """
 
 from __future__ import annotations
 
+import math
 import re
 from difflib import SequenceMatcher
 from typing import Any
 
 __all__ = ["TriggerMatcher"]
+
+
+# Hard floor: remove matches below noise threshold.
+# HARD_FLOOR is a safety invariant, not a tuning knob.
+HARD_FLOOR = 0.55
 
 
 class TriggerMatcher:
@@ -28,6 +42,75 @@ class TriggerMatcher:
     Builds an inverted index of triggers for fast lookup and provides
     multiple matching strategies with confidence scoring.
     """
+
+    # Common stopwords to filter from keyword extraction
+    STOPWORDS = frozenset(
+        {
+            "the",
+            "a",
+            "an",
+            "and",
+            "or",
+            "but",
+            "in",
+            "on",
+            "at",
+            "to",
+            "for",
+            "of",
+            "with",
+            "by",
+            "from",
+            "as",
+            "is",
+            "was",
+            "are",
+            "were",
+            "been",
+            "be",
+            "have",
+            "has",
+            "had",
+            "do",
+            "does",
+            "did",
+            "will",
+            "would",
+            "should",
+            "could",
+            "may",
+            "might",
+            "must",
+            "can",
+            "this",
+            "that",
+            "these",
+            "those",
+            "i",
+            "you",
+            "he",
+            "she",
+            "it",
+            "we",
+            "they",
+            "me",
+            "him",
+            "her",
+            "us",
+            "them",
+            "my",
+            "your",
+            "his",
+            "its",
+            "our",
+            "their",
+        }
+    )
+
+    # Short alphanumeric technical tokens that should be preserved during
+    # keyword extraction even when below the default length threshold.
+    # These tokens are domain-significant (e.g., cloud services, protocols).
+    _TECHNICAL_TOKENS = frozenset({"s3", "k8", "ec2", "ml", "ai", "ci", "cd", "db"})
 
     def __init__(self, agent_registry: dict[str, Any]):
         """Initialize matcher with agent registry.
@@ -99,16 +182,17 @@ class TriggerMatcher:
             Sorted by confidence (highest first)
         """
         user_lower = user_request.lower()
-        matches = []
+        matches: list[tuple[str, float, str]] = []
 
         # Extract keywords from request
         keywords = self._extract_keywords(user_request)
 
-        for agent_name, agent_data in self.registry["agents"].items():
+        # Sort agents by name for deterministic iteration order.
+        for agent_name, agent_data in sorted(self.registry["agents"].items()):
             triggers = agent_data.get("activation_triggers", [])
 
             # Calculate match scores
-            scores = []
+            scores: list[tuple[float, str]] = []
 
             # 1. Exact trigger match with word boundary checks
             for trigger in triggers:
@@ -117,15 +201,23 @@ class TriggerMatcher:
                     if self._is_context_appropriate(trigger, user_request, agent_name):
                         scores.append((1.0, f"Exact match: '{trigger}'"))
 
-            # 2. Fuzzy trigger match with context filtering
+            # 2. Fuzzy trigger match (tiered thresholds, multi-word bonus)
             for trigger in triggers:
                 similarity = self._fuzzy_match(trigger.lower(), user_lower)
                 if similarity > 0.7:
                     # Apply context filtering for short triggers
                     if self._is_context_appropriate(trigger, user_request, agent_name):
+                        # Multi-word triggers are more specific -> monotonic bonus
+                        word_count = len(trigger.split())
+                        specificity_bonus = (
+                            min(math.log(word_count) * 0.05, 0.08)
+                            if word_count > 1
+                            else 0.0
+                        )
+                        rank_score = similarity * 0.9 + specificity_bonus
                         scores.append(
                             (
-                                similarity * 0.9,
+                                rank_score,
                                 f"Fuzzy match: '{trigger}' ({similarity:.0%})",
                             )
                         )
@@ -148,6 +240,14 @@ class TriggerMatcher:
                 best_score, reason = max(scores, key=lambda x: x[0])
                 matches.append((agent_name, best_score, reason))
 
+        # Hard floor: remove matches below noise threshold.
+        # HARD_FLOOR is a safety invariant, not a tuning knob.
+        matches = [
+            (name, score, reason)
+            for name, score, reason in matches
+            if score >= HARD_FLOOR
+        ]
+
         # Sort by confidence
         matches.sort(key=lambda x: x[1], reverse=True)
 
@@ -156,7 +256,8 @@ class TriggerMatcher:
     def _extract_keywords(self, text: str) -> list[str]:
         """Extract meaningful keywords from text.
 
-        Filters out common stopwords and short words.
+        Preserves short alphanumeric technical tokens (e.g., "s3", "k8", "ec2")
+        that would otherwise be dropped by the length filter.
 
         Args:
             text: Input text
@@ -164,78 +265,35 @@ class TriggerMatcher:
         Returns:
             List of extracted keywords
         """
-        # Common stopwords to filter
-        stopwords = {
-            "the",
-            "a",
-            "an",
-            "and",
-            "or",
-            "but",
-            "in",
-            "on",
-            "at",
-            "to",
-            "for",
-            "of",
-            "with",
-            "by",
-            "from",
-            "as",
-            "is",
-            "was",
-            "are",
-            "were",
-            "been",
-            "be",
-            "have",
-            "has",
-            "had",
-            "do",
-            "does",
-            "did",
-            "will",
-            "would",
-            "should",
-            "could",
-            "may",
-            "might",
-            "must",
-            "can",
-            "this",
-            "that",
-            "these",
-            "those",
-            "i",
-            "you",
-            "he",
-            "she",
-            "it",
-            "we",
-            "they",
-            "me",
-            "him",
-            "her",
-            "us",
-            "them",
-            "my",
-            "your",
-            "his",
-            "its",
-            "our",
-            "their",
-        }
-
-        # Split on whitespace and punctuation
         words = re.findall(r"\b\w+\b", text.lower())
+        return [
+            w
+            for w in words
+            if w not in self.STOPWORDS and (len(w) > 2 or w in self._TECHNICAL_TOKENS)
+        ]
 
-        # Filter stopwords and short words
-        keywords = [w for w in words if w not in stopwords and len(w) > 2]
+    @staticmethod
+    def _fuzzy_threshold(trigger: str) -> float:
+        """Dynamic threshold: shorter triggers need higher similarity.
 
-        return keywords
+        Short words (<=6 chars) like "react", "debug" have high character
+        overlap with unrelated words. Longer triggers are more specific.
+        """
+        n = len(trigger)
+        if n <= 6:
+            return 0.85
+        elif n <= 10:
+            return 0.78
+        else:
+            return 0.72
 
     def _fuzzy_match(self, trigger: str, text: str) -> float:
         """Calculate fuzzy match score using SequenceMatcher.
+
+        Uses tiered thresholds based on trigger length to prevent
+        false positives from short-word character overlap.
+        Full-text comparison is intentionally omitted (pure noise).
+        Terminates early on perfect word match to avoid unnecessary iteration.
 
         Args:
             trigger: Trigger phrase to match
@@ -244,25 +302,21 @@ class TriggerMatcher:
         Returns:
             Similarity score (0.0-1.0)
         """
-        # Check if trigger matches with word boundaries first
         if self._exact_match_with_word_boundaries(trigger, text):
             return 1.0
 
-        # For better fuzzy matching, check against individual words in the text
-        # not just the entire text (which fails for length differences)
-        words = re.findall(r"\b\w+\b", text.lower())
+        min_threshold = self._fuzzy_threshold(trigger)
 
-        # Check similarity against each word
+        words = re.findall(r"\b\w+\b", text.lower())
         best_word_score = 0.0
         for word in words:
             word_score = SequenceMatcher(None, trigger, word).ratio()
-            best_word_score = max(best_word_score, word_score)
+            if word_score >= min_threshold:
+                best_word_score = max(best_word_score, word_score)
+                if best_word_score >= 1.0:
+                    break  # Perfect match; no further iteration needed
 
-        # Also check against entire text (for multi-word triggers)
-        full_text_score = SequenceMatcher(None, trigger, text).ratio()
-
-        # Return the best score
-        return max(best_word_score, full_text_score)
+        return best_word_score
 
     def _keyword_overlap_score(self, keywords: list[str], triggers: list[str]) -> float:
         """Calculate keyword overlap score.
