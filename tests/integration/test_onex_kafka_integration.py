@@ -15,13 +15,8 @@ Exercises the full ONEX routing pipeline:
 All Kafka interactions are mocked via the session-scoped conftest mock.
 The emit daemon is replaced with a test double that captures payloads.
 
-TECH DEBT: These tests use mocked Kafka. Real bus validation (connecting
-to the Redpanda instance at 192.168.86.200:29092 and verifying that
-events appear on onex.evt.omniclaude.routing-decision.v1) will be
-required before production rollout. This is tracked separately.
-When that work is done, gate the real-bus tests behind
-KAFKA_INTEGRATION_TESTS=real and keep these mock tests as the CI
-fast path.
+Real bus validation is in test_onex_kafka_real_bus.py, gated behind
+KAFKA_INTEGRATION_TESTS=real. These mock tests remain as the CI fast path.
 """
 
 from __future__ import annotations
