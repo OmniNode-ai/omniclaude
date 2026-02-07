@@ -75,8 +75,9 @@ class HandlerHistoryPostgres:
         self._clock = clock or (lambda: datetime.now(UTC))
         # agent_name -> list of recorded entries (append-only)
         self._store: dict[str, list[ModelAgentStatsEntry]] = {}
-        # Track seen correlation_ids for idempotency
-        self._seen_correlation_ids: set[UUID] = set()
+        # Track seen correlation_ids for idempotency (insertion-ordered dict).
+        # Using dict preserves insertion order (Python 3.7+) for partial eviction.
+        self._seen_correlation_ids: dict[UUID, None] = {}
 
     @property
     def handler_key(self) -> str:
@@ -119,13 +120,20 @@ class HandlerHistoryPostgres:
                 )
                 return self._build_stats_snapshot()
 
-            # Evict oldest entries when cap reached (Phase 1 approximation;
-            # Phase 2+ will use database-level UPSERT for true idempotency)
+            # Evict oldest half when cap reached, preserving recent entries.
+            # Phase 2+ will use database-level UPSERT for true idempotency.
             if len(self._seen_correlation_ids) >= _MAX_DEDUP_ENTRIES:
-                self._seen_correlation_ids.clear()
-                logger.info("Dedup cache evicted at %d entries", _MAX_DEDUP_ENTRIES)
+                evict_count = _MAX_DEDUP_ENTRIES // 2
+                keys_to_evict = list(self._seen_correlation_ids)[:evict_count]
+                for k in keys_to_evict:
+                    del self._seen_correlation_ids[k]
+                logger.info(
+                    "Dedup cache evicted %d oldest entries, %d remain",
+                    evict_count,
+                    len(self._seen_correlation_ids),
+                )
 
-            self._seen_correlation_ids.add(cid)
+            self._seen_correlation_ids[cid] = None
 
             if entry.agent_name not in self._store:
                 self._store[entry.agent_name] = []
