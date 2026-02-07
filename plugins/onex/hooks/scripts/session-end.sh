@@ -124,9 +124,9 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
         fi
     ) &
 
-    # Emit session.outcome event for feedback loop (OMN-1735, FEEDBACK-008)
+    # Emit session.outcome event for feedback loop (OMN-1735, OMN-1892)
     # Uses ClaudeCodeSessionOutcome enum values: success, failed, abandoned, unknown
-    # Starting with "unknown" as default - heuristics can be added later
+    # Derives outcome from session signals via session_outcome.py
     (
         # Validate SESSION_ID before constructing payload
         if [[ -z "$SESSION_ID" ]]; then
@@ -140,9 +140,30 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
             exit 0
         fi
 
-        # Build session.outcome payload
-        # TODO(OMN-1735): Add heuristics to map session end reasons to outcomes
-        OUTCOME="unknown"
+        # Convert duration from ms to seconds for outcome derivation
+        # (SESSION_DURATION is from parent scope; DURATION_SECONDS must be
+        #  computed here because the session.ended subshell's copy is isolated)
+        DURATION_SECONDS="0"
+        if [[ -n "$SESSION_DURATION" && "$SESSION_DURATION" != "0" ]]; then
+            DURATION_SECONDS=$($PYTHON_CMD -c "import sys; print(f'{float(sys.argv[1])/1000:.3f}')" "$SESSION_DURATION" 2>/dev/null || echo "0")
+        fi
+
+        # Derive outcome using session signals (OMN-1892)
+        # Falls back to "unknown" if Python call fails (graceful degradation)
+        OUTCOME=$("$PYTHON_CMD" -c "
+import sys
+sys.path.insert(0, '${HOOKS_LIB}')
+from session_outcome import derive_session_outcome
+result = derive_session_outcome(
+    exit_code=0,
+    session_output='${SESSION_REASON}',
+    tool_calls_completed=0,
+    duration_seconds=float('${DURATION_SECONDS}' if '${DURATION_SECONDS}' else '0'),
+)
+print(result.outcome)
+" 2>>"$LOG_FILE") || OUTCOME="unknown"
+
+        log "Session outcome derived: ${OUTCOME}"
         EMITTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
         OUTCOME_PAYLOAD=$(jq -n \
@@ -163,6 +184,73 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
         else
             emit_via_daemon "session.outcome" "$OUTCOME_PAYLOAD" 100
         fi
+    ) &
+
+    # Feedback guardrail check (OMN-1892)
+    # Evaluates whether routing feedback should be recorded.
+    # Runs in a separate backgrounded subshell to stay within 50ms sync budget.
+    # Re-derives OUTCOME independently because subshell variables are isolated.
+    (
+        # Convert duration (same as above -- subshell isolation requires re-computation)
+        DURATION_SECONDS="0"
+        if [[ -n "$SESSION_DURATION" && "$SESSION_DURATION" != "0" ]]; then
+            DURATION_SECONDS=$($PYTHON_CMD -c "import sys; print(f'{float(sys.argv[1])/1000:.3f}')" "$SESSION_DURATION" 2>/dev/null || echo "0")
+        fi
+
+        # Single Python call: derive outcome then evaluate guardrails
+        # Combines session_outcome + feedback_guardrails to avoid extra subprocess
+        FEEDBACK_RESULT=$("$PYTHON_CMD" -c "
+import sys, json
+sys.path.insert(0, '${HOOKS_LIB}')
+from session_outcome import derive_session_outcome
+from feedback_guardrails import should_reinforce_routing
+
+outcome_result = derive_session_outcome(
+    exit_code=0,
+    session_output='${SESSION_REASON}',
+    tool_calls_completed=0,
+    duration_seconds=float('${DURATION_SECONDS}' if '${DURATION_SECONDS}' else '0'),
+)
+result = should_reinforce_routing(
+    injection_occurred=False,  # TODO: read from session state when available
+    utilization_score=0.0,     # TODO: read from session metrics when available
+    agent_match_score=0.0,     # TODO: read from session metrics when available
+    session_outcome=outcome_result.outcome,
+)
+print(json.dumps({
+    'outcome': outcome_result.outcome,
+    'should_reinforce': result.should_reinforce,
+    'skip_reason': result.skip_reason,
+}))
+" 2>>"$LOG_FILE") || FEEDBACK_RESULT='{"outcome":"unknown","should_reinforce":false,"skip_reason":"PYTHON_ERROR"}'
+
+        OUTCOME=$(echo "$FEEDBACK_RESULT" | jq -r '.outcome' 2>/dev/null) || OUTCOME="unknown"
+        SHOULD_REINFORCE=$(echo "$FEEDBACK_RESULT" | jq -r '.should_reinforce' 2>/dev/null) || SHOULD_REINFORCE="false"
+        SKIP_REASON=$(echo "$FEEDBACK_RESULT" | jq -r '.skip_reason // empty' 2>/dev/null) || SKIP_REASON=""
+
+        if [[ "$SHOULD_REINFORCE" == "true" ]] && [[ "$KAFKA_ENABLED" == "true" ]]; then
+            FEEDBACK_PAYLOAD=$(jq -n \
+                --arg session_id "$SESSION_ID" \
+                --arg outcome "$OUTCOME" \
+                --arg emitted_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                '{session_id: $session_id, outcome: $outcome, emitted_at: $emitted_at}' 2>/dev/null)
+
+            if [[ -n "$FEEDBACK_PAYLOAD" ]]; then
+                emit_via_daemon "routing.feedback" "$FEEDBACK_PAYLOAD" 100
+            fi
+        elif [[ -n "$SKIP_REASON" ]] && [[ "$KAFKA_ENABLED" == "true" ]]; then
+            SKIP_PAYLOAD=$(jq -n \
+                --arg session_id "$SESSION_ID" \
+                --arg skip_reason "$SKIP_REASON" \
+                --arg emitted_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                '{session_id: $session_id, skip_reason: $skip_reason, emitted_at: $emitted_at}' 2>/dev/null)
+
+            if [[ -n "$SKIP_PAYLOAD" ]]; then
+                emit_via_daemon "routing.feedback.skipped" "$SKIP_PAYLOAD" 100
+            fi
+        fi
+
+        log "Feedback guardrail: should_reinforce=$SHOULD_REINFORCE skip_reason=$SKIP_REASON"
     ) &
 
     log "Session event emission started via emit daemon"
