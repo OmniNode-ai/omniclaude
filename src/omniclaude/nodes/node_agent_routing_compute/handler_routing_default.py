@@ -99,6 +99,8 @@ class HandlerRoutingDefault:
             return self._create_explicit_result(explicit_agent)
 
         # 3. Run TriggerMatcher.match() to get trigger matches
+        # TriggerMatcher is instantiated per-call because the agent registry
+        # is part of the request and may vary between invocations.
         try:
             matcher = TriggerMatcher(registry_dict)
             trigger_matches = matcher.match(request.prompt)

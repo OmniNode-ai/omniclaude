@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class ModelAgentStatsEntry(BaseModel):
@@ -60,6 +60,15 @@ class ModelAgentStatsEntry(BaseModel):
         default=None,
         description="When this agent was last selected",
     )
+
+    @model_validator(mode="after")
+    def _validate_routings(self) -> ModelAgentStatsEntry:
+        if self.successful_routings > self.total_routings:
+            raise ValueError(
+                f"successful_routings ({self.successful_routings}) "
+                f"cannot exceed total_routings ({self.total_routings})"
+            )
+        return self
 
 
 __all__ = ["ModelAgentStatsEntry"]

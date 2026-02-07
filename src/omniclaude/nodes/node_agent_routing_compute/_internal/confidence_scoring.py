@@ -174,16 +174,15 @@ class ConfidenceScorer:
             # No capabilities defined - neutral score
             return 0.5
 
-        # Extract words from request using word-boundary regex
-        # Consistent with TriggerMatcher._extract_keywords tokenization
-        request_words = set(re.findall(r"\b\w+\b", request.lower()))
+        request_lower = request.lower()
 
         # Check if any capability matches as a complete token
         matches = 0
         for cap in capabilities:
             cap_lower = cap.lower()
-            # Check if capability appears as a complete word in the request
-            if cap_lower in request_words:
+            # Word-boundary check: handles both single and multi-word capabilities
+            # Prevents "api" matching inside "rapidly" while supporting "api design"
+            if re.search(r"\b" + re.escape(cap_lower) + r"\b", request_lower):
                 matches += 1
 
         # Return proportional score
