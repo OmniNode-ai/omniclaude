@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 OmniNode Team
 """
 Golden Corpus Generator for Agent Routing Regression Testing.
 
@@ -33,6 +35,11 @@ if str(_project_root / "src") not in sys.path:
     sys.path.insert(0, str(_project_root / "src"))
 
 from omniclaude.lib.core.agent_router import AgentRouter
+from tests.routing.conftest import (
+    TOLERANCE_CONFIDENCE,
+    TOLERANCE_ROUTING_POLICY,
+    TOLERANCE_SELECTED_AGENT,
+)
 
 # --------------------------------------------------------------------------
 # Curated prompt catalogue
@@ -544,14 +551,18 @@ def generate_corpus(
         "generator": "tests/routing/generate_corpus.py",
         "agent_count": agent_count,
         "tolerance": {
-            "confidence": 0.05,
-            "selected_agent": "exact",
-            "routing_policy": "exact",
+            "confidence": TOLERANCE_CONFIDENCE,
+            "selected_agent": TOLERANCE_SELECTED_AGENT,
+            "routing_policy": TOLERANCE_ROUTING_POLICY,
         },
         "entries": [],
     }
 
     for i, (prompt, category, notes) in enumerate(CURATED_PROMPTS, 1):
+        if not prompt or not prompt.strip():
+            print(f"  [{i:3d}/{len(CURATED_PROMPTS)}] SKIP     → (blank prompt)")
+            continue
+
         # Clear cache between runs (already ttl=0 but be explicit)
         router.invalidate_cache()
 

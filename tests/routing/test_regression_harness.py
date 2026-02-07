@@ -75,13 +75,9 @@ class TestAgentRouterRegression:
     generated.
     """
 
-    def test_corpus_has_100_plus_entries(
-        self, corpus_entries: list[dict[str, Any]]
-    ) -> None:
-        """Acceptance criteria: 100+ prompts in golden corpus."""
-        assert len(corpus_entries) >= 100, (
-            f"Golden corpus has {len(corpus_entries)} entries, need 100+"
-        )
+    # NOTE: Entry count (>= 100) is validated by the corpus_entries fixture
+    # in conftest.py. No separate test needed -- the fixture fails first if
+    # the corpus is too small.
 
     def test_all_fields_captured(self, corpus_entries: list[dict[str, Any]]) -> None:
         """Acceptance criteria: All required fields captured and compared."""
@@ -164,7 +160,7 @@ class TestAgentRouterRegression:
                     f"  Actual:   {actual_agent}\n"
                     f"  Category: {entry['category']}"
                 )
-                continue
+                continue  # Collect all failures before reporting (soft-assert pattern)
 
             # ── Check confidence (±0.05 tolerance) ────────────────────
             expected_conf = expected["confidence"]
@@ -175,7 +171,7 @@ class TestAgentRouterRegression:
                     f"  Expected: {expected_conf} (±{TOLERANCE_CONFIDENCE})\n"
                     f"  Actual:   {actual_confidence}"
                 )
-                continue
+                continue  # Collect all failures before reporting (soft-assert pattern)
 
             # ── Check routing_policy (exact match) ────────────────────
             if actual_policy != expected["routing_policy"]:
@@ -537,9 +533,14 @@ class TestCorpusIntegrity:
 
     def test_no_duplicate_prompts(self, corpus_entries: list[dict[str, Any]]) -> None:
         """Each prompt should appear at most once."""
-        prompts = [e["prompt"] for e in corpus_entries]
-        duplicates = [p for p in prompts if prompts.count(p) > 1]
-        assert not duplicates, f"Duplicate prompts found: {set(duplicates)}"
+        seen: set[str] = set()
+        duplicates: set[str] = set()
+        for entry in corpus_entries:
+            prompt = entry["prompt"]
+            if prompt in seen:
+                duplicates.add(prompt)
+            seen.add(prompt)
+        assert not duplicates, f"Duplicate prompts found: {duplicates}"
 
     def test_confidence_in_valid_range(
         self, corpus_entries: list[dict[str, Any]]

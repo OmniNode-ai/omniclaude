@@ -50,6 +50,7 @@ class ModelRoutingRequest(BaseModel):
     prompt: str = Field(
         ...,
         min_length=1,
+        max_length=10_000,
         description="The user prompt to route",
     )
     correlation_id: UUID = Field(

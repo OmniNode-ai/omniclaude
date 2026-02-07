@@ -42,6 +42,11 @@ pytestmark = pytest.mark.unit
 # Helper Factories
 # =============================================================================
 
+# Helper factories use hardcoded defaults for readability. If model
+# field requirements change, update the corresponding factory below.
+# Each model has its own factory to keep test setup explicit and avoid
+# cross-model coupling. The repetition is intentional.
+
 
 def make_confidence_breakdown(**overrides: object) -> ModelConfidenceBreakdown:
     """Create a valid confidence breakdown with sensible defaults."""
@@ -480,6 +485,10 @@ class TestModelRoutingRequestValidation:
     def test_threshold_above_one_rejected(self) -> None:
         with pytest.raises(ValidationError):
             make_routing_request(confidence_threshold=1.1)
+
+    def test_prompt_over_max_length_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            make_routing_request(prompt="x" * 10_001)
 
     def test_threshold_below_zero_rejected(self) -> None:
         with pytest.raises(ValidationError):
