@@ -11,7 +11,7 @@ Approach: Hybrid (per OMN-1923 Q3 answer)
   - Auto-captured router output as expected values
 
 Usage:
-    cd /Volumes/PRO-G40/Code/omniclaude3
+    cd /Volumes/PRO-G40/Code/omniclaude
     python -m tests.routing.generate_corpus
 
     # Or with custom registry/output:
@@ -568,17 +568,14 @@ def generate_corpus(
             explanation = top.confidence.explanation
 
             # Build candidates
-            candidates = []
-            for rec in recommendations:
-                agents_registry = router.registry.get("agents", {})
-                rec_data = agents_registry.get(rec.agent_name, {})
-                candidates.append(
-                    {
-                        "name": rec.agent_name,
-                        "score": round(rec.confidence.total, 6),
-                        "reason": rec.reason,
-                    }
-                )
+            candidates = [
+                {
+                    "name": rec.agent_name,
+                    "score": round(rec.confidence.total, 6),
+                    "reason": rec.reason,
+                }
+                for rec in recommendations
+            ]
         else:
             selected_agent = "polymorphic-agent"
             confidence = 0.5
