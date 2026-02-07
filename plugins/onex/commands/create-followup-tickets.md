@@ -52,7 +52,7 @@ Create Linear tickets from unresolved code review issues in the current session 
 
 ```
 Task(
-  subagent_type="onex:polymorphic-agent",
+  subagent_type="polymorphic-agent",
   description="Create follow-up tickets from code review",
   prompt="<POLY_PROMPT content>\n\n## Context\nPROJECT: {project}\nFROM_FILE: {from_file}\nREPO: {repo}\nNO_REPO_LABEL: {no_repo_label}\nPARENT: {parent}\nINCLUDE_NITS: {include_nits}\nONLY_CRITICAL: {only_critical}\nONLY_MAJOR: {only_major}\nDRY_RUN: {dry_run}\nAUTO: {auto}\nTEAM: {team}"
 )

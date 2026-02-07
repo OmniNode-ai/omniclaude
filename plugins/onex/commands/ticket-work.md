@@ -33,7 +33,7 @@ For each phase starting from the current phase:
 
 ```
 Task(
-  subagent_type="onex:polymorphic-agent",
+  subagent_type="polymorphic-agent",
   description="Execute {phase} phase for {ticket_id}",
   prompt="<POLY_PROMPT content>\n\n## Execution Context\nTICKET_ID: {ticket_id}\nCURRENT_PHASE: {phase}\nTICKET_TITLE: {title}\nREPO: {repo}\nCONTRACT:\n```yaml\n{contract_yaml}\n```"
 )

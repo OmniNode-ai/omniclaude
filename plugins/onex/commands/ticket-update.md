@@ -47,7 +47,7 @@ Update an existing Linear ticket while preserving structured sections (Contract,
 
 ```
 Task(
-  subagent_type="onex:polymorphic-agent",
+  subagent_type="polymorphic-agent",
   description="Update ticket {ticket_id}",
   prompt="<POLY_PROMPT content>\n\n## Execution Context\nTICKET_ID: {ticket_id}\nFEEDBACK: {feedback or 'none'}\nSTATUS: {status or 'unchanged'}\nLABELS: {labels or 'unchanged'}\nADD_LABELS: {add_labels or 'none'}\nASSIGNEE: {assignee or 'unchanged'}\nPRIORITY: {priority or 'unchanged'}"
 )

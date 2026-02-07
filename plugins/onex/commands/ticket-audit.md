@@ -31,7 +31,7 @@ Multi-repo ticket hygiene audit. Finds stale, orphaned, unassigned, and duplicat
 
 ```
 Task(
-  subagent_type="onex:polymorphic-agent",
+  subagent_type="polymorphic-agent",
   description="Audit ticket hygiene across Linear teams",
   prompt="<POLY_PROMPT content>\n\n## Execution Context\nTEAM: {team or 'all'}\nSTALE_DAYS: {stale_days or '14'}\nFIX_MODE: {fix or 'false'}"
 )

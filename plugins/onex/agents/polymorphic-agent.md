@@ -45,10 +45,11 @@ When task has independent sub-tasks:
 1. Break down into parallel sub-tasks
 2. Dispatch multiple Task tools in **single message**:
    ```
-   <invoke Task subagent_type="agent-api" .../>
-   <invoke Task subagent_type="agent-frontend" .../>
-   <invoke Task subagent_type="agent-database" .../>
+   <invoke Task subagent_type="polymorphic-agent" description="Design API endpoints" prompt="..."/>
+   <invoke Task subagent_type="polymorphic-agent" description="Build frontend" prompt="..."/>
+   <invoke Task subagent_type="polymorphic-agent" description="Set up database" prompt="..."/>
    ```
+   Hook routing automatically specializes each agent based on prompt content.
 3. Aggregate results when all complete
 4. Validate with quality gates if specified
 

@@ -48,7 +48,7 @@ For each task:
 
 **Dispatch fresh subagent:**
 ```
-Task tool (general-purpose):
+Task tool (polymorphic-agent):
   description: "Implement Task N: [task name]"
   prompt: |
     You are implementing Task N from [plan-file].
@@ -57,8 +57,7 @@ Task tool (general-purpose):
     1. Implement exactly what the task specifies
     2. Write tests (following TDD if task says to)
     3. Verify implementation works
-    4. Commit your work
-    5. Report back
+    4. Report back (do NOT commit)
 
     Work from: [directory]
 
@@ -69,16 +68,18 @@ Task tool (general-purpose):
 
 ### 3. Review Subagent's Work
 
-**Dispatch code-reviewer subagent:**
+**Dispatch review subagent:**
 ```
-Task tool (code-reviewer):
-  Use /local-review --no-commit to review the subagent's changes
+Task tool (polymorphic-agent):
+  description: "Review Task N implementation"
+  prompt: |
+    Run /local-review --no-commit to review the subagent's changes.
 
-  WHAT_WAS_IMPLEMENTED: [from subagent's report]
-  PLAN_OR_REQUIREMENTS: Task N from [plan-file]
-  BASE_SHA: [commit before task]
-  HEAD_SHA: [current commit]
-  DESCRIPTION: [task summary]
+    WHAT_WAS_IMPLEMENTED: [from subagent's report]
+    PLAN_OR_REQUIREMENTS: Task N from [plan-file]
+    BASE_SHA: [commit before task]
+    HEAD_SHA: [current commit]
+    DESCRIPTION: [task summary]
 ```
 
 **Code reviewer returns:** Strengths, Issues (Critical/Important/Minor), Assessment

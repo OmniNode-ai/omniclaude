@@ -18,7 +18,7 @@ Generate a pre-filled YAML contract template that you can customize and pass to 
 
 ```
 Task(
-  subagent_type="onex:polymorphic-agent",
+  subagent_type="polymorphic-agent",
   description="Generate ticket template",
   prompt="<POLY_PROMPT content>\n\n## Context\nARGUMENTS: {$ARGUMENTS}"
 )

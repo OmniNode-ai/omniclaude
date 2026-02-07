@@ -35,7 +35,7 @@ Autonomous per-ticket pipeline. Chains: implement -> local_review -> create_pr -
 
 ```
 Task(
-  subagent_type="onex:polymorphic-agent",
+  subagent_type="polymorphic-agent",
   description="Run ticket pipeline for {ticket_id}",
   prompt="<POLY_PROMPT content>\n\n## Execution Context\nTICKET_ID: {ticket_id}\nSKIP_TO: {skip_to or 'none'}\nDRY_RUN: {dry_run}\nFORCE_RUN: {force_run}"
 )
