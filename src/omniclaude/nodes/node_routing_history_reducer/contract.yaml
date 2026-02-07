@@ -1,0 +1,127 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 OmniNode Team
+#
+# ONEX Node Contract
+# Node: NodeRoutingHistoryReducer
+#
+# Capability-oriented reducer node for routing history operations.
+# Named by capability ("routing.history"), not by vendor (e.g., PostgreSQL).
+# Principle: "I'm interested in what you do, not what you are"
+#
+# This contract defines the interface for routing history reduction operations with
+# pluggable backends. Handlers implementing ProtocolHistoryStore can be
+# swapped without changing the node interface.
+
+# Contract identifiers
+name: node_routing_history_reducer
+contract_name: node_routing_history_reducer
+node_name: node_routing_history_reducer
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+# Node type
+node_type: REDUCER_GENERIC
+
+# Description
+description: >
+  Capability-oriented reducer node for routing history operations.
+  Records routing decisions and queries historical agent performance statistics
+  with pluggable backends.
+
+# Strongly typed I/O models
+input_model:
+  name: ModelAgentStatsEntry
+  module: omniclaude.nodes.node_routing_history_reducer.models
+
+output_model:
+  name: ModelAgentRoutingStats
+  module: omniclaude.nodes.node_routing_history_reducer.models
+
+# Capability declaration (capability-oriented naming)
+# STANDARDIZED: Same prefix as handler contract capability_outputs
+capabilities:
+  - name: routing.history
+    description: Record and query routing decision history
+    version: 1.0.0
+
+  - name: routing.history.record
+    description: Record routing decisions for historical tracking
+
+  - name: routing.history.query
+    description: Query historical agent performance statistics
+
+# IO operations (REDUCER node specific)
+# EXPLICIT OPERATION MAPPING:
+# operation name -> protocol method (1:1 by name)
+io_operations:
+  - operation: record_routing_decision
+    description: Record a routing decision for historical tracking
+    protocol_method: record_routing_decision  # -> ProtocolHistoryStore.record_routing_decision()
+    input_fields:
+      - entry: ModelAgentStatsEntry
+      - correlation_id: UUID | None
+    output_fields:
+      - result: ModelAgentRoutingStats
+    idempotent: true
+
+  - operation: query_routing_stats
+    description: Query historical routing statistics for agents
+    protocol_method: query_routing_stats  # -> ProtocolHistoryStore.query_routing_stats()
+    input_fields:
+      - agent_name: str
+      - correlation_id: UUID | None
+    output_fields:
+      - result: ModelAgentRoutingStats
+    idempotent: true
+
+# Dependencies (protocols this node requires)
+dependencies:
+  - name: protocol_history_store
+    type: protocol
+    class_name: ProtocolHistoryStore
+    module: omniclaude.nodes.node_routing_history_reducer.protocols
+    pluggable: true
+
+# Handler routing (for pluggable backends)
+# Uses handler_key ONLY (not module/class) per OMN-1403 requirements
+handler_routing:
+  routing_strategy: backend_match
+  default_backend: postgresql
+  backends:
+    - backend: postgresql
+      handler_key: postgresql
+
+# Error handling configuration
+error_handling:
+  retry_policy:
+    max_retries: 3
+    initial_delay_ms: 100
+    max_delay_ms: 5000
+    exponential_base: 2
+    retry_on:
+      - InfraConnectionError
+      - InfraTimeoutError
+  circuit_breaker:
+    enabled: true
+    failure_threshold: 5
+    reset_timeout_ms: 60000
+
+# Metadata
+metadata:
+  author: OmniNode Team
+  license: MIT
+  ticket: OMN-1925
+  maturity: mvp
+  tags:
+    - reducer
+    - routing-history
+    - statistics
+    - capability-oriented
