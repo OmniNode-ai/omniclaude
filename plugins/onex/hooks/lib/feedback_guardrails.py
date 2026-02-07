@@ -5,7 +5,7 @@ Gates whether a session's routing decision should be used to reinforce
 the routing model. Prevents learning from noise by requiring:
     1. Context injection actually occurred (no injection = no signal)
     2. Clear session outcome (success or failed, not abandoned/unknown)
-    3. Minimum utilization OR accuracy thresholds met
+    3. Minimum utilization AND accuracy thresholds met
 
 All functions are pure — no network calls, no datetime.now(), no side effects.
 
