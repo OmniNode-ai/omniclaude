@@ -82,6 +82,7 @@ phases:
     block_kind: null
     last_error: null
     last_error_at: null
+    issue_fingerprints: []    # List of per-iteration fingerprint records
   create_pr:
     started_at: null
     completed_at: null
@@ -98,6 +99,7 @@ phases:
     block_kind: null
     last_error: null
     last_error_at: null
+    issue_fingerprints: []    # List of per-iteration fingerprint records
   ready_for_merge:
     started_at: null
     completed_at: null
@@ -241,19 +243,22 @@ else:
             "stop_on_cross_repo": True,
             "stop_on_invariant": True,
         },
-        "phases": {
-            phase_name: {
-                "started_at": None,
-                "completed_at": None,
-                "artifacts": {},
-                "blocked_reason": None,
-                "block_kind": None,
-                "last_error": None,
-                "last_error_at": None,
-            }
-            for phase_name in ["implement", "local_review", "create_pr", "pr_release_ready", "ready_for_merge"]
-        }
+        "phases": {}
     }
+    for phase_name in ["implement", "local_review", "create_pr", "pr_release_ready", "ready_for_merge"]:
+        phase_data = {
+            "started_at": None,
+            "completed_at": None,
+            "artifacts": {},
+            "blocked_reason": None,
+            "block_kind": None,
+            "last_error": None,
+            "last_error_at": None,
+        }
+        # Add fingerprint tracking for review phases
+        if phase_name in ("local_review", "pr_release_ready"):
+            phase_data["issue_fingerprints"] = []
+        state["phases"][phase_name] = phase_data
 ```
 
 ### 3. Handle --skip-to
@@ -582,6 +587,102 @@ def parse_phase_output(raw_output, phase_name):
     return result
 ```
 
+### fingerprint_issues
+
+```python
+def fingerprint_issues(review_output):
+    """Extract issue fingerprints from review output.
+
+    Parses structured review findings into normalized {file, rule_id, severity}
+    tuples for mechanical repeat detection.
+
+    KNOWN LIMITATION: Relies on pattern matching against local-review and
+    pr-release-ready output format. If upstream output format changes, this
+    parser may need updating.
+    """
+    import re
+    fingerprints = []
+
+    # Pattern: "file.py:123: rule-id (severity)" or "severity: description in file.py"
+    # Match lines like: "src/foo.py:42: unused-import (minor)"
+    pattern1 = re.compile(r'([^\s:]+\.\w+):\d+:\s*(\S+)\s*\((\w+)\)')
+    # Match lines like: "minor: Unused import in src/foo.py"
+    pattern2 = re.compile(r'(critical|major|minor|nit|warning|error):\s*.+?(?:in|at)\s+([^\s:]+\.\w+)')
+    # Match lines like: "[MINOR] src/foo.py - unused-import"
+    pattern3 = re.compile(r'\[(CRITICAL|MAJOR|MINOR|NIT)\]\s+([^\s]+\.\w+)\s*[-:]\s*(\S+)')
+
+    for line in (review_output or "").split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+
+        m1 = pattern1.search(line)
+        if m1:
+            file_path, rule_id, severity = m1.group(1), m1.group(2), m1.group(3).lower()
+            fingerprints.append({"file": file_path, "rule_id": rule_id, "severity": severity})
+            continue
+
+        m3 = pattern3.search(line)
+        if m3:
+            severity, file_path, rule_id = m3.group(1).lower(), m3.group(2), m3.group(3)
+            fingerprints.append({"file": file_path, "rule_id": rule_id, "severity": severity})
+            continue
+
+        m2 = pattern2.search(line)
+        if m2:
+            severity, file_path = m2.group(1).lower(), m2.group(2)
+            # Map severity aliases
+            severity_map = {"warning": "major", "error": "critical"}
+            severity = severity_map.get(severity, severity)
+            fingerprints.append({"file": file_path, "rule_id": "unknown", "severity": severity})
+
+    return fingerprints
+```
+
+### detect_repeat_fingerprints
+
+```python
+def detect_repeat_fingerprints(prev_fingerprints, current_fingerprints):
+    """Mechanically detect if same issues appear across iterations.
+
+    Returns True if current fingerprints are a non-empty subset of previous
+    fingerprints (meaning: no new issues found, and existing issues not fixed).
+    """
+    if not current_fingerprints:
+        return False  # No issues = not a repeat
+
+    prev_set = {(fp["file"], fp["rule_id"], fp["severity"]) for fp in prev_fingerprints}
+    current_set = {(fp["file"], fp["rule_id"], fp["severity"]) for fp in current_fingerprints}
+
+    return len(current_set) > 0 and current_set.issubset(prev_set)
+```
+
+### detect_new_major_issues
+
+```python
+def detect_new_major_issues(first_iteration_fingerprints, current_fingerprints):
+    """Detect if new major/critical issues appeared after iteration 1.
+
+    Returns True if current iteration has major/critical findings
+    that were NOT present in the first iteration.
+    """
+    major_severities = {"critical", "major"}
+
+    first_majors = {
+        (fp["file"], fp["rule_id"])
+        for fp in first_iteration_fingerprints
+        if fp["severity"] in major_severities
+    }
+    current_majors = {
+        (fp["file"], fp["rule_id"])
+        for fp in current_fingerprints
+        if fp["severity"] in major_severities
+    }
+
+    new_majors = current_majors - first_majors
+    return len(new_majors) > 0
+```
+
 ---
 
 ## Phase Execution Loop
@@ -803,32 +904,92 @@ def execute_phase(phase_name, state):
 
 **Actions:**
 
-1. **Invoke local-review:**
+1. **Initialize review loop:**
+   ```python
+   max_iterations = state["policy"]["max_review_iterations"]
+   iteration = 0
+   all_fingerprints = state["phases"]["local_review"].get("issue_fingerprints", [])
    ```
-   Skill(skill="local-review", args="--max-iterations {policy.max_review_iterations}")
+
+2. **Review iteration loop:**
+   ```python
+   while iteration < max_iterations:
+       iteration += 1
+       print(f"### Local review iteration {iteration}/{max_iterations}")
+
+       # Invoke local-review (single iteration)
+       # Skill(skill="local-review")
+       # Capture output from local-review execution
+
+       # Parse the output
+       result = parse_phase_output(review_output, "local_review")
+
+       # Extract fingerprints from this iteration
+       current_fingerprints = fingerprint_issues(review_output)
+
+       # Record fingerprints in state
+       iteration_record = {f"iteration_{iteration}": current_fingerprints}
+       all_fingerprints.append(iteration_record)
+       state["phases"]["local_review"]["issue_fingerprints"] = all_fingerprints
+       save_state(state, state_path)
+
+       # Check: 0 blocking issues = completed
+       if result["blocking_issues"] == 0:
+           result["status"] = "completed"
+           result["artifacts"]["iterations"] = iteration
+           result["artifacts"]["nit_count"] = str(result["nit_count"])
+           return result
+
+       # Check: stop_on_repeat (mechanical comparison)
+       if state["policy"]["stop_on_repeat"] and iteration > 1:
+           prev_fingerprints = list(all_fingerprints[-2].values())[0] if len(all_fingerprints) >= 2 else []
+           if detect_repeat_fingerprints(prev_fingerprints, current_fingerprints):
+               return {
+                   "status": "blocked",
+                   "block_kind": "blocked_review_limit",
+                   "reason": f"Same issues detected across iterations {iteration-1} and {iteration} (repeat fingerprint match)",
+                   "blocking_issues": result["blocking_issues"],
+                   "nit_count": result["nit_count"],
+                   "artifacts": {"iterations": iteration}
+               }
+
+       # Check: stop_on_major (new major after iteration 1)
+       if state["policy"]["stop_on_major"] and iteration > 1:
+           first_fingerprints = list(all_fingerprints[0].values())[0] if all_fingerprints else []
+           if detect_new_major_issues(first_fingerprints, current_fingerprints):
+               return {
+                   "status": "blocked",
+                   "block_kind": "blocked_policy",
+                   "reason": f"New major issue appeared after iteration 1",
+                   "blocking_issues": result["blocking_issues"],
+                   "nit_count": result["nit_count"],
+                   "artifacts": {"iterations": iteration}
+               }
+
+   # max_review_iterations reached
+   return {
+       "status": "blocked",
+       "block_kind": "blocked_review_limit",
+       "reason": f"Review capped at {max_iterations} iterations, {result['blocking_issues']} issues remain",
+       "blocking_issues": result["blocking_issues"],
+       "nit_count": result["nit_count"],
+       "artifacts": {"iterations": iteration}
+   }
    ```
 
-2. **Parse result:**
-   Use `parse_phase_output()` on the local-review output to determine:
-   - `status`: completed (clean) or blocked (issues remain)
-   - `blocking_issues`: count of remaining critical/major/minor
-   - `nit_count`: count of remaining nits
-   - `artifacts`: commits made, iterations run
-
-3. **Policy checks:**
-   - If `blocking_issues > 0`: status = blocked, block_kind = "blocked_review_limit"
-   - If parse fails: status = failed, block_kind = "failed_exception", reason = "Could not parse local-review output"
-
-4. **Dry-run behavior:** local-review runs normally (reviews code), but any commits are skipped (`--no-commit` implied). The review output is still parsed for status determination.
+3. **Dry-run behavior:** local-review runs with `--no-commit` flag. Review output is still parsed for fingerprinting. No commits are made.
 
 **Mutations:**
 - `phases.local_review.started_at`
 - `phases.local_review.completed_at`
 - `phases.local_review.artifacts` (iterations, commits, blocking_remaining, nit_count)
+- `phases.local_review.issue_fingerprints` (per-iteration fingerprint records)
 
 **Exit conditions:**
 - **Completed:** 0 blocking issues (nits OK)
-- **Blocked:** blocking issues remain after max iterations
+- **Blocked (repeat):** same fingerprints across iterations (stop_on_repeat)
+- **Blocked (major):** new major appeared after iteration 1 (stop_on_major)
+- **Blocked (limit):** max_review_iterations reached with issues remaining
 - **Failed:** local-review errors out or output parse failure
 
 ---
@@ -1044,34 +1205,98 @@ EOF
        return result
    ```
 
-2. **Invoke pr-release-ready:**
+2. **Initialize review loop:**
+   ```python
+   max_iterations = state["policy"]["max_review_iterations"]
+   iteration = 0
+   all_fingerprints = state["phases"]["pr_release_ready"].get("issue_fingerprints", [])
    ```
-   Skill(skill="pr-release-ready")
+
+3. **Review iteration loop:**
+   ```python
+   while iteration < max_iterations:
+       iteration += 1
+       print(f"### PR release-ready iteration {iteration}/{max_iterations}")
+
+       # Invoke pr-release-ready (single iteration)
+       # Skill(skill="pr-release-ready")
+       # Capture output from pr-release-ready execution
+
+       # Parse the output
+       result = parse_phase_output(review_output, "pr_release_ready")
+
+       # Extract fingerprints from this iteration
+       current_fingerprints = fingerprint_issues(review_output)
+
+       # Record fingerprints in state
+       iteration_record = {f"iteration_{iteration}": current_fingerprints}
+       all_fingerprints.append(iteration_record)
+       state["phases"]["pr_release_ready"]["issue_fingerprints"] = all_fingerprints
+       save_state(state, state_path)
+
+       # Check: 0 blocking issues = completed
+       if result["blocking_issues"] == 0:
+           result["status"] = "completed"
+           result["artifacts"]["iterations"] = iteration
+           result["artifacts"]["nit_count"] = str(result["nit_count"])
+           return result
+
+       # Check: stop_on_repeat (mechanical comparison)
+       if state["policy"]["stop_on_repeat"] and iteration > 1:
+           prev_fingerprints = list(all_fingerprints[-2].values())[0] if len(all_fingerprints) >= 2 else []
+           if detect_repeat_fingerprints(prev_fingerprints, current_fingerprints):
+               return {
+                   "status": "blocked",
+                   "block_kind": "blocked_review_limit",
+                   "reason": f"Same issues detected across iterations {iteration-1} and {iteration} (repeat fingerprint match)",
+                   "blocking_issues": result["blocking_issues"],
+                   "nit_count": result["nit_count"],
+                   "artifacts": {"iterations": iteration}
+               }
+
+       # Check: stop_on_major (new major after iteration 1)
+       if state["policy"]["stop_on_major"] and iteration > 1:
+           first_fingerprints = list(all_fingerprints[0].values())[0] if all_fingerprints else []
+           if detect_new_major_issues(first_fingerprints, current_fingerprints):
+               return {
+                   "status": "blocked",
+                   "block_kind": "blocked_policy",
+                   "reason": f"New major issue appeared after iteration 1",
+                   "blocking_issues": result["blocking_issues"],
+                   "nit_count": result["nit_count"],
+                   "artifacts": {"iterations": iteration}
+               }
+
+   # max_review_iterations reached
+   return {
+       "status": "blocked",
+       "block_kind": "blocked_review_limit",
+       "reason": f"Review capped at {max_iterations} iterations, {result['blocking_issues']} issues remain",
+       "blocking_issues": result["blocking_issues"],
+       "nit_count": result["nit_count"],
+       "artifacts": {"iterations": iteration}
+   }
    ```
-   This fetches CodeRabbit review issues and invokes `/parallel-solve` to fix them.
 
-3. **Parse result:**
-   Use `parse_phase_output()` to determine status:
-   - `status`: completed (all issues fixed) or blocked (issues remain)
-   - `blocking_issues`: remaining critical/major/minor
-   - `nit_count`: remaining nits
-
-4. **Push fixes** (if any commits were made):
+4. **Push fixes** (if any commits were made during iterations):
    ```bash
    git push
    ```
 
-5. **Dry-run behavior:** pr-release-ready runs in report-only mode. No fixes are committed or pushed.
+5. **Dry-run behavior:** pr-release-ready runs in report-only mode. Review output is still parsed for fingerprinting. No fixes are committed or pushed.
 
 **Mutations:**
 - `phases.pr_release_ready.started_at`
 - `phases.pr_release_ready.completed_at`
 - `phases.pr_release_ready.artifacts` (iterations, blocking_remaining, nit_count)
+- `phases.pr_release_ready.issue_fingerprints` (per-iteration fingerprint records)
 
 **Exit conditions:**
-- **Completed:** 0 blocking issues
-- **Blocked:** blocking issues remain after review iterations
-- **Failed:** pr-release-ready errors out
+- **Completed:** 0 blocking issues (nits OK)
+- **Blocked (repeat):** same fingerprints across iterations (stop_on_repeat)
+- **Blocked (major):** new major appeared after iteration 1 (stop_on_major)
+- **Blocked (limit):** max_review_iterations reached with issues remaining
+- **Failed:** pr-release-ready errors out or output parse failure
 
 ---
 
