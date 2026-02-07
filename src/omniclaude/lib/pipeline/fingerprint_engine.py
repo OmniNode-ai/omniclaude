@@ -20,7 +20,7 @@ _SEVERITY_MAP: dict[str, str] = {
 }
 
 _SEVERITY_PATTERN = re.compile(
-    r"\b(" + "|".join(_SEVERITY_MAP.keys()) + r")\b",
+    r"\b(" + "|".join(_SEVERITY_MAP.keys()) + r")(?=[\s]*[:\]\)\-,]|\s*$)",
     re.IGNORECASE,
 )
 

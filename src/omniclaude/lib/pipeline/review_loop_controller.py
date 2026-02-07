@@ -39,7 +39,15 @@ class ReviewLoopController:
 
         Computes fingerprint set, counts blocking vs nit issues, and
         appends an IterationRecord to the internal history.
+
+        Raises ``ValueError`` if *iteration* has already been recorded
+        (idempotency guard against duplicate calls that would corrupt
+        repeat-detection).
         """
+        for existing in self._iteration_records:
+            if existing.iteration == iteration:
+                raise ValueError(f"Iteration {iteration} already recorded")
+
         fingerprints = compute_fingerprint_set(findings)
         blocking_count = sum(
             1 for f in findings if f.severity in ("critical", "major", "minor")

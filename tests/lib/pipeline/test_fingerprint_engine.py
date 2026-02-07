@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from omniclaude.lib.pipeline.fingerprint_engine import (
     classify_severity,
@@ -47,6 +48,11 @@ class TestNormalizeFinding:
     def test_returns_issue_fingerprint(self) -> None:
         fp = normalize_finding("a.py", "rule", "critical")
         assert isinstance(fp, IssueFingerprint)
+
+    def test_rejects_invalid_severity(self) -> None:
+        """normalize_finding passes through severity without alias mapping — invalid values raise."""
+        with pytest.raises(ValidationError):
+            normalize_finding("a.py", "rule", "warning")
 
 
 class TestComputeFingerprintSet:
@@ -142,16 +148,16 @@ class TestClassifySeverity:
         assert classify_severity("critical: something wrong") == "critical"
 
     def test_error_maps_to_critical(self) -> None:
-        assert classify_severity("error in code") == "critical"
+        assert classify_severity("error: in code") == "critical"
 
     def test_major_keyword(self) -> None:
-        assert classify_severity("major issue found") == "major"
+        assert classify_severity("major: issue found") == "major"
 
     def test_warning_maps_to_major(self) -> None:
         assert classify_severity("warning: deprecated API") == "major"
 
     def test_minor_keyword(self) -> None:
-        assert classify_severity("minor style issue") == "minor"
+        assert classify_severity("minor: style issue") == "minor"
 
     def test_nit_keyword(self) -> None:
         assert classify_severity("nit: prefer single quotes") == "nit"
@@ -164,3 +170,15 @@ class TestClassifySeverity:
 
     def test_empty_string_defaults_to_minor(self) -> None:
         assert classify_severity("") == "minor"
+
+    def test_multiple_keywords_uses_first_delimiter_match(self) -> None:
+        """When multiple severity keywords appear, first one with a delimiter wins."""
+        # "minor:" has delimiter so should match as minor, not the "error" word later
+        result = classify_severity("minor: fix error handling")
+        assert result == "minor"
+
+    def test_keyword_without_delimiter_no_match(self) -> None:
+        """Keywords embedded in phrases without delimiters should not match."""
+        # "error" appears but without a colon/bracket delimiter
+        result = classify_severity("fix error handling")
+        assert result == "minor"  # Falls through to default

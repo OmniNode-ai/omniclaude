@@ -73,6 +73,15 @@ class TestStopOnRepeat:
         can_continue, _reason = controller.should_continue(2, [fp2])
         assert can_continue is True
 
+    def test_empty_findings_continues(self) -> None:
+        """Zero issues found means review loop should continue (not a repeat)."""
+        policy = PipelinePolicy(max_review_iterations=10)
+        controller = ReviewLoopController(policy)
+
+        can_continue, reason = controller.should_continue(1, [])
+        assert can_continue is True
+        assert reason is None
+
 
 class TestStopOnMajor:
     """Tests for stop_on_major enforcement."""

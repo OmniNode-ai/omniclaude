@@ -163,6 +163,18 @@ class TestPhaseResult:
         with pytest.raises(ValidationError):
             r.status = "failed"
 
+    def test_artifacts_default_empty_tuple(self) -> None:
+        r = PhaseResult(status="completed")
+        assert r.artifacts == ()
+
+    def test_artifacts_coerces_dict_to_sorted_tuples(self) -> None:
+        r = PhaseResult(status="completed", artifacts={"b": "2", "a": "1"})
+        assert r.artifacts == (("a", "1"), ("b", "2"))
+
+    def test_artifacts_accepts_tuple_input(self) -> None:
+        r = PhaseResult(status="completed", artifacts=(("x", "1"),))
+        assert r.artifacts == (("x", "1"),)
+
 
 class TestIterationRecord:
     """Tests for IterationRecord model."""

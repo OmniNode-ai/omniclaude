@@ -57,7 +57,15 @@ class PhaseResult(BaseModel):
     status: Literal["completed", "blocked", "failed"]
     blocking_issues: int = 0
     nit_count: int = 0
-    artifacts: dict[str, str] = Field(default_factory=dict)
+    artifacts: tuple[tuple[str, str], ...] = Field(default_factory=tuple)
+
+    @field_validator("artifacts", mode="before")
+    @classmethod
+    def _coerce_artifacts(cls, v: dict[str, str] | tuple[tuple[str, str], ...]) -> tuple[tuple[str, str], ...]:
+        if isinstance(v, dict):
+            return tuple(sorted(v.items()))
+        return v
+
     reason: str | None = None
     block_kind: (
         Literal[
