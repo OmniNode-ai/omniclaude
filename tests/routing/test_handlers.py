@@ -96,6 +96,32 @@ class TestHandlerRoutingDefault:
         assert result.routing_policy == "explicit_request"
 
     @pytest.mark.asyncio
+    async def test_generic_agent_request(self, handler: HandlerRoutingDefault) -> None:
+        """'use an agent' should resolve to polymorphic-agent."""
+        agents = (
+            _make_agent("agent-api-architect", triggers=("api design",)),
+            _make_agent("polymorphic-agent", triggers=("poly",)),
+        )
+        request = _make_request("use an agent to help me", agents)
+        result = await handler.compute_routing(request)
+
+        assert result.selected_agent == "polymorphic-agent"
+        assert result.confidence == 1.0
+        assert result.routing_policy == "explicit_request"
+
+    @pytest.mark.asyncio
+    async def test_generic_agent_request_missing_fallback(
+        self, handler: HandlerRoutingDefault
+    ) -> None:
+        """Generic request when polymorphic-agent is NOT in registry should not match."""
+        agents = (_make_agent("agent-api-architect", triggers=("api design",)),)
+        request = _make_request("use an agent to help me", agents)
+        result = await handler.compute_routing(request)
+
+        # polymorphic-agent not in registry, so generic pattern doesn't match
+        assert result.routing_policy != "explicit_request"
+
+    @pytest.mark.asyncio
     async def test_trigger_match(self, handler: HandlerRoutingDefault) -> None:
         agents = (
             _make_agent("agent-debugger", triggers=("debug", "troubleshoot")),

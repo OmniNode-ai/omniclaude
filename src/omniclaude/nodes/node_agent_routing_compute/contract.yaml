@@ -66,6 +66,15 @@ io_operations:
       - result: ModelRoutingResult
     idempotent: true
 
+# Handler routing (for pluggable backends)
+# Uses handler_key ONLY (not module/class) per OMN-1403 requirements
+handler_routing:
+  routing_strategy: backend_match
+  default_backend: default
+  backends:
+    - backend: default
+      handler_key: default
+
 # Dependencies (protocols this node requires)
 dependencies:
   - name: protocol_agent_routing
