@@ -674,10 +674,9 @@ class ModelRoutingFeedbackPayload(BaseModel):
         min_length=1,
         description="Session identifier",
     )
-    outcome: str = Field(
+    outcome: Literal["success", "failed"] = Field(
         ...,
-        min_length=1,
-        description="Session outcome that triggered feedback (success or failed)",
+        description="Session outcome that triggered feedback",
     )
     # Timestamps - MUST be explicitly injected (no default_factory for testability)
     # Uses TimezoneAwareDatetime for automatic timezone validation
