@@ -374,13 +374,21 @@ def _run_async(coro: Any) -> Any:
 
     # Loop is running — cannot use run_until_complete or asyncio.run.
     # Offload to a new thread that creates its own event loop.
+    # Use explicit pool lifecycle (no context manager) so that on timeout
+    # we call shutdown(wait=False) to avoid blocking on a hung thread.
     import concurrent.futures
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-        future = pool.submit(asyncio.run, coro)
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    future = pool.submit(asyncio.run, coro)
+    try:
         # Timeout matches the default routing budget (5s) to prevent
         # _run_async from blocking longer than callers expect.
         return future.result(timeout=5)
+    finally:
+        # Always shut down without waiting. On success the thread has
+        # already finished; on timeout or error we must not block.
+        # cancel_futures=True (Python 3.9+) prevents queued work.
+        pool.shutdown(wait=False, cancel_futures=True)
 
 
 def _get_cached_stats() -> Any:
