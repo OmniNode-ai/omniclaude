@@ -104,9 +104,11 @@ fi
 ) &
 
 # Convert duration from ms to seconds once (used by all subshells below)
+# Uses awk instead of Python to avoid ~30-50ms interpreter startup cost
+# on the synchronous path (preserves <50ms SessionEnd budget).
 DURATION_SECONDS="0"
 if [[ -n "$SESSION_DURATION" && "$SESSION_DURATION" != "0" ]]; then
-    DURATION_SECONDS=$($PYTHON_CMD -c "import sys; print(f'{float(sys.argv[1])/1000:.3f}')" "$SESSION_DURATION" 2>/dev/null || echo "0")
+    DURATION_SECONDS=$(awk -v ms="$SESSION_DURATION" 'BEGIN{printf "%.3f", ms/1000}' 2>/dev/null || echo "0")
 fi
 
 # ===================================================================
