@@ -43,12 +43,34 @@ fi
 TAB_REGISTRY_DIR="/tmp/omniclaude-tabs"
 LINE2=""
 
-if [ -d "$TAB_REGISTRY_DIR" ] && command -v jq >/dev/null 2>&1; then
+if command -v jq >/dev/null 2>&1; then
+  mkdir -p "$TAB_REGISTRY_DIR" 2>/dev/null
+
   # Determine current tab's iTerm GUID for highlighting
   # ITERM_SESSION_ID format: w{W}t{T}p{P}:{GUID} - extract just the GUID
   CURRENT_ITERM=""
   if [ -n "${ITERM_SESSION_ID:-}" ]; then
     CURRENT_ITERM="${ITERM_SESSION_ID#*:}"  # Strip prefix up to colon = GUID only
+  fi
+
+  # Self-register/update: ensure this tab's registry entry matches the current project.
+  # Handles: new sessions, resumed sessions, same tab switching repos.
+  # Keyed by GUID so each iTerm tab has exactly one entry.
+  if [ -n "$CURRENT_ITERM" ]; then
+    NEEDS_UPDATE=0
+    EXISTING=$(grep -rl "$CURRENT_ITERM" "$TAB_REGISTRY_DIR"/ 2>/dev/null | head -1)
+    if [ -z "$EXISTING" ]; then
+      NEEDS_UPDATE=1
+    elif [ -n "$FOLDER_NAME" ]; then
+      # Check if repo changed (same tab, different session)
+      EXISTING_REPO=$(jq -r '.repo // ""' "$EXISTING" 2>/dev/null)
+      [ "$EXISTING_REPO" != "$FOLDER_NAME" ] && NEEDS_UPDATE=1
+    fi
+    if [ "$NEEDS_UPDATE" -eq 1 ]; then
+      # Remove old entry for this GUID if it exists under a different session ID
+      [ -n "$EXISTING" ] && rm -f "$EXISTING" 2>/dev/null
+      ( "$HOME/.claude/register-tab.sh" "auto-${CURRENT_ITERM}" "$PROJECT_DIR" >/dev/null 2>&1 ) &
+    fi
   fi
 
   # Stale threshold: skip entries older than 24 hours (86400 seconds)
