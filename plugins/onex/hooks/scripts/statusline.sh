@@ -73,15 +73,24 @@ if [ -d "$TAB_REGISTRY_DIR" ] && command -v jq >/dev/null 2>&1; then
 
   if [ -n "$ENTRIES" ]; then
     # Single jq call: parse all entries, sort by tab_pos, output tab-delimited
+    # Includes project_path so we can read live branch from git
     FORMATTED=$(echo "$ENTRIES" | jq -sr '
       [.[] | select(.repo != null)] |
       sort_by(.tab_pos // 999) |
-      .[] | "\(.tab_pos // "?")\t\(.repo // "?")\t\(.ticket // "")\t\(.iterm_guid // "")"
+      .[] | "\(.tab_pos // "?")\t\(.repo // "?")\t\(.ticket // "")\t\(.iterm_guid // "")\t\(.project_path // "")"
     ' 2>/dev/null)
 
     if [ -n "$FORMATTED" ]; then
-      while IFS=$'\t' read -r tab_pos repo ticket iterm_guid; do
+      while IFS=$'\t' read -r tab_pos repo ticket iterm_guid project_path; do
         [ -z "$tab_pos" ] && continue
+
+        # Read live branch from git if project_path is available (keeps ticket current after merges)
+        if [ -n "$project_path" ] && [ -d "$project_path" ]; then
+          live_branch=$(git -C "$project_path" branch --show-current 2>/dev/null || echo "")
+          if [ -n "$live_branch" ]; then
+            ticket=$(echo "$live_branch" | grep -oiE 'omn-[0-9]+' | head -1 | tr '[:lower:]' '[:upper:]')
+          fi
+        fi
 
         # Build label: T{pos}·{repo} or T{pos}·{repo}·{ticket}
         label="T${tab_pos}·${repo}"
@@ -93,7 +102,7 @@ if [ -d "$TAB_REGISTRY_DIR" ] && command -v jq >/dev/null 2>&1; then
           # Current tab: black text on cyan background
           LINE2="${LINE2}\033[30;46m ${label} \033[0m  "
         else
-          # Inactive tabs: gray text
+          # Inactive tabs: gray text (bright black = gray on most terminals)
           LINE2="${LINE2}\033[37m${label}\033[0m  "
         fi
       done <<< "$FORMATTED"

@@ -48,7 +48,8 @@ jq -n \
     --argjson tab_pos "${TAB_POS:-null}" \
     --arg session_id "$SESSION_ID" \
     --arg iterm_guid "${ITERM_SESSION_ID:-}" \
-    '{repo: $repo, branch: $branch, ticket: $ticket, tab_pos: $tab_pos, session_id: $session_id, iterm_guid: $iterm_guid}' \
+    --arg project_path "$PROJECT_PATH" \
+    '{repo: $repo, branch: $branch, ticket: $ticket, tab_pos: $tab_pos, session_id: $session_id, iterm_guid: $iterm_guid, project_path: $project_path}' \
     > "${TAB_REGISTRY_DIR}/${SESSION_ID}.json.tmp" 2>/dev/null \
 && mv "${TAB_REGISTRY_DIR}/${SESSION_ID}.json.tmp" "${TAB_REGISTRY_DIR}/${SESSION_ID}.json" 2>/dev/null
 
