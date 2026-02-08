@@ -218,7 +218,7 @@ print(result.outcome)
                 outcome: $outcome,
                 emitted_at: $emitted_at,
                 active_ticket: (if $active_ticket == "" then null else $active_ticket end)
-            }' 2>/dev/null)
+            }' 2>>"$LOG_FILE")
 
         if [[ -z "$OUTCOME_PAYLOAD" || "$OUTCOME_PAYLOAD" == "null" ]]; then
             log "WARNING: Failed to construct outcome payload (jq failed), skipping emission"
