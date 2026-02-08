@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID, uuid4
 
@@ -51,7 +51,7 @@ from omniclaude.nodes.node_routing_emission_effect.models import (
 # Helpers
 # --------------------------------------------------------------------------
 
-DEFAULT_AGENT = "polymorphic-agent"
+RoutingPolicy = Literal["trigger_match", "explicit_request", "fallback_default"]
 
 
 def _make_breakdown(
@@ -70,7 +70,7 @@ def _make_breakdown(
 def _make_routing_result(
     selected_agent: str = "agent-testing",
     confidence: float = 0.85,
-    routing_policy: str = "trigger_match",
+    routing_policy: RoutingPolicy = "trigger_match",
     fallback_reason: str | None = None,
 ) -> ModelRoutingResult:
     breakdown = _make_breakdown(

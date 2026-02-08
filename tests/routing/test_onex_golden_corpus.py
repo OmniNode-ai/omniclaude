@@ -145,13 +145,14 @@ def golden_corpus() -> dict[str, Any]:
     """Load the golden corpus."""
     assert _CORPUS_PATH.exists(), f"Golden corpus not found: {_CORPUS_PATH}"
     with open(_CORPUS_PATH, encoding="utf-8") as f:
-        return json.load(f)
+        data: dict[str, Any] = json.load(f)
+    return data
 
 
 @pytest.fixture(scope="module")
 def corpus_entries(golden_corpus: dict[str, Any]) -> list[dict[str, Any]]:
     """Extract entries from the golden corpus."""
-    entries = golden_corpus["entries"]
+    entries: list[dict[str, Any]] = golden_corpus["entries"]
     assert len(entries) >= 100, f"Golden corpus has {len(entries)} entries, need 100+"
     return entries
 

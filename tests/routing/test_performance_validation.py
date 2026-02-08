@@ -333,7 +333,6 @@ class TestWrapperPerformance:
     def test_wrapper_p95_under_budget(
         self,
         corpus_prompts: list[str],
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """route_via_events p95 must be under 100ms (well within 500ms hook budget)."""
         wrapper = self._get_wrapper()
@@ -366,7 +365,6 @@ class TestWrapperPerformance:
     def test_wrapper_p50_under_budget(
         self,
         corpus_prompts: list[str],
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """route_via_events p50 must be under 50ms."""
         wrapper = self._get_wrapper()

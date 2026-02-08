@@ -33,7 +33,7 @@ import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 import pytest
@@ -92,10 +92,13 @@ def _get_bootstrap_servers() -> str:
     return servers
 
 
+RoutingPolicy = Literal["trigger_match", "explicit_request", "fallback_default"]
+
+
 def _make_emission_request(
     agent: str = "agent-testing",
     confidence: float = 0.85,
-    policy: str = "trigger_match",
+    policy: RoutingPolicy = "trigger_match",
     session_id: str | None = None,
 ) -> ModelEmissionRequest:
     """Build a valid ModelEmissionRequest for testing."""
@@ -154,7 +157,9 @@ async def _consume_one(
             for _tp, records in result.items():
                 for record in records:
                     try:
-                        payload = json.loads(record.value.decode("utf-8"))
+                        payload: dict[str, Any] = json.loads(
+                            record.value.decode("utf-8")
+                        )
                         if match_fn(payload):
                             return payload
                     except (json.JSONDecodeError, UnicodeDecodeError):
