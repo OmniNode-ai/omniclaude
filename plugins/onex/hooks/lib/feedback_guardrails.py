@@ -86,6 +86,20 @@ def should_reinforce_routing(
     Returns:
         GuardrailResult with decision, skip reason, and diagnostic details.
     """
+    # Defensive coercion: callers may pass strings or None from shell/JSON contexts.
+    # Convert to float early to avoid TypeError in math.isnan/isinf checks below.
+    try:
+        utilization_score = float(utilization_score)
+    except (TypeError, ValueError):
+        logger.warning("Non-numeric utilization_score %r, using 0.0", utilization_score)
+        utilization_score = 0.0
+
+    try:
+        agent_match_score = float(agent_match_score)
+    except (TypeError, ValueError):
+        logger.warning("Non-numeric agent_match_score %r, using 0.0", agent_match_score)
+        agent_match_score = 0.0
+
     # Validate session_outcome before any processing.
     # Log a warning but never raise — hooks must not block.
     if session_outcome not in VALID_OUTCOMES:

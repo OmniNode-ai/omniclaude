@@ -80,7 +80,7 @@ def calculate_agent_match_score(
             seen.add(low)
             signals_lower.append(low)
 
-    matched: list[str] = []
+    matched: list[str] = []  # Converted to tuple in AgentMatchResult for immutability
     for trigger in agent_triggers:
         trigger_lower = trigger.lower()
         # Check if trigger appears in ANY individual signal (not across boundaries)

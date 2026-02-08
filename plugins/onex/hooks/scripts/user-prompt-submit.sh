@@ -51,6 +51,10 @@ run_with_timeout() {
 # Input Processing
 # -----------------------------
 INPUT="$(cat)"
+if ! echo "$INPUT" | jq -e . >/dev/null 2>>"$LOG_FILE"; then
+    log "ERROR: Malformed JSON on stdin, using empty object"
+    INPUT='{}'
+fi
 log "UserPromptSubmit hook triggered (plugin mode)"
 
 PROMPT="$(printf %s "$INPUT" | jq -r ".prompt // \"\"" 2>>"$LOG_FILE" || echo "")"

@@ -41,7 +41,7 @@ source "${HOOKS_DIR}/scripts/common.sh"
 # Read stdin (validate JSON; fall back to empty object on malformed input)
 INPUT=$(cat)
 if ! echo "$INPUT" | jq -e . >/dev/null 2>>"$LOG_FILE"; then
-    log "WARNING: Malformed JSON on stdin, using empty object"
+    log "ERROR: Malformed JSON on stdin, using empty object"
     INPUT='{}'
 fi
 
@@ -53,9 +53,9 @@ SESSION_DURATION=$(echo "$INPUT" | jq -r '.durationMs // 0' 2>/dev/null || echo 
 SESSION_REASON=$(echo "$INPUT" | jq -r '.reason // "other"' 2>/dev/null || echo "other")
 
 # Extract tool call count from session payload (if available)
-TOOL_CALLS_COMPLETED=$(echo "$INPUT" | jq -r '.numTurns // 0' 2>/dev/null || echo "0")
+TOOL_CALLS_COMPLETED=$(echo "$INPUT" | jq -r '.tools_used_count // 0' 2>/dev/null || echo "0")
 if [[ "$TOOL_CALLS_COMPLETED" == "0" ]]; then
-    log "Phase 1: numTurns absent or zero — SUCCESS gate unreachable (see OMN-1892)"
+    log "Phase 1: tools_used_count absent or zero — SUCCESS gate unreachable (see OMN-1892)"
 fi
 
 # Validate reason is one of the allowed values
@@ -160,7 +160,7 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
         #   - session_output: Uses session reason (clear/logout/prompt_input_exit/
         #     other), NOT captured stdout. Outcome will not resolve to FAILED
         #     until session_output carries error markers (Error:, Exception:, etc.)
-        #   - tool_calls_completed: Extracted from numTurns (best-effort);
+        #   - tool_calls_completed: Extracted from tools_used_count (best-effort);
         #     may still be 0 if field is absent from SessionEnd payload.
         #     SUCCESS requires tool_calls > 0 AND completion markers.
         # Unreachable gates: SUCCESS (no completion markers in reason codes),
@@ -278,7 +278,9 @@ print(json.dumps({
                 exit 0
             fi
 
-            if [[ -n "$SKIP_PAYLOAD" && "$SKIP_PAYLOAD" != "null" ]]; then
+            if [[ -z "$SKIP_PAYLOAD" || "$SKIP_PAYLOAD" == "null" ]]; then
+                log "WARNING: routing.skipped payload empty or null, skipping emission"
+            else
                 emit_via_daemon "routing.skipped" "$SKIP_PAYLOAD" 100
             fi
         fi

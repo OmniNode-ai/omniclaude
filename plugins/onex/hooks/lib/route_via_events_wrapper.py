@@ -438,7 +438,7 @@ def _get_cached_stats() -> Any:
         ):
             return _cached_stats
         try:
-            _cached_stats = _run_async(history.query_routing_stats())
+            _cached_stats = _run_async(history.query_routing_stats(), timeout=5.0)
             _cached_stats_time = time.time()
         except Exception as e:
             logger.debug("Failed to pre-fetch routing stats: %s", e)
@@ -540,7 +540,7 @@ def _route_via_onex_nodes(
                     logger.debug("ONEX emission failed (non-blocking): %s", exc)
             return r, elapsed_ms
 
-        result, latency_ms = _run_async(_compute_and_emit())
+        result, latency_ms = _run_async(_compute_and_emit(), timeout=timeout_ms / 1000)
 
         if latency_ms > timeout_ms:
             logger.warning(
@@ -598,6 +598,7 @@ def route_via_events(
     correlation_id: str,
     timeout_ms: int = 5000,
     session_id: str | None = None,  # Used by ONEX emission path
+    _start_time: float | None = None,
 ) -> dict[str, Any]:
     """
     Route user prompt using intelligent trigger matching and confidence scoring.
@@ -613,11 +614,17 @@ def route_via_events(
             If the routing operation exceeds this budget, the result is
             discarded and a fallback to the default agent is returned.
         session_id: Session ID for emission tracking
+        _start_time: Optional wall-clock start time (from ``time.time()``).
+            When provided, latency tracking includes time spent *before*
+            this function was called (e.g., Python interpreter startup,
+            argument parsing).  Callers that care about end-to-end budget
+            accuracy should capture ``time.time()`` as early as possible
+            and pass it here.
 
     Returns:
         Routing decision dictionary with routing_path signal
     """
-    start_time = time.time()
+    start_time = _start_time if _start_time is not None else time.time()
     event_attempted = False  # Local routing, no event bus
 
     # Validate inputs before processing
@@ -790,6 +797,10 @@ def main() -> None:
     Usage:
         python route_via_events_wrapper.py "prompt" "correlation-id" [timeout_ms] [session_id]
     """
+    # Capture wall-clock time before argument parsing so that interpreter
+    # startup and import overhead are included in the latency budget.
+    entry_time = time.time()
+
     if len(sys.argv) < 3:
         # Graceful degradation with fallback agent when args missing
         print(
@@ -817,7 +828,9 @@ def main() -> None:
     timeout_ms = int(sys.argv[3]) if len(sys.argv) > 3 else 5000
     session_id = sys.argv[4] if len(sys.argv) > 4 else None
 
-    result = route_via_events(prompt, correlation_id, timeout_ms, session_id)
+    result = route_via_events(
+        prompt, correlation_id, timeout_ms, session_id, _start_time=entry_time
+    )
     print(json.dumps(result))
 
 

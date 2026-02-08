@@ -44,6 +44,9 @@ ERROR_MARKER_REGEXES: tuple[re.Pattern[str], ...] = (
 # Standalone FAILED at end of line — checked per-match in _has_error_markers
 # with zero-count prefix exclusion. Separated from ERROR_MARKER_REGEXES because
 # the exclusion requires per-line context that fixed-width lookbehinds cannot handle.
+# Known limitation: May match "FAILED" in user prompt echo-backs.
+# Mitigated by _ZERO_COUNT_PREFIX_RE exclusion and Phase 1 session_output
+# not yet carrying raw stdout (currently uses session_reason codes only).
 _FAILED_EOL_RE: re.Pattern[str] = re.compile(r"\bFAILED\s*$", re.MULTILINE)
 _ZERO_COUNT_PREFIX_RE: re.Pattern[str] = re.compile(r"\b0+\s+FAILED\b")
 
