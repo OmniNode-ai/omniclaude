@@ -634,6 +634,30 @@ class TestFalsePositiveRejection:
         )
         assert result.outcome != OUTCOME_FAILED
 
+    def test_zero_double_space_failed_does_not_trigger(self) -> None:
+        """'0  FAILED' (double space) should NOT trigger FAILED.
+
+        Variable whitespace between zero count and FAILED should still
+        be recognized as a passing test summary.
+        """
+        result = derive_session_outcome(
+            exit_code=0,
+            session_output="10 passed, 0  FAILED",
+            tool_calls_completed=5,
+            duration_seconds=120.0,
+        )
+        assert result.outcome != OUTCOME_FAILED
+
+    def test_double_zero_failed_does_not_trigger(self) -> None:
+        """'00 FAILED' (padded zero count) should NOT trigger FAILED."""
+        result = derive_session_outcome(
+            exit_code=0,
+            session_output="10 passed, 00 FAILED",
+            tool_calls_completed=5,
+            duration_seconds=120.0,
+        )
+        assert result.outcome != OUTCOME_FAILED
+
     def test_error_colon_mid_sentence_does_not_trigger(self) -> None:
         """'This is an Error: none found' mid-sentence should NOT trigger."""
         result = derive_session_outcome(
@@ -832,7 +856,7 @@ class TestResultStructure:
         ]
         for exit_code, output, tools, duration in test_cases:
             result = derive_session_outcome(exit_code, output, tools, duration)
-            assert isinstance(result.signals_used, list)
+            assert isinstance(result.signals_used, tuple)
 
     def test_signals_used_is_nonempty(self) -> None:
         """signals_used is always non-empty (at least one signal contributed)."""

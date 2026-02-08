@@ -35,15 +35,17 @@ ERROR_MARKER_REGEXES: tuple[re.Pattern[str], ...] = (
     re.compile(r"(?:^|\n)\s*\w*Exception:"),
     # "Traceback" as a standalone word (already distinctive)
     re.compile(r"\bTraceback\b"),
-    # "FAILED" with a preceding count or "test(s)" prefix, or standalone at
-    # end-of-line. The negative lookbehind excludes "0 FAILED" (common in
-    # passing test summaries). When real session output is wired in (see
-    # OMN-1892 Phase 1 notes in session-end.sh), monitor for false positives
-    # from log messages or status strings containing "FAILED".
-    re.compile(
-        r"[1-9]\d*\s+FAILED\b|[Tt]ests?\s+FAILED\b|(?<!0 )\bFAILED\s*$", re.MULTILINE
-    ),
+    # "FAILED" with a preceding non-zero count or "test(s)" prefix.
+    # Standalone FAILED at end-of-line is handled separately in _has_error_markers
+    # to properly exclude zero-count prefixes with variable whitespace.
+    re.compile(r"[1-9]\d*\s+FAILED\b|[Tt]ests?\s+FAILED\b"),
 )
+
+# Standalone FAILED at end of line — checked per-match in _has_error_markers
+# with zero-count prefix exclusion. Separated from ERROR_MARKER_REGEXES because
+# the exclusion requires per-line context that fixed-width lookbehinds cannot handle.
+_FAILED_EOL_RE: re.Pattern[str] = re.compile(r"\bFAILED\s*$", re.MULTILINE)
+_ZERO_COUNT_PREFIX_RE: re.Pattern[str] = re.compile(r"\b0+\s+FAILED\b")
 
 # Patterns that indicate a session completed meaningful work.
 # Matched case-insensitively against session output text.
@@ -75,7 +77,7 @@ class SessionOutcomeResult(NamedTuple):
 
     outcome: str  # One of: success, failed, abandoned, unknown
     reason: str  # Human-readable explanation of why this outcome was chosen
-    signals_used: list[str]  # Which signals contributed to the decision
+    signals_used: tuple[str, ...]  # Which signals contributed to the decision
 
 
 # =============================================================================
@@ -89,9 +91,18 @@ def _has_error_markers(session_output: str) -> bool:
     Uses pre-compiled regexes with line-start anchoring and contextual
     patterns to reduce false positives from benign references to errors
     (e.g., 'fix FAILED test' or 'This is an Error: none found').
+
+    Standalone FAILED at end-of-line is checked separately with per-line
+    zero-count exclusion to handle variable whitespace (e.g., '0  FAILED').
     """
     for pattern in ERROR_MARKER_REGEXES:
         if pattern.search(session_output):
+            return True
+    # Check standalone FAILED at end of line, excluding lines with zero-count prefix
+    for match in _FAILED_EOL_RE.finditer(session_output):
+        line_start = session_output.rfind("\n", 0, match.start()) + 1
+        line = session_output[line_start : match.end()]
+        if not _ZERO_COUNT_PREFIX_RE.search(line):
             return True
     return False
 
@@ -142,7 +153,7 @@ def derive_session_outcome(
         return SessionOutcomeResult(
             outcome=OUTCOME_FAILED,
             reason=f"Non-zero exit code: {exit_code}",
-            signals_used=signals,
+            signals_used=tuple(signals),
         )
 
     has_errors = _has_error_markers(session_output)
@@ -151,7 +162,7 @@ def derive_session_outcome(
         return SessionOutcomeResult(
             outcome=OUTCOME_FAILED,
             reason="Error markers detected in session output",
-            signals_used=signals,
+            signals_used=tuple(signals),
         )
 
     # Gate 2: SUCCESS — tool calls completed AND completion markers present
@@ -162,7 +173,7 @@ def derive_session_outcome(
         return SessionOutcomeResult(
             outcome=OUTCOME_SUCCESS,
             reason=f"Session completed with {tool_calls_completed} tool calls and completion markers",
-            signals_used=signals,
+            signals_used=tuple(signals),
         )
 
     # Gate 3: ABANDONED — no completion markers and short duration
@@ -172,7 +183,7 @@ def derive_session_outcome(
         return SessionOutcomeResult(
             outcome=OUTCOME_ABANDONED,
             reason=f"Session ended after {duration_seconds:.1f}s without completion markers",
-            signals_used=signals,
+            signals_used=tuple(signals),
         )
 
     # Gate 4: UNKNOWN — insufficient signal
@@ -185,7 +196,7 @@ def derive_session_outcome(
     return SessionOutcomeResult(
         outcome=OUTCOME_UNKNOWN,
         reason="Insufficient signal to classify session outcome",
-        signals_used=signals,
+        signals_used=tuple(signals),
     )
 
 
