@@ -203,7 +203,7 @@ class TriggerMatcher:
     # Short alphanumeric technical tokens that should be preserved during
     # keyword extraction even when below the default length threshold.
     # These tokens are domain-significant (e.g., cloud services, protocols).
-    _TECHNICAL_TOKENS = frozenset({"s3", "k8", "ec2", "ml", "ai", "ci", "cd", "db"})  # noqa: secrets
+    _TECHNICAL_TOKENS = frozenset({"s3", "k8", "ec2", "ml", "ai", "ci", "cd", "db"})
 
     def __init__(self, agent_registry: AgentRegistry):
         """Initialize matcher with agent registry.

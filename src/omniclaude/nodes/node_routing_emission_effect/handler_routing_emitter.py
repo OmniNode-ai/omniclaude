@@ -66,7 +66,7 @@ DUAL_TOPICS: Final[tuple[str, ...]] = (TOPIC_EVT, TOPIC_CMD)
 EmitFn = Callable[[str, dict[str, object]], bool]
 
 
-def _noop_emit(event_type: str, payload: dict[str, object]) -> bool:  # noqa: ARG001
+def _noop_emit(event_type: str, payload: dict[str, object]) -> bool:
     """No-op emitter used when the daemon is unavailable."""
     return False
 
@@ -187,7 +187,7 @@ class HandlerRoutingEmitter:
                 success=False,
                 correlation_id=resolved_cid,
                 topics_emitted=(),
-                error="Emit daemon returned failure (daemon unavailable or event dropped)",
+                error="Emit daemon returned failure (daemon unavailable or dropped)",
                 duration_ms=elapsed_ms,
             )
 
@@ -240,10 +240,10 @@ class HandlerRoutingEmitter:
 
 
 __all__ = [
-    "HandlerRoutingEmitter",
-    "EVENT_TYPE_ROUTING_DECISION",
-    "TOPIC_EVT",
-    "TOPIC_CMD",
     "DUAL_TOPICS",
+    "EVENT_TYPE_ROUTING_DECISION",
+    "TOPIC_CMD",
+    "TOPIC_EVT",
     "EmitFn",
+    "HandlerRoutingEmitter",
 ]
