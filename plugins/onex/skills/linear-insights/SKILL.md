@@ -305,7 +305,7 @@ These skills are designed to be invoked by polymorphic agents:
 
 ```
 Task(
-  subagent_type="onex:polymorphic-agent",
+  subagent_type="polymorphic-agent",
   description="Generate daily work report",
   prompt="Generate a daily work report for the last 24 hours.
 

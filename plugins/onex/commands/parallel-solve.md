@@ -80,11 +80,11 @@ Create a plan to execute tasks in parallel:
 
 **DO NOT execute tasks yourself** - you MUST dispatch EVERY task to a **polymorphic-agent** using the Task tool.
 
-### 🟣 MANDATORY: subagent_type="onex:polymorphic-agent"
+### 🟣 MANDATORY: subagent_type="polymorphic-agent"
 
 **EVERY Task tool call MUST use:**
 ```
-subagent_type="onex:polymorphic-agent"
+subagent_type="polymorphic-agent"
 ```
 
 **NEVER use these subagent_types:**
@@ -124,7 +124,7 @@ not for spawned polymorphic agents.
 ```
 Task(
   description="Fix import errors in reducer node",
-  subagent_type="onex:polymorphic-agent",
+  subagent_type="polymorphic-agent",
   prompt="**Task**: Fix import errors in node_user_reducer.py
 
   **Context**: [Detailed problem description]
@@ -144,7 +144,7 @@ Task(
 ```
 Task(
   description="Implement Docker optimization feature",
-  subagent_type="onex:polymorphic-agent",
+  subagent_type="polymorphic-agent",
   prompt="**Task**: Add multi-stage Docker build optimization
 
   **Context**: Reduce Docker image size and build time
@@ -166,7 +166,7 @@ Task(
 ```
 Task(
   description="Enhance caching strategy",
-  subagent_type="onex:polymorphic-agent",
+  subagent_type="polymorphic-agent",
   prompt="**Task**: Improve Valkey caching hit rate
 
   **Context**: Current hit rate is 60%, target 80%
@@ -278,7 +278,7 @@ After all fixes are complete, **ASK the user** if they want to:
 - Run Bash/Edit/Write commands directly to execute tasks
 - Execute tasks yourself instead of using Task tool
 - Skip dispatching to polymorphic agents
-- **Use any subagent_type other than "onex:polymorphic-agent"** ← CRITICAL
+- **Use any subagent_type other than "polymorphic-agent"** ← CRITICAL
 - Use `general-purpose`, `Explore`, `Plan`, or any other agent type
 - Reject tasks because they're "enhancements" or "features" instead of bugs
 - **Run git commands in spawned agents** (git add, git commit, git push, git stash, etc.)
@@ -286,7 +286,7 @@ After all fixes are complete, **ASK the user** if they want to:
 - **Assume user wants changes committed** - always ask first
 
 **DO**:
-- **ALWAYS use subagent_type="onex:polymorphic-agent"** for EVERY Task dispatch (bugs, features, enhancements, optimizations, etc.) ← MANDATORY
+- **ALWAYS use subagent_type="polymorphic-agent"** for EVERY Task dispatch (bugs, features, enhancements, optimizations, etc.) ← MANDATORY
 - Dispatch multiple independent pollys in parallel
 - Provide detailed context in each Task prompt
 - Include Intelligence Context from hooks

@@ -279,6 +279,13 @@ log "Session ID: $SESSION_ID"
 log "Project Path: $PROJECT_PATH"
 log "CWD: $CWD"
 
+# Register tab for statusline tab bar (background, non-blocking)
+REGISTER_TAB="${HOOKS_DIR}/scripts/register-tab.sh"
+if [[ -x "$REGISTER_TAB" ]]; then
+    ( "$REGISTER_TAB" "$SESSION_ID" "${PROJECT_PATH:-$CWD}" >> "$LOG_FILE" 2>&1 ) &
+    log "Tab registration started in background"
+fi
+
 # Start emit daemon early (before any Kafka emissions)
 # This ensures daemon is ready for downstream hooks (UserPromptSubmit, PostToolUse)
 start_emit_daemon_if_needed
