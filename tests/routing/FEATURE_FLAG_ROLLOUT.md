@@ -49,10 +49,10 @@ rollback procedure.
 **How**: Add `USE_ONEX_ROUTING_NODES=true` to GitHub Actions env
 **Duration**: 1 sprint
 **Validation**:
-- CI pipeline passes with flag enabled
-- No test regressions
-- Performance benchmarks validated locally (skipped on CI due to environment sensitivity)
-- CI validates golden corpus match and integration tests only
+- CI pipeline passes with flag enabled (golden corpus + integration tests)
+- No test regressions in CI or local runs
+- Performance benchmarks are **local-only** (`pytest.mark.skipif(CI)`) — run manually before advancing to Phase 3
+- CI does NOT validate latency budgets; this is explicitly deferred to local dev verification
 
 **Rollback**: Remove env var from CI configuration
 
@@ -86,11 +86,12 @@ commit that removed the legacy path.
 
 Each gate MUST pass before advancing to the next rollout phase.
 
-### Gate 1: Golden Corpus Match
+### Gate 1: Legacy Regression Harness
 
 - **Requirement**: 100% match within tolerance for all 104 corpus entries
-- **Test**: `tests/routing/test_onex_golden_corpus.py`
+- **Test**: `tests/routing/test_regression_harness.py`
 - **Tolerance**: confidence +/-0.05, selected_agent exact, routing_policy exact
+- **Note**: This gate validates the legacy `AgentRouter` path against the golden corpus. The ONEX path cross-validation is Gate 4.
 
 ### Gate 2: Performance Budget
 
@@ -104,10 +105,13 @@ Each gate MUST pass before advancing to the next rollout phase.
 - **Test**: `tests/integration/test_onex_kafka_integration.py`
 - **Tech debt**: Real Kafka validation deferred (see below)
 
-### Gate 4: Cross-Validation
+### Gate 4: ONEX Cross-Validation
 
-- **Requirement**: ONEX and legacy paths agree on >=80% of routing decisions (agent selection) and >=90% of routing policies
-- **Test**: `tests/routing/test_onex_golden_corpus.py::TestOnexLegacyCrossValidation`
+- **Requirement**: ONEX and legacy paths agree on >=80% of agent selections (`_MIN_AGREEMENT_RATIO`) and >=90% of routing policies
+- **Tests**:
+  - `test_onex_golden_corpus.py::TestOnexLegacyCrossValidation::test_agreement_above_minimum_threshold` (agent agreement)
+  - `test_onex_golden_corpus.py::TestOnexLegacyCrossValidation::test_policy_agreement_is_high` (policy agreement)
+  - `test_onex_golden_corpus.py::TestOnexBehavioralInvariants::test_explicit_agent_requests_always_match` (explicit-request invariant)
 - **Note**: Divergences expected due to ONEX TriggerMatcher enhancements (tiered fuzzy thresholds, HIGH_CONFIDENCE_TRIGGERS)
 
 ---

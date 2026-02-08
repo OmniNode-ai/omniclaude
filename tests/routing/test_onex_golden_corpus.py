@@ -112,9 +112,7 @@ def _load_agent_definitions() -> tuple[ModelAgentDefinition, ...]:
                 )
             )
         except Exception as exc:
-            import warnings
-
-            warnings.warn(f"Skipping agent '{name}': {exc}", stacklevel=2)
+            pytest.fail(f"Agent '{name}' failed to load from registry: {exc}")
     assert defs, (
         f"No valid agents loaded from {_REGISTRY_PATH}. "
         "Check registry schema or agent definition format."
@@ -466,6 +464,11 @@ class TestOnexBehavioralInvariants:
             assert result.confidence == 1.0, (
                 f"Entry {entry['id']}: Explicit request should have "
                 f"confidence 1.0, got {result.confidence}"
+            )
+            expected_agent = entry["expected"]["selected_agent"]
+            assert result.selected_agent == expected_agent, (
+                f"Entry {entry['id']}: Explicit request for "
+                f"'{expected_agent}' routed to '{result.selected_agent}'"
             )
 
     @pytest.mark.asyncio

@@ -159,12 +159,6 @@ def legacy_router() -> AgentRouter:
 
 
 @pytest.fixture(scope="module")
-def onex_handler() -> HandlerRoutingDefault:
-    """Create HandlerRoutingDefault."""
-    return HandlerRoutingDefault()
-
-
-@pytest.fixture(scope="module")
 def agent_definitions() -> tuple[ModelAgentDefinition, ...]:
     """Load agent definitions."""
     return _load_agent_definitions()
@@ -191,6 +185,8 @@ class TestLegacyRouterPerformance:
         corpus_prompts: list[str],
     ) -> None:
         """p95 and p50 routing latency must be under budget (cold cache)."""
+        assert corpus_prompts, "Empty corpus would silently pass benchmarks"
+
         latencies_ms: list[float] = []
 
         for prompt in corpus_prompts:
@@ -232,14 +228,19 @@ class TestOnexHandlerPerformance:
     @pytest.mark.asyncio
     async def test_onex_handler_under_budget(
         self,
-        onex_handler: HandlerRoutingDefault,
         agent_definitions: tuple[ModelAgentDefinition, ...],
         corpus_prompts: list[str],
     ) -> None:
         """p95 and p50 ONEX routing latency must be under budget (cold cache)."""
+        assert corpus_prompts, "Empty corpus would silently pass benchmarks"
+        assert agent_definitions, "Empty registry would silently pass benchmarks"
+
         latencies_ms: list[float] = []
 
         for prompt in corpus_prompts:
+            # Fresh handler per prompt enforces cold-cache per the spec:
+            # "Standard dev machine, cold cache".
+            cold_handler = HandlerRoutingDefault()
             request = ModelRoutingRequest(
                 prompt=prompt,
                 correlation_id=uuid4(),
@@ -247,7 +248,7 @@ class TestOnexHandlerPerformance:
                 confidence_threshold=CONFIDENCE_THRESHOLD,
             )
             start = time.perf_counter()
-            await onex_handler.compute_routing(request)
+            await cold_handler.compute_routing(request)
             elapsed_ms = (time.perf_counter() - start) * 1000
             latencies_ms.append(elapsed_ms)
 
@@ -365,6 +366,8 @@ class TestWrapperPerformance:
         corpus_prompts: list[str],
     ) -> None:
         """route_via_events p95 and p50 must be under budget."""
+        assert corpus_prompts, "Empty corpus would silently pass benchmarks"
+
         wrapper = self._wrapper
 
         latencies_ms: list[float] = []
@@ -385,6 +388,16 @@ class TestWrapperPerformance:
             f"\n    p95: {p95:.2f}ms"
             f"\n    min: {latencies_ms[0]:.2f}ms"
             f"\n    max: {latencies_ms[-1]:.2f}ms"
+        )
+
+        # Verify ONEX path was actually exercised, not just legacy fallthrough.
+        # When USE_ONEX_ROUTING_NODES=true and the ONEX path works, route_via_events
+        # returns early from _route_via_onex_nodes(). Sample one call to confirm.
+        probe = wrapper.route_via_events("debug this error", str(uuid4()))
+        assert probe.get("routing_method") != "fallback", (
+            "Wrapper benchmark did not exercise ONEX path — "
+            f"routing_method={probe.get('routing_method')}, "
+            "check USE_ONEX_ROUTING_NODES is effective"
         )
 
         assert p95 < WRAPPER_P95_BUDGET_MS, (
