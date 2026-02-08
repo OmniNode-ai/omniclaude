@@ -69,7 +69,7 @@ if command -v jq >/dev/null 2>&1; then
     if [ "$NEEDS_UPDATE" -eq 1 ]; then
       # Remove old entry for this GUID if it exists under a different session ID
       [ -n "$EXISTING" ] && rm -f "$EXISTING" 2>/dev/null
-      ( "$HOME/.claude/register-tab.sh" "auto-${CURRENT_ITERM}" "$PROJECT_DIR" >/dev/null 2>&1 ) &
+      ( "$(dirname "$0")/register-tab.sh" "auto-${CURRENT_ITERM}" "$PROJECT_DIR" >/dev/null 2>&1 ) &
     fi
   fi
 
@@ -78,7 +78,7 @@ if command -v jq >/dev/null 2>&1; then
   STALE_THRESHOLD=$((NOW - 86400))
 
   # Read all registry files, parse with single jq invocation
-  # Output: tab_pos\trepo\tticket\titerm_guid (one per line, sorted by tab_pos)
+  # Output: tab_pos|repo|ticket|iterm_guid|project_path (one per line, pipe-delimited, sorted by tab_pos)
   ENTRIES=""
   for f in "$TAB_REGISTRY_DIR"/*.json; do
     [ -f "$f" ] || continue
