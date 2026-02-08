@@ -186,8 +186,9 @@ BEFORE any implementation work, execute these steps IN ORDER:
 
 1. **Create git branch** using Linear's suggested branch name:
    - Get branch name from `mcp__linear-server__get_issue(id="{ticket_id}")` response field `branchName`
-   - Check if branch already exists before creating:
+   - Capture the current branch for rollback, then check if target branch already exists before creating:
    ```bash
+   PREV_BRANCH=$(git branch --show-current)
    if git show-ref --verify --quiet refs/heads/{branchName}; then
        git checkout {branchName}
        BRANCH_CREATED=false
@@ -196,14 +197,16 @@ BEFORE any implementation work, execute these steps IN ORDER:
        BRANCH_CREATED=true
    fi
    ```
-   Track `BRANCH_CREATED` for rollback safety.
+   Track `PREV_BRANCH` and `BRANCH_CREATED` for rollback safety.
 
 2. **Update Linear status** to "In Progress":
    ```
    mcp__linear-server__update_issue(id="{ticket_id}", state="In Progress")
    ```
-   If the update fails with "state not found", query available states with
-   `mcp__linear-server__list_issue_statuses(team="{team_id}")` and use the appropriate state name.
+   If the update fails with "state not found", derive the team ID from the issue data already
+   fetched in step 1 (i.e., `issue.team.id` from the `mcp__linear-server__get_issue` response),
+   then query available states with
+   `mcp__linear-server__list_issue_statuses(team=issue["team"]["id"])` and use the appropriate state name.
 
 3. **Update contract** with branch name:
    - Set `branch` field to the git branch name
@@ -228,7 +231,7 @@ BEFORE any implementation work, execute these steps IN ORDER:
 | Failure Point | Rollback Action |
 |---------------|-----------------|
 | Git checkout fails | Stop. Do not update Linear or contract. Report error. |
-| Linear update fails | If `BRANCH_CREATED=true`, checkout previous branch then delete branch. Report error. |
+| Linear update fails | If `BRANCH_CREATED=true`, run `git checkout ${PREV_BRANCH}` then `git branch -d {branchName}` to delete the newly created branch. Report error. |
 | Contract persistence fails | Log warning and continue (Linear is source of truth). |
 
 **After parallel-solve completes:**

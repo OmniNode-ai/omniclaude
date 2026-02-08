@@ -104,7 +104,7 @@ Task tool (polymorphic-agent):
 
 ### 6. Final Review
 
-After all tasks complete, dispatch final code-reviewer:
+After all tasks complete, dispatch final review subagent using `/local-review --no-commit`:
 - Reviews entire implementation
 - Checks all plan requirements met
 - Validates overall architecture

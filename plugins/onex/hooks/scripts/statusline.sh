@@ -5,8 +5,14 @@
 # Note: This script intentionally continues on errors (no set -e) because
 # status line display should never block Claude Code, even if git fails.
 
+LOG_FILE="${LOG_FILE:-${HOME}/.claude/hooks.log}"
+
 input=$(cat)
-PROJECT_DIR=$(echo "$input" | jq -r '.workspace.project_dir // .workspace.current_dir // "."')
+PROJECT_DIR=$(echo "$input" | jq -r '.workspace.project_dir // .workspace.current_dir // "."' 2>/dev/null)
+if [[ $? -ne 0 || -z "$PROJECT_DIR" || "$PROJECT_DIR" == "null" ]]; then
+  echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] statusline: failed to parse stdin JSON" >> "$LOG_FILE" 2>/dev/null
+  exit 0
+fi
 FOLDER_NAME=$(basename "$PROJECT_DIR")
 
 # Get git info if in a repo
@@ -37,3 +43,5 @@ if [ -n "$GIT_BRANCH" ]; then
 else
   echo -e "[\033[36m${FOLDER_NAME}\033[0m]"
 fi
+
+exit 0

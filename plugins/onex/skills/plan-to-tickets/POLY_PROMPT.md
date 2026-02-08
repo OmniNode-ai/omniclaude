@@ -488,18 +488,13 @@ def validate_plan_dependencies(
     return (True, False)  # proceed, no violations to override
 
 
-# Call before Step 8
-plan_repo = args.repo  # May be None if not specified
-
-should_proceed, arch_violation_override = validate_plan_dependencies(
-    entries=entries,
-    plan_repo=plan_repo,
-    allow_override=args.allow_arch_violation,
-    dry_run=args.dry_run
-)
-
-if not should_proceed:
-    raise SystemExit(1)
+# Example integration - actual call is in main flow below (see Main Execution Flow, Step 7.5):
+# should_proceed, arch_violation_override = validate_plan_dependencies(
+#     entries=entries,
+#     plan_repo=args.repo,
+#     allow_override=args.allow_arch_violation,
+#     dry_run=args.dry_run
+# )
 ```
 
 **Key behavior**:
@@ -539,7 +534,11 @@ def create_tickets_batch(
     Returns:
         {created: [], skipped: [], updated: [], failed: [], id_map: {P1: OMN-xxx}}
     """
+    import os
     import time  # For rate limiting between API calls
+
+    # Configurable rate limiting: delay between Linear API calls (seconds)
+    rate_limit_delay = float(os.environ.get('LINEAR_RATE_LIMIT_DELAY', '0.2'))
 
     # Linear has ~65KB description limit - define once for consistency
     MAX_DESC_SIZE = 60000  # Leave margin for safety
@@ -619,7 +618,7 @@ def create_tickets_batch(
             continue
 
         # Rate limiting: small delay between API calls to avoid hitting Linear rate limits
-        time.sleep(0.2)  # 200ms delay = max 5 requests/second, well under Linear limits
+        time.sleep(rate_limit_delay)
 
         try:
             params = {
@@ -670,6 +669,9 @@ def create_tickets_batch(
 
         if new_blocked_by and not dry_run:
             try:
+                # Rate limiting: consistent with first pass
+                time.sleep(rate_limit_delay)
+
                 # Merge with first-pass dependencies (Linear replaces, doesn't merge)
                 # Only include first-pass deps that exist in id_map (validated IDs)
                 first_pass = item.get('first_pass_blocked_by', [])
@@ -782,7 +784,18 @@ except ValueError as e:
     print(f"Error: {e}")
     raise SystemExit(1)
 
-# Step 5-8: Create tickets
+# Step 7.5: Validate architecture dependencies
+should_proceed, arch_violation_override = validate_plan_dependencies(
+    entries=entries,
+    plan_repo=args.repo,
+    allow_override=args.allow_arch_violation,
+    dry_run=args.dry_run
+)
+
+if not should_proceed:
+    raise SystemExit(1)
+
+# Step 8: Create tickets
 results = create_tickets_batch(
     entries=entries,
     epic=epic,

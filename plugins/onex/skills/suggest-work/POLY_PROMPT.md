@@ -232,6 +232,8 @@ Return the top 5 results in a table with columns: #, ID, Title, Priority, Repo M
 | EventBusAlignment | Event Bus Alignment - OmniNode Platform | `b927f193-1c30-4707-b962-a6d240f705df` |
 | PipelineOptimization | Synchronous Pipeline Optimization | `469d68a3-e5ce-48de-b9e9-80700290869e` |
 
+> **Note**: Project UUIDs should be consolidated in `config.yaml` as the single source of truth. The table above is illustrative; always read from `config.yaml` at runtime to avoid drift.
+
 ## Error Handling
 
 | Error | Behavior |

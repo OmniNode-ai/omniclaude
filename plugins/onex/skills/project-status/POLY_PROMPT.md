@@ -15,7 +15,7 @@ You are generating a project health dashboard with metrics from Linear, includin
 
 ### 1. Determine Target Project
 
-Resolve the project from the provided argument or default. Map shortcut names to Linear project IDs:
+Resolve the project from the provided argument or default. Use `config.yaml` as the source of truth for shortcut to project ID mappings. The table below is illustrative:
 
 | Shortcut | Full Name | Project ID |
 |----------|-----------|------------|

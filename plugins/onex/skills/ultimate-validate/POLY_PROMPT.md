@@ -16,9 +16,9 @@ Before analyzing tooling, understand what users actually do with this codebase.
 
 ```bash
 # Check for workflow docs
-cat README.md 2>/dev/null | head -200
-cat CLAUDE.md 2>/dev/null | head -200
-cat AGENTS.md 2>/dev/null | head -200
+head -200 README.md 2>/dev/null
+head -200 CLAUDE.md 2>/dev/null
+head -200 AGENTS.md 2>/dev/null
 ls docs/ 2>/dev/null
 ```
 

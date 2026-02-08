@@ -239,8 +239,9 @@ def detect_repo_label(args) -> str | None:
         # Extract repo name from URL (e.g., git@github.com:org/omniclaude.git -> omniclaude)
         url = result.stdout.strip()
         repo_name = url.rstrip('.git').split('/')[-1]
-    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError) as e:
         # Fallback to directory name (handles: git not installed, no remote, permission errors)
+        print(f"Warning: git remote detection failed ({type(e).__name__}: {e}), falling back to directory name")
         repo_name = Path.cwd().name
 
     # Map repo name to Linear label (most repos use same name)

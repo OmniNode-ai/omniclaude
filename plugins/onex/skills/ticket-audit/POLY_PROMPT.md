@@ -37,6 +37,21 @@ mcp__linear-server__list_issues(team="{team_name}", state="backlog", limit=250)
 
 Use cursor-based pagination if more than 250 results. Combine all issues into a single working set.
 
+Pagination example for each state query:
+```python
+all_issues = []
+for state in ("started", "unstarted", "backlog"):
+    cursor = None
+    while True:
+        response = mcp__linear-server__list_issues(
+            team="{team_name}", state=state, limit=250, cursor=cursor
+        )
+        all_issues.extend(response["nodes"])
+        if not response.get("pageInfo", {}).get("hasNextPage"):
+            break
+        cursor = response["pageInfo"]["endCursor"]
+```
+
 ### 3. Analyze Issues
 
 Run each of the following checks against the working set:
@@ -127,19 +142,32 @@ For each pair, record:
 
 For each issue that has a `parent` field:
 ```python
-# Check if parent issue exists and is in a completed/cancelled state
+# Collect unique parent IDs first to avoid redundant API calls
+parent_ids = set()
+for issue in all_issues:
+    parent_id = issue.get("parent", {}).get("id") if issue.get("parent") else None
+    if parent_id:
+        parent_ids.add(parent_id)
+
+# Fetch each parent once and build a lookup mapping
+parents = {}
+for parent_id in parent_ids:
+    parents[parent_id] = mcp__linear-server__get_issue(id=parent_id)
+
+# Check for orphans using the pre-fetched parent data
 orphan_tickets = []
 for issue in all_issues:
     parent_id = issue.get("parent", {}).get("id") if issue.get("parent") else None
     if parent_id:
-        parent = mcp__linear-server__get_issue(id=parent_id)
-        parent_state_type = parent.get("state", {}).get("type", "")
-        if parent_state_type in ("completed", "cancelled"):
-            orphan_tickets.append({
-                "child": issue,
-                "parent": parent,
-                "parent_state": parent_state_type
-            })
+        parent = parents.get(parent_id)
+        if parent:
+            parent_state_type = parent.get("state", {}).get("type", "")
+            if parent_state_type in ("completed", "cancelled"):
+                orphan_tickets.append({
+                    "child": issue,
+                    "parent": parent,
+                    "parent_state": parent_state_type
+                })
 ```
 
 For each orphan, record:
@@ -219,7 +247,7 @@ Only apply safe, reversible fixes:
    ```
    Create the "stale" label first if it does not exist:
    ```
-   mcp__linear-server__create_issue_label(name="stale", color="#FFA500", description="No updates in 14+ days")
+   mcp__linear-server__create_issue_label(name="stale", color="#FFA500", description="No updates in {STALE_DAYS}+ days")
    ```
 
 2. **Orphan tickets with completed parents**: Add a comment noting the orphan status

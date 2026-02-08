@@ -455,7 +455,7 @@ if args.blocked_by:
         violations = validate_dependencies(
             ticket_repo=ticket_repo,
             blocked_by_ids=blocked_by_ids,
-            fetch_ticket_fn=lambda id: mcp__linear-server__get_issue(id=id)
+            fetch_ticket_fn=lambda issue_id: mcp__linear-server__get_issue(id=issue_id)
         )
 
         errors = filter_errors(violations)

@@ -298,7 +298,7 @@ def notify_blocked(ticket_id, reason, block_kind, run_id=None, phase=None):
 
     try:
         # emit_client_wrapper is at ${CLAUDE_PLUGIN_ROOT}/hooks/lib/emit_client_wrapper.py
-        from emit_client_wrapper import emit_event
+        from plugins.onex.hooks.lib.emit_client_wrapper import emit_event
         emit_event(
             event_type='notification.blocked',
             payload={
@@ -326,7 +326,7 @@ def notify_completed(ticket_id, summary, run_id=None, phase=None, pr_url=None):
 
     try:
         # emit_client_wrapper is at ${CLAUDE_PLUGIN_ROOT}/hooks/lib/emit_client_wrapper.py
-        from emit_client_wrapper import emit_event
+        from plugins.onex.hooks.lib.emit_client_wrapper import emit_event
         emit_event(
             event_type='notification.completed',
             payload={
@@ -740,26 +740,38 @@ def execute_phase(phase_name, state):
    BASE_REF=$(git merge-base origin/main HEAD)
    COMMIT_SUMMARY=$(git log --oneline "$BASE_REF"..HEAD)
 
-   gh pr create \
-     --title "feat($TICKET_ID): $TICKET_TITLE" \
-     --body "$(cat <<EOF
+   # Sanitize all interpolated values to prevent shell injection and heredoc breakage.
+   # Remove characters that could break quoting or inject commands.
+   sanitize() { printf '%s' "$1" | tr -d '\000-\037' | sed 's/[`$"\\]/\\&/g'; }
+   SAFE_TICKET_ID=$(sanitize "$TICKET_ID")
+   SAFE_TICKET_TITLE=$(sanitize "$TICKET_TITLE")
+   SAFE_RUN_ID=$(sanitize "$RUN_ID")
+   SAFE_COMMIT_SUMMARY=$(sanitize "$COMMIT_SUMMARY")
+
+   # Write PR body to a temp file to avoid heredoc interpolation risks
+   PR_BODY_FILE=$(mktemp)
+   trap 'rm -f "$PR_BODY_FILE"' EXIT
+   cat > "$PR_BODY_FILE" <<PRBODY
    ## Summary
 
    Automated PR created by ticket-pipeline.
 
-   **Ticket**: $TICKET_ID
-   **Pipeline Run**: $RUN_ID
+   **Ticket**: ${SAFE_TICKET_ID}
+   **Pipeline Run**: ${SAFE_RUN_ID}
 
    ## Changes
 
-   $COMMIT_SUMMARY
+   ${SAFE_COMMIT_SUMMARY}
 
    ## Test Plan
 
    - [ ] CI passes
    - [ ] CodeRabbit review addressed
-   EOF
-   )"
+   PRBODY
+
+   gh pr create \
+     --title "feat(${SAFE_TICKET_ID}): ${SAFE_TICKET_TITLE}" \
+     --body-file "$PR_BODY_FILE"
    ```
 
 4. **Update Linear:**

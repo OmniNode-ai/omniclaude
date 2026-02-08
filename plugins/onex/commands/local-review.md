@@ -6,7 +6,7 @@ args:
   - name: uncommitted
     description: Only review uncommitted changes (ignore committed)
     required: false
-  - name: since
+  - name: since_ref
     description: Base ref for diff (branch/commit)
     required: false
   - name: max-iterations
@@ -31,7 +31,7 @@ Review local changes, fix issues, commit fixes, and iterate until clean or max i
 
 ## Execution
 
-1. Parse arguments from `$ARGUMENTS`: `--uncommitted`, `--since <ref>`, `--max-iterations <n>`, `--files <glob>`, `--no-fix`, `--no-commit`
+1. Parse arguments from `$ARGUMENTS`: `--uncommitted`, `--since_ref <ref>`, `--max-iterations <n>`, `--files <glob>`, `--no-fix`, `--no-commit`
 2. Read the poly prompt from `${CLAUDE_PLUGIN_ROOT}/skills/local-review/POLY_PROMPT.md`
 3. Dispatch to polymorphic agent:
 

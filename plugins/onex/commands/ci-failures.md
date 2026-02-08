@@ -19,7 +19,7 @@ Analyze CI/CD failures and provide a concise summary with severity classificatio
 
 ## Execution
 
-1. Parse arguments: `PR_OR_BRANCH` = `$1` or current branch, `WORKFLOW_FILTER` = `$2`
+1. Parse arguments: `PR_OR_BRANCH` = `$pr_number` or current branch, `WORKFLOW_FILTER` = `$workflow`
 2. Read the poly prompt from `${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/POLY_PROMPT.md`
 3. Dispatch to polymorphic agent:
 

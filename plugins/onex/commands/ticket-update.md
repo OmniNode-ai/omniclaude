@@ -36,7 +36,7 @@ Update an existing Linear ticket while preserving structured sections (Contract,
 
 1. Parse arguments from `$ARGUMENTS`:
    - `ticket_id` (required, first positional arg)
-   - Remaining text as `feedback` (free-text update description)
+   - Remaining non-flag text is captured as `feedback` (free-text update description). Flags like `--status` are extracted first; everything else is concatenated as feedback.
    - `--status STATUS`
    - `--labels LABELS` (comma-separated, replaces existing)
    - `--add-labels LABELS` (comma-separated, adds to existing)

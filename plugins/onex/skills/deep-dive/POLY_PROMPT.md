@@ -102,24 +102,15 @@ Extract progress percentages and milestone status for each project.
 
 ### 4. Fetch GitHub PR Data
 
-Execute for each repository in the REPOS list:
+Execute for each repository in the REPOS list (split REPOS by commas into an array and iterate):
 
 ```bash
-gh pr list --repo OmniNode-ai/omnibase_core --state merged \
-  --search "merged:>=${DATE}" \
-  --json number,title,url,files,additions,deletions
-
-gh pr list --repo OmniNode-ai/omnibase_spi --state merged \
-  --search "merged:>=${DATE}" \
-  --json number,title,url,files,additions,deletions
-
-gh pr list --repo OmniNode-ai/omnibase_infra --state merged \
-  --search "merged:>=${DATE}" \
-  --json number,title,url,files,additions,deletions
-
-gh pr list --repo OmniNode-ai/omniclaude --state merged \
-  --search "merged:>=${DATE}" \
-  --json number,title,url,files,additions,deletions
+IFS=',' read -ra REPO_ARRAY <<< "${REPOS}"
+for repo in "${REPO_ARRAY[@]}"; do
+  gh pr list --repo "OmniNode-ai/${repo}" --state merged \
+    --search "merged:>=${DATE}" \
+    --json number,title,url,files,additions,deletions
+done
 ```
 
 Collect from each PR: number, title, URL, files changed count, additions, deletions.
@@ -129,7 +120,8 @@ Collect from each PR: number, title, URL, files changed count, additions, deleti
 Execute in each repository directory:
 
 ```bash
-git log --oneline --since="${DATE}" --until="${DATE} 23:59:59" --author="Jonah"
+AUTHOR="${LINEAR_INSIGHTS_AUTHOR:-$(git config user.name)}"
+git log --oneline --since="${DATE}" --until="${DATE} 23:59:59" --author="${AUTHOR}"
 ```
 
 Count commits per repository and categorize by type (feat, fix, refactor, test, docs, chore).

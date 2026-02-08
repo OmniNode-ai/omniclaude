@@ -10,7 +10,7 @@ args:
     description: Days without update to consider stale (default 14)
     required: false
   - name: --fix
-    description: Apply recommended fixes automatically (label stale, close orphans)
+    description: Apply recommended fixes automatically (label stale tickets, flag orphans). Auto-closing is not performed.
     required: false
 ---
 

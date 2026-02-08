@@ -19,15 +19,16 @@ You are a polymorphic agent updating an existing Linear ticket. Apply the reques
 ### 1. Fetch Current Ticket
 
 ```
-mcp__linear-server__get_issue(id="{TICKET_ID}")
+ticket = mcp__linear-server__get_issue(id="{TICKET_ID}")
 ```
 
-Record:
-- Current description
-- Current status/state
-- Current labels
-- Current assignee
-- Current priority
+Record from `ticket`:
+- Current description (`ticket["description"]`)
+- Current status/state (`ticket["state"]`)
+- Current labels (`ticket["labels"]`)
+- Current assignee (`ticket["assignee"]`)
+- Current priority (`ticket["priority"]`)
+- Team ID (`ticket["team"]["id"]`) -- needed for status validation in Step 5
 
 If the fetch fails, report the error and stop.
 
@@ -53,6 +54,11 @@ def parse_description_sections(description):
     if pipeline_start in description and pipeline_end in description:
         ps_start = description.index(pipeline_start)
         ps_end = description.index(pipeline_end) + len(pipeline_end)
+        if ps_start >= ps_end:
+            raise ValueError(
+                f"Malformed Pipeline Status markers: start ({ps_start}) >= end ({ps_end}). "
+                "The closing marker <!-- /pipeline-status --> appears before the opening ## Pipeline Status."
+            )
         sections["pipeline_status"] = description[ps_start:ps_end]
         description = description[:ps_start] + description[ps_end:]
 
@@ -60,9 +66,9 @@ def parse_description_sections(description):
     contract_marker = "## Contract"
     if contract_marker in description:
         import re
-        # Find --- before ## Contract
+        # Find --- immediately before ## Contract using lookahead
         contract_idx = description.rfind(contract_marker)
-        delimiter_match = re.search(r'\n---\n\s*$', description[:contract_idx])
+        delimiter_match = re.search(r'\n---\n(?=\s*## Contract)', description[:contract_idx + len(contract_marker)])
         if delimiter_match:
             sections["contract"] = description[delimiter_match.start():]
             description = description[:delimiter_match.start()]
@@ -76,14 +82,24 @@ def parse_description_sections(description):
 
 ### 3. Apply Description Changes (if FEEDBACK is not "none")
 
-If `FEEDBACK` contains description changes:
+Initialize tracking variables:
 
-1. Parse the current description into sections (step 2)
+```python
+description_changed = False
+new_description = None
+```
+
+If `FEEDBACK` contains description changes (FEEDBACK != "none"):
+
+1. Parse the current description into sections (step 2):
+   ```python
+   sections = parse_description_sections(ticket["description"])
+   ```
 2. Apply the feedback to the `user_content` portion only:
    - If feedback says "add requirement: X" -- append to requirements section
    - If feedback says "update section Y" -- modify that section in user_content
    - If feedback is general text -- append as a new section or modify existing text as appropriate
-3. Reassemble the description preserving protected sections:
+3. Reassemble the description preserving protected sections and mark as changed:
 
 ```python
 def reassemble_description(sections):
@@ -98,6 +114,9 @@ def reassemble_description(sections):
         parts.append(sections["contract"])
 
     return "\n".join(parts)
+
+new_description = reassemble_description(sections)
+description_changed = True
 ```
 
 ### 4. Apply Metadata Changes
@@ -119,8 +138,8 @@ if LABELS != "unchanged":
 # Label addition (preserves existing)
 if ADD_LABELS != "none":
     new_labels = [l.strip() for l in ADD_LABELS.split(",") if l.strip()]
-    # Fetch existing labels
-    existing_labels = [label["name"] for label in issue.get("labels", {}).get("nodes", [])]
+    # Merge with existing labels from the fetched ticket
+    existing_labels = [label["name"] for label in ticket.get("labels", {}).get("nodes", [])]
     combined = list(set(existing_labels + new_labels))
     update_params["labels"] = combined
 
@@ -139,22 +158,34 @@ if description_changed:
 
 ### 5. Validate Before Write
 
-Before applying the update:
+Derive the team ID from the fetched ticket for status validation:
 
-1. **Status validation**: If changing status, verify the target state exists:
+```python
+team_id = ticket["team"]["id"]
+```
+
+Before applying the update, run validations grouped by type:
+
+**Input validation:**
+
+1. **Priority validation**: If priority is changing, verify it is an integer in range 0-4.
+
+**Resource validation:**
+
+2. **Status validation**: If changing status, verify the target state exists:
    ```
-   mcp__linear-server__list_issue_statuses(team="{team_id}")
+   mcp__linear-server__list_issue_statuses(team=team_id)
    ```
    If the target state name does not exist, report available states and stop.
 
-2. **Label validation**: If setting labels, verify they exist or will be created.
+3. **Label validation**: If setting labels, verify they exist or will be created.
 
-3. **Description integrity**: If description changed, verify:
+**Integrity validation:**
+
+4. **Description integrity**: If description changed, verify:
    - The `## Contract` section (if it existed) is still present and unmodified
    - The `## Pipeline Status` section (if it existed) is still present and unmodified
    - YAML in both sections still parses correctly
-
-4. **Priority validation**: Verify priority is 0-4.
 
 ### 6. Apply Update
 

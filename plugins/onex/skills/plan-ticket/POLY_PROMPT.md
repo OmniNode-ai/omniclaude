@@ -91,6 +91,8 @@ Detect repo from:
 
 Valid repos: `omnibase_core`, `omniclaude`, `omnibase_infra`, `omnidash`, `omniintelligence`, `omnimemory`, `omninode_infra`
 
+> **Note**: If the detected or specified repository name does not match the allowed list above, warn the user rather than silently defaulting to `omniclaude`.
+
 ## No Interactive Prompts
 
 This skill does NOT use AskUserQuestion. It outputs a single copyable block and instructions. The user edits the template themselves and passes it to `/create-ticket`.
