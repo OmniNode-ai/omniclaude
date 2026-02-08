@@ -189,6 +189,13 @@ fi
     log "Publisher stop signal sent"
 ) &
 
+# Clean up tab registry entry
+TAB_REGISTRY_DIR="/tmp/omniclaude-tabs"
+if [[ -n "$SESSION_ID" && -f "$TAB_REGISTRY_DIR/${SESSION_ID}.json" ]]; then
+    rm -f "$TAB_REGISTRY_DIR/${SESSION_ID}.json" 2>/dev/null || true
+    log "Tab registry entry removed"
+fi
+
 # Clean up correlation state
 if [[ -f "${HOOKS_LIB}/correlation_manager.py" ]]; then
     $PYTHON_CMD -c "
