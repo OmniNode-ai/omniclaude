@@ -127,8 +127,21 @@ async def _consume_one(
     topic: str,
     match_fn: Any,
     timeout_seconds: float = 10.0,
+    ready_event: asyncio.Event | None = None,
 ) -> dict[str, Any] | None:
-    """Consume messages until match_fn returns True or timeout."""
+    """Consume messages until match_fn returns True or timeout.
+
+    Args:
+        topic: Kafka topic to consume from.
+        match_fn: Predicate applied to each deserialized message; returns True
+            when the desired message is found.
+        timeout_seconds: Maximum wall-clock time to wait for a matching message.
+        ready_event: If provided, this event is set once the consumer has
+            completed ``seek_to_end()`` and is ready to receive new messages.
+            Callers should ``await ready_event.wait()`` (with a timeout) instead
+            of using a fixed ``asyncio.sleep`` to avoid race conditions caused
+            by Kafka consumer-group rebalancing taking longer than expected.
+    """
     try:
         from aiokafka import AIOKafkaConsumer
     except ImportError:
@@ -149,7 +162,10 @@ async def _consume_one(
         await consumer.start()
         # Seek to end so we only see new messages
         await consumer.seek_to_end()
-        await asyncio.sleep(0.3)
+
+        # Signal that the consumer is positioned and ready for new messages.
+        if ready_event is not None:
+            ready_event.set()
 
         start = asyncio.get_running_loop().time()
         while (asyncio.get_running_loop().time() - start) < timeout_seconds:
@@ -275,15 +291,18 @@ class TestRealBusRoutingEmission:
             policy="trigger_match",
         )
 
-        # Start consumer BEFORE emitting
+        # Start consumer BEFORE emitting; use a readiness event to avoid
+        # race conditions from Kafka consumer-group rebalancing delays.
+        consumer_ready = asyncio.Event()
         consumer_task = asyncio.create_task(
             _consume_one(
                 TOPIC_EVT,
                 match_fn=lambda p: p.get("session_id") == request.session_id,
                 timeout_seconds=10.0,
+                ready_event=consumer_ready,
             )
         )
-        await asyncio.sleep(1.0)
+        await asyncio.wait_for(consumer_ready.wait(), timeout=10.0)
 
         # Emit via handler
         result = await emitter.emit_routing_decision(request)
@@ -314,14 +333,16 @@ class TestRealBusRoutingEmission:
 
         request = _make_emission_request(confidence=0.78)
 
+        consumer_ready = asyncio.Event()
         consumer_task = asyncio.create_task(
             _consume_one(
                 TOPIC_EVT,
                 match_fn=lambda p: p.get("session_id") == request.session_id,
                 timeout_seconds=10.0,
+                ready_event=consumer_ready,
             )
         )
-        await asyncio.sleep(1.0)
+        await asyncio.wait_for(consumer_ready.wait(), timeout=10.0)
 
         result = await emitter.emit_routing_decision(request)
         assert result.success is True
@@ -348,14 +369,16 @@ class TestRealBusRoutingEmission:
         request = _make_emission_request()
         after = datetime.now(UTC)
 
+        consumer_ready = asyncio.Event()
         consumer_task = asyncio.create_task(
             _consume_one(
                 TOPIC_EVT,
                 match_fn=lambda p: p.get("session_id") == request.session_id,
                 timeout_seconds=10.0,
+                ready_event=consumer_ready,
             )
         )
-        await asyncio.sleep(1.0)
+        await asyncio.wait_for(consumer_ready.wait(), timeout=10.0)
 
         result = await emitter.emit_routing_decision(request)
         assert result.success is True
@@ -379,15 +402,17 @@ class TestRealBusRoutingEmission:
         for policy in ("trigger_match", "explicit_request", "fallback_default"):
             request = _make_emission_request(policy=policy)
 
+            consumer_ready = asyncio.Event()
             consumer_task = asyncio.create_task(
                 _consume_one(
                     TOPIC_EVT,
                     match_fn=lambda p, sid=request.session_id: p.get("session_id")
                     == sid,
                     timeout_seconds=10.0,
+                    ready_event=consumer_ready,
                 )
             )
-            await asyncio.sleep(0.5)
+            await asyncio.wait_for(consumer_ready.wait(), timeout=10.0)
 
             result = await emitter.emit_routing_decision(request)
             assert result.success is True, f"Failed for policy={policy}: {result.error}"
@@ -428,6 +453,14 @@ class TestRealBusEmissionPerformance:
                     agent=f"agent-perf-{i}",
                     session_id=f"perf-{uuid4().hex[:8]}",
                 )
+                # NOTE: Intentional access to private static method.
+                # This benchmark isolates serialization cost from I/O by
+                # calling _build_payload directly and publishing with a
+                # pre-started persistent producer.  Using the public
+                # emit_routing_decision() API would include connection setup,
+                # emit_fn dispatch, and result-object construction, which
+                # would conflate those costs with the Kafka publish latency
+                # we are measuring here.
                 payload = HandlerRoutingEmitter._build_payload(
                     request, request.correlation_id
                 )
@@ -474,15 +507,17 @@ class TestRealBusGoldenCorpusFields:
         for expected_confidence in test_values:
             request = _make_emission_request(confidence=expected_confidence)
 
+            consumer_ready = asyncio.Event()
             consumer_task = asyncio.create_task(
                 _consume_one(
                     TOPIC_EVT,
                     match_fn=lambda p, sid=request.session_id: p.get("session_id")
                     == sid,
                     timeout_seconds=10.0,
+                    ready_event=consumer_ready,
                 )
             )
-            await asyncio.sleep(0.5)
+            await asyncio.wait_for(consumer_ready.wait(), timeout=10.0)
 
             result = await emitter.emit_routing_decision(request)
             assert result.success is True
@@ -514,16 +549,17 @@ class TestRealBusGoldenCorpusFields:
         for agent in agents:
             request = _make_emission_request(agent=agent)
 
+            consumer_ready = asyncio.Event()
             consumer_task = asyncio.create_task(
                 _consume_one(
                     TOPIC_EVT,
                     match_fn=lambda p, sid=request.session_id: p.get("session_id")
                     == sid,
                     timeout_seconds=15.0,
+                    ready_event=consumer_ready,
                 )
             )
-            # Allow more time for consumer to subscribe and join group
-            await asyncio.sleep(1.5)
+            await asyncio.wait_for(consumer_ready.wait(), timeout=15.0)
 
             result = await emitter.emit_routing_decision(request)
             assert result.success is True
@@ -542,15 +578,17 @@ class TestRealBusGoldenCorpusFields:
         for policy in ("trigger_match", "explicit_request", "fallback_default"):
             request = _make_emission_request(policy=policy)
 
+            consumer_ready = asyncio.Event()
             consumer_task = asyncio.create_task(
                 _consume_one(
                     TOPIC_EVT,
                     match_fn=lambda p, sid=request.session_id: p.get("session_id")
                     == sid,
                     timeout_seconds=10.0,
+                    ready_event=consumer_ready,
                 )
             )
-            await asyncio.sleep(0.5)
+            await asyncio.wait_for(consumer_ready.wait(), timeout=10.0)
 
             result = await emitter.emit_routing_decision(request)
             assert result.success is True

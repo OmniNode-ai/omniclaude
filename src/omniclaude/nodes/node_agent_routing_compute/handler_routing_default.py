@@ -280,8 +280,10 @@ class HandlerRoutingDefault:
         try:
             text_lower = text.lower()
 
-            # Patterns for specific agent requests (with agent name)
-            # \b prevents false positives: "reuse agent-X", "misuse agent-X"
+            # Patterns for specific agent requests (with agent name).
+            # \b word boundaries are an intentional improvement over legacy
+            # AgentRouter._extract_explicit_agent(), which lacks them and
+            # therefore suffers false positives like "reuse agent-X".
             specific_patterns = [
                 r"\buse\s+(agent-[\w-]+)",  # "use agent-researcher"
                 r"@(agent-[\w-]+)",  # "@agent-researcher"
@@ -303,6 +305,9 @@ class HandlerRoutingDefault:
                             pattern,
                         )
                         return agent_name
+                    # Intentional improvement over legacy AgentRouter: strip
+                    # the "agent-" prefix so "@agent-testing" resolves to the
+                    # registry key "testing". Legacy does not strip and fails.
                     stripped = agent_name.removeprefix("agent-")
                     if stripped != agent_name and stripped in known_agents:
                         logger.debug(

@@ -185,12 +185,12 @@ class TestLegacyRouterPerformance:
     """Performance validation for the legacy AgentRouter path."""
 
     @pytest.mark.benchmark
-    def test_legacy_router_p95_under_budget(
+    def test_legacy_router_under_budget(
         self,
         legacy_router: AgentRouter,
         corpus_prompts: list[str],
     ) -> None:
-        """p95 routing latency must be under 100ms (cold cache)."""
+        """p95 and p50 routing latency must be under budget (cold cache)."""
         latencies_ms: list[float] = []
 
         for prompt in corpus_prompts:
@@ -215,26 +215,6 @@ class TestLegacyRouterPerformance:
         assert p95 < P95_BUDGET_MS, (
             f"Legacy router p95 ({p95:.2f}ms) exceeds {P95_BUDGET_MS}ms budget"
         )
-
-    @pytest.mark.benchmark
-    def test_legacy_router_p50_under_budget(
-        self,
-        legacy_router: AgentRouter,
-        corpus_prompts: list[str],
-    ) -> None:
-        """p50 routing latency must be under 50ms (cold cache)."""
-        latencies_ms: list[float] = []
-
-        for prompt in corpus_prompts:
-            legacy_router.invalidate_cache()
-            start = time.perf_counter()
-            legacy_router.route(prompt, max_recommendations=5)
-            elapsed_ms = (time.perf_counter() - start) * 1000
-            latencies_ms.append(elapsed_ms)
-
-        latencies_ms.sort()
-        p50 = _percentile(latencies_ms, 50)
-
         assert p50 < P50_BUDGET_MS, (
             f"Legacy router p50 ({p50:.2f}ms) exceeds {P50_BUDGET_MS}ms budget"
         )
@@ -250,13 +230,13 @@ class TestOnexHandlerPerformance:
 
     @pytest.mark.benchmark
     @pytest.mark.asyncio
-    async def test_onex_handler_p95_under_budget(
+    async def test_onex_handler_under_budget(
         self,
         onex_handler: HandlerRoutingDefault,
         agent_definitions: tuple[ModelAgentDefinition, ...],
         corpus_prompts: list[str],
     ) -> None:
-        """p95 ONEX routing latency must be under 100ms (cold cache)."""
+        """p95 and p50 ONEX routing latency must be under budget (cold cache)."""
         latencies_ms: list[float] = []
 
         for prompt in corpus_prompts:
@@ -286,33 +266,6 @@ class TestOnexHandlerPerformance:
         assert p95 < P95_BUDGET_MS, (
             f"ONEX handler p95 ({p95:.2f}ms) exceeds {P95_BUDGET_MS}ms budget"
         )
-
-    @pytest.mark.benchmark
-    @pytest.mark.asyncio
-    async def test_onex_handler_p50_under_budget(
-        self,
-        onex_handler: HandlerRoutingDefault,
-        agent_definitions: tuple[ModelAgentDefinition, ...],
-        corpus_prompts: list[str],
-    ) -> None:
-        """p50 ONEX routing latency must be under 50ms (cold cache)."""
-        latencies_ms: list[float] = []
-
-        for prompt in corpus_prompts:
-            request = ModelRoutingRequest(
-                prompt=prompt,
-                correlation_id=uuid4(),
-                agent_registry=agent_definitions,
-                confidence_threshold=CONFIDENCE_THRESHOLD,
-            )
-            start = time.perf_counter()
-            await onex_handler.compute_routing(request)
-            elapsed_ms = (time.perf_counter() - start) * 1000
-            latencies_ms.append(elapsed_ms)
-
-        latencies_ms.sort()
-        p50 = _percentile(latencies_ms, 50)
-
         assert p50 < P50_BUDGET_MS, (
             f"ONEX handler p50 ({p50:.2f}ms) exceeds {P50_BUDGET_MS}ms budget"
         )
@@ -339,29 +292,24 @@ class TestWrapperPerformance:
     """
 
     @pytest.fixture(autouse=True)
-    def _enable_onex_routing(
+    def _setup_wrapper(
         self,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        """Enable ONEX routing so wrapper benchmarks exercise the ONEX path."""
-        monkeypatch.setenv("USE_ONEX_ROUTING_NODES", "true")
+        """Enable ONEX routing and prepare wrapper with emission mocked.
 
-    @staticmethod
-    def _get_wrapper():
-        """Import and reload the wrapper with emission mocked.
-
-        The ONEX routing flag is set by the ``_enable_onex_routing``
-        fixture before this method is called.  The module reload
-        ensures fresh handler singletons and picks up the ONEX
-        node imports.
+        Instead of ``importlib.reload()`` (which creates a new module
+        object while monkeypatch holds references to the old one), we
+        reset handler singletons directly -- the same approach used in
+        ``tests/integration/test_onex_kafka_integration.py``.
 
         Both the legacy ``_emit_event_fn`` and the ONEX
         ``HandlerRoutingEmitter`` emit path are disabled so the
-        benchmark measures pure routing compute without socket
-        I/O to the emit daemon.
+        benchmark measures pure routing compute without socket I/O.
         """
-        import importlib
         import sys
+
+        monkeypatch.setenv("USE_ONEX_ROUTING_NODES", "true")
 
         hooks_lib = str(_PROJECT_ROOT / "plugins" / "onex" / "hooks" / "lib")
         if hooks_lib not in sys.path:
@@ -369,10 +317,22 @@ class TestWrapperPerformance:
 
         import route_via_events_wrapper
 
-        importlib.reload(route_via_events_wrapper)
+        # Save and restore handler singletons (Issue 17 fix).
+        orig_compute = route_via_events_wrapper._compute_handler
+        orig_emit = route_via_events_wrapper._emit_handler
+        orig_history = route_via_events_wrapper._history_handler
+        orig_stats = route_via_events_wrapper._cached_stats
+        orig_router = route_via_events_wrapper._router_instance
 
-        # Disable legacy emission path.
-        route_via_events_wrapper._emit_event_fn = None
+        route_via_events_wrapper._compute_handler = None
+        route_via_events_wrapper._emit_handler = None
+        route_via_events_wrapper._history_handler = None
+        route_via_events_wrapper._cached_stats = None
+        route_via_events_wrapper._router_instance = None
+
+        # Disable legacy emission path (Issue 18 fix: use monkeypatch
+        # for automatic cleanup instead of direct mutation).
+        monkeypatch.setattr(route_via_events_wrapper, "_emit_event_fn", None)
 
         # Disable ONEX emission path.  HandlerRoutingEmitter
         # resolves its emit_fn via
@@ -382,17 +342,30 @@ class TestWrapperPerformance:
         # of a live daemon connection.
         ecw = sys.modules.get("emit_client_wrapper")
         if ecw is not None:
-            ecw.emit_event = lambda event_type, payload: False  # type: ignore[attr-defined]
+            monkeypatch.setattr(
+                ecw,
+                "emit_event",
+                lambda event_type, payload: False,
+            )
 
-        return route_via_events_wrapper
+        self._wrapper = route_via_events_wrapper
+
+        yield  # noqa: PT022
+
+        # Restore handler singletons so other tests see the originals.
+        route_via_events_wrapper._compute_handler = orig_compute
+        route_via_events_wrapper._emit_handler = orig_emit
+        route_via_events_wrapper._history_handler = orig_history
+        route_via_events_wrapper._cached_stats = orig_stats
+        route_via_events_wrapper._router_instance = orig_router
 
     @pytest.mark.benchmark
-    def test_wrapper_p95_under_budget(
+    def test_wrapper_under_budget(
         self,
         corpus_prompts: list[str],
     ) -> None:
-        """route_via_events p95 must be under WRAPPER_P95_BUDGET_MS."""
-        wrapper = self._get_wrapper()
+        """route_via_events p95 and p50 must be under budget."""
+        wrapper = self._wrapper
 
         latencies_ms: list[float] = []
 
@@ -417,26 +390,6 @@ class TestWrapperPerformance:
         assert p95 < WRAPPER_P95_BUDGET_MS, (
             f"Wrapper p95 ({p95:.2f}ms) exceeds {WRAPPER_P95_BUDGET_MS}ms budget"
         )
-
-    @pytest.mark.benchmark
-    def test_wrapper_p50_under_budget(
-        self,
-        corpus_prompts: list[str],
-    ) -> None:
-        """route_via_events p50 must be under WRAPPER_P50_BUDGET_MS."""
-        wrapper = self._get_wrapper()
-
-        latencies_ms: list[float] = []
-
-        for prompt in corpus_prompts:
-            start = time.perf_counter()
-            wrapper.route_via_events(prompt, str(uuid4()))
-            elapsed_ms = (time.perf_counter() - start) * 1000
-            latencies_ms.append(elapsed_ms)
-
-        latencies_ms.sort()
-        p50 = _percentile(latencies_ms, 50)
-
         assert p50 < WRAPPER_P50_BUDGET_MS, (
             f"Wrapper p50 ({p50:.2f}ms) exceeds {WRAPPER_P50_BUDGET_MS}ms budget"
         )

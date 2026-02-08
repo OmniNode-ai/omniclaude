@@ -305,6 +305,17 @@ class TestOnexKafkaIntegration:
         assert "routing_path" in result
         assert "routing_policy" in result
 
+        # Verify specific fallback behavior: compute failure must select
+        # the default polymorphic-agent and use the fallback_default policy.
+        assert result["selected_agent"] == "polymorphic-agent", (
+            f"Compute failure should fall back to polymorphic-agent, "
+            f"got {result['selected_agent']!r}"
+        )
+        assert result["routing_policy"] == "fallback_default", (
+            f"Compute failure should use fallback_default policy, "
+            f"got {result['routing_policy']!r}"
+        )
+
     @pytest.mark.integration
     def test_onex_result_has_all_wrapper_fields(
         self, monkeypatch: pytest.MonkeyPatch
@@ -376,7 +387,12 @@ class TestFeatureFlagToggle:
         result = route_via_events("debug this error", str(uuid4()))
 
         assert result["selected_agent"] is not None
-        assert result["routing_path"] in {"event", "local", "hybrid"}
+        # When the ONEX flag is OFF, routing must use the local path only.
+        # Accepting all three values {"event", "local", "hybrid"} is a
+        # tautology that would mask a broken flag-off code path.
+        assert result["routing_path"] == "local", (
+            f"Flag OFF should force local routing path, got {result['routing_path']!r}"
+        )
         # Legacy path always sets event_attempted=False
         assert result["event_attempted"] is False
 

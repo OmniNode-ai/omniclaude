@@ -111,9 +111,10 @@ def _load_agent_definitions() -> tuple[ModelAgentDefinition, ...]:
                     definition_path=data.get("definition_path"),
                 )
             )
-        except Exception:
-            # Skip invalid agents (matches wrapper behavior)
-            pass
+        except Exception as exc:
+            import warnings
+
+            warnings.warn(f"Skipping agent '{name}': {exc}", stacklevel=2)
     assert defs, (
         f"No valid agents loaded from {_REGISTRY_PATH}. "
         "Check registry schema or agent definition format."
@@ -453,7 +454,11 @@ class TestOnexBehavioralInvariants:
             )
             result = await handler.compute_routing(request)
 
-            # Explicit-category entries MUST produce explicit_request policy
+            # NOTE: The golden corpus records routing_policy="trigger_match" for
+            # explicit requests because the legacy router has no explicit_request
+            # concept. The ONEX handler correctly identifies these as explicit_request.
+            # This divergence is expected and accounted for in the cross-validation
+            # test (which normalizes explicit_request -> trigger_match for comparison).
             assert result.routing_policy == "explicit_request", (
                 f"Entry {entry['id']}: Explicit request should produce "
                 f"routing_policy='explicit_request', got '{result.routing_policy}'"
