@@ -11,21 +11,51 @@ PROJECT_PATH="${2:-$(pwd)}"
 TAB_REGISTRY_DIR="/tmp/omniclaude-tabs"
 mkdir -p "$TAB_REGISTRY_DIR" 2>/dev/null || exit 0
 
-# Get visual tab position via AppleScript (accurate, macOS only)
+# Get visual tab position via AppleScript (macOS only)
+# Strategy: look up the tab containing our session by GUID, not "current tab",
+# because this script may run in the background when another tab is focused.
 TAB_POS=""
 if [ "$(uname)" = "Darwin" ] && command -v osascript >/dev/null 2>&1; then
-    TAB_POS=$(osascript -e '
-        tell application "iTerm2"
-            tell current window
-                repeat with i from 1 to count of tabs
-                    if tab i is current tab then return i
+    # Extract GUID from ITERM_SESSION_ID (format: w{W}t{T}p{P}:{GUID} or plain {GUID})
+    ITERM_GUID=""
+    case "${ITERM_SESSION_ID:-}" in
+        *:*) ITERM_GUID="${ITERM_SESSION_ID##*:}" ;;
+        ?*)  ITERM_GUID="$ITERM_SESSION_ID" ;;
+    esac
+
+    if [ -n "$ITERM_GUID" ]; then
+        # Find tab by matching session GUID (works even when tab isn't focused)
+        TAB_POS=$(osascript 2>/dev/null <<APPLESCRIPT
+tell application "iTerm2"
+    tell current window
+        repeat with i from 1 to count of tabs
+            tell tab i
+                repeat with s in sessions
+                    if unique ID of s contains "$ITERM_GUID" then return i
                 end repeat
             end tell
-        end tell
-    ' 2>/dev/null) || TAB_POS=""
+        end repeat
+    end tell
+end tell
+APPLESCRIPT
+        ) || TAB_POS=""
+    fi
+
+    # Fallback: current tab (correct during SessionStart when this tab IS focused)
+    if [ -z "$TAB_POS" ]; then
+        TAB_POS=$(osascript -e '
+            tell application "iTerm2"
+                tell current window
+                    repeat with i from 1 to count of tabs
+                        if tab i is current tab then return i
+                    end repeat
+                end tell
+            end tell
+        ' 2>/dev/null) || TAB_POS=""
+    fi
 fi
 
-# Fallback: extract from ITERM_SESSION_ID (creation order, less accurate)
+# Last resort fallback: extract from ITERM_SESSION_ID (creation order, less accurate)
 if [ -z "$TAB_POS" ] && [ -n "${ITERM_SESSION_ID:-}" ]; then
     TAB_POS=$(echo "$ITERM_SESSION_ID" | sed -n 's/.*t\([0-9]*\)p.*/\1/p')
     [ -n "$TAB_POS" ] && TAB_POS=$((TAB_POS + 1))
