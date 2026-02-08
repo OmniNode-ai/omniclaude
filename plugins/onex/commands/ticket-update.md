@@ -35,6 +35,7 @@ Update an existing Linear ticket while preserving structured sections (Contract,
 ## Execution
 
 1. Parse arguments from `$ARGUMENTS`:
+   > **Parsing order**: Flags (e.g., `--status`, `--labels`) are extracted first. Remaining unmatched text is captured as `feedback`.
    - `ticket_id` (required, first positional arg)
    - Remaining non-flag text is captured as `feedback` (free-text update description). Flags like `--status` are extracted first; everything else is concatenated as feedback.
    - `--status STATUS`

@@ -4,7 +4,7 @@ You are analyzing a codebase deeply and generating a comprehensive validation co
 
 ## Arguments
 
-- `TARGET_REPO`: The repository root to analyze (default: current working directory)
+_No arguments. Operates on the current working directory._
 
 ## Steps
 
@@ -164,7 +164,7 @@ Run the actual type checker commands found:
 
 ```bash
 # Python
-mypy src/omniclaude/
+mypy src/
 # or
 pyright src/
 
@@ -302,7 +302,7 @@ File: .claude/commands/validate.md
 
 Phases included:
   1. Linting        - ruff check src/ tests/
-  2. Type Checking  - mypy src/omniclaude/
+  2. Type Checking  - mypy src/
   3. Style Checking - ruff format --check src/ tests/
   4. Unit Tests     - pytest tests/ -v
   5. E2E Tests      - [N scenarios from workflow docs]

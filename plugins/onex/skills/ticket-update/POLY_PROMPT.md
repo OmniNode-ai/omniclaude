@@ -66,7 +66,10 @@ def parse_description_sections(description):
     contract_marker = "## Contract"
     if contract_marker in description:
         import re
-        # Find --- immediately before ## Contract using lookahead
+        # Find --- immediately before ## Contract using lookahead.
+        # Lookahead ensures --- is immediately before ## Contract, handling edge cases:
+        # - Multiple --- delimiters: only matches the one before Contract
+        # - Missing ---: falls back to slicing from contract marker directly
         contract_idx = description.rfind(contract_marker)
         delimiter_match = re.search(r'\n---\n(?=\s*## Contract)', description[:contract_idx + len(contract_marker)])
         if delimiter_match:
@@ -130,6 +133,10 @@ update_params = {"id": TICKET_ID}
 if STATUS != "unchanged":
     update_params["state"] = STATUS
 
+# Validate: LABELS and ADD_LABELS are mutually exclusive
+if LABELS != "unchanged" and ADD_LABELS != "none":
+    raise ValueError("Cannot use both LABELS (replace all) and ADD_LABELS (append) simultaneously. Choose one.")
+
 # Label replacement
 if LABELS != "unchanged":
     label_list = [l.strip() for l in LABELS.split(",") if l.strip()]
@@ -157,6 +164,8 @@ if description_changed:
 ```
 
 ### 5. Validate Before Write
+
+Validations are grouped: input validation, resource validation, integrity validation.
 
 Derive the team ID from the fetched ticket for status validation:
 

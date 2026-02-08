@@ -186,18 +186,24 @@ BEFORE any implementation work, execute these steps IN ORDER:
 
 1. **Create git branch** using Linear's suggested branch name:
    - Get branch name from `mcp__linear-server__get_issue(id="{ticket_id}")` response field `branchName`
-   - Capture the current branch for rollback, then check if target branch already exists before creating:
+   - Capture the current branch for rollback, sanitize the branch name, then check if target branch already exists before creating:
    ```bash
-   PREV_BRANCH=$(git branch --show-current)
-   if git show-ref --verify --quiet refs/heads/{branchName}; then
-       git checkout {branchName}
+   PREV_BRANCH="$(git branch --show-current)"
+   # Sanitize branch name from Linear - allow only safe git branch characters
+   BRANCH="$(printf '%s' "{branchName}" | tr -cd '[:alnum:]/._-')"
+   if [ -z "$BRANCH" ]; then
+       echo "Error: Invalid branch name from Linear: {branchName}"
+       exit 1
+   fi
+   if git show-ref --verify --quiet "refs/heads/${BRANCH}"; then
+       git checkout "${BRANCH}"
        BRANCH_CREATED=false
    else
-       git checkout -b {branchName}
+       git checkout -b "${BRANCH}"
        BRANCH_CREATED=true
    fi
    ```
-   Track `PREV_BRANCH` and `BRANCH_CREATED` for rollback safety.
+   Track `PREV_BRANCH`, `BRANCH`, and `BRANCH_CREATED` for rollback safety.
 
 2. **Update Linear status** to "In Progress":
    ```
@@ -231,7 +237,7 @@ BEFORE any implementation work, execute these steps IN ORDER:
 | Failure Point | Rollback Action |
 |---------------|-----------------|
 | Git checkout fails | Stop. Do not update Linear or contract. Report error. |
-| Linear update fails | If `BRANCH_CREATED=true`, run `git checkout ${PREV_BRANCH}` then `git branch -d {branchName}` to delete the newly created branch. Report error. |
+| Linear update fails | Always run `git checkout "${PREV_BRANCH}"` to return to original branch. If `BRANCH_CREATED=true`, also run `git branch -d "${BRANCH}"` to delete the newly created branch. Report error. |
 | Contract persistence fails | Log warning and continue (Linear is source of truth). |
 
 **After parallel-solve completes:**
@@ -351,7 +357,7 @@ def extract_contract(description: str) -> dict | None:
 
 ```python
 def update_description_with_contract(description: str, contract: dict) -> str:
-    """Update ticket description with contract, preserving original content."""
+    """Update ticket description with contract, preserving all surrounding content."""
     import yaml
     import re
 
@@ -360,7 +366,21 @@ def update_description_with_contract(description: str, contract: dict) -> str:
     contract_block = f"\n---\n{marker}\n\n```yaml\n{contract_yaml}```\n"
 
     if marker in description:
+        # Try to replace only the YAML code-fence content after the marker
+        pattern = rf"({re.escape(marker)}\s*\n\s*```(?:yaml|YAML)?\s*\n)(.*?)(\n\s*```)"
+        match = re.search(pattern, description, flags=re.DOTALL)
+        if match:
+            return description[:match.start(1)] + f"{marker}\n\n```yaml\n{contract_yaml}```" + description[match.end(3):]
+
+        # Fallback: replace from marker to next section or end
         idx = description.rfind(marker)
+        # Look for next ## heading after the contract
+        next_section = re.search(r'\n## (?!Contract)', description[idx + len(marker):])
+        if next_section:
+            end_idx = idx + len(marker) + next_section.start()
+            return description[:idx] + contract_block.rstrip() + "\n" + description[end_idx:]
+
+        # No content after contract - original behavior
         delimiter_match = re.search(r'\n---\n\s*$', description[:idx])
         if delimiter_match:
             return description[:delimiter_match.start()] + contract_block

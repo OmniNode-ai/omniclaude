@@ -79,7 +79,7 @@ Fetch Linear data using MCP tool calls:
 ```python
 mcp__linear-server__list_issues(
     assignee="me",
-    updatedAt="-P{DAYS}D",  # e.g., "-P1D" for 1 day, "-P7D" for weekly
+    updatedAt="-P${DAYS}D",  # e.g., "-P1D" for 1 day, "-P7D" for weekly
     limit=100
 )
 ```
@@ -120,8 +120,11 @@ Collect from each PR: number, title, URL, files changed count, additions, deleti
 Execute in each repository directory:
 
 ```bash
+# Calculate start date based on DAYS parameter (supports both GNU and macOS date)
+START_DATE=$(date -d "${DATE} -$((DAYS - 1)) days" +%Y-%m-%d 2>/dev/null || date -v-$((DAYS - 1))d -j -f "%Y-%m-%d" "${DATE}" +%Y-%m-%d)
+
 AUTHOR="${LINEAR_INSIGHTS_AUTHOR:-$(git config user.name)}"
-git log --oneline --since="${DATE}" --until="${DATE} 23:59:59" --author="${AUTHOR}"
+git log --oneline --since="${START_DATE}" --until="${DATE} 23:59:59" --author="${AUTHOR}"
 ```
 
 Count commits per repository and categorize by type (feat, fix, refactor, test, docs, chore).
@@ -171,6 +174,8 @@ Compile all collected data into the deep dive format with these sections:
 If `--save` or `--output` was specified, write the report to the output file:
 
 - Default filename format: `${MONTH_UPPER}_${DAY}_${YEAR}_DEEP_DIVE.md`
+  These variables are derived from `DATE`: `MONTH_UPPER` = uppercase full month name, `DAY` = zero-padded day, `YEAR` = four-digit year
+  (e.g., DATE=2025-12-09 produces `DECEMBER_09_2025_DEEP_DIVE.md`)
 - Default output directory: `${LINEAR_INSIGHTS_OUTPUT_DIR}` or `${HOME}/Code/omni_save`
 - `--output FILE` overrides both directory and filename
 

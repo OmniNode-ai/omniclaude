@@ -24,6 +24,7 @@ force_run = FORCE_RUN == "true"
 skip_to = None if SKIP_TO == "none" else SKIP_TO
 
 if skip_to:
+    # Canonical phase order - referenced in multiple code blocks throughout this prompt
     valid_phases = ["implement", "local_review", "create_pr", "pr_release_ready", "ready_for_merge"]
     if skip_to not in valid_phases:
         print(f"Error: Invalid phase '{skip_to}'. Valid: {valid_phases}")
@@ -161,7 +162,9 @@ if lock_path.exists():
             print(f"Error: Lock exists for {ticket_id} but no state file. Use --force-run to override.")
             exit(1)
 
-# Write lock file
+# Note: On resume, the lock file is written initially with a fresh run_id (line ~173)
+# then overwritten with the correct run_id from saved state (line ~189).
+# This is intentional: the initial write claims the lock, the second write corrects the ID.
 run_id = str(uuid.uuid4())[:8]
 lock_data = {
     "run_id": run_id,
@@ -309,8 +312,9 @@ def notify_blocked(ticket_id, reason, block_kind, run_id=None, phase=None):
                 'session_id': os.environ.get('CLAUDE_SESSION_ID', 'unknown')
             }
         )
-    except Exception:
-        pass  # Best-effort, non-blocking
+    except Exception as e:
+        import sys
+        print(f"Warning: Notification failed: {e}", file=sys.stderr)
 ```
 
 ### notify_completed
@@ -337,8 +341,9 @@ def notify_completed(ticket_id, summary, run_id=None, phase=None, pr_url=None):
                 'session_id': os.environ.get('CLAUDE_SESSION_ID', 'unknown')
             }
         )
-    except Exception:
-        pass  # Best-effort, non-blocking
+    except Exception as e:
+        import sys
+        print(f"Warning: Notification failed: {e}", file=sys.stderr)
 ```
 
 ### get_current_repo
@@ -403,6 +408,10 @@ artifacts:"""
     pipeline_end = "<!-- /pipeline-status -->"
     pipeline_block = f"\n\n{pipeline_start}\n\n```yaml\n{summary_yaml}\n```\n\n{pipeline_end}\n"
 
+    # Marker-based description patching: handles three cases:
+    # 1. Both start+end markers present: replace between markers
+    # 2. Only start marker: regex replace after start marker
+    # 3. No markers: append to end (before ## Contract if present)
     if pipeline_start in description and pipeline_end in description:
         start_idx = description.index(pipeline_start)
         end_idx = description.index(pipeline_end) + len(pipeline_end)
@@ -424,6 +433,11 @@ artifacts:"""
         required_keys = {"run_id", "phase"}
         if not isinstance(parsed, dict) or not required_keys.issubset(parsed.keys()):
             raise ValueError(f"Missing required keys: {required_keys - set(parsed.keys() if isinstance(parsed, dict) else [])}")
+        if not isinstance(parsed.get("run_id"), str):
+            parsed["run_id"] = str(parsed["run_id"])  # Coerce to string
+        valid_phases = PHASES + ["done"]
+        if parsed.get("phase") not in valid_phases:
+            raise ValueError(f"Invalid phase '{parsed.get('phase')}', expected one of: {valid_phases}")
     except (yaml.YAMLError, ValueError) as e:
         print(f"Warning: Pipeline summary YAML validation failed: {e}")
         notify_blocked(ticket_id, f"YAML validation failed for pipeline summary: {e}", "failed_exception",
@@ -449,6 +463,10 @@ def parse_phase_output(raw_output, phase_name):
         artifacts: dict
         reason: str | None
         block_kind: str | None
+
+    NOTE: This parses natural language output from skills, which is inherently fragile.
+    Future improvement: skills should return structured JSON output instead.
+    Current patterns are based on observed skill output formats.
     """
     result = {
         "status": "completed",
@@ -531,6 +549,10 @@ for phase_name in phase_order:
     phase_data["started_at"] = datetime.now(timezone.utc).isoformat()
     save_state(state, state_path)
 
+    # Lock release policy:
+    # - Unexpected exceptions (bugs, crashes): RELEASE lock for clean retry
+    # - Expected failures (blocked, failed phases): PRESERVE lock for resume with --force-run
+    # This intentional asymmetry allows resume on expected failures while cleaning up after bugs.
     try:
         result = execute_phase(phase_name, state)
     except Exception as e:
