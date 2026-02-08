@@ -280,8 +280,10 @@ class HandlerRoutingDefault:
         try:
             text_lower = text.lower()
 
-            # Patterns for specific agent requests (with agent name)
-            # \b prevents false positives: "reuse agent-X", "misuse agent-X"
+            # Patterns for specific agent requests (with agent name).
+            # \b word boundaries are an intentional improvement over legacy
+            # AgentRouter._extract_explicit_agent(), which lacks them and
+            # therefore suffers false positives like "reuse agent-X".
             specific_patterns = [
                 r"\buse\s+(agent-[\w-]+)",  # "use agent-researcher"
                 r"@(agent-[\w-]+)",  # "@agent-researcher"
@@ -293,7 +295,9 @@ class HandlerRoutingDefault:
                 match = re.search(pattern, text_lower)
                 if match:
                     agent_name = match.group(1)
-                    # Verify agent exists in registry
+                    # Verify agent exists in registry.
+                    # Registry keys may or may not have the "agent-" prefix,
+                    # so try the captured name first, then stripped.
                     if agent_name in known_agents:
                         logger.debug(
                             "Extracted explicit agent: %s (pattern=%s)",
@@ -301,6 +305,18 @@ class HandlerRoutingDefault:
                             pattern,
                         )
                         return agent_name
+                    # Intentional improvement over legacy AgentRouter: strip
+                    # the "agent-" prefix so "@agent-testing" resolves to the
+                    # registry key "testing". Legacy does not strip and fails.
+                    stripped = agent_name.removeprefix("agent-")
+                    if stripped != agent_name and stripped in known_agents:
+                        logger.debug(
+                            "Extracted explicit agent: %s (pattern=%s, "
+                            "resolved via prefix strip)",
+                            stripped,
+                            pattern,
+                        )
+                        return stripped
 
             # Patterns for generic agent requests (no specific agent name)
             # These should default to polymorphic-agent

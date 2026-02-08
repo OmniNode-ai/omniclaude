@@ -749,7 +749,7 @@ class TestEventRegistryIntegration:
             assert isinstance(reg.fan_out, list)
             for rule in reg.fan_out:
                 assert isinstance(rule, FanOutRule)
-                assert isinstance(rule.topic_base, (str, TopicBase))
+                assert isinstance(rule.topic_base, str | TopicBase)
 
     def test_all_registrations_have_at_least_one_fanout(self) -> None:
         """Verify all registrations have at least one fan-out rule."""
