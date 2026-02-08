@@ -14,9 +14,10 @@ Exercises the full ONEX routing pipeline:
 
 All Kafka interactions are mocked via the session-scoped conftest mock.
 The emit daemon is replaced with a test double that captures payloads.
+These tests run in every default pytest invocation (no env var gating).
 
 Real bus validation is in test_onex_kafka_real_bus.py, gated behind
-KAFKA_INTEGRATION_TESTS=real. These mock tests remain as the CI fast path.
+KAFKA_INTEGRATION_TESTS=real.
 """
 
 from __future__ import annotations
@@ -179,7 +180,6 @@ class TestOnexKafkaIntegration:
     a 5-second window.
     """
 
-    @pytest.mark.integration
     def test_onex_path_routes_and_emits(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Full ONEX path: compute + emit + result shaping."""
         monkeypatch.setenv("USE_ONEX_ROUTING_NODES", "true")
@@ -239,7 +239,6 @@ class TestOnexKafkaIntegration:
         assert emitted_payloads[0]["agent"] == "agent-testing"
         assert emitted_payloads[0]["confidence"] == 0.85
 
-    @pytest.mark.integration
     def test_onex_emission_failure_is_non_blocking(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -272,7 +271,6 @@ class TestOnexKafkaIntegration:
         assert result["selected_agent"] == "agent-testing"
         assert result["confidence"] == 0.85
 
-    @pytest.mark.integration
     def test_onex_compute_failure_falls_back_to_legacy(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -316,7 +314,6 @@ class TestOnexKafkaIntegration:
             f"got {result['routing_policy']!r}"
         )
 
-    @pytest.mark.integration
     def test_onex_result_has_all_wrapper_fields(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -377,7 +374,6 @@ class TestFeatureFlagToggle:
     3. Flag toggle mid-session: clean switch without stale state
     """
 
-    @pytest.mark.integration
     def test_flag_off_uses_legacy_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """When flag is off, legacy path is used regardless of ONEX availability."""
         monkeypatch.delenv("USE_ONEX_ROUTING_NODES", raising=False)
@@ -396,7 +392,6 @@ class TestFeatureFlagToggle:
         # Legacy path always sets event_attempted=False
         assert result["event_attempted"] is False
 
-    @pytest.mark.integration
     def test_flag_on_attempts_onex_path(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """When flag is on and handlers available, ONEX path is used."""
         monkeypatch.setenv("USE_ONEX_ROUTING_NODES", "true")
@@ -431,7 +426,6 @@ class TestFeatureFlagToggle:
         assert result["confidence"] == 0.90
         mock_compute.compute_routing.assert_called_once()
 
-    @pytest.mark.integration
     def test_flag_on_but_handlers_unavailable_falls_back(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -460,7 +454,6 @@ class TestEmissionPayloadStructure:
     envelope (event_type, correlation_id, timestamp, payload schema).
     """
 
-    @pytest.mark.integration
     def test_emission_request_has_required_fields(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -508,7 +501,6 @@ class TestEmissionPayloadStructure:
         assert req.emitted_at is not None
         assert isinstance(req.correlation_id, UUID)
 
-    @pytest.mark.integration
     def test_emission_result_reports_topics(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
