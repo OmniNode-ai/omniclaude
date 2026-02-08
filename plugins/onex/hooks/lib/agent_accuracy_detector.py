@@ -26,7 +26,7 @@ class AgentMatchResult(NamedTuple):
 
     score: float  # 0.0-1.0 accuracy score
     method: str  # Scoring method used
-    matched_triggers: list[str]  # Which triggers matched
+    matched_triggers: tuple[str, ...]  # Which triggers matched
     total_triggers: int  # Total triggers evaluated
 
 
@@ -65,7 +65,7 @@ def calculate_agent_match_score(
         return AgentMatchResult(
             score=0.0,
             method="no_triggers",
-            matched_triggers=[],
+            matched_triggers=(),
             total_triggers=0,
         )
 
@@ -95,7 +95,7 @@ def calculate_agent_match_score(
     return AgentMatchResult(
         score=score,
         method="trigger_overlap",
-        matched_triggers=matched,
+        matched_triggers=tuple(matched),
         total_triggers=total,
     )
 

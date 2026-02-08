@@ -601,6 +601,21 @@ class TestFalsePositiveRejection:
         )
         assert result.outcome != OUTCOME_FAILED
 
+    def test_zero_failed_does_not_trigger(self) -> None:
+        """'0 FAILED' in test summary output should NOT trigger FAILED.
+
+        A test summary like '10 passed, 0 FAILED' indicates a successful run.
+        The FAILED marker pattern requires a non-zero leading digit to avoid
+        this false positive.
+        """
+        result = derive_session_outcome(
+            exit_code=0,
+            session_output="10 passed, 0 FAILED",
+            tool_calls_completed=5,
+            duration_seconds=120.0,
+        )
+        assert result.outcome != OUTCOME_FAILED
+
     def test_error_colon_mid_sentence_does_not_trigger(self) -> None:
         """'This is an Error: none found' mid-sentence should NOT trigger."""
         result = derive_session_outcome(

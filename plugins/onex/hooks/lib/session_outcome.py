@@ -36,7 +36,9 @@ ERROR_MARKER_REGEXES: tuple[re.Pattern[str], ...] = (
     # "Traceback" as a standalone word (already distinctive)
     re.compile(r"\bTraceback\b"),
     # "FAILED" preceded by a count or test-related word, or at end of a line
-    re.compile(r"\d+\s+FAILED\b|[Tt]ests?\s+FAILED\b|\bFAILED\s*$", re.MULTILINE),
+    re.compile(
+        r"[1-9]\d*\s+FAILED\b|[Tt]ests?\s+FAILED\b|(?<!0 )\bFAILED\s*$", re.MULTILINE
+    ),
 )
 
 # Patterns that indicate a session completed meaningful work.

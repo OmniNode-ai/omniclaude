@@ -363,15 +363,22 @@ def _run_async(coro: Any) -> Any:
     """Run a coroutine from synchronous code.
 
     Uses asyncio.run() for the common case.  If an event loop is already
-    running (e.g., nested async context), falls back to
-    loop.run_until_complete() to avoid the RuntimeError that asyncio.run()
-    raises in that scenario.
+    running (e.g., nested async context), offloads to a new thread with
+    its own event loop to avoid RuntimeError.
     """
     try:
-        loop = asyncio.get_running_loop()
+        asyncio.get_running_loop()
     except RuntimeError:
+        # No loop running — safe to create one
         return asyncio.run(coro)
-    return loop.run_until_complete(coro)
+
+    # Loop is running — cannot use run_until_complete or asyncio.run.
+    # Offload to a new thread that creates its own event loop.
+    import concurrent.futures
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(asyncio.run, coro)
+        return future.result(timeout=10)
 
 
 def _get_cached_stats() -> Any:

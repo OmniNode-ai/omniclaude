@@ -11,6 +11,7 @@ exist, this script will flag them as duplicates.
 Exclusions:
 - __init__.py (expected to exist in every package)
 - conftest.py (pytest configuration files)
+- node.py (ONEX convention: each node directory has a node.py entry point)
 - test_*.py files (test files may have duplicates)
 - Files in lib/ directory (utility modules)
 - Files in _archive/ directory (archived code)
@@ -187,6 +188,7 @@ Examples:
 
 Exclusions:
   - __init__.py, conftest.py (common files)
+  - node.py (ONEX node entry points)
   - test_*.py, *_test.py (test files)
   - Files in lib/ directory
   - Files in _archive/ directory

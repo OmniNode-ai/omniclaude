@@ -112,6 +112,8 @@ fi
 #   - tool_calls_completed: Extracted from numTurns (best-effort);
 #     may still be 0 if field is absent from SessionEnd payload.
 #     SUCCESS requires tool_calls > 0 AND completion markers.
+# Unreachable gates: SUCCESS (no completion markers in reason codes),
+#   FAILED (exit_code always 0, no error markers in reason codes).
 # Result: Outcome currently resolves to abandoned or unknown only.
 # Future tickets:
 #   - tool_calls_completed: Wire from session aggregation service
@@ -139,6 +141,9 @@ print(result.outcome)
 " 2>>"$LOG_FILE") || DERIVED_OUTCOME="unknown"
 
 log "Session outcome derived: ${DERIVED_OUTCOME}"
+if [[ "$DERIVED_OUTCOME" == "unknown" || "$DERIVED_OUTCOME" == "abandoned" ]]; then
+    log "Phase 1: outcome=$DERIVED_OUTCOME (SUCCESS/FAILED gates require wired session_output and tool_calls; see OMN-1892)"
+fi
 
 # Emit session.ended event to Kafka (async, non-blocking)
 # Uses emit_client_wrapper with daemon fan-out (OMN-1632)

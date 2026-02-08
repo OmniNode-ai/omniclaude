@@ -46,13 +46,13 @@ class TestNoTriggers:
         )
         assert result.method == "no_triggers"
 
-    def test_empty_triggers_returns_empty_matched_list(self) -> None:
+    def test_empty_triggers_returns_empty_matched_tuple(self) -> None:
         """Empty agent_triggers list yields empty matched_triggers."""
         result = calculate_agent_match_score(
             agent_triggers=[],
             context_signals=["signal"],
         )
-        assert result.matched_triggers == []
+        assert result.matched_triggers == ()
 
     def test_empty_triggers_returns_zero_total(self) -> None:
         """Empty agent_triggers list yields total_triggers=0."""
@@ -70,7 +70,7 @@ class TestNoTriggers:
         )
         assert result.score == 0.0
         assert result.method == "no_triggers"
-        assert result.matched_triggers == []
+        assert result.matched_triggers == ()
         assert result.total_triggers == 0
 
 
@@ -118,7 +118,7 @@ class TestFullMatch:
             context_signals=["debug session active"],
         )
         assert result.score == 1.0
-        assert result.matched_triggers == ["debug"]
+        assert result.matched_triggers == ("debug",)
         assert result.total_triggers == 1
 
 
@@ -147,7 +147,7 @@ class TestPartialMatch:
             agent_triggers=["pytest", "jest", "cypress"],
             context_signals=["running pytest suite"],
         )
-        assert result.matched_triggers == ["pytest"]
+        assert result.matched_triggers == ("pytest",)
 
     def test_total_triggers_unchanged_by_match_count(self) -> None:
         """total_triggers always equals len(agent_triggers) regardless of matches."""
@@ -186,13 +186,13 @@ class TestNoMatch:
         )
         assert result.method == "trigger_overlap"
 
-    def test_no_match_empty_matched_list(self) -> None:
+    def test_no_match_empty_matched_tuple(self) -> None:
         """matched_triggers is empty when nothing matches."""
         result = calculate_agent_match_score(
             agent_triggers=["api design", "openapi"],
             context_signals=["database migration", "schema update"],
         )
-        assert result.matched_triggers == []
+        assert result.matched_triggers == ()
 
     def test_no_match_total_triggers_preserved(self) -> None:
         """total_triggers still reflects input count even when nothing matches."""
@@ -213,7 +213,7 @@ class TestCaseInsensitivity:
             context_signals=["api design patterns"],
         )
         assert result.score == 1.0
-        assert result.matched_triggers == ["API Design"]
+        assert result.matched_triggers == ("API Design",)
 
     def test_lowercase_trigger_matches_uppercase_signal(self) -> None:
         """Trigger 'api design' matches signal 'API DESIGN PATTERNS'."""
@@ -238,7 +238,7 @@ class TestCaseInsensitivity:
             context_signals=["kubernetes cluster setup"],
         )
         assert result.score == 1.0
-        assert result.matched_triggers == ["KUBERNETES"]
+        assert result.matched_triggers == ("KUBERNETES",)
 
     def test_original_trigger_casing_preserved_in_matched(self) -> None:
         """matched_triggers preserves original casing of the trigger string."""
@@ -310,7 +310,7 @@ class TestEdgeCases:
         )
         assert result.score == 0.0
         assert result.method == "trigger_overlap"
-        assert result.matched_triggers == []
+        assert result.matched_triggers == ()
         assert result.total_triggers == 2
 
     def test_single_trigger_single_signal_no_match(self) -> None:
@@ -415,7 +415,7 @@ class TestEdgeCases:
         # After filtering: ["api", "debug"] -> 1 of 2 matches
         assert result.total_triggers == 2
         assert result.score == pytest.approx(0.5)
-        assert result.matched_triggers == ["api"]
+        assert result.matched_triggers == ("api",)
 
     def test_unicode_in_triggers_and_signals(self) -> None:
         """Unicode characters in triggers and signals are handled."""
@@ -454,13 +454,13 @@ class TestResultStructure:
         )
         assert isinstance(result.method, str)
 
-    def test_matched_triggers_is_list_of_strings(self) -> None:
-        """matched_triggers field is a list of strings."""
+    def test_matched_triggers_is_tuple_of_strings(self) -> None:
+        """matched_triggers field is a tuple of strings."""
         result = calculate_agent_match_score(
             agent_triggers=["test", "debug"],
             context_signals=["test session", "debug log"],
         )
-        assert isinstance(result.matched_triggers, list)
+        assert isinstance(result.matched_triggers, tuple)
         for item in result.matched_triggers:
             assert isinstance(item, str)
 
@@ -581,7 +581,7 @@ class TestRealisticScenarios:
             ],
         )
         assert result.score == 0.0
-        assert result.matched_triggers == []
+        assert result.matched_triggers == ()
 
     def test_deterministic_results(self) -> None:
         """Same inputs always produce the same output (pure function)."""
