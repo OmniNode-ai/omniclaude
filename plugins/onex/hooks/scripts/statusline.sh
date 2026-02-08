@@ -74,15 +74,20 @@ if [ -d "$TAB_REGISTRY_DIR" ] && command -v jq >/dev/null 2>&1; then
   if [ -n "$ENTRIES" ]; then
     # Single jq call: parse all entries, sort by tab_pos, output tab-delimited
     # Includes project_path so we can read live branch from git
+    # Use pipe-delimited output (tab-delimited breaks on empty fields with bash read)
     FORMATTED=$(echo "$ENTRIES" | jq -sr '
       [.[] | select(.repo != null)] |
       sort_by(.tab_pos // 999) |
-      .[] | "\(.tab_pos // "?")\t\(.repo // "?")\t\(.ticket // "")\t\(.iterm_guid // "")\t\(.project_path // "")"
+      .[] | "\(.tab_pos // "?")|\(.repo // "?")|\(.ticket // "-")|\(.iterm_guid // "-")|\(.project_path // "-")"
     ' 2>/dev/null)
 
     if [ -n "$FORMATTED" ]; then
-      while IFS=$'\t' read -r tab_pos repo ticket iterm_guid project_path; do
+      while IFS='|' read -r tab_pos repo ticket iterm_guid project_path; do
         [ -z "$tab_pos" ] && continue
+        # Convert placeholders back to empty
+        [ "$ticket" = "-" ] && ticket=""
+        [ "$iterm_guid" = "-" ] && iterm_guid=""
+        [ "$project_path" = "-" ] && project_path=""
 
         # Read live branch from git if project_path is available (keeps ticket current after merges)
         if [ -n "$project_path" ] && [ -d "$project_path" ]; then
