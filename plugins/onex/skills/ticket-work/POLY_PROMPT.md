@@ -532,7 +532,7 @@ When waiting for human input or completing work, send a Slack notification via t
 
 ```python
 # Blocked notification — emit_client_wrapper is at ${CLAUDE_PLUGIN_ROOT}/hooks/lib/emit_client_wrapper.py
-from emit_client_wrapper import emit_event
+from plugins.onex.hooks.lib.emit_client_wrapper import emit_event
 emit_event(
     event_type='notification.blocked',
     payload={
