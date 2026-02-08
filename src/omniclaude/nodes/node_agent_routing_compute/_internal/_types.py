@@ -31,6 +31,7 @@ class AgentData(TypedDict, total=False):
     Keys:
         activation_triggers: Phrases that trigger this agent.
         title: Human-readable agent description.
+        description: Extended agent description (falls back to ``title``).
         capabilities: Capability strings the agent provides.
         domain_context: Domain classification for context scoring.
         definition_path: Filesystem path to the agent YAML file.
@@ -38,6 +39,7 @@ class AgentData(TypedDict, total=False):
 
     activation_triggers: list[str]
     title: str
+    description: str
     capabilities: list[str]
     domain_context: str
     definition_path: str

@@ -377,7 +377,10 @@ def _run_async(coro: Any, timeout: float = 5.0) -> Any:
             protection against hangs outside the coroutine itself.
 
     Raises:
-        asyncio.TimeoutError: If the coroutine exceeds *timeout* seconds.
+        TimeoutError: If the coroutine exceeds *timeout* seconds.
+            On the event-loop path this is ``asyncio.TimeoutError``; on the
+            thread-pool path it is ``concurrent.futures.TimeoutError``.  Both
+            are subclasses of the builtin ``TimeoutError`` on Python 3.11+.
     """
     guarded = asyncio.wait_for(coro, timeout=timeout)
 

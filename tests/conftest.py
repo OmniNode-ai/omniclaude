@@ -555,11 +555,12 @@ def pytest_collection_modifyitems(config, items):
     )
 
     for item in items:
-        # Check if test is specifically a postgres integration test
-        # (by checking for postgres_integration marker instead of brittle path detection)
-        is_postgres_test = "postgres_integration" in item.keywords
+        # Use get_closest_marker() to check for explicitly-applied markers,
+        # NOT `"name" in item.keywords` which also matches directory names
+        # (e.g. tests in tests/integration/ would match "integration" keyword).
+        is_postgres_test = item.get_closest_marker("postgres_integration") is not None
 
-        if "integration" in item.keywords:
+        if item.get_closest_marker("integration") is not None:
             if is_postgres_test:
                 # PostgreSQL integration test - needs POSTGRES_INTEGRATION_TESTS
                 if not postgres_enabled:
