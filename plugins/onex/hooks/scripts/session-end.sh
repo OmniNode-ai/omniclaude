@@ -208,7 +208,7 @@ print(result.outcome)
         # --- Emit session.outcome event ---
         EMITTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-        OUTCOME_PAYLOAD=$(jq -n \
+        if ! OUTCOME_PAYLOAD=$(jq -n \
             --arg session_id "$SESSION_ID" \
             --arg outcome "$DERIVED_OUTCOME" \
             --arg emitted_at "$EMITTED_AT" \
@@ -218,10 +218,10 @@ print(result.outcome)
                 outcome: $outcome,
                 emitted_at: $emitted_at,
                 active_ticket: (if $active_ticket == "" then null else $active_ticket end)
-            }' 2>>"$LOG_FILE")
-
-        if [[ -z "$OUTCOME_PAYLOAD" || "$OUTCOME_PAYLOAD" == "null" ]]; then
+            }' 2>>"$LOG_FILE"); then
             log "WARNING: Failed to construct outcome payload (jq failed), skipping emission"
+        elif [[ -z "$OUTCOME_PAYLOAD" || "$OUTCOME_PAYLOAD" == "null" ]]; then
+            log "WARNING: outcome payload empty or null, skipping emission"
         else
             emit_via_daemon "session.outcome" "$OUTCOME_PAYLOAD" 100
         fi
