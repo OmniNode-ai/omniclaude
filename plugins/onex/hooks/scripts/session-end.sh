@@ -108,60 +108,7 @@ fi
 # on the synchronous path (preserves <50ms SessionEnd budget).
 DURATION_SECONDS="0"
 if [[ -n "$SESSION_DURATION" && "$SESSION_DURATION" != "0" ]]; then
-    DURATION_SECONDS=$(awk -v ms="$SESSION_DURATION" 'BEGIN{printf "%.3f", ms/1000}' 2>/dev/null || echo "0")
-fi
-
-# ===================================================================
-# PHASE 1 PLUMBING (OMN-1892): Outcome derivation inputs are
-# partially hardcoded. Current state:
-#   - exit_code=0: Always 0 (hooks must never exit non-zero per CLAUDE.md)
-#   - session_output: Uses session reason (clear/logout/prompt_input_exit/
-#     other), NOT captured stdout. Outcome will not resolve to FAILED
-#     until session_output carries error markers (Error:, Exception:, etc.)
-#   - tool_calls_completed: Extracted from numTurns (best-effort);
-#     may still be 0 if field is absent from SessionEnd payload.
-#     SUCCESS requires tool_calls > 0 AND completion markers.
-# Unreachable gates: SUCCESS (no completion markers in reason codes),
-#   FAILED (exit_code always 0, no error markers in reason codes).
-# Result: Outcome currently resolves to abandoned or unknown only.
-# Future tickets:
-#   - tool_calls_completed: Wire from session aggregation service
-#   - session_output: Wire from captured session output/stdout
-# ===================================================================
-# Derive session outcome ONCE (OMN-1892)
-# Used by both session.outcome emission and feedback guardrail check.
-# Pure Python with no I/O -- synchronous cost is negligible (<5ms).
-# Falls back to "unknown" if Python call fails (graceful degradation).
-DERIVED_OUTCOME=$(HOOKS_LIB="$HOOKS_LIB" SESSION_REASON="$SESSION_REASON" DURATION_SECONDS="$DURATION_SECONDS" TOOL_CALLS_COMPLETED="$TOOL_CALLS_COMPLETED" \
-    "$PYTHON_CMD" -c "
-import os, sys
-sys.path.insert(0, os.environ['HOOKS_LIB'])
-from session_outcome import derive_session_outcome
-session_reason = os.environ.get('SESSION_REASON', 'other')
-duration_str = os.environ.get('DURATION_SECONDS', '0') or '0'
-tool_calls_str = os.environ.get('TOOL_CALLS_COMPLETED', '0') or '0'
-if not tool_calls_str.isdigit():
-    print(f'WARNING: TOOL_CALLS_COMPLETED={tool_calls_str!r} not numeric, using 0', file=sys.stderr)
-try:
-    duration = float(duration_str)
-    if duration < 0:
-        print(f'WARNING: DURATION_SECONDS={duration} is negative, using 0', file=sys.stderr)
-        duration = 0.0
-except ValueError:
-    print(f'WARNING: DURATION_SECONDS={duration_str!r} not numeric, using 0', file=sys.stderr)
-    duration = 0.0
-result = derive_session_outcome(
-    exit_code=0,
-    session_output=session_reason,
-    tool_calls_completed=int(tool_calls_str) if tool_calls_str.isdigit() else 0,
-    duration_seconds=duration,
-)
-print(result.outcome)
-" 2>>"$LOG_FILE") || DERIVED_OUTCOME="unknown"
-
-log "Session outcome derived: ${DERIVED_OUTCOME}"
-if [[ "$DERIVED_OUTCOME" == "unknown" || "$DERIVED_OUTCOME" == "abandoned" ]]; then
-    log "Phase 1: outcome=$DERIVED_OUTCOME (SUCCESS/FAILED gates require wired session_output and tool_calls; see OMN-1892)"
+    DURATION_SECONDS=$(awk -v ms="$SESSION_DURATION" 'BEGIN{v=ms/1000; printf "%.3f", (v<0?0:v)}' 2>/dev/null || echo "0")
 fi
 
 # Emit session.ended event to Kafka (async, non-blocking)
@@ -190,22 +137,75 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
         fi
     ) &
 
-    # Emit session.outcome event for feedback loop (OMN-1735, OMN-1892)
-    # Uses ClaudeCodeSessionOutcome enum values: success, failed, abandoned, unknown
-    # Outcome was derived synchronously above; subshell uses pre-computed DERIVED_OUTCOME.
+    # Session outcome derivation + emission + feedback guardrails (OMN-1735, OMN-1892)
+    # Consolidated into a single backgrounded subshell so the DERIVED_OUTCOME
+    # Python computation (~30-50ms interpreter startup) stays off the sync path.
     (
-        # Validate SESSION_ID before constructing payload
+        # Validate SESSION_ID once for all outcome/feedback work
         if [[ -z "$SESSION_ID" ]]; then
-            log "WARNING: SESSION_ID is empty, skipping session.outcome emission"
-            exit 0  # Exit the subshell cleanly
+            log "WARNING: SESSION_ID is empty, skipping session.outcome and feedback"
+            exit 0
         fi
 
         # Validate UUID format (8-4-4-4-12 structure, case-insensitive)
         if [[ ! "$SESSION_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
-            log "WARNING: SESSION_ID '$SESSION_ID' is not valid UUID format, skipping session.outcome emission"
+            log "WARNING: SESSION_ID '$SESSION_ID' is not valid UUID format, skipping session.outcome and feedback"
             exit 0
         fi
 
+        # ===================================================================
+        # PHASE 1 PLUMBING (OMN-1892): Outcome derivation inputs are
+        # partially hardcoded. Current state:
+        #   - exit_code=0: Always 0 (hooks must never exit non-zero per CLAUDE.md)
+        #   - session_output: Uses session reason (clear/logout/prompt_input_exit/
+        #     other), NOT captured stdout. Outcome will not resolve to FAILED
+        #     until session_output carries error markers (Error:, Exception:, etc.)
+        #   - tool_calls_completed: Extracted from numTurns (best-effort);
+        #     may still be 0 if field is absent from SessionEnd payload.
+        #     SUCCESS requires tool_calls > 0 AND completion markers.
+        # Unreachable gates: SUCCESS (no completion markers in reason codes),
+        #   FAILED (exit_code always 0, no error markers in reason codes).
+        # Result: Outcome currently resolves to abandoned or unknown only.
+        # Future tickets:
+        #   - tool_calls_completed: Wire from session aggregation service
+        #   - session_output: Wire from captured session output/stdout
+        # ===================================================================
+        # Derive session outcome (pure Python, no I/O)
+        # Python startup is ~30-50ms but runs in this backgrounded subshell,
+        # not on the sync path. Falls back to "unknown" on failure.
+        DERIVED_OUTCOME=$(HOOKS_LIB="$HOOKS_LIB" SESSION_REASON="$SESSION_REASON" DURATION_SECONDS="$DURATION_SECONDS" TOOL_CALLS_COMPLETED="$TOOL_CALLS_COMPLETED" \
+            "$PYTHON_CMD" -c "
+import os, sys
+sys.path.insert(0, os.environ['HOOKS_LIB'])
+from session_outcome import derive_session_outcome
+session_reason = os.environ.get('SESSION_REASON', 'other')
+duration_str = os.environ.get('DURATION_SECONDS', '0') or '0'
+tool_calls_str = os.environ.get('TOOL_CALLS_COMPLETED', '0') or '0'
+if not tool_calls_str.isdigit():
+    print(f'WARNING: TOOL_CALLS_COMPLETED={tool_calls_str!r} not numeric, using 0', file=sys.stderr)
+try:
+    duration = float(duration_str)
+    if duration < 0:
+        print(f'WARNING: DURATION_SECONDS={duration} is negative, using 0', file=sys.stderr)
+        duration = 0.0
+except ValueError:
+    print(f'WARNING: DURATION_SECONDS={duration_str!r} not numeric, using 0', file=sys.stderr)
+    duration = 0.0
+result = derive_session_outcome(
+    exit_code=0,
+    session_output=session_reason,
+    tool_calls_completed=int(tool_calls_str) if tool_calls_str.isdigit() else 0,
+    duration_seconds=duration,
+)
+print(result.outcome)
+" 2>>"$LOG_FILE") || DERIVED_OUTCOME="unknown"
+
+        log "Session outcome derived: ${DERIVED_OUTCOME}"
+        if [[ "$DERIVED_OUTCOME" == "unknown" || "$DERIVED_OUTCOME" == "abandoned" ]]; then
+            log "Phase 1: outcome=$DERIVED_OUTCOME (SUCCESS/FAILED gates require wired session_output and tool_calls; see OMN-1892)"
+        fi
+
+        # --- Emit session.outcome event ---
         EMITTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
         OUTCOME_PAYLOAD=$(jq -n \
@@ -220,32 +220,13 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
                 active_ticket: (if $active_ticket == "" then null else $active_ticket end)
             }' 2>/dev/null)
 
-        # Validate payload was constructed successfully
         if [[ -z "$OUTCOME_PAYLOAD" || "$OUTCOME_PAYLOAD" == "null" ]]; then
             log "WARNING: Failed to construct outcome payload (jq failed), skipping emission"
         else
             emit_via_daemon "session.outcome" "$OUTCOME_PAYLOAD" 100
         fi
-    ) &
 
-    # Feedback guardrail check (OMN-1892)
-    # Evaluates whether routing feedback should be recorded.
-    # Runs in a backgrounded subshell to stay within 50ms sync budget.
-    # Uses pre-computed DERIVED_OUTCOME from main shell.
-    (
-        # Validate SESSION_ID before constructing payload
-        if [[ -z "$SESSION_ID" ]]; then
-            log "WARNING: SESSION_ID is empty, skipping routing feedback evaluation"
-            exit 0  # Exit the subshell cleanly
-        fi
-
-        # Validate UUID format (8-4-4-4-12 structure, case-insensitive)
-        if [[ ! "$SESSION_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
-            log "WARNING: SESSION_ID '$SESSION_ID' is not valid UUID format, skipping routing feedback evaluation"
-            exit 0
-        fi
-
-        # Evaluate guardrails using pre-computed DERIVED_OUTCOME
+        # --- Evaluate feedback guardrails ---
         # ===================================================================
         # PHASE 1 PLUMBING (OMN-1892): Guardrail logic is wired but inputs
         # are hardcoded. Feedback will always be skipped (NO_INJECTION).
