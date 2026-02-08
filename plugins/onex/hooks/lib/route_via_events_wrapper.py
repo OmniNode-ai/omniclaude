@@ -359,18 +359,33 @@ def _get_onex_handlers() -> tuple[Any, Any, Any] | None:
     return _compute_handler, _emit_handler, _history_handler
 
 
-def _run_async(coro: Any) -> Any:
-    """Run a coroutine from synchronous code.
+def _run_async(coro: Any, timeout: float = 5.0) -> Any:
+    """Run a coroutine from synchronous code with timeout enforcement.
 
     Uses asyncio.run() for the common case.  If an event loop is already
     running (e.g., nested async context), offloads to a new thread with
     its own event loop to avoid RuntimeError.
+
+    Args:
+        coro: The coroutine to execute.
+        timeout: Maximum seconds to allow the coroutine to run before
+            cancellation.  Defaults to 5.0, matching the routing budget.
+            The timeout is enforced at the async boundary via
+            ``asyncio.wait_for`` so that the coroutine is *cancelled*
+            rather than merely abandoned.  On the thread path a secondary
+            ``future.result(timeout=...)`` guard provides belt-and-suspenders
+            protection against hangs outside the coroutine itself.
+
+    Raises:
+        asyncio.TimeoutError: If the coroutine exceeds *timeout* seconds.
     """
+    guarded = asyncio.wait_for(coro, timeout=timeout)
+
     try:
         asyncio.get_running_loop()
     except RuntimeError:
         # No loop running — safe to create one
-        return asyncio.run(coro)
+        return asyncio.run(guarded)
 
     # Loop is running — cannot use run_until_complete or asyncio.run.
     # Offload to a new thread that creates its own event loop.
@@ -379,11 +394,11 @@ def _run_async(coro: Any) -> Any:
     import concurrent.futures
 
     pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-    future = pool.submit(asyncio.run, coro)
+    future = pool.submit(asyncio.run, guarded)
     try:
-        # Timeout matches the default routing budget (5s) to prevent
-        # _run_async from blocking longer than callers expect.
-        return future.result(timeout=5)
+        # Secondary timeout guard (belt-and-suspenders): if the inner
+        # asyncio.wait_for doesn't fire for some reason, this catches it.
+        return future.result(timeout=timeout)
     finally:
         # Always shut down without waiting. On success the thread has
         # already finished; on timeout or error we must not block.

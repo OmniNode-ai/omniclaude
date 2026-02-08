@@ -40,7 +40,7 @@ source "${HOOKS_DIR}/scripts/common.sh"
 
 # Read stdin (validate JSON; fall back to empty object on malformed input)
 INPUT=$(cat)
-if ! echo "$INPUT" | jq empty 2>/dev/null; then
+if ! echo "$INPUT" | jq -e . >/dev/null 2>>"$LOG_FILE"; then
     log "WARNING: Malformed JSON on stdin, using empty object"
     INPUT='{}'
 fi
@@ -54,6 +54,9 @@ SESSION_REASON=$(echo "$INPUT" | jq -r '.reason // "other"' 2>/dev/null || echo 
 
 # Extract tool call count from session payload (if available)
 TOOL_CALLS_COMPLETED=$(echo "$INPUT" | jq -r '.numTurns // 0' 2>/dev/null || echo "0")
+if [[ "$TOOL_CALLS_COMPLETED" == "0" ]]; then
+    log "Phase 1: numTurns absent or zero — SUCCESS gate unreachable (see OMN-1892)"
+fi
 
 # Validate reason is one of the allowed values
 case "$SESSION_REASON" in
@@ -266,15 +269,15 @@ print(json.dumps({
 }))
 " 2>>"$LOG_FILE") || FEEDBACK_RESULT='{"should_reinforce":false,"skip_reason":"PYTHON_ERROR"}'
 
-        SHOULD_REINFORCE=$(echo "$FEEDBACK_RESULT" | jq -r '.should_reinforce' 2>/dev/null) || SHOULD_REINFORCE="false"
-        SKIP_REASON=$(echo "$FEEDBACK_RESULT" | jq -r '.skip_reason // empty' 2>/dev/null) || SKIP_REASON=""
+        SHOULD_REINFORCE=$(echo "$FEEDBACK_RESULT" | jq -r '.should_reinforce' 2>>"$LOG_FILE") || SHOULD_REINFORCE="false"
+        SKIP_REASON=$(echo "$FEEDBACK_RESULT" | jq -r '.skip_reason // empty' 2>>"$LOG_FILE") || SKIP_REASON=""
 
         if [[ "$SHOULD_REINFORCE" == "true" ]] && [[ "$KAFKA_ENABLED" == "true" ]]; then
             if ! FEEDBACK_PAYLOAD=$(jq -n \
                 --arg session_id "$SESSION_ID" \
                 --arg outcome "$DERIVED_OUTCOME" \
                 --arg emitted_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-                '{session_id: $session_id, outcome: $outcome, emitted_at: $emitted_at}' 2>/dev/null); then
+                '{session_id: $session_id, outcome: $outcome, emitted_at: $emitted_at}' 2>>"$LOG_FILE"); then
                 log "WARNING: Failed to construct routing.feedback payload (jq failed), skipping emission"
                 exit 0
             fi
@@ -287,7 +290,7 @@ print(json.dumps({
                 --arg session_id "$SESSION_ID" \
                 --arg skip_reason "$SKIP_REASON" \
                 --arg emitted_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-                '{session_id: $session_id, skip_reason: $skip_reason, emitted_at: $emitted_at}' 2>/dev/null); then
+                '{session_id: $session_id, skip_reason: $skip_reason, emitted_at: $emitted_at}' 2>>"$LOG_FILE"); then
                 log "WARNING: Failed to construct routing.skipped payload (jq failed), skipping emission"
                 exit 0
             fi
