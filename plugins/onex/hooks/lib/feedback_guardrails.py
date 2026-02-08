@@ -94,6 +94,18 @@ def should_reinforce_routing(
             session_outcome,
             sorted(VALID_OUTCOMES),
         )
+        # Clamp scores even on the invalid-outcome path so that the details
+        # dict has the same shape as every other return path (raw + clamped).
+        clamped_util = (
+            0.0
+            if math.isnan(utilization_score) or math.isinf(utilization_score)
+            else max(0.0, min(1.0, utilization_score))
+        )
+        clamped_acc = (
+            0.0
+            if math.isnan(agent_match_score) or math.isinf(agent_match_score)
+            else max(0.0, min(1.0, agent_match_score))
+        )
         return GuardrailResult(
             should_reinforce=False,
             skip_reason=SKIP_INVALID_OUTCOME,
@@ -101,6 +113,8 @@ def should_reinforce_routing(
                 "injection_occurred": injection_occurred,
                 "utilization_score_raw": utilization_score,
                 "agent_match_score_raw": agent_match_score,
+                "utilization_score": clamped_util,
+                "agent_match_score": clamped_acc,
                 "session_outcome": session_outcome,
             },
         )

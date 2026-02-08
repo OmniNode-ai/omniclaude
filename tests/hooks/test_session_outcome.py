@@ -551,6 +551,24 @@ class TestEdgeCases:
         # Uppercase hex does not match \b[0-9a-f]{7,40}\b
         assert result.outcome == OUTCOME_UNKNOWN
 
+    def test_hex_substring_false_positive_known_risk(self) -> None:
+        """Non-commit hex substrings (e.g. CSS colors) can match as commit hashes.
+
+        This is a documented Phase 1 risk: _COMMIT_HASH_RE matches any 7-40 char
+        lowercase hex string not adjacent to dashes. A CSS hex color like '#abcdef1'
+        contains 'abcdef1' which matches. This test documents the current behavior
+        so future refinements can be validated against it.
+        """
+        result = derive_session_outcome(
+            exit_code=0,
+            session_output="color: #abcdef1",
+            tool_calls_completed=2,
+            duration_seconds=90.0,
+        )
+        # Known false positive: 'abcdef1' matches _COMMIT_HASH_RE
+        # This triggers completion marker, so with tool_calls > 0 -> SUCCESS
+        assert result.outcome == OUTCOME_SUCCESS
+
     def test_multiple_error_markers_still_failed(self) -> None:
         """Multiple error markers in output still produces FAILED."""
         result = derive_session_outcome(

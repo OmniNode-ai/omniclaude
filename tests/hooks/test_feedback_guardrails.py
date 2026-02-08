@@ -155,6 +155,24 @@ class TestInvalidOutcomeValidation:
         assert result.should_reinforce is False
         assert result.skip_reason == SKIP_INVALID_OUTCOME
         assert result.details["session_outcome"] == "typo_sucess"
+        # Verify details shape matches other return paths (raw + clamped)
+        assert result.details["utilization_score_raw"] == 0.8
+        assert result.details["agent_match_score_raw"] == 0.9
+        assert result.details["utilization_score"] == 0.8
+        assert result.details["agent_match_score"] == 0.9
+
+    def test_invalid_outcome_clamps_nan_scores(self) -> None:
+        """Invalid outcome path still clamps NaN scores to 0.0 for consistency."""
+        result = should_reinforce_routing(
+            injection_occurred=True,
+            utilization_score=float("nan"),
+            agent_match_score=float("inf"),
+            session_outcome="bogus",
+        )
+        assert result.should_reinforce is False
+        assert result.skip_reason == SKIP_INVALID_OUTCOME
+        assert result.details["utilization_score"] == 0.0
+        assert result.details["agent_match_score"] == 0.0
 
     def test_invalid_outcome_precedes_gate_1(self) -> None:
         """Invalid outcome is checked before gate 1 (no injection).
