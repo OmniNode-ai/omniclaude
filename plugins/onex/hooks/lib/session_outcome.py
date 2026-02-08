@@ -48,12 +48,16 @@ _FAILED_EOL_RE: re.Pattern[str] = re.compile(r"\bFAILED\s*$", re.MULTILINE)
 _ZERO_COUNT_PREFIX_RE: re.Pattern[str] = re.compile(r"\b0+\s+FAILED\b")
 
 # Patterns that indicate a session completed meaningful work.
-# Matched case-insensitively against session output text.
+# Pre-compiled with IGNORECASE and word boundaries, matching the ERROR_MARKER_REGEXES pattern.
 COMPLETION_MARKER_PATTERNS: tuple[str, ...] = (
     "completed",
     "done",
     "finished",
     "success",
+)
+_COMPLETION_MARKER_REGEXES: tuple[re.Pattern[str], ...] = tuple(
+    re.compile(r"\b" + re.escape(marker) + r"\b", re.IGNORECASE)
+    for marker in COMPLETION_MARKER_PATTERNS
 )
 
 # Commit hash: 7-40 lowercase hex chars, NOT preceded or followed by a dash.
@@ -110,14 +114,12 @@ def _has_error_markers(session_output: str) -> bool:
 def _has_completion_markers(session_output: str) -> bool:
     """Check if session output contains completion markers (case-insensitive).
 
-    Uses word boundary matching to avoid false positives from substrings
-    (e.g., 'abandoned' should not match 'done', 'unsuccessful' should not
-    match 'success').
+    Uses pre-compiled regexes with word boundary matching to avoid false
+    positives from substrings (e.g., 'abandoned' should not match 'done',
+    'unsuccessful' should not match 'success').
     """
-    output_lower = session_output.lower()
-    for marker in COMPLETION_MARKER_PATTERNS:
-        # Use word boundary to avoid false positives from substrings
-        if re.search(r"\b" + re.escape(marker) + r"\b", output_lower):
+    for pattern in _COMPLETION_MARKER_REGEXES:
+        if pattern.search(session_output):
             return True
     # Also check for commit hashes as completion signal
     if _COMMIT_HASH_RE.search(session_output):

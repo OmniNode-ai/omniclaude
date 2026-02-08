@@ -133,13 +133,23 @@ import os, sys
 sys.path.insert(0, os.environ['HOOKS_LIB'])
 from session_outcome import derive_session_outcome
 session_reason = os.environ.get('SESSION_REASON', 'other')
-duration_str = os.environ.get('DURATION_SECONDS', '0')
-tool_calls_str = os.environ.get('TOOL_CALLS_COMPLETED', '0')
+duration_str = os.environ.get('DURATION_SECONDS', '0') or '0'
+tool_calls_str = os.environ.get('TOOL_CALLS_COMPLETED', '0') or '0'
+if not tool_calls_str.isdigit():
+    print(f'WARNING: TOOL_CALLS_COMPLETED={tool_calls_str!r} not numeric, using 0', file=sys.stderr)
+try:
+    duration = float(duration_str)
+    if duration < 0:
+        print(f'WARNING: DURATION_SECONDS={duration} is negative, using 0', file=sys.stderr)
+        duration = 0.0
+except ValueError:
+    print(f'WARNING: DURATION_SECONDS={duration_str!r} not numeric, using 0', file=sys.stderr)
+    duration = 0.0
 result = derive_session_outcome(
     exit_code=0,
     session_output=session_reason,
     tool_calls_completed=int(tool_calls_str) if tool_calls_str.isdigit() else 0,
-    duration_seconds=float(duration_str if duration_str else '0'),
+    duration_seconds=duration,
 )
 print(result.outcome)
 " 2>>"$LOG_FILE") || DERIVED_OUTCOME="unknown"
