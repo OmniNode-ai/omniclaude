@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# Custom pre-push hook wrapper
+# ────────────────────────────────────────────────────────────────────
+# Fixes index.lock race condition between pre-commit hooks and
+# pre-push hooks.
+#
+# The pre-commit framework's staged_files_only context manager calls
+# `git write-tree`, which requires acquiring .git/index.lock.  After
+# a recent `git commit` (which also runs pre-commit hooks), the lock
+# file can still exist momentarily, causing `git push` to fail with:
+#
+#   fatal: Unable to create '.git/index.lock': File exists.
+#
+# All pre-push hooks in this repo use pass_filenames=false and
+# always_run=true, so the stash/write-tree behavior is not actually
+# needed.  This wrapper clears stale locks safely before delegating
+# to pre-commit.
+#
+# Install
+# -------
+#   cp scripts/git-hooks/pre-push .git/hooks/pre-push
+#   chmod +x .git/hooks/pre-push
+#
+# Note: Running `pre-commit install --hook-type pre-push` will
+#       overwrite this file.  Re-copy after re-installing hooks.
+# ────────────────────────────────────────────────────────────────────
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+LOCK_FILE="${REPO_ROOT}/.git/index.lock"
+
+# ── Remove stale index.lock if present and safe to do so ───────────
+if [[ -f "$LOCK_FILE" ]]; then
+    # Git commands that hold the index lock during operation.
+    lock_holders="git (commit|merge|rebase|checkout|stash|pull|read-tree|write-tree|add|reset|rm)"
+
+    # Safety: only remove if no git process that would hold the lock
+    # is actively running.  pgrep exits non-zero when nothing matches.
+    if ! pgrep -f "$lock_holders" >/dev/null 2>&1; then
+        echo "pre-push: removing stale .git/index.lock (no active git process holds it)" >&2
+        rm -f "$LOCK_FILE"
+    else
+        echo "WARNING: .git/index.lock exists and a git process is running. Pre-push may fail." >&2
+    fi
+fi
+
+# ── Delegate to pre-commit ─────────────────────────────────────────
+# Detect the Python that pre-commit was installed with.  We try, in
+# order:
+#   1. The pipx-managed venv (common on macOS with `pipx install pre-commit`)
+#   2. Any `pre-commit` on $PATH
+#   3. Fail with a helpful message
+#
+# We deliberately avoid hardcoding a single absolute path so that the
+# hook works across machines and after Python version upgrades.
+
+find_precommit_python() {
+    # Candidate paths where pipx installs pre-commit
+    local candidates=(
+        "${HOME}/.local/pipx/venvs/pre-commit/bin/python"
+        "${HOME}/.local/share/pipx/venvs/pre-commit/bin/python"
+    )
+    for candidate in "${candidates[@]}"; do
+        if [[ -x "$candidate" ]]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+ARGS=(hook-impl --config=.pre-commit-config.yaml --hook-type=pre-push)
+HERE="$(cd "$(dirname "$0")" && pwd)"
+ARGS+=(--hook-dir "$HERE" -- "$@")
+
+INSTALL_PYTHON="$(find_precommit_python 2>/dev/null || true)"
+
+if [[ -n "$INSTALL_PYTHON" && -x "$INSTALL_PYTHON" ]]; then
+    exec "$INSTALL_PYTHON" -mpre_commit "${ARGS[@]}"
+elif command -v pre-commit > /dev/null; then
+    exec pre-commit "${ARGS[@]}"
+else
+    echo '`pre-commit` not found.  Did you forget to activate your virtualenv?' 1>&2
+    exit 1
+fi
