@@ -35,7 +35,11 @@ ERROR_MARKER_REGEXES: tuple[re.Pattern[str], ...] = (
     re.compile(r"(?:^|\n)\s*\w*Exception:"),
     # "Traceback" as a standalone word (already distinctive)
     re.compile(r"\bTraceback\b"),
-    # "FAILED" preceded by a count or test-related word, or at end of a line
+    # "FAILED" with a preceding count or "test(s)" prefix, or standalone at
+    # end-of-line. The negative lookbehind excludes "0 FAILED" (common in
+    # passing test summaries). When real session output is wired in (see
+    # OMN-1892 Phase 1 notes in session-end.sh), monitor for false positives
+    # from log messages or status strings containing "FAILED".
     re.compile(
         r"[1-9]\d*\s+FAILED\b|[Tt]ests?\s+FAILED\b|(?<!0 )\bFAILED\s*$", re.MULTILINE
     ),

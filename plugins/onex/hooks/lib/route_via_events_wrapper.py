@@ -378,7 +378,9 @@ def _run_async(coro: Any) -> Any:
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
         future = pool.submit(asyncio.run, coro)
-        return future.result(timeout=10)
+        # Timeout matches the default routing budget (5s) to prevent
+        # _run_async from blocking longer than callers expect.
+        return future.result(timeout=5)
 
 
 def _get_cached_stats() -> Any:

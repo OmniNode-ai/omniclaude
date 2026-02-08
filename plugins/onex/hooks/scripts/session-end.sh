@@ -38,8 +38,12 @@ fi
 # Source shared functions (provides PYTHON_CMD, KAFKA_ENABLED, get_time_ms, log)
 source "${HOOKS_DIR}/scripts/common.sh"
 
-# Read stdin
+# Read stdin (validate JSON; fall back to empty object on malformed input)
 INPUT=$(cat)
+if ! echo "$INPUT" | jq empty 2>/dev/null; then
+    log "WARNING: Malformed JSON on stdin, using empty object"
+    INPUT='{}'
+fi
 
 log "SessionEnd hook triggered (plugin mode)"
 
