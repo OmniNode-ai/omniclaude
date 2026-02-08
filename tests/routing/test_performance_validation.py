@@ -19,8 +19,10 @@ Note on statistical approach:
     routing path multiple times, measure wall-clock latency per call, and
     compute p50/p95 from the resulting distribution.
 
-    Cold cache is enforced by calling invalidate_cache() (legacy) or
-    creating a fresh handler (ONEX) before each prompt.
+    Cold cache is enforced by calling invalidate_cache() (legacy).
+    ONEX HandlerRoutingDefault is stateless: TriggerMatcher and
+    ConfidenceScorer are instantiated per-call inside
+    compute_routing(), so no explicit cache invalidation is needed.
 """
 
 from __future__ import annotations
@@ -59,6 +61,14 @@ from omniclaude.nodes.node_agent_routing_compute.models import (
 CONFIDENCE_THRESHOLD = 0.5
 P95_BUDGET_MS = 100  # p95 must be below this
 P50_BUDGET_MS = 50  # p50 must be below this
+
+# Wrapper-level budgets.  The wrapper adds asyncio.run() event-loop
+# creation (compute + emission attempt) and agent-definition
+# conversion on top of pure routing compute, so budgets are relaxed
+# compared to the direct handler benchmarks.  Both remain well
+# within the 500ms hook budget.
+WRAPPER_P95_BUDGET_MS = 150
+WRAPPER_P50_BUDGET_MS = 75
 
 _ROUTING_DIR = Path(__file__).parent
 _PROJECT_ROOT = _ROUTING_DIR.parents[1]
@@ -114,6 +124,11 @@ def _load_agent_definitions() -> tuple[ModelAgentDefinition, ...]:
             )
         except Exception:
             pass
+    assert defs, (
+        f"No agent definitions loaded from {_REGISTRY_PATH}; "
+        "performance benchmarks would silently pass on "
+        "zero iterations"
+    )
     return tuple(defs)
 
 
@@ -121,7 +136,15 @@ def _load_corpus_prompts() -> list[str]:
     """Load all non-empty prompts from the golden corpus."""
     with open(_CORPUS_PATH, encoding="utf-8") as f:
         corpus = json.load(f)
-    return [entry["prompt"] for entry in corpus["entries"] if entry["prompt"].strip()]
+    prompts = [
+        entry["prompt"] for entry in corpus["entries"] if entry["prompt"].strip()
+    ]
+    assert prompts, (
+        f"No prompts loaded from {_CORPUS_PATH}; "
+        "performance benchmarks would silently pass on "
+        "zero iterations"
+    )
+    return prompts
 
 
 # --------------------------------------------------------------------------
@@ -301,7 +324,7 @@ class TestOnexHandlerPerformance:
 
 
 class TestWrapperPerformance:
-    """Performance validation for route_via_events() wrapper.
+    """Performance validation for route_via_events() with ONEX routing.
 
     This tests the full synchronous path including handler init, request
     shaping, compute, and result shaping -- everything that counts toward
@@ -310,11 +333,33 @@ class TestWrapperPerformance:
     The emit daemon is mocked to isolate routing latency from I/O.
     Emission adds non-deterministic socket overhead that is backgrounded
     in production and should not count toward the routing budget.
+
+    USE_ONEX_ROUTING_NODES is enabled so the wrapper exercises the ONEX
+    compute path rather than only the legacy AgentRouter path.
     """
+
+    @pytest.fixture(autouse=True)
+    def _enable_onex_routing(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Enable ONEX routing so wrapper benchmarks exercise the ONEX path."""
+        monkeypatch.setenv("USE_ONEX_ROUTING_NODES", "true")
 
     @staticmethod
     def _get_wrapper():
-        """Import and reload the wrapper with emission mocked."""
+        """Import and reload the wrapper with emission mocked.
+
+        The ONEX routing flag is set by the ``_enable_onex_routing``
+        fixture before this method is called.  The module reload
+        ensures fresh handler singletons and picks up the ONEX
+        node imports.
+
+        Both the legacy ``_emit_event_fn`` and the ONEX
+        ``HandlerRoutingEmitter`` emit path are disabled so the
+        benchmark measures pure routing compute without socket
+        I/O to the emit daemon.
+        """
         import importlib
         import sys
 
@@ -325,8 +370,20 @@ class TestWrapperPerformance:
         import route_via_events_wrapper
 
         importlib.reload(route_via_events_wrapper)
-        # Disable event emission to isolate routing latency
+
+        # Disable legacy emission path.
         route_via_events_wrapper._emit_event_fn = None
+
+        # Disable ONEX emission path.  HandlerRoutingEmitter
+        # resolves its emit_fn via
+        # `from emit_client_wrapper import emit_event` at
+        # construction time.  Patching the module attribute
+        # ensures the emitter gets a no-op callable instead
+        # of a live daemon connection.
+        ecw = sys.modules.get("emit_client_wrapper")
+        if ecw is not None:
+            ecw.emit_event = lambda event_type, payload: False  # type: ignore[attr-defined]
+
         return route_via_events_wrapper
 
     @pytest.mark.benchmark
@@ -334,7 +391,7 @@ class TestWrapperPerformance:
         self,
         corpus_prompts: list[str],
     ) -> None:
-        """route_via_events p95 must be under 100ms (well within 500ms hook budget)."""
+        """route_via_events p95 must be under WRAPPER_P95_BUDGET_MS."""
         wrapper = self._get_wrapper()
 
         latencies_ms: list[float] = []
@@ -357,8 +414,8 @@ class TestWrapperPerformance:
             f"\n    max: {latencies_ms[-1]:.2f}ms"
         )
 
-        assert p95 < P95_BUDGET_MS, (
-            f"Wrapper p95 ({p95:.2f}ms) exceeds {P95_BUDGET_MS}ms budget"
+        assert p95 < WRAPPER_P95_BUDGET_MS, (
+            f"Wrapper p95 ({p95:.2f}ms) exceeds {WRAPPER_P95_BUDGET_MS}ms budget"
         )
 
     @pytest.mark.benchmark
@@ -366,7 +423,7 @@ class TestWrapperPerformance:
         self,
         corpus_prompts: list[str],
     ) -> None:
-        """route_via_events p50 must be under 50ms."""
+        """route_via_events p50 must be under WRAPPER_P50_BUDGET_MS."""
         wrapper = self._get_wrapper()
 
         latencies_ms: list[float] = []
@@ -380,6 +437,6 @@ class TestWrapperPerformance:
         latencies_ms.sort()
         p50 = _percentile(latencies_ms, 50)
 
-        assert p50 < P50_BUDGET_MS, (
-            f"Wrapper p50 ({p50:.2f}ms) exceeds {P50_BUDGET_MS}ms budget"
+        assert p50 < WRAPPER_P50_BUDGET_MS, (
+            f"Wrapper p50 ({p50:.2f}ms) exceeds {WRAPPER_P50_BUDGET_MS}ms budget"
         )

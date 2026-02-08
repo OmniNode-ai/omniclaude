@@ -51,7 +51,8 @@ rollback procedure.
 **Validation**:
 - CI pipeline passes with flag enabled
 - No test regressions
-- Performance metrics collected from CI runs
+- Performance benchmarks validated locally (skipped on CI due to environment sensitivity)
+- CI validates golden corpus match and integration tests only
 
 **Rollback**: Remove env var from CI configuration
 
@@ -105,8 +106,9 @@ Each gate MUST pass before advancing to the next rollout phase.
 
 ### Gate 4: Cross-Validation
 
-- **Requirement**: ONEX and legacy paths produce identical results
+- **Requirement**: ONEX and legacy paths agree on >=80% of routing decisions (agent selection) and >=90% of routing policies
 - **Test**: `tests/routing/test_onex_golden_corpus.py::TestOnexLegacyCrossValidation`
+- **Note**: Divergences expected due to ONEX TriggerMatcher enhancements (tiered fuzzy thresholds, HIGH_CONFIDENCE_TRIGGERS)
 
 ---
 

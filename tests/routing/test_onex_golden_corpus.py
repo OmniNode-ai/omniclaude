@@ -114,6 +114,10 @@ def _load_agent_definitions() -> tuple[ModelAgentDefinition, ...]:
         except Exception:
             # Skip invalid agents (matches wrapper behavior)
             pass
+    assert defs, (
+        f"No valid agents loaded from {_REGISTRY_PATH}. "
+        "Check registry schema or agent definition format."
+    )
     return tuple(defs)
 
 
@@ -365,6 +369,12 @@ class TestOnexLegacyCrossValidation:
         Policy agreement is more important than agent agreement — it
         validates that the ONEX handler correctly distinguishes between
         trigger_match and fallback_default states.
+
+        Note: The legacy router has no ``explicit_request`` concept; it
+        returns ``trigger_match`` for successfully routed explicit
+        requests.  For comparison purposes we normalize
+        ``explicit_request`` to ``trigger_match`` since both represent
+        successful routing.
         """
         agree = 0
         total = 0
@@ -392,7 +402,13 @@ class TestOnexLegacyCrossValidation:
             )
             onex_result = await handler.compute_routing(request)
 
-            if onex_result.routing_policy == legacy_policy:
+            # Normalize explicit_request -> trigger_match for legacy
+            # comparison (legacy has no explicit_request concept).
+            onex_policy = onex_result.routing_policy
+            if onex_policy == "explicit_request":
+                onex_policy = "trigger_match"
+
+            if onex_policy == legacy_policy:
                 agree += 1
 
         ratio = agree / total if total > 0 else 0.0
@@ -437,14 +453,15 @@ class TestOnexBehavioralInvariants:
             )
             result = await handler.compute_routing(request)
 
-            # Explicit requests must either match explicitly or via trigger
-            # (the ONEX handler has explicit detection that produces
-            # routing_policy="explicit_request" with confidence=1.0)
-            if result.routing_policy == "explicit_request":
-                assert result.confidence == 1.0, (
-                    f"Entry {entry['id']}: Explicit request should have "
-                    f"confidence 1.0, got {result.confidence}"
-                )
+            # Explicit-category entries MUST produce explicit_request policy
+            assert result.routing_policy == "explicit_request", (
+                f"Entry {entry['id']}: Explicit request should produce "
+                f"routing_policy='explicit_request', got '{result.routing_policy}'"
+            )
+            assert result.confidence == 1.0, (
+                f"Entry {entry['id']}: Explicit request should have "
+                f"confidence 1.0, got {result.confidence}"
+            )
 
     @pytest.mark.asyncio
     async def test_deterministic_routing(

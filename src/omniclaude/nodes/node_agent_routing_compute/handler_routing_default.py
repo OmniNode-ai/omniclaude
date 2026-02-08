@@ -293,7 +293,9 @@ class HandlerRoutingDefault:
                 match = re.search(pattern, text_lower)
                 if match:
                     agent_name = match.group(1)
-                    # Verify agent exists in registry
+                    # Verify agent exists in registry.
+                    # Registry keys may or may not have the "agent-" prefix,
+                    # so try the captured name first, then stripped.
                     if agent_name in known_agents:
                         logger.debug(
                             "Extracted explicit agent: %s (pattern=%s)",
@@ -301,6 +303,15 @@ class HandlerRoutingDefault:
                             pattern,
                         )
                         return agent_name
+                    stripped = agent_name.removeprefix("agent-")
+                    if stripped != agent_name and stripped in known_agents:
+                        logger.debug(
+                            "Extracted explicit agent: %s (pattern=%s, "
+                            "resolved via prefix strip)",
+                            stripped,
+                            pattern,
+                        )
+                        return stripped
 
             # Patterns for generic agent requests (no specific agent name)
             # These should default to polymorphic-agent
