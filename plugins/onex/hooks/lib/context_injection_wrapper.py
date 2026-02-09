@@ -29,7 +29,7 @@ Output JSON:
         "success": true,
         "patterns_context": "## Learned Patterns...",
         "pattern_count": 3,
-        "source": "/home/user/.claude/learned_patterns.json",
+        "source": "database:contract:192.168.86.200:5436/omninode_bridge",
         "retrieval_ms": 42,
         "injection_id": "abc12345-...",
         "cohort": "treatment"
