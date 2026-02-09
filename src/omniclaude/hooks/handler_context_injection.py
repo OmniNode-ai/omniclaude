@@ -3,11 +3,10 @@
 """Handler for context injection - all business logic lives here.
 
 This handler performs:
-1. Database query to load patterns (primary source)
-2. Optional file I/O fallback if database unavailable
-3. Filtering/sorting/limiting of patterns
-4. Markdown formatting
-5. Event emission to Kafka
+1. Database query to load patterns
+2. Filtering/sorting/limiting of patterns
+3. Markdown formatting
+4. Event emission to Kafka
 
 Following ONEX patterns from omnibase_infra: handlers own all business logic.
 No separate node is needed for simple file-read operations.
@@ -19,7 +18,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import json
 import logging
 import time
 from collections.abc import Callable
@@ -239,7 +237,7 @@ class HandlerContextInjection:
     """Handler for context injection from learned patterns.
 
     This handler implements the full context injection workflow:
-    1. Load patterns from database (primary) or files (fallback)
+    1. Load patterns from database
     2. Filter by domain and confidence threshold
     3. Sort by confidence descending
     4. Limit to max patterns
@@ -248,7 +246,7 @@ class HandlerContextInjection:
 
     Following ONEX patterns from omnibase_infra:
     - Handlers own all business logic
-    - Database-backed storage with file fallback
+    - Database-backed storage
     - Stateless and async-safe
 
     Usage:
@@ -434,10 +432,9 @@ class HandlerContextInjection:
         timeout_seconds = cfg.timeout_ms / 1000.0
         patterns: list[ModelPatternRecord] = []
         source = "none"
-        context_source = ContextSource.PERSISTENCE_FILE  # Default for events
+        context_source = ContextSource.DATABASE  # Default for events
 
         try:
-            # Try database first if enabled
             if cfg.db_enabled:
                 try:
                     db_result = await asyncio.wait_for(
@@ -453,21 +450,6 @@ class HandlerContextInjection:
                     logger.debug(f"Loaded {len(patterns)} patterns from database")
                 except Exception as db_err:
                     logger.warning(f"Database pattern loading failed: {db_err}")
-                    # Fall through to file fallback if enabled
-
-            # File fallback if no patterns from DB and fallback enabled
-            if not patterns and (cfg.file_fallback_enabled or not cfg.db_enabled):
-                load_result = await asyncio.wait_for(
-                    asyncio.to_thread(
-                        self._load_patterns_from_files,
-                        project_root,
-                    ),
-                    timeout=timeout_seconds,
-                )
-                patterns = load_result.patterns
-                source = self._format_source_attribution(load_result.source_files)
-                context_source = ContextSource.PERSISTENCE_FILE
-                logger.debug(f"Loaded {len(patterns)} patterns from files")
 
             retrieval_ms = int((time.monotonic() - start_time) * 1000)
 
@@ -767,126 +749,6 @@ class HandlerContextInjection:
         source = f"database:contract:{cfg.db_host}:{cfg.db_port}/{cfg.db_name}"
         return ModelLoadPatternsResult(patterns=patterns, source_files=[Path(source)])
 
-    # =========================================================================
-    # File I/O Methods (Fallback)
-    # =========================================================================
-
-    def _load_patterns_from_files(
-        self,
-        project_root: str | None,
-    ) -> ModelLoadPatternsResult:
-        """Load patterns from persistence files.
-
-        Finds and parses all pattern files, deduplicating by pattern_id.
-        Tracks which files contributed at least one pattern for accurate
-        source attribution.
-
-        Args:
-            project_root: Optional project root path.
-
-        Returns:
-            ModelLoadPatternsResult with unique patterns and contributing source files.
-        """
-        all_patterns: list[ModelPatternRecord] = []
-        contributing_files: list[Path] = []
-
-        # Find pattern files using config's persistence_file path
-        pattern_files = self._find_pattern_files(
-            Path(project_root) if project_root else None,
-            self._config.persistence_file,
-        )
-
-        if not pattern_files:
-            logger.debug("No pattern files found")
-            return ModelLoadPatternsResult(patterns=[], source_files=[])
-
-        # Parse each file
-        for file_path in pattern_files:
-            try:
-                patterns = self._parse_pattern_file(file_path)
-                if patterns:  # Only track files that contributed patterns
-                    all_patterns.extend(patterns)
-                    contributing_files.append(file_path)
-                logger.debug(f"Loaded {len(patterns)} patterns from {file_path}")
-            except Exception as e:
-                logger.warning(f"Failed to parse {file_path}: {e}")
-                continue
-
-        # Deduplicate by pattern_id (keep first occurrence)
-        seen_ids: set[str] = set()
-        unique_patterns: list[ModelPatternRecord] = []
-        for pattern in all_patterns:
-            if pattern.pattern_id not in seen_ids:
-                seen_ids.add(pattern.pattern_id)
-                unique_patterns.append(pattern)
-
-        return ModelLoadPatternsResult(
-            patterns=unique_patterns, source_files=contributing_files
-        )
-
-    def _find_pattern_files(
-        self, project_root: Path | None, persistence_file: str
-    ) -> list[Path]:
-        """Find learned pattern files in standard locations.
-
-        Searches:
-        1. Project-specific: {project_root}/{persistence_file}
-        2. User-level: ~/.claude/learned_patterns.json (standard fallback)
-
-        Args:
-            project_root: Optional project root path.
-            persistence_file: Relative path to patterns file from config
-                (e.g., ".claude/learned_patterns.json").
-        """
-        candidates: list[Path] = []
-
-        # Project-specific patterns (uses configurable persistence_file)
-        if project_root and project_root.is_dir():
-            project_file = project_root / persistence_file
-            if project_file.exists():
-                candidates.append(project_file)
-
-        # User-level patterns (uses filename from persistence_file config)
-        persistence_filename = Path(persistence_file).name
-        user_file = Path.home() / ".claude" / persistence_filename
-        if user_file.exists():
-            candidates.append(user_file)
-
-        return candidates
-
-    def _parse_pattern_file(self, file_path: Path) -> list[ModelPatternRecord]:
-        """Parse a learned_patterns.json file."""
-        with file_path.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        if not isinstance(data, dict):
-            raise ValueError("Pattern file must be a JSON object")
-
-        patterns_data = data.get("patterns", [])
-        if not isinstance(patterns_data, list):
-            raise ValueError("'patterns' must be a list")
-
-        records: list[ModelPatternRecord] = []
-        for idx, item in enumerate(patterns_data):
-            try:
-                record = PatternRecord(
-                    pattern_id=item["pattern_id"],
-                    domain=item["domain"],
-                    title=item["title"],
-                    description=item["description"],
-                    confidence=float(item["confidence"]),
-                    usage_count=int(item["usage_count"]),
-                    success_rate=float(item["success_rate"]),
-                    example_reference=item.get("example_reference"),
-                    lifecycle_state=item.get("lifecycle_state"),
-                )
-                records.append(record)
-            except (KeyError, TypeError, ValueError) as e:
-                logger.debug(f"Skipping invalid pattern at index {idx}: {e}")
-                continue
-
-        return records
-
     def _format_source_attribution(self, source_files: list[Path]) -> str:
         """Format source file paths for accurate attribution.
 
@@ -978,7 +840,7 @@ class HandlerContextInjection:
         project_root: str | None,
         agent_domain: str,
         min_confidence: float,
-        context_source: ContextSource = ContextSource.PERSISTENCE_FILE,
+        context_source: ContextSource = ContextSource.DATABASE,
     ) -> None:
         """Emit context injection event to Kafka."""
         # Derive entity_id

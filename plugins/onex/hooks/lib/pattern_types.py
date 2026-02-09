@@ -3,7 +3,7 @@
 
 This module contains the canonical definitions for pattern-related data types,
 ensuring consistency between:
-- plugins/onex/hooks/lib/learned_pattern_injector.py (CLI module)
+- plugins/onex/hooks/lib/context_injection_wrapper.py (CLI module)
 - src/omniclaude/hooks/handler_context_injection.py (handler module)
 
 Part of OMN-1403: Context injection for session enrichment.
@@ -11,7 +11,7 @@ Part of OMN-1403: Context injection for session enrichment.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TypedDict
 
@@ -90,22 +90,6 @@ class PatternRecord:
 
 
 @dataclass
-class PatternFile:
-    """
-    Represents the structure of a learned_patterns.json file.
-
-    Attributes:
-        version: Schema version of the pattern file.
-        last_updated: ISO-8601 timestamp of last update.
-        patterns: List of pattern records.
-    """
-
-    version: str
-    last_updated: str
-    patterns: list[PatternRecord] = field(default_factory=list)
-
-
-@dataclass
 class LoadPatternsResult:
     """
     Result from loading patterns including source attribution.
@@ -179,10 +163,42 @@ class InjectorOutput(TypedDict):
     cohort: str | None
 
 
+# =============================================================================
+# Output Constructors
+# =============================================================================
+
+
+def create_empty_output(source: str = "none", retrieval_ms: int = 0) -> InjectorOutput:
+    """Create an empty output for cases with no patterns."""
+    return InjectorOutput(
+        success=True,
+        patterns_context="",
+        pattern_count=0,
+        source=source,
+        retrieval_ms=retrieval_ms,
+        injection_id=None,
+        cohort=None,
+    )
+
+
+def create_error_output(retrieval_ms: int = 0) -> InjectorOutput:
+    """Create an output for error cases (still returns success for hook compatibility)."""
+    return InjectorOutput(
+        success=True,  # Always success for hook compatibility
+        patterns_context="",
+        pattern_count=0,
+        source="error",
+        retrieval_ms=retrieval_ms,
+        injection_id=None,
+        cohort=None,
+    )
+
+
 __all__ = [
     "PatternRecord",
-    "PatternFile",
     "LoadPatternsResult",
     "InjectorInput",
     "InjectorOutput",
+    "create_empty_output",
+    "create_error_output",
 ]

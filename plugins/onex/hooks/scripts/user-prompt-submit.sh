@@ -352,11 +352,8 @@ if [[ "$SESSION_ALREADY_INJECTED" == "false" ]] && [[ -n "$AGENT_NAME" ]] && [[ 
     # Try ONEX-compliant wrapper first, fall back to legacy injector
     # Use run_with_timeout for portability (works on macOS and Linux)
     if [[ -f "${HOOKS_LIB}/context_injection_wrapper.py" ]]; then
-        log "Using ONEX-compliant context_injection_wrapper.py"
+        log "Using context_injection_wrapper.py"
         PATTERN_RESULT="$(echo "$PATTERN_INPUT" | run_with_timeout 2 $PYTHON_CMD "${HOOKS_LIB}/context_injection_wrapper.py" 2>>"$LOG_FILE" || echo '{}')"
-    elif [[ -f "${HOOKS_LIB}/learned_pattern_injector.py" ]]; then
-        log "Falling back to legacy learned_pattern_injector.py"
-        PATTERN_RESULT="$(echo "$PATTERN_INPUT" | run_with_timeout 2 $PYTHON_CMD "${HOOKS_LIB}/learned_pattern_injector.py" 2>>"$LOG_FILE" || echo '{}')"
     else
         log "INFO: No pattern injector found, skipping pattern injection"
         PATTERN_RESULT='{}'

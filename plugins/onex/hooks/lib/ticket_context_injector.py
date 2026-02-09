@@ -3,7 +3,7 @@
 
 This module enables SessionStart hooks to inject active ticket context from
 the /ticket-work workflow. It follows the same patterns as context_injection_wrapper.py
-and learned_pattern_injector.py.
+and context_injection_wrapper.py.
 
 Part of OMN-1830: Ticket context injection for session enrichment.
 

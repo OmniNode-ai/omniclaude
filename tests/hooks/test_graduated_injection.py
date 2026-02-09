@@ -16,12 +16,17 @@ Part of OMN-2042: Graduated Injection Policy - lifecycle-state-aware pattern sel
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
 
+from omniclaude.hooks.context_config import ContextInjectionConfig
+from omniclaude.hooks.handler_context_injection import (
+    HandlerContextInjection,
+    ModelLoadPatternsResult,
+    ModelPatternRecord,
+)
 from omniclaude.hooks.injection_limits import (
     InjectionLimitsConfig,
     compute_effective_score,
@@ -716,128 +721,102 @@ class TestProvisionalConfig:
 
 
 class TestHandlerIntegration:
-    """Test handler integration with provisional patterns (file-based)."""
-
-    @pytest.fixture(autouse=True)
-    def isolated_home(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-        """Isolate tests from user's real ~/.claude/ directory."""
-        fake_home = tmp_path / "fake_home"
-        fake_home.mkdir()
-        monkeypatch.setattr(Path, "home", lambda: fake_home)
-        return fake_home
-
-    @pytest.fixture
-    def temp_project_dir(self, tmp_path: Path) -> Path:
-        """Create a temporary project directory with .claude folder."""
-        project_dir = tmp_path / "project"
-        project_dir.mkdir()
-        claude_dir = project_dir / ".claude"
-        claude_dir.mkdir()
-        return project_dir
+    """Test handler integration with provisional patterns (mock-DB)."""
 
     @pytest.mark.asyncio
-    async def test_handler_with_provisional_pattern_in_file(
-        self, temp_project_dir: Path
-    ) -> None:
-        """Handler formats provisional patterns from file with badge."""
-        from omniclaude.hooks.context_config import ContextInjectionConfig
-        from omniclaude.hooks.handler_context_injection import HandlerContextInjection
+    async def test_handler_with_provisional_pattern(self) -> None:
+        """Handler formats provisional patterns from DB with badge."""
+        patterns = [
+            ModelPatternRecord(
+                pattern_id="val-1",
+                domain="testing",
+                title="Validated Pattern",
+                description="A validated pattern.",
+                confidence=0.9,
+                usage_count=10,
+                success_rate=0.8,
+            ),
+            ModelPatternRecord(
+                pattern_id="prov-1",
+                domain="code_review",
+                title="Provisional Pattern",
+                description="A provisional pattern.",
+                confidence=0.7,
+                usage_count=5,
+                success_rate=0.6,
+                lifecycle_state="provisional",
+            ),
+        ]
 
-        patterns_data = {
-            "version": "1.0.0",
-            "patterns": [
-                {
-                    "pattern_id": "val-1",
-                    "domain": "testing",
-                    "title": "Validated Pattern",
-                    "description": "A validated pattern.",
-                    "confidence": 0.9,
-                    "usage_count": 10,
-                    "success_rate": 0.8,
-                },
-                {
-                    "pattern_id": "prov-1",
-                    "domain": "code_review",
-                    "title": "Provisional Pattern",
-                    "description": "A provisional pattern.",
-                    "confidence": 0.7,
-                    "usage_count": 5,
-                    "success_rate": 0.6,
-                    "lifecycle_state": "provisional",
-                },
-            ],
-        }
-        pattern_path = temp_project_dir / ".claude" / "learned_patterns.json"
-        with pattern_path.open("w") as f:
-            json.dump(patterns_data, f)
-
-        # With include_provisional=True, both patterns are included
-        config_with_provisional = ContextInjectionConfig(
+        config = ContextInjectionConfig(
             enabled=True,
+            db_enabled=True,
             min_confidence=0.0,
-            db_enabled=False,
             limits=InjectionLimitsConfig(include_provisional=True),
         )
-        handler = HandlerContextInjection(config=config_with_provisional)
-        result = await handler.handle(
-            project_root=str(temp_project_dir),
-            emit_event=False,
-        )
+        handler = HandlerContextInjection(config=config)
+
+        async def mock_load(
+            domain: str | None = None,
+            project_scope: str | None = None,
+        ) -> ModelLoadPatternsResult:
+            return ModelLoadPatternsResult(
+                patterns=list(patterns),
+                source_files=[Path("mock:test")],
+            )
+
+        handler._load_patterns_from_database = mock_load  # type: ignore[assignment]
+        result = await handler.handle(emit_event=False)
 
         assert result.success is True
         assert result.pattern_count == 2
-        # File parser extracts lifecycle_state via item.get('lifecycle_state')
-        # so provisional patterns get the [Provisional] badge in output
         assert "Validated Pattern" in result.context_markdown
         assert "[Provisional]" in result.context_markdown
 
     @pytest.mark.asyncio
-    async def test_handler_excludes_provisional_when_disabled(
-        self, temp_project_dir: Path
-    ) -> None:
-        """Handler excludes provisional patterns from file when include_provisional=False."""
-        from omniclaude.hooks.context_config import ContextInjectionConfig
-        from omniclaude.hooks.handler_context_injection import HandlerContextInjection
-
-        patterns_data = {
-            "version": "1.0.0",
-            "patterns": [
-                {
-                    "pattern_id": "val-1",
-                    "domain": "testing",
-                    "title": "Validated Pattern",
-                    "description": "A validated pattern.",
-                    "confidence": 0.9,
-                    "usage_count": 10,
-                    "success_rate": 0.8,
-                },
-                {
-                    "pattern_id": "prov-1",
-                    "domain": "code_review",
-                    "title": "Provisional Pattern",
-                    "description": "A provisional pattern.",
-                    "confidence": 0.7,
-                    "usage_count": 5,
-                    "success_rate": 0.6,
-                    "lifecycle_state": "provisional",
-                },
-            ],
-        }
-        pattern_path = temp_project_dir / ".claude" / "learned_patterns.json"
-        with pattern_path.open("w") as f:
-            json.dump(patterns_data, f)
+    async def test_handler_excludes_provisional_when_disabled(self) -> None:
+        """Handler excludes provisional patterns when include_provisional=False."""
+        patterns = [
+            ModelPatternRecord(
+                pattern_id="val-1",
+                domain="testing",
+                title="Validated Pattern",
+                description="A validated pattern.",
+                confidence=0.9,
+                usage_count=10,
+                success_rate=0.8,
+            ),
+            ModelPatternRecord(
+                pattern_id="prov-1",
+                domain="code_review",
+                title="Provisional Pattern",
+                description="A provisional pattern.",
+                confidence=0.7,
+                usage_count=5,
+                success_rate=0.6,
+                lifecycle_state="provisional",
+            ),
+        ]
 
         # Default config has include_provisional=False
         config = ContextInjectionConfig(
             enabled=True,
             min_confidence=0.0,
-            db_enabled=False,
+            db_enabled=True,
         )
         handler = HandlerContextInjection(config=config)
-        result = await handler.handle(
-            project_root=str(temp_project_dir),
-            emit_event=False,
-        )
+
+        async def mock_load(
+            domain: str | None = None,
+            project_scope: str | None = None,
+        ) -> ModelLoadPatternsResult:
+            return ModelLoadPatternsResult(
+                patterns=list(patterns),
+                source_files=[Path("mock:test")],
+            )
+
+        handler._load_patterns_from_database = mock_load  # type: ignore[assignment]
+        result = await handler.handle(emit_event=False)
 
         assert result.success is True
         assert result.pattern_count == 1  # Only validated pattern selected
