@@ -3,55 +3,76 @@
 # OmniClaude Hooks - Shared Shell Functions
 # =============================================================================
 # Common utility functions for all hook scripts.
-# Source this file at the top of hook scripts after setting PLUGIN_ROOT and PROJECT_ROOT.
+# Source this file at the top of hook scripts after setting PLUGIN_ROOT.
 #
 # Usage:
 #   source "${HOOKS_DIR}/scripts/common.sh"
 #
 # Requires (must be set before sourcing):
 #   - PLUGIN_ROOT: Path to the plugin root directory
-#   - PROJECT_ROOT: Path to the project root directory
-#   - PYTHON_CMD will be exported after sourcing
-#   - KAFKA_ENABLED will be exported after sourcing (true/false)
+#   - PROJECT_ROOT: Path to project root (used for .env loading, not for Python)
+#
+# Exports after sourcing:
+#   - PYTHON_CMD: Resolved Python interpreter (hard fails if not found)
+#   - KAFKA_ENABLED: "true" or "false"
 # =============================================================================
 
 # =============================================================================
 # Python Environment Detection
 # =============================================================================
-# Priority: Poetry venv > Plugin venv > Project venv > System Python
+# Strict priority chain with NO fallbacks. If no valid Python is found,
+# hooks refuse to run. This prevents silent degradation where hooks run
+# against the wrong interpreter with missing dependencies.
 #
-# This function finds the appropriate Python interpreter to use, preferring
-# virtual environments over system Python to ensure dependencies are available.
+# Priority:
+#   1. PLUGIN_PYTHON_BIN env var (explicit override / escape hatch)
+#   2. Plugin-bundled venv at PLUGIN_ROOT/lib/.venv (marketplace runtime)
+#   3. OMNICLAUDE_PROJECT_ROOT/.venv (explicit dev mode, no heuristics)
+#   4. Hard failure with actionable error message
 
 find_python() {
-    # Check for Poetry venv via pyproject.toml
-    if command -v poetry >/dev/null 2>&1 && [[ -f "${PROJECT_ROOT}/pyproject.toml" ]]; then
-        POETRY_VENV="$(poetry env info --path 2>/dev/null || true)"
-        if [[ -n "$POETRY_VENV" && -f "$POETRY_VENV/bin/python3" ]]; then
-            echo "$POETRY_VENV/bin/python3"
-            return
-        fi
+    # 1. Explicit override (escape hatch for custom environments)
+    if [[ -n "${PLUGIN_PYTHON_BIN:-}" && -f "${PLUGIN_PYTHON_BIN}" && -x "${PLUGIN_PYTHON_BIN}" ]]; then
+        echo "${PLUGIN_PYTHON_BIN}"
+        return
     fi
 
-    # Check for plugin-local venv
-    if [[ -f "${PLUGIN_ROOT}/lib/.venv/bin/python3" ]]; then
+    # 2. Plugin-bundled venv (marketplace runtime — created by deploy.sh)
+    if [[ -f "${PLUGIN_ROOT}/lib/.venv/bin/python3" && -x "${PLUGIN_ROOT}/lib/.venv/bin/python3" ]]; then
         echo "${PLUGIN_ROOT}/lib/.venv/bin/python3"
         return
     fi
 
-    # Check for project venv
-    if [[ -f "${PROJECT_ROOT}/.venv/bin/python3" ]]; then
-        echo "${PROJECT_ROOT}/.venv/bin/python3"
+    # 3. Explicit dev-mode project venv (no heuristics, no CWD probing)
+    if [[ -n "${OMNICLAUDE_PROJECT_ROOT:-}" && -f "${OMNICLAUDE_PROJECT_ROOT}/.venv/bin/python3" && -x "${OMNICLAUDE_PROJECT_ROOT}/.venv/bin/python3" ]]; then
+        echo "${OMNICLAUDE_PROJECT_ROOT}/.venv/bin/python3"
         return
     fi
 
-    # Fallback to system Python
-    echo "python3"
+    # No fallback: return empty to trigger hard failure
+    echo ""
 }
 
-# Export PYTHON_CMD for use in scripts
+# Resolve Python — hard fail if not found
+# NOTE: This exit 1 intentionally violates the "hooks exit 0" invariant (CLAUDE.md).
+# Rationale: running hooks against the wrong Python produces non-reproducible bugs
+# that are far worse than a visible, actionable error. See OMN-2051.
 PYTHON_CMD="$(find_python)"
+if [[ -z "${PYTHON_CMD}" ]]; then
+    echo "ERROR: No valid Python found for ONEX hooks." 1>&2
+    echo "  Expected one of:" 1>&2
+    echo "    - PLUGIN_PYTHON_BIN=/path/to/python3" 1>&2
+    echo "    - ${PLUGIN_ROOT}/lib/.venv/bin/python3 (deploy the plugin)" 1>&2
+    echo "    - OMNICLAUDE_PROJECT_ROOT=/path/to/repo with .venv (dev mode)" 1>&2
+    exit 1
+fi
 export PYTHON_CMD
+
+# Log resolved interpreter for debugging (only if LOG_FILE is available)
+# Uses inline printf instead of log() which is defined later in this file
+if [[ -n "${LOG_FILE:-}" ]]; then
+    printf "[%s] Resolved python: %s\n" "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" "${PYTHON_CMD}" >> "$LOG_FILE"
+fi
 
 # =============================================================================
 # Boolean Normalization

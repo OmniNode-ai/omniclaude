@@ -211,6 +211,91 @@ if [[ "$EXECUTE" == "true" ]]; then
 
     echo ""
 
+    # =============================================================================
+    # Bundled Python Venv (per-plugin isolation)
+    # =============================================================================
+    # Creates a self-contained venv with all Python deps at <cache>/lib/.venv/.
+    # If any step fails, deploy exits non-zero and the registry is untouched.
+    # Note: TARGET dir (synced files) may persist on failure; re-deploy overwrites it.
+    # No fallbacks. Either the venv works or the deploy fails.
+
+    echo "Creating bundled Python venv..."
+
+    # The project root is two levels up from SOURCE_ROOT (which points to plugins/onex)
+    PROJECT_ROOT_FOR_INSTALL="$(cd "${SOURCE_ROOT}/../.." && pwd)"
+
+    # --- Validate Python >= 3.12 ---
+    PYTHON_BIN="python3"
+    if ! command -v "$PYTHON_BIN" &>/dev/null; then
+        echo -e "${RED}Error: python3 not found in PATH. Python 3.12+ required.${NC}"
+        exit 1
+    fi
+    PY_MAJOR=$("$PYTHON_BIN" -c "import sys; print(sys.version_info.major)")
+    PY_MINOR=$("$PYTHON_BIN" -c "import sys; print(sys.version_info.minor)")
+    if [[ "${PY_MAJOR}" -lt 3 ]] || { [[ "${PY_MAJOR}" -eq 3 ]] && [[ "${PY_MINOR}" -lt 12 ]]; }; then
+        echo -e "${RED}Error: Python ${PY_MAJOR}.${PY_MINOR} found, but >= 3.12 required.${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}  Python ${PY_MAJOR}.${PY_MINOR} validated${NC}"
+
+    # --- Create venv (clean state) ---
+    VENV_DIR="${TARGET}/lib/.venv"
+    rm -rf "$VENV_DIR"
+    mkdir -p "${TARGET}/lib"
+    "$PYTHON_BIN" -m venv "$VENV_DIR"
+    echo -e "${GREEN}  Venv created at ${VENV_DIR}${NC}"
+
+    # --- Bootstrap pip toolchain ---
+    if ! "$VENV_DIR/bin/python3" -m ensurepip --upgrade 2>&1; then
+        echo -e "${RED}Error: ensurepip failed. Python may lack the ensurepip module (common on minimal installs).${NC}"
+        rm -rf "$VENV_DIR"
+        exit 1
+    fi
+    "$VENV_DIR/bin/pip" install --upgrade pip wheel --quiet
+    echo -e "${GREEN}  pip toolchain bootstrapped${NC}"
+
+    # --- Install project (non-editable, no cache) ---
+    echo "  Installing project from ${PROJECT_ROOT_FOR_INSTALL}..."
+    if ! "$VENV_DIR/bin/pip" install --no-cache-dir "${PROJECT_ROOT_FOR_INSTALL}" --quiet; then
+        echo -e "${RED}Error: pip install failed for ${PROJECT_ROOT_FOR_INSTALL}. Deploy aborted.${NC}"
+        rm -rf "$VENV_DIR"
+        exit 1
+    fi
+    echo -e "${GREEN}  Project installed into venv${NC}"
+
+    # --- Write venv manifest ---
+    MANIFEST="${TARGET}/lib/venv_manifest.txt"
+    {
+        echo "# Plugin Venv Manifest"
+        echo "# Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+        echo "# Deploy version: ${NEW_VERSION}"
+        echo ""
+        echo "python_version: $("$VENV_DIR/bin/python3" --version 2>&1)"
+        echo "pip_version: $("$VENV_DIR/bin/pip" --version 2>&1)"
+        echo "source_root: ${PROJECT_ROOT_FOR_INSTALL}"
+        echo "git_sha: $(cd "${PROJECT_ROOT_FOR_INSTALL}" && git rev-parse HEAD 2>/dev/null || echo 'unknown')"
+        echo ""
+        echo "# Installed packages:"
+        "$VENV_DIR/bin/pip" freeze 2>/dev/null
+    } > "$MANIFEST"
+    echo -e "${GREEN}  Venv manifest written to ${MANIFEST}${NC}"
+
+    # --- Smoke test ---
+    if "$VENV_DIR/bin/python3" -c "import omnibase_infra; import omniclaude; from omniclaude.hooks.topics import TopicBase; print('Smoke test: OK')" 2>&1; then
+        echo -e "${GREEN}  Bundled venv smoke test passed${NC}"
+    else
+        echo -e "${RED}Error: Bundled venv smoke test FAILED. Deploy aborted.${NC}"
+        echo "  The following imports must work:"
+        echo "    import omnibase_infra"
+        echo "    import omniclaude"
+        echo "    from omniclaude.hooks.topics import TopicBase"
+        rm -rf "$VENV_DIR"  # Clean up failed venv
+        rm -f "$MANIFEST"   # Clean up stale manifest
+        exit 1
+    fi
+
+    echo ""
+
     # Update registry
     if [[ -f "$REGISTRY" ]]; then
         # Verify expected structure exists before updating
