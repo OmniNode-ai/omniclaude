@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -838,3 +839,43 @@ class TestHandlerIntegration:
         assert result.pattern_count == 1  # Only validated pattern selected
         assert "Validated Pattern" in result.context_markdown
         assert "[Provisional]" not in result.context_markdown
+
+    @pytest.mark.asyncio
+    async def test_domain_with_provisional_falls_back_with_warning(self) -> None:
+        """Domain filter + include_provisional=True falls back to validated-only with warning."""
+        validated_row = {
+            "pattern_id": "val-1",
+            "domain": "testing",
+            "title": "Validated Pattern",
+            "description": "A validated pattern.",
+            "confidence": 0.9,
+            "usage_count": 10,
+            "success_rate": 0.8,
+        }
+
+        mock_runtime = MagicMock()
+        mock_runtime.call = AsyncMock(return_value=[validated_row])
+
+        config = ContextInjectionConfig(
+            enabled=True,
+            db_enabled=True,
+            min_confidence=0.0,
+            limits=InjectionLimitsConfig(include_provisional=True),
+        )
+        handler = HandlerContextInjection(config=config)
+        handler._get_repository_runtime = AsyncMock(return_value=mock_runtime)
+
+        result = await handler._load_patterns_from_database(domain="testing")
+
+        # Should call list_patterns_by_domain (not list_injectable_patterns)
+        mock_runtime.call.assert_called_once()
+        call_args = mock_runtime.call.call_args
+        assert call_args[0][0] == "list_patterns_by_domain"
+
+        # Should include a warning about the fallback
+        assert len(result.warnings) == 1
+        assert "include_provisional=True ignored" in result.warnings[0]
+
+        # Should still return the validated patterns
+        assert len(result.patterns) == 1
+        assert result.patterns[0].pattern_id == "val-1"
