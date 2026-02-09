@@ -21,7 +21,7 @@ import hashlib
 import logging
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -230,10 +230,12 @@ class ModelLoadPatternsResult:
     Attributes:
         patterns: List of unique pattern records.
         source_files: List of files that contributed at least one pattern.
+        warnings: Operational warnings (e.g., silent fallbacks). Empty if none.
     """
 
     patterns: list[ModelPatternRecord]
     source_files: list[Path]
+    warnings: list[str] = field(default_factory=list)
 
 
 # =============================================================================
@@ -688,6 +690,7 @@ class HandlerContextInjection:
 
         # Get extra patterns for filtering (will be filtered by confidence/domain later)
         limit = cfg.max_patterns * 2
+        warnings: list[str] = []
 
         try:
             # Determine which operation to call based on include_provisional config (OMN-2042)
@@ -701,15 +704,14 @@ class HandlerContextInjection:
                 )
             elif domain:
                 if include_provisional:
-                    logger.warning(
-                        "include_provisional=True ignored: domain filter '%s' is active "
-                        "but domain-filtered graduated injection is not yet implemented "
-                        "(see OMN-2042 follow-up). Falling through to "
-                        "list_patterns_by_domain which returns VALIDATED patterns only. "
-                        "Callers will receive a successful result with no provisional "
-                        "patterns included.",
-                        domain,
+                    msg = (
+                        f"include_provisional=True ignored: domain filter '{domain}' "
+                        f"is active but domain-filtered graduated injection is not yet "
+                        f"implemented (see OMN-2042 follow-up). Returning VALIDATED "
+                        f"patterns only."
                     )
+                    logger.warning(msg)
+                    warnings.append(msg)
                 # Use domain-filtered operation (validated only; graduated domain query is a follow-up)
                 rows = await runtime.call(
                     "list_patterns_by_domain",
@@ -761,7 +763,11 @@ class HandlerContextInjection:
 
         # Build source attribution
         source = f"database:contract:{cfg.db_host}:{cfg.db_port}/{cfg.db_name}"
-        return ModelLoadPatternsResult(patterns=patterns, source_files=[Path(source)])
+        return ModelLoadPatternsResult(
+            patterns=patterns,
+            source_files=[Path(source)],
+            warnings=warnings,
+        )
 
     def _format_source_attribution(self, source_files: list[Path]) -> str:
         """Format source file paths for accurate attribution.

@@ -225,13 +225,15 @@ if [[ "$SESSION_ALREADY_INJECTED" == "false" ]] && [[ -n "$AGENT_NAME" ]] && [[ 
             min_confidence: $min_confidence
         }')"
 
-    # 0.4s timeout - the entire UserPromptSubmit hook has a <500ms budget;
+    # 1s timeout - Perl's alarm() truncates to integer, so sub-second values
+    # become 0 (which cancels the alarm). Use integer seconds only.
+    # The entire UserPromptSubmit hook has a <500ms budget;
     # context injection is one part alongside routing, agent loading, etc.
     # Use ONEX-compliant wrapper for pattern injection
     # Use run_with_timeout for portability (works on macOS and Linux)
     if [[ -f "${HOOKS_LIB}/context_injection_wrapper.py" ]]; then
         log "Using context_injection_wrapper.py"
-        PATTERN_RESULT="$(echo "$PATTERN_INPUT" | run_with_timeout 0.4 $PYTHON_CMD "${HOOKS_LIB}/context_injection_wrapper.py" 2>>"$LOG_FILE" || echo '{}')"
+        PATTERN_RESULT="$(echo "$PATTERN_INPUT" | run_with_timeout 1 $PYTHON_CMD "${HOOKS_LIB}/context_injection_wrapper.py" 2>>"$LOG_FILE" || echo '{}')"
     else
         log "INFO: No pattern injector found, skipping pattern injection"
         PATTERN_RESULT='{}'

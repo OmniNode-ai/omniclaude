@@ -194,7 +194,7 @@ def compute_effective_score(
     usage_count: int,
     usage_count_scale: float = 5.0,
     lifecycle_state: str | None = None,
-    provisional_dampening: float = 1.0,
+    provisional_dampening: float = 0.5,
 ) -> float:
     """Compute effective score for pattern ranking.
 
@@ -221,7 +221,7 @@ def compute_effective_score(
             provisional_dampening factor is applied. Default None (treated
             as "validated", no dampening).
         provisional_dampening: Dampening factor for provisional patterns.
-            Default 1.0 (no dampening). Typical value: 0.5.
+            Default 0.5 (matches InjectionLimitsConfig default).
             Must be >0.0; use include_provisional=False to disable entirely.
 
     Returns:

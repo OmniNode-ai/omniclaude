@@ -242,8 +242,8 @@ class TestProvisionalDampening:
         )
         assert score == base_score
 
-    def test_default_dampening_is_no_change(self) -> None:
-        """Default provisional_dampening=1.0 means no change for backward compat."""
+    def test_default_dampening_halves_provisional_score(self) -> None:
+        """Default provisional_dampening=0.5 halves score for provisional patterns."""
         score = compute_effective_score(
             confidence=0.9,
             success_rate=0.8,
@@ -255,8 +255,8 @@ class TestProvisionalDampening:
             success_rate=0.8,
             usage_count=10,
         )
-        # Default dampening is 1.0, so no change
-        assert score == base_score
+        # Default dampening is 0.5 (matches InjectionLimitsConfig default)
+        assert score == pytest.approx(base_score * 0.5)
 
     def test_dampening_clamped_above_one(self) -> None:
         """Dampening > 1.0 is clamped to 1.0."""
