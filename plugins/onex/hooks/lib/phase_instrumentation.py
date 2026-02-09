@@ -51,6 +51,8 @@ from omnibase_spi.contracts.measurement import (
     MeasurementCheck,
 )
 
+from plugins.onex.hooks.lib.metrics_emitter import MAX_ERROR_MESSAGE_LENGTH
+
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
@@ -332,9 +334,7 @@ def build_error_metrics(
 
     duration = ContractDurationMetrics(wall_clock_ms=wall_clock_ms)
 
-    # Sanitize error message (use shared constant from metrics_emitter)
-    from plugins.onex.hooks.lib.metrics_emitter import MAX_ERROR_MESSAGE_LENGTH
-
+    # Sanitize error message -- align with evt topic limit
     error_msg = str(error)[:MAX_ERROR_MESSAGE_LENGTH]
 
     outcome = ContractOutcomeMetrics(
@@ -436,6 +436,7 @@ def instrumented_phase(
     repo_id: str,
     phase_fn: Callable[[], PhaseResult],
     instance_id: str = "",
+    started_at: datetime | None = None,
 ) -> PhaseResult:
     """Execute a pipeline phase with full instrumentation.
 
@@ -453,6 +454,8 @@ def instrumented_phase(
         repo_id: Repository identifier.
         phase_fn: Zero-argument callable that executes the phase.
         instance_id: Optional instance identifier.
+        started_at: Explicit start timestamp for deterministic testing.
+            Defaults to ``datetime.now(UTC)`` when *None*.
 
     Returns:
         The PhaseResult from phase_fn.
@@ -466,7 +469,8 @@ def instrumented_phase(
         write_metrics_artifact,
     )
 
-    started_at = datetime.now(UTC)
+    if started_at is None:
+        started_at = datetime.now(UTC)
 
     try:
         result = phase_fn()
