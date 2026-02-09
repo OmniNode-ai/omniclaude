@@ -73,8 +73,16 @@ class PatternRecord:
     example_reference: str | None = None
     lifecycle_state: str | None = None
 
+    # Valid lifecycle states for pattern records
+    VALID_LIFECYCLE_STATES = frozenset({"validated", "provisional", None})
+
     def __post_init__(self) -> None:
         """Validate fields after initialization (runs before instance is frozen)."""
+        if self.lifecycle_state not in self.VALID_LIFECYCLE_STATES:
+            raise ValueError(
+                f"lifecycle_state must be one of {{'validated', 'provisional', None}}, "
+                f"got {self.lifecycle_state!r}"
+            )
         if not 0.0 <= self.confidence <= 1.0:
             raise ValueError(
                 f"confidence must be between 0.0 and 1.0, got {self.confidence}"

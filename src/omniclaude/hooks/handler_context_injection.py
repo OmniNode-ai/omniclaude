@@ -181,8 +181,16 @@ class PatternRecord:
     example_reference: str | None = None
     lifecycle_state: str | None = None
 
+    # Valid lifecycle states for pattern records
+    VALID_LIFECYCLE_STATES = frozenset({"validated", "provisional", None})
+
     def __post_init__(self) -> None:
         """Validate fields after initialization (runs before instance is frozen)."""
+        if self.lifecycle_state not in self.VALID_LIFECYCLE_STATES:
+            raise ValueError(
+                f"lifecycle_state must be one of {{'validated', 'provisional', None}}, "
+                f"got {self.lifecycle_state!r}"
+            )
         if not 0.0 <= self.confidence <= 1.0:
             raise ValueError(
                 f"confidence must be between 0.0 and 1.0, got {self.confidence}"
@@ -693,10 +701,11 @@ class HandlerContextInjection:
                 if include_provisional:
                     logger.warning(
                         "include_provisional=True ignored with domain filter '%s'; "
-                        "domain-filtered query returns validated patterns only",
+                        "domain-filtered graduated injection not yet implemented "
+                        "(see OMN-2042 follow-up). Returning validated patterns only.",
                         domain,
                     )
-                # Use domain-filtered operation (validated only for now)
+                # Use domain-filtered operation (validated only; graduated domain query is a follow-up)
                 rows = await runtime.call(
                     "list_patterns_by_domain",
                     domain,  # positional arg

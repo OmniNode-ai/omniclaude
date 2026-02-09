@@ -219,8 +219,8 @@ if [[ "$SESSION_ALREADY_INJECTED" == "false" ]] && [[ -n "$AGENT_NAME" ]] && [[ 
             min_confidence: $min_confidence
         }')"
 
-    # 2s timeout - patterns should be fast (file-based)
-    # Try ONEX-compliant wrapper first, fall back to legacy injector
+    # 2s timeout - patterns should be fast (database-backed)
+    # Use ONEX-compliant wrapper for pattern injection
     # Use run_with_timeout for portability (works on macOS and Linux)
     if [[ -f "${HOOKS_LIB}/context_injection_wrapper.py" ]]; then
         log "Using context_injection_wrapper.py"
