@@ -158,7 +158,7 @@ Each `FanOutRule` specifies:
 |-----------|-------------|---------|-----------------|
 | Infra `EventRegistry` (installed) | 4 | No | Stale |
 | Infra `EventRegistry` (source) | 12 | No | Conflicting |
-| omniclaude4 local `EVENT_REGISTRY` | 17 | Yes | Canonical |
+| omniclaude4 local `EVENT_REGISTRY` | 14 | Yes | Canonical |
 
 ---
 
@@ -194,7 +194,7 @@ One semantic event can publish to multiple Kafka topics with different payload t
 | `prompt.submitted` | `onex.cmd.omniintelligence.claude-hook-event.v1` | `onex.evt.omniclaude.prompt-submitted.v1` | `transform_for_observability` (redacts secrets, truncates to 100 chars) |
 | `session.outcome` | `onex.cmd.omniintelligence.session-outcome.v1` | `onex.evt.omniclaude.session-outcome.v1` | Passthrough (no sensitive content) |
 
-All other event types (15 of 17) are single-target EVT with passthrough.
+All other event types (12 of 14) are single-target with passthrough.
 
 **When to add fan-out**: An event needs fan-out when it is simultaneously:
 - An input to a specific downstream system (CMD) — e.g., intelligence feedback loop
@@ -226,7 +226,7 @@ The same `event_type` can legitimately map to both CMD and EVT via fan-out. This
 | File | Change |
 |------|--------|
 | `src/omniclaude/hooks/topics.py` | +3 TopicBase entries (`ROUTING_DECISION`, `NOTIFICATION_BLOCKED`, `NOTIFICATION_COMPLETED`), renamed `SESSION_OUTCOME` → `SESSION_OUTCOME_CMD` + `SESSION_OUTCOME_EVT`, removed `ROUTING_DECISIONS` |
-| `src/omniclaude/hooks/event_registry.py` | +6 EventRegistrations (17 total), `session.outcome` upgraded to dual fan-out |
+| `src/omniclaude/hooks/event_registry.py` | +6 EventRegistrations (14 total), `session.outcome` upgraded to dual fan-out |
 | `src/omniclaude/publisher/embedded_publisher.py` | Replaced infra `EventRegistry` with local registry imports, added `_inject_metadata()`, fan-out loop in `_handle_emit()` |
 | `plugins/onex/hooks/lib/hook_event_adapter.py` | `TopicBase.ROUTING_DECISIONS` → `TopicBase.ROUTING_DECISION` |
 | `tests/publisher/test_embedded_publisher.py` | Removed all `patch.object(publisher._registry, ...)` mocks |
@@ -244,7 +244,7 @@ The same `event_type` can legitimately map to both CMD and EVT via fan-out. This
 ### Verification
 
 ```bash
-# All 17 event types registered with correct fan-out
+# All 14 event types registered with correct fan-out
 .venv/bin/python3 -c "
 from omniclaude.hooks.event_registry import EVENT_REGISTRY
 for et in sorted(EVENT_REGISTRY.keys()):
@@ -285,7 +285,7 @@ grep -c 'from omnibase_infra.*event_registry' src/omniclaude/publisher/embedded_
 
 ### Benefits Realized
 
-1. **Single source of truth**: 17 event types defined once, in one file, in the app repo
+1. **Single source of truth**: 14 event types defined once, in one file, in the app repo
 2. **No version drift**: No infra package to go stale
 3. **Fan-out support**: One event, multiple delivery targets with per-target transforms
 4. **Privacy by design**: EVT topics get sanitized previews; CMD topics get full payloads
@@ -328,7 +328,7 @@ Extend infra with `FanOutRule` support. **Rejected** because:
 
 ### Related Code
 
-- **Event Registry**: `src/omniclaude/hooks/event_registry.py` — 17 event types with fan-out rules
+- **Event Registry**: `src/omniclaude/hooks/event_registry.py` — 14 event types with fan-out rules
 - **Topic Definitions**: `src/omniclaude/hooks/topics.py` — `TopicBase` StrEnum
 - **Publisher**: `src/omniclaude/publisher/embedded_publisher.py` — fan-out loop in `_handle_emit()`
 - **Infra PR**: omnibase_infra #275 — removed `_register_defaults()` from `EventRegistry`
