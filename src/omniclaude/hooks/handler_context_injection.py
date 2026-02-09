@@ -435,7 +435,7 @@ class HandlerContextInjection:
                 cohort=None,
             )
 
-        # Step 1: Load patterns (database primary, file fallback)
+        # Step 1: Load patterns from database
         start_time = time.monotonic()
         timeout_seconds = cfg.timeout_ms / 1000.0
         patterns: list[ModelPatternRecord] = []
