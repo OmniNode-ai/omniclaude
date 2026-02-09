@@ -9,9 +9,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
+
+logger = logging.getLogger(__name__)
 
 from omnibase_spi.contracts.measurement.contract_aggregated_run import (
     ContractAggregatedRun,
@@ -409,8 +412,12 @@ def load_gate(
     if not target.exists():
         return None
 
-    data = json.loads(target.read_text())
-    return ContractPromotionGate.model_validate(data)
+    try:
+        data = json.loads(target.read_text())
+        return ContractPromotionGate.model_validate(data)
+    except (json.JSONDecodeError, OSError, ValueError) as e:
+        logger.warning("Failed to load gate from %s: %s", target, e)
+        return None
 
 
 def load_latest_gate_result(
@@ -447,5 +454,6 @@ def load_latest_gate_result(
         data = json.loads(latest_file.read_text())
         result = data.get("gate_result")
         return str(result) if result is not None else None
-    except Exception:
+    except (json.JSONDecodeError, OSError) as e:
+        logger.warning("Failed to load latest gate for %s: %s", pid, e)
         return None
