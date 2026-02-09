@@ -457,6 +457,8 @@ class HandlerContextInjection:
                     patterns = db_result.patterns
                     source = self._format_source_attribution(db_result.source_files)
                     context_source = ContextSource.DATABASE
+                    for w in db_result.warnings:
+                        logger.warning("Pattern loading warning: %s", w)
                     logger.debug(f"Loaded {len(patterns)} patterns from database")
                 except Exception as db_err:
                     logger.warning(f"Database pattern loading failed: {db_err}")

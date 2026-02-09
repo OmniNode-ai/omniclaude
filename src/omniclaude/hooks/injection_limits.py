@@ -350,10 +350,9 @@ class InjectionLimitsConfig(BaseSettings):
             "When False (default), only validated patterns are injected. "
             "When True, provisional patterns are included with dampened scores "
             "and annotated with [Provisional] badge in output. "
-            "NOTE: This setting is silently ignored when a domain filter is active "
-            "because domain-filtered graduated injection is not yet implemented "
-            "(see OMN-2042 follow-up). In that case only validated patterns are "
-            "returned, even though no error is raised."
+            "NOTE: When a domain filter is active, this setting falls back to "
+            "validated-only patterns with a logged warning, because domain-filtered "
+            "graduated injection is not yet implemented (see OMN-2042 follow-up)."
         ),
     )
 

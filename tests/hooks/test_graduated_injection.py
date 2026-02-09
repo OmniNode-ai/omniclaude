@@ -155,6 +155,22 @@ class TestPatternRecordLifecycleState:
         with pytest.raises(Exception):
             record.lifecycle_state = "provisional"  # type: ignore[misc]
 
+    def test_invalid_lifecycle_state_raises_value_error(self) -> None:
+        """PatternRecord rejects invalid lifecycle_state values."""
+        from omniclaude.hooks.handler_context_injection import PatternRecord
+
+        with pytest.raises(ValueError, match="lifecycle_state must be one of"):
+            PatternRecord(
+                pattern_id="test-bad",
+                domain="testing",
+                title="Test",
+                description="Desc",
+                confidence=0.9,
+                usage_count=10,
+                success_rate=0.8,
+                lifecycle_state="unknown",
+            )
+
     def test_cli_pattern_record_has_lifecycle_state(self) -> None:
         """CLI PatternRecord also has lifecycle_state field."""
         from plugins.onex.hooks.lib.pattern_types import PatternRecord as CLIRecord
