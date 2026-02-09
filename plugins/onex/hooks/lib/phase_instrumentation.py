@@ -285,6 +285,7 @@ def build_error_metrics(
     started_at: datetime,
     error: Exception,
     instance_id: str = "",
+    completed_at: datetime | None = None,
 ) -> ContractPhaseMetrics:
     """Build a ContractPhaseMetrics for an error case.
 
@@ -299,11 +300,13 @@ def build_error_metrics(
         started_at: Phase start timestamp.
         error: The exception that was raised.
         instance_id: Optional instance identifier.
+        completed_at: Phase completion timestamp. Defaults to now if not provided.
 
     Returns:
         A ContractPhaseMetrics with ERROR classification.
     """
-    completed_at = datetime.now(UTC)
+    if completed_at is None:
+        completed_at = datetime.now(UTC)
     wall_clock_ms = (completed_at - started_at).total_seconds() * 1000.0
 
     spi_phase = PHASE_TO_SPI.get(phase, ContractEnumPipelinePhase.IMPLEMENT)
@@ -471,6 +474,7 @@ def instrumented_phase(
         )
 
     except Exception as e:
+        completed_at = datetime.now(UTC)
         metrics = build_error_metrics(
             run_id=run_id,
             phase=phase,
@@ -480,6 +484,7 @@ def instrumented_phase(
             started_at=started_at,
             error=e,
             instance_id=instance_id,
+            completed_at=completed_at,
         )
         # Emit and persist even on error
         emit_phase_metrics(metrics)

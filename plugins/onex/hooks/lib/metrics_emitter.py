@@ -104,7 +104,8 @@ def _sanitize_failed_tests(tests: list[str]) -> list[str]:
 def _validate_artifact_uri(uri: str) -> bool:
     """Validate artifact pointer URI does not contain absolute paths.
 
-    Per M2 spec, URIs containing /Users/ or C:\\ are rejected for evt emission.
+    Per M2 spec, URIs containing /Users/, /home/, /root/, or C:\\ are rejected
+    for evt emission.
 
     Args:
         uri: The artifact URI to validate.
@@ -112,7 +113,7 @@ def _validate_artifact_uri(uri: str) -> bool:
     Returns:
         True if URI is safe for emission.
     """
-    if "/Users/" in uri or "C:\\" in uri:
+    if "/Users/" in uri or "/home/" in uri or "/root/" in uri or "C:\\" in uri:
         logger.warning(f"Artifact URI contains absolute path, rejecting: {uri[:50]}...")
         return False
     return True
@@ -125,24 +126,33 @@ def _validate_artifact_uri(uri: str) -> bool:
 
 def _build_measurement_event(
     metrics: ContractPhaseMetrics,
+    *,
+    timestamp_iso: str | None = None,
+    event_id: str | None = None,
 ) -> ContractMeasurementEvent:
     """Wrap ContractPhaseMetrics in a ContractMeasurementEvent.
 
     Args:
         metrics: The phase metrics to wrap.
+        timestamp_iso: Explicit ISO-8601 timestamp for deterministic testing.
+            Defaults to ``datetime.now(UTC).isoformat()`` when *None*.
+        event_id: Explicit short event identifier for deterministic testing.
+            Defaults to ``str(uuid.uuid4())[:8]`` when *None*.
 
     Returns:
         A ContractMeasurementEvent domain envelope.
     """
     from omnibase_spi.contracts.measurement import ContractMeasurementEvent
 
-    event_id = str(uuid.uuid4())[:8]
-    timestamp = datetime.now(UTC).isoformat()
+    if event_id is None:
+        event_id = str(uuid.uuid4())[:8]
+    if timestamp_iso is None:
+        timestamp_iso = datetime.now(UTC).isoformat()
 
     return ContractMeasurementEvent(
         event_id=event_id,
         event_type="phase_completed",
-        timestamp_iso=timestamp,
+        timestamp_iso=timestamp_iso,
         payload=metrics,
     )
 

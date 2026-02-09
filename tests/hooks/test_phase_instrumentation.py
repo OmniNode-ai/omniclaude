@@ -14,24 +14,15 @@ Covers:
 
 from __future__ import annotations
 
-import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from pydantic import ValidationError
 
-# Ensure src is importable
-_src_path = str(Path(__file__).parent.parent.parent / "src")
-if _src_path not in sys.path:
-    sys.path.insert(0, _src_path)
-
-# Ensure plugins is importable
-_plugins_path = str(
-    Path(__file__).parent.parent.parent / "plugins" / "onex" / "hooks" / "lib"
-)
-if _plugins_path not in sys.path:
-    sys.path.insert(0, _plugins_path)
+# All tests in this module are unit tests
+pytestmark = pytest.mark.unit
 
 from omnibase_spi.contracts.measurement import (
     ContractCostMetrics,
@@ -47,6 +38,10 @@ from omnibase_spi.contracts.measurement import (
 )
 
 from plugins.onex.hooks.lib.metrics_emitter import (
+    _build_measurement_event,
+    _sanitize_error_messages,
+    _sanitize_failed_tests,
+    _validate_artifact_uri,
     emit_phase_metrics,
     metrics_artifact_exists,
     read_metrics_artifact,
@@ -857,6 +852,128 @@ class TestConstants:
 
 
 # ---------------------------------------------------------------------------
+# Tests: Sanitization functions (security-critical for evt topic)
+# ---------------------------------------------------------------------------
+
+
+class TestSanitization:
+    """Direct tests for sanitization functions in metrics_emitter.py.
+
+    These functions guard the broad-access evt topic against secret leakage
+    and oversized payloads. Each is security-critical.
+    """
+
+    # -- _sanitize_error_messages --
+
+    def test_error_message_truncation(self):
+        """Messages over 200 chars are truncated with trailing '...'."""
+        long_msg = "A" * 300
+        result = _sanitize_error_messages([long_msg])
+        assert len(result) == 1
+        assert len(result[0]) == 200
+        assert result[0].endswith("...")
+
+    def test_error_messages_capped_at_five(self):
+        """More than 5 messages are trimmed to exactly 5."""
+        messages = [f"error-{i}" for i in range(10)]
+        result = _sanitize_error_messages(messages)
+        assert len(result) == 5
+
+    def test_error_messages_secret_redaction(self):
+        """Messages containing secrets (e.g. OpenAI key) get redacted."""
+        # Pattern requires sk- followed by 20+ alphanumeric chars
+        secret_key = "sk-abc123456789abcdefghij"
+        secret_msg = f"Failed with key {secret_key} in request"
+        result = _sanitize_error_messages([secret_msg])
+        assert len(result) == 1
+        # The original secret should not appear verbatim in the output
+        assert secret_key not in result[0]
+        assert "REDACTED" in result[0]
+
+    def test_error_messages_empty_list(self):
+        """Empty input returns empty output."""
+        assert _sanitize_error_messages([]) == []
+
+    # -- _sanitize_failed_tests --
+
+    def test_failed_test_truncation(self):
+        """Test names over 100 chars are truncated with trailing '...'."""
+        long_name = "test_" + "x" * 200
+        result = _sanitize_failed_tests([long_name])
+        assert len(result) == 1
+        assert len(result[0]) == 100
+        assert result[0].endswith("...")
+
+    def test_failed_tests_capped_at_twenty(self):
+        """More than 20 tests are trimmed to exactly 20."""
+        tests = [f"test_case_{i}" for i in range(30)]
+        result = _sanitize_failed_tests(tests)
+        assert len(result) == 20
+
+    def test_failed_tests_empty_list(self):
+        """Empty input returns empty output."""
+        assert _sanitize_failed_tests([]) == []
+
+    # -- _validate_artifact_uri --
+
+    def test_rejects_users_path(self):
+        """/Users/ in URI is rejected."""
+        assert _validate_artifact_uri("/Users/jonah/artifacts/report.html") is False
+
+    def test_rejects_home_path(self):
+        """/home/ in URI is rejected."""
+        assert _validate_artifact_uri("/home/deploy/artifacts/report.html") is False
+
+    def test_rejects_root_path(self):
+        """/root/ in URI is rejected."""
+        assert _validate_artifact_uri("/root/.cache/artifact.json") is False
+
+    def test_rejects_windows_path(self):
+        """C:\\ in URI is rejected."""
+        assert _validate_artifact_uri("C:\\Users\\admin\\report.html") is False
+
+    def test_accepts_relative_path(self):
+        """Relative paths like artifacts/report.html are accepted."""
+        assert _validate_artifact_uri("artifacts/report.html") is True
+
+    def test_accepts_https_url(self):
+        """HTTPS URLs are accepted."""
+        assert _validate_artifact_uri("https://ci.example.com/report") is True
+
+    # -- _build_measurement_event --
+
+    def test_injectable_timestamp_and_event_id(
+        self, sample_metrics: ContractPhaseMetrics
+    ):
+        """Explicit timestamp_iso and event_id are used when provided."""
+        event = _build_measurement_event(
+            sample_metrics,
+            timestamp_iso="2026-02-09T12:00:00+00:00",
+            event_id="test1234",
+        )
+        assert event.event_id == "test1234"
+        assert event.timestamp_iso == "2026-02-09T12:00:00+00:00"
+
+    def test_default_timestamp_and_event_id(self, sample_metrics: ContractPhaseMetrics):
+        """When not provided, timestamp and event_id are auto-generated."""
+        event = _build_measurement_event(sample_metrics)
+        # event_id is uuid4()[:8] so 8 chars
+        assert len(event.event_id) == 8
+        # timestamp_iso should be a valid ISO string with current year
+        assert event.timestamp_iso.startswith("20")
+
+    def test_event_envelope_structure(self, sample_metrics: ContractPhaseMetrics):
+        """Event envelope has required keys."""
+        event = _build_measurement_event(
+            sample_metrics,
+            timestamp_iso="2026-02-09T00:00:00+00:00",
+            event_id="abcd1234",
+        )
+        assert event.event_type == "phase_completed"
+        assert event.payload is sample_metrics
+
+
+# ---------------------------------------------------------------------------
 # Tests: Frozen contract compliance
 # ---------------------------------------------------------------------------
 
@@ -865,7 +982,7 @@ class TestFrozenCompliance:
     """Verify metrics contracts are immutable (frozen=True)."""
 
     def test_phase_metrics_is_frozen(self, sample_metrics: ContractPhaseMetrics):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             sample_metrics.run_id = "mutated"  # type: ignore[misc]
 
     def test_round_trip_json(self, sample_metrics: ContractPhaseMetrics):
