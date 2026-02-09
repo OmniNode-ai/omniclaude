@@ -4,9 +4,9 @@ version = "0.1.0"
 description = "Claude Code hooks + learning loop integration"
 requires-python = ">=3.12,<4.0"
 dependencies = [
-    "omnibase-core>=0.14.0,<0.15.0",
-    "omnibase-spi>=0.6.4,<0.7.0",
-    "omnibase-infra>=0.4.0,<0.5.0",
+    "omnibase-core>=0.16.0,<0.17.0",
+    "omnibase-spi>=0.7.0,<0.8.0",
+    "omnibase-infra>=0.6.0,<0.7.0",
     "pydantic>=2.9.0",
     "pydantic-settings>=2.6.0",
     "cachetools>=5.0.0",
@@ -45,6 +45,9 @@ dev = [
 [project.scripts]
 omniclaude-emit = "omniclaude.hooks.cli_emit:main"
 omni-patterns = "omniclaude.cli.patterns:main"
+
+[project.entry-points."onex.domain_plugins"]
+claude = "omniclaude.runtime.plugin:PluginClaude"
 
 [build-system]
 requires = ["hatchling"]
