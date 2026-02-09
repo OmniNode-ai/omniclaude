@@ -53,6 +53,31 @@ if command -v jq >/dev/null 2>&1; then
     CURRENT_ITERM="${ITERM_SESSION_ID#*:}"  # Strip prefix up to colon = GUID only
   fi
 
+  # Query live tab positions from iTerm2 via single AppleScript call.
+  # Returns "pos|GUID" per line. Used to:
+  #   1. Show current visual positions (not stale registration-time positions)
+  #   2. Filter out entries for closed tabs (GUID has no live match)
+  LIVE_POSITIONS=""
+  if [ "$(uname)" = "Darwin" ] && command -v osascript >/dev/null 2>&1; then
+    LIVE_POSITIONS=$(osascript 2>/dev/null <<'APPLESCRIPT'
+tell application "iTerm2"
+    tell current window
+        set output to ""
+        repeat with i from 1 to count of tabs
+            tell tab i
+                repeat with s in sessions
+                    set uid to unique ID of s
+                    set output to output & i & "|" & uid & linefeed
+                end repeat
+            end tell
+        end repeat
+        return output
+    end tell
+end tell
+APPLESCRIPT
+    ) || LIVE_POSITIONS=""
+  fi
+
   # Self-register/update: ensure this tab's registry entry matches the current project.
   # Handles: new sessions, resumed sessions, same tab switching repos.
   # Keyed by GUID so each iTerm tab has exactly one entry.
@@ -78,25 +103,20 @@ if command -v jq >/dev/null 2>&1; then
   STALE_THRESHOLD=$((NOW - 86400))
 
   # Read all registry files, parse with single jq invocation
-  # Output: tab_pos\trepo\tticket\titerm_guid (one per line, sorted by tab_pos)
+  # Output: tab_pos|repo|ticket|iterm_guid|project_path (one per line, sorted by tab_pos)
   ENTRIES=""
   for f in "$TAB_REGISTRY_DIR"/*.json; do
     [ -f "$f" ] || continue
     # Skip stale files (older than 24h) using file mtime
-    if stat -f %m "$f" >/dev/null 2>&1; then
-      FILE_MTIME=$(stat -f %m "$f" 2>/dev/null)
-    else
-      FILE_MTIME=$(stat -c %Y "$f" 2>/dev/null || echo "0")
-    fi
+    FILE_MTIME=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null || echo "0")
     [ "$FILE_MTIME" -lt "$STALE_THRESHOLD" ] && continue
     ENTRIES="${ENTRIES}$(cat "$f" 2>/dev/null)
 "
   done
 
   if [ -n "$ENTRIES" ]; then
-    # Single jq call: parse all entries, sort by tab_pos, output tab-delimited
+    # Single jq call: parse all entries, sort by tab_pos, output pipe-delimited
     # Includes project_path so we can read live branch from git
-    # Use pipe-delimited output (tab-delimited breaks on empty fields with bash read)
     FORMATTED=$(echo "$ENTRIES" | jq -sr '
       [.[] | select(.repo != null)] |
       sort_by(.tab_pos // 999) |
@@ -104,12 +124,32 @@ if command -v jq >/dev/null 2>&1; then
     ' 2>/dev/null)
 
     if [ -n "$FORMATTED" ]; then
+      # Apply live tab positions and filter closed tabs BEFORE rendering.
+      # This ensures correct sort order after tab moves.
+      if [ -n "$LIVE_POSITIONS" ]; then
+        RESOLVED=""
+        while IFS='|' read -r tab_pos repo ticket iterm_guid project_path; do
+          [ -z "$tab_pos" ] && continue
+          entry_guid="${iterm_guid#*:}"
+          live_pos=$(echo "$LIVE_POSITIONS" | grep -F "$entry_guid" | head -1 | cut -d'|' -f1)
+          if [ -n "$live_pos" ]; then
+            RESOLVED="${RESOLVED}${live_pos}|${repo}|${ticket}|${iterm_guid}|${project_path}
+"
+          fi
+          # No live match → tab closed since registration, skip
+        done <<< "$FORMATTED"
+        FORMATTED=$(echo "$RESOLVED" | sort -t'|' -k1 -n)
+      fi
+
       while IFS='|' read -r tab_pos repo ticket iterm_guid project_path; do
         [ -z "$tab_pos" ] && continue
         # Convert placeholders back to empty
         [ "$ticket" = "-" ] && ticket=""
         [ "$iterm_guid" = "-" ] && iterm_guid=""
         [ "$project_path" = "-" ] && project_path=""
+
+        # Normalize GUID: strip "w{W}t{T}p{P}:" prefix if present
+        entry_guid="${iterm_guid#*:}"
 
         # Read live branch from git if project_path is available (keeps ticket current after merges)
         if [ -n "$project_path" ] && [ -d "$project_path" ]; then
@@ -123,8 +163,7 @@ if command -v jq >/dev/null 2>&1; then
         label="T${tab_pos}·${repo}"
         [ -n "$ticket" ] && label="${label}·${ticket}"
 
-        # Highlight current tab (match by iTerm GUID - handles both full and GUID-only formats)
-        entry_guid="${iterm_guid#*:}"  # Strip w{W}t{T}p{P}: prefix if present
+        # Highlight current tab (match by iTerm GUID)
         if [ -n "$CURRENT_ITERM" ] && [ "$entry_guid" = "$CURRENT_ITERM" ]; then
           # Current tab: black text on cyan background
           LINE2="${LINE2}\033[30;46m ${label} \033[0m  "

@@ -185,7 +185,7 @@ class HandlerRoutingDefault:
 
         # 8. Fallback - no matches above threshold
         fallback_reason = (
-            f"No agents matched above threshold {request.confidence_threshold:.2f}"
+            "No agents matched any trigger patterns"
             if not candidates
             else (
                 f"Best match {candidates[0].agent_name} "

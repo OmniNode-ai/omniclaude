@@ -113,8 +113,10 @@ if [[ -n "$SESSION_DURATION" && "$SESSION_DURATION" != "0" ]]; then
     DURATION_SECONDS=$(awk -v ms="$SESSION_DURATION" 'BEGIN{v=ms/1000; printf "%.3f", (v<0?0:v)}' 2>/dev/null || echo "0")
 fi
 
-# Emit session.ended event to Kafka (async, non-blocking)
+# Emit session.ended event to Kafka (backgrounded for parallelism)
 # Uses emit_client_wrapper with daemon fan-out (OMN-1632)
+# PIDs tracked for drain-then-stop at end (no fixed sleep needed at SessionEnd).
+EMIT_PIDS=()
 if [[ "$KAFKA_ENABLED" == "true" ]]; then
     (
         # Build JSON payload for emit daemon (includes active_ticket for OMN-1830)
@@ -138,6 +140,7 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
             emit_via_daemon "session.ended" "$SESSION_PAYLOAD" 100
         fi
     ) &
+    EMIT_PIDS+=($!)
 
     # Session outcome derivation + emission + feedback guardrails (OMN-1735, OMN-1892)
     # Consolidated into a single backgrounded subshell so the DERIVED_OUTCOME
@@ -289,30 +292,12 @@ print(json.dumps({
 
         log "Feedback guardrail: should_reinforce=$SHOULD_REINFORCE skip_reason=$SKIP_REASON"
     ) &
+    EMIT_PIDS+=($!)
 
     log "Session event emission started via emit daemon"
 else
     log "Kafka emission skipped (KAFKA_ENABLED=$KAFKA_ENABLED)"
 fi
-
-# Flush and stop the publisher (OMN-1944)
-# Give events a brief window (0.5s) to flush, then send stop signal.
-# This runs in a background subshell to avoid blocking session-end.
-# Known limitation: if emit subshells above take >0.5s (e.g. socket latency),
-# events may not be enqueued before SIGTERM arrives and will be dropped.
-# Acceptable per CLAUDE.md failure modes (data loss OK, UI freeze is not).
-# Override via PUBLISHER_DRAIN_DELAY_SECONDS if needed.
-(
-    # Brief pause to allow async emit subshells above to complete
-    sleep "${PUBLISHER_DRAIN_DELAY_SECONDS:-0.5}"
-
-    # Stop publisher via __main__.py stop command (sends SIGTERM to PID)
-    "$PYTHON_CMD" -m omniclaude.publisher stop >> "$LOG_FILE" 2>&1 || {
-        # Fallback: try legacy daemon stop
-        "$PYTHON_CMD" -m omnibase_infra.runtime.emit_daemon.cli stop >> "$LOG_FILE" 2>&1 || true
-    }
-    log "Publisher stop signal sent"
-) &
 
 # Clean up correlation state
 if [[ -f "${HOOKS_LIB}/correlation_manager.py" ]]; then
@@ -332,8 +317,29 @@ if [[ -f "${HOOKS_LIB}/session_marker.py" ]] && [[ -n "${SESSION_ID}" ]]; then
     log "Cleared session injection marker"
 fi
 
-log "SessionEnd hook completed"
-
-# Output unchanged
+# Output response immediately so Claude Code can proceed with shutdown
 echo "$INPUT"
+
+# Drain emit subshells, then stop publisher (OMN-1944)
+# SessionEnd has no downstream UI action — waiting is safe here.
+# We wait for emit subshells to finish (bounded by timeout) so events
+# are enqueued before the publisher is stopped. No fixed-sleep gamble.
+DRAIN_TIMEOUT="${PUBLISHER_DRAIN_TIMEOUT_SECONDS:-3}"
+if [[ ${#EMIT_PIDS[@]} -gt 0 ]]; then
+    # Timeout guard: kill stragglers after DRAIN_TIMEOUT seconds
+    ( sleep "$DRAIN_TIMEOUT" && kill "${EMIT_PIDS[@]}" 2>/dev/null ) &
+    DRAIN_GUARD_PID=$!
+    wait "${EMIT_PIDS[@]}" 2>/dev/null || true
+    kill "$DRAIN_GUARD_PID" 2>/dev/null; wait "$DRAIN_GUARD_PID" 2>/dev/null || true
+    log "Emit subshells drained (${#EMIT_PIDS[@]} tracked)"
+fi
+
+# Stop publisher after all events are enqueued (or timed out)
+"$PYTHON_CMD" -m omniclaude.publisher stop >> "$LOG_FILE" 2>&1 || {
+    # Fallback: try legacy daemon stop
+    "$PYTHON_CMD" -m omnibase_infra.runtime.emit_daemon.cli stop >> "$LOG_FILE" 2>&1 || true
+}
+log "Publisher stop signal sent"
+
+log "SessionEnd hook completed"
 exit 0
