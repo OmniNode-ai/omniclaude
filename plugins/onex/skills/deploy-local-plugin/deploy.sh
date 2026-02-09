@@ -215,7 +215,8 @@ if [[ "$EXECUTE" == "true" ]]; then
     # Bundled Python Venv (per-plugin isolation)
     # =============================================================================
     # Creates a self-contained venv with all Python deps at <cache>/lib/.venv/.
-    # Atomic: if any step fails, deploy exits non-zero and registry is untouched.
+    # If any step fails, deploy exits non-zero and the registry is untouched.
+    # Note: TARGET dir (synced files) may persist on failure; re-deploy overwrites it.
     # No fallbacks. Either the venv works or the deploy fails.
 
     echo "Creating bundled Python venv..."

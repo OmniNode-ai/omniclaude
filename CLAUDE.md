@@ -104,6 +104,8 @@ These modules are intended for external use:
 | `ENABLE_POSTGRES` | Enable database logging | No (default: false) |
 | `USE_EVENT_ROUTING` | Enable agent routing via Kafka | No (default: false) |
 | `ENFORCEMENT_MODE` | Quality enforcement: `warn`, `block`, `silent` | No (default: warn) |
+| `OMNICLAUDE_PROJECT_ROOT` | Explicit project root for dev-mode Python venv resolution | No (dev only) |
+| `PLUGIN_PYTHON_BIN` | Override Python interpreter path for hooks (escape hatch) | No |
 
 ---
 
