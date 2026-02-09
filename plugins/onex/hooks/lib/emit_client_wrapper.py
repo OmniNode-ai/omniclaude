@@ -2,7 +2,7 @@
 """Emit Client Wrapper - Python Client for Hook Event Emission.
 
 This module provides the client-side interface for all hooks to emit events via
-the emit daemon using the EmitClient from omnibase_infra.
+the emit daemon using the EmitClient from omniclaude.publisher.
 
 Design Decisions:
     - **Python-only**: Uses EmitClient from omniclaude.publisher (OMN-1944 port)

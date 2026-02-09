@@ -1160,22 +1160,17 @@ async def wait_for_session_outcome(
         topic,
         bootstrap_servers=get_kafka_bootstrap_servers(),
         group_id=consumer_group,
-        auto_offset_reset="earliest",
+        auto_offset_reset="latest",
         enable_auto_commit=True,
         consumer_timeout_ms=int(timeout_seconds * 1000),
     )
 
     try:
         await consumer.start()
-        # Retry seek_to_end to handle topic auto-creation timing: if the
-        # topic doesn't exist yet, seek_to_end may raise or return empty
-        # partitions. A short retry loop lets Redpanda create the topic.
-        for _attempt in range(3):
-            try:
-                await consumer.seek_to_end()
-                break
-            except Exception:
-                await asyncio.sleep(0.5)
+        # No seek_to_end needed — auto_offset_reset="latest" positions
+        # the consumer at the current end. Messages published AFTER the
+        # consumer joins will be consumed, avoiding the race window that
+        # existed with the old earliest + seek_to_end pattern.
 
         start_time = asyncio.get_running_loop().time()
         while (asyncio.get_running_loop().time() - start_time) < timeout_seconds:

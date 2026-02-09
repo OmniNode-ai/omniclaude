@@ -352,6 +352,22 @@ class TestEmitSessionOutcome:
                 ),
             )
 
+    def test_empty_session_id_raises(self) -> None:
+        """Empty session_id raises ValueError at config construction."""
+        with pytest.raises(ValueError, match="non-empty"):
+            ModelSessionOutcomeConfig(
+                session_id="",
+                outcome="success",
+            )
+
+    def test_whitespace_session_id_raises(self) -> None:
+        """Whitespace-only session_id raises ValueError at config construction."""
+        with pytest.raises(ValueError, match="non-empty"):
+            ModelSessionOutcomeConfig(
+                session_id="   ",
+                outcome="success",
+            )
+
     @patch("omniclaude.hooks.handler_event_emitter.EventBusKafka")
     async def test_all_four_outcomes_are_valid(self, mock_bus_cls) -> None:
         """All four outcome classifications can be emitted."""

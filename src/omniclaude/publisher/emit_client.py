@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 # 4 KiB is generous for a single JSON response line
 _RECV_BUFSIZE = 4096
+# Guard against unbounded buffer growth from a misbehaving daemon (1 MiB)
+_MAX_RESPONSE_SIZE = 1_048_576
 
 
 class EmitClient:
@@ -39,6 +41,7 @@ class EmitClient:
         self._socket_path = socket_path
         self._timeout = timeout
         self._sock: socket.socket | None = None
+        self._buf = b""  # Persistent read buffer for TCP stream framing
 
     # ------------------------------------------------------------------
     # Connection management
@@ -52,6 +55,7 @@ class EmitClient:
         sock.settimeout(self._timeout)
         sock.connect(self._socket_path)
         self._sock = sock
+        self._buf = b""  # Reset buffer on new connection
         return sock
 
     def _send_and_recv(self, request: dict[str, object]) -> dict[str, object]:
@@ -68,16 +72,18 @@ class EmitClient:
             sock.sendall(line)
             return self._read_response(sock)
 
-    @staticmethod
-    def _read_response(sock: socket.socket) -> dict[str, object]:
-        """Read until newline and parse JSON."""
-        buf = b""
-        while b"\n" not in buf:
+    def _read_response(self, sock: socket.socket) -> dict[str, object]:
+        """Read until newline and parse JSON, preserving leftover bytes."""
+        while b"\n" not in self._buf:
             chunk = sock.recv(_RECV_BUFSIZE)
             if not chunk:
                 raise ConnectionResetError("daemon closed connection")
-            buf += chunk
-        resp_line = buf[: buf.index(b"\n")]
+            self._buf += chunk
+            if len(self._buf) > _MAX_RESPONSE_SIZE:
+                raise ValueError("daemon response exceeded size limit")
+        idx = self._buf.index(b"\n")
+        resp_line = self._buf[:idx]
+        self._buf = self._buf[idx + 1 :]  # Preserve leftover for next call
         return json.loads(resp_line)  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
@@ -121,6 +127,11 @@ class EmitClient:
             except OSError:
                 pass
             self._sock = None
+            self._buf = b""
+
+    def __del__(self) -> None:
+        """Best-effort cleanup of open socket on garbage collection."""
+        self.close()
 
 
 __all__ = ["EmitClient"]
