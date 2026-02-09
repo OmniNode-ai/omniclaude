@@ -136,7 +136,7 @@ def _reset_emit_event_cache() -> None:
 class PatternRecord:
     """API transfer model for learned patterns.
 
-    This is the canonical API model with 9 core fields, used for:
+    This is the canonical API model with 10 core fields, used for:
     - Context injection into Claude Code sessions
     - JSON serialization in API responses
     - Data transfer between components
@@ -165,10 +165,13 @@ class PatternRecord:
             Defaults to None for backward compatibility. None is treated as validated
             (no dampening applied). Provisional patterns are annotated differently
             in context injection output.
+        evidence_tier: Measurement quality tier (UNMEASURED, MEASURED, VERIFIED).
+            Defaults to None for backward compatibility. None is treated as UNMEASURED.
+            MEASURED and VERIFIED patterns display quality badges in context injection.
 
     See Also:
         - DbPatternRecord: Database model (12 fields) in repository_patterns.py
-        - PatternRecord (CLI): CLI model (9 fields) in plugins/onex/hooks/lib/pattern_types.py
+        - PatternRecord (CLI): CLI model (10 fields) in plugins/onex/hooks/lib/pattern_types.py
     """
 
     pattern_id: str
@@ -180,9 +183,12 @@ class PatternRecord:
     success_rate: float
     example_reference: str | None = None
     lifecycle_state: str | None = None
+    evidence_tier: str | None = None
 
     # Valid lifecycle states for pattern records
     VALID_LIFECYCLE_STATES = frozenset({"validated", "provisional", None})
+    # Valid evidence tiers for measurement quality
+    VALID_EVIDENCE_TIERS = frozenset({"UNMEASURED", "MEASURED", "VERIFIED", None})
 
     def __post_init__(self) -> None:
         """Validate fields after initialization (runs before instance is frozen)."""
@@ -190,6 +196,11 @@ class PatternRecord:
             raise ValueError(
                 f"lifecycle_state must be one of {{'validated', 'provisional', None}}, "
                 f"got {self.lifecycle_state!r}"
+            )
+        if self.evidence_tier not in self.VALID_EVIDENCE_TIERS:
+            raise ValueError(
+                f"evidence_tier must be one of {{'UNMEASURED', 'MEASURED', 'VERIFIED', None}}, "
+                f"got {self.evidence_tier!r}"
             )
         if not 0.0 <= self.confidence <= 1.0:
             raise ValueError(
@@ -750,6 +761,14 @@ class HandlerContextInjection:
                         str(raw_lifecycle) if raw_lifecycle is not None else None
                     )
 
+                    # Map evidence_tier from DB (OMN-2044)
+                    raw_evidence_tier = row.get("evidence_tier")
+                    evidence_tier = (
+                        str(raw_evidence_tier)
+                        if raw_evidence_tier is not None
+                        else None
+                    )
+
                     patterns.append(
                         PatternRecord(
                             pattern_id=str(pattern_id),
@@ -761,6 +780,7 @@ class HandlerContextInjection:
                             success_rate=_safe_float(row.get("success_rate")),
                             example_reference=row.get("example_reference"),
                             lifecycle_state=lifecycle_state,
+                            evidence_tier=evidence_tier,
                         )
                     )
                 except (ValueError, TypeError) as e:
@@ -824,9 +844,15 @@ class HandlerContextInjection:
             success_pct = f"{pattern.success_rate * 100:.0f}%"
 
             # Annotate provisional patterns with badge (OMN-2042)
-            title_suffix = (
-                " [Provisional]" if pattern.lifecycle_state == "provisional" else ""
-            )
+            # Annotate evidence tier with quality badge (OMN-2044)
+            badges: list[str] = []
+            if pattern.lifecycle_state == "provisional":
+                badges.append("[Provisional]")
+            if pattern.evidence_tier == "MEASURED":
+                badges.append("[Measured]")
+            elif pattern.evidence_tier == "VERIFIED":
+                badges.append("[Verified]")
+            title_suffix = (" " + " ".join(badges)) if badges else ""
             lines.append(f"### {pattern.title}{title_suffix}")
             lines.append("")
             lines.append(f"- **Domain**: {pattern.domain}")

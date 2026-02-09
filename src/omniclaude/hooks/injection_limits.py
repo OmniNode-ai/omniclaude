@@ -384,6 +384,16 @@ class InjectionLimitsConfig(BaseSettings):
         ),
     )
 
+    # Evidence tier filtering (OMN-2044: Evidence Tier in Retrieval Path)
+    require_measured: bool = Field(
+        default=False,
+        description=(
+            "When True, only patterns with evidence_tier MEASURED or VERIFIED "
+            "are included in injection. Patterns with UNMEASURED or None "
+            "evidence_tier are filtered out. Default False (all patterns pass)."
+        ),
+    )
+
     @field_validator("selection_policy")
     @classmethod
     def validate_selection_policy(cls, v: str) -> str:
@@ -460,8 +470,17 @@ def render_single_pattern(pattern: PatternRecord) -> str:
     success_pct = f"{pattern.success_rate * 100:.0f}%"
 
     # Annotate provisional patterns with badge (OMN-2042)
+    # Annotate evidence tier with quality badge (OMN-2044)
     lifecycle = getattr(pattern, "lifecycle_state", None)
-    title_suffix = " [Provisional]" if lifecycle == "provisional" else ""
+    evidence_tier = getattr(pattern, "evidence_tier", None)
+    badges: list[str] = []
+    if lifecycle == "provisional":
+        badges.append("[Provisional]")
+    if evidence_tier == "MEASURED":
+        badges.append("[Measured]")
+    elif evidence_tier == "VERIFIED":
+        badges.append("[Verified]")
+    title_suffix = (" " + " ".join(badges)) if badges else ""
 
     lines = [
         f"### {pattern.title}{title_suffix}",
@@ -543,6 +562,22 @@ def select_patterns_for_injection(
 
     if not candidates:
         return []
+
+    # Pre-filter: exclude unmeasured patterns when require_measured=True (OMN-2044)
+    if limits.require_measured:
+        before_count = len(candidates)
+        measured_tiers = {"MEASURED", "VERIFIED"}
+        candidates = [
+            p for p in candidates if getattr(p, "evidence_tier", None) in measured_tiers
+        ]
+        filtered_count = before_count - len(candidates)
+        if filtered_count > 0:
+            logger.debug(
+                "Filtered out %d unmeasured patterns (require_measured=True)",
+                filtered_count,
+            )
+        if not candidates:
+            return []
 
     # Pre-filter: exclude provisional patterns when include_provisional=False (OMN-2042)
     # This is the single enforcement point for both DB and file sources.
