@@ -29,7 +29,7 @@ Output JSON:
         "success": true,
         "patterns_context": "## Learned Patterns...",
         "pattern_count": 3,
-        "source": "/home/user/.claude/learned_patterns.json",
+        "source": "database:contract:192.168.86.200:5436/omninode_bridge",
         "retrieval_ms": 42,
         "injection_id": "abc12345-...",
         "cohort": "treatment"
@@ -44,11 +44,11 @@ import sys
 import time
 from typing import TYPE_CHECKING, cast
 
-from learned_pattern_injector import (
+from pattern_types import (
     InjectorInput,
     InjectorOutput,
-    _create_empty_output,
-    _create_error_output,
+    create_empty_output,
+    create_error_output,
 )
 
 if TYPE_CHECKING:
@@ -131,7 +131,7 @@ def main() -> None:
 
         if not input_data:
             logger.debug("Empty input received")
-            output = _create_empty_output()
+            output = create_empty_output()
             print(json.dumps(output))
             sys.exit(0)
 
@@ -141,7 +141,7 @@ def main() -> None:
         except json.JSONDecodeError as e:
             logger.warning(f"Invalid JSON input: {e}")
             elapsed_ms = int((time.monotonic() - start_time) * 1000)
-            output = _create_error_output(retrieval_ms=elapsed_ms)
+            output = create_error_output(retrieval_ms=elapsed_ms)
             print(json.dumps(output))
             sys.exit(0)
 
@@ -167,7 +167,7 @@ def main() -> None:
             logger.warning(f"Failed to import handler: {e}")
             # Handler import failed - return empty output for graceful degradation
             elapsed_ms = int((time.monotonic() - start_time) * 1000)
-            output = _create_error_output(retrieval_ms=elapsed_ms)
+            output = create_error_output(retrieval_ms=elapsed_ms)
             print(json.dumps(output))
             sys.exit(0)
 
@@ -221,7 +221,7 @@ def main() -> None:
         # CRITICAL: Always exit 0 for hook compatibility
         logger.error(f"Unexpected error in context injection wrapper: {e}")
         elapsed_ms = int((time.monotonic() - start_time) * 1000)
-        output = _create_error_output(retrieval_ms=elapsed_ms)
+        output = create_error_output(retrieval_ms=elapsed_ms)
         print(json.dumps(output))
         sys.exit(0)
 

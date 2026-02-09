@@ -193,16 +193,23 @@ def compute_effective_score(
     success_rate: float,
     usage_count: int,
     usage_count_scale: float = 5.0,
+    lifecycle_state: str | None = None,
+    provisional_dampening: float = 0.5,
 ) -> float:
     """Compute effective score for pattern ranking.
 
-    Formula: confidence * clamp(success_rate, 0..1) * f(usage_count)
+    Formula: confidence * clamp(success_rate, 0..1) * f(usage_count) [* dampening]
     where f(usage_count) = min(1.0, log1p(usage_count) / k)
+
+    For provisional patterns (lifecycle_state == "provisional"), the score is
+    multiplied by provisional_dampening to reduce their ranking priority relative
+    to validated patterns. This is part of OMN-2042: Graduated Injection Policy.
 
     This provides a composite score that considers:
     - confidence: How certain we are about the pattern
     - success_rate: Historical success when applied
     - usage_count: Experience/maturity (bounded to prevent runaway)
+    - lifecycle_state: Pattern maturity (provisional patterns are dampened)
 
     Args:
         confidence: Pattern confidence (0.0 to 1.0).
@@ -210,6 +217,13 @@ def compute_effective_score(
         usage_count: Number of times pattern was used.
         usage_count_scale: Scale factor k for usage_count normalization.
             Higher values = usage_count matters less. Default 5.0.
+        lifecycle_state: Pattern lifecycle state. If "provisional", the
+            provisional_dampening factor is applied. Default None (treated
+            as "validated", no dampening).
+        provisional_dampening: Dampening factor for provisional patterns.
+            Default 0.5 (matches InjectionLimitsConfig default).
+            Must be >0.0 (raises ValueError otherwise);
+            use include_provisional=False to disable entirely.
 
     Returns:
         Effective score (0.0 to 1.0).
@@ -219,6 +233,9 @@ def compute_effective_score(
         0.648  # approximately
         >>> compute_effective_score(0.5, 0.5, 0)  # Low everything
         0.0  # log1p(0) = 0
+        >>> compute_effective_score(0.9, 0.8, 10, lifecycle_state="provisional",
+        ...     provisional_dampening=0.5)  # Provisional at half score
+        0.324  # approximately
 
     Bootstrapping Note:
         Patterns with usage_count=0 will always receive a score of 0 because
@@ -241,7 +258,19 @@ def compute_effective_score(
     # For k=5: usage_count needs to be ~147 to reach factor of 1.0
     usage_factor = min(1.0, math.log1p(count) / usage_count_scale)
 
-    return conf * succ * usage_factor
+    score = conf * succ * usage_factor
+
+    # Apply provisional dampening (OMN-2042)
+    if lifecycle_state == "provisional":
+        if provisional_dampening <= 0.0:
+            raise ValueError(
+                "provisional_dampening must be > 0.0; "
+                "use include_provisional=False to disable provisional patterns"
+            )
+        dampening = min(1.0, provisional_dampening)
+        score *= dampening
+
+    return score
 
 
 # =============================================================================
@@ -319,6 +348,42 @@ class InjectionLimitsConfig(BaseSettings):
         description="Scale factor k for usage_count in effective score formula",
     )
 
+    # Provisional pattern configuration (OMN-2042: Graduated Injection Policy)
+    include_provisional: bool = Field(
+        default=False,
+        description=(
+            "Include provisional (not yet fully validated) patterns in injection. "
+            "When False (default), only validated patterns are injected. "
+            "When True, provisional patterns are included with dampened scores "
+            "and annotated with [Provisional] badge in output. "
+            "NOTE: When a domain filter is active, this setting falls back to "
+            "validated-only patterns with a logged warning, because domain-filtered "
+            "graduated injection is not yet implemented (see OMN-2042 follow-up)."
+        ),
+    )
+
+    provisional_dampening: float = Field(
+        default=0.5,
+        gt=0.0,
+        le=1.0,
+        description=(
+            "Dampening factor applied to provisional pattern scores. "
+            "A value of 0.5 means provisional patterns compete at half "
+            "their computed effective score. Range: (0.0, 1.0]. "
+            "To disable provisional patterns entirely, set include_provisional=False."
+        ),
+    )
+
+    max_provisional: int | None = Field(
+        default=None,
+        ge=1,
+        le=20,
+        description=(
+            "Optional hard cap on the number of provisional patterns injected. "
+            "None means no cap beyond the overall max_patterns_per_injection limit."
+        ),
+    )
+
     @field_validator("selection_policy")
     @classmethod
     def validate_selection_policy(cls, v: str) -> str:
@@ -394,8 +459,12 @@ def render_single_pattern(pattern: PatternRecord) -> str:
     confidence_pct = f"{pattern.confidence * 100:.0f}%"
     success_pct = f"{pattern.success_rate * 100:.0f}%"
 
+    # Annotate provisional patterns with badge (OMN-2042)
+    lifecycle = getattr(pattern, "lifecycle_state", None)
+    title_suffix = " [Provisional]" if lifecycle == "provisional" else ""
+
     lines = [
-        f"### {pattern.title}",
+        f"### {pattern.title}{title_suffix}",
         "",
         f"- **Domain**: {pattern.domain}",
         f"- **Confidence**: {confidence_pct}",
@@ -475,6 +544,24 @@ def select_patterns_for_injection(
     if not candidates:
         return []
 
+    # Pre-filter: exclude provisional patterns when include_provisional=False (OMN-2042)
+    # This is the single enforcement point for both DB and file sources.
+    if not limits.include_provisional:
+        before_count = len(candidates)
+        candidates = [
+            p
+            for p in candidates
+            if getattr(p, "lifecycle_state", None) != "provisional"
+        ]
+        filtered_count = before_count - len(candidates)
+        if filtered_count > 0:
+            logger.debug(
+                "Filtered out %d provisional patterns (include_provisional=False)",
+                filtered_count,
+            )
+        if not candidates:
+            return []
+
     # Use computed header tokens if not explicitly provided
     # This keeps the default in sync with INJECTION_HEADER constant
     effective_header_tokens = (
@@ -484,11 +571,15 @@ def select_patterns_for_injection(
     # Step 1: Score and normalize all candidates
     scored: list[ScoredPattern] = []
     for pattern in candidates:
+        # Pass lifecycle_state and provisional_dampening for graduated injection (OMN-2042)
+        pattern_lifecycle = getattr(pattern, "lifecycle_state", None)
         effective_score = compute_effective_score(
             confidence=pattern.confidence,
             success_rate=pattern.success_rate,
             usage_count=pattern.usage_count,
             usage_count_scale=limits.usage_count_scale,
+            lifecycle_state=pattern_lifecycle,
+            provisional_dampening=limits.provisional_dampening,
         )
         normalized_domain = normalize_domain(pattern.domain)
         rendered = render_single_pattern(pattern)
@@ -514,6 +605,9 @@ def select_patterns_for_injection(
     # Step 3: Apply limits with greedy selection
     selected: list[PatternRecord] = []
     domain_counts: dict[str, int] = {}
+    provisional_count = (
+        0  # Track provisional patterns for max_provisional cap (OMN-2042)
+    )
     total_tokens = effective_header_tokens  # Start with header overhead
 
     # Apply safety margin to token budget to account for tokenizer differences
@@ -538,11 +632,20 @@ def select_patterns_for_injection(
             )
             continue
 
-        # Check max_tokens_injected (skip this pattern)
-        # INTENTIONAL: No backfill with smaller patterns. Per "prefer_fewer_high_confidence"
-        # policy, we skip patterns that exceed budget and do NOT attempt to fit smaller
-        # subsequent patterns. This is by design - we prefer fewer high-quality patterns
-        # over maximizing token utilization with lower-scored alternatives.
+        # Check max_provisional cap (OMN-2042: skip provisional if cap reached)
+        pattern_lifecycle = getattr(scored_pattern.pattern, "lifecycle_state", None)
+        if pattern_lifecycle == "provisional" and limits.max_provisional is not None:
+            if provisional_count >= limits.max_provisional:
+                logger.debug(
+                    f"Skipping pattern {scored_pattern.pattern.pattern_id}: "
+                    f"provisional cap ({limits.max_provisional}) reached"
+                )
+                continue
+
+        # Check max_tokens_injected (skip this pattern, try next)
+        # Patterns are sorted by descending effective_score. If a high-token pattern
+        # exceeds budget, we skip it and try subsequent (lower-scored but possibly
+        # smaller) patterns that may still fit within the remaining budget.
         # NOTE: Uses effective_token_budget (with safety margin) to account for
         # tokenizer differences between tiktoken and Claude's actual tokenizer.
         new_total = total_tokens + scored_pattern.rendered_tokens
@@ -557,6 +660,8 @@ def select_patterns_for_injection(
         selected.append(scored_pattern.pattern)
         domain_counts[domain] = current_domain_count + 1
         total_tokens = new_total
+        if pattern_lifecycle == "provisional":
+            provisional_count += 1
 
         logger.debug(
             f"Selected pattern {scored_pattern.pattern.pattern_id}: "

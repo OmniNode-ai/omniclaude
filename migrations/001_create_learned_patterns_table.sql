@@ -90,7 +90,7 @@ CREATE TABLE IF NOT EXISTS learned_patterns (
 -- ======================================================================
 
 -- Primary query pattern: Filter by domain, sort by confidence DESC
--- Used by HandlerContextInjection._load_patterns_from_files() after DB migration
+-- Used by HandlerContextInjection._load_patterns_from_database()
 -- Supports queries like:
 --   SELECT * FROM learned_patterns
 --   WHERE domain IN ($domain, 'general') AND confidence >= $min_confidence

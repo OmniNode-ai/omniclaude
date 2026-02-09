@@ -3,11 +3,10 @@
 """Handler for context injection - all business logic lives here.
 
 This handler performs:
-1. Database query to load patterns (primary source)
-2. Optional file I/O fallback if database unavailable
-3. Filtering/sorting/limiting of patterns
-4. Markdown formatting
-5. Event emission to Kafka
+1. Database query to load patterns
+2. Filtering/sorting/limiting of patterns
+3. Markdown formatting
+4. Event emission to Kafka
 
 Following ONEX patterns from omnibase_infra: handlers own all business logic.
 No separate node is needed for simple file-read operations.
@@ -19,11 +18,10 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import json
 import logging
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -138,7 +136,7 @@ def _reset_emit_event_cache() -> None:
 class PatternRecord:
     """API transfer model for learned patterns.
 
-    This is the canonical API model with 8 core fields, used for:
+    This is the canonical API model with 9 core fields, used for:
     - Context injection into Claude Code sessions
     - JSON serialization in API responses
     - Data transfer between components
@@ -163,10 +161,14 @@ class PatternRecord:
         usage_count: Number of times this pattern has been applied.
         success_rate: Success rate from 0.0 to 1.0.
         example_reference: Optional reference to an example.
+        lifecycle_state: Lifecycle state of the pattern ("validated" or "provisional").
+            Defaults to None for backward compatibility. None is treated as validated
+            (no dampening applied). Provisional patterns are annotated differently
+            in context injection output.
 
     See Also:
         - DbPatternRecord: Database model (12 fields) in repository_patterns.py
-        - PatternRecord (CLI): CLI model (8 fields) in plugins/onex/hooks/lib/pattern_types.py
+        - PatternRecord (CLI): CLI model (9 fields) in plugins/onex/hooks/lib/pattern_types.py
     """
 
     pattern_id: str
@@ -177,9 +179,18 @@ class PatternRecord:
     usage_count: int
     success_rate: float
     example_reference: str | None = None
+    lifecycle_state: str | None = None
+
+    # Valid lifecycle states for pattern records
+    VALID_LIFECYCLE_STATES = frozenset({"validated", "provisional", None})
 
     def __post_init__(self) -> None:
         """Validate fields after initialization (runs before instance is frozen)."""
+        if self.lifecycle_state not in self.VALID_LIFECYCLE_STATES:
+            raise ValueError(
+                f"lifecycle_state must be one of {{'validated', 'provisional', None}}, "
+                f"got {self.lifecycle_state!r}"
+            )
         if not 0.0 <= self.confidence <= 1.0:
             raise ValueError(
                 f"confidence must be between 0.0 and 1.0, got {self.confidence}"
@@ -219,10 +230,12 @@ class ModelLoadPatternsResult:
     Attributes:
         patterns: List of unique pattern records.
         source_files: List of files that contributed at least one pattern.
+        warnings: Operational warnings (e.g., silent fallbacks). Empty if none.
     """
 
     patterns: list[ModelPatternRecord]
     source_files: list[Path]
+    warnings: list[str] = field(default_factory=list)
 
 
 # =============================================================================
@@ -234,7 +247,7 @@ class HandlerContextInjection:
     """Handler for context injection from learned patterns.
 
     This handler implements the full context injection workflow:
-    1. Load patterns from database (primary) or files (fallback)
+    1. Load patterns from database
     2. Filter by domain and confidence threshold
     3. Sort by confidence descending
     4. Limit to max patterns
@@ -243,7 +256,7 @@ class HandlerContextInjection:
 
     Following ONEX patterns from omnibase_infra:
     - Handlers own all business logic
-    - Database-backed storage with file fallback
+    - Database-backed storage
     - Stateless and async-safe
 
     Usage:
@@ -424,15 +437,14 @@ class HandlerContextInjection:
                 cohort=None,
             )
 
-        # Step 1: Load patterns (database primary, file fallback)
+        # Step 1: Load patterns from database
         start_time = time.monotonic()
         timeout_seconds = cfg.timeout_ms / 1000.0
         patterns: list[ModelPatternRecord] = []
         source = "none"
-        context_source = ContextSource.PERSISTENCE_FILE  # Default for events
+        context_source = ContextSource.DATABASE  # Default for events
 
         try:
-            # Try database first if enabled
             if cfg.db_enabled:
                 try:
                     db_result = await asyncio.wait_for(
@@ -445,24 +457,14 @@ class HandlerContextInjection:
                     patterns = db_result.patterns
                     source = self._format_source_attribution(db_result.source_files)
                     context_source = ContextSource.DATABASE
+                    for w in db_result.warnings:
+                        logger.warning("Pattern loading warning: %s", w)
                     logger.debug(f"Loaded {len(patterns)} patterns from database")
+                except TimeoutError:
+                    raise  # Let outer handler report timeout with detail
                 except Exception as db_err:
                     logger.warning(f"Database pattern loading failed: {db_err}")
-                    # Fall through to file fallback if enabled
-
-            # File fallback if no patterns from DB and fallback enabled
-            if not patterns and (cfg.file_fallback_enabled or not cfg.db_enabled):
-                load_result = await asyncio.wait_for(
-                    asyncio.to_thread(
-                        self._load_patterns_from_files,
-                        project_root,
-                    ),
-                    timeout=timeout_seconds,
-                )
-                patterns = load_result.patterns
-                source = self._format_source_attribution(load_result.source_files)
-                context_source = ContextSource.PERSISTENCE_FILE
-                logger.debug(f"Loaded {len(patterns)} patterns from files")
+                    context_source = ContextSource.NONE
 
             retrieval_ms = int((time.monotonic() - start_time) * 1000)
 
@@ -550,6 +552,7 @@ class HandlerContextInjection:
 
         # Step 7: Emit event
         if emit_event and patterns:
+            emitted_at = datetime.now(UTC)
             await self._emit_event(
                 patterns=patterns,
                 context_size_bytes=context_size_bytes,
@@ -560,6 +563,7 @@ class HandlerContextInjection:
                 agent_domain=agent_domain,
                 min_confidence=cfg.min_confidence,
                 context_source=context_source,
+                emitted_at=emitted_at,
             )
 
         return ModelInjectionResult(
@@ -690,11 +694,31 @@ class HandlerContextInjection:
         runtime = await self._get_repository_runtime()
 
         # Get extra patterns for filtering (will be filtered by confidence/domain later)
-        limit = cfg.max_patterns * 2
+        # Use limits config to stay synchronized with select_patterns_for_injection
+        limit = cfg.limits.max_patterns_per_injection * 2
+        warnings: list[str] = []
 
         try:
-            # Use domain-filtered operation if domain specified, otherwise list all
-            if domain:
+            # Determine which operation to call based on include_provisional config (OMN-2042)
+            include_provisional = cfg.limits.include_provisional
+
+            if include_provisional and not domain:
+                # Use graduated injection query that includes validated + provisional
+                rows = await runtime.call(
+                    "list_injectable_patterns",
+                    limit,  # positional arg
+                )
+            elif domain:
+                if include_provisional:
+                    msg = (
+                        f"include_provisional=True ignored: domain filter '{domain}' "
+                        f"is active but domain-filtered graduated injection is not yet "
+                        f"implemented (see OMN-2042 follow-up). Returning VALIDATED "
+                        f"patterns only."
+                    )
+                    logger.warning(msg)
+                    warnings.append(msg)
+                # Use domain-filtered operation (validated only; graduated domain query is a follow-up)
                 rows = await runtime.call(
                     "list_patterns_by_domain",
                     domain,  # positional arg
@@ -718,6 +742,14 @@ class HandlerContextInjection:
                         logger.warning("Skipping row with missing pattern_id")
                         continue
 
+                    # Map lifecycle_state from DB (OMN-2042)
+                    # list_injectable_patterns returns status as lifecycle_state;
+                    # list_validated_patterns does not include it (defaults to None/"validated")
+                    raw_lifecycle = row.get("lifecycle_state")
+                    lifecycle_state = (
+                        str(raw_lifecycle) if raw_lifecycle is not None else None
+                    )
+
                     patterns.append(
                         PatternRecord(
                             pattern_id=str(pattern_id),
@@ -728,6 +760,7 @@ class HandlerContextInjection:
                             usage_count=_safe_int(row.get("usage_count")),
                             success_rate=_safe_float(row.get("success_rate")),
                             example_reference=row.get("example_reference"),
+                            lifecycle_state=lifecycle_state,
                         )
                     )
                 except (ValueError, TypeError) as e:
@@ -736,126 +769,11 @@ class HandlerContextInjection:
 
         # Build source attribution
         source = f"database:contract:{cfg.db_host}:{cfg.db_port}/{cfg.db_name}"
-        return ModelLoadPatternsResult(patterns=patterns, source_files=[Path(source)])
-
-    # =========================================================================
-    # File I/O Methods (Fallback)
-    # =========================================================================
-
-    def _load_patterns_from_files(
-        self,
-        project_root: str | None,
-    ) -> ModelLoadPatternsResult:
-        """Load patterns from persistence files.
-
-        Finds and parses all pattern files, deduplicating by pattern_id.
-        Tracks which files contributed at least one pattern for accurate
-        source attribution.
-
-        Args:
-            project_root: Optional project root path.
-
-        Returns:
-            ModelLoadPatternsResult with unique patterns and contributing source files.
-        """
-        all_patterns: list[ModelPatternRecord] = []
-        contributing_files: list[Path] = []
-
-        # Find pattern files using config's persistence_file path
-        pattern_files = self._find_pattern_files(
-            Path(project_root) if project_root else None,
-            self._config.persistence_file,
-        )
-
-        if not pattern_files:
-            logger.debug("No pattern files found")
-            return ModelLoadPatternsResult(patterns=[], source_files=[])
-
-        # Parse each file
-        for file_path in pattern_files:
-            try:
-                patterns = self._parse_pattern_file(file_path)
-                if patterns:  # Only track files that contributed patterns
-                    all_patterns.extend(patterns)
-                    contributing_files.append(file_path)
-                logger.debug(f"Loaded {len(patterns)} patterns from {file_path}")
-            except Exception as e:
-                logger.warning(f"Failed to parse {file_path}: {e}")
-                continue
-
-        # Deduplicate by pattern_id (keep first occurrence)
-        seen_ids: set[str] = set()
-        unique_patterns: list[ModelPatternRecord] = []
-        for pattern in all_patterns:
-            if pattern.pattern_id not in seen_ids:
-                seen_ids.add(pattern.pattern_id)
-                unique_patterns.append(pattern)
-
         return ModelLoadPatternsResult(
-            patterns=unique_patterns, source_files=contributing_files
+            patterns=patterns,
+            source_files=[Path(source)],
+            warnings=warnings,
         )
-
-    def _find_pattern_files(
-        self, project_root: Path | None, persistence_file: str
-    ) -> list[Path]:
-        """Find learned pattern files in standard locations.
-
-        Searches:
-        1. Project-specific: {project_root}/{persistence_file}
-        2. User-level: ~/.claude/learned_patterns.json (standard fallback)
-
-        Args:
-            project_root: Optional project root path.
-            persistence_file: Relative path to patterns file from config
-                (e.g., ".claude/learned_patterns.json").
-        """
-        candidates: list[Path] = []
-
-        # Project-specific patterns (uses configurable persistence_file)
-        if project_root and project_root.is_dir():
-            project_file = project_root / persistence_file
-            if project_file.exists():
-                candidates.append(project_file)
-
-        # User-level patterns (uses filename from persistence_file config)
-        persistence_filename = Path(persistence_file).name
-        user_file = Path.home() / ".claude" / persistence_filename
-        if user_file.exists():
-            candidates.append(user_file)
-
-        return candidates
-
-    def _parse_pattern_file(self, file_path: Path) -> list[ModelPatternRecord]:
-        """Parse a learned_patterns.json file."""
-        with file_path.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        if not isinstance(data, dict):
-            raise ValueError("Pattern file must be a JSON object")
-
-        patterns_data = data.get("patterns", [])
-        if not isinstance(patterns_data, list):
-            raise ValueError("'patterns' must be a list")
-
-        records: list[ModelPatternRecord] = []
-        for idx, item in enumerate(patterns_data):
-            try:
-                record = PatternRecord(
-                    pattern_id=item["pattern_id"],
-                    domain=item["domain"],
-                    title=item["title"],
-                    description=item["description"],
-                    confidence=float(item["confidence"]),
-                    usage_count=int(item["usage_count"]),
-                    success_rate=float(item["success_rate"]),
-                    example_reference=item.get("example_reference"),
-                )
-                records.append(record)
-            except (KeyError, TypeError, ValueError) as e:
-                logger.debug(f"Skipping invalid pattern at index {idx}: {e}")
-                continue
-
-        return records
 
     def _format_source_attribution(self, source_files: list[Path]) -> str:
         """Format source file paths for accurate attribution.
@@ -905,7 +823,11 @@ class HandlerContextInjection:
             confidence_pct = f"{pattern.confidence * 100:.0f}%"
             success_pct = f"{pattern.success_rate * 100:.0f}%"
 
-            lines.append(f"### {pattern.title}")
+            # Annotate provisional patterns with badge (OMN-2042)
+            title_suffix = (
+                " [Provisional]" if pattern.lifecycle_state == "provisional" else ""
+            )
+            lines.append(f"### {pattern.title}{title_suffix}")
             lines.append("")
             lines.append(f"- **Domain**: {pattern.domain}")
             lines.append(f"- **Confidence**: {confidence_pct}")
@@ -944,7 +866,8 @@ class HandlerContextInjection:
         project_root: str | None,
         agent_domain: str,
         min_confidence: float,
-        context_source: ContextSource = ContextSource.PERSISTENCE_FILE,
+        context_source: ContextSource = ContextSource.DATABASE,
+        emitted_at: datetime,
     ) -> None:
         """Emit context injection event to Kafka."""
         # Derive entity_id
@@ -986,7 +909,7 @@ class HandlerContextInjection:
                 session_id=session_id or str(entity_id),
                 correlation_id=resolved_correlation_id,
                 causation_id=uuid4(),
-                emitted_at=datetime.now(UTC),
+                emitted_at=emitted_at,
                 context_source=context_source,
                 pattern_count=len(patterns),
                 context_size_bytes=context_size_bytes,

@@ -203,9 +203,60 @@ if [[ "$SKIP_IF_SESSION_INJECTED" == "true" ]] && [[ -f "${HOOKS_LIB}/session_ma
 fi
 
 if [[ "$SESSION_ALREADY_INJECTED" == "false" ]] && [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
-    PATTERN_INPUT="$(jq -n --arg agent "$AGENT_NAME" --arg dom "$AGENT_DOMAIN" --arg sid "$SESSION_ID" --arg cid "$CORRELATION_ID" '{agent_name: $agent, domain: $dom, session_id: $sid, correlation_id: $cid, max_patterns: 5, min_confidence: 0.7}')"
-    PATTERN_RESULT="$(echo "$PATTERN_INPUT" | run_with_timeout 2 $PYTHON_CMD "${HOOKS_LIB}/context_injection_wrapper.py" 2>>"$LOG_FILE" || echo '{}')"
-    LEARNED_PATTERNS="$(echo "$PATTERN_RESULT" | jq -r '.patterns_context // ""')"
+    log "Loading learned patterns via context injection..."
+
+    # Validate numeric env vars before passing to jq --argjson
+    _max_patterns="${MAX_PATTERNS:-5}"
+    _min_confidence="${MIN_CONFIDENCE:-0.7}"
+    [[ "$_max_patterns" =~ ^[0-9]+$ ]] || _max_patterns=5
+    [[ "$_min_confidence" =~ ^[0-9]*\.?[0-9]+$ ]] || _min_confidence=0.7
+
+    PATTERN_INPUT="$(jq -n \
+        --arg agent "${AGENT_NAME:-}" \
+        --arg domain "${AGENT_DOMAIN:-}" \
+        --arg session "${SESSION_ID:-}" \
+        --arg project "${PROJECT_ROOT:-}" \
+        --arg correlation "${CORRELATION_ID:-}" \
+        --argjson max_patterns "$_max_patterns" \
+        --argjson min_confidence "$_min_confidence" \
+        '{
+            agent_name: $agent,
+            domain: $domain,
+            session_id: $session,
+            project: $project,
+            correlation_id: $correlation,
+            max_patterns: $max_patterns,
+            min_confidence: $min_confidence
+        }')"
+
+    # 1s timeout (safety net, not target). Perl's alarm() truncates to integer,
+    # so sub-second values become 0 (cancels the alarm). Use integer seconds only.
+    # The entire UserPromptSubmit hook has a <500ms budget (CLAUDE.md);
+    # this timeout caps worst-case latency while the budget governs typical runs.
+    # Use ONEX-compliant wrapper for pattern injection
+    # Use run_with_timeout for portability (works on macOS and Linux)
+    if [[ -f "${HOOKS_LIB}/context_injection_wrapper.py" ]]; then
+        log "Using context_injection_wrapper.py"
+        PATTERN_RESULT="$(echo "$PATTERN_INPUT" | run_with_timeout 1 $PYTHON_CMD "${HOOKS_LIB}/context_injection_wrapper.py" 2>>"$LOG_FILE" || echo '{}')"
+    else
+        log "INFO: No pattern injector found, skipping pattern injection"
+        PATTERN_RESULT='{}'
+    fi
+
+    PATTERN_SUCCESS="$(echo "$PATTERN_RESULT" | jq -r '.success // false' 2>/dev/null || echo 'false')"
+    LEARNED_PATTERNS=""
+
+    if [[ "$PATTERN_SUCCESS" == "true" ]]; then
+        LEARNED_PATTERNS="$(echo "$PATTERN_RESULT" | jq -r '.patterns_context // ""' 2>/dev/null || echo '')"
+        PATTERN_COUNT="$(echo "$PATTERN_RESULT" | jq -r '.pattern_count // 0' 2>/dev/null || echo '0')"
+        if [[ -n "$LEARNED_PATTERNS" ]] && [[ "$PATTERN_COUNT" != "0" ]]; then
+            log "Learned patterns loaded: ${PATTERN_COUNT} patterns"
+        fi
+    else
+        log "INFO: No learned patterns available"
+    fi
+elif [[ "$SESSION_ALREADY_INJECTED" == "true" ]]; then
+    log "Using patterns from SessionStart injection (session ${SESSION_ID:0:8}...)"
 fi
 
 # -----------------------------

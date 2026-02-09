@@ -19,10 +19,6 @@ Environment variables use the OMNICLAUDE_CONTEXT_ prefix:
     OMNICLAUDE_CONTEXT_DB_POOL_MIN_SIZE: Minimum pool connections (default: 1)
     OMNICLAUDE_CONTEXT_DB_POOL_MAX_SIZE: Maximum pool connections (default: 5)
 
-    Deprecated file-based configuration:
-    OMNICLAUDE_CONTEXT_PERSISTENCE_FILE: Path to patterns file (DEPRECATED)
-    OMNICLAUDE_CONTEXT_FILE_FALLBACK_ENABLED: Fall back to file if DB unavailable (default: false)
-
 Example:
     >>> from omniclaude.hooks.context_config import ContextInjectionConfig
     >>>
@@ -242,8 +238,6 @@ class ContextInjectionConfig(BaseSettings):
         db_password: Database password (SecretStr for security).
         db_pool_min_size: Minimum database pool connections.
         db_pool_max_size: Maximum database pool connections.
-        persistence_file: DEPRECATED - Path to the learned patterns persistence file.
-        file_fallback_enabled: Fall back to file if database unavailable.
     """
 
     model_config = SettingsConfigDict(
@@ -335,18 +329,6 @@ class ContextInjectionConfig(BaseSettings):
             "If empty, uses bundled contract from omniclaude.contracts. "
             "Override via OMNICLAUDE_CONTEXT_DB_CONTRACT_PATH."
         ),
-    )
-
-    # Deprecated file-based configuration
-    persistence_file: str = Field(
-        default=".claude/learned_patterns.json",
-        description="DEPRECATED: File-based pattern storage. Use database instead.",
-        deprecated=True,
-    )
-
-    file_fallback_enabled: bool = Field(
-        default=False,
-        description="Fall back to file if database unavailable",
     )
 
     # Injection limits configuration (OMN-1671)
