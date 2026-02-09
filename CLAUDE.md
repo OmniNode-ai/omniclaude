@@ -35,8 +35,11 @@ What happens when infrastructure is unavailable:
 | **Malformed stdin JSON** | Hook logs error, passes through empty | 0 | No |
 | **Agent YAML not found** | Uses default agent, logs warning | 0 | No |
 | **Context injection fails** | Proceeds without patterns | 0 | No |
+| **No valid Python found** | Hook exits with actionable error | 1 | No |
 
 **Design principle**: Hooks never block Claude Code. Data loss is acceptable; UI freeze is not.
+
+**Exception**: `find_python()` hard-fails (exit 1) if no valid Python interpreter is found. This is intentional — running hooks against the wrong Python produces non-reproducible bugs. The error message tells the user exactly how to fix it (deploy the plugin or set `OMNICLAUDE_PROJECT_ROOT`). See OMN-2051.
 
 **Logging**: Failures are logged to `~/.claude/hooks.log` when `LOG_FILE` is set.
 
