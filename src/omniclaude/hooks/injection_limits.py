@@ -348,7 +348,11 @@ class InjectionLimitsConfig(BaseSettings):
             "Include provisional (not yet fully validated) patterns in injection. "
             "When False (default), only validated patterns are injected. "
             "When True, provisional patterns are included with dampened scores "
-            "and annotated with [Provisional] badge in output."
+            "and annotated with [Provisional] badge in output. "
+            "NOTE: This setting is silently ignored when a domain filter is active "
+            "because domain-filtered graduated injection is not yet implemented "
+            "(see OMN-2042 follow-up). In that case only validated patterns are "
+            "returned, even though no error is raised."
         ),
     )
 

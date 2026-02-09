@@ -82,7 +82,6 @@ class TestContextSource:
     def test_all_values_exist(self) -> None:
         """All expected context source values are defined."""
         assert ContextSource.DATABASE == "database"
-        assert ContextSource.PERSISTENCE_FILE == "persistence_file"
         assert ContextSource.SESSION_AGGREGATOR == "session_aggregator"
         assert ContextSource.RAG_QUERY == "rag_query"
         assert ContextSource.FALLBACK_STATIC == "fallback_static"
@@ -91,7 +90,6 @@ class TestContextSource:
     def test_is_str_enum(self) -> None:
         """ContextSource values are strings (StrEnum)."""
         assert isinstance(ContextSource.DATABASE, str)
-        assert isinstance(ContextSource.PERSISTENCE_FILE, str)
         assert isinstance(ContextSource.SESSION_AGGREGATOR, str)
         assert isinstance(ContextSource.RAG_QUERY, str)
         assert isinstance(ContextSource.FALLBACK_STATIC, str)
@@ -100,13 +98,12 @@ class TestContextSource:
     def test_string_comparison(self) -> None:
         """ContextSource can be compared to strings."""
         assert ContextSource.DATABASE == "database"
-        assert ContextSource.PERSISTENCE_FILE == "persistence_file"
         assert ContextSource.RAG_QUERY == "rag_query"
         assert ContextSource.NONE == "none"
 
-    def test_has_six_values(self) -> None:
-        """ContextSource has exactly 6 defined values (DATABASE added for db backend)."""
-        assert len(ContextSource) == 6
+    def test_has_five_values(self) -> None:
+        """ContextSource has exactly 5 defined values."""
+        assert len(ContextSource) == 5
 
 
 # =============================================================================
@@ -139,13 +136,13 @@ class TestModelHookContextInjectedPayload:
         base = make_base_payload_kwargs()
         payload = ModelHookContextInjectedPayload(
             **base,
-            context_source=ContextSource.PERSISTENCE_FILE,
+            context_source=ContextSource.DATABASE,
             pattern_count=3,
             context_size_bytes=1024,
             retrieval_duration_ms=50,
         )
         assert payload.pattern_count == 3
-        assert payload.context_source == ContextSource.PERSISTENCE_FILE
+        assert payload.context_source == ContextSource.DATABASE
         assert payload.context_size_bytes == 1024
         assert payload.retrieval_duration_ms == 50
         # Defaults
@@ -258,7 +255,7 @@ class TestPatternCountBounds:
         base = make_base_payload_kwargs()
         payload = ModelHookContextInjectedPayload(
             **base,
-            context_source=ContextSource.PERSISTENCE_FILE,
+            context_source=ContextSource.DATABASE,
             pattern_count=100,
             context_size_bytes=1000,
             retrieval_duration_ms=50,
@@ -284,7 +281,7 @@ class TestPatternCountBounds:
         with pytest.raises(ValidationError) as exc_info:
             ModelHookContextInjectedPayload(
                 **base,
-                context_source=ContextSource.PERSISTENCE_FILE,
+                context_source=ContextSource.DATABASE,
                 pattern_count=101,
                 context_size_bytes=0,
                 retrieval_duration_ms=0,
@@ -343,7 +340,7 @@ class TestContextSizeBytesBounds:
         with pytest.raises(ValidationError) as exc_info:
             ModelHookContextInjectedPayload(
                 **base,
-                context_source=ContextSource.PERSISTENCE_FILE,
+                context_source=ContextSource.DATABASE,
                 pattern_count=5,
                 context_size_bytes=50001,
                 retrieval_duration_ms=0,
@@ -402,7 +399,7 @@ class TestRetrievalDurationBounds:
         with pytest.raises(ValidationError) as exc_info:
             ModelHookContextInjectedPayload(
                 **base,
-                context_source=ContextSource.PERSISTENCE_FILE,
+                context_source=ContextSource.DATABASE,
                 pattern_count=5,
                 context_size_bytes=1024,
                 retrieval_duration_ms=10001,
@@ -435,7 +432,7 @@ class TestConfidenceThresholdBounds:
         base = make_base_payload_kwargs()
         payload = ModelHookContextInjectedPayload(
             **base,
-            context_source=ContextSource.PERSISTENCE_FILE,
+            context_source=ContextSource.DATABASE,
             pattern_count=10,
             context_size_bytes=500,
             min_confidence_threshold=0.0,
@@ -476,7 +473,7 @@ class TestConfidenceThresholdBounds:
         with pytest.raises(ValidationError) as exc_info:
             ModelHookContextInjectedPayload(
                 **base,
-                context_source=ContextSource.PERSISTENCE_FILE,
+                context_source=ContextSource.DATABASE,
                 pattern_count=5,
                 context_size_bytes=1024,
                 min_confidence_threshold=1.1,
@@ -574,7 +571,7 @@ class TestSerialization:
         base = make_base_payload_kwargs()
         original = ModelHookContextInjectedPayload(
             **base,
-            context_source=ContextSource.PERSISTENCE_FILE,
+            context_source=ContextSource.DATABASE,
             pattern_count=10,
             context_size_bytes=4096,
             agent_domain="code_review",
@@ -653,17 +650,17 @@ class TestEventEnvelopeIntegration:
 class TestAllContextSourceValues:
     """Tests that all context source values can be used in payloads."""
 
-    def test_persistence_file_source(self) -> None:
-        """PERSISTENCE_FILE source creates valid payload."""
+    def test_database_source(self) -> None:
+        """DATABASE source creates valid payload."""
         base = make_base_payload_kwargs()
         payload = ModelHookContextInjectedPayload(
             **base,
-            context_source=ContextSource.PERSISTENCE_FILE,
+            context_source=ContextSource.DATABASE,
             pattern_count=5,
             context_size_bytes=1024,
             retrieval_duration_ms=50,
         )
-        assert payload.context_source == ContextSource.PERSISTENCE_FILE
+        assert payload.context_source == ContextSource.DATABASE
 
     def test_session_aggregator_source(self) -> None:
         """SESSION_AGGREGATOR source creates valid payload."""

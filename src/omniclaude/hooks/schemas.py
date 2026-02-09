@@ -142,7 +142,6 @@ class ContextSource(StrEnum):
 
     Values:
         DATABASE: Context loaded from PostgreSQL database (primary source).
-        PERSISTENCE_FILE: Context loaded from persistence file storage (deprecated).
         SESSION_AGGREGATOR: Context aggregated from session history.
         RAG_QUERY: Context retrieved via RAG query from vector database.
         FALLBACK_STATIC: Static fallback context when other sources unavailable.
@@ -150,7 +149,6 @@ class ContextSource(StrEnum):
     """
 
     DATABASE = "database"
-    PERSISTENCE_FILE = "persistence_file"
     SESSION_AGGREGATOR = "session_aggregator"
     RAG_QUERY = "rag_query"
     FALLBACK_STATIC = "fallback_static"

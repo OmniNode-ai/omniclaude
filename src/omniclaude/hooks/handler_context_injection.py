@@ -700,9 +700,12 @@ class HandlerContextInjection:
             elif domain:
                 if include_provisional:
                     logger.warning(
-                        "include_provisional=True ignored with domain filter '%s'; "
-                        "domain-filtered graduated injection not yet implemented "
-                        "(see OMN-2042 follow-up). Returning validated patterns only.",
+                        "include_provisional=True ignored: domain filter '%s' is active "
+                        "but domain-filtered graduated injection is not yet implemented "
+                        "(see OMN-2042 follow-up). Falling through to "
+                        "list_patterns_by_domain which returns VALIDATED patterns only. "
+                        "Callers will receive a successful result with no provisional "
+                        "patterns included.",
                         domain,
                     )
                 # Use domain-filtered operation (validated only; graduated domain query is a follow-up)

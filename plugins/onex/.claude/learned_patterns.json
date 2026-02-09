@@ -20,7 +20,7 @@
       "confidence": 0.98,
       "usage_count": 45,
       "success_rate": 1.0,
-      "example_reference": "plugins/onex/hooks/lib/learned_pattern_injector.py"
+      "example_reference": "plugins/onex/hooks/lib/context_injection_wrapper.py"
     },
     {
       "pattern_id": "kafka-topic-versioning",
