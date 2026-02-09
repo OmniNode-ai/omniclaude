@@ -497,8 +497,8 @@ class TestModuleImport:
     """Verify PluginClaude is importable from the runtime package."""
 
     def test_importable_from_runtime_package(self):
-        # This import goes through __init__.py
-        from omniclaude.runtime.plugin import PluginClaude
+        # Verify __init__.py re-exports PluginClaude
+        from omniclaude.runtime import PluginClaude
 
         instance = PluginClaude()
         assert instance.plugin_id == "claude"
