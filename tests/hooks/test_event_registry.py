@@ -584,7 +584,8 @@ class TestFanOutRule:
         )
         payload = {"key": "value"}
         result = rule.apply_transform(payload)
-        assert result is payload  # Same object
+        assert result == payload  # Same content
+        assert result is not payload  # Defensive copy
 
     def test_fanout_rule_apply_transform_with_function(self) -> None:
         """Verify apply_transform applies transform function."""

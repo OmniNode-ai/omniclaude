@@ -26,7 +26,7 @@ This skill logs agent routing decisions for tracking, observability, and machine
 - 🚀 **Scalability**: Handles 1M+ events/sec
 - 🛡️ **Fault Tolerance**: Events persisted even if consumers fail
 
-**Kafka Topic**: `agent-routing-decisions`
+**Kafka Topic**: `onex.evt.omniclaude.routing-decision.v1`
 
 **How to Use (Kafka)**:
 

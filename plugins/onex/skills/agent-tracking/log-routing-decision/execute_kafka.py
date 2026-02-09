@@ -156,7 +156,7 @@ def log_routing_decision_kafka(args):
     }
 
     # Publish to Kafka
-    success = publish_to_kafka(event, topic="agent-routing-decisions")
+    success = publish_to_kafka(event)
 
     if success:
         output = {
@@ -167,7 +167,7 @@ def log_routing_decision_kafka(args):
             "routing_strategy": args.strategy,
             "routing_time_ms": int(args.latency_ms),
             "published_to": "kafka",
-            "topic": "agent-routing-decisions",
+            "topic": "onex.evt.omniclaude.routing-decision.v1",
         }
         print(json.dumps(output, indent=2))
         return 0

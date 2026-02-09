@@ -215,7 +215,7 @@ The same `event_type` can legitimately map to both CMD and EVT via fan-out. This
 
 `ROUTING_DECISIONS = "agent-routing-decisions"` removed from `TopicBase`. The ONEX-canonical replacement `ROUTING_DECISION = "onex.evt.omniclaude.routing-decision.v1"` is the sole target for `routing.decision` events.
 
-**Known downstream impact**: `consumers/agent_actions_consumer.py` still subscribes to `"agent-routing-decisions"` via hardcoded string. This consumer requires a separate update to migrate to the ONEX topic.
+**Resolved**: `consumers/agent_actions_consumer.py` has been migrated to subscribe to `"onex.evt.omniclaude.routing-decision.v1"` in the same PR.
 
 ---
 
@@ -273,10 +273,10 @@ grep -c 'from omnibase_infra.*event_registry' src/omniclaude/publisher/embedded_
    - **Rationale**: Each working copy is on a separate ticket. They adopt the infra change when they're ready.
    - **Mitigation**: The fix is straightforward — switch to local registry, same as omniclaude4.
 
-2. **Consumer migration required**
-   - **Impact**: `consumers/agent_actions_consumer.py` still subscribes to legacy `"agent-routing-decisions"` topic.
-   - **Rationale**: Dual-publishing to legacy topics adds complexity for limited benefit. Consumers should migrate.
-   - **Mitigation**: Separate update to consumer subscription list.
+2. **Consumer migration** *(resolved)*
+   - **Impact**: `consumers/agent_actions_consumer.py` migrated to `"onex.evt.omniclaude.routing-decision.v1"` in the same PR.
+   - **Rationale**: Dual-publishing to legacy topics adds complexity for limited benefit.
+   - **Mitigation**: Complete — consumer and skills updated to ONEX topic.
 
 3. **Static registry (no dynamic registration)**
    - **Impact**: Adding event types requires code changes, not runtime configuration.
