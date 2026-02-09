@@ -42,6 +42,7 @@ from plugins.onex.hooks.lib.metrics_emitter import (
     _build_measurement_event,
     _sanitize_error_messages,
     _sanitize_failed_tests,
+    _sanitize_skip_reason,
     _validate_artifact_uri,
     emit_phase_metrics,
     metrics_artifact_exists,
@@ -293,6 +294,7 @@ class TestBuildErrorMetrics:
 
     def test_error_classification(self):
         started = datetime(2026, 2, 9, 10, 0, 0, tzinfo=UTC)
+        completed = datetime(2026, 2, 9, 10, 0, 5, tzinfo=UTC)
         error = RuntimeError("Connection timeout")
 
         metrics = build_error_metrics(
@@ -302,6 +304,7 @@ class TestBuildErrorMetrics:
             ticket_id="OMN-2027",
             repo_id="omniclaude2",
             started_at=started,
+            completed_at=completed,
             error=error,
         )
 
@@ -315,6 +318,7 @@ class TestBuildErrorMetrics:
 
     def test_error_message_truncation(self):
         started = datetime(2026, 2, 9, 10, 0, 0, tzinfo=UTC)
+        completed = datetime(2026, 2, 9, 10, 0, 5, tzinfo=UTC)
         long_msg = "x" * 500
         error = ValueError(long_msg)
 
@@ -325,11 +329,35 @@ class TestBuildErrorMetrics:
             ticket_id="OMN-2027",
             repo_id="omniclaude2",
             started_at=started,
+            completed_at=completed,
             error=error,
         )
 
         assert metrics.outcome is not None
-        assert len(metrics.outcome.error_messages[0]) <= MAX_ERROR_MESSAGE_LENGTH
+        assert len(metrics.outcome.error_messages[0]) == MAX_ERROR_MESSAGE_LENGTH
+        assert metrics.outcome.error_messages[0].endswith("...")
+
+    def test_short_error_message_not_truncated(self):
+        """Error messages under MAX_ERROR_MESSAGE_LENGTH are kept verbatim."""
+        started = datetime(2026, 2, 9, 10, 0, 0, tzinfo=UTC)
+        completed = datetime(2026, 2, 9, 10, 0, 5, tzinfo=UTC)
+        short_msg = "Connection refused"
+        error = RuntimeError(short_msg)
+
+        metrics = build_error_metrics(
+            run_id="run-err3",
+            phase="implement",
+            attempt=1,
+            ticket_id="OMN-2027",
+            repo_id="omniclaude2",
+            started_at=started,
+            completed_at=completed,
+            error=error,
+        )
+
+        assert metrics.outcome is not None
+        assert metrics.outcome.error_messages[0] == short_msg
+        assert not metrics.outcome.error_messages[0].endswith("...")
 
 
 # ---------------------------------------------------------------------------
@@ -405,6 +433,8 @@ class TestInstrumentedPhase:
     )
     def test_success_path(self, mock_write, mock_emit):
         """Successful phase emits metrics and writes artifact."""
+        fixed_start = datetime(2026, 2, 9, 10, 0, 0, tzinfo=UTC)
+        fixed_end = datetime(2026, 2, 9, 10, 1, 0, tzinfo=UTC)
         expected_result = PhaseResult(status="completed", tokens_used=1000)
 
         result = instrumented_phase(
@@ -414,6 +444,8 @@ class TestInstrumentedPhase:
             ticket_id="OMN-2027",
             repo_id="omniclaude2",
             phase_fn=lambda: expected_result,
+            started_at=fixed_start,
+            completed_at=fixed_end,
         )
 
         assert result.status == "completed"
@@ -427,6 +459,7 @@ class TestInstrumentedPhase:
             emitted_metrics.outcome.result_classification
             == ContractEnumResultClassification.SUCCESS
         )
+        assert emitted_metrics.duration.wall_clock_ms == 60_000.0
 
     @patch(
         "plugins.onex.hooks.lib.metrics_emitter.emit_phase_metrics", return_value=True
@@ -437,6 +470,8 @@ class TestInstrumentedPhase:
     )
     def test_error_path(self, mock_write, mock_emit):
         """Phase that raises emits error metrics and re-raises."""
+        fixed_start = datetime(2026, 2, 9, 10, 0, 0, tzinfo=UTC)
+        fixed_end = datetime(2026, 2, 9, 10, 0, 30, tzinfo=UTC)
 
         def failing_phase():
             raise RuntimeError("Phase crashed")
@@ -449,6 +484,8 @@ class TestInstrumentedPhase:
                 ticket_id="OMN-2027",
                 repo_id="omniclaude2",
                 phase_fn=failing_phase,
+                started_at=fixed_start,
+                completed_at=fixed_end,
             )
 
         # Metrics should still be emitted and written on error
@@ -461,6 +498,7 @@ class TestInstrumentedPhase:
             == ContractEnumResultClassification.ERROR
         )
         assert "Phase crashed" in emitted_metrics.outcome.error_messages[0]
+        assert emitted_metrics.duration.wall_clock_ms == 30_000.0
 
     @patch(
         "plugins.onex.hooks.lib.metrics_emitter.emit_phase_metrics", return_value=True
@@ -471,6 +509,8 @@ class TestInstrumentedPhase:
     )
     def test_blocked_result(self, mock_write, mock_emit):
         """Blocked phase result maps to PARTIAL classification."""
+        fixed_start = datetime(2026, 2, 9, 10, 0, 0, tzinfo=UTC)
+        fixed_end = datetime(2026, 2, 9, 10, 10, 0, tzinfo=UTC)
         blocked_result = PhaseResult(
             status="blocked",
             blocking_issues=2,
@@ -485,6 +525,8 @@ class TestInstrumentedPhase:
             ticket_id="OMN-2027",
             repo_id="omniclaude2",
             phase_fn=lambda: blocked_result,
+            started_at=fixed_start,
+            completed_at=fixed_end,
         )
 
         assert result.status == "blocked"
@@ -504,6 +546,7 @@ class TestInstrumentedPhase:
     def test_injectable_started_at(self, mock_write, mock_emit):
         """instrumented_phase uses injected started_at for deterministic timing."""
         fixed_start = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
+        fixed_end = datetime(2026, 1, 1, 12, 5, 0, tzinfo=UTC)
         result = instrumented_phase(
             run_id="run-timing",
             phase="implement",
@@ -512,11 +555,75 @@ class TestInstrumentedPhase:
             repo_id="omniclaude2",
             phase_fn=lambda: PhaseResult(status="completed"),
             started_at=fixed_start,
+            completed_at=fixed_end,
         )
         assert result.status == "completed"
         emitted_metrics = mock_emit.call_args[0][0]
-        # Duration should be based on fixed_start, not a fresh datetime.now()
-        assert emitted_metrics.duration.wall_clock_ms >= 0
+        # Duration should be exactly 5 minutes = 300000ms
+        assert emitted_metrics.duration.wall_clock_ms == 300_000.0
+
+    @patch(
+        "plugins.onex.hooks.lib.metrics_emitter.emit_phase_metrics", return_value=True
+    )
+    @patch(
+        "plugins.onex.hooks.lib.metrics_emitter.write_metrics_artifact",
+        return_value=Path("/tmp/test.json"),
+    )
+    def test_injectable_completed_at_success(self, mock_write, mock_emit):
+        """instrumented_phase uses injected completed_at on success path."""
+        fixed_start = datetime(2026, 3, 1, 8, 0, 0, tzinfo=UTC)
+        fixed_end = datetime(2026, 3, 1, 8, 2, 30, tzinfo=UTC)
+
+        result = instrumented_phase(
+            run_id="run-completed-at",
+            phase="create_pr",
+            attempt=1,
+            ticket_id="OMN-2027",
+            repo_id="omniclaude2",
+            phase_fn=lambda: PhaseResult(status="completed", tokens_used=500),
+            started_at=fixed_start,
+            completed_at=fixed_end,
+        )
+
+        assert result.status == "completed"
+        emitted_metrics = mock_emit.call_args[0][0]
+        # Duration should be exactly 2m30s = 150000ms
+        assert emitted_metrics.duration.wall_clock_ms == 150_000.0
+
+    @patch(
+        "plugins.onex.hooks.lib.metrics_emitter.emit_phase_metrics", return_value=True
+    )
+    @patch(
+        "plugins.onex.hooks.lib.metrics_emitter.write_metrics_artifact",
+        return_value=Path("/tmp/test.json"),
+    )
+    def test_injectable_completed_at_error(self, mock_write, mock_emit):
+        """instrumented_phase uses injected completed_at on error path."""
+        fixed_start = datetime(2026, 3, 1, 8, 0, 0, tzinfo=UTC)
+        fixed_end = datetime(2026, 3, 1, 8, 0, 10, tzinfo=UTC)
+
+        def failing_phase():
+            raise ValueError("Something broke")
+
+        with pytest.raises(ValueError, match="Something broke"):
+            instrumented_phase(
+                run_id="run-completed-at-err",
+                phase="implement",
+                attempt=1,
+                ticket_id="OMN-2027",
+                repo_id="omniclaude2",
+                phase_fn=failing_phase,
+                started_at=fixed_start,
+                completed_at=fixed_end,
+            )
+
+        emitted_metrics = mock_emit.call_args[0][0]
+        # Duration should be exactly 10s = 10000ms
+        assert emitted_metrics.duration.wall_clock_ms == 10_000.0
+        assert (
+            emitted_metrics.outcome.result_classification
+            == ContractEnumResultClassification.ERROR
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -895,6 +1002,105 @@ class TestMetricsEmitter:
         assert len(emitted_tests[0]) <= 100
         assert emitted_tests[0].endswith("...")
 
+    @patch("plugins.onex.hooks.lib.emit_client_wrapper.emit_event", return_value=True)
+    def test_emit_sanitizes_skip_reason_in_payload(self, mock_emit):
+        """emit_phase_metrics redacts and truncates skip_reason before emission."""
+        secret_key = "sk-abc123456789abcdefghij"
+        long_reason = f"Skipped due to key {secret_key} " + "x" * 200
+
+        metrics = ContractPhaseMetrics(
+            run_id="test-skip-sanitize",
+            phase=ContractEnumPipelinePhase.IMPLEMENT,
+            phase_id="test-skip-sanitize-implement-1",
+            attempt=1,
+            context=ContractMeasurementContext(
+                ticket_id="OMN-TEST",
+                repo_id="test-repo",
+                toolchain="claude-code",
+            ),
+            producer=ContractProducer(
+                name=PRODUCER_NAME,
+                version=PRODUCER_VERSION,
+                instance_id="test-inst",
+            ),
+            duration=ContractDurationMetrics(wall_clock_ms=0.0),
+            outcome=ContractOutcomeMetrics(
+                result_classification=ContractEnumResultClassification.SKIPPED,
+                skip_reason=long_reason,
+                skip_reason_code="test_skip",
+            ),
+        )
+
+        success = emit_phase_metrics(metrics)
+        assert success is True
+
+        call_args = mock_emit.call_args
+        payload = call_args[0][1]
+        emitted_reason = payload["payload"]["outcome"]["skip_reason"]
+
+        # Must be truncated to MAX_ERROR_MESSAGE_LENGTH
+        assert len(emitted_reason) <= MAX_ERROR_MESSAGE_LENGTH
+        # Must not contain the raw secret
+        assert secret_key not in emitted_reason
+        assert "REDACTED" in emitted_reason
+
+    def test_write_artifact_sanitizes_skip_reason(
+        self,
+        _tmp_artifact_dir: Path,
+    ):
+        """write_metrics_artifact redacts and truncates skip_reason in file."""
+        secret_key = "sk-abc123456789abcdefghij"
+        long_reason = f"Skipped with key {secret_key} " + "y" * 200
+
+        metrics = ContractPhaseMetrics(
+            run_id="test-skip-artifact",
+            phase=ContractEnumPipelinePhase.IMPLEMENT,
+            phase_id="test-skip-artifact-implement-1",
+            attempt=1,
+            context=ContractMeasurementContext(
+                ticket_id="OMN-TEST",
+                repo_id="test-repo",
+                toolchain="claude-code",
+            ),
+            producer=ContractProducer(
+                name=PRODUCER_NAME,
+                version=PRODUCER_VERSION,
+                instance_id="test-inst",
+            ),
+            duration=ContractDurationMetrics(wall_clock_ms=0.0),
+            outcome=ContractOutcomeMetrics(
+                result_classification=ContractEnumResultClassification.SKIPPED,
+                skip_reason=long_reason,
+                skip_reason_code="test_skip",
+            ),
+        )
+
+        path = write_metrics_artifact(
+            ticket_id="OMN-TEST",
+            run_id="test-skip-artifact",
+            phase="implement",
+            attempt=1,
+            metrics=metrics,
+        )
+
+        assert path is not None
+        assert path.exists()
+
+        data = read_metrics_artifact(
+            ticket_id="OMN-TEST",
+            run_id="test-skip-artifact",
+            phase="implement",
+            attempt=1,
+        )
+
+        assert data is not None
+        written_reason = data["outcome"]["skip_reason"]
+        # Must be truncated
+        assert len(written_reason) <= MAX_ERROR_MESSAGE_LENGTH
+        # Must not contain the raw secret
+        assert secret_key not in written_reason
+        assert "REDACTED" in written_reason
+
 
 # ---------------------------------------------------------------------------
 # Tests: PhaseResult
@@ -1103,6 +1309,20 @@ class TestSanitization:
         """E:\\ in URI is rejected."""
         assert _validate_artifact_uri("E:\\Builds\\artifact.json") is False
 
+    def test_rejects_lowercase_windows_drive(self):
+        """Lowercase drive letters like c:\\ are also rejected."""
+        assert _validate_artifact_uri("c:\\Users\\admin\\report.html") is False
+        assert _validate_artifact_uri("d:\\Projects\\build.json") is False
+
+    def test_rejects_volumes_path(self):
+        """/Volumes/ in URI is rejected (macOS external drives)."""
+        assert _validate_artifact_uri("/Volumes/PRO-G40/Code/report.html") is False
+
+    def test_rejects_unc_path(self):
+        """UNC paths like \\\\server\\share are rejected."""
+        assert _validate_artifact_uri("\\\\fileserver\\builds\\report.html") is False
+        assert _validate_artifact_uri("\\\\192.168.1.1\\share\\artifact.json") is False
+
     def test_accepts_relative_path(self):
         """Relative paths like artifacts/report.html are accepted."""
         assert _validate_artifact_uri("artifacts/report.html") is True
@@ -1110,6 +1330,29 @@ class TestSanitization:
     def test_accepts_https_url(self):
         """HTTPS URLs are accepted."""
         assert _validate_artifact_uri("https://ci.example.com/report") is True
+
+    # -- _sanitize_skip_reason --
+
+    def test_skip_reason_truncation(self):
+        """Long skip_reason is truncated to MAX_ERROR_MESSAGE_LENGTH."""
+        long_reason = "S" * 300
+        result = _sanitize_skip_reason(long_reason)
+        assert len(result) == MAX_ERROR_MESSAGE_LENGTH
+        assert result.endswith("...")
+
+    def test_skip_reason_short_passthrough(self):
+        """Short skip_reason passes through unchanged."""
+        short_reason = "Phase skipped by user"
+        result = _sanitize_skip_reason(short_reason)
+        assert result == short_reason
+
+    def test_skip_reason_secret_redaction(self):
+        """skip_reason containing secrets gets redacted."""
+        secret_key = "sk-abc123456789abcdefghij"
+        reason = f"Skipped due to auth failure with key {secret_key}"
+        result = _sanitize_skip_reason(reason)
+        assert secret_key not in result
+        assert "REDACTED" in result
 
     # -- _build_measurement_event --
 

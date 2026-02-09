@@ -91,6 +91,34 @@ def _sanitize_error_messages(messages: list[str]) -> list[str]:
     return sanitized
 
 
+def _sanitize_skip_reason(reason: str) -> str:
+    """Sanitize a skip_reason string for evt topic emission.
+
+    Applies secret redaction and length truncation, mirroring the
+    treatment applied to error_messages.
+
+    Args:
+        reason: Raw skip reason string.
+
+    Returns:
+        Sanitized skip reason string.
+    """
+    try:
+        from plugins.onex.hooks.lib.secret_redactor import redact_secrets
+    except ImportError:
+        logger.warning(
+            "secret_redactor not available; skip_reason will not be redacted"
+        )
+
+        def redact_secrets(text: str) -> str:  # type: ignore[misc]
+            return text
+
+    clean = redact_secrets(reason)
+    if len(clean) > MAX_ERROR_MESSAGE_LENGTH:
+        clean = clean[: MAX_ERROR_MESSAGE_LENGTH - 3] + "..."
+    return clean
+
+
 def _sanitize_failed_tests(tests: list[str]) -> list[str]:
     """Truncate failed test names per M2 spec.
 
@@ -118,10 +146,14 @@ _ABSOLUTE_PATH_PREFIXES = (
     "/opt/",
     "/etc/",
     "/srv/",
+    "/Volumes/",
 )
 
-# Matches Windows drive-letter paths like C:\, D:\, etc. anywhere in the string.
-_WINDOWS_DRIVE_RE = re.compile(r"[A-Z]:\\")
+# Matches UNC paths like \\server\share anywhere in the string.
+_UNC_PATH_RE = re.compile(r"\\\\[^\\]+")
+
+# Matches Windows drive-letter paths like C:\, D:\, c:\, etc. anywhere in the string.
+_WINDOWS_DRIVE_RE = re.compile(r"[A-Za-z]:\\")
 
 
 def _validate_artifact_uri(uri: str) -> bool:
@@ -137,7 +169,9 @@ def _validate_artifact_uri(uri: str) -> bool:
         True if URI is safe for emission.
     """
     if uri.startswith("file://") or uri.startswith("~"):
-        logger.warning(f"Artifact URI contains local path scheme, rejecting: {uri[:50]}...")
+        logger.warning(
+            f"Artifact URI contains local path scheme, rejecting: {uri[:50]}..."
+        )
         return False
     if any(prefix in uri for prefix in _ABSOLUTE_PATH_PREFIXES):
         logger.warning(f"Artifact URI contains absolute path, rejecting: {uri[:50]}...")
@@ -149,6 +183,9 @@ def _validate_artifact_uri(uri: str) -> bool:
         logger.warning(
             f"Artifact URI contains Windows drive path, rejecting: {uri[:50]}..."
         )
+        return False
+    if _UNC_PATH_RE.search(uri):
+        logger.warning(f"Artifact URI contains UNC path, rejecting: {uri[:50]}...")
         return False
     return True
 
@@ -229,6 +266,8 @@ def emit_phase_metrics(
                 outcome["failed_tests"] = _sanitize_failed_tests(
                     outcome.get("failed_tests", [])
                 )
+            if outcome and outcome.get("skip_reason"):
+                outcome["skip_reason"] = _sanitize_skip_reason(outcome["skip_reason"])
 
         # Validate artifact URIs
         if "payload" in payload and "artifact_pointers" in (payload["payload"] or {}):
@@ -300,6 +339,8 @@ def write_metrics_artifact(
                 outcome["failed_tests"] = _sanitize_failed_tests(
                     outcome.get("failed_tests", [])
                 )
+            if outcome.get("skip_reason"):
+                outcome["skip_reason"] = _sanitize_skip_reason(outcome["skip_reason"])
 
         # Atomic write via temp file
         tmp_path = artifact_path.with_suffix(".json.tmp")

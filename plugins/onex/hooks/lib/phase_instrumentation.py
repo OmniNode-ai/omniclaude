@@ -334,8 +334,11 @@ def build_error_metrics(
 
     duration = ContractDurationMetrics(wall_clock_ms=wall_clock_ms)
 
-    # Sanitize error message -- align with evt topic limit
-    error_msg = str(error)[:MAX_ERROR_MESSAGE_LENGTH]
+    # Sanitize error message -- align with evt topic limit (matches
+    # _sanitize_error_messages truncation: trim to limit-3 then append "...")
+    error_msg = str(error)
+    if len(error_msg) > MAX_ERROR_MESSAGE_LENGTH:
+        error_msg = error_msg[: MAX_ERROR_MESSAGE_LENGTH - 3] + "..."
 
     outcome = ContractOutcomeMetrics(
         result_classification=ContractEnumResultClassification.ERROR,
@@ -437,6 +440,7 @@ def instrumented_phase(
     phase_fn: Callable[[], PhaseResult],
     instance_id: str = "",
     started_at: datetime | None = None,
+    completed_at: datetime | None = None,
 ) -> PhaseResult:
     """Execute a pipeline phase with full instrumentation.
 
@@ -456,6 +460,9 @@ def instrumented_phase(
         instance_id: Optional instance identifier.
         started_at: Explicit start timestamp for deterministic testing.
             Defaults to ``datetime.now(UTC)`` when *None*.
+        completed_at: Explicit completion timestamp for deterministic testing.
+            Defaults to ``datetime.now(UTC)`` when *None* (captured after
+            *phase_fn* returns or raises).
 
     Returns:
         The PhaseResult from phase_fn.
@@ -475,7 +482,7 @@ def instrumented_phase(
     try:
         result = phase_fn()
 
-        completed_at = datetime.now(UTC)
+        _completed = completed_at if completed_at is not None else datetime.now(UTC)
         metrics = build_metrics_from_result(
             run_id=run_id,
             phase=phase,
@@ -483,13 +490,13 @@ def instrumented_phase(
             ticket_id=ticket_id,
             repo_id=repo_id,
             started_at=started_at,
-            completed_at=completed_at,
+            completed_at=_completed,
             phase_result=result,
             instance_id=instance_id,
         )
 
     except Exception as e:
-        completed_at = datetime.now(UTC)
+        _completed = completed_at if completed_at is not None else datetime.now(UTC)
         metrics = build_error_metrics(
             run_id=run_id,
             phase=phase,
@@ -499,7 +506,7 @@ def instrumented_phase(
             started_at=started_at,
             error=e,
             instance_id=instance_id,
-            completed_at=completed_at,
+            completed_at=_completed,
         )
         # Emit and persist even on error
         emit_phase_metrics(metrics)
