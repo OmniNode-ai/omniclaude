@@ -186,6 +186,9 @@ ops:
       and current. Includes the status column so the handler can differentiate
       between validated and provisional patterns for annotation and dampening.
       Validated patterns are ordered first, then by quality_score descending.
+      Note: min_confidence filtering is done in Python (select_patterns_for_injection)
+      rather than SQL. For large tables, pushing confidence >= $2 to SQL would
+      reduce data transfer (tracked as optimization opportunity).
     sql: |
       SELECT
         id::text AS pattern_id,

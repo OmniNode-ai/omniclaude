@@ -231,16 +231,16 @@ class TestProvisionalDampening:
         )
         assert dampened_score == pytest.approx(base_score * 0.5, abs=1e-10)
 
-    def test_provisional_dampening_zero(self) -> None:
-        """Provisional dampening of 0.0 produces zero score."""
-        score = compute_effective_score(
-            confidence=0.9,
-            success_rate=0.8,
-            usage_count=10,
-            lifecycle_state="provisional",
-            provisional_dampening=0.0,
-        )
-        assert score == 0.0
+    def test_provisional_dampening_zero_raises(self) -> None:
+        """Provisional dampening of 0.0 raises ValueError (use include_provisional=False)."""
+        with pytest.raises(ValueError, match=r"provisional_dampening must be > 0\.0"):
+            compute_effective_score(
+                confidence=0.9,
+                success_rate=0.8,
+                usage_count=10,
+                lifecycle_state="provisional",
+                provisional_dampening=0.0,
+            )
 
     def test_provisional_dampening_one(self) -> None:
         """Provisional dampening of 1.0 produces no dampening."""

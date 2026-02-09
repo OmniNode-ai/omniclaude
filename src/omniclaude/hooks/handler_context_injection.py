@@ -462,6 +462,7 @@ class HandlerContextInjection:
                     logger.debug(f"Loaded {len(patterns)} patterns from database")
                 except Exception as db_err:
                     logger.warning(f"Database pattern loading failed: {db_err}")
+                    context_source = ContextSource.NONE
 
             retrieval_ms = int((time.monotonic() - start_time) * 1000)
 
@@ -691,7 +692,8 @@ class HandlerContextInjection:
         runtime = await self._get_repository_runtime()
 
         # Get extra patterns for filtering (will be filtered by confidence/domain later)
-        limit = cfg.max_patterns * 2
+        # Use limits config to stay synchronized with select_patterns_for_injection
+        limit = cfg.limits.max_patterns_per_injection * 2
         warnings: list[str] = []
 
         try:

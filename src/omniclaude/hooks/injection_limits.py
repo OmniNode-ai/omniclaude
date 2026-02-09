@@ -222,7 +222,8 @@ def compute_effective_score(
             as "validated", no dampening).
         provisional_dampening: Dampening factor for provisional patterns.
             Default 0.5 (matches InjectionLimitsConfig default).
-            Must be >0.0; use include_provisional=False to disable entirely.
+            Must be >0.0 (raises ValueError otherwise);
+            use include_provisional=False to disable entirely.
 
     Returns:
         Effective score (0.0 to 1.0).
@@ -261,7 +262,12 @@ def compute_effective_score(
 
     # Apply provisional dampening (OMN-2042)
     if lifecycle_state == "provisional":
-        dampening = max(0.0, min(1.0, provisional_dampening))
+        if provisional_dampening <= 0.0:
+            raise ValueError(
+                "provisional_dampening must be > 0.0; "
+                "use include_provisional=False to disable provisional patterns"
+            )
+        dampening = min(1.0, provisional_dampening)
         score *= dampening
 
     return score
@@ -541,11 +547,18 @@ def select_patterns_for_injection(
     # Pre-filter: exclude provisional patterns when include_provisional=False (OMN-2042)
     # This is the single enforcement point for both DB and file sources.
     if not limits.include_provisional:
+        before_count = len(candidates)
         candidates = [
             p
             for p in candidates
             if getattr(p, "lifecycle_state", None) != "provisional"
         ]
+        filtered_count = before_count - len(candidates)
+        if filtered_count > 0:
+            logger.debug(
+                "Filtered out %d provisional patterns (include_provisional=False)",
+                filtered_count,
+            )
         if not candidates:
             return []
 
