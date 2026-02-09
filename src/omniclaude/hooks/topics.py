@@ -103,11 +103,6 @@ class TopicBase(StrEnum):
     NOTIFICATION_COMPLETED = "onex.evt.omniclaude.notification-completed.v1"
 
     # ==========================================================================
-    # Phase metrics topics (OMN-2027 - pipeline measurement)
-    # ==========================================================================
-    PHASE_METRICS = "onex.evt.omniclaude.phase-metrics.v1"
-
-    # ==========================================================================
     # Manifest injection topics (agent loading observability)
     # ==========================================================================
     MANIFEST_INJECTION_STARTED = "onex.evt.omniclaude.manifest-injection-started.v1"

@@ -104,7 +104,6 @@ SUPPORTED_EVENT_TYPES = frozenset(
         "routing.skipped",  # OMN-1892 - Routing feedback skipped (guardrail gate)
         "notification.blocked",  # OMN-1831 - Slack notifications via emit daemon
         "notification.completed",  # OMN-1831 - Slack notifications via emit daemon
-        "phase.metrics",  # OMN-2027 - Phase instrumentation metrics
     ]
 )
 

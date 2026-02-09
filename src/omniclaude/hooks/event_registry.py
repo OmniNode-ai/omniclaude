@@ -429,21 +429,6 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         required_fields=["session_id"],
     ),
     # =========================================================================
-    # Phase Metrics (OMN-2027 - pipeline measurement)
-    # =========================================================================
-    "phase.metrics": EventRegistration(
-        event_type="phase.metrics",
-        fan_out=[
-            FanOutRule(
-                topic_base=TopicBase.PHASE_METRICS,
-                transform=None,  # Passthrough (pre-sanitized by metrics_emitter)
-                description="Phase instrumentation metrics for pipeline observability",
-            ),
-        ],
-        partition_key_field=None,  # Keyed by run_id in payload, not session_id
-        required_fields=[],  # Payload is a full ContractMeasurementEvent envelope
-    ),
-    # =========================================================================
     # Notification Events (OMN-1831)
     # =========================================================================
     "notification.blocked": EventRegistration(
