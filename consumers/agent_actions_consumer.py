@@ -235,7 +235,7 @@ class AgentActionsConsumer:
             "topics",
             [
                 "agent-actions",
-                "agent-routing-decisions",
+                "onex.evt.omniclaude.routing-decision.v1",
                 "agent-transformation-events",
                 "router-performance-metrics",
                 "agent-detection-failures",
@@ -581,7 +581,7 @@ class AgentActionsConsumer:
                         inserted, duplicates = self._insert_agent_actions(
                             cursor, events
                         )
-                    elif topic == "agent-routing-decisions":
+                    elif topic == "onex.evt.omniclaude.routing-decision.v1":
                         inserted, duplicates = self._insert_routing_decisions(
                             cursor, events
                         )

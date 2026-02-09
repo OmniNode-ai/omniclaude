@@ -55,7 +55,9 @@ from kafka_publisher import get_kafka_producer
 load_env_file()
 
 
-def publish_to_kafka(event: dict, topic: str = "agent-routing-decisions") -> bool:
+def publish_to_kafka(
+    event: dict, topic: str = "onex.evt.omniclaude.routing-decision.v1"
+) -> bool:
     """
     Publish event to Kafka topic.
 

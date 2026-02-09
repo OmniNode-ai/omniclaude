@@ -108,6 +108,8 @@ fi
 # on the synchronous path (preserves <50ms SessionEnd budget).
 DURATION_SECONDS="0"
 if [[ -n "$SESSION_DURATION" && "$SESSION_DURATION" != "0" ]]; then
+    # Sanitize: ensure SESSION_DURATION is strictly numeric before awk
+    [[ "$SESSION_DURATION" =~ ^[0-9]+$ ]] || SESSION_DURATION=0
     DURATION_SECONDS=$(awk -v ms="$SESSION_DURATION" 'BEGIN{v=ms/1000; printf "%.3f", (v<0?0:v)}' 2>/dev/null || echo "0")
 fi
 

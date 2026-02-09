@@ -242,10 +242,10 @@ class HookEventAdapter:
         """Build full topic name from TopicBase constant.
 
         Args:
-            base: TopicBase enum constant (e.g., TopicBase.ROUTING_DECISIONS)
+            base: TopicBase enum constant (e.g., TopicBase.ROUTING_DECISION)
 
         Returns:
-            Full topic name with optional prefix (e.g., "dev.agent-routing-decisions")
+            Full topic name with optional prefix (e.g., "onex.evt.omniclaude.routing-decision.v1")
         """
         return build_topic(self.topic_prefix, base)
 

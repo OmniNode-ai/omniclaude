@@ -191,7 +191,7 @@ class FanOutRule:
             Transformed payload, or original if no transform is defined.
         """
         if self.transform is None:
-            return payload
+            return dict(payload)
         return self.transform(payload)
 
 

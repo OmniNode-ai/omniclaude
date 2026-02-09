@@ -323,7 +323,8 @@ class EmbeddedEventPublisher:
             result["correlation_id"] = correlation_id or str(uuid4())
         if "causation_id" not in result:
             result["causation_id"] = None
-        result["emitted_at"] = datetime.now(UTC).isoformat()
+        if "emitted_at" not in result:
+            result["emitted_at"] = datetime.now(UTC).isoformat()
         result["schema_version"] = "1.0.0"
         return result
 
