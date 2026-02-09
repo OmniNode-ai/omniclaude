@@ -69,6 +69,17 @@ def _validate_path_segment(value: str, label: str) -> str | None:
     return value
 
 
+def _check_path_within_root(target: Path, root: Path) -> bool:
+    """Verify that ``target`` resolves to a location inside ``root``.
+
+    Guards against symlink-based escapes after segment validation.
+    """
+    try:
+        return target.resolve().is_relative_to(root.resolve())
+    except (OSError, ValueError):
+        return False
+
+
 # -- Load --------------------------------------------------------------------
 
 
@@ -87,6 +98,9 @@ def load_attribution_record(
     root = attributions_root or ATTRIBUTIONS_ROOT
     target = root / safe_pid / "record.json"
     if not target.exists():
+        return None
+    if not _check_path_within_root(target, root):
+        _log.warning("Path escapes attributions root: %s", target)
         return None
     try:
         data = json.loads(target.read_text())
@@ -115,6 +129,9 @@ def load_aggregated_run(
     root = attributions_root or ATTRIBUTIONS_ROOT
     target = root / safe_pid / f"{safe_rid}.measured.json"
     if not target.exists():
+        return None
+    if not _check_path_within_root(target, root):
+        _log.warning("Path escapes attributions root: %s", target)
         return None
     try:
         data = json.loads(target.read_text())
@@ -191,9 +208,15 @@ def save_measured_attribution(
     target_dir.mkdir(parents=True, exist_ok=True)
 
     target = target_dir / f"{safe_rid}.measured.json"
+    if not _check_path_within_root(target, root):
+        raise ValueError(f"Resolved path escapes attributions root: {target}")
     tmp = target.with_suffix(".json.tmp")
-    tmp.write_text(measured.model_dump_json(indent=2))
-    tmp.rename(target)
+    try:
+        tmp.write_text(measured.model_dump_json(indent=2))
+        tmp.rename(target)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
     return target
 
 
