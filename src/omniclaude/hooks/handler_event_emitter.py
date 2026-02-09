@@ -1138,6 +1138,14 @@ async def emit_session_outcome_from_config(
 
         # Build payload
         tracing = config.tracing
+        if tracing.emitted_at is None:
+            logger.warning(
+                "emitted_at_not_injected",
+                extra={
+                    "session_id": config.session_id,
+                    "function": "emit_session_outcome_from_config",
+                },
+            )
         emitted_at = tracing.emitted_at or datetime.now(UTC)
 
         payload = ModelSessionOutcome(
@@ -1166,7 +1174,6 @@ async def emit_session_outcome_from_config(
         # Publish to both topics (fan-out) with per-topic error handling
         # to avoid partial inconsistency where CMD succeeds but EVT fails
         cmd_ok = False
-        evt_ok = False
         evt_error: str | None = None
 
         await bus.publish(topic=topic_cmd, key=partition_key, value=message_bytes)
@@ -1174,7 +1181,6 @@ async def emit_session_outcome_from_config(
 
         try:
             await bus.publish(topic=topic_evt, key=partition_key, value=message_bytes)
-            evt_ok = True
         except Exception as evt_exc:
             # CMD succeeded, EVT failed — log but don't lose the CMD success
             evt_error = f"{type(evt_exc).__name__}: {evt_exc!s}"
@@ -1193,7 +1199,7 @@ async def emit_session_outcome_from_config(
             extra={
                 "topics": [topic_cmd, topic_evt],
                 "cmd_ok": cmd_ok,
-                "evt_ok": evt_ok,
+                "evt_ok": evt_error is None,
                 "session_id": config.session_id,
                 "outcome": config.outcome,
             },

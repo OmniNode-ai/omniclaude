@@ -129,6 +129,12 @@ class EmitClient:
             self._sock = None
             self._buf = b""
 
+    def __enter__(self) -> EmitClient:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
+
     def __del__(self) -> None:
         """Best-effort cleanup of open socket on garbage collection."""
         self.close()
