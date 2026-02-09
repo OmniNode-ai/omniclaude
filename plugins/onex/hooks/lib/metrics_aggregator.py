@@ -59,7 +59,9 @@ def compute_outcome_signature(metrics: ContractPhaseMetrics) -> str:
 
     parts: list[str] = [
         outcome.result_classification.value,
+        f"ft:{len(outcome.failed_tests)}",
         *sorted(outcome.failed_tests),
+        f"ec:{len(outcome.error_codes)}",
         *sorted(outcome.error_codes),
         outcome.skip_reason_code,
     ]
