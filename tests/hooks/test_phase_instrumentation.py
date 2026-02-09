@@ -266,6 +266,62 @@ class TestBuildMetricsFromResult:
         assert metrics.context.repo_id == "test-repo"
         assert metrics.context.toolchain == "claude-code"
 
+    def test_failure_reason_truncated_to_max(self):
+        """Long reason strings are truncated to MAX_ERROR_MESSAGE_LENGTH in error_messages."""
+        started = datetime(2026, 2, 9, 10, 0, 0, tzinfo=UTC)
+        completed = datetime(2026, 2, 9, 10, 2, 0, tzinfo=UTC)
+        long_reason = "R" * 300  # well over MAX_ERROR_MESSAGE_LENGTH
+
+        failed_result = PhaseResult(
+            status="failed",
+            blocking_issues=1,
+            reason=long_reason,
+            block_kind="test_failure",
+        )
+
+        metrics = build_metrics_from_result(
+            run_id="run-trunc",
+            phase="local_review",
+            attempt=1,
+            ticket_id="OMN-2027",
+            repo_id="omniclaude2",
+            started_at=started,
+            completed_at=completed,
+            phase_result=failed_result,
+        )
+
+        assert metrics.outcome is not None
+        assert len(metrics.outcome.error_messages) == 1
+        assert len(metrics.outcome.error_messages[0]) == MAX_ERROR_MESSAGE_LENGTH
+        assert metrics.outcome.error_messages[0].endswith("...")
+
+    def test_short_reason_not_truncated(self):
+        """Reason strings under MAX_ERROR_MESSAGE_LENGTH are kept verbatim."""
+        started = datetime(2026, 2, 9, 10, 0, 0, tzinfo=UTC)
+        completed = datetime(2026, 2, 9, 10, 2, 0, tzinfo=UTC)
+        short_reason = "3 blocking issues remain"
+
+        failed_result = PhaseResult(
+            status="failed",
+            blocking_issues=3,
+            reason=short_reason,
+            block_kind="blocked_review_limit",
+        )
+
+        metrics = build_metrics_from_result(
+            run_id="run-short",
+            phase="local_review",
+            attempt=1,
+            ticket_id="OMN-2027",
+            repo_id="omniclaude2",
+            started_at=started,
+            completed_at=completed,
+            phase_result=failed_result,
+        )
+
+        assert metrics.outcome is not None
+        assert metrics.outcome.error_messages == [short_reason]
+
     def test_phase_id_format(self, sample_phase_result: PhaseResult):
         started = datetime(2026, 2, 9, 10, 0, 0, tzinfo=UTC)
         completed = datetime(2026, 2, 9, 10, 1, 0, tzinfo=UTC)
@@ -926,7 +982,9 @@ class TestMetricsEmitter:
         self, mock_emit, sample_metrics: ContractPhaseMetrics
     ):
         """emit_phase_metrics wraps in event and calls daemon."""
-        success = emit_phase_metrics(sample_metrics)
+        success = emit_phase_metrics(
+            sample_metrics, timestamp_iso="2026-02-09T12:00:00+00:00"
+        )
 
         assert success is True
         mock_emit.assert_called_once()
@@ -941,7 +999,9 @@ class TestMetricsEmitter:
         self, mock_emit, sample_metrics: ContractPhaseMetrics
     ):
         """emit_phase_metrics returns False when daemon fails."""
-        success = emit_phase_metrics(sample_metrics)
+        success = emit_phase_metrics(
+            sample_metrics, timestamp_iso="2026-02-09T12:00:00+00:00"
+        )
         assert success is False
 
     @patch("plugins.onex.hooks.lib.emit_client_wrapper.emit_event", return_value=True)
@@ -987,7 +1047,7 @@ class TestMetricsEmitter:
             ),
         )
 
-        success = emit_phase_metrics(metrics)
+        success = emit_phase_metrics(metrics, timestamp_iso="2026-02-09T12:00:00+00:00")
         assert success is True
 
         # Verify the payload sent to emit_event has sanitized failed_tests
@@ -1031,7 +1091,7 @@ class TestMetricsEmitter:
             ),
         )
 
-        success = emit_phase_metrics(metrics)
+        success = emit_phase_metrics(metrics, timestamp_iso="2026-02-09T12:00:00+00:00")
         assert success is True
 
         call_args = mock_emit.call_args
@@ -1276,6 +1336,12 @@ class TestSanitization:
         """file:// URIs are rejected."""
         assert _validate_artifact_uri("file:///tmp/secret.json") is False
 
+    def test_rejects_file_uri_case_insensitive(self):
+        """file:// scheme check is case-insensitive per RFC 3986."""
+        assert _validate_artifact_uri("File:///custom/data.json") is False
+        assert _validate_artifact_uri("FILE:///opt/report.html") is False
+        assert _validate_artifact_uri("fIlE:///secret") is False
+
     def test_rejects_tilde_path(self):
         """~ paths are rejected."""
         assert _validate_artifact_uri("~/.ssh/id_rsa") is False
@@ -1322,6 +1388,14 @@ class TestSanitization:
         """UNC paths like \\\\server\\share are rejected."""
         assert _validate_artifact_uri("\\\\fileserver\\builds\\report.html") is False
         assert _validate_artifact_uri("\\\\192.168.1.1\\share\\artifact.json") is False
+
+    def test_rejects_case_insensitive_prefix_in_url(self):
+        """Path prefixes are matched case-insensitively to prevent PII bypass."""
+        # Lowercase variants that would bypass a case-sensitive check
+        assert _validate_artifact_uri("s3://bucket/users/admin/file.txt") is False
+        assert _validate_artifact_uri("s3://bucket/USERS/admin/file.txt") is False
+        assert _validate_artifact_uri("s3://bucket/volumes/drive/file.txt") is False
+        assert _validate_artifact_uri("s3://bucket/HOME/deploy/file.txt") is False
 
     def test_accepts_relative_path(self):
         """Relative paths like artifacts/report.html are accepted."""

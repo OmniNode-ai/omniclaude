@@ -22,7 +22,6 @@ import json
 import logging
 import re
 import uuid
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -168,12 +167,13 @@ def _validate_artifact_uri(uri: str) -> bool:
     Returns:
         True if URI is safe for emission.
     """
-    if uri.startswith("file://") or uri.startswith("~"):
+    uri_lower = uri.lower()
+    if uri_lower.startswith("file://") or uri.startswith("~"):
         logger.warning(
             f"Artifact URI contains local path scheme, rejecting: {uri[:50]}..."
         )
         return False
-    if any(prefix in uri for prefix in _ABSOLUTE_PATH_PREFIXES):
+    if any(prefix.lower() in uri_lower for prefix in _ABSOLUTE_PATH_PREFIXES):
         logger.warning(f"Artifact URI contains absolute path, rejecting: {uri[:50]}...")
         return False
     if len(uri) > 0 and uri[0] == "/" and not uri.startswith("//"):
@@ -198,15 +198,19 @@ def _validate_artifact_uri(uri: str) -> bool:
 def _build_measurement_event(
     metrics: ContractPhaseMetrics,
     *,
-    timestamp_iso: str | None = None,
+    timestamp_iso: str,
     event_id: str | None = None,
 ) -> ContractMeasurementEvent:
     """Wrap ContractPhaseMetrics in a ContractMeasurementEvent.
 
+    ``timestamp_iso`` is required (no ``datetime.now()`` default) per the
+    repository invariant that emitted_at timestamps must be explicitly
+    injected for deterministic testing.
+
     Args:
         metrics: The phase metrics to wrap.
-        timestamp_iso: Explicit ISO-8601 timestamp for deterministic testing.
-            Defaults to ``datetime.now(UTC).isoformat()`` when *None*.
+        timestamp_iso: ISO-8601 timestamp for the event envelope.
+            Must be explicitly provided by the caller.
         event_id: Explicit short event identifier for deterministic testing.
             Defaults to ``str(uuid.uuid4())[:8]`` when *None*.
 
@@ -217,8 +221,6 @@ def _build_measurement_event(
 
     if event_id is None:
         event_id = str(uuid.uuid4())[:8]
-    if timestamp_iso is None:
-        timestamp_iso = datetime.now(UTC).isoformat()
 
     return ContractMeasurementEvent(
         event_id=event_id,
@@ -231,7 +233,7 @@ def _build_measurement_event(
 def emit_phase_metrics(
     metrics: ContractPhaseMetrics,
     *,
-    timestamp_iso: str | None = None,
+    timestamp_iso: str,
     event_id: str | None = None,
 ) -> bool:
     """Emit phase metrics to Kafka via the emit daemon.
@@ -239,10 +241,14 @@ def emit_phase_metrics(
     Wraps metrics in ContractMeasurementEvent, serializes via model_dump,
     and sends through the daemon. The daemon transports the dict unchanged.
 
+    ``timestamp_iso`` is required (no ``datetime.now()`` default) per the
+    repository invariant that emitted_at timestamps must be explicitly
+    injected for deterministic testing.
+
     Args:
         metrics: The ContractPhaseMetrics to emit.
-        timestamp_iso: Explicit ISO-8601 timestamp for deterministic testing.
-            Forwarded to ``_build_measurement_event``.
+        timestamp_iso: ISO-8601 timestamp for the event envelope.
+            Must be explicitly provided by the caller.
         event_id: Explicit short event identifier for deterministic testing.
             Forwarded to ``_build_measurement_event``.
 
