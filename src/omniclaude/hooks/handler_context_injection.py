@@ -163,10 +163,13 @@ class PatternRecord:
         usage_count: Number of times this pattern has been applied.
         success_rate: Success rate from 0.0 to 1.0.
         example_reference: Optional reference to an example.
+        lifecycle_state: Lifecycle state of the pattern ("validated" or "provisional").
+            Defaults to "validated" for backward compatibility. Provisional patterns
+            are annotated differently in context injection output.
 
     See Also:
         - DbPatternRecord: Database model (12 fields) in repository_patterns.py
-        - PatternRecord (CLI): CLI model (8 fields) in plugins/onex/hooks/lib/pattern_types.py
+        - PatternRecord (CLI): CLI model (9 fields) in plugins/onex/hooks/lib/pattern_types.py
     """
 
     pattern_id: str
@@ -177,6 +180,7 @@ class PatternRecord:
     usage_count: int
     success_rate: float
     example_reference: str | None = None
+    lifecycle_state: str | None = None
 
     def __post_init__(self) -> None:
         """Validate fields after initialization (runs before instance is frozen)."""
@@ -693,8 +697,17 @@ class HandlerContextInjection:
         limit = cfg.max_patterns * 2
 
         try:
-            # Use domain-filtered operation if domain specified, otherwise list all
-            if domain:
+            # Determine which operation to call based on include_provisional config (OMN-2042)
+            include_provisional = cfg.limits.include_provisional
+
+            if include_provisional and not domain:
+                # Use graduated injection query that includes validated + provisional
+                rows = await runtime.call(
+                    "list_injectable_patterns",
+                    limit,  # positional arg
+                )
+            elif domain:
+                # Use domain-filtered operation (validated only for now)
                 rows = await runtime.call(
                     "list_patterns_by_domain",
                     domain,  # positional arg
@@ -718,6 +731,14 @@ class HandlerContextInjection:
                         logger.warning("Skipping row with missing pattern_id")
                         continue
 
+                    # Map lifecycle_state from DB (OMN-2042)
+                    # list_injectable_patterns returns status as lifecycle_state;
+                    # list_validated_patterns does not include it (defaults to None/"validated")
+                    raw_lifecycle = row.get("lifecycle_state")
+                    lifecycle_state = (
+                        str(raw_lifecycle) if raw_lifecycle is not None else None
+                    )
+
                     patterns.append(
                         PatternRecord(
                             pattern_id=str(pattern_id),
@@ -728,6 +749,7 @@ class HandlerContextInjection:
                             usage_count=_safe_int(row.get("usage_count")),
                             success_rate=_safe_float(row.get("success_rate")),
                             example_reference=row.get("example_reference"),
+                            lifecycle_state=lifecycle_state,
                         )
                     )
                 except (ValueError, TypeError) as e:
@@ -849,6 +871,7 @@ class HandlerContextInjection:
                     usage_count=int(item["usage_count"]),
                     success_rate=float(item["success_rate"]),
                     example_reference=item.get("example_reference"),
+                    lifecycle_state=item.get("lifecycle_state"),
                 )
                 records.append(record)
             except (KeyError, TypeError, ValueError) as e:
@@ -905,7 +928,11 @@ class HandlerContextInjection:
             confidence_pct = f"{pattern.confidence * 100:.0f}%"
             success_pct = f"{pattern.success_rate * 100:.0f}%"
 
-            lines.append(f"### {pattern.title}")
+            # Annotate provisional patterns with badge (OMN-2042)
+            title_suffix = (
+                " [Provisional]" if pattern.lifecycle_state == "provisional" else ""
+            )
+            lines.append(f"### {pattern.title}{title_suffix}")
             lines.append("")
             lines.append(f"- **Domain**: {pattern.domain}")
             lines.append(f"- **Confidence**: {confidence_pct}")
