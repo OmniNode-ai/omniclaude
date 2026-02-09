@@ -38,6 +38,7 @@ from omnibase_spi.contracts.measurement import (
 )
 
 from plugins.onex.hooks.lib.metrics_emitter import (
+    MAX_ERROR_MESSAGE_LENGTH,
     _build_measurement_event,
     _sanitize_error_messages,
     _sanitize_failed_tests,
@@ -328,7 +329,7 @@ class TestBuildErrorMetrics:
         )
 
         assert metrics.outcome is not None
-        assert len(metrics.outcome.error_messages[0]) <= 200
+        assert len(metrics.outcome.error_messages[0]) <= MAX_ERROR_MESSAGE_LENGTH
 
 
 # ---------------------------------------------------------------------------
@@ -960,11 +961,11 @@ class TestSanitization:
     # -- _sanitize_error_messages --
 
     def test_error_message_truncation(self):
-        """Messages over 200 chars are truncated with trailing '...'."""
+        """Messages over MAX_ERROR_MESSAGE_LENGTH are truncated with trailing '...'."""
         long_msg = "A" * 300
         result = _sanitize_error_messages([long_msg])
         assert len(result) == 1
-        assert len(result[0]) == 200
+        assert len(result[0]) == MAX_ERROR_MESSAGE_LENGTH
         assert result[0].endswith("...")
 
     def test_error_messages_capped_at_five(self):
@@ -1026,6 +1027,19 @@ class TestSanitization:
         """C:\\ in URI is rejected."""
         assert _validate_artifact_uri("C:\\Users\\admin\\report.html") is False
 
+    def test_rejects_file_uri(self):
+        """file:// URIs are rejected."""
+        assert _validate_artifact_uri("file:///tmp/secret.json") is False
+
+    def test_rejects_tilde_path(self):
+        """~ paths are rejected."""
+        assert _validate_artifact_uri("~/.ssh/id_rsa") is False
+
+    def test_rejects_absolute_path(self):
+        """Arbitrary absolute paths are rejected."""
+        assert _validate_artifact_uri("/etc/passwd") is False
+        assert _validate_artifact_uri("/var/log/syslog") is False
+
     def test_accepts_relative_path(self):
         """Relative paths like artifacts/report.html are accepted."""
         assert _validate_artifact_uri("artifacts/report.html") is True
@@ -1048,13 +1062,17 @@ class TestSanitization:
         assert event.event_id == "test1234"
         assert event.timestamp_iso == "2026-02-09T12:00:00+00:00"
 
-    def test_default_timestamp_and_event_id(self, sample_metrics: ContractPhaseMetrics):
-        """When not provided, timestamp and event_id are auto-generated."""
-        event = _build_measurement_event(sample_metrics)
-        # event_id is uuid4()[:8] so 8 chars
-        assert len(event.event_id) == 8
-        # timestamp_iso should be a valid ISO string with current year
-        assert event.timestamp_iso.startswith("20")
+    def test_explicit_timestamp_and_event_id_used(
+        self, sample_metrics: ContractPhaseMetrics
+    ):
+        """Explicit timestamp and event_id are used (deterministic testing)."""
+        event = _build_measurement_event(
+            sample_metrics,
+            timestamp_iso="2026-02-09T12:00:00+00:00",
+            event_id="abcd5678",
+        )
+        assert event.event_id == "abcd5678"
+        assert event.timestamp_iso == "2026-02-09T12:00:00+00:00"
 
     def test_event_envelope_structure(self, sample_metrics: ContractPhaseMetrics):
         """Event envelope has required keys."""

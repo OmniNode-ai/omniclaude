@@ -108,10 +108,10 @@ def _sanitize_failed_tests(tests: list[str]) -> list[str]:
 
 
 def _validate_artifact_uri(uri: str) -> bool:
-    """Validate artifact pointer URI does not contain absolute paths.
+    """Validate artifact pointer URI does not contain absolute or local paths.
 
-    Per M2 spec, URIs containing /Users/, /home/, /root/, or C:\\ are rejected
-    for evt emission.
+    Rejects file:// URIs, tilde paths, absolute paths, and Windows drive paths
+    to prevent PII leakage on the broad-access evt topic.
 
     Args:
         uri: The artifact URI to validate.
@@ -119,7 +119,15 @@ def _validate_artifact_uri(uri: str) -> bool:
     Returns:
         True if URI is safe for emission.
     """
-    if "/Users/" in uri or "/home/" in uri or "/root/" in uri or "C:\\" in uri:
+    if (
+        uri.startswith("file://")
+        or uri.startswith("~")
+        or "/Users/" in uri
+        or "/home/" in uri
+        or "/root/" in uri
+        or "C:\\" in uri
+        or (len(uri) > 0 and uri[0] == "/" and not uri.startswith("//"))
+    ):
         logger.warning(f"Artifact URI contains absolute path, rejecting: {uri[:50]}...")
         return False
     return True
@@ -163,7 +171,12 @@ def _build_measurement_event(
     )
 
 
-def emit_phase_metrics(metrics: ContractPhaseMetrics) -> bool:
+def emit_phase_metrics(
+    metrics: ContractPhaseMetrics,
+    *,
+    timestamp_iso: str | None = None,
+    event_id: str | None = None,
+) -> bool:
     """Emit phase metrics to Kafka via the emit daemon.
 
     Wraps metrics in ContractMeasurementEvent, serializes via model_dump,
@@ -171,12 +184,18 @@ def emit_phase_metrics(metrics: ContractPhaseMetrics) -> bool:
 
     Args:
         metrics: The ContractPhaseMetrics to emit.
+        timestamp_iso: Explicit ISO-8601 timestamp for deterministic testing.
+            Forwarded to ``_build_measurement_event``.
+        event_id: Explicit short event identifier for deterministic testing.
+            Forwarded to ``_build_measurement_event``.
 
     Returns:
         True if emission succeeded, False otherwise.
     """
     try:
-        event = _build_measurement_event(metrics)
+        event = _build_measurement_event(
+            metrics, timestamp_iso=timestamp_iso, event_id=event_id
+        )
         payload = event.model_dump(mode="json")
 
         # Sanitize before emission

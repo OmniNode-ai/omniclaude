@@ -332,8 +332,10 @@ def build_error_metrics(
 
     duration = ContractDurationMetrics(wall_clock_ms=wall_clock_ms)
 
-    # Sanitize error message
-    error_msg = str(error)[:200]
+    # Sanitize error message (use shared constant from metrics_emitter)
+    from plugins.onex.hooks.lib.metrics_emitter import MAX_ERROR_MESSAGE_LENGTH
+
+    error_msg = str(error)[:MAX_ERROR_MESSAGE_LENGTH]
 
     outcome = ContractOutcomeMetrics(
         result_classification=ContractEnumResultClassification.ERROR,
@@ -675,7 +677,7 @@ def run_measurement_checks(
     )
 
     # CHECK-MEAS-003: Tokens within budget
-    token_budget = TOKEN_BUDGETS.get(phase, float("inf"))
+    token_budget = TOKEN_BUDGETS.get(phase, float("inf"))  # noqa: secrets
     actual_tokens = metrics.cost.llm_total_tokens if metrics.cost else 0
     tokens_ok = actual_tokens <= token_budget
     results.append(
