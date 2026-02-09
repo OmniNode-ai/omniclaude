@@ -112,7 +112,7 @@ def load_attribution_record(
         _log.warning("Path escapes attributions root: %s", target)
         return None
     try:
-        data = json.loads(target.read_text())
+        data = json.loads(target.read_text(encoding="utf-8"))
         return ContractAttributionRecord.model_validate(data)
     except (json.JSONDecodeError, ValueError, OSError) as exc:
         _log.warning("Cannot load attribution record at %s: %s", target, exc)
@@ -143,7 +143,7 @@ def load_aggregated_run(
         _log.warning("Path escapes attributions root: %s", target)
         return None
     try:
-        data = json.loads(target.read_text())
+        data = json.loads(target.read_text(encoding="utf-8"))
         measured = ContractMeasuredAttribution.model_validate(data)
         return measured.aggregated_run
     except (json.JSONDecodeError, ValueError, OSError) as exc:
@@ -221,7 +221,7 @@ def save_measured_attribution(
         raise ValueError(f"Resolved path escapes attributions root: {target}")
     tmp = target.with_suffix(".json.tmp")
     try:
-        tmp.write_text(measured.model_dump_json(indent=2))
+        tmp.write_text(measured.model_dump_json(indent=2), encoding="utf-8")
         tmp.rename(target)
     except BaseException:
         tmp.unlink(missing_ok=True)
