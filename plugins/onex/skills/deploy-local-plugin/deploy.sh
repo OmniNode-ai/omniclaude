@@ -245,7 +245,11 @@ if [[ "$EXECUTE" == "true" ]]; then
     echo -e "${GREEN}  Venv created at ${VENV_DIR}${NC}"
 
     # --- Bootstrap pip toolchain ---
-    "$VENV_DIR/bin/python3" -m ensurepip --upgrade 2>/dev/null
+    if ! "$VENV_DIR/bin/python3" -m ensurepip --upgrade 2>&1; then
+        echo -e "${RED}Error: ensurepip failed. Python may lack the ensurepip module (common on minimal installs).${NC}"
+        rm -rf "$VENV_DIR"
+        exit 1
+    fi
     "$VENV_DIR/bin/pip" install --upgrade pip wheel --quiet
     echo -e "${GREEN}  pip toolchain bootstrapped${NC}"
 

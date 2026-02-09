@@ -32,19 +32,19 @@
 
 find_python() {
     # 1. Explicit override (escape hatch for custom environments)
-    if [[ -n "${PLUGIN_PYTHON_BIN:-}" && -f "${PLUGIN_PYTHON_BIN}" ]]; then
+    if [[ -n "${PLUGIN_PYTHON_BIN:-}" && -f "${PLUGIN_PYTHON_BIN}" && -x "${PLUGIN_PYTHON_BIN}" ]]; then
         echo "${PLUGIN_PYTHON_BIN}"
         return
     fi
 
     # 2. Plugin-bundled venv (marketplace runtime — created by deploy.sh)
-    if [[ -f "${PLUGIN_ROOT}/lib/.venv/bin/python3" ]]; then
+    if [[ -f "${PLUGIN_ROOT}/lib/.venv/bin/python3" && -x "${PLUGIN_ROOT}/lib/.venv/bin/python3" ]]; then
         echo "${PLUGIN_ROOT}/lib/.venv/bin/python3"
         return
     fi
 
     # 3. Explicit dev-mode project venv (no heuristics, no CWD probing)
-    if [[ -n "${OMNICLAUDE_PROJECT_ROOT:-}" && -f "${OMNICLAUDE_PROJECT_ROOT}/.venv/bin/python3" ]]; then
+    if [[ -n "${OMNICLAUDE_PROJECT_ROOT:-}" && -f "${OMNICLAUDE_PROJECT_ROOT}/.venv/bin/python3" && -x "${OMNICLAUDE_PROJECT_ROOT}/.venv/bin/python3" ]]; then
         echo "${OMNICLAUDE_PROJECT_ROOT}/.venv/bin/python3"
         return
     fi
