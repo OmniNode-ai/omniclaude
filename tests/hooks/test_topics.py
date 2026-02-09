@@ -46,7 +46,6 @@ class TestTopicBase:
         )
 
         # Legacy observability topics (to be migrated)
-        assert TopicBase.ROUTING_DECISIONS == "agent-routing-decisions"
         assert TopicBase.AGENT_ACTIONS == "agent-actions"
         assert TopicBase.PERFORMANCE_METRICS == "router-performance-metrics"
         assert TopicBase.TRANSFORMATIONS == "agent-transformation-events"
@@ -75,7 +74,6 @@ class TestTopicBase:
         # Legacy observability topics (to be migrated in future PR)
         # These use simple hyphenated names without the onex prefix
         legacy_topics = {
-            TopicBase.ROUTING_DECISIONS,
             TopicBase.AGENT_ACTIONS,
             TopicBase.PERFORMANCE_METRICS,
             TopicBase.TRANSFORMATIONS,

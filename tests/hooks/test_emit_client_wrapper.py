@@ -75,13 +75,13 @@ class TestModuleImport:
         event types to appropriate Kafka topics.
 
         For example:
-        - Event type "routing.decision" is routed to Kafka topic "agent-routing-decisions"
+        - Event type "routing.decision" is routed to Kafka topic "onex.evt.omniclaude.routing-decision.v1"
         - Event type "session.started" is routed to Kafka topic "onex.evt.omniclaude.session-started.v1"
 
         This test documents the naming convention: event types use dotted lowercase
         names like "category.action" for internal routing, while Kafka topics follow
         either ONEX canonical format (onex.{kind}.{producer}.{event-name}.v{n}) or
-        legacy hyphenated format (agent-routing-decisions).
+        ONEX canonical format (onex.evt.omniclaude.routing-decision.v1).
 
         See topics.py for actual Kafka topic definitions.
         """

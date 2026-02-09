@@ -27,8 +27,17 @@ from omnibase_core.errors import OnexError
 from omnibase_infra.event_bus.event_bus_kafka import EventBusKafka
 from omnibase_infra.event_bus.models import ModelEventHeaders
 from omnibase_infra.event_bus.models.config import ModelKafkaEventBusConfig
-from omnibase_infra.runtime.emit_daemon.event_registry import EventRegistry
 from pydantic import ValidationError
+
+from omniclaude.hooks.event_registry import (
+    get_partition_key as registry_get_partition_key,
+)
+from omniclaude.hooks.event_registry import (
+    get_registration,
+)
+from omniclaude.hooks.event_registry import (
+    validate_payload as registry_validate_payload,
+)
 
 if TYPE_CHECKING:
     from omnibase_infra.protocols import ProtocolEventBusLike
@@ -63,7 +72,6 @@ class EmbeddedEventPublisher:
     ) -> None:
         self._config = config
         self._event_bus: ProtocolEventBusLike | None = event_bus
-        self._registry = EventRegistry(environment=config.environment)
         self._queue = BoundedEventQueue(
             max_memory_queue=config.max_memory_queue,
             max_spool_messages=config.max_spool_messages,
@@ -304,6 +312,21 @@ class EmbeddedEventPublisher:
             spool_size=self._queue.spool_size(),
         ).model_dump_json()
 
+    def _inject_metadata(
+        self,
+        payload: dict[str, object],
+        correlation_id: str | None,
+    ) -> dict[str, object]:
+        """Add standard metadata fields to payload."""
+        result = dict(payload)
+        if "correlation_id" not in result or result["correlation_id"] is None:
+            result["correlation_id"] = correlation_id or str(uuid4())
+        if "causation_id" not in result:
+            result["causation_id"] = None
+        result["emitted_at"] = datetime.now(UTC).isoformat()
+        result["schema_version"] = "1.0.0"
+        return result
+
     async def _handle_emit(self, request: ModelDaemonEmitRequest) -> str:
         event_type = request.event_type
 
@@ -317,73 +340,88 @@ class EmbeddedEventPublisher:
 
         payload: dict[str, object] = cast("dict[str, object]", raw_payload)
 
+        # --- Look up registration from local ONEX-native registry ---
+        registration = get_registration(event_type)
+        if registration is None:
+            return ModelDaemonErrorResponse(
+                reason=f"Unknown event type: {event_type}"
+            ).model_dump_json()
+
+        # --- Validate required fields ---
         try:
-            topic = self._registry.resolve_topic(event_type)
-        except Exception as e:
+            missing = registry_validate_payload(event_type, payload)
+            if missing:
+                return ModelDaemonErrorResponse(
+                    reason=f"Missing required fields for {event_type}: {missing}"
+                ).model_dump_json()
+        except KeyError as e:
             return ModelDaemonErrorResponse(reason=str(e)).model_dump_json()
 
-        try:
-            self._registry.validate_payload(event_type, payload)
-        except Exception as e:
-            return ModelDaemonErrorResponse(reason=str(e)).model_dump_json()
-
+        # --- Inject metadata ---
         correlation_id = payload.get("correlation_id")
         if not isinstance(correlation_id, str):
             correlation_id = None
 
-        try:
-            enriched_payload = self._registry.inject_metadata(
-                event_type,
-                payload,
-                correlation_id=correlation_id,
+        enriched_payload = self._inject_metadata(payload, correlation_id)
+
+        # --- Fan-out: enqueue one event per fan-out rule ---
+        last_event_id: str | None = None
+
+        for rule in registration.fan_out:
+            # Apply transform (e.g., sanitize prompt for observability topic)
+            transformed = rule.apply_transform(enriched_payload)
+
+            # Topic = bare ONEX suffix (realm-agnostic, per OMN-1972 TopicResolver)
+            # TopicBase is a StrEnum whose value IS the wire topic.
+            topic = str(rule.topic_base)
+
+            # Serialize and check size
+            try:
+                transformed_json = json.dumps(transformed)
+            except (TypeError, ValueError) as e:
+                logger.warning(
+                    f"Payload serialization failed for {event_type} -> {topic}: {e}"
+                )
+                continue
+
+            if len(transformed_json.encode("utf-8")) > self._config.max_payload_bytes:
+                logger.warning(
+                    f"Payload exceeds max size for {event_type} -> {topic}, skipping"
+                )
+                continue
+
+            # Get partition key from transformed payload
+            try:
+                partition_key = registry_get_partition_key(event_type, transformed)
+            except KeyError:
+                partition_key = None
+
+            event_id = str(uuid4())
+            queued_event = ModelQueuedEvent(
+                event_id=event_id,
+                event_type=event_type,
+                topic=topic,
+                payload=transformed,
+                partition_key=partition_key,
+                queued_at=datetime.now(UTC),
             )
-        except Exception as e:
+
+            success = await self._queue.enqueue(queued_event)
+            if success:
+                logger.debug(
+                    f"Event queued: {event_id}",
+                    extra={"event_type": event_type, "topic": topic},
+                )
+                last_event_id = event_id
+            else:
+                logger.warning(f"Failed to queue event for {event_type} -> {topic}")
+
+        if last_event_id is None:
             return ModelDaemonErrorResponse(
-                reason=f"Metadata enrichment failed: {e}"
+                reason=f"Failed to queue any events for {event_type}"
             ).model_dump_json()
 
-        try:
-            enriched_json = json.dumps(enriched_payload)
-        except (TypeError, ValueError) as e:
-            return ModelDaemonErrorResponse(
-                reason=f"Payload serialization failed: {e}"
-            ).model_dump_json()
-
-        if len(enriched_json.encode("utf-8")) > self._config.max_payload_bytes:
-            return ModelDaemonErrorResponse(
-                reason=f"Payload exceeds maximum size of {self._config.max_payload_bytes} bytes"
-            ).model_dump_json()
-
-        try:
-            partition_key = self._registry.get_partition_key(
-                event_type, enriched_payload
-            )
-        except Exception as e:
-            return ModelDaemonErrorResponse(
-                reason=f"Partition key resolution failed: {e}"
-            ).model_dump_json()
-
-        event_id = str(uuid4())
-        queued_event = ModelQueuedEvent(
-            event_id=event_id,
-            event_type=event_type,
-            topic=topic,
-            payload=enriched_payload,
-            partition_key=partition_key,
-            queued_at=datetime.now(UTC),
-        )
-
-        success = await self._queue.enqueue(queued_event)
-        if success:
-            logger.debug(
-                f"Event queued: {event_id}",
-                extra={"event_type": event_type, "topic": topic},
-            )
-            return ModelDaemonQueuedResponse(event_id=event_id).model_dump_json()
-        else:
-            return ModelDaemonErrorResponse(
-                reason="Failed to queue event (queue may be full)"
-            ).model_dump_json()
+        return ModelDaemonQueuedResponse(event_id=last_event_id).model_dump_json()
 
     async def _publisher_loop(self) -> None:
         """Background task: dequeue events and publish to Kafka."""

@@ -377,7 +377,7 @@ class HookEventAdapter:
             "timestamp": datetime.now(UTC).isoformat(),
         }
 
-        return self._publish(self._build_topic(TopicBase.ROUTING_DECISIONS), event)
+        return self._publish(self._build_topic(TopicBase.ROUTING_DECISION), event)
 
     def publish_routing_decision(
         self,
