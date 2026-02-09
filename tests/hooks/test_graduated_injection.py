@@ -879,3 +879,60 @@ class TestHandlerIntegration:
         # Should still return the validated patterns
         assert len(result.patterns) == 1
         assert result.patterns[0].pattern_id == "val-1"
+
+    @pytest.mark.asyncio
+    async def test_list_injectable_patterns_called_when_provisional_no_domain(
+        self,
+    ) -> None:
+        """include_provisional=True without domain dispatches to list_injectable_patterns."""
+        prov_row = {
+            "pattern_id": "prov-1",
+            "domain": "general",
+            "title": "Provisional Pattern",
+            "description": "A provisional pattern.",
+            "confidence": 0.7,
+            "usage_count": 3,
+            "success_rate": 0.6,
+            "lifecycle_state": "provisional",
+        }
+        val_row = {
+            "pattern_id": "val-1",
+            "domain": "testing",
+            "title": "Validated Pattern",
+            "description": "A validated pattern.",
+            "confidence": 0.9,
+            "usage_count": 10,
+            "success_rate": 0.8,
+            "lifecycle_state": "validated",
+        }
+
+        mock_runtime = MagicMock()
+        mock_runtime.call = AsyncMock(return_value=[val_row, prov_row])
+
+        config = ContextInjectionConfig(
+            enabled=True,
+            db_enabled=True,
+            min_confidence=0.0,
+            limits=InjectionLimitsConfig(include_provisional=True),
+        )
+        handler = HandlerContextInjection(config=config)
+        handler._get_repository_runtime = AsyncMock(return_value=mock_runtime)
+
+        result = await handler._load_patterns_from_database(domain=None)
+
+        # Should call list_injectable_patterns (not list_validated_patterns)
+        mock_runtime.call.assert_called_once()
+        call_args = mock_runtime.call.call_args
+        assert call_args[0][0] == "list_injectable_patterns"
+
+        # Should return both validated and provisional patterns
+        assert len(result.patterns) == 2
+        ids = {p.pattern_id for p in result.patterns}
+        assert ids == {"val-1", "prov-1"}
+
+        # Provisional pattern should have lifecycle_state set
+        prov = next(p for p in result.patterns if p.pattern_id == "prov-1")
+        assert prov.lifecycle_state == "provisional"
+
+        # No warnings expected (no fallback needed)
+        assert len(result.warnings) == 0

@@ -460,6 +460,8 @@ class HandlerContextInjection:
                     for w in db_result.warnings:
                         logger.warning("Pattern loading warning: %s", w)
                     logger.debug(f"Loaded {len(patterns)} patterns from database")
+                except TimeoutError:
+                    raise  # Let outer handler report timeout with detail
                 except Exception as db_err:
                     logger.warning(f"Database pattern loading failed: {db_err}")
                     context_source = ContextSource.NONE

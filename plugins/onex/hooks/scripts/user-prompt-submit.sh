@@ -211,7 +211,7 @@ if [[ "$SESSION_ALREADY_INJECTED" == "false" ]] && [[ -n "$AGENT_NAME" ]] && [[ 
         --arg agent "${AGENT_NAME:-}" \
         --arg domain "${AGENT_DOMAIN:-}" \
         --arg session "${SESSION_ID:-}" \
-        --arg project "${PROJECT_NAME:-}" \
+        --arg project "${PROJECT_ROOT:-}" \
         --arg correlation "${CORRELATION_ID:-}" \
         --argjson max_patterns "$_max_patterns" \
         --argjson min_confidence "$_min_confidence" \
