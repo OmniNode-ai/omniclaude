@@ -12,6 +12,7 @@ Part of OMN-2076: Golden path session + injection + outcome emission.
 from __future__ import annotations
 
 import json
+import os
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
@@ -111,6 +112,7 @@ def derive_and_build_outcome_config(
 # =============================================================================
 
 
+@patch.dict(os.environ, {"KAFKA_BOOTSTRAP_SERVERS": "test:9092"})
 class TestGoldenPathSessionLifecycle:
     """Golden path: session start → injection → work → end → outcome emission."""
 
@@ -263,6 +265,7 @@ class TestGoldenPathSessionLifecycle:
 # =============================================================================
 
 
+@patch.dict(os.environ, {"KAFKA_BOOTSTRAP_SERVERS": "test:9092"})
 class TestEmitSessionOutcome:
     """Tests for emit_session_outcome_from_config function."""
 
