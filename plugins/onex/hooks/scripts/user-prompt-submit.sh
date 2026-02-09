@@ -225,10 +225,10 @@ if [[ "$SESSION_ALREADY_INJECTED" == "false" ]] && [[ -n "$AGENT_NAME" ]] && [[ 
             min_confidence: $min_confidence
         }')"
 
-    # 1s timeout - Perl's alarm() truncates to integer, so sub-second values
-    # become 0 (which cancels the alarm). Use integer seconds only.
-    # The entire UserPromptSubmit hook has a <500ms budget;
-    # context injection is one part alongside routing, agent loading, etc.
+    # 1s timeout (safety net, not target). Perl's alarm() truncates to integer,
+    # so sub-second values become 0 (cancels the alarm). Use integer seconds only.
+    # The entire UserPromptSubmit hook has a <500ms budget (CLAUDE.md);
+    # this timeout caps worst-case latency while the budget governs typical runs.
     # Use ONEX-compliant wrapper for pattern injection
     # Use run_with_timeout for portability (works on macOS and Linux)
     if [[ -f "${HOOKS_LIB}/context_injection_wrapper.py" ]]; then
@@ -240,6 +240,7 @@ if [[ "$SESSION_ALREADY_INJECTED" == "false" ]] && [[ -n "$AGENT_NAME" ]] && [[ 
     fi
 
     PATTERN_SUCCESS="$(echo "$PATTERN_RESULT" | jq -r '.success // false' 2>/dev/null || echo 'false')"
+    LEARNED_PATTERNS=""
 
     if [[ "$PATTERN_SUCCESS" == "true" ]]; then
         LEARNED_PATTERNS="$(echo "$PATTERN_RESULT" | jq -r '.patterns_context // ""' 2>/dev/null || echo '')"
