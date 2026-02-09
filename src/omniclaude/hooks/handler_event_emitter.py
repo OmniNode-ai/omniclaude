@@ -40,7 +40,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
-from omnibase_core.enums import EnumCoreErrorCode
+from omnibase_core.enums import EnumClaudeCodeSessionOutcome, EnumCoreErrorCode
 from omnibase_core.models.errors import ModelOnexError
 from omnibase_core.models.hooks.claude_code import (
     ModelClaudeCodeHookEvent,
@@ -229,14 +229,30 @@ class ModelSessionOutcomeConfig:
     the intelligence CMD topic and the observability EVT topic.
 
     Attributes:
-        session_id: Session identifier string (min 1 char).
-        outcome: Classification of how the session ended.
+        session_id: Session identifier string (min 1 non-whitespace char).
+        outcome: Classification of how the session ended. Accepts bare strings
+            that match EnumClaudeCodeSessionOutcome values; coerced on init.
         tracing: Optional tracing configuration (provides emitted_at, environment).
+
+    Raises:
+        ValueError: If session_id is empty/whitespace or outcome is invalid.
     """
 
     session_id: str
-    outcome: str  # One of: success, failed, abandoned, unknown
+    outcome: EnumClaudeCodeSessionOutcome
     tracing: ModelEventTracingConfig = field(default_factory=ModelEventTracingConfig)
+
+    def __post_init__(self) -> None:
+        """Validate session_id and coerce outcome to enum."""
+        if not self.session_id or not self.session_id.strip():
+            raise ValueError("session_id must be a non-empty, non-whitespace string")
+        # Always coerce to enum — idempotent if already the right type,
+        # converts bare str at runtime (dataclass doesn't enforce types).
+        object.__setattr__(
+            self,
+            "outcome",
+            EnumClaudeCodeSessionOutcome(self.outcome),
+        )
 
 
 # =============================================================================
@@ -1109,25 +1125,16 @@ async def emit_session_outcome_from_config(
 
     Returns:
         ModelEventPublishResult indicating success or failure.
-        On partial failure (one topic succeeds, one fails), returns failure
-        with the first error message.
+        CMD is the primary target; if CMD succeeds but EVT fails, returns
+        success=True with error_message describing the partial EVT failure.
+        Only returns success=False if CMD publish itself fails.
     """
     bus: EventBusKafka | None = None
     first_topic = "unknown"
 
     try:
-        from omnibase_core.enums import EnumClaudeCodeSessionOutcome
-
-        # Validate outcome value
-        try:
-            outcome_enum = EnumClaudeCodeSessionOutcome(config.outcome)
-        except ValueError:
-            valid = [e.value for e in EnumClaudeCodeSessionOutcome]
-            return ModelEventPublishResult(
-                success=False,
-                topic="unknown",
-                error_message=f"Invalid outcome '{config.outcome}'. Valid: {valid}",
-            )
+        # outcome is already validated as EnumClaudeCodeSessionOutcome by config
+        outcome_enum = config.outcome
 
         # Build payload
         tracing = config.tracing
@@ -1156,24 +1163,53 @@ async def emit_session_outcome_from_config(
         bus = EventBusKafka(config=kafka_config)
         await bus.start()
 
-        # Publish to both topics (fan-out)
+        # Publish to both topics (fan-out) with per-topic error handling
+        # to avoid partial inconsistency where CMD succeeds but EVT fails
+        cmd_ok = False
+        evt_ok = False
+        evt_error: str | None = None
+
         await bus.publish(topic=topic_cmd, key=partition_key, value=message_bytes)
-        await bus.publish(topic=topic_evt, key=partition_key, value=message_bytes)
+        cmd_ok = True
+
+        try:
+            await bus.publish(topic=topic_evt, key=partition_key, value=message_bytes)
+            evt_ok = True
+        except Exception as evt_exc:
+            # CMD succeeded, EVT failed — log but don't lose the CMD success
+            evt_error = f"{type(evt_exc).__name__}: {evt_exc!s}"
+            logger.warning(
+                "session_outcome_evt_publish_failed",
+                extra={
+                    "topic_cmd": topic_cmd,
+                    "topic_evt": topic_evt,
+                    "error": evt_error,
+                    "session_id": config.session_id,
+                },
+            )
 
         logger.debug(
             "session_outcome_emitted",
             extra={
                 "topics": [topic_cmd, topic_evt],
+                "cmd_ok": cmd_ok,
+                "evt_ok": evt_ok,
                 "session_id": config.session_id,
                 "outcome": config.outcome,
             },
         )
 
+        # Report success if at least CMD topic was published (primary target)
+        # EVT is observability-only; partial failure is acceptable
+        error_msg = (
+            f"Partial fan-out: EVT publish failed: {evt_error}" if evt_error else None
+        )
         return ModelEventPublishResult(
-            success=True,
-            topic=topic_cmd,  # Report first topic for consistency
+            success=cmd_ok,
+            topic=topic_cmd,
             partition=None,
             offset=None,
+            error_message=error_msg,
         )
 
     except Exception as e:

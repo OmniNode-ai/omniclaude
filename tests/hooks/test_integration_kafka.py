@@ -1167,7 +1167,15 @@ async def wait_for_session_outcome(
 
     try:
         await consumer.start()
-        await consumer.seek_to_end()
+        # Retry seek_to_end to handle topic auto-creation timing: if the
+        # topic doesn't exist yet, seek_to_end may raise or return empty
+        # partitions. A short retry loop lets Redpanda create the topic.
+        for _attempt in range(3):
+            try:
+                await consumer.seek_to_end()
+                break
+            except Exception:
+                await asyncio.sleep(0.5)
 
         start_time = asyncio.get_running_loop().time()
         while (asyncio.get_running_loop().time() - start_time) < timeout_seconds:

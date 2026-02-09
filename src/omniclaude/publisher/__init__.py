@@ -14,6 +14,7 @@ from __future__ import annotations
 __all__: list[str] = [
     "BoundedEventQueue",
     "EmbeddedEventPublisher",
+    "EmitClient",
     "ModelDaemonEmitRequest",
     "ModelDaemonErrorResponse",
     "ModelDaemonPingRequest",
@@ -31,6 +32,10 @@ def __getattr__(name: str) -> object:
         from omniclaude.publisher.publisher_config import PublisherConfig
 
         return PublisherConfig
+    if name == "EmitClient":
+        from omniclaude.publisher.emit_client import EmitClient
+
+        return EmitClient
     if name == "EmbeddedEventPublisher":
         from omniclaude.publisher.embedded_publisher import EmbeddedEventPublisher
 

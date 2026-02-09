@@ -11,6 +11,7 @@ Part of OMN-2076: Golden path session + injection + outcome emission.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
@@ -184,8 +185,10 @@ class TestGoldenPathSessionLifecycle:
         publish_calls = mock_bus.publish.call_args_list
 
         # There should be publishes from session_started (1), session_ended (1),
-        # and session_outcome (2: CMD + EVT)
-        assert len(publish_calls) >= 2  # At least the 2 outcome publishes
+        # and session_outcome (2: CMD + EVT) = 4 total
+        assert len(publish_calls) == 4, (
+            f"Expected 4 publishes (start + end + 2x outcome), got {len(publish_calls)}"
+        )
 
         # Find the outcome publishes (last two)
         outcome_publishes = publish_calls[-2:]
@@ -202,8 +205,6 @@ class TestGoldenPathSessionLifecycle:
         # Verify payload structure
         for call in outcome_publishes:
             value_bytes = call.kwargs["value"]
-            import json
-
             payload = json.loads(value_bytes.decode("utf-8"))
             assert payload["session_id"] == str(session_id)
             assert payload["outcome"] == "success"
@@ -337,25 +338,19 @@ class TestEmitSessionOutcome:
             assert validated.emitted_at == ts
 
     @patch("omniclaude.hooks.handler_event_emitter.EventBusKafka")
-    async def test_invalid_outcome_returns_failure(self, mock_bus_cls) -> None:
-        """Invalid outcome value returns failure without publishing."""
-        mock_bus = AsyncMock()
-        mock_bus_cls.return_value = mock_bus
-
-        config = ModelSessionOutcomeConfig(
-            session_id="test-session",
-            outcome="invalid_outcome",
-            tracing=ModelEventTracingConfig(
-                emitted_at=datetime(2026, 2, 9, 12, 0, 0, tzinfo=UTC),
-                environment="test",
-            ),
-        )
-
-        result = await emit_session_outcome_from_config(config)
-
-        assert result.success is False
-        assert "invalid_outcome" in (result.error_message or "")
-        mock_bus.publish.assert_not_called()
+    async def test_invalid_outcome_raises_at_config_construction(
+        self, mock_bus_cls
+    ) -> None:
+        """Invalid outcome value raises ValueError at config construction."""
+        with pytest.raises(ValueError, match="invalid_outcome"):
+            ModelSessionOutcomeConfig(
+                session_id="test-session",
+                outcome="invalid_outcome",
+                tracing=ModelEventTracingConfig(
+                    emitted_at=datetime(2026, 2, 9, 12, 0, 0, tzinfo=UTC),
+                    environment="test",
+                ),
+            )
 
     @patch("omniclaude.hooks.handler_event_emitter.EventBusKafka")
     async def test_all_four_outcomes_are_valid(self, mock_bus_cls) -> None:
