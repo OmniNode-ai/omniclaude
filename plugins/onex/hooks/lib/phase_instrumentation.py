@@ -217,7 +217,10 @@ def build_metrics_from_result(
     """
     wall_clock_ms = (completed_at - started_at).total_seconds() * 1000.0
 
-    spi_phase = PHASE_TO_SPI.get(phase, ContractEnumPipelinePhase.IMPLEMENT)
+    spi_phase = PHASE_TO_SPI.get(phase)
+    if spi_phase is None:
+        logger.warning("Unknown pipeline phase %r, defaulting to IMPLEMENT", phase)
+        spi_phase = ContractEnumPipelinePhase.IMPLEMENT
     classification = _classify_result(phase_result)
 
     context = ContractMeasurementContext(
@@ -309,7 +312,10 @@ def build_error_metrics(
         completed_at = datetime.now(UTC)
     wall_clock_ms = (completed_at - started_at).total_seconds() * 1000.0
 
-    spi_phase = PHASE_TO_SPI.get(phase, ContractEnumPipelinePhase.IMPLEMENT)
+    spi_phase = PHASE_TO_SPI.get(phase)
+    if spi_phase is None:
+        logger.warning("Unknown pipeline phase %r, defaulting to IMPLEMENT", phase)
+        spi_phase = ContractEnumPipelinePhase.IMPLEMENT
 
     context = ContractMeasurementContext(
         ticket_id=ticket_id,
@@ -376,7 +382,10 @@ def build_skipped_metrics(
     Returns:
         A ContractPhaseMetrics with SKIPPED classification.
     """
-    spi_phase = PHASE_TO_SPI.get(phase, ContractEnumPipelinePhase.IMPLEMENT)
+    spi_phase = PHASE_TO_SPI.get(phase)
+    if spi_phase is None:
+        logger.warning("Unknown pipeline phase %r, defaulting to IMPLEMENT", phase)
+        spi_phase = ContractEnumPipelinePhase.IMPLEMENT
 
     context = ContractMeasurementContext(
         ticket_id=ticket_id,
@@ -621,16 +630,17 @@ def run_measurement_checks(
 
     # CHECK-MEAS-001: Phase metrics were emitted (artifact exists)
     # If we have a metrics object at all, this check passes.
-    has_metrics = metrics is not None
     results.append(
         MeasurementCheckResult(
             check_id=MeasurementCheck.CHECK_MEAS_001,
-            passed=has_metrics,
-            message="Phase metrics emitted" if has_metrics else "Phase metrics missing",
+            passed=metrics is not None,
+            message="Phase metrics emitted"
+            if metrics is not None
+            else "Phase metrics missing",
         )
     )
 
-    if not has_metrics:
+    if metrics is None:
         # Remaining checks cannot run without metrics
         for check in [
             MeasurementCheck.CHECK_MEAS_002,

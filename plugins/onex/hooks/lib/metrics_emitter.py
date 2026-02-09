@@ -74,7 +74,10 @@ def _sanitize_error_messages(messages: list[str]) -> list[str]:
     try:
         from plugins.onex.hooks.lib.secret_redactor import redact_secrets
     except ImportError:
-        # Fallback: just truncate
+        logger.warning(
+            "secret_redactor not available; error messages will not be redacted"
+        )
+
         def redact_secrets(text: str) -> str:  # type: ignore[misc]
             return text
 
