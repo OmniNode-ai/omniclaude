@@ -319,6 +319,13 @@ def metrics_artifact_exists(
     Returns:
         True if the artifact file exists.
     """
+    for component in (ticket_id, run_id, phase):
+        if any(c in str(component) for c in _INVALID_PATH_CHARS):
+            logger.warning(
+                f"Rejected path component with traversal chars: {component!r}"
+            )
+            return False
+
     artifact_path = (
         ARTIFACT_BASE_DIR
         / ticket_id
