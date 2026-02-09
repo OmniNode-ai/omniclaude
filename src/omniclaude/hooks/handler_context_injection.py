@@ -138,7 +138,7 @@ def _reset_emit_event_cache() -> None:
 class PatternRecord:
     """API transfer model for learned patterns.
 
-    This is the canonical API model with 8 core fields, used for:
+    This is the canonical API model with 9 core fields, used for:
     - Context injection into Claude Code sessions
     - JSON serialization in API responses
     - Data transfer between components
@@ -164,8 +164,9 @@ class PatternRecord:
         success_rate: Success rate from 0.0 to 1.0.
         example_reference: Optional reference to an example.
         lifecycle_state: Lifecycle state of the pattern ("validated" or "provisional").
-            Defaults to "validated" for backward compatibility. Provisional patterns
-            are annotated differently in context injection output.
+            Defaults to None for backward compatibility. None is treated as validated
+            (no dampening applied). Provisional patterns are annotated differently
+            in context injection output.
 
     See Also:
         - DbPatternRecord: Database model (12 fields) in repository_patterns.py
@@ -707,6 +708,12 @@ class HandlerContextInjection:
                     limit,  # positional arg
                 )
             elif domain:
+                if include_provisional:
+                    logger.warning(
+                        "include_provisional=True ignored with domain filter '%s'; "
+                        "domain-filtered query returns validated patterns only",
+                        domain,
+                    )
                 # Use domain-filtered operation (validated only for now)
                 rows = await runtime.call(
                     "list_patterns_by_domain",

@@ -54,8 +54,9 @@ class PatternRecord:
         success_rate: Success rate from 0.0 to 1.0.
         example_reference: Optional reference to an example (e.g., "path/to/file.py:42").
         lifecycle_state: Lifecycle state of the pattern ("validated" or "provisional").
-            Defaults to "validated" for backward compatibility. Provisional patterns
-            are annotated differently in context injection output.
+            Defaults to None for backward compatibility. None is treated as validated
+            (no dampening applied). Provisional patterns are annotated differently
+            in context injection output.
 
     See Also:
         - ModelPatternRecord: Handler API model in src/omniclaude/hooks/handler_context_injection.py

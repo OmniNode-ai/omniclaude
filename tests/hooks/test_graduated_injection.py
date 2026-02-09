@@ -784,7 +784,7 @@ class TestHandlerIntegration:
 
         assert result.success is True
         assert result.pattern_count == 2
-        # File-based patterns: lifecycle_state is not loaded from JSON by default
-        # (file parser doesn't extract lifecycle_state yet - this tests the handler
-        # format function with whatever patterns come through)
+        # File parser extracts lifecycle_state via item.get('lifecycle_state')
+        # so provisional patterns get the [Provisional] badge in output
         assert "Validated Pattern" in result.context_markdown
+        assert "[Provisional]" in result.context_markdown
