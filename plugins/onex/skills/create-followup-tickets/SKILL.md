@@ -20,7 +20,7 @@ Create Linear tickets in batch from code review output. This skill reads review 
 
 Use this skill after running a code review:
 - After `/local-review` completes with issues
-- After `/pr-release-ready` identifies follow-up work
+- After `/pr-review-dev` identifies follow-up work
 - After any review that produces structured issue output
 
 ## Quick Start
@@ -32,7 +32,7 @@ Use this skill after running a code review:
 
 ## Review Data Format
 
-The skill expects review data in this JSON structure (output by `/local-review` and `/pr-release-ready`):
+The skill expects review data in this JSON structure (output by `/local-review` and `/pr-review-dev`):
 
 ```json
 {
@@ -189,7 +189,7 @@ Supported formats:
 
 ```bash
 # 1. Review a PR
-/pr-release-ready 78
+/pr-review-dev 78
 
 # 2. Fix what you can in this session
 
@@ -209,6 +209,6 @@ Supported formats:
 ## See Also
 
 - `/local-review` - Review local changes
-- `/pr-release-ready` - Fix all PR issues
+- `/pr-review-dev` - Review a PR
 - `/create-ticket` - Create a single ticket
 - Linear skills: `${CLAUDE_PLUGIN_ROOT}/skills/linear/`

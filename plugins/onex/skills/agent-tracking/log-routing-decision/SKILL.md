@@ -26,7 +26,7 @@ This skill logs agent routing decisions for tracking, observability, and machine
 - 🚀 **Scalability**: Handles 1M+ events/sec
 - 🛡️ **Fault Tolerance**: Events persisted even if consumers fail
 
-**Kafka Topic**: `agent-routing-decisions`
+**Kafka Topic**: `onex.evt.omniclaude.routing-decision.v1`
 
 **How to Use (Kafka)**:
 
@@ -125,7 +125,7 @@ Skills are version-controlled in the repository and symlinked to `${CLAUDE_PLUGI
 ## Required Environment
 
 **For Kafka Version**:
-- Kafka brokers: Set via `KAFKA_BROKERS` env var (default: `localhost:9092`)
+- Kafka brokers: Set via `KAFKA_BOOTSTRAP_SERVERS` env var (no default — must be explicitly configured)
 - kafka-python package: `pip install kafka-python`
 
 **For Direct DB Version**:
@@ -145,7 +145,7 @@ Skills are version-controlled in the repository and symlinked to `${CLAUDE_PLUGI
   "routing_strategy": "enhanced_fuzzy_matching",
   "routing_time_ms": 45,
   "published_to": "kafka",
-  "topic": "agent-routing-decisions"
+  "topic": "onex.evt.omniclaude.routing-decision.v1"
 }
 ```
 

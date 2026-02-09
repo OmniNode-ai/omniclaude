@@ -633,6 +633,110 @@ class ModelSessionOutcome(BaseModel):
 
 
 # =============================================================================
+# Routing Feedback Events (OMN-1892)
+# =============================================================================
+
+
+class ModelRoutingFeedbackPayload(BaseModel):
+    """Event payload for routing feedback reinforcement.
+
+    Emitted at session end when the feedback guardrails determine that
+    the routing decision should be reinforced (all gates passed). This
+    event enables the intelligence system to learn from successful and
+    failed routing decisions.
+
+    Attributes:
+        event_name: Literal discriminator for polymorphic deserialization.
+        session_id: Session identifier string.
+        outcome: Session outcome that triggered feedback (success or failed).
+        emitted_at: Timestamp when the event was emitted (UTC).
+
+    Example:
+        >>> from datetime import UTC, datetime
+        >>> event = ModelRoutingFeedbackPayload(
+        ...     session_id="abc12345-1234-5678-abcd-1234567890ab",
+        ...     outcome="success",
+        ...     emitted_at=datetime(2025, 1, 15, 12, 30, 0, tzinfo=UTC),
+        ... )
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+    )
+
+    event_name: Literal["routing.feedback"] = Field(
+        default="routing.feedback",
+        description="Event type discriminator for polymorphic deserialization",
+    )
+    session_id: str = Field(
+        ...,
+        min_length=1,
+        description="Session identifier",
+    )
+    outcome: Literal["success", "failed"] = Field(
+        ...,
+        description="Session outcome that triggered feedback",
+    )
+    # Timestamps - MUST be explicitly injected (no default_factory for testability)
+    # Uses TimezoneAwareDatetime for automatic timezone validation
+    emitted_at: TimezoneAwareDatetime = Field(
+        ...,
+        description="Timestamp when the event was emitted (UTC)",
+    )
+
+
+class ModelRoutingFeedbackSkippedPayload(BaseModel):
+    """Event payload for routing feedback that was skipped by guardrails.
+
+    Emitted at session end when the feedback guardrails determine that
+    the routing decision should NOT be reinforced (a gate failed). This
+    event provides observability into why feedback was suppressed.
+
+    Attributes:
+        event_name: Literal discriminator for polymorphic deserialization.
+        session_id: Session identifier string.
+        skip_reason: Why reinforcement was skipped (e.g., NO_INJECTION,
+            UNCLEAR_OUTCOME, BELOW_SCORE_THRESHOLD).
+        emitted_at: Timestamp when the event was emitted (UTC).
+
+    Example:
+        >>> from datetime import UTC, datetime
+        >>> event = ModelRoutingFeedbackSkippedPayload(
+        ...     session_id="abc12345-1234-5678-abcd-1234567890ab",
+        ...     skip_reason="NO_INJECTION",
+        ...     emitted_at=datetime(2025, 1, 15, 12, 30, 0, tzinfo=UTC),
+        ... )
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+    )
+
+    event_name: Literal["routing.skipped"] = Field(
+        default="routing.skipped",
+        description="Event type discriminator for polymorphic deserialization",
+    )
+    session_id: str = Field(
+        ...,
+        min_length=1,
+        description="Session identifier",
+    )
+    skip_reason: str = Field(
+        ...,
+        min_length=1,
+        description="Why reinforcement was skipped (NO_INJECTION, UNCLEAR_OUTCOME, BELOW_SCORE_THRESHOLD)",
+    )
+    # Timestamps - MUST be explicitly injected (no default_factory for testability)
+    # Uses TimezoneAwareDatetime for automatic timezone validation
+    emitted_at: TimezoneAwareDatetime = Field(
+        ...,
+        description="Timestamp when the event was emitted (UTC)",
+    )
+
+
+# =============================================================================
 # Prompt Events
 # =============================================================================
 
@@ -1531,6 +1635,8 @@ __all__ = [
     "ModelHookSessionStartedPayload",
     "ModelHookSessionEndedPayload",
     "ModelSessionOutcome",
+    "ModelRoutingFeedbackPayload",
+    "ModelRoutingFeedbackSkippedPayload",
     "ModelHookPromptSubmittedPayload",
     "ModelHookToolExecutedPayload",
     "ModelHookContextInjectedPayload",

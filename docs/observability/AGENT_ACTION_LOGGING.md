@@ -172,7 +172,7 @@ await logger.log_success(
 **Consumer**: `consumers/agent_actions_consumer.py` (already exists)
 
 **Features**:
-- ✅ Multi-topic subscription (agent-actions, agent-routing-decisions, etc.)
+- ✅ Multi-topic subscription (agent-actions, onex.evt.omniclaude.routing-decision.v1, etc.)
 - ✅ Batch processing (100 events or 1 second intervals)
 - ✅ Dead letter queue for failed messages
 - ✅ Graceful shutdown
@@ -181,7 +181,7 @@ await logger.log_success(
 
 **Consumer subscribes to**:
 - `agent-actions` - Action events from publishers
-- `agent-routing-decisions` - Routing decisions
+- `onex.evt.omniclaude.routing-decision.v1` - Routing decisions
 - `agent-transformation-events` - Agent transformations
 - `router-performance-metrics` - Performance metrics
 - `agent-detection-failures` - Detection failures

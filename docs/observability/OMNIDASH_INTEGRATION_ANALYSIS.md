@@ -85,7 +85,7 @@ Omnidash is a **production-ready, data-dense enterprise dashboard** built with R
 
 **Kafka Event Consumer** (`server/event-consumer.ts`):
 - ✅ Consumes from Kafka at `192.168.86.200:9092`
-- ✅ Topics: `agent-routing-decisions`, `agent-transformation-events`, `router-performance-metrics`, `agent-actions`
+- ✅ Topics: `onex.evt.omniclaude.routing-decision.v1`, `agent-transformation-events`, `router-performance-metrics`, `agent-actions`
 - ✅ In-memory event aggregation and caching
 - ✅ EventEmitter-based pub/sub for internal distribution
 - ✅ Provides `getAggregatedMetrics()` method

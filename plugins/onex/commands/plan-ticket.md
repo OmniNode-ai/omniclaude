@@ -5,23 +5,26 @@ tags: [linear, tickets, planning, templates]
 args: []
 ---
 
-# Plan Ticket
+# Ticket Planning Template
 
-Generate a pre-filled YAML contract template that you can customize and pass to `/create-ticket`.
+Generate a pre-filled YAML contract template that you can customize and pass to `/create-ticket`. No interactive prompts - just a copyable block.
 
-**Announce at start:** "Generating ticket template..."
+**Announce at start:** "I'm using the plan-ticket command to generate a ticket template."
+
+## Quick Reference
+
+The plan-ticket skill provides:
+- YAML contract template generation
+- Pre-fills fields based on context you provide
+- Template ready for editing and passing to /create-ticket
+- No interactive prompts - outputs a single copyable block
 
 ## Execution
 
-1. Read the poly prompt from `${CLAUDE_PLUGIN_ROOT}/skills/plan-ticket/POLY_PROMPT.md`
-2. Dispatch to polymorphic agent:
+Use the Skill tool to load the `plan-ticket` skill, then output the template.
 
 ```
-Task(
-  subagent_type="polymorphic-agent",
-  description="Generate ticket template",
-  prompt="<POLY_PROMPT content>\n\n## Context\nARGUMENTS: {arguments}"
-)
+Skill(skill="onex:plan-ticket")
 ```
 
-3. Show the generated template to the user.
+Follow the skill's template generation logic. Output a copyable YAML block with next steps.

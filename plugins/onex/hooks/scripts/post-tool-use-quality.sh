@@ -37,6 +37,11 @@ export PYTHONPATH="${PROJECT_ROOT}:${PLUGIN_ROOT}/lib:${HOOKS_LIB}:${PYTHONPATH:
 
 # Get tool info from stdin
 TOOL_INFO=$(cat)
+if ! echo "$TOOL_INFO" | jq -e . >/dev/null 2>>"$LOG_FILE"; then
+    log "ERROR: Malformed JSON on stdin for PostToolUse"
+    printf '%s\n' "$TOOL_INFO"
+    exit 0
+fi
 
 # Debug: Save JSON structure
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] PostToolUse JSON:" >> "$LOG_FILE"

@@ -27,10 +27,8 @@ from omniclaude.nodes.node_agent_routing_compute._internal import (
     ConfidenceScorer,
     TriggerMatcher,
 )
-from omniclaude.nodes.node_agent_routing_compute._internal.confidence_scoring import (
+from omniclaude.nodes.node_agent_routing_compute._internal._types import (
     AgentData,
-)
-from omniclaude.nodes.node_agent_routing_compute._internal.trigger_matching import (
     AgentRegistry,
 )
 from omniclaude.nodes.node_agent_routing_compute.models import (
@@ -187,7 +185,7 @@ class HandlerRoutingDefault:
 
         # 8. Fallback - no matches above threshold
         fallback_reason = (
-            f"No agents matched above threshold {request.confidence_threshold:.2f}"
+            "No agents matched any trigger patterns"
             if not candidates
             else (
                 f"Best match {candidates[0].agent_name} "
@@ -280,10 +278,8 @@ class HandlerRoutingDefault:
         try:
             text_lower = text.lower()
 
-            # Patterns for specific agent requests (with agent name).
-            # \b word boundaries are an intentional improvement over legacy
-            # AgentRouter._extract_explicit_agent(), which lacks them and
-            # therefore suffers false positives like "reuse agent-X".
+            # Patterns for specific agent requests (with agent name)
+            # \b prevents false positives: "reuse agent-X", "misuse agent-X"
             specific_patterns = [
                 r"\buse\s+(agent-[\w-]+)",  # "use agent-researcher"
                 r"@(agent-[\w-]+)",  # "@agent-researcher"
@@ -295,9 +291,7 @@ class HandlerRoutingDefault:
                 match = re.search(pattern, text_lower)
                 if match:
                     agent_name = match.group(1)
-                    # Verify agent exists in registry.
-                    # Registry keys may or may not have the "agent-" prefix,
-                    # so try the captured name first, then stripped.
+                    # Verify agent exists in registry
                     if agent_name in known_agents:
                         logger.debug(
                             "Extracted explicit agent: %s (pattern=%s)",
@@ -305,18 +299,6 @@ class HandlerRoutingDefault:
                             pattern,
                         )
                         return agent_name
-                    # Intentional improvement over legacy AgentRouter: strip
-                    # the "agent-" prefix so "@agent-testing" resolves to the
-                    # registry key "testing". Legacy does not strip and fails.
-                    stripped = agent_name.removeprefix("agent-")
-                    if stripped != agent_name and stripped in known_agents:
-                        logger.debug(
-                            "Extracted explicit agent: %s (pattern=%s, "
-                            "resolved via prefix strip)",
-                            stripped,
-                            pattern,
-                        )
-                        return stripped
 
             # Patterns for generic agent requests (no specific agent name)
             # These should default to polymorphic-agent

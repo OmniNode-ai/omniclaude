@@ -584,7 +584,8 @@ class TestFanOutRule:
         )
         payload = {"key": "value"}
         result = rule.apply_transform(payload)
-        assert result is payload  # Same object
+        assert result == payload  # Same content
+        assert result is not payload  # Defensive copy
 
     def test_fanout_rule_apply_transform_with_function(self) -> None:
         """Verify apply_transform applies transform function."""
@@ -725,6 +726,45 @@ class TestEventRegistryIntegration:
 
         # Intelligence should be passthrough (None)
         assert intel_rule.transform is None
+
+    def test_session_outcome_fan_out_to_both_cmd_and_evt(self) -> None:
+        """session.outcome should fan-out to both CMD (intelligence) and EVT (observability)."""
+        from omniclaude.hooks.event_registry import EVENT_REGISTRY
+
+        reg = EVENT_REGISTRY["session.outcome"]
+        assert len(reg.fan_out) == 2
+
+        topic_bases = [rule.topic_base for rule in reg.fan_out]
+        assert TopicBase.SESSION_OUTCOME_CMD in topic_bases
+        assert TopicBase.SESSION_OUTCOME_EVT in topic_bases
+
+    def test_session_outcome_required_fields(self) -> None:
+        """session.outcome should require session_id and outcome."""
+        from omniclaude.hooks.event_registry import EVENT_REGISTRY
+
+        reg = EVENT_REGISTRY["session.outcome"]
+        assert "session_id" in reg.required_fields
+        assert "outcome" in reg.required_fields
+
+    def test_session_outcome_both_rules_are_passthrough(self) -> None:
+        """session.outcome fan-out rules should both be passthrough (no transform)."""
+        from omniclaude.hooks.event_registry import EVENT_REGISTRY
+
+        reg = EVENT_REGISTRY["session.outcome"]
+        for rule in reg.fan_out:
+            assert rule.transform is None, (
+                f"Expected passthrough for {rule.topic_base}, got transform"
+            )
+
+    def test_routing_decision_uses_onex_topic(self) -> None:
+        """routing.decision should use ONEX-canonical topic, not legacy."""
+        from omniclaude.hooks.event_registry import EVENT_REGISTRY
+
+        reg = EVENT_REGISTRY["routing.decision"]
+        topic_bases = [rule.topic_base for rule in reg.fan_out]
+        assert TopicBase.ROUTING_DECISION in topic_bases
+        # Legacy topic should NOT be present
+        assert "agent-routing-decisions" not in [str(t) for t in topic_bases]
 
     def test_session_events_no_transform(self) -> None:
         """Verify session events use passthrough (no transform)."""

@@ -51,7 +51,7 @@ ln -sf "$(pwd)/CLAUDE.md" ~/.claude/CLAUDE.md
 
 ### Custom Commands (`.claude/commands/`)
 - `/parallel-solve` - Auto-detect and solve issues in parallel
-- `/local-review` - Local code review loop
+- `/pr-dev-review` - Development PR review workflow
 - `/pr-release-ready` - Release-ready PR review workflow
 
 ### Hooks (`claude/hooks/`)

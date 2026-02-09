@@ -100,6 +100,8 @@ SUPPORTED_EVENT_TYPES = frozenset(
         "agent.match",  # OMN-1889
         "latency.breakdown",  # OMN-1889
         "routing.decision",  # PR-92 - Routing decision emission via daemon
+        "routing.feedback",  # OMN-1892 - Routing feedback for reinforcement
+        "routing.skipped",  # OMN-1892 - Routing feedback skipped (guardrail gate)
         "notification.blocked",  # OMN-1831 - Slack notifications via emit daemon
         "notification.completed",  # OMN-1831 - Slack notifications via emit daemon
     ]

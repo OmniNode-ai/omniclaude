@@ -48,7 +48,7 @@ import time
 from collections.abc import Callable
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 # Add script directory to path for sibling imports
 _SCRIPT_DIR = Path(__file__).parent
@@ -118,6 +118,9 @@ try:
     _onex_nodes_available = True
 except ImportError:
     logger.debug("ONEX routing nodes not available, USE_ONEX_ROUTING_NODES ignored")
+
+if TYPE_CHECKING:
+    from omniclaude.nodes.node_agent_routing_compute._internal import AgentRegistry
 
 # Canonical routing path values for metrics (from OMN-1893)
 VALID_ROUTING_PATHS = frozenset({"event", "local", "hybrid"})
@@ -308,6 +311,8 @@ _emit_handler: Any = None
 _history_handler: Any = None
 _onex_handler_lock = threading.Lock()
 _cached_stats: Any = None
+_cached_stats_time: float | None = None
+_STATS_CACHE_TTL_SECONDS = 300  # 5 min; stale stats are acceptable for routing hints
 _stats_lock = threading.Lock()
 
 
@@ -354,26 +359,93 @@ def _get_onex_handlers() -> tuple[Any, Any, Any] | None:
     return _compute_handler, _emit_handler, _history_handler
 
 
+def _run_async(coro: Any, timeout: float = 5.0) -> Any:
+    """Run a coroutine from synchronous code with timeout enforcement.
+
+    Uses asyncio.run() for the common case.  If an event loop is already
+    running (e.g., nested async context), offloads to a new thread with
+    its own event loop to avoid RuntimeError.
+
+    Args:
+        coro: The coroutine to execute.
+        timeout: Maximum seconds to allow the coroutine to run before
+            cancellation.  Defaults to 5.0, matching the routing budget.
+            The timeout is enforced at the async boundary via
+            ``asyncio.wait_for`` so that the coroutine is *cancelled*
+            rather than merely abandoned.  On the thread path a secondary
+            ``future.result(timeout=...)`` guard provides belt-and-suspenders
+            protection against hangs outside the coroutine itself.
+
+    Raises:
+        TimeoutError: If the coroutine exceeds *timeout* seconds.
+            On the event-loop path this is ``asyncio.TimeoutError``; on the
+            thread-pool path it is ``concurrent.futures.TimeoutError``.  Both
+            are subclasses of the builtin ``TimeoutError`` on Python 3.11+.
+    """
+    guarded = asyncio.wait_for(coro, timeout=timeout)
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        # No loop running — safe to create one
+        return asyncio.run(guarded)
+
+    # Loop is running — cannot use run_until_complete or asyncio.run.
+    # Offload to a new thread that creates its own event loop.
+    # Use explicit pool lifecycle (no context manager) so that on timeout
+    # we call shutdown(wait=False) to avoid blocking on a hung thread.
+    import concurrent.futures
+
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+    future = pool.submit(asyncio.run, guarded)
+    try:
+        # Secondary timeout guard (belt-and-suspenders): if the inner
+        # asyncio.wait_for doesn't fire for some reason, this catches it.
+        return future.result(timeout=timeout)
+    finally:
+        # Always shut down without waiting. On success the thread has
+        # already finished; on timeout or error we must not block.
+        # cancel_futures=True (Python 3.9+) prevents queued work.
+        pool.shutdown(wait=False, cancel_futures=True)
+
+
 def _get_cached_stats() -> Any:
-    """Pre-fetch routing stats once per process. Returns None on failure."""
-    global _cached_stats
-    if _cached_stats is not None:
+    """Pre-fetch routing stats, cached with a TTL.
+
+    Stats are used as hints for confidence scoring, so brief staleness
+    (up to _STATS_CACHE_TTL_SECONDS) is acceptable.  This avoids a
+    database round-trip on every routing call while ensuring the cache
+    does not grow infinitely stale.
+    """
+    global _cached_stats, _cached_stats_time
+    now = time.time()
+    if (
+        _cached_stats is not None
+        and _cached_stats_time is not None
+        and (now - _cached_stats_time) < _STATS_CACHE_TTL_SECONDS
+    ):
         return _cached_stats
     handlers = _get_onex_handlers()
     if handlers is None:
         return None
     _, _, history = handlers
     with _stats_lock:
-        if _cached_stats is not None:
+        # Re-check after acquiring lock (another thread may have refreshed)
+        if (
+            _cached_stats is not None
+            and _cached_stats_time is not None
+            and (time.time() - _cached_stats_time) < _STATS_CACHE_TTL_SECONDS
+        ):
             return _cached_stats
         try:
-            _cached_stats = asyncio.run(history.query_routing_stats())
+            _cached_stats = _run_async(history.query_routing_stats(), timeout=5.0)
+            _cached_stats_time = time.time()
         except Exception as e:
             logger.debug("Failed to pre-fetch routing stats: %s", e)
     return _cached_stats
 
 
-def _build_agent_definitions(registry: dict[str, Any]) -> tuple[Any, ...]:
+def _build_agent_definitions(registry: "AgentRegistry") -> tuple[Any, ...]:
     """Convert AgentRouter registry to ModelAgentDefinition tuple."""
     defs: list[Any] = []
     for name, data in registry.get("agents", {}).items():
@@ -442,32 +514,34 @@ def _route_via_onex_nodes(
             confidence_threshold=CONFIDENCE_THRESHOLD,
         )
 
-        async def _compute() -> Any:
-            """Compute routing only (no emission)."""
-            return await compute.compute_routing(request, correlation_id=cid)
+        async def _compute_and_emit() -> tuple[Any, int]:
+            """Compute routing and emit in a single event loop."""
+            r = await compute.compute_routing(request, correlation_id=cid)
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            # Emit only if within timeout budget — avoids emitting a routing
+            # decision that will be discarded (which would conflict with the
+            # legacy fallback's own emission).
+            if elapsed_ms <= timeout_ms:
+                try:
+                    emit_req = ModelEmissionRequest(
+                        correlation_id=cid,
+                        session_id=session_id or "unknown",
+                        selected_agent=r.selected_agent,
+                        confidence=r.confidence,
+                        confidence_breakdown=r.confidence_breakdown,
+                        routing_policy=r.routing_policy,
+                        routing_path=r.routing_path,
+                        prompt_preview=_sanitize_prompt_preview(prompt),
+                        prompt_length=len(prompt),
+                        emitted_at=datetime.now(UTC),
+                    )
+                    await emitter.emit_routing_decision(emit_req, correlation_id=cid)
+                except Exception as exc:
+                    logger.debug("ONEX emission failed (non-blocking): %s", exc)
+            return r, elapsed_ms
 
-        async def _emit(r: Any) -> None:
-            """Emit routing decision (best-effort, non-blocking)."""
-            emit_req = ModelEmissionRequest(
-                correlation_id=cid,
-                session_id=session_id or "unknown",
-                selected_agent=r.selected_agent,
-                confidence=r.confidence,
-                confidence_breakdown=r.confidence_breakdown,
-                routing_policy=r.routing_policy,
-                routing_path=r.routing_path,
-                prompt_preview=_sanitize_prompt_preview(prompt),
-                prompt_length=len(prompt),
-                emitted_at=datetime.now(UTC),
-            )
-            await emitter.emit_routing_decision(emit_req, correlation_id=cid)
+        result, latency_ms = _run_async(_compute_and_emit(), timeout=timeout_ms / 1000)
 
-        result = asyncio.run(_compute())
-        latency_ms = int((time.time() - start_time) * 1000)
-
-        # Check timeout BEFORE emission — avoids emitting a routing decision
-        # that will be discarded (which would conflict with the legacy
-        # fallback's own emission).
         if latency_ms > timeout_ms:
             logger.warning(
                 "ONEX routing exceeded %dms budget (%dms), falling back",
@@ -475,12 +549,6 @@ def _route_via_onex_nodes(
                 latency_ms,
             )
             return None
-
-        # Emit routing decision (best-effort, only if within budget)
-        try:
-            asyncio.run(_emit(result))
-        except Exception as exc:
-            logger.debug("ONEX emission failed (non-blocking): %s", exc)
 
         # Result shaping: ModelRoutingResult → wrapper dict
         agents_reg = router.registry.get("agents", {})
@@ -530,6 +598,7 @@ def route_via_events(
     correlation_id: str,
     timeout_ms: int = 5000,
     session_id: str | None = None,  # Used by ONEX emission path
+    _start_time: float | None = None,
 ) -> dict[str, Any]:
     """
     Route user prompt using intelligent trigger matching and confidence scoring.
@@ -545,11 +614,17 @@ def route_via_events(
             If the routing operation exceeds this budget, the result is
             discarded and a fallback to the default agent is returned.
         session_id: Session ID for emission tracking
+        _start_time: Optional wall-clock start time (from ``time.time()``).
+            When provided, latency tracking includes time spent *before*
+            this function was called (e.g., Python interpreter startup,
+            argument parsing).  Callers that care about end-to-end budget
+            accuracy should capture ``time.time()`` as early as possible
+            and pass it here.
 
     Returns:
         Routing decision dictionary with routing_path signal
     """
-    start_time = time.time()
+    start_time = _start_time if _start_time is not None else time.time()
     event_attempted = False  # Local routing, no event bus
 
     # Validate inputs before processing
@@ -722,6 +797,10 @@ def main() -> None:
     Usage:
         python route_via_events_wrapper.py "prompt" "correlation-id" [timeout_ms] [session_id]
     """
+    # Capture wall-clock time before argument parsing so that interpreter
+    # startup and import overhead are included in the latency budget.
+    entry_time = time.time()
+
     if len(sys.argv) < 3:
         # Graceful degradation with fallback agent when args missing
         print(
@@ -749,7 +828,9 @@ def main() -> None:
     timeout_ms = int(sys.argv[3]) if len(sys.argv) > 3 else 5000
     session_id = sys.argv[4] if len(sys.argv) > 4 else None
 
-    result = route_via_events(prompt, correlation_id, timeout_ms, session_id)
+    result = route_via_events(
+        prompt, correlation_id, timeout_ms, session_id, _start_time=entry_time
+    )
     print(json.dumps(result))
 
 

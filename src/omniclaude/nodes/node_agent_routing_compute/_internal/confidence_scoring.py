@@ -12,49 +12,21 @@ Confidence Components (weighted):
 
 Based on agent_router.py ConfidenceScorer with intentional refinements:
 - Word-level capability matching (prevents 'api' matching inside 'rapidly')
-Pure Python - NO ONEX imports.
+Pure Python with typed interfaces from _types. No ONEX framework imports.
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import TypedDict
 
-__all__ = [
-    "AgentData",
-    "AgentHistory",
-    "ConfidenceScore",
-    "ConfidenceScorer",
-    "RoutingContext",
-]
+from omniclaude.nodes.node_agent_routing_compute._internal._types import (
+    AgentData,
+    HistoricalRecord,
+    RoutingContext,
+)
 
-
-class AgentData(TypedDict, total=False):
-    """Agent registry entry data.
-
-    Fields are optional (total=False) because agents have varying metadata.
-    """
-
-    activation_triggers: list[str]
-    capabilities: list[str]
-    domain_context: str
-    description: str
-    title: str
-    definition_path: str
-    agent_type: str
-
-
-class RoutingContext(TypedDict, total=False):
-    """Execution context for routing."""
-
-    domain: str
-
-
-class AgentHistory(TypedDict, total=False):
-    """Historical agent performance data."""
-
-    overall: float
+__all__ = ["ConfidenceScore", "ConfidenceScorer"]
 
 
 @dataclass
@@ -98,7 +70,7 @@ class ConfidenceScorer:
         """Initialize confidence scorer."""
         # Historical success rates (loaded from tracking data)
         # In Phase 2+, this would come from actual usage tracking
-        self.historical_success: dict[str, AgentHistory] = {}
+        self.historical_success: dict[str, HistoricalRecord] = {}
 
     def score(
         self,

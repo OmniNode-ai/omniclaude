@@ -97,9 +97,6 @@ NO_SNAPSHOT=false
 # Default to MVP project from config.yaml
 PROJECT_ID="e44ddbf4-b4c7-40dc-84fa-f402ec27b38e"
 
-# Configurable git author for commit analysis
-AUTHOR="${LINEAR_INSIGHTS_AUTHOR:-$(git config user.name 2>/dev/null || echo "unknown")}"
-
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -399,7 +396,7 @@ if [[ "$JSON_OUTPUT" == "true" && "$GENERATE" == "true" ]]; then
     printf '  ],\n'
     printf '  "gh_commands": [%s\n  ],\n' "$gh_commands_json"
     printf '  "git_commands": [\n'
-    printf '    "git log --oneline --since=\\"%s\\\" --until=\\\"%s 23:59:59\\\" --author=\\\"%s\\\""\n' "$TARGET_DATE" "$TARGET_DATE" "$AUTHOR"
+    printf '    "git log --oneline --since=\\"%s\\\" --until=\\\"%s 23:59:59\\\" --author=\\\"Jonah\\\""\n' "$TARGET_DATE" "$TARGET_DATE"
     printf '  ],\n'
     printf '  "report_sections": [\n'
     printf '    "Executive Summary (Velocity/Effectiveness scores)",\n'
@@ -480,7 +477,7 @@ echo "To generate the report, use the polymorphic agent with this prompt:"
 echo ""
 cat << 'PROMPT'
 Task(
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   description="Generate deep dive report",
   prompt="""Generate a comprehensive deep dive report for {DATE}.
 
@@ -504,7 +501,7 @@ gh pr list --repo OmniNode-ai/{repo} --state merged \
 
 ### Step 3: Fetch Commit Data
 ```bash
-git log --oneline --since="{DATE}" --until="{DATE} 23:59:59" --author="{AUTHOR}"
+git log --oneline --since="{DATE}" --until="{DATE} 23:59:59" --author="Jonah"
 ```
 
 ## Report Format
@@ -616,7 +613,7 @@ if [[ "$GENERATE" == "true" ]]; then
     echo "Execute in each repository directory:"
     echo ""
     echo '```bash'
-    echo "git log --oneline --since=\"${TARGET_DATE}\" --until=\"${TARGET_DATE} 23:59:59\" --author=\"${AUTHOR}\""
+    echo "git log --oneline --since=\"${TARGET_DATE}\" --until=\"${TARGET_DATE} 23:59:59\" --author=\"Jonah\""
     echo '```'
     echo ""
     echo "============================================================"

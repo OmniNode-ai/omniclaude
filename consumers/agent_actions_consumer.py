@@ -3,7 +3,7 @@
 Agent Observability Kafka Consumer - Production Implementation
 
 Consumes agent observability events from multiple Kafka topics and persists to PostgreSQL with:
-- Multi-topic subscription (agent-actions, agent-routing-decisions, agent-transformation-events, router-performance-metrics)
+- Multi-topic subscription (agent-actions, onex.evt.omniclaude.routing-decision.v1, agent-transformation-events, router-performance-metrics)
 - Topic-based routing to appropriate database tables
 - Batch processing (100 events or 1 second intervals)
 - Dead letter queue for failed messages
@@ -235,7 +235,7 @@ class AgentActionsConsumer:
             "topics",
             [
                 "agent-actions",
-                "agent-routing-decisions",
+                "onex.evt.omniclaude.routing-decision.v1",
                 "agent-transformation-events",
                 "router-performance-metrics",
                 "agent-detection-failures",
@@ -581,7 +581,7 @@ class AgentActionsConsumer:
                         inserted, duplicates = self._insert_agent_actions(
                             cursor, events
                         )
-                    elif topic == "agent-routing-decisions":
+                    elif topic == "onex.evt.omniclaude.routing-decision.v1":
                         inserted, duplicates = self._insert_routing_decisions(
                             cursor, events
                         )

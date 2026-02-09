@@ -81,7 +81,7 @@ The shift from direct database writes to Kafka-based event streaming provides:
 │  │  │                                                             │  │ │
 │  │  │  Topics (with partitions):                                 │  │ │
 │  │  │  ├─ agent-actions (12 partitions)                          │  │ │
-│  │  │  ├─ agent-routing-decisions (6 partitions)                 │  │ │
+│  │  │  ├─ onex.evt.omniclaude.routing-decision.v1 (6 partitions) │  │ │
 │  │  │  ├─ agent-transformation-events (6 partitions)             │  │ │
 │  │  │  ├─ router-performance-metrics (6 partitions)              │  │ │
 │  │  │  ├─ task-executions (12 partitions)                        │  │ │
@@ -161,12 +161,14 @@ The shift from direct database writes to Kafka-based event streaming provides:
 
 ### Topic Naming Convention
 
-**Pattern**: `{domain}-{entity}-{plural}`
+**Pattern**: `onex.{kind}.{producer}.{event-name}.v{n}` (ONEX canonical format)
+
+> **Note**: Some legacy topics still use the older `{domain}-{entity}-{plural}` convention (e.g., `agent-actions`). New and migrated topics use the ONEX format.
 
 Examples:
-- `agent-actions` (not `agent-action` or `agents-actions`)
-- `agent-routing-decisions` (not `routing-decision`)
-- `code-quality-metrics` (not `code-quality-metric`)
+- `onex.evt.omniclaude.routing-decision.v1`
+- `agent-actions` (legacy format, not yet migrated)
+- `code-quality-metrics` (legacy format, not yet migrated)
 
 ### Topic Schema Specifications
 
@@ -212,7 +214,7 @@ Examples:
 
 ---
 
-#### 2. `agent-routing-decisions` Topic
+#### 2. `onex.evt.omniclaude.routing-decision.v1` Topic
 
 **Purpose**: Track agent selection decisions for routing intelligence.
 
@@ -648,7 +650,7 @@ All agent-tracking skills follow this Kafka producer pattern:
 """
 Skill: /log-routing-decision
 Purpose: Publish routing decision events to Kafka
-Topic: agent-routing-decisions
+Topic: onex.evt.omniclaude.routing-decision.v1
 """
 
 import os
@@ -665,7 +667,7 @@ KAFKA_ENABLE_LOGGING = os.getenv('KAFKA_ENABLE_LOGGING', 'true').lower() == 'tru
 DEBUG = os.getenv('DEBUG', 'false').lower() == 'true'
 
 # Topic configuration
-TOPIC_NAME = 'agent-routing-decisions'
+TOPIC_NAME = 'onex.evt.omniclaude.routing-decision.v1'
 PARTITION_KEY_FIELD = 'correlation_id'
 
 def create_kafka_producer():
@@ -874,7 +876,7 @@ KAFKA_BROKERS = os.getenv('KAFKA_BROKERS', 'localhost:9092').split(',')
 CONSUMER_GROUP_ID = 'db-writer-group'
 TOPICS = [
     'agent-actions',
-    'agent-routing-decisions',
+    'onex.evt.omniclaude.routing-decision.v1',
     'agent-transformation-events',
     'router-performance-metrics',
     'task-executions',
@@ -937,7 +939,7 @@ def process_batch(consumer, conn, cursor):
                 event = record.value
 
                 # Route to appropriate handler
-                if topic == 'agent-routing-decisions':
+                if topic == 'onex.evt.omniclaude.routing-decision.v1':
                     insert_routing_decision(cursor, event)
                 elif topic == 'agent-transformation-events':
                     insert_transformation_event(cursor, event)
@@ -1213,7 +1215,7 @@ create_topic() {
 
 # Create all topics
 create_topic "agent-actions" 12 604800000  # 7 days
-create_topic "agent-routing-decisions" 6 2592000000  # 30 days
+create_topic "onex.evt.omniclaude.routing-decision.v1" 6 2592000000  # 30 days
 create_topic "agent-transformation-events" 6 2592000000  # 30 days
 create_topic "router-performance-metrics" 6 2592000000  # 30 days
 create_topic "task-executions" 12 7776000000  # 90 days
@@ -1281,7 +1283,7 @@ export DEBUG=true
 # 2. Check Kafka topic has event
 kafka-console-consumer \
   --bootstrap-server localhost:9092 \
-  --topic agent-routing-decisions \
+  --topic onex.evt.omniclaude.routing-decision.v1 \
   --from-beginning \
   --max-messages 1
 
@@ -1309,7 +1311,7 @@ aws s3 ls s3://agent-observability-audit/events/ --recursive | tail -10
 - `kafka.server:type=ReplicaManager,name=UnderReplicatedPartitions` - Replication lag
 
 **Topic Metrics**:
-- `kafka.log:type=Log,name=Size,topic=agent-routing-decisions` - Topic size
+- `kafka.log:type=Log,name=Size,topic=onex.evt.omniclaude.routing-decision.v1` - Topic size
 - `kafka.server:type=BrokerTopicMetrics,name=TotalProduceRequestsPerSec,topic=*` - Producer load
 
 **Consumer Metrics**:
@@ -1472,7 +1474,7 @@ def compare_routing_decisions():
 
     # Consume Kafka topic
     consumer = KafkaConsumer(
-        'agent-routing-decisions',
+        'onex.evt.omniclaude.routing-decision.v1',
         bootstrap_servers=['localhost:9092'],
         value_deserializer=lambda m: json.loads(m.decode('utf-8')),
         auto_offset_reset='earliest',
@@ -1574,7 +1576,7 @@ docker logs db-writer-consumer --tail 100
 ```bash
 # Verify events in Kafka
 kafka-console-consumer --bootstrap-server localhost:9092 \
-  --topic agent-routing-decisions \
+  --topic onex.evt.omniclaude.routing-decision.v1 \
   --from-beginning --max-messages 10
 
 # Check consumer is running
@@ -1597,7 +1599,7 @@ docker logs db-writer-consumer | grep ERROR
    ```bash
    kafka-consumer-groups --bootstrap-server localhost:9092 \
      --group db-writer-group --reset-offsets --to-earliest \
-     --topic agent-routing-decisions --execute
+     --topic onex.evt.omniclaude.routing-decision.v1 --execute
    ```
 
 ---

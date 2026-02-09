@@ -117,36 +117,21 @@ class TestEmbeddedEventPublisher:
     ) -> None:
         await publisher.start()
         try:
-            # Use a mock for the registry to avoid needing real event types
-            with (
-                patch.object(
-                    publisher._registry, "resolve_topic", return_value="test-topic"
-                ),
-                patch.object(publisher._registry, "validate_payload"),
-                patch.object(
-                    publisher._registry,
-                    "inject_metadata",
-                    return_value={"enriched": True},
-                ),
-                patch.object(
-                    publisher._registry, "get_partition_key", return_value="key"
-                ),
-            ):
-                request = (
-                    json.dumps(
-                        {
-                            "event_type": "session.started",
-                            "payload": {"session_id": "abc-123"},
-                        }
-                    ).encode()
-                    + b"\n"
-                )
+            request = (
+                json.dumps(
+                    {
+                        "event_type": "session.started",
+                        "payload": {"session_id": "abc-123"},
+                    }
+                ).encode()
+                + b"\n"
+            )
 
-                response_json = await publisher._process_request(request)
-                response = json.loads(response_json)
+            response_json = await publisher._process_request(request)
+            response = json.loads(response_json)
 
-                assert response["status"] == "queued"
-                assert "event_id" in response
+            assert response["status"] == "queued"
+            assert "event_id" in response
         finally:
             await publisher.stop()
 
@@ -188,27 +173,17 @@ class TestEmbeddedEventPublisher:
         await publisher.start()
 
         # Enqueue some events directly
-        with (
-            patch.object(
-                publisher._registry, "resolve_topic", return_value="test-topic"
-            ),
-            patch.object(publisher._registry, "validate_payload"),
-            patch.object(
-                publisher._registry, "inject_metadata", return_value={"data": True}
-            ),
-            patch.object(publisher._registry, "get_partition_key", return_value="key"),
-        ):
-            for i in range(3):
-                request = (
-                    json.dumps(
-                        {
-                            "event_type": "session.started",
-                            "payload": {"session_id": f"s-{i}"},
-                        }
-                    ).encode()
-                    + b"\n"
-                )
-                await publisher._process_request(request)
+        for i in range(3):
+            request = (
+                json.dumps(
+                    {
+                        "event_type": "session.started",
+                        "payload": {"session_id": f"s-{i}"},
+                    }
+                ).encode()
+                + b"\n"
+            )
+            await publisher._process_request(request)
 
         await publisher.stop()
 
@@ -339,33 +314,27 @@ class TestEmbeddedEventPublisher:
         """Verify that payloads exceeding max_payload_bytes after enrichment are rejected."""
         await publisher.start()
         try:
-            # inject_metadata returns a payload that exceeds max_payload_bytes
-            oversized = {"data": "x" * (publisher.config.max_payload_bytes + 1)}
-            with (
-                patch.object(
-                    publisher._registry, "resolve_topic", return_value="test-topic"
-                ),
-                patch.object(publisher._registry, "validate_payload"),
-                patch.object(
-                    publisher._registry,
-                    "inject_metadata",
-                    return_value=oversized,
-                ),
-            ):
-                request = (
-                    json.dumps(
-                        {
-                            "event_type": "session.started",
-                            "payload": {"session_id": "abc"},
-                        }
-                    ).encode()
-                    + b"\n"
-                )
-                response_json = await publisher._process_request(request)
-                response = json.loads(response_json)
+            # Create a payload that exceeds max_payload_bytes after enrichment
+            oversized_payload = {
+                "session_id": "abc",
+                "data": "x" * (publisher.config.max_payload_bytes + 1),
+            }
+            request = (
+                json.dumps(
+                    {
+                        "event_type": "session.started",
+                        "payload": oversized_payload,
+                    }
+                ).encode()
+                + b"\n"
+            )
+            response_json = await publisher._process_request(request)
+            response = json.loads(response_json)
 
-                assert response["status"] == "error"
-                assert "maximum size" in response["reason"]
+            # With fan-out, oversized payloads are skipped per target.
+            # session.started has 1 fan-out target, so skipping it means
+            # zero successful enqueues -> error response.
+            assert response["status"] == "error"
         finally:
             await publisher.stop()
 
@@ -437,33 +406,19 @@ class TestEmbeddedEventPublisher:
             assert response["status"] == "ok"
             assert "queue_size" in response
 
-            # 2. Emit via socket (with mocked registry)
-            with (
-                patch.object(
-                    publisher._registry, "resolve_topic", return_value="test-topic"
-                ),
-                patch.object(publisher._registry, "validate_payload"),
-                patch.object(
-                    publisher._registry,
-                    "inject_metadata",
-                    return_value={"enriched": True},
-                ),
-                patch.object(
-                    publisher._registry, "get_partition_key", return_value="key"
-                ),
-            ):
-                emit_request = json.dumps(
-                    {
-                        "event_type": "session.started",
-                        "payload": {"session_id": "socket-test"},
-                    }
-                )
-                writer.write(emit_request.encode("utf-8") + b"\n")
-                await writer.drain()
-                response_line = await asyncio.wait_for(reader.readline(), timeout=5.0)
-                response = json.loads(response_line.decode("utf-8"))
-                assert response["status"] == "queued"
-                assert "event_id" in response
+            # 2. Emit via socket
+            emit_request = json.dumps(
+                {
+                    "event_type": "session.started",
+                    "payload": {"session_id": "socket-test"},
+                }
+            )
+            writer.write(emit_request.encode("utf-8") + b"\n")
+            await writer.drain()
+            response_line = await asyncio.wait_for(reader.readline(), timeout=5.0)
+            response = json.loads(response_line.decode("utf-8"))
+            assert response["status"] == "queued"
+            assert "event_id" in response
 
             # 3. Invalid JSON via socket
             writer.write(b"not valid json\n")

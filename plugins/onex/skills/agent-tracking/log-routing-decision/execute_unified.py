@@ -108,7 +108,7 @@ def log_routing_decision_unified(args):
             "routing_strategy": args.strategy,
             "routing_time_ms": int(args.latency_ms),
             "published_via": "unified_event_adapter",
-            "topic": "agent-routing-decisions",
+            "topic": "onex.evt.omniclaude.routing-decision.v1",
         }
         print(json.dumps(output, indent=2))
         return 0

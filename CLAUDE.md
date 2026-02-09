@@ -133,85 +133,6 @@ omniclaude/
 
 ---
 
-## Agent Routing Architecture
-
-Two distinct systems select and configure agents. They compose -- they do not compete.
-
-### System 1: Hook-Based Persona Routing (UserPromptSubmit)
-
-Every user prompt triggers the `UserPromptSubmit` hook, which selects an agent persona:
-
-```
-user prompt → user-prompt-submit.sh → route_via_events_wrapper.py → agent_router.py
-                                                                        │
-                                                         loads 53 YAML configs from
-                                                    plugins/onex/agents/configs/*.yaml
-                                                                        │
-                                                         TriggerMatcher + ConfidenceScorer
-                                                           select best agent for prompt
-                                                                        │
-                                                         agent's behavioral directives
-                                                       injected into Claude's context via
-                                                       hookSpecificOutput.additionalContext
-```
-
-**This is NOT process spawning.** It changes Claude's persona/instructions for the current turn. The agent YAML's `behavioral_directives`, `activation_patterns`, and `tool_preferences` shape how Claude responds.
-
-**Slash commands** (`/command-name`) bypass routing entirely and default to `polymorphic-agent`.
-
-### System 2: Task Tool subagent_type Dispatch
-
-The `Task` tool spawns a **new agent process**. The `subagent_type` determines which system prompt file the subprocess loads.
-
-```
-Task(subagent_type="polymorphic-agent", ...)
-    │
-    ▼
-resolves to plugins/onex/agents/polymorphic-agent.md (system prompt)
-    │
-    ▼
-subprocess starts → receives its OWN UserPromptSubmit hook
-    │
-    ▼
-System 1 routes the subprocess's first prompt → agent persona applied
-```
-
-The two systems compose: System 2 spawns the process, System 1 routes its prompts.
-
-### Valid subagent_types
-
-| subagent_type | Source | Description |
-|---------------|--------|-------------|
-| `polymorphic-agent` | `plugins/onex/agents/polymorphic-agent.md` | Full ONEX agent with hook routing, intelligence, observability |
-| `agent-parallel-dispatcher` | `.claude/agents/AGENT-PARALLEL-DISPATCHER.md` | Legacy Pydantic parallel executor |
-| `Explore` | Claude Code built-in | Read-only codebase exploration (no file writes) |
-| `Plan` | Claude Code built-in | Read-only planning (no file writes) |
-| `Bash` | Claude Code built-in | Shell command execution only |
-| `general-purpose` | Claude Code built-in | Full tool access, no ONEX capabilities |
-
-**Default for automated workflows**: Use `polymorphic-agent`. It gets ONEX hook routing, intelligence integration, and observability for free.
-
-### Key Files
-
-| File | Role |
-|------|------|
-| `plugins/onex/hooks/lib/agent_router.py` | TriggerMatcher + ConfidenceScorer logic |
-| `plugins/onex/hooks/lib/route_via_events_wrapper.py` | Routing entry point (called by hook script) |
-| `plugins/onex/hooks/lib/simple_agent_loader.py` | Loads agent YAML, resolves behavioral directives |
-| `plugins/onex/agents/configs/*.yaml` | 53 agent persona definitions |
-| `plugins/onex/agents/polymorphic-agent.md` | System prompt for Task-spawned ONEX agents |
-
-### Common Mistakes
-
-| Mistake | Why It Fails | Fix |
-|---------|-------------|-----|
-| `subagent_type="onex:polymorphic-agent"` | Not a valid type; colon prefix is not resolved | `subagent_type="polymorphic-agent"` |
-| `subagent_type="api-architect"` | YAML agent names are personas, not subagent_types | `subagent_type="polymorphic-agent"` (System 1 routes it) |
-| Confusing routing with spawning | System 1 changes persona; System 2 spawns process | See descriptions above |
-| Using `general-purpose` for ONEX workflows | No hook routing, no intelligence, no observability | Use `polymorphic-agent` instead |
-
----
-
 ## Hook Data Flow
 
 ### Input Format
@@ -354,7 +275,7 @@ Agents are selected by matching `activation_patterns` against user prompts.
 
 **Location**: `plugins/onex/commands/*.md`
 
-User-invocable via `/command-name`. Examples: `/parallel-solve`, `/ci-failures`, `/pr-release-ready`
+User-invocable via `/command-name`. Examples: `/parallel-solve`, `/ci-failures`, `/pr-review-dev`
 
 ### Skills (SKILL.md)
 

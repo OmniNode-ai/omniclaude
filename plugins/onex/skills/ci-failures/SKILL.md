@@ -29,10 +29,10 @@ Bash(${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review 33)
 Bash(${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/fetch-ci-data 33)
 ```
 
-### ✅ CORRECT - Dispatch to polymorphic-agent:
+### ✅ CORRECT - Dispatch to onex:polymorphic-agent:
 ```
 Task(
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   description="CI failure analysis for PR #33",
   prompt="Analyze CI failures for PR #33. Use the ci-failures skill tools:
     1. Run: ${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review 33
@@ -872,7 +872,7 @@ CI failures analysis uses direct GitHub API calls (via `gh` CLI) rather than eve
 ## Related Skills
 
 **Debugging & Analysis**:
-- `${CLAUDE_PLUGIN_ROOT}/skills/local-review/` - Local code review loop
+- `${CLAUDE_PLUGIN_ROOT}/skills/pr-review/` - PR review and feedback analysis
 - `${CLAUDE_PLUGIN_ROOT}/skills/system-status/` - System health monitoring
 - `${CLAUDE_PLUGIN_ROOT}/skills/agent-tracking/` - Agent execution tracking
 
@@ -973,6 +973,6 @@ ${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/get-ci-job-details 56174634733
 
 - GitHub Actions API: https://docs.github.com/en/rest/actions
 - GitHub CLI Manual: https://cli.github.com/manual/
-- PR Review: Use `/pr-release-ready` or `/local-review` commands
+- PR Review Skills: `${CLAUDE_PLUGIN_ROOT}/skills/pr-review/SKILL.md`
 - System Status Skills: `${CLAUDE_PLUGIN_ROOT}/skills/system-status/SKILL.md`
 - Event Alignment Plan: `/docs/events/EVENT_ALIGNMENT_PLAN.md`

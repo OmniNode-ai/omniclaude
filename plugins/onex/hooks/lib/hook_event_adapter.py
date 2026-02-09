@@ -218,7 +218,7 @@ class HookEventAdapter:
             enable_events: Enable event publishing (feature flag)
             topic_prefix: Optional environment prefix for topics (e.g., "dev", "staging").
                 - Default: KAFKA_TOPIC_PREFIX env var or empty string (no prefix)
-                - When set, topics become "{prefix}.{base}" (e.g., "dev.agent-routing-decisions")
+                - When set, topics become "{prefix}.{base}" (e.g., "dev.onex.evt.omniclaude.routing-decision.v1")
         """
         self.bootstrap_servers = bootstrap_servers or os.environ.get(
             "KAFKA_BOOTSTRAP_SERVERS", "omninode-bridge-redpanda:9092"
@@ -242,10 +242,10 @@ class HookEventAdapter:
         """Build full topic name from TopicBase constant.
 
         Args:
-            base: TopicBase enum constant (e.g., TopicBase.ROUTING_DECISIONS)
+            base: TopicBase enum constant (e.g., TopicBase.ROUTING_DECISION)
 
         Returns:
-            Full topic name with optional prefix (e.g., "dev.agent-routing-decisions")
+            Full topic name with optional prefix (e.g., "onex.evt.omniclaude.routing-decision.v1")
         """
         return build_topic(self.topic_prefix, base)
 
@@ -377,7 +377,7 @@ class HookEventAdapter:
             "timestamp": datetime.now(UTC).isoformat(),
         }
 
-        return self._publish(self._build_topic(TopicBase.ROUTING_DECISIONS), event)
+        return self._publish(self._build_topic(TopicBase.ROUTING_DECISION), event)
 
     def publish_routing_decision(
         self,

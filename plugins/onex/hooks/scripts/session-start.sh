@@ -252,6 +252,12 @@ START_TIME=$(get_time_ms)
 
 # Read stdin
 INPUT=$(cat)
+if [[ "$JQ_AVAILABLE" -eq 1 ]]; then
+    if ! echo "$INPUT" | jq -e . >/dev/null 2>>"$LOG_FILE"; then
+        log "ERROR: Malformed JSON on stdin, using empty object"
+        INPUT='{}'
+    fi
+fi
 
 log "SessionStart hook triggered (plugin mode)"
 log "Using Python: $PYTHON_CMD"
@@ -278,13 +284,6 @@ fi
 log "Session ID: $SESSION_ID"
 log "Project Path: $PROJECT_PATH"
 log "CWD: $CWD"
-
-# Register tab for statusline tab bar (background, non-blocking)
-REGISTER_TAB="${HOOKS_DIR}/scripts/register-tab.sh"
-if [[ -x "$REGISTER_TAB" ]]; then
-    ( "$REGISTER_TAB" "$SESSION_ID" "${PROJECT_PATH:-$CWD}" >> "$LOG_FILE" 2>&1 ) &
-    log "Tab registration started in background"
-fi
 
 # Start emit daemon early (before any Kafka emissions)
 # This ensures daemon is ready for downstream hooks (UserPromptSubmit, PostToolUse)

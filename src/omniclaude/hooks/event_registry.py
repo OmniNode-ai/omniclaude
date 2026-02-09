@@ -191,7 +191,7 @@ class FanOutRule:
             Transformed payload, or original if no transform is defined.
         """
         if self.transform is None:
-            return payload
+            return dict(payload)
         return self.transform(payload)
 
 
@@ -266,15 +266,22 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         partition_key_field="session_id",
         required_fields=["session_id"],
     ),
-    # Session outcome event for feedback loop (OMN-1735, FEEDBACK-008)
-    # Triggers pattern_feedback_effect in omniintelligence
+    # Session outcome event (OMN-1735, FEEDBACK-008)
+    # Fan-out to BOTH intelligence (CMD) and observability (EVT):
+    #   - CMD: triggers pattern_feedback_effect in omniintelligence
+    #   - EVT: dashboards, monitoring, generic subscribers
     "session.outcome": EventRegistration(
         event_type="session.outcome",
         fan_out=[
             FanOutRule(
-                topic_base=TopicBase.SESSION_OUTCOME,
-                transform=None,  # Passthrough
-                description="Session outcome for feedback loop (success/failed/abandoned/unknown)",
+                topic_base=TopicBase.SESSION_OUTCOME_CMD,
+                transform=None,  # Passthrough — full payload to intelligence
+                description="Session outcome for intelligence feedback loop",
+            ),
+            FanOutRule(
+                topic_base=TopicBase.SESSION_OUTCOME_EVT,
+                transform=None,  # Passthrough — same payload for observability
+                description="Session outcome for dashboards and monitoring",
             ),
         ],
         partition_key_field="session_id",
@@ -326,6 +333,33 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         required_fields=["tool_name", "session_id"],
     ),
     # =========================================================================
+    # Routing Feedback Events (OMN-1892)
+    # =========================================================================
+    "routing.feedback": EventRegistration(
+        event_type="routing.feedback",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.ROUTING_FEEDBACK,
+                transform=None,  # Passthrough
+                description="Routing feedback for reinforcement learning",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "outcome"],
+    ),
+    "routing.skipped": EventRegistration(
+        event_type="routing.skipped",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.ROUTING_FEEDBACK_SKIPPED,
+                transform=None,  # Passthrough
+                description="Routing feedback skipped (guardrail gate failed)",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "skip_reason"],
+    ),
+    # =========================================================================
     # Injection Tracking Events (OMN-1673 INJECT-004)
     # =========================================================================
     "injection.recorded": EventRegistration(
@@ -339,6 +373,87 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         ],
         partition_key_field="session_id",
         required_fields=["injection_id", "session_id", "cohort"],
+    ),
+    # =========================================================================
+    # Metrics Events (OMN-1889)
+    # =========================================================================
+    "context.utilization": EventRegistration(
+        event_type="context.utilization",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.CONTEXT_UTILIZATION,
+                transform=None,  # Passthrough
+                description="Context utilization metrics for observability",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id"],
+    ),
+    "agent.match": EventRegistration(
+        event_type="agent.match",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.AGENT_MATCH,
+                transform=None,  # Passthrough
+                description="Agent match metrics for observability",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id"],
+    ),
+    "latency.breakdown": EventRegistration(
+        event_type="latency.breakdown",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.LATENCY_BREAKDOWN,
+                transform=None,  # Passthrough
+                description="Latency breakdown metrics for observability",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id"],
+    ),
+    # =========================================================================
+    # Routing Decision (PR-92)
+    # =========================================================================
+    "routing.decision": EventRegistration(
+        event_type="routing.decision",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.ROUTING_DECISION,
+                transform=None,  # Passthrough
+                description="Routing decision event for observability",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id"],
+    ),
+    # =========================================================================
+    # Notification Events (OMN-1831)
+    # =========================================================================
+    "notification.blocked": EventRegistration(
+        event_type="notification.blocked",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.NOTIFICATION_BLOCKED,
+                transform=None,  # Passthrough
+                description="Notification blocked event for observability",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id"],
+    ),
+    "notification.completed": EventRegistration(
+        event_type="notification.completed",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.NOTIFICATION_COMPLETED,
+                transform=None,  # Passthrough
+                description="Notification completed event for observability",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id"],
     ),
 }
 

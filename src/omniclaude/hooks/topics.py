@@ -54,14 +54,16 @@ class TopicBase(StrEnum):
     CLAUDE_HOOK_EVENT = "onex.cmd.omniintelligence.claude-hook-event.v1"
     # Tool content topic for pattern learning (OMN-1702)
     TOOL_CONTENT = "onex.cmd.omniintelligence.tool-content.v1"
-    # Session outcome topic for feedback loop (OMN-1735, FEEDBACK-008)
-    SESSION_OUTCOME = "onex.cmd.omniintelligence.session-outcome.v1"
+    # Session outcome: CMD target for intelligence feedback loop (OMN-1735)
+    SESSION_OUTCOME_CMD = "onex.cmd.omniintelligence.session-outcome.v1"
+    # Session outcome: EVT target for dashboards / monitoring
+    SESSION_OUTCOME_EVT = "onex.evt.omniclaude.session-outcome.v1"
 
     # ==========================================================================
     # Legacy observability topics (to be migrated in future PR)
     # These use simple hyphenated names for backward compatibility
+    # NOTE: ROUTING_DECISIONS removed — migrated to ROUTING_DECISION (ONEX format)
     # ==========================================================================
-    ROUTING_DECISIONS = "agent-routing-decisions"
     AGENT_ACTIONS = "agent-actions"
     PERFORMANCE_METRICS = "router-performance-metrics"
     TRANSFORMATIONS = "agent-transformation-events"
@@ -82,6 +84,23 @@ class TopicBase(StrEnum):
     CONTEXT_UTILIZATION = "onex.evt.omniclaude.context-utilization.v1"
     AGENT_MATCH = "onex.evt.omniclaude.agent-match.v1"
     LATENCY_BREAKDOWN = "onex.evt.omniclaude.latency-breakdown.v1"
+
+    # ==========================================================================
+    # Routing feedback topics (OMN-1892)
+    # ==========================================================================
+    ROUTING_FEEDBACK = "onex.evt.omniclaude.routing-feedback.v1"
+    ROUTING_FEEDBACK_SKIPPED = "onex.evt.omniclaude.routing-feedback-skipped.v1"
+
+    # ==========================================================================
+    # Routing decision topics (PR-92)
+    # ==========================================================================
+    ROUTING_DECISION = "onex.evt.omniclaude.routing-decision.v1"
+
+    # ==========================================================================
+    # Notification topics (OMN-1831)
+    # ==========================================================================
+    NOTIFICATION_BLOCKED = "onex.evt.omniclaude.notification-blocked.v1"
+    NOTIFICATION_COMPLETED = "onex.evt.omniclaude.notification-completed.v1"
 
     # ==========================================================================
     # Manifest injection topics (agent loading observability)

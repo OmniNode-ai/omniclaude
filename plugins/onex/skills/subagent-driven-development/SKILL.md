@@ -48,7 +48,7 @@ For each task:
 
 **Dispatch fresh subagent:**
 ```
-Task tool (polymorphic-agent):
+Task tool (general-purpose):
   description: "Implement Task N: [task name]"
   prompt: |
     You are implementing Task N from [plan-file].
@@ -57,7 +57,8 @@ Task tool (polymorphic-agent):
     1. Implement exactly what the task specifies
     2. Write tests (following TDD if task says to)
     3. Verify implementation works
-    4. Report back (do NOT commit)
+    4. Commit your work
+    5. Report back
 
     Work from: [directory]
 
@@ -68,18 +69,16 @@ Task tool (polymorphic-agent):
 
 ### 3. Review Subagent's Work
 
-**Dispatch review subagent:**
+**Dispatch code-reviewer subagent:**
 ```
-Task tool (polymorphic-agent):
-  description: "Review Task N implementation"
-  prompt: |
-    Run /local-review --no-commit to review the subagent's changes.
+Task tool (code-reviewer):
+  Use template at ${CLAUDE_PLUGIN_ROOT}/skills/requesting-code-review/code-reviewer.md
 
-    WHAT_WAS_IMPLEMENTED: [from subagent's report]
-    PLAN_OR_REQUIREMENTS: Task N from [plan-file]
-    BASE_SHA: [commit before task]
-    HEAD_SHA: [current commit]
-    DESCRIPTION: [task summary]
+  WHAT_WAS_IMPLEMENTED: [from subagent's report]
+  PLAN_OR_REQUIREMENTS: Task N from [plan-file]
+  BASE_SHA: [commit before task]
+  HEAD_SHA: [current commit]
+  DESCRIPTION: [task summary]
 ```
 
 **Code reviewer returns:** Strengths, Issues (Critical/Important/Minor), Assessment
@@ -104,7 +103,7 @@ Task tool (polymorphic-agent):
 
 ### 6. Final Review
 
-After all tasks complete, dispatch final review subagent using `/local-review --no-commit`:
+After all tasks complete, dispatch final code-reviewer:
 - Reviews entire implementation
 - Checks all plan requirements met
 - Validates overall architecture
@@ -187,7 +186,7 @@ Done!
 
 **Required workflow skills:**
 - **writing-plans** - REQUIRED: Creates the plan that this skill executes
-- **local-review** - REQUIRED: Review after each task via `/local-review --no-commit` (see Step 3)
+- **requesting-code-review** - REQUIRED: Review after each task (see Step 3)
 - **finishing-a-development-branch** - REQUIRED: Complete development after all tasks (see Step 7)
 
 **Subagents must use:**
@@ -196,4 +195,4 @@ Done!
 **Alternative workflow:**
 - **executing-plans** - Use for parallel session instead of same-session execution
 
-Code review: Use `/local-review --no-commit` to review subagent work
+See code-reviewer template: `${CLAUDE_PLUGIN_ROOT}/skills/requesting-code-review/code-reviewer.md`

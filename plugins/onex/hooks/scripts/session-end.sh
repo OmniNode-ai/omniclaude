@@ -38,8 +38,12 @@ fi
 # Source shared functions (provides PYTHON_CMD, KAFKA_ENABLED, get_time_ms, log)
 source "${HOOKS_DIR}/scripts/common.sh"
 
-# Read stdin
+# Read stdin (validate JSON; fall back to empty object on malformed input)
 INPUT=$(cat)
+if ! echo "$INPUT" | jq -e . >/dev/null 2>>"$LOG_FILE"; then
+    log "ERROR: Malformed JSON on stdin, using empty object"
+    INPUT='{}'
+fi
 
 log "SessionEnd hook triggered (plugin mode)"
 
@@ -47,6 +51,12 @@ log "SessionEnd hook triggered (plugin mode)"
 SESSION_ID=$(echo "$INPUT" | jq -r '.sessionId // ""' 2>/dev/null || echo "")
 SESSION_DURATION=$(echo "$INPUT" | jq -r '.durationMs // 0' 2>/dev/null || echo "0")
 SESSION_REASON=$(echo "$INPUT" | jq -r '.reason // "other"' 2>/dev/null || echo "other")
+
+# Extract tool call count from session payload (if available)
+TOOL_CALLS_COMPLETED=$(echo "$INPUT" | jq -r '.tools_used_count // 0' 2>/dev/null || echo "0")
+if [[ "$TOOL_CALLS_COMPLETED" == "0" ]]; then
+    log "Phase 1: tools_used_count absent or zero — SUCCESS gate unreachable (see OMN-1892)"
+fi
 
 # Validate reason is one of the allowed values
 case "$SESSION_REASON" in
@@ -93,26 +103,33 @@ fi
         >> "$LOG_FILE" 2>&1 || { rc=$?; log "Session end logging failed (exit=$rc)"; }
 ) &
 
-# Emit session.ended event to Kafka (async, non-blocking)
+# Convert duration from ms to seconds once (used by all subshells below)
+# Uses awk instead of Python to avoid ~30-50ms interpreter startup cost
+# on the synchronous path (preserves <50ms SessionEnd budget).
+DURATION_SECONDS="0"
+if [[ -n "$SESSION_DURATION" && "$SESSION_DURATION" != "0" ]]; then
+    # Sanitize: ensure SESSION_DURATION is strictly numeric before awk
+    [[ "$SESSION_DURATION" =~ ^[0-9]+$ ]] || SESSION_DURATION=0
+    DURATION_SECONDS=$(awk -v ms="$SESSION_DURATION" 'BEGIN{v=ms/1000; printf "%.3f", (v<0?0:v)}' 2>/dev/null || echo "0")
+fi
+
+# Emit session.ended event to Kafka (backgrounded for parallelism)
 # Uses emit_client_wrapper with daemon fan-out (OMN-1632)
+# PIDs tracked for drain-then-stop at end (no fixed sleep needed at SessionEnd).
+EMIT_PIDS=()
 if [[ "$KAFKA_ENABLED" == "true" ]]; then
     (
-        # Convert duration from ms to seconds (using Python instead of bc for reliability)
-        DURATION_SECONDS=""
-        if [[ -n "$SESSION_DURATION" && "$SESSION_DURATION" != "0" ]]; then
-            DURATION_SECONDS=$($PYTHON_CMD -c "import sys; print(f'{float(sys.argv[1])/1000:.3f}')" "$SESSION_DURATION" 2>/dev/null || echo "")
-        fi
-
         # Build JSON payload for emit daemon (includes active_ticket for OMN-1830)
+        # DURATION_SECONDS pre-computed in main shell; map "0" to null (no duration info)
         SESSION_PAYLOAD=$(jq -n \
             --arg session_id "$SESSION_ID" \
             --arg reason "$SESSION_REASON" \
-            --arg duration_seconds "${DURATION_SECONDS:-}" \
+            --arg duration_seconds "$DURATION_SECONDS" \
             --arg active_ticket "$ACTIVE_TICKET" \
             '{
                 session_id: $session_id,
                 reason: $reason,
-                duration_seconds: (if $duration_seconds == "" then null else ($duration_seconds | tonumber) end),
+                duration_seconds: (if $duration_seconds == "0" then null else ($duration_seconds | tonumber) end),
                 active_ticket: (if $active_ticket == "" then null else $active_ticket end)
             }' 2>/dev/null)
 
@@ -123,31 +140,82 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
             emit_via_daemon "session.ended" "$SESSION_PAYLOAD" 100
         fi
     ) &
+    EMIT_PIDS+=($!)
 
-    # Emit session.outcome event for feedback loop (OMN-1735, FEEDBACK-008)
-    # Uses ClaudeCodeSessionOutcome enum values: success, failed, abandoned, unknown
-    # Starting with "unknown" as default - heuristics can be added later
+    # Session outcome derivation + emission + feedback guardrails (OMN-1735, OMN-1892)
+    # Consolidated into a single backgrounded subshell so the DERIVED_OUTCOME
+    # Python computation (~30-50ms interpreter startup) stays off the sync path.
     (
-        # Validate SESSION_ID before constructing payload
+        # Validate SESSION_ID once for all outcome/feedback work
         if [[ -z "$SESSION_ID" ]]; then
-            log "WARNING: SESSION_ID is empty, skipping session.outcome emission"
-            exit 0  # Exit the subshell cleanly
+            log "WARNING: SESSION_ID is empty, skipping session.outcome and feedback"
+            exit 0
         fi
 
         # Validate UUID format (8-4-4-4-12 structure, case-insensitive)
         if [[ ! "$SESSION_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
-            log "WARNING: SESSION_ID '$SESSION_ID' is not valid UUID format, skipping session.outcome emission"
+            log "WARNING: SESSION_ID '$SESSION_ID' is not valid UUID format, skipping session.outcome and feedback"
             exit 0
         fi
 
-        # Build session.outcome payload
-        # TODO(OMN-1735): Add heuristics to map session end reasons to outcomes
-        OUTCOME="unknown"
+        # ===================================================================
+        # PHASE 1 PLUMBING (OMN-1892): Outcome derivation inputs are
+        # partially hardcoded. Current state:
+        #   - exit_code=0: Always 0 (hooks must never exit non-zero per CLAUDE.md)
+        #   - session_output: Uses session reason (clear/logout/prompt_input_exit/
+        #     other), NOT captured stdout. Outcome will not resolve to FAILED
+        #     until session_output carries error markers (Error:, Exception:, etc.)
+        #   - tool_calls_completed: Extracted from tools_used_count (best-effort);
+        #     may still be 0 if field is absent from SessionEnd payload.
+        #     SUCCESS requires tool_calls > 0 AND completion markers.
+        # Unreachable gates: SUCCESS (no completion markers in reason codes),
+        #   FAILED (exit_code always 0, no error markers in reason codes).
+        # Result: Outcome currently resolves to abandoned or unknown only.
+        # Future tickets:
+        #   - tool_calls_completed: Wire from session aggregation service
+        #   - session_output: Wire from captured session output/stdout
+        # ===================================================================
+        # Derive session outcome (pure Python, no I/O)
+        # Python startup is ~30-50ms but runs in this backgrounded subshell,
+        # not on the sync path. Falls back to "unknown" on failure.
+        DERIVED_OUTCOME=$(HOOKS_LIB="$HOOKS_LIB" SESSION_REASON="$SESSION_REASON" DURATION_SECONDS="$DURATION_SECONDS" TOOL_CALLS_COMPLETED="$TOOL_CALLS_COMPLETED" \
+            "$PYTHON_CMD" -c "
+import os, sys
+sys.path.insert(0, os.environ['HOOKS_LIB'])
+from session_outcome import derive_session_outcome
+session_reason = os.environ.get('SESSION_REASON', 'other')
+duration_str = os.environ.get('DURATION_SECONDS', '0') or '0'
+tool_calls_str = os.environ.get('TOOL_CALLS_COMPLETED', '0') or '0'
+if not tool_calls_str.isdigit():
+    print(f'WARNING: TOOL_CALLS_COMPLETED={tool_calls_str!r} not numeric, using 0', file=sys.stderr)
+try:
+    duration = float(duration_str)
+    if duration < 0:
+        print(f'WARNING: DURATION_SECONDS={duration} is negative, using 0', file=sys.stderr)
+        duration = 0.0
+except ValueError:
+    print(f'WARNING: DURATION_SECONDS={duration_str!r} not numeric, using 0', file=sys.stderr)
+    duration = 0.0
+result = derive_session_outcome(
+    exit_code=0,
+    session_output=session_reason,
+    tool_calls_completed=int(tool_calls_str) if tool_calls_str.isdigit() else 0,
+    duration_seconds=duration,
+)
+print(result.outcome)
+" 2>>"$LOG_FILE") || DERIVED_OUTCOME="unknown"
+
+        log "Session outcome derived: ${DERIVED_OUTCOME}"
+        if [[ "$DERIVED_OUTCOME" == "unknown" || "$DERIVED_OUTCOME" == "abandoned" ]]; then
+            log "Phase 1: outcome=$DERIVED_OUTCOME (SUCCESS/FAILED gates require wired session_output and tool_calls; see OMN-1892)"
+        fi
+
+        # --- Emit session.outcome event ---
         EMITTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-        OUTCOME_PAYLOAD=$(jq -n \
+        if ! OUTCOME_PAYLOAD=$(jq -n \
             --arg session_id "$SESSION_ID" \
-            --arg outcome "$OUTCOME" \
+            --arg outcome "$DERIVED_OUTCOME" \
             --arg emitted_at "$EMITTED_AT" \
             --arg active_ticket "$ACTIVE_TICKET" \
             '{
@@ -155,52 +223,87 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
                 outcome: $outcome,
                 emitted_at: $emitted_at,
                 active_ticket: (if $active_ticket == "" then null else $active_ticket end)
-            }' 2>/dev/null)
-
-        # Validate payload was constructed successfully
-        if [[ -z "$OUTCOME_PAYLOAD" || "$OUTCOME_PAYLOAD" == "null" ]]; then
+            }' 2>>"$LOG_FILE"); then
             log "WARNING: Failed to construct outcome payload (jq failed), skipping emission"
+        elif [[ -z "$OUTCOME_PAYLOAD" || "$OUTCOME_PAYLOAD" == "null" ]]; then
+            log "WARNING: outcome payload empty or null, skipping emission"
         else
             emit_via_daemon "session.outcome" "$OUTCOME_PAYLOAD" 100
         fi
+
+        # --- Evaluate feedback guardrails ---
+        # ===================================================================
+        # PHASE 1 PLUMBING (OMN-1892): Guardrail logic is wired but inputs
+        # are hardcoded. Feedback will always be skipped (NO_INJECTION).
+        # Future tickets to wire real values:
+        #   - injection_occurred: Read from session injection marker
+        #   - utilization_score: Read from PostToolUse utilization metrics
+        #   - agent_match_score: Read from UserPromptSubmit routing decision
+        # ===================================================================
+        FEEDBACK_RESULT=$(HOOKS_LIB="$HOOKS_LIB" DERIVED_OUTCOME="$DERIVED_OUTCOME" \
+            "$PYTHON_CMD" -c "
+import os, sys, json
+sys.path.insert(0, os.environ['HOOKS_LIB'])
+from feedback_guardrails import should_reinforce_routing
+result = should_reinforce_routing(
+    injection_occurred=False,
+    utilization_score=0.0,
+    agent_match_score=0.0,
+    session_outcome=os.environ['DERIVED_OUTCOME'],
+)
+print(json.dumps({
+    'should_reinforce': result.should_reinforce,
+    'skip_reason': result.skip_reason,
+}))
+" 2>>"$LOG_FILE") || FEEDBACK_RESULT='{"should_reinforce":false,"skip_reason":"PYTHON_ERROR"}'
+
+        SHOULD_REINFORCE=$(echo "$FEEDBACK_RESULT" | jq -r '.should_reinforce' 2>>"$LOG_FILE") || SHOULD_REINFORCE="false"
+        SKIP_REASON=$(echo "$FEEDBACK_RESULT" | jq -r '.skip_reason // empty' 2>>"$LOG_FILE") || SKIP_REASON=""
+
+        if [[ "$SHOULD_REINFORCE" == "true" ]] && [[ "$KAFKA_ENABLED" == "true" ]]; then
+            if ! FEEDBACK_PAYLOAD=$(jq -n \
+                --arg session_id "$SESSION_ID" \
+                --arg outcome "$DERIVED_OUTCOME" \
+                --arg emitted_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                '{session_id: $session_id, outcome: $outcome, emitted_at: $emitted_at}' 2>>"$LOG_FILE"); then
+                log "WARNING: Failed to construct routing.feedback payload (jq failed), skipping emission"
+                exit 0
+            fi
+
+            if [[ -n "$FEEDBACK_PAYLOAD" && "$FEEDBACK_PAYLOAD" != "null" ]]; then
+                emit_via_daemon "routing.feedback" "$FEEDBACK_PAYLOAD" 100
+            fi
+        elif [[ -n "$SKIP_REASON" ]] && [[ "$KAFKA_ENABLED" == "true" ]]; then
+            if ! SKIP_PAYLOAD=$(jq -n \
+                --arg session_id "$SESSION_ID" \
+                --arg skip_reason "$SKIP_REASON" \
+                --arg emitted_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+                '{session_id: $session_id, skip_reason: $skip_reason, emitted_at: $emitted_at}' 2>>"$LOG_FILE"); then
+                log "WARNING: Failed to construct routing.skipped payload (jq failed), skipping emission"
+                exit 0
+            fi
+
+            if [[ -z "$SKIP_PAYLOAD" || "$SKIP_PAYLOAD" == "null" ]]; then
+                log "WARNING: routing.skipped payload empty or null, skipping emission"
+            else
+                emit_via_daemon "routing.skipped" "$SKIP_PAYLOAD" 100
+            fi
+        fi
+
+        log "Feedback guardrail: should_reinforce=$SHOULD_REINFORCE skip_reason=$SKIP_REASON"
     ) &
+    EMIT_PIDS+=($!)
 
     log "Session event emission started via emit daemon"
 else
     log "Kafka emission skipped (KAFKA_ENABLED=$KAFKA_ENABLED)"
 fi
 
-# Flush and stop the publisher (OMN-1944)
-# Give events a brief window (0.5s) to flush, then send stop signal.
-# This runs in a background subshell to avoid blocking session-end.
-# Known limitation: if emit subshells above take >0.5s (e.g. socket latency),
-# events may not be enqueued before SIGTERM arrives and will be dropped.
-# Acceptable per CLAUDE.md failure modes (data loss OK, UI freeze is not).
-# Override via PUBLISHER_DRAIN_DELAY_SECONDS if needed.
-(
-    # Brief pause to allow async emit subshells above to complete
-    sleep "${PUBLISHER_DRAIN_DELAY_SECONDS:-0.5}"
-
-    # Stop publisher via __main__.py stop command (sends SIGTERM to PID)
-    "$PYTHON_CMD" -m omniclaude.publisher stop >> "$LOG_FILE" 2>&1 || {
-        # Fallback: try legacy daemon stop
-        "$PYTHON_CMD" -m omnibase_infra.runtime.emit_daemon.cli stop >> "$LOG_FILE" 2>&1 || true
-    }
-    log "Publisher stop signal sent"
-) &
-
-# Clean up tab registry entry
-TAB_REGISTRY_DIR="/tmp/omniclaude-tabs"
-if [[ -n "$SESSION_ID" && -f "$TAB_REGISTRY_DIR/${SESSION_ID}.json" ]]; then
-    rm -f "$TAB_REGISTRY_DIR/${SESSION_ID}.json" 2>/dev/null || true
-    log "Tab registry entry removed"
-fi
-
 # Clean up correlation state
 if [[ -f "${HOOKS_LIB}/correlation_manager.py" ]]; then
-    $PYTHON_CMD -c "
-import sys
-sys.path.insert(0, '${HOOKS_LIB}')
+    HOOKS_LIB="$HOOKS_LIB" $PYTHON_CMD -c "
+import os, sys
+sys.path.insert(0, os.environ['HOOKS_LIB'])
 from correlation_manager import get_registry
 get_registry().clear()
 " 2>/dev/null || true
@@ -214,8 +317,29 @@ if [[ -f "${HOOKS_LIB}/session_marker.py" ]] && [[ -n "${SESSION_ID}" ]]; then
     log "Cleared session injection marker"
 fi
 
-log "SessionEnd hook completed"
-
-# Output unchanged
+# Output response immediately so Claude Code can proceed with shutdown
 echo "$INPUT"
+
+# Drain emit subshells, then stop publisher (OMN-1944)
+# SessionEnd has no downstream UI action — waiting is safe here.
+# We wait for emit subshells to finish (bounded by timeout) so events
+# are enqueued before the publisher is stopped. No fixed-sleep gamble.
+DRAIN_TIMEOUT="${PUBLISHER_DRAIN_TIMEOUT_SECONDS:-3}"
+if [[ ${#EMIT_PIDS[@]} -gt 0 ]]; then
+    # Timeout guard: kill stragglers after DRAIN_TIMEOUT seconds
+    ( sleep "$DRAIN_TIMEOUT" && kill "${EMIT_PIDS[@]}" 2>/dev/null ) &
+    DRAIN_GUARD_PID=$!
+    wait "${EMIT_PIDS[@]}" 2>/dev/null || true
+    kill "$DRAIN_GUARD_PID" 2>/dev/null; wait "$DRAIN_GUARD_PID" 2>/dev/null || true
+    log "Emit subshells drained (${#EMIT_PIDS[@]} tracked)"
+fi
+
+# Stop publisher after all events are enqueued (or timed out)
+"$PYTHON_CMD" -m omniclaude.publisher stop >> "$LOG_FILE" 2>&1 || {
+    # Fallback: try legacy daemon stop
+    "$PYTHON_CMD" -m omnibase_infra.runtime.emit_daemon.cli stop >> "$LOG_FILE" 2>&1 || true
+}
+log "Publisher stop signal sent"
+
+log "SessionEnd hook completed"
 exit 0

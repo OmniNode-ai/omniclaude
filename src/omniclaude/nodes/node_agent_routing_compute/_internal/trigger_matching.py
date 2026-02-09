@@ -18,7 +18,7 @@ invariants preserved:
 - Technical token preservation (s3, ml, ai, etc.)
 - No full-text SequenceMatcher comparison (intentionally omitted)
 
-Pure Python - NO ONEX imports.
+Pure Python with typed interfaces from _types. No ONEX framework imports.
 """
 
 from __future__ import annotations
@@ -26,17 +26,12 @@ from __future__ import annotations
 import math
 import re
 from difflib import SequenceMatcher
-from typing import TypedDict
 
-from .confidence_scoring import AgentData
+from omniclaude.nodes.node_agent_routing_compute._internal._types import (
+    AgentRegistry,
+)
 
-__all__ = ["AgentRegistry", "TriggerMatcher"]
-
-
-class AgentRegistry(TypedDict):
-    """Agent registry structure expected by TriggerMatcher."""
-
-    agents: dict[str, AgentData]
+__all__ = ["TriggerMatcher"]
 
 
 # Hard floor: remove matches below noise threshold.
@@ -208,7 +203,7 @@ class TriggerMatcher:
     # Short alphanumeric technical tokens that should be preserved during
     # keyword extraction even when below the default length threshold.
     # These tokens are domain-significant (e.g., cloud services, protocols).
-    _TECHNICAL_TOKENS = frozenset({"s3", "k8", "ec2", "ml", "ai", "ci", "cd", "db"})  # noqa: secrets
+    _TECHNICAL_TOKENS = frozenset({"s3", "k8", "ec2", "ml", "ai", "ci", "cd", "db"})
 
     def __init__(self, agent_registry: AgentRegistry):
         """Initialize matcher with agent registry.
