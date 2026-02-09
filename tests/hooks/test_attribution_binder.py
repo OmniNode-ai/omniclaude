@@ -399,6 +399,54 @@ class TestSaveAndLoad:
         result = load_aggregated_run("p1", "no-such-run", attributions_root=tmp_path)
         assert result is None
 
+    def test_load_attribution_record_corrupt_json_returns_none(
+        self, tmp_path: Path
+    ) -> None:
+        from plugins.onex.hooks.lib.attribution_binder import load_attribution_record
+
+        record_dir = tmp_path / "corrupt"
+        record_dir.mkdir()
+        (record_dir / "record.json").write_text("{invalid json")
+
+        result = load_attribution_record("corrupt", attributions_root=tmp_path)
+        assert result is None
+
+    def test_load_attribution_record_invalid_schema_returns_none(
+        self, tmp_path: Path
+    ) -> None:
+        from plugins.onex.hooks.lib.attribution_binder import load_attribution_record
+
+        record_dir = tmp_path / "bad-schema"
+        record_dir.mkdir()
+        (record_dir / "record.json").write_text('{"not_a_valid_field": true}')
+
+        result = load_attribution_record("bad-schema", attributions_root=tmp_path)
+        assert result is None
+
+    def test_load_aggregated_run_corrupt_json_returns_none(
+        self, tmp_path: Path
+    ) -> None:
+        from plugins.onex.hooks.lib.attribution_binder import load_aggregated_run
+
+        run_dir = tmp_path / "p1"
+        run_dir.mkdir()
+        (run_dir / "run-bad.measured.json").write_text("not json at all")
+
+        result = load_aggregated_run("p1", "run-bad", attributions_root=tmp_path)
+        assert result is None
+
+    def test_load_aggregated_run_invalid_schema_returns_none(
+        self, tmp_path: Path
+    ) -> None:
+        from plugins.onex.hooks.lib.attribution_binder import load_aggregated_run
+
+        run_dir = tmp_path / "p1"
+        run_dir.mkdir()
+        (run_dir / "run-schema.measured.json").write_text('{"wrong": "schema"}')
+
+        result = load_aggregated_run("p1", "run-schema", attributions_root=tmp_path)
+        assert result is None
+
 
 # =============================================================================
 # bind_and_save convenience
