@@ -750,6 +750,9 @@ class TestRoutingFeedbackEmissionPath:
         3. Construct ModelRoutingFeedbackPayload with the result
         4. Verify the payload is frozen and fields match
         """
+        pytest.importorskip(
+            "tiktoken", reason="requires tiktoken for omniclaude.hooks import chain"
+        )
         from datetime import UTC, datetime
 
         from omniclaude.hooks.schemas import ModelRoutingFeedbackPayload
@@ -786,6 +789,9 @@ class TestRoutingFeedbackEmissionPath:
 
     def test_feedback_payload_with_failed_outcome(self) -> None:
         """Failed sessions also produce valid feedback payloads."""
+        pytest.importorskip(
+            "tiktoken", reason="requires tiktoken for omniclaude.hooks import chain"
+        )
         from datetime import UTC, datetime
 
         from omniclaude.hooks.schemas import ModelRoutingFeedbackPayload
@@ -808,6 +814,9 @@ class TestRoutingFeedbackEmissionPath:
 
     def test_skipped_payload_from_failed_guardrail(self) -> None:
         """When guardrails reject, ModelRoutingFeedbackSkippedPayload is constructable."""
+        pytest.importorskip(
+            "tiktoken", reason="requires tiktoken for omniclaude.hooks import chain"
+        )
         from datetime import UTC, datetime
 
         from omniclaude.hooks.schemas import ModelRoutingFeedbackSkippedPayload
