@@ -1126,6 +1126,245 @@ class TestClaudeHookEventIntegration:
 
 
 # =============================================================================
+# Session Outcome Integration Tests (OMN-2076)
+# =============================================================================
+
+
+async def wait_for_session_outcome(
+    topic: str,
+    session_id: str,
+    consumer_group: str,
+    timeout_seconds: float = 10.0,
+) -> dict[str, Any] | None:
+    """Wait for a session outcome event by session_id.
+
+    Session outcome events use ModelSessionOutcome schema (not the envelope
+    schema used by other hook events), so we match on root-level session_id.
+
+    Args:
+        topic: The Kafka topic to consume from.
+        session_id: The session_id to match in the payload.
+        consumer_group: Consumer group ID.
+        timeout_seconds: Maximum time to wait.
+
+    Returns:
+        The matching message payload, or None if not found.
+    """
+    try:
+        from aiokafka import AIOKafkaConsumer
+    except ImportError:
+        pytest.skip("aiokafka not installed")
+        return None
+
+    consumer = AIOKafkaConsumer(
+        topic,
+        bootstrap_servers=get_kafka_bootstrap_servers(),
+        group_id=consumer_group,
+        auto_offset_reset="earliest",
+        enable_auto_commit=True,
+        consumer_timeout_ms=int(timeout_seconds * 1000),
+    )
+
+    try:
+        await consumer.start()
+        await consumer.seek_to_end()
+
+        start_time = asyncio.get_running_loop().time()
+        while (asyncio.get_running_loop().time() - start_time) < timeout_seconds:
+            try:
+                result = await consumer.getmany(timeout_ms=500, max_records=100)
+                for _tp, records in result.items():
+                    for record in records:
+                        try:
+                            payload = json.loads(record.value.decode("utf-8"))
+                            if payload.get("session_id") == session_id:
+                                return payload
+                        except (json.JSONDecodeError, UnicodeDecodeError):
+                            continue
+
+            except TimeoutError:
+                continue
+
+        return None
+
+    finally:
+        await consumer.stop()
+
+
+class TestSessionOutcomeIntegration:
+    """Integration tests for session outcome emission to both Kafka topics.
+
+    Verifies that emit_session_outcome_from_config() correctly publishes
+    to both the CMD (intelligence) and EVT (observability) topics.
+
+    Part of OMN-2076: Golden path session + injection + outcome emission.
+    """
+
+    async def test_session_outcome_reaches_cmd_topic(
+        self,
+        _kafka_health_check,
+        unique_consumer_group,
+    ) -> None:
+        """Verify session.outcome event reaches the CMD (intelligence) topic."""
+        from datetime import UTC, datetime
+
+        from omniclaude.hooks.handler_event_emitter import (
+            ModelEventTracingConfig,
+            ModelSessionOutcomeConfig,
+            emit_session_outcome_from_config,
+        )
+        from omniclaude.hooks.topics import TopicBase, build_topic
+
+        env = get_kafka_environment()
+        test_session_id = f"outcome-cmd-test-{uuid4().hex[:12]}"
+        topic = build_topic(env, TopicBase.SESSION_OUTCOME_CMD)
+
+        # Start consumer BEFORE publishing
+        consumer_task = asyncio.create_task(
+            wait_for_session_outcome(
+                topic=topic,
+                session_id=test_session_id,
+                consumer_group=unique_consumer_group,
+                timeout_seconds=15.0,
+            )
+        )
+        await asyncio.sleep(1.0)
+
+        config = ModelSessionOutcomeConfig(
+            session_id=test_session_id,
+            outcome="success",
+            tracing=ModelEventTracingConfig(
+                emitted_at=datetime.now(UTC),
+                environment=env,
+            ),
+        )
+
+        result = await emit_session_outcome_from_config(config)
+        assert result.success is True, f"Publish failed: {result.error_message}"
+
+        message = await consumer_task
+        assert message is not None, f"Session outcome not received on CMD topic {topic}"
+        assert message["session_id"] == test_session_id
+        assert message["outcome"] == "success"
+        assert message["event_name"] == "session.outcome"
+
+    async def test_session_outcome_reaches_evt_topic(
+        self,
+        _kafka_health_check,
+        unique_consumer_group,
+    ) -> None:
+        """Verify session.outcome event reaches the EVT (observability) topic."""
+        from datetime import UTC, datetime
+
+        from omniclaude.hooks.handler_event_emitter import (
+            ModelEventTracingConfig,
+            ModelSessionOutcomeConfig,
+            emit_session_outcome_from_config,
+        )
+        from omniclaude.hooks.topics import TopicBase, build_topic
+
+        env = get_kafka_environment()
+        test_session_id = f"outcome-evt-test-{uuid4().hex[:12]}"
+        topic = build_topic(env, TopicBase.SESSION_OUTCOME_EVT)
+
+        consumer_task = asyncio.create_task(
+            wait_for_session_outcome(
+                topic=topic,
+                session_id=test_session_id,
+                consumer_group=unique_consumer_group,
+                timeout_seconds=15.0,
+            )
+        )
+        await asyncio.sleep(1.0)
+
+        config = ModelSessionOutcomeConfig(
+            session_id=test_session_id,
+            outcome="failed",
+            tracing=ModelEventTracingConfig(
+                emitted_at=datetime.now(UTC),
+                environment=env,
+            ),
+        )
+
+        result = await emit_session_outcome_from_config(config)
+        assert result.success is True, f"Publish failed: {result.error_message}"
+
+        message = await consumer_task
+        assert message is not None, f"Session outcome not received on EVT topic {topic}"
+        assert message["session_id"] == test_session_id
+        assert message["outcome"] == "failed"
+
+    async def test_session_outcome_full_golden_path(
+        self,
+        _kafka_health_check,
+        unique_consumer_group,
+    ) -> None:
+        """Golden path: derive outcome and emit to both topics.
+
+        This test exercises the complete flow:
+        1. Derive outcome from session signals (SUCCESS path)
+        2. Emit to Kafka via emit_session_outcome_from_config
+        3. Verify event arrives on CMD topic
+        """
+        from datetime import UTC, datetime
+
+        from omniclaude.hooks.handler_event_emitter import (
+            ModelEventTracingConfig,
+            ModelSessionOutcomeConfig,
+            emit_session_outcome_from_config,
+        )
+        from omniclaude.hooks.topics import TopicBase, build_topic
+        from plugins.onex.hooks.lib.session_outcome import (
+            OUTCOME_SUCCESS,
+            derive_session_outcome,
+        )
+
+        env = get_kafka_environment()
+        test_session_id = f"golden-path-test-{uuid4().hex[:12]}"
+        topic = build_topic(env, TopicBase.SESSION_OUTCOME_CMD)
+
+        # Step 1: Derive outcome
+        outcome_result = derive_session_outcome(
+            exit_code=0,
+            session_output="Task completed successfully",
+            tool_calls_completed=5,
+            duration_seconds=300.0,
+        )
+        assert outcome_result.outcome == OUTCOME_SUCCESS
+
+        # Step 2: Start consumer
+        consumer_task = asyncio.create_task(
+            wait_for_session_outcome(
+                topic=topic,
+                session_id=test_session_id,
+                consumer_group=unique_consumer_group,
+                timeout_seconds=15.0,
+            )
+        )
+        await asyncio.sleep(1.0)
+
+        # Step 3: Emit outcome
+        config = ModelSessionOutcomeConfig(
+            session_id=test_session_id,
+            outcome=outcome_result.outcome,
+            tracing=ModelEventTracingConfig(
+                emitted_at=datetime.now(UTC),
+                environment=env,
+            ),
+        )
+
+        result = await emit_session_outcome_from_config(config)
+        assert result.success is True, f"Publish failed: {result.error_message}"
+
+        # Step 4: Verify
+        message = await consumer_task
+        assert message is not None, f"Golden path event not received on topic {topic}"
+        assert message["session_id"] == test_session_id
+        assert message["outcome"] == "success"
+        assert "emitted_at" in message
+
+
+# =============================================================================
 # Main
 # =============================================================================
 

@@ -59,6 +59,7 @@ from omniclaude.hooks.schemas import (
     ModelHookSessionEndedPayload,
     ModelHookSessionStartedPayload,
     ModelHookToolExecutedPayload,
+    ModelSessionOutcome,
     SessionEndReason,
 )
 from omniclaude.hooks.topics import TopicBase, build_topic
@@ -218,6 +219,24 @@ class ModelClaudeHookEventConfig:
     correlation_id: UUID | None = None
     timestamp_utc: datetime | None = None
     environment: str | None = None
+
+
+@dataclass(frozen=True)
+class ModelSessionOutcomeConfig:
+    """Configuration for session outcome events.
+
+    Session outcome events are emitted at session end with fan-out to both
+    the intelligence CMD topic and the observability EVT topic.
+
+    Attributes:
+        session_id: Session identifier string (min 1 char).
+        outcome: Classification of how the session ended.
+        tracing: Optional tracing configuration (provides emitted_at, environment).
+    """
+
+    session_id: str
+    outcome: str  # One of: success, failed, abandoned, unknown
+    tracing: ModelEventTracingConfig = field(default_factory=ModelEventTracingConfig)
 
 
 # =============================================================================
@@ -1065,6 +1084,129 @@ async def emit_claude_hook_event(
                 )
 
 
+# =============================================================================
+# Session Outcome Emission (OMN-2076: fan-out to CMD + EVT)
+# =============================================================================
+
+
+async def emit_session_outcome_from_config(
+    config: ModelSessionOutcomeConfig,
+) -> ModelEventPublishResult:
+    """Emit a session outcome event to both CMD and EVT topics.
+
+    Session outcome events use fan-out: the same payload is published to both
+    the intelligence CMD topic (for feedback loop) and the observability EVT
+    topic (for dashboards/monitoring). This mirrors the daemon's FanOutRule
+    behavior at the Python handler level.
+
+    The function publishes to:
+        - onex.cmd.omniintelligence.session-outcome.v1 (intelligence feedback)
+        - onex.evt.omniclaude.session-outcome.v1 (observability)
+
+    Args:
+        config: Session outcome configuration containing session_id, outcome,
+            and optional tracing config.
+
+    Returns:
+        ModelEventPublishResult indicating success or failure.
+        On partial failure (one topic succeeds, one fails), returns failure
+        with the first error message.
+    """
+    bus: EventBusKafka | None = None
+    first_topic = "unknown"
+
+    try:
+        from omnibase_core.enums import EnumClaudeCodeSessionOutcome
+
+        # Validate outcome value
+        try:
+            outcome_enum = EnumClaudeCodeSessionOutcome(config.outcome)
+        except ValueError:
+            valid = [e.value for e in EnumClaudeCodeSessionOutcome]
+            return ModelEventPublishResult(
+                success=False,
+                topic="unknown",
+                error_message=f"Invalid outcome '{config.outcome}'. Valid: {valid}",
+            )
+
+        # Build payload
+        tracing = config.tracing
+        emitted_at = tracing.emitted_at or datetime.now(UTC)
+
+        payload = ModelSessionOutcome(
+            session_id=config.session_id,
+            outcome=outcome_enum,
+            emitted_at=emitted_at,
+        )
+
+        # Get environment
+        env = tracing.environment or os.environ.get("KAFKA_ENVIRONMENT", "dev")
+
+        # Build both topics (fan-out)
+        topic_cmd = build_topic(env, TopicBase.SESSION_OUTCOME_CMD)
+        topic_evt = build_topic(env, TopicBase.SESSION_OUTCOME_EVT)
+        first_topic = topic_cmd
+
+        # Serialize payload
+        message_bytes = payload.model_dump_json().encode("utf-8")
+        partition_key = config.session_id.encode("utf-8")
+
+        # Create Kafka config and bus
+        kafka_config = _create_kafka_config()
+        bus = EventBusKafka(config=kafka_config)
+        await bus.start()
+
+        # Publish to both topics (fan-out)
+        await bus.publish(topic=topic_cmd, key=partition_key, value=message_bytes)
+        await bus.publish(topic=topic_evt, key=partition_key, value=message_bytes)
+
+        logger.debug(
+            "session_outcome_emitted",
+            extra={
+                "topics": [topic_cmd, topic_evt],
+                "session_id": config.session_id,
+                "outcome": config.outcome,
+            },
+        )
+
+        return ModelEventPublishResult(
+            success=True,
+            topic=topic_cmd,  # Report first topic for consistency
+            partition=None,
+            offset=None,
+        )
+
+    except Exception as e:
+        logger.warning(
+            "session_outcome_publish_failed",
+            extra={
+                "topic": first_topic,
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "session_id": config.session_id,
+            },
+        )
+
+        error_msg = f"{type(e).__name__}: {e!s}"
+        return ModelEventPublishResult(
+            success=False,
+            topic=first_topic,
+            error_message=(
+                error_msg[:997] + "..." if len(error_msg) > 1000 else error_msg
+            ),
+        )
+
+    finally:
+        if bus is not None:
+            try:
+                await bus.close()
+            except Exception as close_error:
+                logger.debug(
+                    "kafka_bus_close_error",
+                    extra={"error": str(close_error)},
+                )
+
+
 __all__ = [
     # Constants
     "MAX_PROMPT_SIZE",
@@ -1077,6 +1219,7 @@ __all__ = [
     "ModelSessionStartedConfig",
     "ModelSessionEndedConfig",
     "ModelClaudeHookEventConfig",
+    "ModelSessionOutcomeConfig",
     # Core emission function
     "emit_hook_event",
     # Config-based convenience functions
@@ -1084,6 +1227,8 @@ __all__ = [
     "emit_session_ended_from_config",
     "emit_prompt_submitted_from_config",
     "emit_tool_executed_from_config",
+    # Session outcome emission (OMN-2076)
+    "emit_session_outcome_from_config",
     # Claude hook event emission (for omniintelligence)
     "emit_claude_hook_event",
     # Backwards-compatible convenience functions
