@@ -38,6 +38,36 @@ _log = logging.getLogger(__name__)
 
 ATTRIBUTIONS_ROOT = Path.home() / ".claude" / "attributions"
 
+_DANGEROUS_PATTERNS = ("..", "/", "\\", "\x00")
+
+
+def _validate_path_segment(value: str, label: str) -> str | None:
+    """Validate a string used as a filesystem path segment.
+
+    Rejects values containing path separators, parent-directory references,
+    null bytes, or shell expansion characters.  Returns the value on success,
+    or None (with a warning) if the value is unsafe.
+    """
+    if not value:
+        return None
+    for pat in _DANGEROUS_PATTERNS:
+        if pat in value:
+            _log.warning(
+                "Rejected unsafe %s containing %r: %s",
+                label,
+                pat,
+                repr(value[:80]),
+            )
+            return None
+    if value.startswith(("~", "$")):
+        _log.warning(
+            "Rejected %s with shell expansion characters: %s",
+            label,
+            repr(value[:80]),
+        )
+        return None
+    return value
+
 
 # -- Load --------------------------------------------------------------------
 
@@ -51,8 +81,11 @@ def load_attribution_record(
 
     Returns None if the record file does not exist or is corrupt.
     """
+    safe_pid = _validate_path_segment(pattern_id, "pattern_id")
+    if safe_pid is None:
+        return None
     root = attributions_root or ATTRIBUTIONS_ROOT
-    target = root / pattern_id / "record.json"
+    target = root / safe_pid / "record.json"
     if not target.exists():
         return None
     try:
@@ -75,8 +108,12 @@ def load_aggregated_run(
     and extracts the aggregated_run field.  Returns None if not found
     or file is corrupt.
     """
+    safe_pid = _validate_path_segment(pattern_id, "pattern_id")
+    safe_rid = _validate_path_segment(run_id, "run_id")
+    if safe_pid is None or safe_rid is None:
+        return None
     root = attributions_root or ATTRIBUTIONS_ROOT
-    target = root / pattern_id / f"{run_id}.measured.json"
+    target = root / safe_pid / f"{safe_rid}.measured.json"
     if not target.exists():
         return None
     try:
@@ -143,11 +180,17 @@ def save_measured_attribution(
     Storage: {attributions_root}/{pattern_id}/{run_id}.measured.json
     Uses atomic write (tmp + rename).
     """
+    safe_pid = _validate_path_segment(pattern_id, "pattern_id")
+    safe_rid = _validate_path_segment(run_id, "run_id")
+    if safe_pid is None or safe_rid is None:
+        raise ValueError(
+            f"Unsafe path segment rejected: pattern_id={pattern_id!r}, run_id={run_id!r}"
+        )
     root = attributions_root or ATTRIBUTIONS_ROOT
-    target_dir = root / pattern_id
+    target_dir = root / safe_pid
     target_dir.mkdir(parents=True, exist_ok=True)
 
-    target = target_dir / f"{run_id}.measured.json"
+    target = target_dir / f"{safe_rid}.measured.json"
     tmp = target.with_suffix(".json.tmp")
     tmp.write_text(measured.model_dump_json(indent=2))
     tmp.rename(target)

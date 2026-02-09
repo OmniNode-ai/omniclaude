@@ -449,6 +449,79 @@ class TestSaveAndLoad:
 
 
 # =============================================================================
+# Path Traversal Rejection
+# =============================================================================
+
+
+class TestPathTraversalRejection:
+    """Verify that path-traversal sequences in pattern_id/run_id are rejected."""
+
+    _MALICIOUS_SEGMENTS = [
+        "../etc",
+        "foo/bar",
+        "foo\\bar",
+        "foo\x00bar",
+        "~evil",
+        "$HOME",
+    ]
+
+    @pytest.mark.parametrize("bad_id", _MALICIOUS_SEGMENTS)
+    def test_load_attribution_record_rejects_traversal(
+        self, tmp_path: Path, bad_id: str
+    ) -> None:
+        from plugins.onex.hooks.lib.attribution_binder import load_attribution_record
+
+        result = load_attribution_record(bad_id, attributions_root=tmp_path)
+        assert result is None
+
+    @pytest.mark.parametrize("bad_id", _MALICIOUS_SEGMENTS)
+    def test_load_aggregated_run_rejects_bad_pattern_id(
+        self, tmp_path: Path, bad_id: str
+    ) -> None:
+        from plugins.onex.hooks.lib.attribution_binder import load_aggregated_run
+
+        result = load_aggregated_run(bad_id, "run-1", attributions_root=tmp_path)
+        assert result is None
+
+    @pytest.mark.parametrize("bad_id", _MALICIOUS_SEGMENTS)
+    def test_load_aggregated_run_rejects_bad_run_id(
+        self, tmp_path: Path, bad_id: str
+    ) -> None:
+        from plugins.onex.hooks.lib.attribution_binder import load_aggregated_run
+
+        result = load_aggregated_run("p1", bad_id, attributions_root=tmp_path)
+        assert result is None
+
+    @pytest.mark.parametrize("bad_id", _MALICIOUS_SEGMENTS)
+    def test_save_rejects_bad_pattern_id(self, tmp_path: Path, bad_id: str) -> None:
+        from plugins.onex.hooks.lib.attribution_binder import (
+            bind_attribution,
+            save_measured_attribution,
+        )
+
+        attr = _make_attribution()
+        measured = bind_attribution(attr)
+        with pytest.raises(ValueError, match="Unsafe path segment"):
+            save_measured_attribution(
+                measured, bad_id, "run-1", attributions_root=tmp_path
+            )
+
+    @pytest.mark.parametrize("bad_id", _MALICIOUS_SEGMENTS)
+    def test_save_rejects_bad_run_id(self, tmp_path: Path, bad_id: str) -> None:
+        from plugins.onex.hooks.lib.attribution_binder import (
+            bind_attribution,
+            save_measured_attribution,
+        )
+
+        attr = _make_attribution()
+        measured = bind_attribution(attr)
+        with pytest.raises(ValueError, match="Unsafe path segment"):
+            save_measured_attribution(
+                measured, "p1", bad_id, attributions_root=tmp_path
+            )
+
+
+# =============================================================================
 # bind_and_save convenience
 # =============================================================================
 
