@@ -516,7 +516,7 @@ Complete flow from agent spawn to database persistence:
 - `dev.archon-intelligence.intelligence.code-analysis-failed.v1` - Failed requests
 
 **Agent Tracking Topics** (future):
-- `agent-routing-decisions` - Routing decisions
+- `onex.evt.omniclaude.routing-decision.v1` - Routing decisions
 - `agent-transformation-events` - Agent transformations
 - `router-performance-metrics` - Performance metrics
 - `agent-actions` - Individual tool calls

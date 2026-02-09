@@ -42,7 +42,7 @@ This document describes the unified event infrastructure that replaces direct Ka
 │ Events         │         │ Events         │
 │                │         │                │
 │ - routing-     │         │ - code-        │
-│   decisions    │         │   analysis-    │
+│   decision.v1  │         │   analysis-    │
 │ - agent-       │         │   requested    │
 │   actions      │         │ - code-        │
 │ - performance  │         │   analysis-    │
@@ -186,7 +186,7 @@ python3 ~/.claude/skills/agent-tracking/log-transformation/execute_unified.py \
 ### Event Topics
 | Event Type | Topic |
 |-----------|-------|
-| Routing Decisions | `agent-routing-decisions` |
+| Routing Decisions | `onex.evt.omniclaude.routing-decision.v1` |
 | Agent Actions | `agent-actions` |
 | Performance Metrics | `agent-performance-metrics` |
 | Transformations | `agent-transformations` |
@@ -367,7 +367,7 @@ OMNICLAUDE_PATH=/Volumes/PRO-G40/Code/omniclaude  # For skill imports
 from kafka import KafkaProducer
 
 producer = KafkaProducer(bootstrap_servers="localhost:29092")
-producer.send("agent-routing-decisions", event_data)
+producer.send("onex.evt.omniclaude.routing-decision.v1", event_data)
 ```
 
 **After (HookEventAdapter):**
@@ -456,7 +456,7 @@ python3 ~/.claude/skills/agent-tracking/log-routing-decision/execute_unified.py 
 #   "correlation_id": "...",
 #   "selected_agent": "test-agent",
 #   "published_via": "unified_event_adapter",
-#   "topic": "agent-routing-decisions"
+#   "topic": "onex.evt.omniclaude.routing-decision.v1"
 # }
 ```
 
@@ -485,7 +485,7 @@ python3 ~/.claude/skills/agent-tracking/log-routing-decision/execute_unified.py 
 kafka-topics.sh --list --bootstrap-server localhost:29092
 
 # Expected topics:
-# agent-routing-decisions
+# onex.evt.omniclaude.routing-decision.v1
 # agent-actions
 # agent-performance-metrics
 # agent-transformations
@@ -500,7 +500,7 @@ kafka-topics.sh --list --bootstrap-server localhost:29092
 # Monitor routing decisions
 kafka-console-consumer.sh \
   --bootstrap-server localhost:29092 \
-  --topic agent-routing-decisions \
+  --topic onex.evt.omniclaude.routing-decision.v1 \
   --from-beginning
 
 # Monitor intelligence requests
@@ -535,7 +535,7 @@ kafka-broker-api-versions.sh --bootstrap-server localhost:29092
 tail -f ~/.claude/hooks/hook-enhanced.log | grep "hook_event_adapter"
 
 # Verify topic exists
-kafka-topics.sh --list --bootstrap-server localhost:29092 | grep "agent-routing-decisions"
+kafka-topics.sh --list --bootstrap-server localhost:29092 | grep "onex.evt.omniclaude.routing-decision"
 ```
 
 ### Intelligence Requests Timing Out
@@ -563,7 +563,7 @@ grep "correlation_id" ~/.claude/hooks/hook-enhanced.log | tail -20
 # Verify correlation tracking in events
 kafka-console-consumer.sh \
   --bootstrap-server localhost:29092 \
-  --topic agent-routing-decisions \
+  --topic onex.evt.omniclaude.routing-decision.v1 \
   --property print.key=true
 ```
 

@@ -46,7 +46,7 @@ Health: ✅ Healthy
 ✅ Joined consumer group: agent-observability-postgres
 ✅ Assigned 6 partitions:
    - agent-actions
-   - agent-routing-decisions
+   - onex.evt.omniclaude.routing-decision.v1
    - agent-transformation-events
    - router-performance-metrics
    - agent-detection-failures

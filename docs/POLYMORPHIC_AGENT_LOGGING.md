@@ -23,7 +23,7 @@ The Polymorphic Agent logging system provides complete observability of agent ac
              │ Publishes events via Kafka skills (<5ms each)
              │
              ├──→ agent-actions (DEBUG mode)
-             ├──→ agent-routing-decisions
+             ├──→ onex.evt.omniclaude.routing-decision.v1
              ├──→ agent-transformation-events
              └──→ router-performance-metrics
                   │
@@ -82,7 +82,7 @@ python3 ~/.claude/skills/agent-tracking/log-agent-action/execute_kafka.py \
   --duration-ms 45
 ```
 
-### 2. Routing Decisions (agent-routing-decisions topic)
+### 2. Routing Decisions (onex.evt.omniclaude.routing-decision.v1 topic)
 
 **When to Log**: Immediately after selecting which agent should handle the task
 
@@ -187,7 +187,7 @@ START_TIME=$(date +%s%N)
 END_TIME=$(date +%s%N)
 ROUTING_TIME_MS=$(( ($END_TIME - $START_TIME) / 1000000 ))
 
-# 5. Log routing decision (→ agent-routing-decisions topic)
+# 5. Log routing decision (→ onex.evt.omniclaude.routing-decision.v1 topic)
 python3 ~/.claude/skills/agent-tracking/log-routing-decision/execute_kafka.py \
   --agent "agent-performance" \
   --confidence 0.92 \
@@ -324,7 +324,7 @@ Replay events from Kafka to analyze historical behavior:
 # Consume events from beginning of topic
 kafka-console-consumer \
   --bootstrap-server localhost:29092 \
-  --topic agent-routing-decisions \
+  --topic onex.evt.omniclaude.routing-decision.v1 \
   --from-beginning \
   --property print.key=true \
   --property print.timestamp=true
@@ -353,7 +353,7 @@ kafka-console-consumer \
 
 **Topics Consumed**:
 - `agent-actions`
-- `agent-routing-decisions`
+- `onex.evt.omniclaude.routing-decision.v1`
 - `agent-transformation-events`
 - `router-performance-metrics`
 

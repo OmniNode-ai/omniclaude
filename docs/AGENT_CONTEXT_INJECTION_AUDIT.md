@@ -143,7 +143,7 @@ Each with naming patterns, file patterns, execute methods, responsibilities.
   - `workflow_steps`
 
 - **Kafka/Redpanda** (port 29102): 9+ topics documented
-  - `agent-routing-decisions`
+  - `onex.evt.omniclaude.routing-decision.v1`
   - `agent-transformation-events`
   - `router-performance-metrics`
   - `agent-actions`
@@ -982,7 +982,7 @@ python agents/lib/manifest_validator.py
 ## Event Contracts
 
 ### routing_decision
-**Topic**: `agent-routing-decisions`
+**Topic**: `onex.evt.omniclaude.routing-decision.v1`
 **Schema**:
 - `correlation_id`: UUID
 - `user_request`: TEXT
@@ -1052,7 +1052,7 @@ python agents/lib/manifest_validator.py
 ## Available Skills
 
 ### Agent Tracking (Kafka-based)
-- `log-routing-decision` → `agent-routing-decisions` topic
+- `log-routing-decision` → `onex.evt.omniclaude.routing-decision.v1` topic
 - `log-transformation` → `agent-transformation-events` topic
 - `log-performance-metrics` → `router-performance-metrics` topic
 - `log-agent-action` → `agent-actions` topic

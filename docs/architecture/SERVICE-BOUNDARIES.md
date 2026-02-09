@@ -252,7 +252,7 @@ These services are **NOT owned by omniclaude**. They are provided by external sy
 - `agent.routing.failed.v1` (consume in CLI, publish from router consumer)
 
 **Tracking Topics**:
-- `agent-routing-decisions` (publish)
+- `onex.evt.omniclaude.routing-decision.v1` (publish)
 - `agent-transformation-events` (publish)
 - `router-performance-metrics` (publish)
 - `agent-actions` (publish)

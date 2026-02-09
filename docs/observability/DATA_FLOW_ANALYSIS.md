@@ -178,7 +178,7 @@ pr-review          | 3                | 1138.7            | 20.0
 agent-actions                                    ✅ Exists (0 consumers?)
 agent-execution-logs                             ✅ Exists (active)
 agent-transformation-events                      ✅ Exists (0 consumers?)
-agent-routing-decisions                          ✅ Exists (active)
+onex.evt.omniclaude.routing-decision.v1          ✅ Exists (active)
 agent.routing.requested.v1                       ✅ Exists (active)
 ```
 
