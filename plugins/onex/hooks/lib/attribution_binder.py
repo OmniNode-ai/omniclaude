@@ -58,8 +58,8 @@ def load_attribution_record(
     try:
         data = json.loads(target.read_text())
         return ContractAttributionRecord.model_validate(data)
-    except (json.JSONDecodeError, ValueError) as exc:
-        _log.warning("Corrupt attribution record at %s: %s", target, exc)
+    except (json.JSONDecodeError, ValueError, OSError) as exc:
+        _log.warning("Cannot load attribution record at %s: %s", target, exc)
         return None
 
 
@@ -83,8 +83,8 @@ def load_aggregated_run(
         data = json.loads(target.read_text())
         measured = ContractMeasuredAttribution.model_validate(data)
         return measured.aggregated_run
-    except (json.JSONDecodeError, ValueError) as exc:
-        _log.warning("Corrupt measured attribution at %s: %s", target, exc)
+    except (json.JSONDecodeError, ValueError, OSError) as exc:
+        _log.warning("Cannot load measured attribution at %s: %s", target, exc)
         return None
 
 
