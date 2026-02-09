@@ -738,6 +738,57 @@ class TestMetricsEmitter:
         result = read_metrics_artifact("OMN-XXXX", "no-run", "fake", 1)
         assert result is None
 
+    @pytest.mark.parametrize(
+        "bad_component",
+        ["../escape", "a/b", "a\\b", "a\x00b"],
+        ids=["dotdot", "slash", "backslash", "null"],
+    )
+    def test_write_rejects_path_traversal(
+        self,
+        _tmp_artifact_dir: Path,
+        sample_metrics: ContractPhaseMetrics,
+        bad_component: str,
+    ):
+        """write_metrics_artifact rejects path traversal in components."""
+        assert (
+            write_metrics_artifact(bad_component, "run", "phase", 1, sample_metrics)
+            is None
+        )
+        assert (
+            write_metrics_artifact("OMN-1", bad_component, "phase", 1, sample_metrics)
+            is None
+        )
+        assert (
+            write_metrics_artifact("OMN-1", "run", bad_component, 1, sample_metrics)
+            is None
+        )
+
+    @pytest.mark.parametrize(
+        "bad_component",
+        ["../escape", "a/b", "a\\b", "a\x00b"],
+        ids=["dotdot", "slash", "backslash", "null"],
+    )
+    def test_read_rejects_path_traversal(
+        self, _tmp_artifact_dir: Path, bad_component: str
+    ):
+        """read_metrics_artifact rejects path traversal in components."""
+        assert read_metrics_artifact(bad_component, "run", "phase", 1) is None
+        assert read_metrics_artifact("OMN-1", bad_component, "phase", 1) is None
+        assert read_metrics_artifact("OMN-1", "run", bad_component, 1) is None
+
+    @pytest.mark.parametrize(
+        "bad_component",
+        ["../escape", "a/b", "a\\b", "a\x00b"],
+        ids=["dotdot", "slash", "backslash", "null"],
+    )
+    def test_exists_rejects_path_traversal(
+        self, _tmp_artifact_dir: Path, bad_component: str
+    ):
+        """metrics_artifact_exists rejects path traversal in components."""
+        assert not metrics_artifact_exists(bad_component, "run", "phase", 1)
+        assert not metrics_artifact_exists("OMN-1", bad_component, "phase", 1)
+        assert not metrics_artifact_exists("OMN-1", "run", bad_component, 1)
+
     @patch("plugins.onex.hooks.lib.emit_client_wrapper.emit_event", return_value=True)
     def test_emit_phase_metrics_calls_daemon(
         self, mock_emit, sample_metrics: ContractPhaseMetrics
