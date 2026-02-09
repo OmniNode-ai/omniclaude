@@ -12,6 +12,7 @@ Storage layout:
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -33,6 +34,8 @@ if TYPE_CHECKING:
         ContractPromotionGate,
     )
 
+_log = logging.getLogger(__name__)
+
 ATTRIBUTIONS_ROOT = Path.home() / ".claude" / "attributions"
 
 
@@ -46,14 +49,18 @@ def load_attribution_record(
 ) -> ContractAttributionRecord | None:
     """Load an attribution record for the given pattern_id.
 
-    Returns None if the record file does not exist.
+    Returns None if the record file does not exist or is corrupt.
     """
     root = attributions_root or ATTRIBUTIONS_ROOT
     target = root / pattern_id / "record.json"
     if not target.exists():
         return None
-    data = json.loads(target.read_text())
-    return ContractAttributionRecord.model_validate(data)
+    try:
+        data = json.loads(target.read_text())
+        return ContractAttributionRecord.model_validate(data)
+    except (json.JSONDecodeError, ValueError) as exc:
+        _log.warning("Corrupt attribution record at %s: %s", target, exc)
+        return None
 
 
 def load_aggregated_run(
@@ -65,15 +72,20 @@ def load_aggregated_run(
     """Load an aggregated run from a measured-attribution artifact.
 
     Looks in {attributions_root}/{pattern_id}/{run_id}.measured.json
-    and extracts the aggregated_run field.  Returns None if not found.
+    and extracts the aggregated_run field.  Returns None if not found
+    or file is corrupt.
     """
     root = attributions_root or ATTRIBUTIONS_ROOT
     target = root / pattern_id / f"{run_id}.measured.json"
     if not target.exists():
         return None
-    data = json.loads(target.read_text())
-    measured = ContractMeasuredAttribution.model_validate(data)
-    return measured.aggregated_run
+    try:
+        data = json.loads(target.read_text())
+        measured = ContractMeasuredAttribution.model_validate(data)
+        return measured.aggregated_run
+    except (json.JSONDecodeError, ValueError) as exc:
+        _log.warning("Corrupt measured attribution at %s: %s", target, exc)
+        return None
 
 
 # -- Bind --------------------------------------------------------------------
