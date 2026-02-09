@@ -642,11 +642,10 @@ def select_patterns_for_injection(
                 )
                 continue
 
-        # Check max_tokens_injected (skip this pattern)
-        # INTENTIONAL: No backfill with smaller patterns. Per "prefer_fewer_high_confidence"
-        # policy, we skip patterns that exceed budget and do NOT attempt to fit smaller
-        # subsequent patterns. This is by design - we prefer fewer high-quality patterns
-        # over maximizing token utilization with lower-scored alternatives.
+        # Check max_tokens_injected (skip this pattern, try next)
+        # Patterns are sorted by descending effective_score. If a high-token pattern
+        # exceeds budget, we skip it and try subsequent (lower-scored but possibly
+        # smaller) patterns that may still fit within the remaining budget.
         # NOTE: Uses effective_token_budget (with safety margin) to account for
         # tokenizer differences between tiktoken and Claude's actual tokenizer.
         new_total = total_tokens + scored_pattern.rendered_tokens
