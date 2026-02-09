@@ -1,17 +1,21 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 OmniNode Team
-"""Runtime wiring and service registration for omniclaude.
+"""Runtime wiring, plugin, and service registration for omniclaude.
 
-This package provides service wiring that delegates to omnibase_infra's
-ServiceContractPublisher for contract-driven handler registration.
+This package provides:
+- **PluginClaude**: Domain plugin implementing ProtocolDomainPlugin (OMN-2002)
+- **Service wiring**: Delegates to omnibase_infra's ServiceContractPublisher
 
-Ticket: OMN-1812 - Migrate wiring.py to use ServiceContractPublisher from omnibase_infra
+Tickets:
+    OMN-2002 - PluginClaude + generic config-driven plugin loader
+    OMN-1812 - Migrate wiring.py to use ServiceContractPublisher from omnibase_infra
 
 Architecture (ARCH-002):
     Runtime owns all Kafka plumbing. All contract publishing functionality
     is provided by omnibase_infra.services.contract_publisher.
 
 Exported:
+    PluginClaude: Domain plugin for kernel bootstrap integration
     wire_omniclaude_services: Async function to register handlers with container
     publish_handler_contracts: Async function to publish handler contracts to Kafka
 
@@ -44,10 +48,15 @@ from omnibase_infra.services.contract_publisher import (
     NoContractsFoundError,
 )
 
+# Export plugin
+from .plugin import PluginClaude
+
 # Export wiring functions
 from .wiring import publish_handler_contracts, wire_omniclaude_services
 
 __all__ = [
+    # Plugin (OMN-2002)
+    "PluginClaude",
     # Configuration
     "ModelContractPublisherConfig",
     # Error types (dataclasses from infra)
