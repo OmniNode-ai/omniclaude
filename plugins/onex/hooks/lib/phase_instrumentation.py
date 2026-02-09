@@ -244,14 +244,20 @@ def build_metrics_from_result(
         llm_total_tokens=phase_result.tokens_used,
     )
 
+    # Truncate reason to align with evt topic limit (same as build_error_metrics)
+    error_messages: list[str] = []
+    if (
+        phase_result.reason
+        and classification != ContractEnumResultClassification.SUCCESS
+    ):
+        reason_msg = phase_result.reason
+        if len(reason_msg) > MAX_ERROR_MESSAGE_LENGTH:
+            reason_msg = reason_msg[: MAX_ERROR_MESSAGE_LENGTH - 3] + "..."
+        error_messages = [reason_msg]
+
     outcome = ContractOutcomeMetrics(
         result_classification=classification,
-        error_messages=(
-            [phase_result.reason]
-            if phase_result.reason
-            and classification != ContractEnumResultClassification.SUCCESS
-            else []
-        ),
+        error_messages=error_messages,
         error_codes=([phase_result.block_kind] if phase_result.block_kind else []),
     )
 
@@ -509,12 +515,12 @@ def instrumented_phase(
             completed_at=_completed,
         )
         # Emit and persist even on error
-        emit_phase_metrics(metrics)
+        emit_phase_metrics(metrics, timestamp_iso=_completed.isoformat())
         write_metrics_artifact(ticket_id, run_id, phase, attempt, metrics)
         raise
 
     # Emit and persist on success
-    emit_phase_metrics(metrics)
+    emit_phase_metrics(metrics, timestamp_iso=_completed.isoformat())
     write_metrics_artifact(ticket_id, run_id, phase, attempt, metrics)
 
     return result
@@ -582,7 +588,7 @@ def detect_silent_omission(
     )
 
     # Emit and persist the violation record
-    emit_phase_metrics(violation)
+    emit_phase_metrics(violation, timestamp_iso=datetime.now(UTC).isoformat())
     write_metrics_artifact(ticket_id, run_id, phase, attempt, violation)
 
     return violation

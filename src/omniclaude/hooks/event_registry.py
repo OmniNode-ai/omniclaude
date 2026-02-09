@@ -467,7 +467,7 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
                 description="Phase instrumentation metrics for pipeline observability",
             ),
         ],
-        partition_key_field=None,  # Keyed by run_id in payload, not session_id
+        partition_key_field=None,  # No partition key; events are round-robin distributed
         required_fields=[],  # Payload is a full ContractMeasurementEvent envelope
     ),
 }
