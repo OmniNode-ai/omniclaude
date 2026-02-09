@@ -38,7 +38,7 @@ class PatternRecord:
         SYNC REQUIREMENTS:
         - This MUST stay in sync with PatternRecord in:
           src/omniclaude/hooks/handler_context_injection.py (ModelPatternRecord)
-        - Both have identical 9 fields and validation logic
+        - Both have identical 10 fields and validation logic
         - See tests/hooks/test_pattern_sync.py for automated verification
 
         The DbPatternRecord in repository_patterns.py is a DIFFERENT model
@@ -57,6 +57,9 @@ class PatternRecord:
             Defaults to None for backward compatibility. None is treated as validated
             (no dampening applied). Provisional patterns are annotated differently
             in context injection output.
+        evidence_tier: Measurement quality tier (UNMEASURED, MEASURED, VERIFIED).
+            Defaults to None for backward compatibility. None is treated as UNMEASURED.
+            MEASURED and VERIFIED patterns display quality badges in context injection.
 
     See Also:
         - ModelPatternRecord: Handler API model in src/omniclaude/hooks/handler_context_injection.py
@@ -72,9 +75,12 @@ class PatternRecord:
     success_rate: float
     example_reference: str | None = None
     lifecycle_state: str | None = None
+    evidence_tier: str | None = None
 
     # Valid lifecycle states for pattern records
     VALID_LIFECYCLE_STATES = frozenset({"validated", "provisional", None})
+    # Valid evidence tiers for measurement quality
+    VALID_EVIDENCE_TIERS = frozenset({"UNMEASURED", "MEASURED", "VERIFIED", None})
 
     def __post_init__(self) -> None:
         """Validate fields after initialization (runs before instance is frozen)."""
@@ -82,6 +88,11 @@ class PatternRecord:
             raise ValueError(
                 f"lifecycle_state must be one of {{'validated', 'provisional', None}}, "
                 f"got {self.lifecycle_state!r}"
+            )
+        if self.evidence_tier not in self.VALID_EVIDENCE_TIERS:
+            raise ValueError(
+                f"evidence_tier must be one of {{'UNMEASURED', 'MEASURED', 'VERIFIED', None}}, "
+                f"got {self.evidence_tier!r}"
             )
         if not 0.0 <= self.confidence <= 1.0:
             raise ValueError(

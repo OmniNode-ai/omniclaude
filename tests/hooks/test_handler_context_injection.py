@@ -788,3 +788,288 @@ class TestInjectPatternsSync:
 
         assert isinstance(result, ModelInjectionResult)
         assert result.success is True
+
+
+# =============================================================================
+# Evidence Tier Tests (OMN-2044)
+# =============================================================================
+
+
+class TestEvidenceTier:
+    """Test evidence_tier field on PatternRecord and related behavior."""
+
+    def test_pattern_record_with_evidence_tier(self) -> None:
+        """Test PatternRecord with evidence_tier constructs correctly."""
+        record = ModelPatternRecord(
+            pattern_id="et-001",
+            domain="testing",
+            title="Measured Pattern",
+            description="A pattern with measurement data",
+            confidence=0.9,
+            usage_count=10,
+            success_rate=0.85,
+            evidence_tier="MEASURED",
+        )
+        assert record.evidence_tier == "MEASURED"
+
+    def test_pattern_record_evidence_tier_default_none(self) -> None:
+        """Test PatternRecord defaults evidence_tier to None."""
+        record = ModelPatternRecord(
+            pattern_id="et-002",
+            domain="testing",
+            title="Default Tier Pattern",
+            description="No tier specified",
+            confidence=0.9,
+            usage_count=10,
+            success_rate=0.85,
+        )
+        assert record.evidence_tier is None
+
+    def test_pattern_record_all_valid_evidence_tiers(self) -> None:
+        """Test all valid evidence_tier values are accepted."""
+        for tier in ("UNMEASURED", "MEASURED", "VERIFIED", None):
+            record = ModelPatternRecord(
+                pattern_id=f"et-{tier}",
+                domain="testing",
+                title="Test",
+                description="Desc",
+                confidence=0.5,
+                usage_count=1,
+                success_rate=0.5,
+                evidence_tier=tier,
+            )
+            assert record.evidence_tier == tier
+
+    def test_pattern_record_invalid_evidence_tier(self) -> None:
+        """Test PatternRecord rejects invalid evidence_tier values."""
+        with pytest.raises(ValueError, match="evidence_tier must be one of"):
+            ModelPatternRecord(
+                pattern_id="et-bad",
+                domain="testing",
+                title="Test",
+                description="Desc",
+                confidence=0.5,
+                usage_count=1,
+                success_rate=0.5,
+                evidence_tier="INVALID",
+            )
+
+    @pytest.mark.asyncio
+    async def test_markdown_badge_measured(
+        self,
+        handler_with_patterns: HandlerFactory,
+    ) -> None:
+        """Test markdown output includes [Measured] badge for MEASURED patterns."""
+        patterns = [
+            ModelPatternRecord(
+                pattern_id="badge-measured",
+                domain="testing",
+                title="Measured Test Pattern",
+                description="Has measurement data",
+                confidence=0.9,
+                usage_count=10,
+                success_rate=0.85,
+                evidence_tier="MEASURED",
+            ),
+        ]
+        handler = handler_with_patterns(patterns, min_confidence=0.0)
+        result = await handler.handle(emit_event=False)
+
+        assert "[Measured]" in result.context_markdown
+        assert "Measured Test Pattern" in result.context_markdown
+
+    @pytest.mark.asyncio
+    async def test_markdown_badge_verified(
+        self,
+        handler_with_patterns: HandlerFactory,
+    ) -> None:
+        """Test markdown output includes [Verified] badge for VERIFIED patterns."""
+        patterns = [
+            ModelPatternRecord(
+                pattern_id="badge-verified",
+                domain="testing",
+                title="Verified Test Pattern",
+                description="Has been verified",
+                confidence=0.95,
+                usage_count=20,
+                success_rate=0.95,
+                evidence_tier="VERIFIED",
+            ),
+        ]
+        handler = handler_with_patterns(patterns, min_confidence=0.0)
+        result = await handler.handle(emit_event=False)
+
+        assert "[Verified]" in result.context_markdown
+        assert "Verified Test Pattern" in result.context_markdown
+
+    @pytest.mark.asyncio
+    async def test_markdown_no_badge_unmeasured(
+        self,
+        handler_with_patterns: HandlerFactory,
+    ) -> None:
+        """Test markdown output shows no badge for UNMEASURED patterns."""
+        patterns = [
+            ModelPatternRecord(
+                pattern_id="badge-unmeasured",
+                domain="testing",
+                title="Unmeasured Test Pattern",
+                description="No measurement data",
+                confidence=0.9,
+                usage_count=10,
+                success_rate=0.85,
+                evidence_tier="UNMEASURED",
+            ),
+        ]
+        handler = handler_with_patterns(patterns, min_confidence=0.0)
+        result = await handler.handle(emit_event=False)
+
+        assert "[Measured]" not in result.context_markdown
+        assert "[Verified]" not in result.context_markdown
+        assert "Unmeasured Test Pattern" in result.context_markdown
+
+    @pytest.mark.asyncio
+    async def test_markdown_no_badge_none_tier(
+        self,
+        handler_with_patterns: HandlerFactory,
+    ) -> None:
+        """Test markdown output shows no badge when evidence_tier is None."""
+        patterns = [
+            ModelPatternRecord(
+                pattern_id="badge-none",
+                domain="testing",
+                title="None Tier Pattern",
+                description="No tier specified",
+                confidence=0.9,
+                usage_count=10,
+                success_rate=0.85,
+                evidence_tier=None,
+            ),
+        ]
+        handler = handler_with_patterns(patterns, min_confidence=0.0)
+        result = await handler.handle(emit_event=False)
+
+        assert "[Measured]" not in result.context_markdown
+        assert "[Verified]" not in result.context_markdown
+
+    @pytest.mark.asyncio
+    async def test_require_measured_filters_unmeasured(
+        self,
+        handler_with_patterns: HandlerFactory,
+    ) -> None:
+        """Test require_measured=True filters out UNMEASURED patterns."""
+        from omniclaude.hooks.injection_limits import InjectionLimitsConfig
+
+        patterns = [
+            ModelPatternRecord(
+                pattern_id="rm-unmeasured",
+                domain="testing",
+                title="Unmeasured",
+                description="Should be filtered",
+                confidence=0.9,
+                usage_count=10,
+                success_rate=0.85,
+                evidence_tier="UNMEASURED",
+            ),
+            ModelPatternRecord(
+                pattern_id="rm-measured",
+                domain="code_review",
+                title="Measured",
+                description="Should pass filter",
+                confidence=0.9,
+                usage_count=10,
+                success_rate=0.85,
+                evidence_tier="MEASURED",
+            ),
+            ModelPatternRecord(
+                pattern_id="rm-verified",
+                domain="debugging",
+                title="Verified",
+                description="Should pass filter",
+                confidence=0.9,
+                usage_count=10,
+                success_rate=0.85,
+                evidence_tier="VERIFIED",
+            ),
+        ]
+        limits = InjectionLimitsConfig(require_measured=True)
+        handler = handler_with_patterns(patterns, min_confidence=0.0, limits=limits)
+        result = await handler.handle(emit_event=False)
+
+        assert result.pattern_count == 2
+        assert "Unmeasured" not in result.context_markdown
+        assert "Measured" in result.context_markdown
+        assert "Verified" in result.context_markdown
+
+    @pytest.mark.asyncio
+    async def test_require_measured_false_passes_all(
+        self,
+        handler_with_patterns: HandlerFactory,
+    ) -> None:
+        """Test require_measured=False (default) passes all patterns."""
+        from omniclaude.hooks.injection_limits import InjectionLimitsConfig
+
+        patterns = [
+            ModelPatternRecord(
+                pattern_id="rf-unmeasured",
+                domain="testing",
+                title="Unmeasured",
+                description="Should pass",
+                confidence=0.9,
+                usage_count=10,
+                success_rate=0.85,
+                evidence_tier="UNMEASURED",
+            ),
+            ModelPatternRecord(
+                pattern_id="rf-measured",
+                domain="code_review",
+                title="Measured",
+                description="Should pass",
+                confidence=0.9,
+                usage_count=10,
+                success_rate=0.85,
+                evidence_tier="MEASURED",
+            ),
+        ]
+        limits = InjectionLimitsConfig(require_measured=False)
+        handler = handler_with_patterns(patterns, min_confidence=0.0, limits=limits)
+        result = await handler.handle(emit_event=False)
+
+        assert result.pattern_count == 2
+
+    @pytest.mark.asyncio
+    async def test_require_measured_filters_none_tier(
+        self,
+        handler_with_patterns: HandlerFactory,
+    ) -> None:
+        """Test require_measured=True also filters out None evidence_tier."""
+        from omniclaude.hooks.injection_limits import InjectionLimitsConfig
+
+        patterns = [
+            ModelPatternRecord(
+                pattern_id="rf-none",
+                domain="testing",
+                title="None Tier",
+                description="Should be filtered",
+                confidence=0.9,
+                usage_count=10,
+                success_rate=0.85,
+                evidence_tier=None,
+            ),
+            ModelPatternRecord(
+                pattern_id="rf-verified",
+                domain="code_review",
+                title="Verified",
+                description="Should pass",
+                confidence=0.9,
+                usage_count=10,
+                success_rate=0.85,
+                evidence_tier="VERIFIED",
+            ),
+        ]
+        limits = InjectionLimitsConfig(require_measured=True)
+        handler = handler_with_patterns(patterns, min_confidence=0.0, limits=limits)
+        result = await handler.handle(emit_event=False)
+
+        assert result.pattern_count == 1
+        assert "None Tier" not in result.context_markdown
+        assert "Verified" in result.context_markdown
