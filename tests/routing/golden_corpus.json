@@ -1,0 +1,3361 @@
+{
+  "version": "1.0.0",
+  "generator": "tests/routing/generate_corpus.py",
+  "agent_count": 22,
+  "tolerance": {
+    "confidence": 0.05,
+    "selected_agent": "exact",
+    "routing_policy": "exact"
+  },
+  "entries": [
+    {
+      "id": 1,
+      "prompt": "Help me design a REST API with OpenAPI specs",
+      "category": "direct_trigger",
+      "notes": "api-architect via 'api design'/'openapi'",
+      "expected": {
+        "selected_agent": "api-architect",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'rest api'"
+      },
+      "candidates": [
+        {
+          "name": "api-architect",
+          "score": 0.66,
+          "reason": "Exact match: 'rest api'"
+        },
+        {
+          "name": "testing",
+          "score": 0.53,
+          "reason": "Fuzzy match: 'test' (75%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "api-architect",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 16.4
+    },
+    {
+      "id": 2,
+      "prompt": "Debug this error in the authentication module",
+      "category": "direct_trigger",
+      "notes": "debug-intelligence via 'debug'/'error'",
+      "expected": {
+        "selected_agent": "debug-intelligence",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'debug'"
+      },
+      "candidates": [
+        {
+          "name": "debug-intelligence",
+          "score": 0.66,
+          "reason": "Exact match: 'debug'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "debug-intelligence",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 11.69
+    },
+    {
+      "id": 3,
+      "prompt": "Build a React dashboard component with TypeScript",
+      "category": "direct_trigger",
+      "notes": "frontend-developer via 'react'/'typescript'",
+      "expected": {
+        "selected_agent": "frontend-developer",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'react'"
+      },
+      "candidates": [
+        {
+          "name": "frontend-developer",
+          "score": 0.66,
+          "reason": "Exact match: 'react'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "frontend-developer",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 12.04
+    },
+    {
+      "id": 4,
+      "prompt": "Create a semantic commit message for these changes",
+      "category": "direct_trigger",
+      "notes": "commit via 'commit'/'semantic commit'",
+      "expected": {
+        "selected_agent": "commit",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'semantic commit'"
+      },
+      "candidates": [
+        {
+          "name": "commit",
+          "score": 0.66,
+          "reason": "Exact match: 'semantic commit'"
+        },
+        {
+          "name": "frontend-developer",
+          "score": 0.521818,
+          "reason": "Fuzzy match: 'react' (73%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "commit",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 13.52
+    },
+    {
+      "id": 5,
+      "prompt": "Write comprehensive unit tests for the parser module",
+      "category": "direct_trigger",
+      "notes": "testing via 'test'",
+      "expected": {
+        "selected_agent": "testing",
+        "confidence": 0.58,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Fuzzy match: 'test' (89%)"
+      },
+      "candidates": [
+        {
+          "name": "testing",
+          "score": 0.58,
+          "reason": "Fuzzy match: 'test' (89%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "testing",
+        "top_confidence": 0.58,
+        "top_trigger_score": 0.8,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 13.71
+    },
+    {
+      "id": 6,
+      "prompt": "Optimize the database query performance",
+      "category": "direct_trigger",
+      "notes": "performance via 'performance'/'optimization'",
+      "expected": {
+        "selected_agent": "performance",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'performance'"
+      },
+      "candidates": [
+        {
+          "name": "performance",
+          "score": 0.66,
+          "reason": "Exact match: 'performance'"
+        },
+        {
+          "name": "agent-observability",
+          "score": 0.66,
+          "reason": "Exact match: 'performance'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "performance",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 9.96
+    },
+    {
+      "id": 7,
+      "prompt": "Run a security audit on the authentication system",
+      "category": "direct_trigger",
+      "notes": "security-audit via 'security'/'audit'",
+      "expected": {
+        "selected_agent": "security-audit",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'security'"
+      },
+      "candidates": [
+        {
+          "name": "security-audit",
+          "score": 0.66,
+          "reason": "Exact match: 'security'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "security-audit",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 12.57
+    },
+    {
+      "id": 8,
+      "prompt": "Set up a Docker container for the new microservice",
+      "category": "direct_trigger",
+      "notes": "devops-infrastructure via 'docker'",
+      "expected": {
+        "selected_agent": "devops-infrastructure",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'docker'"
+      },
+      "candidates": [
+        {
+          "name": "devops-infrastructure",
+          "score": 0.66,
+          "reason": "Exact match: 'docker'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "devops-infrastructure",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 13.63
+    },
+    {
+      "id": 9,
+      "prompt": "Monitor production system health and uptime",
+      "category": "direct_trigger",
+      "notes": "production-monitor via 'production'/'monitor'",
+      "expected": {
+        "selected_agent": "production-monitor",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'monitor'"
+      },
+      "candidates": [
+        {
+          "name": "production-monitor",
+          "score": 0.66,
+          "reason": "Exact match: 'monitor'"
+        },
+        {
+          "name": "agent-observability",
+          "score": 0.66,
+          "reason": "Exact match: 'system health'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "production-monitor",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 11.29
+    },
+    {
+      "id": 10,
+      "prompt": "Check agent observability metrics and diagnostics",
+      "category": "direct_trigger",
+      "notes": "agent-observability via 'observability'/'diagnostics'",
+      "expected": {
+        "selected_agent": "production-monitor",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'observability'"
+      },
+      "candidates": [
+        {
+          "name": "production-monitor",
+          "score": 0.66,
+          "reason": "Exact match: 'observability'"
+        },
+        {
+          "name": "agent-observability",
+          "score": 0.66,
+          "reason": "Exact match: 'observability'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "production-monitor",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 12.02
+    },
+    {
+      "id": 11,
+      "prompt": "Analyze code quality and detect anti-patterns",
+      "category": "direct_trigger",
+      "notes": "code-quality-analyzer via 'code quality'/'anti-patterns'",
+      "expected": {
+        "selected_agent": "code-quality-analyzer",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'code quality'"
+      },
+      "candidates": [
+        {
+          "name": "code-quality-analyzer",
+          "score": 0.66,
+          "reason": "Exact match: 'code quality'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "code-quality-analyzer",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 12.52
+    },
+    {
+      "id": 12,
+      "prompt": "Review this pull request for merge readiness",
+      "category": "direct_trigger",
+      "notes": "pr-review via 'pull request'/'merge readiness'",
+      "expected": {
+        "selected_agent": "pr-review",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'pull request'"
+      },
+      "candidates": [
+        {
+          "name": "pr-review",
+          "score": 0.66,
+          "reason": "Exact match: 'pull request'"
+        },
+        {
+          "name": "code-quality-analyzer",
+          "score": 0.514118,
+          "reason": "Fuzzy match: 'code review' (71%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "pr-review",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 12.19
+    },
+    {
+      "id": 13,
+      "prompt": "Research the best approach for implementing caching",
+      "category": "direct_trigger",
+      "notes": "research via 'research'",
+      "expected": {
+        "selected_agent": "research",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'research'"
+      },
+      "candidates": [
+        {
+          "name": "research",
+          "score": 0.66,
+          "reason": "Exact match: 'research'"
+        },
+        {
+          "name": "frontend-developer",
+          "score": 0.56,
+          "reason": "Fuzzy match: 'implement ui' (83%)"
+        },
+        {
+          "name": "testing",
+          "score": 0.53,
+          "reason": "Fuzzy match: 'test' (75%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "research",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 3
+      },
+      "generation_latency_ms": 12.79
+    },
+    {
+      "id": 14,
+      "prompt": "Manage the ticket lifecycle and dependencies",
+      "category": "direct_trigger",
+      "notes": "ticket-manager via 'ticket'/'dependency analysis'",
+      "expected": {
+        "selected_agent": "ticket-manager",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'ticket lifecycle'"
+      },
+      "candidates": [
+        {
+          "name": "ticket-manager",
+          "score": 0.66,
+          "reason": "Exact match: 'ticket lifecycle'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "ticket-manager",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 11.26
+    },
+    {
+      "id": 15,
+      "prompt": "Collect parameters for the new workflow initialization",
+      "category": "direct_trigger",
+      "notes": "parameter-collector via 'collect parameters'",
+      "expected": {
+        "selected_agent": "parameter-collector",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'collect parameters'"
+      },
+      "candidates": [
+        {
+          "name": "parameter-collector",
+          "score": 0.66,
+          "reason": "Exact match: 'collect parameters'"
+        },
+        {
+          "name": "repository-setup",
+          "score": 0.518462,
+          "reason": "Fuzzy match: 'repository initialization' (72%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "parameter-collector",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 12.58
+    },
+    {
+      "id": 16,
+      "prompt": "Write Python FastAPI backend for user authentication",
+      "category": "direct_trigger",
+      "notes": "python-fastapi-expert via 'python'/'fastapi'",
+      "expected": {
+        "selected_agent": "api-architect",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'fastapi'"
+      },
+      "candidates": [
+        {
+          "name": "api-architect",
+          "score": 0.66,
+          "reason": "Exact match: 'fastapi'"
+        },
+        {
+          "name": "python-fastapi-expert",
+          "score": 0.66,
+          "reason": "Exact match: 'python'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "api-architect",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 12.84
+    },
+    {
+      "id": 17,
+      "prompt": "Generate an AST-based code structure for the new tool",
+      "category": "direct_trigger",
+      "notes": "ast-generator via 'ast'/'code generation'",
+      "expected": {
+        "selected_agent": "devops-infrastructure",
+        "confidence": 0.541739,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Fuzzy match: 'infrastructure' (78%)"
+      },
+      "candidates": [
+        {
+          "name": "devops-infrastructure",
+          "score": 0.541739,
+          "reason": "Fuzzy match: 'infrastructure' (78%)"
+        },
+        {
+          "name": "ast-generator",
+          "score": 0.488571,
+          "reason": "Keyword overlap (71%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "devops-infrastructure",
+        "top_confidence": 0.541739,
+        "top_trigger_score": 0.704348,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 14.64
+    },
+    {
+      "id": 18,
+      "prompt": "Initialize a new repository with git and CI/CD",
+      "category": "direct_trigger",
+      "notes": "repository-setup via 'repository setup'",
+      "expected": {
+        "selected_agent": "repository-setup",
+        "confidence": 0.536923,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Fuzzy match: 'repository setup' (77%)"
+      },
+      "candidates": [
+        {
+          "name": "repository-setup",
+          "score": 0.536923,
+          "reason": "Fuzzy match: 'repository setup' (77%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "repository-setup",
+        "top_confidence": 0.536923,
+        "top_trigger_score": 0.692308,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 13.01
+    },
+    {
+      "id": 19,
+      "prompt": "Write technical documentation for the API endpoints",
+      "category": "direct_trigger",
+      "notes": "documentation-architect via 'documentation'/'api docs'",
+      "expected": {
+        "selected_agent": "api-architect",
+        "confidence": 0.598824,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Fuzzy match: 'endpoint' (94%)"
+      },
+      "candidates": [
+        {
+          "name": "api-architect",
+          "score": 0.598824,
+          "reason": "Fuzzy match: 'endpoint' (94%)"
+        },
+        {
+          "name": "documentation-architect",
+          "score": 0.572,
+          "reason": "Fuzzy match: 'api documentation' (87%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "api-architect",
+        "top_confidence": 0.598824,
+        "top_trigger_score": 0.847059,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 12.68
+    },
+    {
+      "id": 20,
+      "prompt": "Create a comprehensive PR workflow with validation",
+      "category": "direct_trigger",
+      "notes": "pr-workflow via 'PR workflow'",
+      "expected": {
+        "selected_agent": "pr-workflow",
+        "confidence": 0.58,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Keyword overlap (100%)"
+      },
+      "candidates": [
+        {
+          "name": "pr-workflow",
+          "score": 0.58,
+          "reason": "Keyword overlap (100%)"
+        },
+        {
+          "name": "testing",
+          "score": 0.548,
+          "reason": "Fuzzy match: 'validation test' (80%)"
+        },
+        {
+          "name": "frontend-developer",
+          "score": 0.521818,
+          "reason": "Fuzzy match: 'react' (73%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "pr-workflow",
+        "top_confidence": 0.58,
+        "top_trigger_score": 0.8,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 3
+      },
+      "generation_latency_ms": 12.22
+    },
+    {
+      "id": 21,
+      "prompt": "Summarize this deployment log output",
+      "category": "direct_trigger",
+      "notes": "content-summarizer via 'summarize'",
+      "expected": {
+        "selected_agent": "devops-infrastructure",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'deployment'"
+      },
+      "candidates": [
+        {
+          "name": "devops-infrastructure",
+          "score": 0.66,
+          "reason": "Exact match: 'deployment'"
+        },
+        {
+          "name": "content-summarizer",
+          "score": 0.58,
+          "reason": "Keyword overlap (100%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "devops-infrastructure",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 10.04
+    },
+    {
+      "id": 22,
+      "prompt": "Run tests and validate the output",
+      "category": "multi_word_trigger",
+      "notes": "testing via 'run tests'/'validate'",
+      "expected": {
+        "selected_agent": "testing",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'validate'"
+      },
+      "candidates": [
+        {
+          "name": "testing",
+          "score": 0.66,
+          "reason": "Exact match: 'validate'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "testing",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 9.96
+    },
+    {
+      "id": 23,
+      "prompt": "Execute a penetration test on the external API",
+      "category": "multi_word_trigger",
+      "notes": "security-audit via 'penetration test'",
+      "expected": {
+        "selected_agent": "testing",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'test'"
+      },
+      "candidates": [
+        {
+          "name": "testing",
+          "score": 0.66,
+          "reason": "Exact match: 'test'"
+        },
+        {
+          "name": "security-audit",
+          "score": 0.66,
+          "reason": "Exact match: 'penetration test'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "testing",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 12.36
+    },
+    {
+      "id": 24,
+      "prompt": "Create a full PR process with commit prerequisites",
+      "category": "multi_word_trigger",
+      "notes": "pr-workflow via 'full PR workflow'",
+      "expected": {
+        "selected_agent": "commit",
+        "confidence": 0.53,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Fuzzy match: 'git commit' (75%)"
+      },
+      "candidates": [
+        {
+          "name": "commit",
+          "score": 0.53,
+          "reason": "Fuzzy match: 'git commit' (75%)"
+        },
+        {
+          "name": "frontend-developer",
+          "score": 0.521818,
+          "reason": "Fuzzy match: 'react' (73%)"
+        },
+        {
+          "name": "pr-workflow",
+          "score": 0.452,
+          "reason": "Keyword overlap (60%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "commit",
+        "top_confidence": 0.53,
+        "top_trigger_score": 0.675,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 3
+      },
+      "generation_latency_ms": 12.87
+    },
+    {
+      "id": 25,
+      "prompt": "Set up kubernetes cluster for staging environment",
+      "category": "multi_word_trigger",
+      "notes": "devops-infrastructure via 'kubernetes'",
+      "expected": {
+        "selected_agent": "devops-infrastructure",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'kubernetes'"
+      },
+      "candidates": [
+        {
+          "name": "devops-infrastructure",
+          "score": 0.66,
+          "reason": "Exact match: 'kubernetes'"
+        },
+        {
+          "name": "testing",
+          "score": 0.517143,
+          "reason": "Fuzzy match: 'testing' (71%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "devops-infrastructure",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 12.05
+    },
+    {
+      "id": 26,
+      "prompt": "Investigate the root cause of the memory leak",
+      "category": "multi_word_trigger",
+      "notes": "debug-intelligence via 'investigate'/'root cause'",
+      "expected": {
+        "selected_agent": "debug-intelligence",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'investigate'"
+      },
+      "candidates": [
+        {
+          "name": "debug-intelligence",
+          "score": 0.66,
+          "reason": "Exact match: 'investigate'"
+        },
+        {
+          "name": "research",
+          "score": 0.66,
+          "reason": "Exact match: 'investigate'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "debug-intelligence",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 12.44
+    },
+    {
+      "id": 27,
+      "prompt": "Build a UI component for the settings page",
+      "category": "multi_word_trigger",
+      "notes": "frontend-developer via 'ui component'",
+      "expected": {
+        "selected_agent": "frontend-developer",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'ui component'"
+      },
+      "candidates": [
+        {
+          "name": "frontend-developer",
+          "score": 0.66,
+          "reason": "Exact match: 'ui component'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "frontend-developer",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 11.92
+    },
+    {
+      "id": 28,
+      "prompt": "Assess code quality and onex compliance",
+      "category": "multi_word_trigger",
+      "notes": "code-quality-analyzer via 'code quality'/'onex compliance'",
+      "expected": {
+        "selected_agent": "security-audit",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'compliance'"
+      },
+      "candidates": [
+        {
+          "name": "security-audit",
+          "score": 0.66,
+          "reason": "Exact match: 'compliance'"
+        },
+        {
+          "name": "code-quality-analyzer",
+          "score": 0.66,
+          "reason": "Exact match: 'code quality'"
+        },
+        {
+          "name": "pr-review",
+          "score": 0.548,
+          "reason": "Fuzzy match: 'assess pr' (80%)"
+        },
+        {
+          "name": "ast-generator",
+          "score": 0.452,
+          "reason": "Keyword overlap (60%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "security-audit",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 4
+      },
+      "generation_latency_ms": 10.3
+    },
+    {
+      "id": 29,
+      "prompt": "Design api documentation for the new endpoints",
+      "category": "multi_word_trigger",
+      "notes": "documentation-architect via 'api documentation'",
+      "expected": {
+        "selected_agent": "documentation-architect",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'api documentation'"
+      },
+      "candidates": [
+        {
+          "name": "documentation-architect",
+          "score": 0.66,
+          "reason": "Exact match: 'api documentation'"
+        },
+        {
+          "name": "api-architect",
+          "score": 0.598824,
+          "reason": "Fuzzy match: 'endpoint' (94%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "documentation-architect",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 11.81
+    },
+    {
+      "id": 30,
+      "prompt": "Check the system health of all running agents",
+      "category": "multi_word_trigger",
+      "notes": "agent-observability or production-monitor via 'system health'",
+      "expected": {
+        "selected_agent": "production-monitor",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'system health'"
+      },
+      "candidates": [
+        {
+          "name": "production-monitor",
+          "score": 0.66,
+          "reason": "Exact match: 'system health'"
+        },
+        {
+          "name": "agent-observability",
+          "score": 0.66,
+          "reason": "Exact match: 'system health'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "production-monitor",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 12.3
+    },
+    {
+      "id": 31,
+      "prompt": "Orchestrate a multi-agent workflow for this task",
+      "category": "multi_word_trigger",
+      "notes": "polymorphic-agent via 'multi-agent'/'workflow orchestration'",
+      "expected": {
+        "selected_agent": "polymorphic-agent",
+        "confidence": 0.516,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Keyword overlap (80%)"
+      },
+      "candidates": [
+        {
+          "name": "polymorphic-agent",
+          "score": 0.516,
+          "reason": "Keyword overlap (80%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "polymorphic-agent",
+        "top_confidence": 0.516,
+        "top_trigger_score": 0.64,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 12.92
+    },
+    {
+      "id": 32,
+      "prompt": "use agent-debug-intelligence to analyze this stack trace",
+      "category": "explicit_request",
+      "notes": "Explicit @agent pattern",
+      "expected": {
+        "selected_agent": "debug-intelligence",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'debug'"
+      },
+      "candidates": [
+        {
+          "name": "debug-intelligence",
+          "score": 0.66,
+          "reason": "Exact match: 'debug'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "debug-intelligence",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 14.2
+    },
+    {
+      "id": 33,
+      "prompt": "@agent-testing run the full test suite",
+      "category": "explicit_request",
+      "notes": "Explicit @agent pattern",
+      "expected": {
+        "selected_agent": "testing",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'test'"
+      },
+      "candidates": [
+        {
+          "name": "testing",
+          "score": 0.66,
+          "reason": "Exact match: 'test'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "testing",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 11.0
+    },
+    {
+      "id": 34,
+      "prompt": "@agent-api-architect design the user service API",
+      "category": "explicit_request",
+      "notes": "Explicit @agent pattern",
+      "expected": {
+        "selected_agent": "api-architect",
+        "confidence": 0.53,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Fuzzy match: 'api design' (75%)"
+      },
+      "candidates": [
+        {
+          "name": "api-architect",
+          "score": 0.53,
+          "reason": "Fuzzy match: 'api design' (75%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "api-architect",
+        "top_confidence": 0.53,
+        "top_trigger_score": 0.675,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 13.38
+    },
+    {
+      "id": 35,
+      "prompt": "use agent-performance to profile this function",
+      "category": "explicit_request",
+      "notes": "Explicit 'use agent-X' pattern",
+      "expected": {
+        "selected_agent": "performance",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'performance'"
+      },
+      "candidates": [
+        {
+          "name": "performance",
+          "score": 0.66,
+          "reason": "Exact match: 'performance'"
+        },
+        {
+          "name": "agent-observability",
+          "score": 0.66,
+          "reason": "Exact match: 'performance'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "performance",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 12.65
+    },
+    {
+      "id": 36,
+      "prompt": "use agent-pr-review to check this PR",
+      "category": "explicit_request",
+      "notes": "Explicit 'use agent-X' pattern",
+      "expected": {
+        "selected_agent": "pr-review",
+        "confidence": 0.548,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Fuzzy match: 'pr review' (80%)"
+      },
+      "candidates": [
+        {
+          "name": "pr-review",
+          "score": 0.548,
+          "reason": "Fuzzy match: 'pr review' (80%)"
+        },
+        {
+          "name": "code-quality-analyzer",
+          "score": 0.514118,
+          "reason": "Fuzzy match: 'code review' (71%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "pr-review",
+        "top_confidence": 0.548,
+        "top_trigger_score": 0.72,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 11.55
+    },
+    {
+      "id": 37,
+      "prompt": "use an agent to help me with this task",
+      "category": "explicit_request",
+      "notes": "Generic agent request -> polymorphic-agent",
+      "expected": {
+        "selected_agent": "polymorphic-agent",
+        "confidence": 1.0,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Explicitly requested by user"
+      },
+      "candidates": [
+        {
+          "name": "polymorphic-agent",
+          "score": 1.0,
+          "reason": "Explicitly requested by user"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "polymorphic-agent",
+        "top_confidence": 1.0,
+        "top_trigger_score": 1.0,
+        "top_context_score": 1.0,
+        "top_capability_score": 1.0,
+        "top_historical_score": 1.0,
+        "match_count": 1
+      },
+      "generation_latency_ms": 0.04
+    },
+    {
+      "id": 38,
+      "prompt": "spawn an agent to coordinate this workflow",
+      "category": "explicit_request",
+      "notes": "Generic agent request -> polymorphic-agent",
+      "expected": {
+        "selected_agent": "polymorphic-agent",
+        "confidence": 1.0,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Explicitly requested by user"
+      },
+      "candidates": [
+        {
+          "name": "polymorphic-agent",
+          "score": 1.0,
+          "reason": "Explicitly requested by user"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "polymorphic-agent",
+        "top_confidence": 1.0,
+        "top_trigger_score": 1.0,
+        "top_context_score": 1.0,
+        "top_capability_score": 1.0,
+        "top_historical_score": 1.0,
+        "match_count": 1
+      },
+      "generation_latency_ms": 0.01
+    },
+    {
+      "id": 39,
+      "prompt": "@agent-security-audit check for vulnerabilities",
+      "category": "explicit_request",
+      "notes": "Explicit @agent pattern",
+      "expected": {
+        "selected_agent": "security-audit",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'security'"
+      },
+      "candidates": [
+        {
+          "name": "security-audit",
+          "score": 0.66,
+          "reason": "Exact match: 'security'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "security-audit",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 11.33
+    },
+    {
+      "id": 40,
+      "prompt": "What is the meaning of life?",
+      "category": "fallback",
+      "notes": "No routing triggers - should fallback",
+      "expected": {
+        "selected_agent": "polymorphic-agent",
+        "confidence": 0.5,
+        "routing_policy": "fallback_default",
+        "routing_path": "local",
+        "reasoning_contains": "No trigger matches found"
+      },
+      "candidates": [],
+      "router_layer": {
+        "top_agent": null,
+        "top_confidence": null,
+        "top_trigger_score": null,
+        "top_context_score": null,
+        "top_capability_score": null,
+        "top_historical_score": null,
+        "match_count": 0
+      },
+      "generation_latency_ms": 9.0
+    },
+    {
+      "id": 41,
+      "prompt": "Tell me a joke about programming",
+      "category": "fallback",
+      "notes": "No routing triggers - should fallback",
+      "expected": {
+        "selected_agent": "python-fastapi-expert",
+        "confidence": 0.542857,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Fuzzy match: 'async programming' (79%)"
+      },
+      "candidates": [
+        {
+          "name": "python-fastapi-expert",
+          "score": 0.542857,
+          "reason": "Fuzzy match: 'async programming' (79%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "python-fastapi-expert",
+        "top_confidence": 0.542857,
+        "top_trigger_score": 0.707143,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 9.55
+    },
+    {
+      "id": 42,
+      "prompt": "How do I make pasta carbonara?",
+      "category": "fallback",
+      "notes": "Completely unrelated - should fallback",
+      "expected": {
+        "selected_agent": "polymorphic-agent",
+        "confidence": 0.5,
+        "routing_policy": "fallback_default",
+        "routing_path": "local",
+        "reasoning_contains": "No trigger matches found"
+      },
+      "candidates": [],
+      "router_layer": {
+        "top_agent": null,
+        "top_confidence": null,
+        "top_trigger_score": null,
+        "top_context_score": null,
+        "top_capability_score": null,
+        "top_historical_score": null,
+        "match_count": 0
+      },
+      "generation_latency_ms": 9.13
+    },
+    {
+      "id": 43,
+      "prompt": "What is 2 + 2?",
+      "category": "fallback",
+      "notes": "Math question - should fallback",
+      "expected": {
+        "selected_agent": "agent-observability",
+        "confidence": 0.58,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Keyword overlap (100%)"
+      },
+      "candidates": [
+        {
+          "name": "agent-observability",
+          "score": 0.58,
+          "reason": "Keyword overlap (100%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "agent-observability",
+        "top_confidence": 0.58,
+        "top_trigger_score": 0.8,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 5.21
+    },
+    {
+      "id": 44,
+      "prompt": "Explain quantum computing in simple terms",
+      "category": "fallback",
+      "notes": "No dev triggers - should fallback",
+      "expected": {
+        "selected_agent": "polymorphic-agent",
+        "confidence": 0.5,
+        "routing_policy": "fallback_default",
+        "routing_path": "local",
+        "reasoning_contains": "No trigger matches found"
+      },
+      "candidates": [],
+      "router_layer": {
+        "top_agent": null,
+        "top_confidence": null,
+        "top_trigger_score": null,
+        "top_context_score": null,
+        "top_capability_score": null,
+        "top_historical_score": null,
+        "match_count": 0
+      },
+      "generation_latency_ms": 10.79
+    },
+    {
+      "id": 45,
+      "prompt": "List the planets in the solar system",
+      "category": "fallback",
+      "notes": "No dev triggers - should fallback",
+      "expected": {
+        "selected_agent": "polymorphic-agent",
+        "confidence": 0.5,
+        "routing_policy": "fallback_default",
+        "routing_path": "local",
+        "reasoning_contains": "No trigger matches found"
+      },
+      "candidates": [],
+      "router_layer": {
+        "top_agent": null,
+        "top_confidence": null,
+        "top_trigger_score": null,
+        "top_context_score": null,
+        "top_capability_score": null,
+        "top_historical_score": null,
+        "match_count": 0
+      },
+      "generation_latency_ms": 10.53
+    },
+    {
+      "id": 46,
+      "prompt": "Write me a haiku about spring",
+      "category": "fallback",
+      "notes": "Creative writing - should fallback",
+      "expected": {
+        "selected_agent": "polymorphic-agent",
+        "confidence": 0.5,
+        "routing_policy": "fallback_default",
+        "routing_path": "local",
+        "reasoning_contains": "No trigger matches found"
+      },
+      "candidates": [],
+      "router_layer": {
+        "top_agent": null,
+        "top_confidence": null,
+        "top_trigger_score": null,
+        "top_context_score": null,
+        "top_capability_score": null,
+        "top_historical_score": null,
+        "match_count": 0
+      },
+      "generation_latency_ms": 9.15
+    },
+    {
+      "id": 47,
+      "prompt": "Who won the 2024 World Series?",
+      "category": "fallback",
+      "notes": "Trivia - should fallback",
+      "expected": {
+        "selected_agent": "polymorphic-agent",
+        "confidence": 0.5,
+        "routing_policy": "fallback_default",
+        "routing_path": "local",
+        "reasoning_contains": "No trigger matches found"
+      },
+      "candidates": [],
+      "router_layer": {
+        "top_agent": null,
+        "top_confidence": null,
+        "top_trigger_score": null,
+        "top_context_score": null,
+        "top_capability_score": null,
+        "top_historical_score": null,
+        "match_count": 0
+      },
+      "generation_latency_ms": 8.72
+    },
+    {
+      "id": 48,
+      "prompt": "Translate this to French: Hello world",
+      "category": "fallback",
+      "notes": "Translation - should fallback",
+      "expected": {
+        "selected_agent": "polymorphic-agent",
+        "confidence": 0.5,
+        "routing_policy": "fallback_default",
+        "routing_path": "local",
+        "reasoning_contains": "No trigger matches found"
+      },
+      "candidates": [],
+      "router_layer": {
+        "top_agent": null,
+        "top_confidence": null,
+        "top_trigger_score": null,
+        "top_context_score": null,
+        "top_capability_score": null,
+        "top_historical_score": null,
+        "match_count": 0
+      },
+      "generation_latency_ms": 10.24
+    },
+    {
+      "id": 49,
+      "prompt": "Summarize the plot of Hamlet",
+      "category": "fallback",
+      "notes": "Note: 'summarize' may trigger content-summarizer",
+      "expected": {
+        "selected_agent": "content-summarizer",
+        "confidence": 0.554545,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Fuzzy match: 'summarize log' (82%)"
+      },
+      "candidates": [
+        {
+          "name": "content-summarizer",
+          "score": 0.554545,
+          "reason": "Fuzzy match: 'summarize log' (82%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "content-summarizer",
+        "top_confidence": 0.554545,
+        "top_trigger_score": 0.736364,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 8.7
+    },
+    {
+      "id": 50,
+      "prompt": "Review the code and fix any bugs",
+      "category": "ambiguity",
+      "notes": "Could be pr-review, debug, or code-quality",
+      "expected": {
+        "selected_agent": "debug-intelligence",
+        "confidence": 0.568571,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Fuzzy match: 'bug' (86%)"
+      },
+      "candidates": [
+        {
+          "name": "debug-intelligence",
+          "score": 0.568571,
+          "reason": "Fuzzy match: 'bug' (86%)"
+        },
+        {
+          "name": "pr-review",
+          "score": 0.548,
+          "reason": "Fuzzy match: 'pr review' (80%)"
+        },
+        {
+          "name": "code-quality-analyzer",
+          "score": 0.514118,
+          "reason": "Fuzzy match: 'code review' (71%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "debug-intelligence",
+        "top_confidence": 0.568571,
+        "top_trigger_score": 0.771429,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 3
+      },
+      "generation_latency_ms": 10.27
+    },
+    {
+      "id": 51,
+      "prompt": "Improve the API performance",
+      "category": "ambiguity",
+      "notes": "Could be api-architect or performance",
+      "expected": {
+        "selected_agent": "performance",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'performance'"
+      },
+      "candidates": [
+        {
+          "name": "performance",
+          "score": 0.66,
+          "reason": "Exact match: 'performance'"
+        },
+        {
+          "name": "agent-observability",
+          "score": 0.66,
+          "reason": "Exact match: 'performance'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "performance",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 7.81
+    },
+    {
+      "id": 52,
+      "prompt": "Troubleshoot the deployment pipeline failure",
+      "category": "ambiguity",
+      "notes": "Could be debug or devops",
+      "expected": {
+        "selected_agent": "debug-intelligence",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'troubleshoot'"
+      },
+      "candidates": [
+        {
+          "name": "debug-intelligence",
+          "score": 0.66,
+          "reason": "Exact match: 'troubleshoot'"
+        },
+        {
+          "name": "devops-infrastructure",
+          "score": 0.66,
+          "reason": "Exact match: 'deployment'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "debug-intelligence",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 10.62
+    },
+    {
+      "id": 53,
+      "prompt": "Validate the security compliance of the infrastructure",
+      "category": "ambiguity",
+      "notes": "Could be security-audit or devops",
+      "expected": {
+        "selected_agent": "testing",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'validate'"
+      },
+      "candidates": [
+        {
+          "name": "testing",
+          "score": 0.66,
+          "reason": "Exact match: 'validate'"
+        },
+        {
+          "name": "security-audit",
+          "score": 0.66,
+          "reason": "Exact match: 'security'"
+        },
+        {
+          "name": "devops-infrastructure",
+          "score": 0.66,
+          "reason": "Exact match: 'infrastructure'"
+        },
+        {
+          "name": "code-quality-analyzer",
+          "score": 0.66,
+          "reason": "Exact match: 'compliance'"
+        },
+        {
+          "name": "pr-review",
+          "score": 0.536923,
+          "reason": "Fuzzy match: 'compliance check' (77%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "testing",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 5
+      },
+      "generation_latency_ms": 12.19
+    },
+    {
+      "id": 54,
+      "prompt": "Analyze the test coverage and suggest improvements",
+      "category": "ambiguity",
+      "notes": "Could be testing or code-quality",
+      "expected": {
+        "selected_agent": "testing",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'test'"
+      },
+      "candidates": [
+        {
+          "name": "testing",
+          "score": 0.66,
+          "reason": "Exact match: 'test'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "testing",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 12.13
+    },
+    {
+      "id": 55,
+      "prompt": "Set up monitoring for the API endpoints",
+      "category": "ambiguity",
+      "notes": "Could be production-monitor, observability, or api-architect",
+      "expected": {
+        "selected_agent": "api-architect",
+        "confidence": 0.598824,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Fuzzy match: 'endpoint' (94%)"
+      },
+      "candidates": [
+        {
+          "name": "api-architect",
+          "score": 0.598824,
+          "reason": "Fuzzy match: 'endpoint' (94%)"
+        },
+        {
+          "name": "production-monitor",
+          "score": 0.556471,
+          "reason": "Fuzzy match: 'monitor' (82%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "api-architect",
+        "top_confidence": 0.598824,
+        "top_trigger_score": 0.847059,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 11.01
+    },
+    {
+      "id": 56,
+      "prompt": "Document the architecture decisions",
+      "category": "ambiguity",
+      "notes": "Could be documentation-architect or research",
+      "expected": {
+        "selected_agent": "documentation-architect",
+        "confidence": 0.519672,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Fuzzy match: 'documentation architecture' (72%)"
+      },
+      "candidates": [
+        {
+          "name": "documentation-architect",
+          "score": 0.519672,
+          "reason": "Fuzzy match: 'documentation architecture' (72%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "documentation-architect",
+        "top_confidence": 0.519672,
+        "top_trigger_score": 0.64918,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 9.12
+    },
+    {
+      "id": 57,
+      "prompt": "Create a deployment script and run it",
+      "category": "ambiguity",
+      "notes": "Could be devops-infrastructure or commit",
+      "expected": {
+        "selected_agent": "devops-infrastructure",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'deployment'"
+      },
+      "candidates": [
+        {
+          "name": "devops-infrastructure",
+          "score": 0.66,
+          "reason": "Exact match: 'deployment'"
+        },
+        {
+          "name": "frontend-developer",
+          "score": 0.53,
+          "reason": "Fuzzy match: 'typescript' (75%)"
+        },
+        {
+          "name": "security-audit",
+          "score": 0.517143,
+          "reason": "Fuzzy match: 'security' (71%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "devops-infrastructure",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 3
+      },
+      "generation_latency_ms": 10.97
+    },
+    {
+      "id": 58,
+      "prompt": "Fix the failing test in the authentication module",
+      "category": "ambiguity",
+      "notes": "Could be testing or debug",
+      "expected": {
+        "selected_agent": "testing",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'test'"
+      },
+      "candidates": [
+        {
+          "name": "testing",
+          "score": 0.66,
+          "reason": "Exact match: 'test'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "testing",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 13.01
+    },
+    {
+      "id": 59,
+      "prompt": "Optimize the frontend rendering performance",
+      "category": "ambiguity",
+      "notes": "Could be frontend-developer or performance",
+      "expected": {
+        "selected_agent": "frontend-developer",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'frontend'"
+      },
+      "candidates": [
+        {
+          "name": "frontend-developer",
+          "score": 0.66,
+          "reason": "Exact match: 'frontend'"
+        },
+        {
+          "name": "performance",
+          "score": 0.66,
+          "reason": "Exact match: 'performance'"
+        },
+        {
+          "name": "agent-observability",
+          "score": 0.66,
+          "reason": "Exact match: 'performance'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "frontend-developer",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 3
+      },
+      "generation_latency_ms": 10.25
+    },
+    {
+      "id": 60,
+      "prompt": "We need a polymorphic architecture design",
+      "category": "context_filter",
+      "notes": "Should NOT trigger polymorphic-agent (technical usage)",
+      "expected": {
+        "selected_agent": "polymorphic-agent",
+        "confidence": 0.5,
+        "routing_policy": "fallback_default",
+        "routing_path": "local",
+        "reasoning_contains": "No trigger matches found"
+      },
+      "candidates": [],
+      "router_layer": {
+        "top_agent": null,
+        "top_confidence": null,
+        "top_trigger_score": null,
+        "top_context_score": null,
+        "top_capability_score": null,
+        "top_historical_score": null,
+        "match_count": 0
+      },
+      "generation_latency_ms": 10.68
+    },
+    {
+      "id": 61,
+      "prompt": "The code uses polymorphism for the strategy pattern",
+      "category": "context_filter",
+      "notes": "Should NOT trigger polymorphic-agent (technical usage)",
+      "expected": {
+        "selected_agent": "polymorphic-agent",
+        "confidence": 0.5,
+        "routing_policy": "fallback_default",
+        "routing_path": "local",
+        "reasoning_contains": "No trigger matches found"
+      },
+      "candidates": [],
+      "router_layer": {
+        "top_agent": null,
+        "top_confidence": null,
+        "top_trigger_score": null,
+        "top_context_score": null,
+        "top_capability_score": null,
+        "top_historical_score": null,
+        "match_count": 0
+      },
+      "generation_latency_ms": 13.35
+    },
+    {
+      "id": 62,
+      "prompt": "Use poly to coordinate the agents",
+      "category": "context_filter",
+      "notes": "SHOULD trigger polymorphic-agent (action context: 'use poly')",
+      "expected": {
+        "selected_agent": "polymorphic-agent",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'poly'"
+      },
+      "candidates": [
+        {
+          "name": "polymorphic-agent",
+          "score": 0.66,
+          "reason": "Exact match: 'poly'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "polymorphic-agent",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 10.28
+    },
+    {
+      "id": 63,
+      "prompt": "Spawn polly to run multiple tasks",
+      "category": "context_filter",
+      "notes": "SHOULD trigger polymorphic-agent (action context: 'spawn polly')",
+      "expected": {
+        "selected_agent": "polymorphic-agent",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'polly'"
+      },
+      "candidates": [
+        {
+          "name": "polymorphic-agent",
+          "score": 0.66,
+          "reason": "Exact match: 'polly'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "polymorphic-agent",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 9.98
+    },
+    {
+      "id": 64,
+      "prompt": "Polly suggested we use a different approach",
+      "category": "context_filter",
+      "notes": "Should NOT trigger polymorphic-agent (casual reference)",
+      "expected": {
+        "selected_agent": "polymorphic-agent",
+        "confidence": 0.5,
+        "routing_policy": "fallback_default",
+        "routing_path": "local",
+        "reasoning_contains": "No trigger matches found"
+      },
+      "candidates": [],
+      "router_layer": {
+        "top_agent": null,
+        "top_confidence": null,
+        "top_trigger_score": null,
+        "top_context_score": null,
+        "top_capability_score": null,
+        "top_historical_score": null,
+        "match_count": 0
+      },
+      "generation_latency_ms": 11.06
+    },
+    {
+      "id": 65,
+      "prompt": "Dispatch 4 pollys for parallel execution",
+      "category": "context_filter",
+      "notes": "SHOULD trigger polymorphic-agent via 'dispatch 4 pollys'",
+      "expected": {
+        "selected_agent": "polymorphic-agent",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'dispatch 4 pollys'"
+      },
+      "candidates": [
+        {
+          "name": "polymorphic-agent",
+          "score": 0.66,
+          "reason": "Exact match: 'dispatch 4 pollys'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "polymorphic-agent",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 10.31
+    },
+    {
+      "id": 66,
+      "prompt": "The pollyanna approach won't work here",
+      "category": "context_filter",
+      "notes": "Should NOT trigger polymorphic-agent (pollyanna rejection)",
+      "expected": {
+        "selected_agent": "polymorphic-agent",
+        "confidence": 0.5,
+        "routing_policy": "fallback_default",
+        "routing_path": "local",
+        "reasoning_contains": "No trigger matches found"
+      },
+      "candidates": [],
+      "router_layer": {
+        "top_agent": null,
+        "top_confidence": null,
+        "top_trigger_score": null,
+        "top_context_score": null,
+        "top_capability_score": null,
+        "top_historical_score": null,
+        "match_count": 0
+      },
+      "generation_latency_ms": 10.89
+    },
+    {
+      "id": 67,
+      "prompt": "Coordinate the workflow using polymorphic patterns",
+      "category": "context_filter",
+      "notes": "May partially match - tests boundary",
+      "expected": {
+        "selected_agent": "polymorphic-agent",
+        "confidence": 0.5,
+        "routing_policy": "fallback_default",
+        "routing_path": "local",
+        "reasoning_contains": "Keyword overlap (60%)"
+      },
+      "candidates": [
+        {
+          "name": "polymorphic-agent",
+          "score": 0.452,
+          "reason": "Keyword overlap (60%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "polymorphic-agent",
+        "top_confidence": 0.452,
+        "top_trigger_score": 0.48,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 11.49
+    },
+    {
+      "id": 68,
+      "prompt": "Debug the polymorphic dispatch issue",
+      "category": "context_filter",
+      "notes": "Should route to debug (not polymorphic)",
+      "expected": {
+        "selected_agent": "debug-intelligence",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'debug'"
+      },
+      "candidates": [
+        {
+          "name": "debug-intelligence",
+          "score": 0.66,
+          "reason": "Exact match: 'debug'"
+        },
+        {
+          "name": "ticket-manager",
+          "score": 0.66,
+          "reason": "Exact match: 'issue'"
+        },
+        {
+          "name": "polymorphic-agent",
+          "score": 0.542857,
+          "reason": "Fuzzy match: 'polymorphic agent' (79%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "debug-intelligence",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 3
+      },
+      "generation_latency_ms": 9.38
+    },
+    {
+      "id": 69,
+      "prompt": "Using polymorphism in the router design",
+      "category": "context_filter",
+      "notes": "Should NOT trigger polymorphic-agent (technical usage)",
+      "expected": {
+        "selected_agent": "polymorphic-agent",
+        "confidence": 0.5,
+        "routing_policy": "fallback_default",
+        "routing_path": "local",
+        "reasoning_contains": "No trigger matches found"
+      },
+      "candidates": [],
+      "router_layer": {
+        "top_agent": null,
+        "top_confidence": null,
+        "top_trigger_score": null,
+        "top_context_score": null,
+        "top_capability_score": null,
+        "top_historical_score": null,
+        "match_count": 0
+      },
+      "generation_latency_ms": 10.74
+    },
+    {
+      "id": 70,
+      "prompt": "Write some tests for the new feature",
+      "category": "fuzzy_match",
+      "notes": "Fuzzy 'tests' -> testing",
+      "expected": {
+        "selected_agent": "testing",
+        "confidence": 0.58,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Fuzzy match: 'test' (89%)"
+      },
+      "candidates": [
+        {
+          "name": "testing",
+          "score": 0.58,
+          "reason": "Fuzzy match: 'test' (89%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "testing",
+        "top_confidence": 0.58,
+        "top_trigger_score": 0.8,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 11.58
+    },
+    {
+      "id": 71,
+      "prompt": "Help me troubleshoot this issue",
+      "category": "fuzzy_match",
+      "notes": "'troubleshoot' exact match for debug-intelligence",
+      "expected": {
+        "selected_agent": "debug-intelligence",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'troubleshoot'"
+      },
+      "candidates": [
+        {
+          "name": "debug-intelligence",
+          "score": 0.66,
+          "reason": "Exact match: 'troubleshoot'"
+        },
+        {
+          "name": "ticket-manager",
+          "score": 0.66,
+          "reason": "Exact match: 'issue'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "debug-intelligence",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 8.97
+    },
+    {
+      "id": 72,
+      "prompt": "I need to deploy this to staging",
+      "category": "fuzzy_match",
+      "notes": "'deploy' -> devops-infrastructure",
+      "expected": {
+        "selected_agent": "devops-infrastructure",
+        "confidence": 0.53,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Fuzzy match: 'deployment' (75%)"
+      },
+      "candidates": [
+        {
+          "name": "devops-infrastructure",
+          "score": 0.53,
+          "reason": "Fuzzy match: 'deployment' (75%)"
+        },
+        {
+          "name": "testing",
+          "score": 0.517143,
+          "reason": "Fuzzy match: 'testing' (71%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "devops-infrastructure",
+        "top_confidence": 0.53,
+        "top_trigger_score": 0.675,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 10.83
+    },
+    {
+      "id": 73,
+      "prompt": "Can you review these code changes?",
+      "category": "fuzzy_match",
+      "notes": "'review' + 'code changes' -> pr-review",
+      "expected": {
+        "selected_agent": "pr-review",
+        "confidence": 0.58,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Keyword overlap (100%)"
+      },
+      "candidates": [
+        {
+          "name": "pr-review",
+          "score": 0.58,
+          "reason": "Keyword overlap (100%)"
+        },
+        {
+          "name": "code-quality-analyzer",
+          "score": 0.514118,
+          "reason": "Fuzzy match: 'code review' (71%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "pr-review",
+        "top_confidence": 0.58,
+        "top_trigger_score": 0.8,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 10.56
+    },
+    {
+      "id": 74,
+      "prompt": "Let's investigate why the build is slow",
+      "category": "fuzzy_match",
+      "notes": "'investigate' -> research or debug",
+      "expected": {
+        "selected_agent": "debug-intelligence",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'investigate'"
+      },
+      "candidates": [
+        {
+          "name": "debug-intelligence",
+          "score": 0.66,
+          "reason": "Exact match: 'investigate'"
+        },
+        {
+          "name": "research",
+          "score": 0.66,
+          "reason": "Exact match: 'investigate'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "debug-intelligence",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 11.32
+    },
+    {
+      "id": 75,
+      "prompt": "Help improve the documentation quality",
+      "category": "fuzzy_match",
+      "notes": "'documentation' + 'quality' -> documentation-architect",
+      "expected": {
+        "selected_agent": "documentation-architect",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'documentation quality'"
+      },
+      "candidates": [
+        {
+          "name": "documentation-architect",
+          "score": 0.66,
+          "reason": "Exact match: 'documentation quality'"
+        },
+        {
+          "name": "code-quality-analyzer",
+          "score": 0.525263,
+          "reason": "Fuzzy match: 'code quality' (74%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "documentation-architect",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 9.95
+    },
+    {
+      "id": 76,
+      "prompt": "Profile the memory usage of this service",
+      "category": "fuzzy_match",
+      "notes": "'profile' -> performance (high confidence trigger)",
+      "expected": {
+        "selected_agent": "polymorphic-agent",
+        "confidence": 0.5,
+        "routing_policy": "fallback_default",
+        "routing_path": "local",
+        "reasoning_contains": "No trigger matches found"
+      },
+      "candidates": [],
+      "router_layer": {
+        "top_agent": null,
+        "top_confidence": null,
+        "top_trigger_score": null,
+        "top_context_score": null,
+        "top_capability_score": null,
+        "top_historical_score": null,
+        "match_count": 0
+      },
+      "generation_latency_ms": 11.77
+    },
+    {
+      "id": 77,
+      "prompt": "Check for any vulnerabilities in dependencies",
+      "category": "fuzzy_match",
+      "notes": "'vulnerabilities' -> security-audit",
+      "expected": {
+        "selected_agent": "security-audit",
+        "confidence": 0.568571,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Fuzzy match: 'vulnerability' (86%)"
+      },
+      "candidates": [
+        {
+          "name": "security-audit",
+          "score": 0.568571,
+          "reason": "Fuzzy match: 'vulnerability' (86%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "security-audit",
+        "top_confidence": 0.568571,
+        "top_trigger_score": 0.771429,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 11.45
+    },
+    {
+      "id": 78,
+      "prompt": "Speed up the frontend page load time",
+      "category": "fuzzy_match",
+      "notes": "'speed' + 'frontend' -> performance or frontend",
+      "expected": {
+        "selected_agent": "frontend-developer",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'frontend'"
+      },
+      "candidates": [
+        {
+          "name": "frontend-developer",
+          "score": 0.66,
+          "reason": "Exact match: 'frontend'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "frontend-developer",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 11.26
+    },
+    {
+      "id": 79,
+      "prompt": "Create a scaffold for the new ONEX tool",
+      "category": "fuzzy_match",
+      "notes": "'scaffold' -> ast-generator",
+      "expected": {
+        "selected_agent": "ast-generator",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'onex tool'"
+      },
+      "candidates": [
+        {
+          "name": "ast-generator",
+          "score": 0.66,
+          "reason": "Exact match: 'onex tool'"
+        },
+        {
+          "name": "frontend-developer",
+          "score": 0.521818,
+          "reason": "Fuzzy match: 'react' (73%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "ast-generator",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 11.99
+    },
+    {
+      "id": 80,
+      "prompt": "Debug the error, then write tests to prevent regression",
+      "category": "compound",
+      "notes": "Primary: debug, secondary: testing",
+      "expected": {
+        "selected_agent": "debug-intelligence",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'debug'"
+      },
+      "candidates": [
+        {
+          "name": "debug-intelligence",
+          "score": 0.66,
+          "reason": "Exact match: 'debug'"
+        },
+        {
+          "name": "testing",
+          "score": 0.58,
+          "reason": "Fuzzy match: 'test' (89%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "debug-intelligence",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 14.38
+    },
+    {
+      "id": 81,
+      "prompt": "Review the PR and check for security issues",
+      "category": "compound",
+      "notes": "Primary: pr-review, secondary: security",
+      "expected": {
+        "selected_agent": "security-audit",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'security'"
+      },
+      "candidates": [
+        {
+          "name": "security-audit",
+          "score": 0.66,
+          "reason": "Exact match: 'security'"
+        },
+        {
+          "name": "ticket-manager",
+          "score": 0.587273,
+          "reason": "Fuzzy match: 'issue' (91%)"
+        },
+        {
+          "name": "pr-review",
+          "score": 0.548,
+          "reason": "Fuzzy match: 'pr review' (80%)"
+        },
+        {
+          "name": "code-quality-analyzer",
+          "score": 0.514118,
+          "reason": "Fuzzy match: 'code review' (71%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "security-audit",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 4
+      },
+      "generation_latency_ms": 12.71
+    },
+    {
+      "id": 82,
+      "prompt": "Deploy the new feature and monitor the rollout",
+      "category": "compound",
+      "notes": "Primary: devops, secondary: monitoring",
+      "expected": {
+        "selected_agent": "production-monitor",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'monitor'"
+      },
+      "candidates": [
+        {
+          "name": "production-monitor",
+          "score": 0.66,
+          "reason": "Exact match: 'monitor'"
+        },
+        {
+          "name": "devops-infrastructure",
+          "score": 0.53,
+          "reason": "Fuzzy match: 'deployment' (75%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "production-monitor",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 12.91
+    },
+    {
+      "id": 83,
+      "prompt": "Research the best testing strategy for microservices",
+      "category": "compound",
+      "notes": "Primary: research or testing",
+      "expected": {
+        "selected_agent": "testing",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'testing'"
+      },
+      "candidates": [
+        {
+          "name": "testing",
+          "score": 0.66,
+          "reason": "Exact match: 'testing'"
+        },
+        {
+          "name": "research",
+          "score": 0.66,
+          "reason": "Exact match: 'research'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "testing",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 12.87
+    },
+    {
+      "id": 84,
+      "prompt": "Optimize the API response time and document the changes",
+      "category": "compound",
+      "notes": "Primary: performance or api-architect",
+      "expected": {
+        "selected_agent": "polymorphic-agent",
+        "confidence": 0.5,
+        "routing_policy": "fallback_default",
+        "routing_path": "local",
+        "reasoning_contains": "No trigger matches found"
+      },
+      "candidates": [],
+      "router_layer": {
+        "top_agent": null,
+        "top_confidence": null,
+        "top_trigger_score": null,
+        "top_context_score": null,
+        "top_capability_score": null,
+        "top_historical_score": null,
+        "match_count": 0
+      },
+      "generation_latency_ms": 14.24
+    },
+    {
+      "id": 85,
+      "prompt": "debug",
+      "category": "terse",
+      "notes": "Single word - should match debug-intelligence",
+      "expected": {
+        "selected_agent": "debug-intelligence",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'debug'"
+      },
+      "candidates": [
+        {
+          "name": "debug-intelligence",
+          "score": 0.66,
+          "reason": "Exact match: 'debug'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "debug-intelligence",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 2.93
+    },
+    {
+      "id": 86,
+      "prompt": "test",
+      "category": "terse",
+      "notes": "Single word - should match testing",
+      "expected": {
+        "selected_agent": "testing",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'test'"
+      },
+      "candidates": [
+        {
+          "name": "testing",
+          "score": 0.66,
+          "reason": "Exact match: 'test'"
+        },
+        {
+          "name": "security-audit",
+          "score": 0.58,
+          "reason": "Keyword overlap (100%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "testing",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 2.81
+    },
+    {
+      "id": 87,
+      "prompt": "deploy",
+      "category": "terse",
+      "notes": "Single word - should match devops-infrastructure",
+      "expected": {
+        "selected_agent": "devops-infrastructure",
+        "confidence": 0.53,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Fuzzy match: 'deployment' (75%)"
+      },
+      "candidates": [
+        {
+          "name": "devops-infrastructure",
+          "score": 0.53,
+          "reason": "Fuzzy match: 'deployment' (75%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "devops-infrastructure",
+        "top_confidence": 0.53,
+        "top_trigger_score": 0.675,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 3.03
+    },
+    {
+      "id": 88,
+      "prompt": "security",
+      "category": "terse",
+      "notes": "Single word - should match security-audit",
+      "expected": {
+        "selected_agent": "security-audit",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'security'"
+      },
+      "candidates": [
+        {
+          "name": "security-audit",
+          "score": 0.66,
+          "reason": "Exact match: 'security'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "security-audit",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 3.54
+    },
+    {
+      "id": 89,
+      "prompt": "performance",
+      "category": "terse",
+      "notes": "Single word - should match performance",
+      "expected": {
+        "selected_agent": "performance",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'performance'"
+      },
+      "candidates": [
+        {
+          "name": "performance",
+          "score": 0.66,
+          "reason": "Exact match: 'performance'"
+        },
+        {
+          "name": "agent-observability",
+          "score": 0.66,
+          "reason": "Exact match: 'performance'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "performance",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 3.91
+    },
+    {
+      "id": 90,
+      "prompt": "review",
+      "category": "terse",
+      "notes": "Single word - may not match (no word boundary for 'review' alone)",
+      "expected": {
+        "selected_agent": "code-quality-analyzer",
+        "confidence": 0.58,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Keyword overlap (100%)"
+      },
+      "candidates": [
+        {
+          "name": "code-quality-analyzer",
+          "score": 0.58,
+          "reason": "Keyword overlap (100%)"
+        },
+        {
+          "name": "pr-review",
+          "score": 0.58,
+          "reason": "Keyword overlap (100%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "code-quality-analyzer",
+        "top_confidence": 0.58,
+        "top_trigger_score": 0.8,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 3.29
+    },
+    {
+      "id": 91,
+      "prompt": "api",
+      "category": "terse",
+      "notes": "Single word - should match api-architect",
+      "expected": {
+        "selected_agent": "api-architect",
+        "confidence": 0.58,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Keyword overlap (100%)"
+      },
+      "candidates": [
+        {
+          "name": "api-architect",
+          "score": 0.58,
+          "reason": "Keyword overlap (100%)"
+        },
+        {
+          "name": "documentation-architect",
+          "score": 0.58,
+          "reason": "Keyword overlap (100%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "api-architect",
+        "top_confidence": 0.58,
+        "top_trigger_score": 0.8,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 2.55
+    },
+    {
+      "id": 92,
+      "prompt": "docs",
+      "category": "terse",
+      "notes": "Single word - should match documentation-architect",
+      "expected": {
+        "selected_agent": "documentation-architect",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'docs'"
+      },
+      "candidates": [
+        {
+          "name": "documentation-architect",
+          "score": 0.66,
+          "reason": "Exact match: 'docs'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "documentation-architect",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 2.79
+    },
+    {
+      "id": 93,
+      "prompt": "commit",
+      "category": "terse",
+      "notes": "Single word - should match commit",
+      "expected": {
+        "selected_agent": "commit",
+        "confidence": 0.58,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Keyword overlap (100%)"
+      },
+      "candidates": [
+        {
+          "name": "commit",
+          "score": 0.58,
+          "reason": "Keyword overlap (100%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "commit",
+        "top_confidence": 0.58,
+        "top_trigger_score": 0.8,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 2.97
+    },
+    {
+      "id": 94,
+      "prompt": "monitor",
+      "category": "terse",
+      "notes": "Single word - should match production-monitor",
+      "expected": {
+        "selected_agent": "production-monitor",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'monitor'"
+      },
+      "candidates": [
+        {
+          "name": "production-monitor",
+          "score": 0.66,
+          "reason": "Exact match: 'monitor'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "production-monitor",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 3.37
+    },
+    {
+      "id": 95,
+      "prompt": "",
+      "category": "integration_edge",
+      "notes": "Empty prompt -> wrapper returns fallback with 'Invalid input'",
+      "expected": {
+        "selected_agent": "polymorphic-agent",
+        "confidence": 0.5,
+        "routing_policy": "fallback_default",
+        "routing_path": "local",
+        "reasoning_contains": "No trigger matches found"
+      },
+      "candidates": [],
+      "router_layer": {
+        "top_agent": null,
+        "top_confidence": null,
+        "top_trigger_score": null,
+        "top_context_score": null,
+        "top_capability_score": null,
+        "top_historical_score": null,
+        "match_count": 0
+      },
+      "generation_latency_ms": 0.99
+    },
+    {
+      "id": 96,
+      "prompt": "   ",
+      "category": "integration_edge",
+      "notes": "Whitespace-only prompt -> wrapper returns fallback",
+      "expected": {
+        "selected_agent": "polymorphic-agent",
+        "confidence": 0.5,
+        "routing_policy": "fallback_default",
+        "routing_path": "local",
+        "reasoning_contains": "No trigger matches found"
+      },
+      "candidates": [],
+      "router_layer": {
+        "top_agent": null,
+        "top_confidence": null,
+        "top_trigger_score": null,
+        "top_context_score": null,
+        "top_capability_score": null,
+        "top_historical_score": null,
+        "match_count": 0
+      },
+      "generation_latency_ms": 1.27
+    },
+    {
+      "id": 97,
+      "prompt": "Help me fix this bug in production",
+      "category": "integration_edge",
+      "notes": "Multiple triggers: 'fix'/'bug' + 'production'",
+      "expected": {
+        "selected_agent": "debug-intelligence",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'bug'"
+      },
+      "candidates": [
+        {
+          "name": "debug-intelligence",
+          "score": 0.66,
+          "reason": "Exact match: 'bug'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "debug-intelligence",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 9.94
+    },
+    {
+      "id": 98,
+      "prompt": "What's the status of the system?",
+      "category": "integration_edge",
+      "notes": "agent-observability via 'what's the status'",
+      "expected": {
+        "selected_agent": "agent-observability",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'what's the status'"
+      },
+      "candidates": [
+        {
+          "name": "agent-observability",
+          "score": 0.66,
+          "reason": "Exact match: 'what's the status'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "agent-observability",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 9.68
+    },
+    {
+      "id": 99,
+      "prompt": "Create a new FastAPI endpoint with tests",
+      "category": "integration_edge",
+      "notes": "Multiple agents: fastapi + tests",
+      "expected": {
+        "selected_agent": "api-architect",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'fastapi'"
+      },
+      "candidates": [
+        {
+          "name": "api-architect",
+          "score": 0.66,
+          "reason": "Exact match: 'fastapi'"
+        },
+        {
+          "name": "python-fastapi-expert",
+          "score": 0.66,
+          "reason": "Exact match: 'fastapi'"
+        },
+        {
+          "name": "testing",
+          "score": 0.58,
+          "reason": "Fuzzy match: 'test' (89%)"
+        },
+        {
+          "name": "frontend-developer",
+          "score": 0.521818,
+          "reason": "Fuzzy match: 'react' (73%)"
+        },
+        {
+          "name": "repository-setup",
+          "score": 0.514118,
+          "reason": "Fuzzy match: 'repo init' (71%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "api-architect",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 5
+      },
+      "generation_latency_ms": 11.48
+    },
+    {
+      "id": 100,
+      "prompt": "Help me write better commit messages",
+      "category": "integration_edge",
+      "notes": "'commit' trigger match",
+      "expected": {
+        "selected_agent": "commit",
+        "confidence": 0.53,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Fuzzy match: 'git commit' (75%)"
+      },
+      "candidates": [
+        {
+          "name": "commit",
+          "score": 0.53,
+          "reason": "Fuzzy match: 'git commit' (75%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "commit",
+        "top_confidence": 0.53,
+        "top_trigger_score": 0.675,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 10.35
+    },
+    {
+      "id": 101,
+      "prompt": "Benchmark the new caching implementation",
+      "category": "additional",
+      "notes": "'benchmark' -> performance",
+      "expected": {
+        "selected_agent": "performance",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'benchmark'"
+      },
+      "candidates": [
+        {
+          "name": "performance",
+          "score": 0.66,
+          "reason": "Exact match: 'benchmark'"
+        },
+        {
+          "name": "frontend-developer",
+          "score": 0.585161,
+          "reason": "Fuzzy match: 'ui implementation' (90%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "performance",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 10.1
+    },
+    {
+      "id": 102,
+      "prompt": "Automate the deployment pipeline",
+      "category": "additional",
+      "notes": "'deployment' + 'pipeline' -> devops",
+      "expected": {
+        "selected_agent": "devops-infrastructure",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'deployment'"
+      },
+      "candidates": [
+        {
+          "name": "devops-infrastructure",
+          "score": 0.66,
+          "reason": "Exact match: 'deployment'"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "devops-infrastructure",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 1
+      },
+      "generation_latency_ms": 8.81
+    },
+    {
+      "id": 103,
+      "prompt": "Build responsive design for mobile users",
+      "category": "additional",
+      "notes": "'responsive design' -> frontend-developer",
+      "expected": {
+        "selected_agent": "frontend-developer",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'responsive design'"
+      },
+      "candidates": [
+        {
+          "name": "frontend-developer",
+          "score": 0.66,
+          "reason": "Exact match: 'responsive design'"
+        },
+        {
+          "name": "api-architect",
+          "score": 0.53,
+          "reason": "Fuzzy match: 'api design' (75%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "frontend-developer",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 11.09
+    },
+    {
+      "id": 104,
+      "prompt": "Create an incident response runbook",
+      "category": "additional",
+      "notes": "'incident response' -> production-monitor",
+      "expected": {
+        "selected_agent": "production-monitor",
+        "confidence": 0.66,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "reasoning_contains": "Exact match: 'incident response'"
+      },
+      "candidates": [
+        {
+          "name": "production-monitor",
+          "score": 0.66,
+          "reason": "Exact match: 'incident response'"
+        },
+        {
+          "name": "frontend-developer",
+          "score": 0.521818,
+          "reason": "Fuzzy match: 'react' (73%)"
+        }
+      ],
+      "router_layer": {
+        "top_agent": "production-monitor",
+        "top_confidence": 0.66,
+        "top_trigger_score": 1.0,
+        "top_context_score": 0.7,
+        "top_capability_score": 0.0,
+        "top_historical_score": 0.5,
+        "match_count": 2
+      },
+      "generation_latency_ms": 9.58
+    }
+  ]
+}

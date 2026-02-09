@@ -67,6 +67,11 @@ from .routing_event_client import (
 )
 
 # Agent Components
+from .transformation_validator import (
+    TransformationValidationResult,
+    TransformationValidator,
+    validate_transformation,
+)
 from .trigger_matcher import TriggerMatcher
 
 __all__ = [
@@ -107,4 +112,8 @@ __all__ = [
     "AgentIdentity",
     "CapabilityIndex",
     "ResultCache",
+    # Transformation Validation
+    "TransformationValidator",
+    "TransformationValidationResult",
+    "validate_transformation",
 ]

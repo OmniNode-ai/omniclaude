@@ -27,8 +27,11 @@ from pydantic import ValidationError
 
 from omniclaude.hooks.schemas import (
     PROMPT_PREVIEW_MAX_LENGTH,
+    ContextSource,
     HookEventType,
+    ModelHookContextInjectedPayload,
     ModelHookEventEnvelope,
+    ModelHookManifestInjectedPayload,
     ModelHookPromptSubmittedPayload,
     ModelHookSessionEndedPayload,
     ModelHookSessionStartedPayload,
@@ -1257,6 +1260,99 @@ class TestModelHookToolExecutedPayload:
 
 
 # =============================================================================
+# Manifest Injected Tests
+# =============================================================================
+
+
+class TestModelHookManifestInjectedPayload:
+    """Tests for manifest injected event payloads.
+
+    Validates ONEX-compliant schema for agent manifest injection events.
+    """
+
+    def test_create_minimal(self) -> None:
+        """Create with minimal required fields."""
+        entity_id = make_entity_id()
+        emitted_at = make_timestamp()
+        event = ModelHookManifestInjectedPayload(
+            entity_id=entity_id,
+            session_id="session-123",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=emitted_at,
+            agent_name="agent-api-architect",
+            agent_domain="api-development",
+            injection_success=True,
+            injection_duration_ms=45,
+        )
+        assert event.entity_id == entity_id
+        assert event.emitted_at == emitted_at
+        assert event.agent_name == "agent-api-architect"
+        assert event.injection_success is True
+
+    def test_create_full(self) -> None:
+        """Create with all optional fields."""
+        event = ModelHookManifestInjectedPayload(
+            entity_id=make_entity_id(),
+            session_id="session-123",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            agent_name="agent-api-architect",
+            agent_domain="api-development",
+            injection_success=True,
+            injection_duration_ms=45,
+            yaml_path="/path/to/agent.yaml",
+            agent_version="1.0.0",
+            agent_capabilities=["api_design", "openapi_generation"],
+            routing_source="explicit",
+        )
+        assert event.yaml_path == "/path/to/agent.yaml"
+        assert event.agent_version == "1.0.0"
+        assert event.agent_capabilities == ["api_design", "openapi_generation"]
+        assert event.routing_source == "explicit"
+
+    def test_correlation_id_is_required(self) -> None:
+        """correlation_id is required for distributed tracing (explicit injection).
+
+        This is a MAJOR requirement per PR #92 review - manifest events MUST
+        have explicit correlation_id for proper distributed tracing.
+        """
+        with pytest.raises(ValidationError) as exc_info:
+            ModelHookManifestInjectedPayload(
+                entity_id=make_entity_id(),
+                session_id="session-123",
+                # Missing correlation_id - MUST fail!
+                causation_id=make_causation_id(),
+                emitted_at=make_timestamp(),
+                agent_name="agent-api-architect",
+                agent_domain="api-development",
+                injection_success=True,
+                injection_duration_ms=45,
+            )
+        assert "correlation_id" in str(exc_info.value)
+
+    def test_failed_injection_with_error(self) -> None:
+        """Create failed injection event with error details."""
+        event = ModelHookManifestInjectedPayload(
+            entity_id=make_entity_id(),
+            session_id="session-123",
+            correlation_id=make_correlation_id(),
+            causation_id=make_causation_id(),
+            emitted_at=make_timestamp(),
+            agent_name="agent-nonexistent",
+            agent_domain="unknown",
+            injection_success=False,
+            injection_duration_ms=5,
+            error_message="Agent YAML file not found",
+            error_type="FileNotFoundError",
+        )
+        assert event.injection_success is False
+        assert event.error_message == "Agent YAML file not found"
+        assert event.error_type == "FileNotFoundError"
+
+
+# =============================================================================
 # Causation Chain Tests
 # =============================================================================
 
@@ -1850,6 +1946,34 @@ class TestEventTypePayloadValidation:
                     emitted_at=make_timestamp(),
                     tool_execution_id=uuid4(),
                     tool_name="Read",
+                ),
+            ),
+            (
+                HookEventType.CONTEXT_INJECTED,
+                ModelHookContextInjectedPayload(
+                    entity_id=make_entity_id(),
+                    session_id="test",
+                    correlation_id=make_correlation_id(),
+                    causation_id=make_causation_id(),
+                    emitted_at=make_timestamp(),
+                    context_source=ContextSource.DATABASE,
+                    pattern_count=5,
+                    context_size_bytes=1024,
+                    retrieval_duration_ms=50,
+                ),
+            ),
+            (
+                HookEventType.MANIFEST_INJECTED,
+                ModelHookManifestInjectedPayload(
+                    entity_id=make_entity_id(),
+                    session_id="test",
+                    correlation_id=make_correlation_id(),
+                    causation_id=make_causation_id(),
+                    emitted_at=make_timestamp(),
+                    agent_name="agent-api-architect",
+                    agent_domain="api-development",
+                    injection_success=True,
+                    injection_duration_ms=45,
                 ),
             ),
         ]

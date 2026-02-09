@@ -45,10 +45,11 @@ When task has independent sub-tasks:
 1. Break down into parallel sub-tasks
 2. Dispatch multiple Task tools in **single message**:
    ```
-   <invoke Task subagent_type="agent-api" .../>
-   <invoke Task subagent_type="agent-frontend" .../>
-   <invoke Task subagent_type="agent-database" .../>
+   <invoke Task subagent_type="polymorphic-agent" description="Design API endpoints" prompt="..."/>
+   <invoke Task subagent_type="polymorphic-agent" description="Build frontend" prompt="..."/>
+   <invoke Task subagent_type="polymorphic-agent" description="Set up database" prompt="..."/>
    ```
+   Hook routing automatically specializes each agent based on prompt content.
 3. Aggregate results when all complete
 4. Validate with quality gates if specified
 
@@ -329,13 +330,6 @@ mcp__linear-server__create_issue(
    - Generates markdown report with merge requirements
    - Strict mode available for CI/CD (`--strict`)
 
-3. **pr-review-production** (NEW) - Production-grade review wrapper
-   - Script: `${CLAUDE_PLUGIN_ROOT}/skills/pr-review/pr-review-production <PR> [OPTIONS]`
-   - **Enforces strict production standards** (all Critical/Major/Minor MUST be resolved)
-   - Optional Linear ticket creation for each issue
-   - Production-ready output formatting
-   - Exit codes for CI/CD integration
-
 **Priority System**:
 - 🔴 **CRITICAL** (Must address): Security, data loss, crashes, breaking changes
 - 🟠 **MAJOR** (Must address): Performance, bugs, missing tests, API changes
@@ -343,42 +337,21 @@ mcp__linear-server__create_issue(
 - ⚪ **NIT** (Optional): Formatting, naming, minor refactoring
 
 **Merge Requirements**:
-
-**Development/Standard**:
 - ✅ **Can merge when**: Critical, Major, Minor resolved (Nits optional)
 - ❌ **Cannot merge when**: ANY Critical, Major, or Minor remain
-
-**Production** (using `pr-review-production`):
-- ✅ **Can deploy when**: ALL Critical, Major, Minor resolved (Nits optional)
-- ❌ **Cannot deploy when**: ANY Critical, Major, or Minor remain
-- **Automatic Linear ticket creation** for tracking fixes
 
 **Examples**:
 
 ```bash
 # Standard review
 ${CLAUDE_PLUGIN_ROOT}/skills/pr-review/review-pr 22
-
-# Production review (stricter)
-${CLAUDE_PLUGIN_ROOT}/skills/pr-review/pr-review-production 22
-
-# Production review with Linear ticket creation
-${CLAUDE_PLUGIN_ROOT}/skills/pr-review/pr-review-production 22 \
-  --create-linear-tickets \
-  --team 9bdff6a3-f4ef-4ff7-b29a-6c4cf44371e6
-
-# CI/CD integration (exits 2 if issues found)
-${CLAUDE_PLUGIN_ROOT}/skills/pr-review/pr-review-production 22 --json
 ```
 
 **Workflow - PR Review to Linear Tickets**:
-1. Run production review: `pr-review-production <PR> --create-linear-tickets --team <TEAM_ID>`
-2. Script fetches all PR feedback from 4 endpoints
-3. Categorizes by priority (Critical/Major/Minor/Nit)
-4. Creates Linear ticket for each Critical and Major issue
-5. Outputs production readiness status
-6. Team addresses tickets in Linear
-7. Re-run production review to verify resolution
+1. Use `/pr-release-ready <PR>` for comprehensive review
+2. Use `/create-followup-tickets` to create Linear tickets from review output
+3. Team addresses tickets in Linear
+4. Re-run review to verify resolution
 
 ### When to Use Skills vs Direct MCP
 

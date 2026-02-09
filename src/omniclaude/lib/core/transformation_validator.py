@@ -110,10 +110,11 @@ class TransformationValidator:
         "sql",
     ]
 
-    # Short keywords (<=4 chars) that need word-boundary matching to prevent
-    # false positives (e.g., "capital" matching "api", "built" matching "ui").
-    # Follows the same pattern as TaskClassifier._SHORT_KEYWORDS.
-    _SHORT_KEYWORDS = frozenset({"api", "ui", "ux", "css", "sql"})
+    # Short keywords that need word-boundary matching to prevent false positives
+    # (e.g., "capital" matching "api", "built" matching "ui", "xhtml" matching
+    # "html").  Membership in this set determines boundary matching, not character
+    # length.  Follows the same pattern as TaskClassifier._SHORT_KEYWORDS.
+    _SHORT_KEYWORDS = frozenset({"api", "ui", "ux", "css", "html", "sql"})
 
     def __init__(self, min_reason_length: int = 50, min_confidence: float = 0.7):
         """Initialize validator.
@@ -270,9 +271,10 @@ class TransformationValidator:
     def _keyword_in_text(self, keyword: str, text: str) -> bool:
         """Check if keyword appears in text, using word boundaries for short keywords.
 
-        Short keywords (<=4 chars like "api", "ui", "sql") use regex word-boundary
-        matching to prevent false positives (e.g., "capital" matching "api").
-        Follows the same pattern as TaskClassifier._keyword_in_text.
+        Keywords in ``_SHORT_KEYWORDS`` (e.g., "api", "ui", "sql", "html") use
+        regex word-boundary matching to prevent false positives (e.g., "capital"
+        matching "api").  Follows the same pattern as
+        TaskClassifier._keyword_in_text.
         """
         if keyword in self._SHORT_KEYWORDS:
             pattern = rf"\b{re.escape(keyword)}\b"

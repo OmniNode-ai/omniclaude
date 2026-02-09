@@ -1,0 +1,110 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 OmniNode Team
+#
+# ONEX Node Contract
+# Node: NodeAgentRoutingCompute
+#
+# Capability-oriented compute node for agent routing decisions.
+# Named by capability ("agent.routing.compute"), not by implementation.
+# Principle: "I'm interested in what you do, not what you are"
+#
+# This contract defines the interface for agent routing computation.
+# The node evaluates user prompts against agent registries to select
+# the best-matching agent with confidence scoring.
+
+# Contract identifiers
+name: node_agent_routing_compute
+contract_name: node_agent_routing_compute
+node_name: node_agent_routing_compute
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+# Node type
+node_type: COMPUTE_GENERIC
+
+# Description
+description: >
+  Capability-oriented compute node for agent routing decisions.
+  Evaluates user prompts against agent registries and historical statistics
+  to select the best-matching agent with confidence scoring.
+
+# Strongly typed I/O models
+input_model:
+  name: ModelRoutingRequest
+  module: omniclaude.nodes.node_agent_routing_compute.models
+
+output_model:
+  name: ModelRoutingResult
+  module: omniclaude.nodes.node_agent_routing_compute.models
+
+# Capability declaration (capability-oriented naming)
+# STANDARDIZED: Same prefix as handler contract capability_outputs
+capabilities:
+  - name: agent.routing.compute
+    description: Compute agent routing decisions from prompts and registries
+    version: 1.0.0
+
+# IO operations (COMPUTE node specific)
+# EXPLICIT OPERATION MAPPING:
+# operation name -> protocol method (1:1 by name)
+io_operations:
+  - operation: compute_routing
+    description: Compute routing decision for a user prompt against agent registry
+    protocol_method: compute_routing  # -> ProtocolAgentRouting.compute_routing()
+    input_fields:
+      - request: ModelRoutingRequest
+      - correlation_id: UUID | None
+    output_fields:
+      - result: ModelRoutingResult
+    idempotent: true
+
+# Handler routing (for pluggable backends)
+# Uses handler_key ONLY (not module/class) per OMN-1403 requirements
+handler_routing:
+  routing_strategy: backend_match
+  default_backend: default
+  backends:
+    - backend: default
+      handler_key: default
+
+# Dependencies (protocols this node requires)
+dependencies:
+  - name: protocol_agent_routing
+    type: protocol
+    class_name: ProtocolAgentRouting
+    module: omniclaude.nodes.node_agent_routing_compute.protocols
+    pluggable: true
+
+# Error handling configuration
+error_handling:
+  retry_policy:
+    max_retries: 3
+    initial_delay_ms: 100
+    max_delay_ms: 5000
+    exponential_base: 2
+    retry_on:
+      - InfraConnectionError
+      - InfraTimeoutError
+  circuit_breaker:
+    enabled: true
+    failure_threshold: 5
+    reset_timeout_ms: 60000
+
+# Metadata
+metadata:
+  author: OmniNode Team
+  license: MIT
+  ticket: OMN-1925
+  maturity: mvp
+  tags:
+    - compute
+    - agent-routing
+    - capability-oriented

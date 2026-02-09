@@ -1,0 +1,23 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "omninode-tools",
+  "version": "1.0.0",
+  "description": "OmniNode ONEX plugin suite for intelligent agent routing, workflow automation, and observability",
+  "owner": {
+    "name": "OmniNode",
+    "email": "dev@omninode.ai"
+  },
+  "plugins": [
+    {
+      "name": "onex",
+      "description": "Unified ONEX architecture plugin with intelligent agent routing, manifest injection, quality enforcement, polymorphic YAML agents, reusable skills, and custom slash commands for comprehensive workflow automation and observability",
+      "version": "2.1.6",
+      "author": {
+        "name": "OmniNode",
+        "email": "dev@omninode.ai"
+      },
+      "source": "./plugins/onex",
+      "category": "development"
+    }
+  ]
+}

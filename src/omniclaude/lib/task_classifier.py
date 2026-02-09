@@ -135,7 +135,8 @@ class TaskClassifier:
         ],
     }
 
-    # Service name patterns
+    # Service name patterns - used to identify external service mentions.
+    # Note: "onex" also appears in _SHORT_KEYWORDS for word boundary matching.
     SERVICE_PATTERNS = [
         "kafka",
         "redpanda",
@@ -148,7 +149,11 @@ class TaskClassifier:
         "onex",
     ]
 
-    # ONEX node type patterns
+    # ONEX node type patterns - used to identify ONEX architecture mentions.
+    # Note: These terms (effect, compute, reducer, orchestrator) also appear
+    # in DOMAIN_INDICATORS. This is intentional: NODE_TYPE_PATTERNS extracts
+    # them to mentioned_node_types for filtering, while DOMAIN_INDICATORS
+    # uses them for implementation intent classification.
     NODE_TYPE_PATTERNS = ["effect", "compute", "reducer", "orchestrator"]
 
     # Domain-specific indicators for implementation intent detection
@@ -265,6 +270,7 @@ class TaskClassifier:
             # Boost confidence for IMPLEMENT intent with domain-specific terminology
             # Domain terms are strong implementation signals even without explicit verbs
             if primary_intent == TaskIntent.IMPLEMENT:
+                # Use _keyword_in_text for consistent word boundary matching
                 domain_matches = sum(
                     1
                     for indicator in self.DOMAIN_INDICATORS
@@ -280,6 +286,7 @@ class TaskClassifier:
             # domain-specific/technical terms, assume IMPLEMENT intent
             # This catches prompts like "ONEX authentication system" that describe
             # WHAT to build without explicit action verbs
+            # Use _keyword_in_text for consistent word boundary matching
             domain_matches = sum(
                 1
                 for indicator in self.DOMAIN_INDICATORS
@@ -308,7 +315,8 @@ class TaskClassifier:
             if self._keyword_in_text(nt, prompt_lower):
                 keywords.append(nt)
 
-        # 3. Extract service keywords
+        # 3. Extract service keywords (uses _keyword_in_text for consistent matching;
+        #    short terms like "onex" get word boundary matching via _SHORT_KEYWORDS)
         for svc in self.SERVICE_PATTERNS:
             if self._keyword_in_text(svc, prompt_lower):
                 keywords.append(svc)
@@ -331,13 +339,20 @@ class TaskClassifier:
             "your",
         }
         words = re.findall(r"\w+", prompt_lower)
-        significant_words = [w for w in words if len(w) >= 3 and w not in stopwords and w.isalpha()]
+        significant_words = [
+            w
+            for w in words
+            if len(w) >= 3
+            and w not in stopwords
+            and w.isalpha()
+        ]
         keywords.extend(significant_words[:10])  # Limit to 10 most significant
 
         # Extract entities (file names, table names)
         entities = self._extract_entities(user_prompt)
 
         # Extract mentioned services (sorted for deterministic output)
+        # Uses _keyword_in_text for consistent matching behavior
         mentioned_services = sorted(
             svc
             for svc in self.SERVICE_PATTERNS
@@ -345,6 +360,7 @@ class TaskClassifier:
         )
 
         # Extract mentioned node types (sorted for deterministic output)
+        # Uses _keyword_in_text for consistent matching behavior
         mentioned_node_types = sorted(
             nt.upper()
             for nt in self.NODE_TYPE_PATTERNS

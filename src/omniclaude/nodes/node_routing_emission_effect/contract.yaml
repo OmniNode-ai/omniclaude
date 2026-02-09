@@ -1,0 +1,110 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 OmniNode Team
+#
+# ONEX Node Contract
+# Node: NodeRoutingEmissionEffect
+#
+# Capability-oriented effect node for routing decision emission operations.
+# Named by capability ("routing.emission"), not by vendor (e.g., Kafka).
+# Principle: "I'm interested in what you do, not what you are"
+#
+# This contract defines the interface for routing decision emission operations with
+# pluggable backends. Handlers implementing ProtocolRoutingEmitter can be
+# swapped without changing the node interface.
+
+# Contract identifiers
+name: node_routing_emission_effect
+contract_name: node_routing_emission_effect
+node_name: node_routing_emission_effect
+
+contract_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+node_version:
+  major: 1
+  minor: 0
+  patch: 0
+
+# Node type
+node_type: EFFECT_GENERIC
+
+# Description
+description: >
+  Capability-oriented effect node for routing decision emission operations.
+  Handles emission of routing decisions to event topics with pluggable backends.
+
+# Strongly typed I/O models
+input_model:
+  name: ModelEmissionRequest
+  module: omniclaude.nodes.node_routing_emission_effect.models
+
+output_model:
+  name: ModelEmissionResult
+  module: omniclaude.nodes.node_routing_emission_effect.models
+
+# Capability declaration (capability-oriented naming)
+# STANDARDIZED: Same prefix as handler contract capability_outputs
+capabilities:
+  - name: routing.emission
+    description: Emit routing decision events to configured topics
+    version: 1.0.0
+
+# IO operations (EFFECT node specific)
+# EXPLICIT OPERATION MAPPING:
+# operation name -> protocol method (1:1 by name)
+io_operations:
+  - operation: emit_routing_decision
+    description: Emit a routing decision event to configured topics
+    protocol_method: emit_routing_decision  # -> ProtocolRoutingEmitter.emit_routing_decision()
+    input_fields:
+      - request: ModelEmissionRequest
+      - correlation_id: UUID | None
+    output_fields:
+      - result: ModelEmissionResult
+    idempotent: false
+
+# Dependencies (protocols this node requires)
+dependencies:
+  - name: protocol_routing_emitter
+    type: protocol
+    class_name: ProtocolRoutingEmitter
+    module: omniclaude.nodes.node_routing_emission_effect.protocols
+    pluggable: true
+
+# Handler routing (for pluggable backends)
+# Uses handler_key ONLY (not module/class) per OMN-1403 requirements
+handler_routing:
+  routing_strategy: backend_match
+  default_backend: kafka
+  backends:
+    - backend: kafka
+      handler_key: kafka
+
+# Error handling configuration
+error_handling:
+  retry_policy:
+    max_retries: 3
+    initial_delay_ms: 100
+    max_delay_ms: 5000
+    exponential_base: 2
+    retry_on:
+      - InfraConnectionError
+      - InfraTimeoutError
+  circuit_breaker:
+    enabled: true
+    failure_threshold: 5
+    reset_timeout_ms: 60000
+
+# Metadata
+metadata:
+  author: OmniNode Team
+  license: MIT
+  ticket: OMN-1925
+  maturity: mvp
+  tags:
+    - effect
+    - routing
+    - emission
+    - capability-oriented

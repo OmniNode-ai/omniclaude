@@ -23,13 +23,15 @@ import os
 import sys
 from pathlib import Path
 
-# --- Early logging setup ---
-# Configure LOG_FILE handler before any module-level log calls so that
-# warnings during import or initialization are captured to disk.
+# --- Early logging setup (MUST remain above all other module-level code) ---
+# ORDERING INVARIANT: The LOG_FILE file handler must be installed before any
+# module-level logger.warning() calls (e.g., the TypedDict import fallback
+# below).  Moving this block after the import section will silently lose
+# those early warnings.  See issue #3 in the review.
 _LOG_FILE = os.environ.get("LOG_FILE")
 if _LOG_FILE:
     try:
-        _file_handler = logging.FileHandler(_LOG_FILE)
+        _file_handler = logging.FileHandler(_LOG_FILE, encoding="utf-8")
         _file_handler.setFormatter(
             logging.Formatter("%(asctime)s [%(name)s] %(levelname)s: %(message)s")
         )
@@ -51,12 +53,29 @@ except ImportError:
         from typing_extensions import TypedDict
     except ImportError:
         logger.warning(
-            "Neither typing.NotRequired nor typing_extensions.TypedDict available. "
+            "Neither typing.NotRequired nor typing_extensions available. "
             "Agent loader TypedDict definitions will use plain dict fallback."
         )
         from typing import TypedDict  # type: ignore[assignment]
 
-        NotRequired = None  # type: ignore[assignment,misc]
+        # NotRequired must be subscriptable (e.g., NotRequired[list[str]])
+        # at class-body evaluation time.  A bare None would crash with
+        # TypeError, so provide a no-op wrapper that passes through the
+        # inner type.
+        class _NotRequiredFallback:  # type: ignore[no-redef]
+            """Subscriptable stand-in for typing.NotRequired."""
+
+            def __class_getitem__(cls, item):  # type: ignore[override]
+                return item
+
+        NotRequired = _NotRequiredFallback  # type: ignore[assignment,misc]
+
+# Maximum context length to prevent truncation in hook output
+# Claude Code truncates at 10k chars; we use 6k to leave room for other context
+MAX_CONTEXT_LENGTH = 6000
+_TRUNCATION_MARKER = (
+    "\n\n# ... (truncated for brevity - see full YAML in agents/configs/)\n"
+)
 
 
 def _resolve_agent_definitions_dir() -> Path:
@@ -67,44 +86,77 @@ def _resolve_agent_definitions_dir() -> Path:
         1. CLAUDE_PLUGIN_ROOT env var  ->  <root>/onex/agents/configs/
         2. Default fallback            ->  ~/.claude/agents/omniclaude/
 
-    Validates that the resolved directory exists.  If CLAUDE_PLUGIN_ROOT is
-    set but points to a missing or incomplete directory tree, a warning is
-    logged and the default path is returned instead.
+    This function never raises exceptions.  If CLAUDE_PLUGIN_ROOT is set but
+    points to a missing or incomplete directory tree, a warning is logged and
+    the default path is returned.  If even the default path cannot be
+    constructed (e.g., HOME is unset), the current working directory is used
+    as the fallback base.
 
     Returns:
         Resolved Path to the agent definitions directory.
     """
-    default_dir = Path.home() / ".claude" / "agents" / "omniclaude"
-    plugin_root_env = os.environ.get("CLAUDE_PLUGIN_ROOT")
+    # Build the default directory with a safety net for missing HOME.
+    # Path.home() raises RuntimeError when HOME is unset on Unix, or
+    # KeyError on some Windows configurations.
+    try:
+        default_dir = Path.home() / ".claude" / "agents" / "omniclaude"
+    except (RuntimeError, KeyError):
+        logger.warning(
+            "Cannot determine HOME directory; using current working directory "
+            "as fallback base for agent definitions."
+        )
+        default_dir = Path.cwd() / ".claude" / "agents" / "omniclaude"
+
+    plugin_root_env = os.environ.get("CLAUDE_PLUGIN_ROOT", "").strip()
 
     if plugin_root_env:
-        plugin_root = Path(plugin_root_env)
-        if not plugin_root.is_dir():
+        try:
+            plugin_root = Path(plugin_root_env)
+            if not plugin_root.is_dir():
+                logger.warning(
+                    "CLAUDE_PLUGIN_ROOT is set but directory does not exist: %s. "
+                    "Falling back to default agent definitions directory: %s",
+                    plugin_root_env,
+                    default_dir,
+                )
+                return default_dir
+
+            configs_dir = plugin_root / "onex" / "agents" / "configs"
+            if configs_dir.is_dir():
+                return configs_dir
+
             logger.warning(
-                "CLAUDE_PLUGIN_ROOT is set but directory does not exist: %s. "
+                "CLAUDE_PLUGIN_ROOT is set but agents/configs subdirectory not found: %s. "
                 "Falling back to default agent definitions directory: %s",
-                plugin_root_env,
+                configs_dir,
                 default_dir,
             )
-            return default_dir
-
-        configs_dir = plugin_root / "onex" / "agents" / "configs"
-        if configs_dir.is_dir():
-            return configs_dir
-
-        logger.warning(
-            "CLAUDE_PLUGIN_ROOT is set but agents/configs subdirectory not found: %s. "
-            "Falling back to default agent definitions directory: %s",
-            configs_dir,
-            default_dir,
-        )
+        except OSError as exc:
+            logger.warning(
+                "Error resolving CLAUDE_PLUGIN_ROOT (%s): %s. "
+                "Falling back to default agent definitions directory: %s",
+                plugin_root_env,
+                exc,
+                default_dir,
+            )
 
     return default_dir
 
 
-# Resolved at import time. To change at runtime, reassign before calling
-# load_agent(). See _resolve_agent_definitions_dir() for resolution order.
-AGENT_DEFINITIONS_DIR = _resolve_agent_definitions_dir()
+# Resolved at import time so that repeated load_agent() calls avoid redundant
+# I/O.  The resolution function is designed to never raise, but we add a
+# safety net here as a final guard -- per CLAUDE.md, hooks must never crash
+# at import time.  To override at runtime, reassign before calling
+# load_agent().
+try:
+    AGENT_DEFINITIONS_DIR = _resolve_agent_definitions_dir()
+except Exception as exc:
+    logger.warning(
+        "Failed to resolve agent definitions directory: %s. "
+        "Using current working directory as fallback.",
+        exc,
+    )
+    AGENT_DEFINITIONS_DIR = Path.cwd()
 
 
 def _validate_agent_name(agent_name: str) -> str | None:
@@ -145,6 +197,40 @@ def _validate_agent_name(agent_name: str) -> str | None:
         return None
 
     return agent_name
+
+
+def _validate_path_within_bounds(
+    file_path: Path, expected_base: Path
+) -> tuple[bool, str]:
+    """
+    Validate that a resolved file path stays within the expected base directory.
+
+    This prevents symlink-based path traversal attacks where a symlink could
+    point outside the expected directory structure.
+
+    Args:
+        file_path: The file path to validate
+        expected_base: The expected base directory that file_path should be within
+
+    Returns:
+        Tuple of (is_valid, error_message). If valid, error_message is empty.
+    """
+    try:
+        # Resolve both paths to handle symlinks
+        resolved_file = file_path.resolve()
+        resolved_base = expected_base.resolve()
+
+        # Check if the resolved file path is within the resolved base directory
+        try:
+            resolved_file.relative_to(resolved_base)
+            return True, ""
+        except ValueError:
+            return (
+                False,
+                f"Path escapes expected directory: {resolved_file} is not within {resolved_base}",
+            )
+    except OSError as e:
+        return False, f"Failed to resolve path: {e}"
 
 
 class AgentLoadSuccess(TypedDict):
@@ -225,8 +311,19 @@ def load_agent_yaml(agent_name: str) -> str | None:
 
     for path in search_paths:
         if path.exists():
+            # Security: Validate resolved path stays within agents directory
+            # This prevents symlink-based attacks that could read arbitrary files
+            is_within_bounds, bounds_error = _validate_path_within_bounds(
+                path, AGENT_DEFINITIONS_DIR
+            )
+            if not is_within_bounds:
+                logger.warning(
+                    f"load_agent_yaml: Path validation failed for {path}: {bounds_error}"
+                )
+                continue  # Skip this path and try the next one
+
             try:
-                return path.read_text()
+                return path.read_text(encoding="utf-8")
             except OSError as e:
                 logger.warning("Failed to read %s: %s", path, e)
 
@@ -302,6 +399,14 @@ def load_agent(agent_name: str) -> AgentLoadResult:
     yaml_content = load_agent_yaml(safe_name)
 
     if yaml_content:
+        # Truncate if exceeds max length to prevent hook output truncation
+        if len(yaml_content) > MAX_CONTEXT_LENGTH:
+            truncated_content = yaml_content[:MAX_CONTEXT_LENGTH] + _TRUNCATION_MARKER
+            logger.info(
+                f"Truncated agent YAML from {len(yaml_content)} to {len(truncated_content)} chars"
+            )
+            yaml_content = truncated_content
+
         return AgentLoadSuccess(
             success=True,
             context_injection=yaml_content,

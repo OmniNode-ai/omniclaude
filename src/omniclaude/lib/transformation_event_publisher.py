@@ -50,18 +50,28 @@ logger = logging.getLogger(__name__)
 
 # Event type enumeration following EVENT_BUS_INTEGRATION_PATTERNS
 # Values are payload discriminators, NOT topic names.
-# Actual Kafka topic is determined by TopicBase.TRANSFORMATIONS via build_topic().
+# Actual Kafka topic is determined by _EVENT_TYPE_TO_TOPIC mapping via build_topic().
 class TransformationEventType(StrEnum):
     """Agent transformation event types with standardized topic routing.
 
     These values serve as event type discriminators in the payload envelope.
-    All transformation events route to the same Kafka topic
-    (TopicBase.TRANSFORMATIONS) and are differentiated by this field.
+    Each event type routes to its own ONEX-compliant topic via
+    _EVENT_TYPE_TO_TOPIC (e.g., STARTED -> TopicBase.TRANSFORMATION_STARTED).
     """
 
     STARTED = "transformation.started"
     COMPLETED = "transformation.completed"
     FAILED = "transformation.failed"
+
+
+# Mapping from event type to TopicBase for per-event topic routing.
+# Each transformation event type routes to its own ONEX-compliant topic
+# instead of the legacy TopicBase.TRANSFORMATIONS catch-all.
+_EVENT_TYPE_TO_TOPIC: dict[TransformationEventType, TopicBase] = {
+    TransformationEventType.STARTED: TopicBase.TRANSFORMATION_STARTED,
+    TransformationEventType.COMPLETED: TopicBase.TRANSFORMATION_COMPLETED,
+    TransformationEventType.FAILED: TopicBase.TRANSFORMATION_FAILED,
+}
 
 
 def _redact_user_request(text: str | None) -> str | None:
@@ -111,9 +121,9 @@ async def publish_transformation_event(
     """
     Publish agent transformation event to Kafka following EVENT_BUS_INTEGRATION_PATTERNS.
 
-    Events are wrapped in OnexEnvelopeV1 standard envelope and routed to the
-    transformation events topic (TopicBase.TRANSFORMATIONS) with event_type
-    discrimination in the payload.
+    Events are wrapped in OnexEnvelopeV1 standard envelope and routed to
+    per-event-type ONEX topics (e.g., TopicBase.TRANSFORMATION_STARTED)
+    via the _EVENT_TYPE_TO_TOPIC mapping.
 
     Args:
         source_agent: Original agent identity (e.g., "polymorphic-agent")
@@ -208,9 +218,12 @@ async def publish_transformation_event(
             causation_id=causation_id,
         )
 
-        # Build ONEX-compliant topic name using TopicBase
+        # Build ONEX-compliant topic name using per-event TopicBase routing
         topic_prefix = get_kafka_topic_prefix()
-        topic = build_topic(topic_prefix, TopicBase.TRANSFORMATIONS)
+        topic_base = _EVENT_TYPE_TO_TOPIC.get(
+            event_type, TopicBase.TRANSFORMATION_COMPLETED
+        )
+        topic = build_topic(topic_prefix, topic_base)
 
         # Publish to Kafka
         result = await publish_to_kafka(topic, envelope, correlation_id)
@@ -259,7 +272,7 @@ async def publish_transformation_start(
     Publish transformation start event.
 
     Convenience method for publishing at the start of transformation.
-    Routes to TopicBase.TRANSFORMATIONS with event_type=STARTED.
+    Routes to TopicBase.TRANSFORMATION_STARTED.
     """
     return await publish_transformation_event(
         source_agent=source_agent,
@@ -283,7 +296,7 @@ async def publish_transformation_complete(
     Publish transformation complete event.
 
     Convenience method for publishing after successful transformation.
-    Routes to TopicBase.TRANSFORMATIONS with event_type=COMPLETED.
+    Routes to TopicBase.TRANSFORMATION_COMPLETED.
     """
     return await publish_transformation_event(
         source_agent=source_agent,
@@ -310,7 +323,7 @@ async def publish_transformation_failed(
     Publish transformation failed event.
 
     Convenience method for publishing after transformation failure.
-    Routes to TopicBase.TRANSFORMATIONS with event_type=FAILED.
+    Routes to TopicBase.TRANSFORMATION_FAILED.
     """
     return await publish_transformation_event(
         source_agent=source_agent,
