@@ -365,3 +365,87 @@ def assess_evidence(
         sufficient_count=sufficient_count,
         total_count=len(dimensions),
     )
+
+
+# -- Gate storage ------------------------------------------------------------
+
+
+def save_gate(
+    gate: ContractPromotionGate,
+    context: ContractMeasurementContext,
+    *,
+    baselines_root: Path | None = None,
+) -> Path:
+    """Persist a gate as the baseline for the given context.
+
+    Storage: {baselines_root}/{pattern_id}/{baseline_key}/latest.gate.json
+    Uses atomic write (tmp + rename).
+    """
+    root = baselines_root or BASELINES_ROOT
+    baseline_key = derive_baseline_key(context)
+    pattern_id = context.pattern_id or "_no_pattern"
+
+    target_dir = root / pattern_id / baseline_key
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    target = target_dir / "latest.gate.json"
+    tmp = target.with_suffix(".json.tmp")
+    tmp.write_text(gate.model_dump_json(indent=2))
+    tmp.rename(target)
+    return target
+
+
+def load_gate(
+    context: ContractMeasurementContext,
+    *,
+    baselines_root: Path | None = None,
+) -> ContractPromotionGate | None:
+    """Load the gate for the given context, or None if not found."""
+    root = baselines_root or BASELINES_ROOT
+    baseline_key = derive_baseline_key(context)
+    pattern_id = context.pattern_id or "_no_pattern"
+
+    target = root / pattern_id / baseline_key / "latest.gate.json"
+    if not target.exists():
+        return None
+
+    data = json.loads(target.read_text())
+    return ContractPromotionGate.model_validate(data)
+
+
+def load_latest_gate_result(
+    pattern_id: str,
+    *,
+    baselines_root: Path | None = None,
+) -> str | None:
+    """Scan subdirs for the most recent gate file and return gate_result.
+
+    Searches all subdirectories under {baselines_root}/{pattern_id}/
+    for the most recently modified latest.gate.json file.
+
+    Returns:
+        The gate_result string ("pass", "fail", or "insufficient_evidence")
+        or None if no gate files found or on any error.
+    """
+    root = baselines_root or BASELINES_ROOT
+    pid = pattern_id or "_no_pattern"
+    pattern_dir = root / pid
+
+    if not pattern_dir.exists():
+        return None
+
+    try:
+        # Find all gate files
+        gate_files = list(pattern_dir.glob("*/latest.gate.json"))
+        if not gate_files:
+            return None
+
+        # Find the most recently modified
+        latest_file = max(gate_files, key=lambda p: p.stat().st_mtime)
+
+        # Parse and extract gate_result
+        data = json.loads(latest_file.read_text())
+        result = data.get("gate_result")
+        return str(result) if result is not None else None
+    except Exception:
+        return None

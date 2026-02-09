@@ -545,3 +545,111 @@ class TestZeroBaselineGuard:
         ev = _make_dimension_evidence("tests", 0.0, 0.0)
         assert ev.delta_pct is None
         assert ev.sufficient is False
+
+
+# =============================================================================
+# Gate Storage (OMN-2092)
+# =============================================================================
+
+
+class TestGateStorage:
+    """Tests for gate storage functions (save_gate, load_gate, load_latest_gate_result)."""
+
+    def test_save_and_load_gate_round_trip(self, tmp_path: Path) -> None:
+        """Save gate, load gate, verify fields match."""
+        from omnibase_spi.contracts.measurement.contract_promotion_gate import (
+            ContractPromotionGate,
+        )
+
+        from plugins.onex.hooks.lib.metrics_aggregator import load_gate, save_gate
+
+        ctx = _make_context(ticket_id="OMN-2092", pattern_id="pat-rt")
+        gate = ContractPromotionGate(
+            run_id="test-run-rt",
+            gate_result="pass",
+            baseline_key="test-key",
+            required_dimensions=["duration", "tokens", "tests"],
+            sufficient_count=3,
+            total_count=3,
+        )
+
+        path = save_gate(gate, ctx, baselines_root=tmp_path)
+        assert path.exists()
+
+        loaded = load_gate(ctx, baselines_root=tmp_path)
+        assert loaded is not None
+        assert loaded.run_id == gate.run_id
+        assert loaded.gate_result == gate.gate_result
+        assert loaded.baseline_key == gate.baseline_key
+        assert loaded.sufficient_count == gate.sufficient_count
+        assert loaded.total_count == gate.total_count
+
+    def test_load_gate_nonexistent_returns_none(self, tmp_path: Path) -> None:
+        """No gate file → None."""
+        from plugins.onex.hooks.lib.metrics_aggregator import load_gate
+
+        ctx = _make_context(ticket_id="OMN-NONE", pattern_id="pat-none")
+        result = load_gate(ctx, baselines_root=tmp_path)
+        assert result is None
+
+    def test_load_latest_gate_result_scans_subdirs(self, tmp_path: Path) -> None:
+        """Create gates in multiple subdirs, verify most recent returned."""
+        from omnibase_spi.contracts.measurement.contract_promotion_gate import (
+            ContractPromotionGate,
+        )
+
+        from plugins.onex.hooks.lib.metrics_aggregator import (
+            load_latest_gate_result,
+            save_gate,
+        )
+
+        # Create gates in different patterns (same ticket)
+        ctx_a = _make_context(ticket_id="OMN-2092", pattern_id="pat-a")
+        ctx_b = _make_context(ticket_id="OMN-2092", pattern_id="pat-b")
+        ctx_c = _make_context(ticket_id="OMN-2092", pattern_id="pat-c")
+
+        gate_a = ContractPromotionGate(
+            run_id="run-a",
+            gate_result="pass",
+            baseline_key="key-a",
+            required_dimensions=["duration"],
+            sufficient_count=1,
+            total_count=1,
+        )
+        gate_b = ContractPromotionGate(
+            run_id="run-b",
+            gate_result="fail",
+            baseline_key="key-b",
+            required_dimensions=["tokens"],
+            sufficient_count=0,
+            total_count=1,
+        )
+        gate_c = ContractPromotionGate(
+            run_id="run-c",
+            gate_result="pass",
+            baseline_key="key-c",
+            required_dimensions=["tests"],
+            sufficient_count=1,
+            total_count=1,
+        )
+
+        # Save gates (b is saved last, so it's most recent)
+        save_gate(gate_a, ctx_a, baselines_root=tmp_path)
+        save_gate(gate_c, ctx_c, baselines_root=tmp_path)
+        path_b = save_gate(gate_b, ctx_b, baselines_root=tmp_path)
+
+        # Load latest gate result for pat-b pattern
+        result = load_latest_gate_result("pat-b", baselines_root=tmp_path)
+        assert result == "fail"
+
+        # Verify it found the most recent file (gate_b)
+        assert path_b.exists()
+
+    def test_load_latest_gate_result_nonexistent_returns_none(
+        self, tmp_path: Path
+    ) -> None:
+        """No pattern dir → None."""
+        from plugins.onex.hooks.lib.metrics_aggregator import load_latest_gate_result
+
+        result = load_latest_gate_result("pat-nonexistent", baselines_root=tmp_path)
+        assert result is None

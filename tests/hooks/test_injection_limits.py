@@ -996,3 +996,253 @@ class TestRequireMeasuredFilter:
         """Default InjectionLimitsConfig has require_measured=False."""
         config = InjectionLimitsConfig()
         assert config.require_measured is False
+
+
+# =============================================================================
+# Evidence Scoring Tests (OMN-2092)
+# =============================================================================
+
+
+class TestEvidenceScoring:
+    """Tests for compute_effective_score() with gate_result evidence boost/penalty."""
+
+    def test_pass_applies_boost(self) -> None:
+        """score * 1.3 for gate_result="pass"."""
+        base_score = compute_effective_score(
+            confidence=0.8,
+            success_rate=0.8,
+            usage_count=10,
+        )
+        boosted_score = compute_effective_score(
+            confidence=0.8,
+            success_rate=0.8,
+            usage_count=10,
+            gate_result="pass",
+        )
+        assert boosted_score == pytest.approx(base_score * 1.3)
+
+    def test_fail_applies_penalty(self) -> None:
+        """score * 0.6 for gate_result="fail"."""
+        base_score = compute_effective_score(
+            confidence=0.8,
+            success_rate=0.8,
+            usage_count=10,
+        )
+        penalized_score = compute_effective_score(
+            confidence=0.8,
+            success_rate=0.8,
+            usage_count=10,
+            gate_result="fail",
+        )
+        assert penalized_score == pytest.approx(base_score * 0.6)
+
+    def test_insufficient_evidence_neutral(self) -> None:
+        """No modifier for gate_result="insufficient_evidence"."""
+        base_score = compute_effective_score(
+            confidence=0.8,
+            success_rate=0.8,
+            usage_count=10,
+        )
+        neutral_score = compute_effective_score(
+            confidence=0.8,
+            success_rate=0.8,
+            usage_count=10,
+            gate_result="insufficient_evidence",
+        )
+        assert neutral_score == pytest.approx(base_score)
+
+    def test_none_gate_result_neutral(self) -> None:
+        """No modifier for None."""
+        base_score = compute_effective_score(
+            confidence=0.8,
+            success_rate=0.8,
+            usage_count=10,
+        )
+        neutral_score = compute_effective_score(
+            confidence=0.8,
+            success_rate=0.8,
+            usage_count=10,
+            gate_result=None,
+        )
+        assert neutral_score == pytest.approx(base_score)
+
+    def test_boost_capped_at_3x(self) -> None:
+        """evidence_boost=5.0 capped to 3.0."""
+        base_score = compute_effective_score(
+            confidence=0.8,
+            success_rate=0.8,
+            usage_count=10,
+        )
+        # Try to boost with 5.0 (should cap to 3.0)
+        capped_score = compute_effective_score(
+            confidence=0.8,
+            success_rate=0.8,
+            usage_count=10,
+            gate_result="pass",
+            evidence_boost=5.0,
+        )
+        assert capped_score == pytest.approx(base_score * 3.0)
+
+
+# =============================================================================
+# Evidence Policy Tests (OMN-2092)
+# =============================================================================
+
+
+class TestEvidencePolicy:
+    """Tests for select_patterns_for_injection() with evidence resolver."""
+
+    def test_ignore_policy_does_not_consult_resolver(self) -> None:
+        """evidence_policy="ignore" doesn't call resolver."""
+        from omniclaude.hooks.injection_limits import DictEvidenceResolver
+
+        # Create resolver that would raise if called
+        class StrictResolver(DictEvidenceResolver):
+            def resolve(self, pattern_id: str) -> str | None:
+                raise RuntimeError("Resolver should not be called with ignore policy")
+
+        resolver = StrictResolver({})
+        limits = InjectionLimitsConfig(
+            max_patterns_per_injection=10,
+            max_per_domain=10,
+            max_tokens_injected=10000,
+            evidence_policy="ignore",
+        )
+        patterns = [make_pattern(pattern_id="pat-1")]
+
+        # Should not raise
+        result = select_patterns_for_injection(
+            patterns, limits, evidence_resolver=resolver
+        )  # type: ignore[arg-type]
+        assert len(result) == 1
+
+    def test_boost_policy_reranks_by_evidence(self) -> None:
+        """KEY DEMO: 3 patterns with same base stats, evidence_policy="boost" reranks by gate_result."""
+        from omniclaude.hooks.injection_limits import DictEvidenceResolver
+
+        resolver = DictEvidenceResolver(
+            {
+                "pat-a": "pass",
+                "pat-b": "fail",
+                # pat-c not in dict → None
+            }
+        )
+        limits = InjectionLimitsConfig(
+            max_patterns_per_injection=10,
+            max_per_domain=10,
+            max_tokens_injected=10000,
+            evidence_policy="boost",
+        )
+        patterns = [
+            make_pattern(
+                pattern_id="pat-a", confidence=0.9, usage_count=10, success_rate=0.8
+            ),
+            make_pattern(
+                pattern_id="pat-b", confidence=0.9, usage_count=10, success_rate=0.8
+            ),
+            make_pattern(
+                pattern_id="pat-c", confidence=0.9, usage_count=10, success_rate=0.8
+            ),
+        ]
+
+        result = select_patterns_for_injection(
+            patterns, limits, evidence_resolver=resolver
+        )  # type: ignore[arg-type]
+        ids = [p.pattern_id for p in result]
+
+        # pass first, neutral second, fail third
+        assert ids == ["pat-a", "pat-c", "pat-b"]
+
+    def test_require_policy_filters_non_pass(self) -> None:
+        """evidence_policy="require" only selects pass patterns."""
+        from omniclaude.hooks.injection_limits import DictEvidenceResolver
+
+        resolver = DictEvidenceResolver(
+            {
+                "pat-pass": "pass",
+                "pat-fail": "fail",
+                "pat-insufficient": "insufficient_evidence",
+            }
+        )
+        limits = InjectionLimitsConfig(
+            max_patterns_per_injection=10,
+            max_per_domain=10,
+            max_tokens_injected=10000,
+            evidence_policy="require",
+        )
+        patterns = [
+            make_pattern(pattern_id="pat-pass", domain="testing"),
+            make_pattern(pattern_id="pat-fail", domain="code_review"),
+            make_pattern(pattern_id="pat-insufficient", domain="debugging"),
+        ]
+
+        result = select_patterns_for_injection(
+            patterns, limits, evidence_resolver=resolver
+        )  # type: ignore[arg-type]
+        assert len(result) == 1
+        assert result[0].pattern_id == "pat-pass"
+
+    def test_require_policy_empty_when_no_pass(self) -> None:
+        """All fail/None → empty result."""
+        from omniclaude.hooks.injection_limits import DictEvidenceResolver
+
+        resolver = DictEvidenceResolver(
+            {
+                "pat-a": "fail",
+                "pat-b": "insufficient_evidence",
+            }
+        )
+        limits = InjectionLimitsConfig(
+            max_patterns_per_injection=10,
+            max_per_domain=10,
+            max_tokens_injected=10000,
+            evidence_policy="require",
+        )
+        patterns = [
+            make_pattern(pattern_id="pat-a"),
+            make_pattern(pattern_id="pat-b", domain="code_review"),
+            make_pattern(pattern_id="pat-c", domain="debugging"),  # None
+        ]
+
+        result = select_patterns_for_injection(
+            patterns, limits, evidence_resolver=resolver
+        )  # type: ignore[arg-type]
+        assert result == []
+
+    def test_resolver_none_treated_as_null(self) -> None:
+        """evidence_resolver=None → same as NullEvidenceResolver."""
+        limits_with_none = InjectionLimitsConfig(
+            max_patterns_per_injection=10,
+            max_per_domain=10,
+            max_tokens_injected=10000,
+            evidence_policy="boost",
+        )
+        patterns = [
+            make_pattern(
+                pattern_id="pat-a", confidence=0.9, usage_count=10, success_rate=0.8
+            ),
+            make_pattern(
+                pattern_id="pat-b", confidence=0.8, usage_count=10, success_rate=0.8
+            ),
+        ]
+
+        result = select_patterns_for_injection(
+            patterns, limits_with_none, evidence_resolver=None
+        )  # type: ignore[arg-type]
+
+        # Should work without error, ordering by base score only
+        assert len(result) == 2
+        assert result[0].pattern_id == "pat-a"  # Higher confidence
+
+    def test_evidence_badge_in_rendered_output(self) -> None:
+        """render_single_pattern with gate_result="pass" has [Evidence: Pass]."""
+        pattern = make_pattern(pattern_id="pat-pass", title="Test Pattern")
+        rendered = render_single_pattern(pattern, gate_result="pass")  # type: ignore[arg-type]
+
+        assert "[Evidence: Pass]" in rendered
+        assert "### Test Pattern [Evidence: Pass]" in rendered
+
+    def test_default_evidence_policy_is_ignore(self) -> None:
+        """InjectionLimitsConfig().evidence_policy == "ignore"."""
+        config = InjectionLimitsConfig()
+        assert config.evidence_policy == "ignore"

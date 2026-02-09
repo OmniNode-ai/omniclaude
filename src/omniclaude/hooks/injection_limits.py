@@ -27,7 +27,8 @@ import functools
 import logging
 import math
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 import tiktoken
 from pydantic import Field, field_validator
@@ -37,6 +38,58 @@ if TYPE_CHECKING:
     from omniclaude.hooks.handler_context_injection import PatternRecord
 
 logger = logging.getLogger(__name__)
+
+# =============================================================================
+# Evidence Resolver Protocol (OMN-2092)
+# =============================================================================
+
+
+@runtime_checkable
+class EvidenceResolver(Protocol):
+    """Protocol for resolving gate results per pattern.
+
+    Implementations provide the bridge between promotion gate storage
+    and the injection pipeline. The sync path is kept testable by
+    defaulting to NullEvidenceResolver (no file I/O).
+    """
+
+    def resolve(self, pattern_id: str) -> str | None:
+        """Look up the gate_result for a pattern.
+
+        Returns:
+            "pass", "fail", "insufficient_evidence", or None if unknown.
+        """
+        ...
+
+
+class NullEvidenceResolver:
+    """Always returns None — default, preserves current behavior."""
+
+    def resolve(self, pattern_id: str) -> str | None:
+        return None
+
+
+class DictEvidenceResolver:
+    """Test helper — resolves from an in-memory dict."""
+
+    def __init__(self, gates: dict[str, str]) -> None:
+        self._gates = gates
+
+    def resolve(self, pattern_id: str) -> str | None:
+        return self._gates.get(pattern_id)
+
+
+class FileEvidenceResolver:
+    """Reads gate results from ~/.claude/baselines/ via load_latest_gate_result()."""
+
+    def __init__(self, baselines_root: Path | None = None) -> None:
+        self._baselines_root = baselines_root
+
+    def resolve(self, pattern_id: str) -> str | None:
+        from plugins.onex.hooks.lib.metrics_aggregator import load_latest_gate_result
+
+        return load_latest_gate_result(pattern_id, baselines_root=self._baselines_root)
+
 
 # =============================================================================
 # Header Constant (Single Source of Truth)
@@ -195,21 +248,31 @@ def compute_effective_score(
     usage_count_scale: float = 5.0,
     lifecycle_state: str | None = None,
     provisional_dampening: float = 0.5,
+    gate_result: str | None = None,
+    evidence_boost: float = 1.3,
+    evidence_penalty: float = 0.6,
 ) -> float:
     """Compute effective score for pattern ranking.
 
-    Formula: confidence * clamp(success_rate, 0..1) * f(usage_count) [* dampening]
+    Formula: confidence * clamp(success_rate, 0..1) * f(usage_count) [* dampening] [* evidence_modifier]
     where f(usage_count) = min(1.0, log1p(usage_count) / k)
 
     For provisional patterns (lifecycle_state == "provisional"), the score is
     multiplied by provisional_dampening to reduce their ranking priority relative
     to validated patterns. This is part of OMN-2042: Graduated Injection Policy.
 
+    For evidence-driven injection (OMN-2092), the score is further modified by
+    gate_result: patterns with gate_result="pass" are boosted by evidence_boost
+    (default 1.3x, capped at 3.0x), and patterns with gate_result="fail" are
+    penalized by evidence_penalty (default 0.6x). Patterns with
+    gate_result="insufficient_evidence" or None are not modified.
+
     This provides a composite score that considers:
     - confidence: How certain we are about the pattern
     - success_rate: Historical success when applied
     - usage_count: Experience/maturity (bounded to prevent runaway)
     - lifecycle_state: Pattern maturity (provisional patterns are dampened)
+    - gate_result: Promotion gate outcome (passed patterns are boosted)
 
     Args:
         confidence: Pattern confidence (0.0 to 1.0).
@@ -224,9 +287,16 @@ def compute_effective_score(
             Default 0.5 (matches InjectionLimitsConfig default).
             Must be >0.0 (raises ValueError otherwise);
             use include_provisional=False to disable entirely.
+        gate_result: Promotion gate outcome. "pass" applies evidence_boost,
+            "fail" applies evidence_penalty, "insufficient_evidence" or None
+            applies no modifier. Default None.
+        evidence_boost: Score multiplier for gate_result="pass". Default 1.3,
+            capped at 3.0 during application.
+        evidence_penalty: Score multiplier for gate_result="fail". Default 0.6,
+            clamped to [0.0, 1.0] during application.
 
     Returns:
-        Effective score (0.0 to 1.0).
+        Effective score (0.0 to 1.0+, can exceed 1.0 when evidence_boost > 1.0).
 
     Examples:
         >>> compute_effective_score(0.9, 0.8, 10)  # High confidence, good success
@@ -236,6 +306,9 @@ def compute_effective_score(
         >>> compute_effective_score(0.9, 0.8, 10, lifecycle_state="provisional",
         ...     provisional_dampening=0.5)  # Provisional at half score
         0.324  # approximately
+        >>> compute_effective_score(0.9, 0.8, 10, gate_result="pass",
+        ...     evidence_boost=1.3)  # Evidence boost
+        0.842  # approximately (0.648 * 1.3)
 
     Bootstrapping Note:
         Patterns with usage_count=0 will always receive a score of 0 because
@@ -269,6 +342,13 @@ def compute_effective_score(
             )
         dampening = min(1.0, provisional_dampening)
         score *= dampening
+
+    # Apply evidence modifier (OMN-2092)
+    if gate_result == "pass":
+        score *= min(evidence_boost, 3.0)  # cap at 3x
+    elif gate_result == "fail":
+        score *= max(0.0, min(1.0, evidence_penalty))
+    # "insufficient_evidence" or None → no modification (1.0)
 
     return score
 
@@ -394,6 +474,36 @@ class InjectionLimitsConfig(BaseSettings):
         ),
     )
 
+    evidence_policy: str = Field(
+        default="ignore",
+        description=(
+            "Evidence-driven injection policy. "
+            "'ignore' (default): gates not consulted, current behavior preserved. "
+            "'boost': gate results modify effective scores (pass=boost, fail=penalize). "
+            "'require': only patterns with gate_result='pass' are included."
+        ),
+    )
+
+    evidence_boost: float = Field(
+        default=1.3,
+        gt=1.0,
+        le=3.0,
+        description=(
+            "Score multiplier for patterns with gate_result='pass'. "
+            "Applied when evidence_policy='boost'. Default 1.3."
+        ),
+    )
+
+    evidence_penalty: float = Field(
+        default=0.6,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Score multiplier for patterns with gate_result='fail'. "
+            "Applied when evidence_policy='boost'. Default 0.6."
+        ),
+    )
+
     @field_validator("selection_policy")
     @classmethod
     def validate_selection_policy(cls, v: str) -> str:
@@ -414,6 +524,16 @@ class InjectionLimitsConfig(BaseSettings):
         if v not in allowed:
             raise ValueError(
                 f"Unknown selection_policy: {v!r}. Allowed: {sorted(allowed)}"
+            )
+        return v
+
+    @field_validator("evidence_policy")
+    @classmethod
+    def validate_evidence_policy(cls, v: str) -> str:
+        allowed = {"ignore", "boost", "require"}
+        if v not in allowed:
+            raise ValueError(
+                f"Unknown evidence_policy: {v!r}. Allowed: {sorted(allowed)}"
             )
         return v
 
@@ -439,15 +559,19 @@ class ScoredPattern:
         effective_score: Computed composite score.
         normalized_domain: Domain after normalization.
         rendered_tokens: Token count of rendered pattern block.
+        gate_result: Promotion gate outcome for evidence-driven injection (OMN-2092).
     """
 
     pattern: PatternRecord
     effective_score: float
     normalized_domain: str
     rendered_tokens: int
+    gate_result: str | None
 
 
-def render_single_pattern(pattern: PatternRecord) -> str:
+def render_single_pattern(
+    pattern: PatternRecord, gate_result: str | None = None
+) -> str:
     """Render a single pattern as markdown block.
 
     This is used for token counting during selection.
@@ -462,6 +586,7 @@ def render_single_pattern(pattern: PatternRecord) -> str:
 
     Args:
         pattern: Pattern to render.
+        gate_result: Optional promotion gate outcome for evidence badge (OMN-2092).
 
     Returns:
         Markdown string for the pattern.
@@ -480,6 +605,10 @@ def render_single_pattern(pattern: PatternRecord) -> str:
         badges.append("[Measured]")
     elif evidence_tier == "VERIFIED":
         badges.append("[Verified]")
+    if gate_result == "pass":
+        badges.append("[Evidence: Pass]")
+    elif gate_result == "fail":
+        badges.append("[Evidence: Fail]")
     title_suffix = (" " + " ".join(badges)) if badges else ""
 
     lines = [
@@ -508,6 +637,7 @@ def select_patterns_for_injection(
     limits: InjectionLimitsConfig,
     *,
     header_tokens: int | None = None,
+    evidence_resolver: EvidenceResolver | None = None,
 ) -> list[PatternRecord]:
     """Select patterns for injection applying all limits.
 
@@ -530,12 +660,19 @@ def select_patterns_for_injection(
     - Never swap in lower-scoring patterns to fill quota
     - Prefer leaving budget unused vs injecting low-signal patterns
 
+    Evidence-Driven Injection (OMN-2092):
+        When evidence_resolver is provided and limits.evidence_policy != "ignore":
+        - "boost": Gate results modify effective scores (pass=boost, fail=penalize)
+        - "require": Only patterns with gate_result="pass" are included (hard filter)
+
     Args:
         candidates: List of candidate patterns to select from.
         limits: Injection limits configuration.
         header_tokens: Token count for header/wrapper. Defaults to INJECTION_HEADER_TOKENS
             which is computed from INJECTION_HEADER to stay in sync with the actual
             header format used in handler_context_injection.py.
+        evidence_resolver: Optional resolver for promotion gate results. Defaults to None
+            (no evidence-driven injection).
 
     Returns:
         Selected patterns in injection order (highest score first).
@@ -608,6 +745,12 @@ def select_patterns_for_injection(
     for pattern in candidates:
         # Pass lifecycle_state and provisional_dampening for graduated injection (OMN-2042)
         pattern_lifecycle = getattr(pattern, "lifecycle_state", None)
+
+        # Evidence resolution (OMN-2092)
+        gate_result: str | None = None
+        if evidence_resolver is not None and limits.evidence_policy != "ignore":
+            gate_result = evidence_resolver.resolve(pattern.pattern_id)
+
         effective_score = compute_effective_score(
             confidence=pattern.confidence,
             success_rate=pattern.success_rate,
@@ -615,9 +758,12 @@ def select_patterns_for_injection(
             usage_count_scale=limits.usage_count_scale,
             lifecycle_state=pattern_lifecycle,
             provisional_dampening=limits.provisional_dampening,
+            gate_result=gate_result,
+            evidence_boost=limits.evidence_boost,
+            evidence_penalty=limits.evidence_penalty,
         )
         normalized_domain = normalize_domain(pattern.domain)
-        rendered = render_single_pattern(pattern)
+        rendered = render_single_pattern(pattern, gate_result=gate_result)
         rendered_tokens = count_tokens(rendered)
 
         scored.append(
@@ -626,8 +772,22 @@ def select_patterns_for_injection(
                 effective_score=effective_score,
                 normalized_domain=normalized_domain,
                 rendered_tokens=rendered_tokens,
+                gate_result=gate_result,
             )
         )
+
+    # Evidence policy: require (OMN-2092) — filter AFTER scoring, BEFORE sorting
+    if limits.evidence_policy == "require" and evidence_resolver is not None:
+        before_count = len(scored)
+        scored = [s for s in scored if s.gate_result == "pass"]
+        filtered_count = before_count - len(scored)
+        if filtered_count > 0:
+            logger.debug(
+                "Filtered out %d patterns without gate_result='pass' (evidence_policy='require')",
+                filtered_count,
+            )
+        if not scored:
+            return []
 
     # Step 2: Deterministic sort
     # Primary: effective_score DESC
@@ -725,6 +885,11 @@ __all__ = [
     "normalize_domain",
     "count_tokens",
     "render_single_pattern",
+    # Evidence Resolution (OMN-2092)
+    "EvidenceResolver",
+    "NullEvidenceResolver",
+    "FileEvidenceResolver",
+    "DictEvidenceResolver",
     # Constants
     "DOMAIN_ALIASES",
     "KNOWN_DOMAINS",
