@@ -48,6 +48,9 @@ MAX_FAILED_TESTS = 20
 # Artifact base directory
 ARTIFACT_BASE_DIR = Path.home() / ".claude" / "pipelines"
 
+# Characters that must not appear in path components to prevent traversal
+_INVALID_PATH_CHARS = ("..", "/", "\\", "\x00")
+
 
 # ---------------------------------------------------------------------------
 # Sanitization
@@ -230,6 +233,14 @@ def write_metrics_artifact(
         Path to the written artifact, or None on failure.
     """
     try:
+        # Reject path traversal in user-influenced components
+        for component in (ticket_id, run_id, phase):
+            if any(c in str(component) for c in _INVALID_PATH_CHARS):
+                logger.warning(
+                    f"Rejected path component with traversal chars: {component!r}"
+                )
+                return None
+
         metrics_dir = ARTIFACT_BASE_DIR / ticket_id / "metrics" / run_id
         metrics_dir.mkdir(parents=True, exist_ok=True)
 
@@ -266,6 +277,13 @@ def read_metrics_artifact(
     Returns:
         Parsed JSON dict, or None if file does not exist or is corrupt.
     """
+    for component in (ticket_id, run_id, phase):
+        if any(c in str(component) for c in _INVALID_PATH_CHARS):
+            logger.warning(
+                f"Rejected path component with traversal chars: {component!r}"
+            )
+            return None
+
     artifact_path = (
         ARTIFACT_BASE_DIR
         / ticket_id

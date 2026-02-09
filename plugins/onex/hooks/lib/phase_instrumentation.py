@@ -603,7 +603,7 @@ class MeasurementCheckResult:
 
 
 def run_measurement_checks(
-    metrics: ContractPhaseMetrics,
+    metrics: ContractPhaseMetrics | None,
     phase: str,
 ) -> list[MeasurementCheckResult]:
     """Run all measurement checks against a ContractPhaseMetrics.
@@ -611,7 +611,7 @@ def run_measurement_checks(
     Produces CHECK-MEAS-001 through CHECK-MEAS-006 results.
 
     Args:
-        metrics: The phase metrics to validate.
+        metrics: The phase metrics to validate, or None if metrics are unavailable.
         phase: The pipeline phase name (for budget lookups).
 
     Returns:
