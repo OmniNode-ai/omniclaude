@@ -290,6 +290,7 @@ if [[ "$EXECUTE" == "true" ]]; then
         echo "    import omniclaude"
         echo "    from omniclaude.hooks.topics import TopicBase"
         rm -rf "$VENV_DIR"  # Clean up failed venv
+        rm -f "$MANIFEST"   # Clean up stale manifest
         exit 1
     fi
 
