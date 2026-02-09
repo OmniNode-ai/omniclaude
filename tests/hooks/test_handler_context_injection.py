@@ -1073,3 +1073,66 @@ class TestEvidenceTier:
         assert result.pattern_count == 1
         assert "None Tier" not in result.context_markdown
         assert "Verified" in result.context_markdown
+
+    @pytest.mark.asyncio
+    async def test_markdown_combined_provisional_and_measured(
+        self,
+        handler_with_patterns: HandlerFactory,
+    ) -> None:
+        """Test combined [Provisional] [Measured] badges on a single pattern."""
+        from omniclaude.hooks.injection_limits import InjectionLimitsConfig
+
+        patterns = [
+            ModelPatternRecord(
+                pattern_id="combo-prov-meas",
+                domain="testing",
+                title="Combined Badge Pattern",
+                description="Provisional pattern with measurement data",
+                confidence=0.8,
+                usage_count=10,
+                success_rate=0.75,
+                lifecycle_state="provisional",
+                evidence_tier="MEASURED",
+            ),
+        ]
+        limits = InjectionLimitsConfig(include_provisional=True)
+        handler = handler_with_patterns(patterns, min_confidence=0.0, limits=limits)
+        result = await handler.handle(emit_event=False)
+
+        assert "[Provisional]" in result.context_markdown
+        assert "[Measured]" in result.context_markdown
+        assert (
+            "Combined Badge Pattern [Provisional] [Measured]" in result.context_markdown
+        )
+
+    @pytest.mark.asyncio
+    async def test_markdown_combined_provisional_and_verified(
+        self,
+        handler_with_patterns: HandlerFactory,
+    ) -> None:
+        """Test combined [Provisional] [Verified] badges on a single pattern."""
+        from omniclaude.hooks.injection_limits import InjectionLimitsConfig
+
+        patterns = [
+            ModelPatternRecord(
+                pattern_id="combo-prov-ver",
+                domain="testing",
+                title="Provisional Verified Pattern",
+                description="Provisional pattern that has been verified",
+                confidence=0.85,
+                usage_count=15,
+                success_rate=0.8,
+                lifecycle_state="provisional",
+                evidence_tier="VERIFIED",
+            ),
+        ]
+        limits = InjectionLimitsConfig(include_provisional=True)
+        handler = handler_with_patterns(patterns, min_confidence=0.0, limits=limits)
+        result = await handler.handle(emit_event=False)
+
+        assert "[Provisional]" in result.context_markdown
+        assert "[Verified]" in result.context_markdown
+        assert (
+            "Provisional Verified Pattern [Provisional] [Verified]"
+            in result.context_markdown
+        )

@@ -55,6 +55,8 @@ class MockPatternRecord:
     usage_count: int
     success_rate: float
     example_reference: str | None = None
+    lifecycle_state: str | None = None
+    evidence_tier: str | None = None
 
 
 def make_pattern(
@@ -66,6 +68,8 @@ def make_pattern(
     usage_count: int = 10,
     success_rate: float = 0.8,
     example_reference: str | None = None,
+    lifecycle_state: str | None = None,
+    evidence_tier: str | None = None,
 ) -> MockPatternRecord:
     """Create a mock pattern with defaults."""
     return MockPatternRecord(
@@ -77,6 +81,8 @@ def make_pattern(
         usage_count=usage_count,
         success_rate=success_rate,
         example_reference=example_reference,
+        lifecycle_state=lifecycle_state,
+        evidence_tier=evidence_tier,
     )
 
 
@@ -827,3 +833,166 @@ class TestFormatSynchronization:
                 f"render_single_pattern missing: {element!r}"
             )
             assert element in handler_render, f"handler format missing: {element!r}"
+
+
+# =============================================================================
+# Evidence Tier Tests (OMN-2044)
+# =============================================================================
+
+
+class TestEvidenceTierRendering:
+    """Tests for evidence_tier badge rendering in render_single_pattern."""
+
+    def test_measured_badge_in_render(self) -> None:
+        """render_single_pattern includes [Measured] badge."""
+        pattern = make_pattern(title="My Pattern", evidence_tier="MEASURED")
+        rendered = render_single_pattern(pattern)  # type: ignore[arg-type]
+        assert "### My Pattern [Measured]" in rendered
+
+    def test_verified_badge_in_render(self) -> None:
+        """render_single_pattern includes [Verified] badge."""
+        pattern = make_pattern(title="My Pattern", evidence_tier="VERIFIED")
+        rendered = render_single_pattern(pattern)  # type: ignore[arg-type]
+        assert "### My Pattern [Verified]" in rendered
+
+    def test_unmeasured_no_badge(self) -> None:
+        """UNMEASURED patterns do not get a badge."""
+        pattern = make_pattern(title="My Pattern", evidence_tier="UNMEASURED")
+        rendered = render_single_pattern(pattern)  # type: ignore[arg-type]
+        assert "### My Pattern" in rendered
+        assert "[Measured]" not in rendered
+        assert "[Verified]" not in rendered
+
+    def test_none_evidence_tier_no_badge(self) -> None:
+        """Patterns with evidence_tier=None do not get a badge."""
+        pattern = make_pattern(title="My Pattern", evidence_tier=None)
+        rendered = render_single_pattern(pattern)  # type: ignore[arg-type]
+        assert "### My Pattern" in rendered
+        assert "[Measured]" not in rendered
+        assert "[Verified]" not in rendered
+
+    def test_combined_provisional_and_measured(self) -> None:
+        """Provisional + Measured produces both badges."""
+        pattern = make_pattern(
+            title="My Pattern",
+            lifecycle_state="provisional",
+            evidence_tier="MEASURED",
+        )
+        rendered = render_single_pattern(pattern)  # type: ignore[arg-type]
+        assert "[Provisional]" in rendered
+        assert "[Measured]" in rendered
+        assert "### My Pattern [Provisional] [Measured]" in rendered
+
+    def test_combined_provisional_and_verified(self) -> None:
+        """Provisional + Verified produces both badges."""
+        pattern = make_pattern(
+            title="My Pattern",
+            lifecycle_state="provisional",
+            evidence_tier="VERIFIED",
+        )
+        rendered = render_single_pattern(pattern)  # type: ignore[arg-type]
+        assert "[Provisional]" in rendered
+        assert "[Verified]" in rendered
+        assert "### My Pattern [Provisional] [Verified]" in rendered
+
+
+class TestRequireMeasuredFilter:
+    """Tests for require_measured filter in select_patterns_for_injection."""
+
+    def test_require_measured_filters_unmeasured(self) -> None:
+        """require_measured=True filters out UNMEASURED patterns."""
+        limits = InjectionLimitsConfig(
+            max_patterns_per_injection=10,
+            max_per_domain=10,
+            max_tokens_injected=10000,
+            require_measured=True,
+        )
+        patterns = [
+            make_pattern(
+                pattern_id="unmeasured",
+                domain="testing",
+                evidence_tier="UNMEASURED",
+            ),
+            make_pattern(
+                pattern_id="measured",
+                domain="code_review",
+                evidence_tier="MEASURED",
+            ),
+            make_pattern(
+                pattern_id="verified",
+                domain="debugging",
+                evidence_tier="VERIFIED",
+            ),
+        ]
+        result = select_patterns_for_injection(patterns, limits)  # type: ignore[arg-type]
+
+        ids = [p.pattern_id for p in result]
+        assert "unmeasured" not in ids
+        assert "measured" in ids
+        assert "verified" in ids
+        assert len(result) == 2
+
+    def test_require_measured_filters_none_tier(self) -> None:
+        """require_measured=True filters out None evidence_tier."""
+        limits = InjectionLimitsConfig(
+            max_patterns_per_injection=10,
+            max_per_domain=10,
+            max_tokens_injected=10000,
+            require_measured=True,
+        )
+        patterns = [
+            make_pattern(
+                pattern_id="none-tier",
+                domain="testing",
+                evidence_tier=None,
+            ),
+            make_pattern(
+                pattern_id="verified",
+                domain="code_review",
+                evidence_tier="VERIFIED",
+            ),
+        ]
+        result = select_patterns_for_injection(patterns, limits)  # type: ignore[arg-type]
+
+        assert len(result) == 1
+        assert result[0].pattern_id == "verified"
+
+    def test_require_measured_false_passes_all(self) -> None:
+        """require_measured=False (default) passes all patterns."""
+        limits = InjectionLimitsConfig(
+            max_patterns_per_injection=10,
+            max_per_domain=10,
+            max_tokens_injected=10000,
+            require_measured=False,
+        )
+        patterns = [
+            make_pattern(pattern_id="unmeasured", evidence_tier="UNMEASURED"),
+            make_pattern(
+                pattern_id="measured", domain="code_review", evidence_tier="MEASURED"
+            ),
+            make_pattern(pattern_id="none", domain="debugging", evidence_tier=None),
+        ]
+        result = select_patterns_for_injection(patterns, limits)  # type: ignore[arg-type]
+
+        assert len(result) == 3
+
+    def test_require_measured_empty_after_filter(self) -> None:
+        """require_measured=True with all unmeasured returns empty."""
+        limits = InjectionLimitsConfig(
+            max_patterns_per_injection=10,
+            max_per_domain=10,
+            max_tokens_injected=10000,
+            require_measured=True,
+        )
+        patterns = [
+            make_pattern(pattern_id="u1", evidence_tier="UNMEASURED"),
+            make_pattern(pattern_id="u2", domain="code_review", evidence_tier=None),
+        ]
+        result = select_patterns_for_injection(patterns, limits)  # type: ignore[arg-type]
+
+        assert result == []
+
+    def test_require_measured_default_is_false(self) -> None:
+        """Default InjectionLimitsConfig has require_measured=False."""
+        config = InjectionLimitsConfig()
+        assert config.require_measured is False
