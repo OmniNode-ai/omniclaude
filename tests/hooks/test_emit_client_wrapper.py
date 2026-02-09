@@ -64,7 +64,6 @@ class TestModuleImport:
             "routing.skipped",  # OMN-1892 - Routing feedback skipped
             "notification.blocked",  # OMN-1831
             "notification.completed",  # PR-92
-            "phase.metrics",  # OMN-2027
         }
         assert expected_types == SUPPORTED_EVENT_TYPES
 
