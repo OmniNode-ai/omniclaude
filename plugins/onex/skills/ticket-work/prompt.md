@@ -251,7 +251,7 @@ hardening_tickets: []
 
    Then immediately invoke:
    ```
-   Skill(skill="parallel-solve", args="Implement {ticket_id}: {title}. Requirements: {r1}, {r2}, ...")
+   Skill(skill="onex:parallel-solve", args="Implement {ticket_id}: {title}. Requirements: {r1}, {r2}, ...")
    ```
 
 **⚠️ DO NOT proceed to implementation actions until ALL automation steps complete successfully.**
@@ -320,7 +320,7 @@ except AutomationError as e:
 1. Verify branch is checked out (should already exist from transition automation)
 2. **Execute requirements using /parallel-solve:**
    ```
-   Invoke: Skill(skill="parallel-solve", args="Implement requirements for {ticket_id}: {title}.
+   Invoke: Skill(skill="onex:parallel-solve", args="Implement requirements for {ticket_id}: {title}.
    Requirements: {requirements_summary}.
    Files to modify: {context.relevant_files}")
    ```

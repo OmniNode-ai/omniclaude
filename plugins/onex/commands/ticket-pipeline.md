@@ -25,10 +25,10 @@ Autonomous per-ticket pipeline. Chains: implement -> local_review -> create_pr -
 
 ## Execution
 
-Use the Skill tool to load the full `ticket-pipeline` skill, then execute with all provided arguments.
+Use the Skill tool to load the full `onex:ticket-pipeline` skill, then execute with all provided arguments.
 
 ```
-Skill(skill="ticket-pipeline", args="{$ARGUMENTS}")
+Skill(skill="onex:ticket-pipeline", args="{$ARGUMENTS}")
 ```
 
 Follow the skill's orchestration logic completely.
