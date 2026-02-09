@@ -414,6 +414,29 @@ class TestEmitSessionOutcome:
         assert result.error_message is not None
 
     @patch("omniclaude.hooks.handler_event_emitter.EventBusKafka")
+    async def test_partial_fanout_cmd_ok_evt_fails(self, mock_bus_cls) -> None:
+        """CMD succeeds but EVT fails: returns success=True with partial error."""
+        mock_bus = AsyncMock()
+        mock_bus_cls.return_value = mock_bus
+
+        # First publish (CMD) succeeds, second publish (EVT) raises
+        mock_bus.publish.side_effect = [None, RuntimeError("EVT broker down")]
+
+        config = ModelSessionOutcomeConfig(
+            session_id="partial-fanout-test",
+            outcome="success",
+            tracing=ModelEventTracingConfig(
+                emitted_at=datetime(2026, 2, 9, 12, 0, 0, tzinfo=UTC),
+                environment="test",
+            ),
+        )
+
+        result = await emit_session_outcome_from_config(config)
+        assert result.success is True  # CMD is primary target
+        assert result.error_message is not None
+        assert "Partial fan-out" in result.error_message
+
+    @patch("omniclaude.hooks.handler_event_emitter.EventBusKafka")
     async def test_defaults_emitted_at_to_now(self, mock_bus_cls) -> None:
         """When emitted_at is not provided, defaults to current UTC time."""
         mock_bus = AsyncMock()
