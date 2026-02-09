@@ -289,12 +289,16 @@ def write_metrics_artifact(
         artifact_path = metrics_dir / f"{phase}_{attempt}.metrics.json"
         data = metrics.model_dump(mode="json")
 
-        # Sanitize error messages in file artifact (same redaction as Kafka path)
+        # Sanitize file artifact (same redaction as Kafka path)
         if data.get("outcome"):
             outcome = data["outcome"]
             if "error_messages" in outcome:
                 outcome["error_messages"] = _sanitize_error_messages(
                     outcome.get("error_messages", [])
+                )
+            if "failed_tests" in outcome:
+                outcome["failed_tests"] = _sanitize_failed_tests(
+                    outcome.get("failed_tests", [])
                 )
 
         # Atomic write via temp file
