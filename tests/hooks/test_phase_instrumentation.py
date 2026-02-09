@@ -812,6 +812,49 @@ class TestMetricsEmitter:
         success = emit_phase_metrics(sample_metrics)
         assert success is False
 
+    @patch("plugins.onex.hooks.lib.emit_client_wrapper.emit_event", return_value=True)
+    def test_emit_sanitizes_failed_tests_in_payload(self, mock_emit):
+        """emit_phase_metrics truncates and caps failed_tests before emission."""
+        long_test_name = "test_" + "x" * 200  # Over MAX_FAILED_TEST_LENGTH
+        many_tests = [f"test_case_{i}" for i in range(30)]  # Over MAX_FAILED_TESTS
+
+        metrics = ContractPhaseMetrics(
+            run_id="test-sanitize",
+            phase=ContractEnumPipelinePhase.VERIFY,
+            phase_id="test-sanitize-local_review-1",
+            attempt=1,
+            context=ContractMeasurementContext(
+                ticket_id="OMN-TEST",
+                repo_id="test-repo",
+                toolchain="claude-code",
+            ),
+            producer=ContractProducer(
+                name=PRODUCER_NAME,
+                version=PRODUCER_VERSION,
+                instance_id="test-inst",
+            ),
+            duration=ContractDurationMetrics(wall_clock_ms=1000.0),
+            outcome=ContractOutcomeMetrics(
+                result_classification=ContractEnumResultClassification.FAILURE,
+                failed_tests=[long_test_name] + many_tests,
+            ),
+        )
+
+        success = emit_phase_metrics(metrics)
+        assert success is True
+
+        # Verify the payload sent to emit_event has sanitized failed_tests
+        call_args = mock_emit.call_args
+        payload = call_args[0][1]
+        emitted_tests = payload["payload"]["outcome"]["failed_tests"]
+
+        # Capped at MAX_FAILED_TESTS (20)
+        assert len(emitted_tests) <= 20
+
+        # First entry (long name) should be truncated to MAX_FAILED_TEST_LENGTH (100)
+        assert len(emitted_tests[0]) <= 100
+        assert emitted_tests[0].endswith("...")
+
 
 # ---------------------------------------------------------------------------
 # Tests: PhaseResult
