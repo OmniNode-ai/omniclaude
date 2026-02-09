@@ -66,6 +66,15 @@ def _validate_path_segment(value: str, label: str) -> str | None:
             repr(value[:80]),
         )
         return None
+    # Filesystem filename limit (255 chars) minus suffix room (.measured.json = 14)
+    if len(value) > 240:
+        _log.warning(
+            "Rejected %s exceeding length limit (len=%d): %s",
+            label,
+            len(value),
+            repr(value[:80]),
+        )
+        return None
     return value
 
 
