@@ -61,14 +61,12 @@ import concurrent.futures
 import json
 import logging
 import os
+import socket
 import sys
 import threading
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, TypeVar, cast
-
-if TYPE_CHECKING:
-    from omniclaude.publisher.emit_client import EmitClient
+from typing import TypeVar, cast
 
 logger = logging.getLogger(__name__)
 
@@ -155,19 +153,82 @@ def _run_sync_in_thread(func: Callable[[], T]) -> T:  # noqa: UP047 - Python 3.1
 
 
 # =============================================================================
+# Minimal Socket Client (no external dependencies)
+# =============================================================================
+
+
+class _SocketEmitClient:
+    """Minimal emit daemon client using raw Unix domain sockets.
+
+    Implements the newline-delimited JSON protocol expected by the emit daemon.
+    Protocol:
+        Request:  ``{"event_type": "...", "payload": {...}}\\n``
+        Response: ``{"status": "queued", "event_id": "..."}\\n``
+        Ping:     ``{"command": "ping"}\\n``
+        Pong:     ``{"status": "ok", "queue_size": N, "spool_size": N}\\n``
+
+    This replaces the former ``omnibase_infra.runtime.emit_daemon.client.EmitClient``
+    which was removed in OMN-1945 and moved to omniclaude3.
+
+    .. versionadded:: 0.2.1
+    """
+
+    __slots__ = ("_socket_path", "_timeout")
+
+    def __init__(self, socket_path: str, timeout: float) -> None:
+        self._socket_path = socket_path
+        self._timeout = timeout
+
+    def _request(self, data: dict) -> dict:
+        """Send a JSON request and return the parsed response."""
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.settimeout(self._timeout)
+        try:
+            sock.connect(self._socket_path)
+            sock.sendall(json.dumps(data).encode("utf-8") + b"\n")
+            # Read response (daemon always sends newline-terminated JSON)
+            chunks: list[bytes] = []
+            while True:
+                chunk = sock.recv(4096)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+                if b"\n" in chunk:
+                    break
+            return json.loads(b"".join(chunks).decode("utf-8").strip())
+        finally:
+            sock.close()
+
+    def emit_sync(self, event_type: str, payload: dict) -> str:
+        """Emit event synchronously, returns event_id."""
+        response = self._request({"event_type": event_type, "payload": payload})
+        if response.get("status") == "queued":
+            return response["event_id"]
+        raise RuntimeError(response.get("reason", f"Unexpected response: {response}"))
+
+    def is_daemon_running_sync(self) -> bool:
+        """Return True if daemon responds to ping."""
+        try:
+            response = self._request({"command": "ping"})
+            return response.get("status") == "ok"
+        except Exception:
+            return False
+
+
+# =============================================================================
 # Client Initialization (thread-safe, lazy)
 # =============================================================================
 
 _client_lock = threading.Lock()
-_emit_client: EmitClient | None = None
+_emit_client: _SocketEmitClient | None = None
 _client_initialized = False
 
 
-def _get_client() -> EmitClient | None:
-    """Get or create the EmitClient instance (lazy, thread-safe).
+def _get_client() -> _SocketEmitClient | None:
+    """Get or create the emit client instance (lazy, thread-safe).
 
     Returns:
-        EmitClient instance or None if initialization fails.
+        _SocketEmitClient instance or None if initialization fails.
     """
     global _emit_client, _client_initialized
 
@@ -176,8 +237,6 @@ def _get_client() -> EmitClient | None:
             return _emit_client
 
         try:
-            from omniclaude.publisher.emit_client import EmitClient
-
             socket_path = os.environ.get(
                 "OMNICLAUDE_EMIT_SOCKET", str(DEFAULT_SOCKET_PATH)
             )
@@ -186,7 +245,9 @@ def _get_client() -> EmitClient | None:
                     "OMNICLAUDE_EMIT_TIMEOUT", str(DEFAULT_CLIENT_TIMEOUT_SECONDS)
                 )
             )
-            _emit_client = EmitClient(socket_path=socket_path, timeout=timeout_seconds)
+            _emit_client = _SocketEmitClient(
+                socket_path=socket_path, timeout=timeout_seconds
+            )
             logger.debug(
                 f"EmitClient initialized (socket={socket_path}, timeout={timeout_seconds}s)"
             )
@@ -310,7 +371,7 @@ def emit_event(
         logger.debug(f"Event emitted: {event_id}")
         return True
 
-    except (ConnectionRefusedError, FileNotFoundError, BrokenPipeError) as e:
+    except (ConnectionRefusedError, FileNotFoundError, BrokenPipeError, OSError) as e:
         # Expected during startup or when daemon is not running
         logger.debug(f"Event emission failed (daemon unavailable): {e}")
         return False
