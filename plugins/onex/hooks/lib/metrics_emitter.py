@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -38,7 +39,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 # Maximum error message length after redaction (per M2 spec)
-MAX_ERROR_MESSAGE_LENGTH = 200
+MAX_ERROR_MESSAGE_LENGTH = 100
 MAX_ERROR_MESSAGES = 5
 
 # Maximum failed test name length and count (per M2 spec)
@@ -62,7 +63,7 @@ def _sanitize_error_messages(messages: list[str]) -> list[str]:
 
     Applies secret redaction and length truncation per M2 spec:
     - redact_secrets() from secret_redactor.py
-    - Truncate each message to 200 chars
+    - Truncate each message to 100 chars
     - Max 5 messages
 
     Args:
@@ -107,11 +108,27 @@ def _sanitize_failed_tests(tests: list[str]) -> list[str]:
     return sanitized
 
 
+# Absolute path prefixes that leak machine identity and must be rejected.
+_ABSOLUTE_PATH_PREFIXES = (
+    "/Users/",
+    "/home/",
+    "/root/",
+    "/var/",
+    "/tmp/",  # noqa: S108
+    "/opt/",
+    "/etc/",
+    "/srv/",
+)
+
+# Matches Windows drive-letter paths like C:\, D:\, etc. anywhere in the string.
+_WINDOWS_DRIVE_RE = re.compile(r"[A-Z]:\\")
+
+
 def _validate_artifact_uri(uri: str) -> bool:
     """Validate artifact pointer URI does not contain absolute or local paths.
 
-    Rejects file:// URIs, tilde paths, absolute paths, and Windows drive paths
-    to prevent PII leakage on the broad-access evt topic.
+    Rejects file:// URIs, tilde paths, well-known absolute path prefixes, and
+    Windows drive paths to prevent PII leakage on the broad-access evt topic.
 
     Args:
         uri: The artifact URI to validate.
@@ -119,16 +136,19 @@ def _validate_artifact_uri(uri: str) -> bool:
     Returns:
         True if URI is safe for emission.
     """
-    if (
-        uri.startswith("file://")
-        or uri.startswith("~")
-        or "/Users/" in uri
-        or "/home/" in uri
-        or "/root/" in uri
-        or "C:\\" in uri
-        or (len(uri) > 0 and uri[0] == "/" and not uri.startswith("//"))
-    ):
+    if uri.startswith("file://") or uri.startswith("~"):
+        logger.warning(f"Artifact URI contains local path scheme, rejecting: {uri[:50]}...")
+        return False
+    if any(prefix in uri for prefix in _ABSOLUTE_PATH_PREFIXES):
         logger.warning(f"Artifact URI contains absolute path, rejecting: {uri[:50]}...")
+        return False
+    if len(uri) > 0 and uri[0] == "/" and not uri.startswith("//"):
+        logger.warning(f"Artifact URI contains absolute path, rejecting: {uri[:50]}...")
+        return False
+    if _WINDOWS_DRIVE_RE.search(uri):
+        logger.warning(
+            f"Artifact URI contains Windows drive path, rejecting: {uri[:50]}..."
+        )
         return False
     return True
 
@@ -268,6 +288,14 @@ def write_metrics_artifact(
 
         artifact_path = metrics_dir / f"{phase}_{attempt}.metrics.json"
         data = metrics.model_dump(mode="json")
+
+        # Sanitize error messages in file artifact (same redaction as Kafka path)
+        if data.get("outcome"):
+            outcome = data["outcome"]
+            if "error_messages" in outcome:
+                outcome["error_messages"] = _sanitize_error_messages(
+                    outcome.get("error_messages", [])
+                )
 
         # Atomic write via temp file
         tmp_path = artifact_path.with_suffix(".json.tmp")

@@ -494,6 +494,30 @@ class TestInstrumentedPhase:
             == ContractEnumResultClassification.PARTIAL
         )
 
+    @patch(
+        "plugins.onex.hooks.lib.metrics_emitter.emit_phase_metrics", return_value=True
+    )
+    @patch(
+        "plugins.onex.hooks.lib.metrics_emitter.write_metrics_artifact",
+        return_value=Path("/tmp/test.json"),
+    )
+    def test_injectable_started_at(self, mock_write, mock_emit):
+        """instrumented_phase uses injected started_at for deterministic timing."""
+        fixed_start = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
+        result = instrumented_phase(
+            run_id="run-timing",
+            phase="implement",
+            attempt=1,
+            ticket_id="OMN-2027",
+            repo_id="omniclaude2",
+            phase_fn=lambda: PhaseResult(status="completed"),
+            started_at=fixed_start,
+        )
+        assert result.status == "completed"
+        emitted_metrics = mock_emit.call_args[0][0]
+        # Duration should be based on fixed_start, not a fresh datetime.now()
+        assert emitted_metrics.duration.wall_clock_ms >= 0
+
 
 # ---------------------------------------------------------------------------
 # Tests: detect_silent_omission
@@ -814,6 +838,21 @@ class TestMetricsEmitter:
         assert success is False
 
     @patch("plugins.onex.hooks.lib.emit_client_wrapper.emit_event", return_value=True)
+    def test_emit_forwards_injectable_params(
+        self, mock_emit, sample_metrics: ContractPhaseMetrics
+    ):
+        """emit_phase_metrics forwards timestamp_iso and event_id to event."""
+        success = emit_phase_metrics(
+            sample_metrics,
+            timestamp_iso="2026-02-09T12:00:00+00:00",
+            event_id="fixed123",
+        )
+        assert success is True
+        payload = mock_emit.call_args[0][1]
+        assert payload["event_id"] == "fixed123"
+        assert payload["timestamp_iso"] == "2026-02-09T12:00:00+00:00"
+
+    @patch("plugins.onex.hooks.lib.emit_client_wrapper.emit_event", return_value=True)
     def test_emit_sanitizes_failed_tests_in_payload(self, mock_emit):
         """emit_phase_metrics truncates and caps failed_tests before emission."""
         long_test_name = "test_" + "x" * 200  # Over MAX_FAILED_TEST_LENGTH
@@ -1040,6 +1079,30 @@ class TestSanitization:
         assert _validate_artifact_uri("/etc/passwd") is False
         assert _validate_artifact_uri("/var/log/syslog") is False
 
+    def test_rejects_var_path(self):
+        """/var/ in URI is rejected."""
+        assert _validate_artifact_uri("/var/log/pipeline/report.html") is False
+
+    def test_rejects_tmp_path(self):
+        """/tmp/ in URI is rejected."""
+        assert _validate_artifact_uri("/tmp/metrics-output.json") is False
+
+    def test_rejects_opt_path(self):
+        """/opt/ in URI is rejected."""
+        assert _validate_artifact_uri("/opt/app/artifacts/report.html") is False
+
+    def test_rejects_srv_path(self):
+        """/srv/ in URI is rejected."""
+        assert _validate_artifact_uri("/srv/data/artifact.json") is False
+
+    def test_rejects_d_drive(self):
+        """D:\\ in URI is rejected."""
+        assert _validate_artifact_uri("D:\\Projects\\report.html") is False
+
+    def test_rejects_e_drive(self):
+        """E:\\ in URI is rejected."""
+        assert _validate_artifact_uri("E:\\Builds\\artifact.json") is False
+
     def test_accepts_relative_path(self):
         """Relative paths like artifacts/report.html are accepted."""
         assert _validate_artifact_uri("artifacts/report.html") is True
@@ -1060,18 +1123,6 @@ class TestSanitization:
             event_id="test1234",
         )
         assert event.event_id == "test1234"
-        assert event.timestamp_iso == "2026-02-09T12:00:00+00:00"
-
-    def test_explicit_timestamp_and_event_id_used(
-        self, sample_metrics: ContractPhaseMetrics
-    ):
-        """Explicit timestamp and event_id are used (deterministic testing)."""
-        event = _build_measurement_event(
-            sample_metrics,
-            timestamp_iso="2026-02-09T12:00:00+00:00",
-            event_id="abcd5678",
-        )
-        assert event.event_id == "abcd5678"
         assert event.timestamp_iso == "2026-02-09T12:00:00+00:00"
 
     def test_event_envelope_structure(self, sample_metrics: ContractPhaseMetrics):
