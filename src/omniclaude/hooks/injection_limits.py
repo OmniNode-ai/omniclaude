@@ -533,6 +533,17 @@ def select_patterns_for_injection(
     if not candidates:
         return []
 
+    # Pre-filter: exclude provisional patterns when include_provisional=False (OMN-2042)
+    # This is the single enforcement point for both DB and file sources.
+    if not limits.include_provisional:
+        candidates = [
+            p
+            for p in candidates
+            if getattr(p, "lifecycle_state", None) != "provisional"
+        ]
+        if not candidates:
+            return []
+
     # Use computed header tokens if not explicitly provided
     # This keeps the default in sync with INJECTION_HEADER constant
     effective_header_tokens = (

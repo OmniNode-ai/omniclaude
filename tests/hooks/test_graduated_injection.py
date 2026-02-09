@@ -771,6 +771,63 @@ class TestHandlerIntegration:
         with pattern_path.open("w") as f:
             json.dump(patterns_data, f)
 
+        # With include_provisional=True, both patterns are included
+        config_with_provisional = ContextInjectionConfig(
+            enabled=True,
+            min_confidence=0.0,
+            db_enabled=False,
+            limits=InjectionLimitsConfig(include_provisional=True),
+        )
+        handler = HandlerContextInjection(config=config_with_provisional)
+        result = await handler.handle(
+            project_root=str(temp_project_dir),
+            emit_event=False,
+        )
+
+        assert result.success is True
+        assert result.pattern_count == 2
+        # File parser extracts lifecycle_state via item.get('lifecycle_state')
+        # so provisional patterns get the [Provisional] badge in output
+        assert "Validated Pattern" in result.context_markdown
+        assert "[Provisional]" in result.context_markdown
+
+    @pytest.mark.asyncio
+    async def test_handler_excludes_provisional_when_disabled(
+        self, temp_project_dir: Path
+    ) -> None:
+        """Handler excludes provisional patterns from file when include_provisional=False."""
+        from omniclaude.hooks.context_config import ContextInjectionConfig
+        from omniclaude.hooks.handler_context_injection import HandlerContextInjection
+
+        patterns_data = {
+            "version": "1.0.0",
+            "patterns": [
+                {
+                    "pattern_id": "val-1",
+                    "domain": "testing",
+                    "title": "Validated Pattern",
+                    "description": "A validated pattern.",
+                    "confidence": 0.9,
+                    "usage_count": 10,
+                    "success_rate": 0.8,
+                },
+                {
+                    "pattern_id": "prov-1",
+                    "domain": "code_review",
+                    "title": "Provisional Pattern",
+                    "description": "A provisional pattern.",
+                    "confidence": 0.7,
+                    "usage_count": 5,
+                    "success_rate": 0.6,
+                    "lifecycle_state": "provisional",
+                },
+            ],
+        }
+        pattern_path = temp_project_dir / ".claude" / "learned_patterns.json"
+        with pattern_path.open("w") as f:
+            json.dump(patterns_data, f)
+
+        # Default config has include_provisional=False
         config = ContextInjectionConfig(
             enabled=True,
             min_confidence=0.0,
@@ -783,8 +840,6 @@ class TestHandlerIntegration:
         )
 
         assert result.success is True
-        assert result.pattern_count == 2
-        # File parser extracts lifecycle_state via item.get('lifecycle_state')
-        # so provisional patterns get the [Provisional] badge in output
+        assert result.pattern_count == 1  # Only validated pattern selected
         assert "Validated Pattern" in result.context_markdown
-        assert "[Provisional]" in result.context_markdown
+        assert "[Provisional]" not in result.context_markdown

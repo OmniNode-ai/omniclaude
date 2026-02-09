@@ -38,7 +38,7 @@ class PatternRecord:
         SYNC REQUIREMENTS:
         - This MUST stay in sync with PatternRecord in:
           src/omniclaude/hooks/handler_context_injection.py (ModelPatternRecord)
-        - Both have identical 8 fields and validation logic
+        - Both have identical 9 fields and validation logic
         - See tests/hooks/test_pattern_sync.py for automated verification
 
         The DbPatternRecord in repository_patterns.py is a DIFFERENT model
