@@ -545,6 +545,7 @@ class HandlerContextInjection:
 
         # Step 7: Emit event
         if emit_event and patterns:
+            emitted_at = datetime.now(UTC)
             await self._emit_event(
                 patterns=patterns,
                 context_size_bytes=context_size_bytes,
@@ -555,6 +556,7 @@ class HandlerContextInjection:
                 agent_domain=agent_domain,
                 min_confidence=cfg.min_confidence,
                 context_source=context_source,
+                emitted_at=emitted_at,
             )
 
         return ModelInjectionResult(
@@ -853,6 +855,7 @@ class HandlerContextInjection:
         agent_domain: str,
         min_confidence: float,
         context_source: ContextSource = ContextSource.DATABASE,
+        emitted_at: datetime,
     ) -> None:
         """Emit context injection event to Kafka."""
         # Derive entity_id
@@ -894,7 +897,7 @@ class HandlerContextInjection:
                 session_id=session_id or str(entity_id),
                 correlation_id=resolved_correlation_id,
                 causation_id=uuid4(),
-                emitted_at=datetime.now(UTC),
+                emitted_at=emitted_at,
                 context_source=context_source,
                 pattern_count=len(patterns),
                 context_size_bytes=context_size_bytes,

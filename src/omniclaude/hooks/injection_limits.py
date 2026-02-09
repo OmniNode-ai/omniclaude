@@ -222,6 +222,7 @@ def compute_effective_score(
             as "validated", no dampening).
         provisional_dampening: Dampening factor for provisional patterns.
             Default 1.0 (no dampening). Typical value: 0.5.
+            Must be >0.0; use include_provisional=False to disable entirely.
 
     Returns:
         Effective score (0.0 to 1.0).
@@ -358,12 +359,13 @@ class InjectionLimitsConfig(BaseSettings):
 
     provisional_dampening: float = Field(
         default=0.5,
-        ge=0.0,
+        gt=0.0,
         le=1.0,
         description=(
             "Dampening factor applied to provisional pattern scores. "
             "A value of 0.5 means provisional patterns compete at half "
-            "their computed effective score. Range 0.0 (never select) to 1.0 (no dampening)."
+            "their computed effective score. Range: (0.0, 1.0]. "
+            "To disable provisional patterns entirely, set include_provisional=False."
         ),
     )
 
