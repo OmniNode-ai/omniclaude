@@ -1094,7 +1094,7 @@ class TestEvidencePolicy:
 
     def test_ignore_policy_does_not_consult_resolver(self) -> None:
         """evidence_policy="ignore" doesn't call resolver."""
-        from omniclaude.hooks.injection_limits import DictEvidenceResolver
+        from omniclaude.hooks.dict_evidence_resolver import DictEvidenceResolver
 
         # Create resolver that would raise if called
         class StrictResolver(DictEvidenceResolver):
@@ -1118,7 +1118,7 @@ class TestEvidencePolicy:
 
     def test_boost_policy_reranks_by_evidence(self) -> None:
         """KEY DEMO: 3 patterns with same base stats, evidence_policy="boost" reranks by gate_result."""
-        from omniclaude.hooks.injection_limits import DictEvidenceResolver
+        from omniclaude.hooks.dict_evidence_resolver import DictEvidenceResolver
 
         resolver = DictEvidenceResolver(
             {
@@ -1155,7 +1155,7 @@ class TestEvidencePolicy:
 
     def test_require_policy_filters_non_pass(self) -> None:
         """evidence_policy="require" only selects pass patterns."""
-        from omniclaude.hooks.injection_limits import DictEvidenceResolver
+        from omniclaude.hooks.dict_evidence_resolver import DictEvidenceResolver
 
         resolver = DictEvidenceResolver(
             {
@@ -1184,7 +1184,7 @@ class TestEvidencePolicy:
 
     def test_require_policy_empty_when_no_pass(self) -> None:
         """All fail/None → empty result."""
-        from omniclaude.hooks.injection_limits import DictEvidenceResolver
+        from omniclaude.hooks.dict_evidence_resolver import DictEvidenceResolver
 
         resolver = DictEvidenceResolver(
             {
@@ -1234,13 +1234,19 @@ class TestEvidencePolicy:
         assert len(result) == 2
         assert result[0].pattern_id == "pat-a"  # Higher confidence
 
-    def test_evidence_badge_in_rendered_output(self) -> None:
-        """render_single_pattern with gate_result="pass" has [Evidence: Pass]."""
+    def test_evidence_badge_not_in_rendered_output(self) -> None:
+        """render_single_pattern does NOT include evidence badges (format sync with handler).
+
+        Evidence badges are intentionally excluded from render_single_pattern()
+        because _format_patterns_markdown() in handler_context_injection.py does
+        not have access to gate_result. Including them would desynchronize token
+        counting from actual output.
+        """
         pattern = make_pattern(pattern_id="pat-pass", title="Test Pattern")
         rendered = render_single_pattern(pattern, gate_result="pass")  # type: ignore[arg-type]
 
-        assert "[Evidence: Pass]" in rendered
-        assert "### Test Pattern [Evidence: Pass]" in rendered
+        assert "[Evidence: Pass]" not in rendered
+        assert "### Test Pattern" in rendered
 
     def test_default_evidence_policy_is_ignore(self) -> None:
         """InjectionLimitsConfig().evidence_policy == "ignore"."""

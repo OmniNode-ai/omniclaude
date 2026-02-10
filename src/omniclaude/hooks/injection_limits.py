@@ -33,7 +33,6 @@ import tiktoken
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from omniclaude.hooks.dict_evidence_resolver import DictEvidenceResolver
 from omniclaude.hooks.evidence_resolver import EvidenceResolver, NullEvidenceResolver
 from omniclaude.hooks.file_evidence_resolver import FileEvidenceResolver
 
@@ -556,10 +555,11 @@ def render_single_pattern(
         badges.append("[Measured]")
     elif evidence_tier == "VERIFIED":
         badges.append("[Verified]")
-    if gate_result == "pass":
-        badges.append("[Evidence: Pass]")
-    elif gate_result == "fail":
-        badges.append("[Evidence: Fail]")
+    # NOTE: gate_result badges are intentionally NOT rendered here.
+    # _format_patterns_markdown() in handler_context_injection.py does not
+    # have access to gate_result, so including badges here would cause
+    # token counting to overestimate relative to actual output. When the
+    # handler is updated to render evidence badges, add them here too.
     title_suffix = (" " + " ".join(badges)) if badges else ""
 
     lines = [
@@ -840,7 +840,6 @@ __all__ = [
     "EvidenceResolver",
     "NullEvidenceResolver",
     "FileEvidenceResolver",
-    "DictEvidenceResolver",
     # Constants
     "DOMAIN_ALIASES",
     "KNOWN_DOMAINS",
