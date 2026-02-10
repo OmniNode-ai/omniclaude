@@ -17,6 +17,26 @@ from tests.hooks.conftest import make_pattern
 pytestmark = pytest.mark.unit
 
 
+class TestEvidenceResolverProtocolConformance:
+    """Verify that resolver implementations satisfy the EvidenceResolver protocol."""
+
+    def test_file_evidence_resolver_satisfies_protocol(self) -> None:
+        """FileEvidenceResolver is a valid EvidenceResolver."""
+        from omniclaude.hooks.evidence_resolver import EvidenceResolver
+        from plugins.onex.hooks.lib.file_evidence_resolver import FileEvidenceResolver
+
+        resolver = FileEvidenceResolver()
+        assert isinstance(resolver, EvidenceResolver)
+
+    def test_dict_evidence_resolver_satisfies_protocol(self) -> None:
+        """DictEvidenceResolver is a valid EvidenceResolver."""
+        from omniclaude.hooks.evidence_resolver import EvidenceResolver
+        from tests.hooks.dict_evidence_resolver import DictEvidenceResolver
+
+        resolver = DictEvidenceResolver({})
+        assert isinstance(resolver, EvidenceResolver)
+
+
 class TestEvidenceDrivenInjectionFullLoop:
     """Full-loop test for evidence-driven injection feedback cycle."""
 
