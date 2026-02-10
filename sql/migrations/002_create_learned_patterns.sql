@@ -44,6 +44,16 @@ CREATE INDEX IF NOT EXISTS idx_learned_patterns_project_scope
 CREATE INDEX IF NOT EXISTS idx_learned_patterns_domain_confidence
     ON learned_patterns(domain, confidence DESC);
 
+-- Temporal queries for analytics and cache management
+CREATE INDEX IF NOT EXISTS idx_learned_patterns_updated_at
+    ON learned_patterns(updated_at DESC);
+
+-- Composite index for scoped domain queries
+-- Supports: WHERE (project_scope IS NULL OR project_scope = $project)
+--           AND domain = $domain ORDER BY confidence DESC
+CREATE INDEX IF NOT EXISTS idx_learned_patterns_scope_domain_confidence
+    ON learned_patterns(project_scope, domain, confidence DESC);
+
 -- Add table comment
 COMMENT ON TABLE learned_patterns IS
 'Learned patterns for Claude Code context injection. Patterns are injected into sessions based on domain, confidence, and project scope.';
@@ -78,6 +88,25 @@ COMMENT ON COLUMN learned_patterns.example_reference IS
 
 COMMENT ON COLUMN learned_patterns.project_scope IS
 'Optional project scope. NULL means global pattern available to all projects.';
+
+-- Create trigger function to auto-update updated_at on row modification
+CREATE OR REPLACE FUNCTION update_learned_patterns_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create trigger to call the function before any UPDATE
+DROP TRIGGER IF EXISTS trg_learned_patterns_updated_at ON learned_patterns;
+CREATE TRIGGER trg_learned_patterns_updated_at
+    BEFORE UPDATE ON learned_patterns
+    FOR EACH ROW
+    EXECUTE FUNCTION update_learned_patterns_updated_at();
+
+COMMENT ON FUNCTION update_learned_patterns_updated_at() IS
+'Trigger function to auto-update updated_at timestamp on learned_patterns modifications';
 
 -- Verify table was created
 DO $$

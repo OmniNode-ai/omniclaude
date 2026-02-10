@@ -13,7 +13,7 @@ Usage:
 
 See Also:
     - OMN-1806 ticket for requirements
-    - migrations/001_create_learned_patterns_table.sql for schema
+    - sql/migrations/002_create_learned_patterns.sql for schema
 """
 
 from __future__ import annotations
