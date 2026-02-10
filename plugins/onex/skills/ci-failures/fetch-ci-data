@@ -266,7 +266,7 @@ fetch_failures_for_pr() {
     # Third-party CI systems (CircleCI, Jenkins, etc.) that register check runs
     # with a different app slug are excluded. Users should verify in the GitHub
     # Actions UI if they suspect third-party CI failures.
-    failed_checks=$(echo "$api_response" | jq '[.check_runs[] | select(.conclusion == "failure" and .app.slug == "github-actions")]')
+    failed_checks=$(echo "$api_response" | jq '[.check_runs[] | select(.conclusion == "failure" and (.app.slug // "") == "github-actions")]')
 
     local check_count
     check_count=$(echo "$failed_checks" | jq 'length')
