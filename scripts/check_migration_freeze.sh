@@ -26,14 +26,23 @@ MODE="${1:-precommit}"
 
 if [ "$MODE" = "--ci" ]; then
     # CI mode: compare against base branch
-    BASE_BRANCH="${GITHUB_BASE_REF:-main}"
-    # Detect added (A) or renamed (R) files in the migrations directory
-    NEW_MIGRATIONS=$(git diff --name-status "origin/${BASE_BRANCH}...HEAD" -- "$MIGRATIONS_DIR" \
-        | grep -E '^[AR]' | awk '{print $NF}' || true)
+    # MIGRATION_CHECK_BASE: PR base SHA or push-before SHA (set by CI workflow)
+    # GITHUB_BASE_REF: branch name, only set for pull_request events
+    if [ -n "${MIGRATION_CHECK_BASE:-}" ]; then
+        BASE_REF="$MIGRATION_CHECK_BASE"
+    elif [ -n "${GITHUB_BASE_REF:-}" ]; then
+        BASE_REF="origin/${GITHUB_BASE_REF}"
+    else
+        BASE_REF="origin/main"
+    fi
+    # Detect only added (A) files — renames/moves are allowed during freeze
+    NEW_MIGRATIONS=$(git diff --name-status "${BASE_REF}...HEAD" -- "$MIGRATIONS_DIR" \
+        | grep -E '^A' | awk '{print $NF}' || true)
 else
     # Pre-commit mode: check staged files
+    # Only added (A) files — renames/moves are allowed during freeze
     NEW_MIGRATIONS=$(git diff --cached --name-status -- "$MIGRATIONS_DIR" \
-        | grep -E '^[AR]' | awk '{print $NF}' || true)
+        | grep -E '^A' | awk '{print $NF}' || true)
 fi
 
 if [ -n "$NEW_MIGRATIONS" ]; then

@@ -368,5 +368,5 @@ bandit -r src/omniclaude/
 
 ---
 
-**Last Updated**: 2026-02-01
+**Last Updated**: 2026-02-10
 **Version**: 0.2.1

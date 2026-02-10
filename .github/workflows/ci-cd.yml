@@ -325,6 +325,8 @@ jobs:
 
       - name: Check migration freeze
         run: ./scripts/check_migration_freeze.sh --ci
+        env:
+          MIGRATION_CHECK_BASE: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
 
   # ============================================================================
   # Security Scanning - Python Dependencies
