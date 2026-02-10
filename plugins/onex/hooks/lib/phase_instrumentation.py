@@ -33,7 +33,6 @@ Related Tickets:
 from __future__ import annotations
 
 import logging
-import sys
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -270,7 +269,7 @@ def build_metrics_from_result(
         passed_tests=phase_result.tests_passed,
         failed_tests=phase_result.tests_failed,
         pass_rate=(
-            round(phase_result.tests_passed / phase_result.tests_total, 4)
+            min(round(phase_result.tests_passed / phase_result.tests_total, 4), 1.0)
             if phase_result.tests_total > 0
             else None
         ),
@@ -468,7 +467,7 @@ def instrumented_phase(
     repo_id: str,
     phase_fn: Callable[[], PhaseResult],
     instance_id: str = "",
-    started_at: datetime | None = None,
+    started_at: datetime,
     completed_at: datetime | None = None,
 ) -> PhaseResult:
     """Execute a pipeline phase with full instrumentation.
@@ -479,14 +478,6 @@ def instrumented_phase(
     This is the primary entry point for instrumented phase execution.
     Every pipeline phase MUST be called through this wrapper.
 
-    Note:
-        Unlike :func:`build_error_metrics` (which *requires* an explicit
-        ``completed_at`` and raises ``ValueError`` on ``None``), this
-        top-level wrapper intentionally defaults to ``datetime.now(UTC)``
-        because it times real phase execution in production.  The lower-
-        level builders enforce the "no implicit timestamps" invariant;
-        this wrapper is the single place that legitimately creates them.
-
     Args:
         run_id: Pipeline run identifier.
         phase: Pipeline phase name.
@@ -495,11 +486,13 @@ def instrumented_phase(
         repo_id: Repository identifier.
         phase_fn: Zero-argument callable that executes the phase.
         instance_id: Optional instance identifier.
-        started_at: Explicit start timestamp for deterministic testing.
-            Defaults to ``datetime.now(UTC)`` when *None*.
-        completed_at: Explicit completion timestamp for deterministic testing.
-            Defaults to ``datetime.now(UTC)`` when *None* (captured after
-            *phase_fn* returns or raises).
+        started_at: Phase start timestamp. Required — callers must
+            inject an explicit timestamp (repository invariant: no
+            ``datetime.now()`` defaults).
+        completed_at: Explicit completion timestamp for deterministic
+            testing. When *None*, captured via ``datetime.now(UTC)``
+            after *phase_fn* returns or raises. This is the timing
+            boundary — the wrapper measures real phase completion.
 
     Returns:
         The PhaseResult from phase_fn.
@@ -512,9 +505,6 @@ def instrumented_phase(
         emit_phase_metrics,
         write_metrics_artifact,
     )
-
-    if started_at is None:
-        started_at = datetime.now(UTC)
 
     try:
         result = phase_fn()
@@ -733,7 +723,7 @@ def run_measurement_checks(
     )
 
     # CHECK-MEAS-003: Tokens within budget
-    token_budget = TOKEN_BUDGETS.get(phase, sys.maxsize)
+    token_budget = TOKEN_BUDGETS.get(phase, float("inf"))
     actual_tokens = metrics.cost.llm_total_tokens if metrics.cost else 0
     tokens_ok = actual_tokens <= token_budget
     results.append(

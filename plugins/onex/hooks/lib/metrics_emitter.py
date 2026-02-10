@@ -18,7 +18,6 @@ Related Tickets:
 
 from __future__ import annotations
 
-import functools
 import json
 import logging
 import re
@@ -59,16 +58,27 @@ _INVALID_PATH_CHARS = ("..", "/", "\\", "\x00")
 # ---------------------------------------------------------------------------
 
 
-@functools.lru_cache(maxsize=1)
+_redact_secrets_fn: Callable[[str], str] | None = None
+
+
 def _get_redact_secrets() -> Callable[[str], str]:
     """Return the ``redact_secrets`` callable, with a safe fallback.
 
     If ``secret_redactor`` is unavailable, the fallback replaces all input
     with a placeholder to prevent leaking unredacted secrets to evt topics.
+
+    Unlike a permanent cache, this retries the import on each call until it
+    succeeds — a transient import failure at daemon startup will not
+    permanently degrade sanitization for the process lifetime.
     """
+    global _redact_secrets_fn
+    if _redact_secrets_fn is not None:
+        return _redact_secrets_fn
+
     try:
         from plugins.onex.hooks.lib.secret_redactor import redact_secrets
 
+        _redact_secrets_fn = redact_secrets
         return redact_secrets
     except ImportError:
         logger.warning(
@@ -294,7 +304,7 @@ def emit_phase_metrics(
         # Validate artifact URIs
         if isinstance(inner, dict) and "artifact_pointers" in inner:
             pointers = inner.get("artifact_pointers", [])
-            payload["payload"]["artifact_pointers"] = [
+            inner["artifact_pointers"] = [
                 p for p in pointers if _validate_artifact_uri(p.get("uri", ""))
             ]
 
