@@ -90,8 +90,10 @@ def _lightweight_redact(text: str) -> str:
 def _get_redact_secrets() -> Callable[[str], str]:
     """Return the ``redact_secrets`` callable, with a safe fallback.
 
-    If ``secret_redactor`` is unavailable, the fallback replaces all input
-    with a placeholder to prevent leaking unredacted secrets to evt topics.
+    If ``secret_redactor`` is unavailable, the fallback uses
+    ``_lightweight_redact`` which applies regex-based redaction for
+    common secret formats (API keys, tokens, PEM keys, passwords in
+    URLs) while preserving non-secret text.
 
     Both the real redactor and the fallback are cached after first resolution.
     If the module is later deployed, call ``reset_redactor()`` or restart the
@@ -339,6 +341,10 @@ def emit_phase_metrics(
                 )
             if outcome and outcome.get("skip_reason"):
                 outcome["skip_reason"] = _sanitize_skip_reason(outcome["skip_reason"])
+            if outcome and "error_codes" in outcome:
+                outcome["error_codes"] = _sanitize_error_messages(
+                    outcome.get("error_codes", [])
+                )
 
         # Validate artifact URIs
         if isinstance(inner, dict) and "artifact_pointers" in inner:
@@ -414,6 +420,10 @@ def write_metrics_artifact(
                 )
             if outcome.get("skip_reason"):
                 outcome["skip_reason"] = _sanitize_skip_reason(outcome["skip_reason"])
+            if "error_codes" in outcome:
+                outcome["error_codes"] = _sanitize_error_messages(
+                    outcome.get("error_codes", [])
+                )
 
         # Atomic write via temp file (same-filesystem rename is atomic on POSIX)
         tmp_path = artifact_path.with_suffix(".json.tmp")

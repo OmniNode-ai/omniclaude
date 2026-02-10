@@ -277,9 +277,9 @@ def build_metrics_from_result(
         error_codes=error_codes,
     )
 
-    tests_passed = phase_result.tests_passed
-    tests_total = phase_result.tests_total
-    tests_failed = phase_result.tests_failed
+    tests_passed = max(phase_result.tests_passed, 0)
+    tests_total = max(phase_result.tests_total, 0)
+    tests_failed = max(phase_result.tests_failed, 0)
     if tests_total > 0 and tests_passed > tests_total:
         logger.warning(
             "tests_passed (%d) > tests_total (%d); clamping to total",
