@@ -428,8 +428,6 @@ def create_kafka_config() -> ModelKafkaEventBusConfig:
 
 async def emit_hook_event(
     payload: ModelHookPayload,
-    *,
-    environment: str | None = None,
 ) -> ModelEventPublishResult:
     """Emit a hook event to Kafka.
 
@@ -443,7 +441,6 @@ async def emit_hook_event(
 
     Args:
         payload: The hook event payload (one of the Model*Payload types).
-        environment: Deprecated, ignored. Topics are realm-agnostic (OMN-1972).
 
     Returns:
         ModelEventPublishResult indicating success or failure.
@@ -612,7 +609,7 @@ async def emit_session_started_from_config(
         hook_source=config.hook_source,
     )
 
-    return await emit_hook_event(payload, environment=tracing.environment)
+    return await emit_hook_event(payload)
 
 
 async def emit_session_started(
@@ -702,7 +699,7 @@ async def emit_session_ended_from_config(
         tools_used_count=config.tools_used_count,
     )
 
-    return await emit_hook_event(payload, environment=tracing.environment)
+    return await emit_hook_event(payload)
 
 
 async def emit_session_ended(
@@ -793,7 +790,7 @@ async def emit_prompt_submitted_from_config(
         detected_intent=config.detected_intent,
     )
 
-    return await emit_hook_event(payload, environment=tracing.environment)
+    return await emit_hook_event(payload)
 
 
 async def emit_prompt_submitted(
@@ -888,7 +885,7 @@ async def emit_tool_executed_from_config(
         summary=config.summary,
     )
 
-    return await emit_hook_event(payload, environment=tracing.environment)
+    return await emit_hook_event(payload)
 
 
 async def emit_tool_executed(

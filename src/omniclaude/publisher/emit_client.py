@@ -74,12 +74,7 @@ class EmitClient:
             sock = self._connect()
             sock.sendall(line)
             return self._read_response(sock)
-        except (
-            BrokenPipeError,
-            ConnectionResetError,
-            ConnectionRefusedError,
-            TimeoutError,
-        ):
+        except OSError:
             # Socket went stale — close and retry once
             self.close()
             sock = self._connect()
