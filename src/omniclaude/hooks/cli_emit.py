@@ -622,13 +622,11 @@ def cmd_claude_hook_event(
 
 async def _emit_tool_content(
     content: ModelToolExecutionContent,
-    environment: str | None = None,
 ) -> ModelEventPublishResult:
     """Emit a tool content event to Kafka.
 
     Args:
         content: The tool execution content model to emit.
-        environment: Deprecated, ignored. Topics are realm-agnostic (OMN-1972).
 
     Returns:
         ModelEventPublishResult indicating success or failure.
