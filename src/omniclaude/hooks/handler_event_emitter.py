@@ -384,7 +384,7 @@ def _create_kafka_config() -> ModelKafkaEventBusConfig:
         ModelOnexError: If KAFKA_BOOTSTRAP_SERVERS is not set.
     """
     # Environment label for config metadata (not used for topic prefixing — OMN-1972)
-    environment = os.environ.get("KAFKA_ENVIRONMENT", "")
+    environment = os.environ.get("KAFKA_ENVIRONMENT", "prod")
     bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS")
     if not bootstrap_servers:
         raise ModelOnexError(
