@@ -3,6 +3,12 @@
 Rolls up per-phase ContractPhaseMetrics into ContractAggregatedRun,
 detects flakes via outcome signatures, manages baseline storage,
 and assesses per-dimension evidence sufficiency.
+
+Public helpers (``get_total_tokens``, ``get_total_tests``,
+``make_dimension_evidence``, ``build_dimension_evidence_list``,
+``REQUIRED_DIMENSIONS``) are consumed by ``promotion_gater`` and are
+**internal cross-module API** -- not part of the stable public
+entrypoints listed in CLAUDE.md.
 """
 
 from __future__ import annotations
@@ -42,6 +48,8 @@ logger = logging.getLogger(__name__)
 ALL_PHASES: frozenset[ContractEnumPipelinePhase] = frozenset(ContractEnumPipelinePhase)
 
 BASELINES_ROOT = Path.home() / ".claude" / "baselines"
+
+REQUIRED_DIMENSIONS: tuple[str, ...] = ("duration", "tokens", "tests")
 
 
 # -- Outcome signatures (flake detection) ------------------------------------
@@ -273,7 +281,7 @@ def load_baseline(
 # -- Evidence assessment -----------------------------------------------------
 
 
-def _get_total_tokens(run: ContractAggregatedRun) -> int:
+def get_total_tokens(run: ContractAggregatedRun) -> int:
     total = 0
     for m in run.phase_metrics:
         if m.cost is not None:
@@ -281,7 +289,7 @@ def _get_total_tokens(run: ContractAggregatedRun) -> int:
     return total
 
 
-def _get_total_tests(run: ContractAggregatedRun) -> int:
+def get_total_tests(run: ContractAggregatedRun) -> int:
     total = 0
     for m in run.phase_metrics:
         if m.tests is not None:
@@ -289,7 +297,7 @@ def _get_total_tests(run: ContractAggregatedRun) -> int:
     return total
 
 
-def _make_dimension_evidence(
+def make_dimension_evidence(
     dimension: str,
     baseline_value: float,
     current_value: float,
@@ -320,6 +328,44 @@ def _make_dimension_evidence(
     )
 
 
+def build_dimension_evidence_list(
+    candidate: ContractAggregatedRun,
+    baseline: ContractAggregatedRun,
+) -> list[ContractDimensionEvidence]:
+    """Build the standard dimension evidence list from candidate vs baseline.
+
+    Precondition: the returned list must cover every entry in
+    ``REQUIRED_DIMENSIONS``.  A ``RuntimeError`` enforces this so that
+    adding a new required dimension without a corresponding evidence
+    builder fails loudly rather than silently preventing promotion.
+    """
+    dims = [
+        make_dimension_evidence(
+            "duration",
+            baseline.total_duration_ms or 0.0,
+            candidate.total_duration_ms or 0.0,
+        ),
+        make_dimension_evidence(
+            "tokens",
+            float(get_total_tokens(baseline)),
+            float(get_total_tokens(candidate)),
+        ),
+        make_dimension_evidence(
+            "tests",
+            float(get_total_tests(baseline)),
+            float(get_total_tests(candidate)),
+        ),
+    ]
+    built = {d.dimension for d in dims}
+    missing = set(REQUIRED_DIMENSIONS) - built
+    if missing:
+        raise RuntimeError(
+            f"build_dimension_evidence_list is missing dimensions: {sorted(missing)}. "
+            f"Update this function to cover all REQUIRED_DIMENSIONS."
+        )
+    return dims
+
+
 def assess_evidence(
     candidate: ContractAggregatedRun,
     baseline: ContractAggregatedRun | None,
@@ -333,7 +379,6 @@ def assess_evidence(
     - gate_result='fail' when any required dimension is insufficient
     """
     run_id = candidate.run_id
-    required = ["duration", "tokens", "tests"]
 
     if context is None or not context.pattern_id:
         return ContractPromotionGate(
@@ -342,7 +387,7 @@ def assess_evidence(
             baseline_key="",
             gate_result="insufficient_evidence",
             dimensions=[],
-            required_dimensions=required,
+            required_dimensions=list(REQUIRED_DIMENSIONS),
             sufficient_count=0,
             total_count=0,
         )
@@ -356,32 +401,16 @@ def assess_evidence(
             baseline_key=baseline_key,
             gate_result="insufficient_evidence",
             dimensions=[],
-            required_dimensions=required,
+            required_dimensions=list(REQUIRED_DIMENSIONS),
             sufficient_count=0,
             total_count=0,
         )
 
-    dimensions = [
-        _make_dimension_evidence(
-            "duration",
-            baseline.total_duration_ms or 0.0,
-            candidate.total_duration_ms or 0.0,
-        ),
-        _make_dimension_evidence(
-            "tokens",
-            float(_get_total_tokens(baseline)),
-            float(_get_total_tokens(candidate)),
-        ),
-        _make_dimension_evidence(
-            "tests",
-            float(_get_total_tests(baseline)),
-            float(_get_total_tests(candidate)),
-        ),
-    ]
+    dimensions = build_dimension_evidence_list(candidate, baseline)
 
     sufficient_count = sum(1 for d in dimensions if d.sufficient)
     gate_result: Literal["pass", "fail"] = (
-        "pass" if sufficient_count == len(required) else "fail"
+        "pass" if sufficient_count == len(REQUIRED_DIMENSIONS) else "fail"
     )
 
     return ContractPromotionGate(
@@ -390,7 +419,7 @@ def assess_evidence(
         baseline_key=baseline_key,
         gate_result=gate_result,
         dimensions=dimensions,
-        required_dimensions=required,
+        required_dimensions=list(REQUIRED_DIMENSIONS),
         sufficient_count=sufficient_count,
         total_count=len(dimensions),
     )

@@ -505,48 +505,131 @@ class TestEvidenceAssessment:
 class TestZeroBaselineGuard:
     def test_zero_baseline_delta_pct_none(self) -> None:
         from plugins.onex.hooks.lib.metrics_aggregator import (
-            _make_dimension_evidence,
+            make_dimension_evidence,
         )
 
-        ev = _make_dimension_evidence("duration", 0.0, 100.0)
+        ev = make_dimension_evidence("duration", 0.0, 100.0)
         assert ev.delta_pct is None
 
     def test_zero_baseline_insufficient(self) -> None:
         from plugins.onex.hooks.lib.metrics_aggregator import (
-            _make_dimension_evidence,
+            make_dimension_evidence,
         )
 
-        ev = _make_dimension_evidence("duration", 0.0, 100.0)
+        ev = make_dimension_evidence("duration", 0.0, 100.0)
         assert ev.sufficient is False
 
     def test_nonzero_baseline_has_delta_pct(self) -> None:
         from plugins.onex.hooks.lib.metrics_aggregator import (
-            _make_dimension_evidence,
+            make_dimension_evidence,
         )
 
-        ev = _make_dimension_evidence("duration", 100.0, 120.0)
+        ev = make_dimension_evidence("duration", 100.0, 120.0)
         assert ev.delta_pct is not None
         assert ev.delta_pct == pytest.approx(20.0)
         assert ev.sufficient is True
 
     def test_zero_current_insufficient(self) -> None:
         from plugins.onex.hooks.lib.metrics_aggregator import (
-            _make_dimension_evidence,
+            make_dimension_evidence,
         )
 
-        ev = _make_dimension_evidence("tokens", 100.0, 0.0)
+        ev = make_dimension_evidence("tokens", 100.0, 0.0)
         assert ev.sufficient is False
         assert ev.delta_pct == pytest.approx(-100.0)
 
     def test_no_zero_division_error(self) -> None:
         from plugins.onex.hooks.lib.metrics_aggregator import (
-            _make_dimension_evidence,
+            make_dimension_evidence,
         )
 
         # Should never raise ZeroDivisionError
-        ev = _make_dimension_evidence("tests", 0.0, 0.0)
+        ev = make_dimension_evidence("tests", 0.0, 0.0)
         assert ev.delta_pct is None
         assert ev.sufficient is False
+
+
+# =============================================================================
+# build_dimension_evidence_list
+# =============================================================================
+
+
+class TestBuildDimensionEvidenceList:
+    """Direct tests for the public build_dimension_evidence_list entrypoint."""
+
+    def _make_runs(
+        self,
+        *,
+        duration: float = 100.0,
+        tokens: int = 1000,
+        tests: int = 10,
+    ) -> tuple[ContractAggregatedRun, ContractAggregatedRun]:
+        from plugins.onex.hooks.lib.metrics_aggregator import aggregate_run
+
+        metrics = [
+            _make_phase(
+                phase,
+                wall_clock_ms=duration / 5,
+                input_tokens=tokens // 5,
+                output_tokens=0,
+                total_tests=tests // 5,
+            )
+            for phase in ContractEnumPipelinePhase
+        ]
+        baseline = aggregate_run(metrics, run_id="b")
+        candidate = aggregate_run(metrics, run_id="c")
+        return baseline, candidate
+
+    def test_returns_all_required_dimensions(self) -> None:
+        from plugins.onex.hooks.lib.metrics_aggregator import (
+            REQUIRED_DIMENSIONS,
+            build_dimension_evidence_list,
+        )
+
+        baseline, candidate = self._make_runs()
+        dims = build_dimension_evidence_list(candidate, baseline)
+
+        dim_names = {d.dimension for d in dims}
+        assert dim_names == set(REQUIRED_DIMENSIONS)
+
+    def test_dimension_count_matches_required(self) -> None:
+        from plugins.onex.hooks.lib.metrics_aggregator import (
+            REQUIRED_DIMENSIONS,
+            build_dimension_evidence_list,
+        )
+
+        baseline, candidate = self._make_runs()
+        dims = build_dimension_evidence_list(candidate, baseline)
+        assert len(dims) == len(REQUIRED_DIMENSIONS)
+
+    def test_dimension_values_reflect_inputs(self) -> None:
+        from plugins.onex.hooks.lib.metrics_aggregator import (
+            build_dimension_evidence_list,
+        )
+
+        baseline, candidate = self._make_runs(duration=100.0, tokens=1000, tests=10)
+        dims = build_dimension_evidence_list(candidate, baseline)
+
+        by_name = {d.dimension: d for d in dims}
+        # Same inputs → delta_pct should be 0.0 for all dimensions
+        for dim in by_name.values():
+            assert dim.delta_pct == pytest.approx(0.0)
+            assert dim.sufficient is True
+
+    def test_raises_on_missing_dimension(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import plugins.onex.hooks.lib.metrics_aggregator as mod
+        from plugins.onex.hooks.lib.metrics_aggregator import (
+            build_dimension_evidence_list,
+        )
+
+        baseline, candidate = self._make_runs()
+
+        # Temporarily add a dimension that has no builder
+        original = mod.REQUIRED_DIMENSIONS
+        monkeypatch.setattr(mod, "REQUIRED_DIMENSIONS", (*original, "nonexistent"))
+
+        with pytest.raises(RuntimeError, match="nonexistent"):
+            build_dimension_evidence_list(candidate, baseline)
 
 
 # =============================================================================
