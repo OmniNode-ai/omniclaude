@@ -52,8 +52,12 @@ class EmitClient:
         if self._sock is not None:
             return self._sock
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        sock.settimeout(self._timeout)
-        sock.connect(self._socket_path)
+        try:
+            sock.settimeout(self._timeout)
+            sock.connect(self._socket_path)
+        except Exception:
+            sock.close()
+            raise
         self._sock = sock
         self._buf = b""  # Reset buffer on new connection
         return sock
