@@ -488,5 +488,5 @@ def load_latest_gate_result(
             return None
         return result
     except (json.JSONDecodeError, OSError) as e:
-        logger.warning("Failed to load latest gate for %s: %s", pid, e)
+        logger.warning("Failed to load latest gate for %s: %s", pattern_id, e)
         return None
