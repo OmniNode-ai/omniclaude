@@ -78,7 +78,8 @@ def evaluate_promotion_gate(
     3.  No context / no pattern_id / no baseline → warn (gate_result="insufficient_evidence")
     4.  Insufficient evidence on any dimension → warn (gate_result="insufficient_evidence")
     5.  Duration regression > threshold → warn (gate_result="insufficient_evidence")
-    6.  Token regression > threshold   → warn (gate_result="insufficient_evidence")
+    6a. Token regression > threshold    → warn (gate_result="insufficient_evidence")
+    6b. Test count decrease > threshold → warn (gate_result="insufficient_evidence")
     7.  All clear → allow (gate_result="pass")
 
     The ``extensions`` dict on the returned gate carries:
@@ -173,7 +174,7 @@ def evaluate_promotion_gate(
             required=required,
         )
 
-    # -- Check 5 & 6: regression thresholds --------------------------------
+    # -- Check 5, 6a, 6b: regression thresholds -----------------------------
     regression_reasons = _check_regressions(dimensions, thresholds)
     if regression_reasons:
         return _gate(
