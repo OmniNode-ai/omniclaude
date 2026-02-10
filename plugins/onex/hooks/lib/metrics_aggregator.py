@@ -323,10 +323,11 @@ def build_dimension_evidence_list(
     ]
     built = {d.dimension for d in dims}
     missing = set(REQUIRED_DIMENSIONS) - built
-    assert not missing, (
-        f"build_dimension_evidence_list is missing dimensions: {sorted(missing)}. "
-        f"Update this function to cover all REQUIRED_DIMENSIONS."
-    )
+    if missing:
+        raise RuntimeError(
+            f"build_dimension_evidence_list is missing dimensions: {sorted(missing)}. "
+            f"Update this function to cover all REQUIRED_DIMENSIONS."
+        )
     return dims
 
 
