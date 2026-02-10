@@ -21,6 +21,9 @@ DROP INDEX IF EXISTS idx_learned_patterns_domain_confidence;
 -- Drop table
 DROP TABLE IF EXISTS learned_patterns;
 
-RAISE NOTICE 'Successfully dropped learned_patterns table, trigger, function, and indexes';
+DO $$
+BEGIN
+    RAISE NOTICE 'Successfully dropped learned_patterns table, trigger, function, and indexes';
+END $$;
 
 COMMIT;
