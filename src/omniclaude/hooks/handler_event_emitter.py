@@ -87,7 +87,7 @@ class ModelEventTracingConfig:
         correlation_id: Correlation ID for distributed tracing.
         causation_id: ID of the event/trigger that caused this event.
         emitted_at: Event timestamp (defaults to now UTC if not provided).
-        environment: Kafka environment prefix (e.g., "dev", "staging", "prod").
+        environment: Metadata label for config objects (not used for topic prefixing per OMN-1972).
     """
 
     correlation_id: UUID | None = None
