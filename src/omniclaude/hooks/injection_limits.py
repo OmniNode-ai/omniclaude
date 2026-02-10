@@ -762,7 +762,12 @@ def select_patterns_for_injection(
             )
         )
 
-    # Evidence policy: require (OMN-2092) — filter AFTER scoring, BEFORE sorting
+    # Evidence policy: require (OMN-2092) — filter AFTER scoring, BEFORE sorting.
+    # The ``evidence_resolver is not None`` guard is intentional: when no resolver
+    # is wired the warning at function entry (line ~669) already fires and all
+    # patterns pass through unmodified, matching the project invariant that
+    # injection failures never block injection.  Once a resolver IS provided,
+    # this gate enforces the require semantics by dropping non-passing patterns.
     if limits.evidence_policy == "require" and evidence_resolver is not None:
         before_count = len(scored)
         scored = [s for s in scored if s.gate_result == "pass"]

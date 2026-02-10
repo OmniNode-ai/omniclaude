@@ -508,8 +508,10 @@ def load_latest_gate_result(
         if not gate_files:
             return None
 
-        # Find the most recently modified
-        latest_file = max(gate_files, key=lambda p: p.stat().st_mtime)
+        # Find the most recently modified.  When two files share the same
+        # mtime (rare — requires sub-second concurrent writes), the secondary
+        # sort on path string ensures deterministic selection.
+        latest_file = max(gate_files, key=lambda p: (p.stat().st_mtime, str(p)))
 
         # Parse and extract gate_result
         data = json.loads(latest_file.read_text())
