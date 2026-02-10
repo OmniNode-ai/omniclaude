@@ -574,7 +574,7 @@ class TestCustomThresholds:
 
         t = PromotionThresholds()
         with pytest.raises(Exception):
-            t.duration_regression_pct = 50.0  # type: ignore[misc]
+            setattr(t, "duration_regression_pct", 50.0)
 
 
 # =============================================================================
