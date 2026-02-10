@@ -102,6 +102,13 @@ def get_redact_secrets() -> Callable[[str], str]:
     Both the real redactor and the fallback are cached after first resolution.
     If the module is later deployed, call ``reset_redactor()`` or restart the
     process to pick it up — the global is cleared on module reload.
+
+    Note:
+        The import path ``plugins.onex.hooks.lib.secret_redactor`` requires
+        the repository root on ``sys.path``. In deployed environments (plugin
+        cache under ``~/.claude/``), this path will not resolve and the
+        lightweight fallback is used instead. This is by design — the fallback
+        is the expected redactor in deployed mode.
     """
     global _redact_secrets_fn
     if _redact_secrets_fn is not None:
@@ -243,9 +250,9 @@ def _validate_artifact_uri(uri: str) -> bool:
     # prevent local resource references leaking onto the evt topic.
     if uri.startswith("//"):
         host = uri[2:].split("/", 1)[0].split(":")[0].lower()
-        if host in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):  # noqa: S104
+        if not host or host in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):  # noqa: S104
             logger.warning(
-                f"Artifact URI references local host, rejecting: {uri[:50]}..."
+                f"Artifact URI references local host or has empty host, rejecting: {uri[:50]}..."
             )
             return False
     if len(uri) > 0 and uri[0] == "/" and not uri.startswith("//"):

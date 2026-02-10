@@ -267,7 +267,7 @@ fetch_failures_for_pr() {
     local check_count
     check_count=$(echo "$failed_checks" | jq 'length')
 
-    if [ "$total_api_count" -ge 100 ]; then
+    if [ "$total_api_count" -gt 100 ]; then
         print_warning "API returned $total_api_count total check runs (per_page=100) — some failed checks may be missing"
         CHECK_RUNS_TRUNCATED=true
         # Downstream consumers: check_runs_truncated=true in the JSON output
