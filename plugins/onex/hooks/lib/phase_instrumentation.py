@@ -426,9 +426,18 @@ def build_skipped_metrics(
 
     duration = ContractDurationMetrics(wall_clock_ms=0.0)
 
+    # Sanitize skip_reason: redact secrets + truncate (defense-in-depth,
+    # consistent with build_metrics_from_result and build_error_metrics)
+    from plugins.onex.hooks.lib.metrics_emitter import _get_redact_secrets
+
+    redact = _get_redact_secrets()
+    clean_reason = redact(skip_reason)
+    if len(clean_reason) > MAX_ERROR_MESSAGE_LENGTH:
+        clean_reason = clean_reason[: MAX_ERROR_MESSAGE_LENGTH - 3] + "..."
+
     outcome = ContractOutcomeMetrics(
         result_classification=ContractEnumResultClassification.SKIPPED,
-        skip_reason=skip_reason,
+        skip_reason=clean_reason,
         skip_reason_code=skip_reason_code,
     )
 
