@@ -651,6 +651,14 @@ def select_patterns_for_injection(
     if not candidates:
         return []
 
+    # Warn when evidence_policy is active but no resolver is wired up (OMN-2092)
+    if limits.evidence_policy != "ignore" and evidence_resolver is None:
+        logger.warning(
+            "evidence_policy=%r but no evidence_resolver provided; "
+            "evidence policy will have no effect (all patterns pass through)",
+            limits.evidence_policy,
+        )
+
     # Pre-filter: exclude unmeasured patterns when require_measured=True (OMN-2044)
     if limits.require_measured:
         before_count = len(candidates)
