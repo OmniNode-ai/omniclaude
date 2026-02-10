@@ -230,6 +230,8 @@ async def _get_kafka_producer() -> Any:
             from aiokafka import AIOKafkaProducer
 
             bootstrap_servers = _get_kafka_bootstrap_servers()
+            if bootstrap_servers is None:
+                return None
 
             producer = AIOKafkaProducer(
                 bootstrap_servers=bootstrap_servers,
