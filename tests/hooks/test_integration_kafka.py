@@ -339,8 +339,8 @@ class TestKafkaIntegrationBasic:
         from omniclaude.hooks.handler_event_emitter import emit_session_started
         from omniclaude.hooks.topics import TopicBase, build_topic
 
-        # Build expected topic
-        topic = build_topic(test_environment, TopicBase.SESSION_STARTED)
+        # Topics are realm-agnostic (OMN-1972): no environment prefix
+        topic = build_topic("", TopicBase.SESSION_STARTED)
 
         # Start consumer BEFORE publishing (to catch the message)
         consumer_task = asyncio.create_task(
@@ -390,7 +390,7 @@ class TestKafkaIntegrationBasic:
         from omniclaude.hooks.handler_event_emitter import emit_session_ended
         from omniclaude.hooks.topics import TopicBase, build_topic
 
-        topic = build_topic(test_environment, TopicBase.SESSION_ENDED)
+        topic = build_topic("", TopicBase.SESSION_ENDED)
 
         # Start consumer
         consumer_task = asyncio.create_task(
@@ -433,7 +433,7 @@ class TestKafkaIntegrationBasic:
         from omniclaude.hooks.handler_event_emitter import emit_prompt_submitted
         from omniclaude.hooks.topics import TopicBase, build_topic
 
-        topic = build_topic(test_environment, TopicBase.PROMPT_SUBMITTED)
+        topic = build_topic("", TopicBase.PROMPT_SUBMITTED)
         prompt_id = uuid4()
 
         consumer_task = asyncio.create_task(
@@ -477,7 +477,7 @@ class TestKafkaIntegrationBasic:
         from omniclaude.hooks.handler_event_emitter import emit_tool_executed
         from omniclaude.hooks.topics import TopicBase, build_topic
 
-        topic = build_topic(test_environment, TopicBase.TOOL_EXECUTED)
+        topic = build_topic("", TopicBase.TOOL_EXECUTED)
         tool_execution_id = uuid4()
 
         consumer_task = asyncio.create_task(
@@ -601,7 +601,7 @@ class TestKafkaIntegrationEnvelope:
         from omniclaude.hooks.handler_event_emitter import emit_session_started
         from omniclaude.hooks.topics import TopicBase, build_topic
 
-        topic = build_topic(test_environment, TopicBase.SESSION_STARTED)
+        topic = build_topic("", TopicBase.SESSION_STARTED)
 
         consumer_task = asyncio.create_task(
             wait_for_message_with_entity_id(
@@ -720,7 +720,7 @@ class TestKafkaIntegrationPrivacy:
         from omniclaude.hooks.handler_event_emitter import emit_prompt_submitted
         from omniclaude.hooks.topics import TopicBase, build_topic
 
-        topic = build_topic(test_environment, TopicBase.PROMPT_SUBMITTED)
+        topic = build_topic("", TopicBase.PROMPT_SUBMITTED)
 
         consumer_task = asyncio.create_task(
             wait_for_message_with_entity_id(
