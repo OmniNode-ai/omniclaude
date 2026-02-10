@@ -310,6 +310,25 @@ jobs:
           echo "::endgroup::"
 
   # ============================================================================
+  # Migration Freeze Enforcement
+  # Blocks new migrations when .migration_freeze exists (OMN-2055)
+  # ============================================================================
+  migration-freeze:
+    name: Migration Freeze Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check migration freeze
+        run: ./scripts/check_migration_freeze.sh --ci
+        env:
+          MIGRATION_CHECK_BASE: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
+
+  # ============================================================================
   # Security Scanning - Python Dependencies
   # ============================================================================
   security-python:
@@ -584,7 +603,7 @@ jobs:
   build:
     name: Build Docker Image
     runs-on: ubuntu-latest
-    needs: [quality, pyright, check-handshake, enum-governance, exports-validation, cross-repo-validation, security-python, merge-coverage]
+    needs: [quality, pyright, check-handshake, enum-governance, exports-validation, cross-repo-validation, migration-freeze, security-python, merge-coverage]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
