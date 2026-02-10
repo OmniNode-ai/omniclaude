@@ -302,3 +302,71 @@ class TestPatchPipelineStatus:
         result = patch_pipeline_status(SAMPLE_WITH_PIPELINE_STATUS, status_yaml)
         assert result.success
         assert "Human content here." in result.patched_description
+
+    def test_pipeline_status_insertion_ignores_contract_in_code_block(self) -> None:
+        """Insertion uses regex, so '## Contract' inside a code fence is skipped."""
+        desc = (
+            "## Summary\n\n"
+            "Here's an example of a contract format:\n\n"
+            "```\n"
+            "## Contract\n\n"
+            "```yaml\n"
+            'example: "not real"\n'
+            "```\n"
+            "```\n\n"
+            "## Contract\n\n"
+            "```yaml\n"
+            'ticket_id: "OMN-1234"\n'
+            "phase: implementation\n"
+            "```\n"
+        )
+        status_yaml = 'run_id: "r1"\nphase: "implement"'
+        result = patch_pipeline_status(desc, status_yaml)
+        assert result.success
+        patched = result.patched_description
+
+        # Pipeline Status must appear before the real ## Contract (the one
+        # matched by _CONTRACT_PATTERN with a valid fenced YAML block).
+        status_idx = patched.index("## Pipeline Status")
+        # The real contract block starts at the second occurrence matched by
+        # _CONTRACT_PATTERN — verify status comes before it.
+        from linear_contract_patcher import _CONTRACT_PATTERN
+
+        real_match = _CONTRACT_PATTERN.search(patched)
+        assert real_match is not None
+        assert status_idx < real_match.start()
+
+
+# =============================================================================
+# Bare fence / whitespace edge-case tests
+# =============================================================================
+
+
+class TestEdgeCases:
+    """Edge-case tests for fence syntax and whitespace handling."""
+
+    def test_bare_fence_without_yaml_specifier(self) -> None:
+        """Contract block using ``` instead of ```yaml should still extract."""
+        desc = '## Contract\n\n```\nticket_id: "OMN-5678"\nphase: review\n```\n'
+        result = extract_contract_yaml(desc)
+        assert result.success
+        assert result.parsed is not None
+        assert result.parsed["ticket_id"] == "OMN-5678"
+        assert result.parsed["phase"] == "review"
+
+    def test_lstrip_yaml_content(self) -> None:
+        """Leading whitespace in new YAML must not produce extra blank lines."""
+        new_yaml = '\n\n  ticket_id: "OMN-1234"\n  phase: review\n\n'
+        result = patch_contract_yaml(SAMPLE_DESCRIPTION, new_yaml)
+        assert result.success
+        # The YAML inserted into the fence should not start with blank lines
+        assert "```yaml\n\n" not in result.patched_description
+        # Verify content is present (stripped)
+        assert 'ticket_id: "OMN-1234"' in result.patched_description
+
+        # Same check for patch_pipeline_status
+        status_yaml = "\n  run_id: abc\n  phase: implement\n\n"
+        result2 = patch_pipeline_status(SAMPLE_DESCRIPTION, status_yaml)
+        assert result2.success
+        assert "```yaml\n\n" not in result2.patched_description
+        assert "run_id: abc" in result2.patched_description

@@ -184,3 +184,64 @@ class TestDetectCrossRepoChanges:
             c for c in calls if "diff" in c and "origin/develop" in " ".join(c)
         ]
         assert len(diff_calls) == 1
+
+    @patch("cross_repo_detector.subprocess.run")
+    def test_absolute_path_from_git(self, mock_run) -> None:
+        """Absolute path from git diff output is flagged as a violation.
+
+        If git returns an absolute path (e.g., from submodules or worktrees),
+        Path.__truediv__ would silently discard the repo root. The guard
+        must catch this and flag it as a violation.
+        """
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            repo_root = str(Path(tmp).resolve())
+
+            mock_run.side_effect = self._mock_run(
+                {
+                    "rev-parse --show-toplevel": (repo_root, 0),
+                    "diff --name-only origin/main...HEAD": (
+                        "/etc/passwd\nsrc/safe.py",
+                        0,
+                    ),
+                    "diff --name-only HEAD": ("", 0),
+                    "ls-files --others --exclude-standard": ("", 0),
+                }
+            )
+
+            result = detect_cross_repo_changes(cwd=repo_root)
+
+        assert result.violation
+        assert "/etc/passwd" in result.violating_files
+        assert result.files_checked == 2
+
+    def test_base_ref_flag_injection_rejected(self) -> None:
+        """base_ref starting with '-' is rejected to prevent git flag injection.
+
+        While subprocess.run with a list prevents shell injection, git itself
+        interprets arguments starting with '--' as flags (e.g., '--output=/tmp/evil').
+        """
+        result = detect_cross_repo_changes(cwd="/repo", base_ref="--output=/tmp/evil")
+
+        assert result.error is not None
+        assert "Invalid base_ref" in result.error
+        assert "--output=/tmp/evil" in result.error
+        assert not result.violation
+
+    @patch("cross_repo_detector.subprocess.run")
+    def test_git_timeout_handling(self, mock_run) -> None:
+        """subprocess.TimeoutExpired is handled gracefully.
+
+        When git times out, _run_git returns ('', 1). If this happens on
+        rev-parse, detect_cross_repo_changes returns an error result.
+        """
+        mock_run.side_effect = subprocess.TimeoutExpired(
+            cmd=["git", "rev-parse", "--show-toplevel"], timeout=30
+        )
+
+        result = detect_cross_repo_changes(cwd="/repo")
+
+        assert not result.violation
+        assert result.error is not None
+        assert "git" in result.error.lower()

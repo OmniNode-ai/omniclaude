@@ -30,6 +30,7 @@ sys.path.insert(
 )
 
 from pipeline_slack_notifier import (
+    AlertSeverity,
     PipelineSlackNotifier,
     SlackHandlerProtocol,
     notify_sync,
@@ -230,8 +231,6 @@ class TestNotifyBlocked:
     def test_sends_warning_for_policy_block(
         self, notifier: PipelineSlackNotifier, handler: MockSlackHandler
     ) -> None:
-        from omnibase_infra.handlers.models.model_slack_alert import EnumAlertSeverity
-
         asyncio.run(
             notifier.notify_blocked(
                 phase="implement",
@@ -241,13 +240,14 @@ class TestNotifyBlocked:
         )
 
         alert = handler.calls[0]
-        assert alert.severity == EnumAlertSeverity.WARNING
+        # Compare using string value — works with both the local AlertSeverity
+        # fallback and the real EnumAlertSeverity (whose .value is "WARNING").
+        severity_value = getattr(alert.severity, "value", alert.severity)
+        assert severity_value == AlertSeverity.WARNING
 
     def test_sends_error_for_exception(
         self, notifier: PipelineSlackNotifier, handler: MockSlackHandler
     ) -> None:
-        from omnibase_infra.handlers.models.model_slack_alert import EnumAlertSeverity
-
         asyncio.run(
             notifier.notify_blocked(
                 phase="local_review",
@@ -257,7 +257,8 @@ class TestNotifyBlocked:
         )
 
         alert = handler.calls[0]
-        assert alert.severity == EnumAlertSeverity.ERROR
+        severity_value = getattr(alert.severity, "value", alert.severity)
+        assert severity_value == AlertSeverity.ERROR
 
     def test_includes_block_kind_in_details(
         self, notifier: PipelineSlackNotifier, handler: MockSlackHandler

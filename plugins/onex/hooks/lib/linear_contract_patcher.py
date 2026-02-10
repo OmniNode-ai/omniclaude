@@ -245,7 +245,7 @@ def patch_contract_yaml(
         )
 
     # Ensure new YAML doesn't have leading/trailing whitespace issues
-    clean_yaml = new_yaml_str.rstrip()
+    clean_yaml = new_yaml_str.strip()
 
     # Replace only the YAML content (group 2), preserving header and fences
     patched = description[: match.start(2)] + clean_yaml + description[match.end(2) :]
@@ -291,7 +291,7 @@ def patch_pipeline_status(
             validation_error=str(e),
         )
 
-    clean_yaml = status_yaml_str.rstrip()
+    clean_yaml = status_yaml_str.strip()
     new_block = f"## Pipeline Status\n\n```yaml\n{clean_yaml}\n```"
 
     # Try to find existing Pipeline Status block
@@ -303,9 +303,10 @@ def patch_pipeline_status(
         )
         return ContractPatchResult(success=True, patched_description=patched)
 
-    # No existing block — insert before ## Contract
-    contract_idx = description.find("## Contract")
-    if contract_idx >= 0:
+    # No existing block — insert before ## Contract (use regex for accuracy)
+    contract_match = _CONTRACT_PATTERN.search(description)
+    if contract_match:
+        contract_idx = contract_match.start()
         patched = (
             description[:contract_idx].rstrip()
             + "\n\n"
