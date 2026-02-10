@@ -31,7 +31,7 @@ from omniclaude.hooks.injection_limits import (
     render_single_pattern,
     select_patterns_for_injection,
 )
-from tests.hooks.conftest import make_pattern
+from tests.hooks.conftest import MockPatternRecord, make_pattern
 
 # All tests in this module are unit tests
 pytestmark = pytest.mark.unit
