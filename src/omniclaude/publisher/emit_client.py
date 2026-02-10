@@ -143,7 +143,7 @@ class EmitClient:
         """Best-effort cleanup of open socket on garbage collection."""
         try:
             self.close()
-        except Exception:
+        except Exception:  # nosec B110 — __del__ finalizer, nowhere to report errors
             pass
 
 
