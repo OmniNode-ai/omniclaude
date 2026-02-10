@@ -37,25 +37,29 @@ import sys
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
-from omnibase_spi.contracts.measurement import (
-    ContractCostMetrics,
-    ContractDurationMetrics,
-    ContractEnumPipelinePhase,
-    ContractEnumResultClassification,
-    ContractMeasurementContext,
-    ContractOutcomeMetrics,
-    ContractPhaseMetrics,
-    ContractProducer,
-    ContractTestMetrics,
-    MeasurementCheck,
-)
+if TYPE_CHECKING:
+    from omnibase_spi.contracts.measurement import (
+        ContractEnumPipelinePhase,
+        ContractEnumResultClassification,
+        ContractPhaseMetrics,
+    )
 
-from plugins.onex.hooks.lib.metrics_emitter import (
-    MAX_ERROR_MESSAGE_LENGTH,
-    _get_redact_secrets,
-)
+# Deferred constant: imported at first use via _get_max_error_length()
+_MAX_ERROR_MESSAGE_LENGTH: int | None = None
+
+
+def _get_max_error_length() -> int:
+    """Lazily import MAX_ERROR_MESSAGE_LENGTH from metrics_emitter."""
+    global _MAX_ERROR_MESSAGE_LENGTH
+    if _MAX_ERROR_MESSAGE_LENGTH is not None:
+        return _MAX_ERROR_MESSAGE_LENGTH
+    from plugins.onex.hooks.lib.metrics_emitter import MAX_ERROR_MESSAGE_LENGTH
+
+    _MAX_ERROR_MESSAGE_LENGTH = MAX_ERROR_MESSAGE_LENGTH
+    return MAX_ERROR_MESSAGE_LENGTH
+
 
 logger = logging.getLogger(__name__)
 
@@ -67,14 +71,25 @@ logger = logging.getLogger(__name__)
 PRODUCER_NAME = "ticket-pipeline"
 PRODUCER_VERSION = "0.2.1"
 
-# Pipeline phase -> SPI phase mapping
-PHASE_TO_SPI: dict[str, ContractEnumPipelinePhase] = {
-    "implement": ContractEnumPipelinePhase.IMPLEMENT,
-    "local_review": ContractEnumPipelinePhase.VERIFY,
-    "create_pr": ContractEnumPipelinePhase.RELEASE,
-    "pr_release_ready": ContractEnumPipelinePhase.REVIEW,
-    "ready_for_merge": ContractEnumPipelinePhase.RELEASE,
-}
+# Pipeline phase -> SPI phase mapping (deferred: graceful degradation
+# if omnibase_spi is not installed — module remains importable but
+# functions that construct SPI types will raise ImportError at call time).
+try:
+    from omnibase_spi.contracts.measurement import ContractEnumPipelinePhase
+
+    PHASE_TO_SPI: dict[str, ContractEnumPipelinePhase] = {
+        "implement": ContractEnumPipelinePhase.IMPLEMENT,
+        "local_review": ContractEnumPipelinePhase.VERIFY,
+        "create_pr": ContractEnumPipelinePhase.RELEASE,
+        "pr_release_ready": ContractEnumPipelinePhase.REVIEW,
+        "ready_for_merge": ContractEnumPipelinePhase.RELEASE,
+    }
+except ImportError:
+    PHASE_TO_SPI = {}  # type: ignore[assignment]
+    logger.warning(
+        "omnibase_spi not available; PHASE_TO_SPI empty — "
+        "phase instrumentation functions will raise ImportError at call time"
+    )
 
 # Phases that are expected to run tests
 TEST_BEARING_PHASES = frozenset({"local_review"})
@@ -188,6 +203,8 @@ def _classify_result(phase_result: PhaseResult) -> ContractEnumResultClassificat
     Returns:
         The SPI result classification enum value.
     """
+    from omnibase_spi.contracts.measurement import ContractEnumResultClassification
+
     mapping = {
         "completed": ContractEnumResultClassification.SUCCESS,
         "blocked": ContractEnumResultClassification.PARTIAL,
@@ -227,6 +244,21 @@ def build_metrics_from_result(
     Returns:
         A fully populated ContractPhaseMetrics.
     """
+    from omnibase_spi.contracts.measurement import (
+        ContractCostMetrics,
+        ContractDurationMetrics,
+        ContractEnumPipelinePhase,
+        ContractEnumResultClassification,
+        ContractMeasurementContext,
+        ContractOutcomeMetrics,
+        ContractPhaseMetrics,
+        ContractProducer,
+        ContractTestMetrics,
+    )
+
+    from plugins.onex.hooks.lib.metrics_emitter import get_redact_secrets
+
+    max_error_len = _get_max_error_length()
     wall_clock_ms = (completed_at - started_at).total_seconds() * 1000.0
 
     spi_phase = PHASE_TO_SPI.get(phase)
@@ -260,16 +292,16 @@ def build_metrics_from_result(
         phase_result.reason
         and classification != ContractEnumResultClassification.SUCCESS
     ):
-        redact = _get_redact_secrets()
+        redact = get_redact_secrets()
         reason_msg = redact(phase_result.reason)
-        if len(reason_msg) > MAX_ERROR_MESSAGE_LENGTH:
-            reason_msg = reason_msg[: MAX_ERROR_MESSAGE_LENGTH - 3] + "..."
+        if len(reason_msg) > max_error_len:
+            reason_msg = reason_msg[: max_error_len - 3] + "..."
         error_messages = [reason_msg]
 
     # Redact block_kind to prevent PII/secrets in error_codes on evt topic
     error_codes: list[str] = []
     if phase_result.block_kind:
-        redact = _get_redact_secrets()
+        redact = get_redact_secrets()
         error_codes = [redact(phase_result.block_kind)]
 
     outcome = ContractOutcomeMetrics(
@@ -362,11 +394,24 @@ def build_error_metrics(
     Raises:
         ValueError: If ``completed_at`` is None.
     """
+    from omnibase_spi.contracts.measurement import (
+        ContractDurationMetrics,
+        ContractEnumPipelinePhase,
+        ContractEnumResultClassification,
+        ContractMeasurementContext,
+        ContractOutcomeMetrics,
+        ContractPhaseMetrics,
+        ContractProducer,
+    )
+
+    from plugins.onex.hooks.lib.metrics_emitter import get_redact_secrets
+
     if completed_at is None:
         raise ValueError(
             "completed_at is required — repository invariant forbids "
             "datetime.now() defaults for deterministic testing"
         )
+    max_error_len = _get_max_error_length()
     wall_clock_ms = (completed_at - started_at).total_seconds() * 1000.0
 
     spi_phase = PHASE_TO_SPI.get(phase)
@@ -390,10 +435,10 @@ def build_error_metrics(
     duration = ContractDurationMetrics(wall_clock_ms=wall_clock_ms)
 
     # Sanitize error message: redact secrets + truncate to evt topic limit
-    redact = _get_redact_secrets()
+    redact = get_redact_secrets()
     error_msg = redact(str(error))
-    if len(error_msg) > MAX_ERROR_MESSAGE_LENGTH:
-        error_msg = error_msg[: MAX_ERROR_MESSAGE_LENGTH - 3] + "..."
+    if len(error_msg) > max_error_len:
+        error_msg = error_msg[: max_error_len - 3] + "..."
 
     outcome = ContractOutcomeMetrics(
         result_classification=ContractEnumResultClassification.ERROR,
@@ -442,6 +487,19 @@ def build_skipped_metrics(
     Returns:
         A ContractPhaseMetrics with SKIPPED classification.
     """
+    from omnibase_spi.contracts.measurement import (
+        ContractDurationMetrics,
+        ContractEnumPipelinePhase,
+        ContractEnumResultClassification,
+        ContractMeasurementContext,
+        ContractOutcomeMetrics,
+        ContractPhaseMetrics,
+        ContractProducer,
+    )
+
+    from plugins.onex.hooks.lib.metrics_emitter import get_redact_secrets
+
+    max_error_len = _get_max_error_length()
     spi_phase = PHASE_TO_SPI.get(phase)
     if spi_phase is None:
         logger.warning("Unknown pipeline phase %r, defaulting to IMPLEMENT", phase)
@@ -464,10 +522,10 @@ def build_skipped_metrics(
 
     # Sanitize skip_reason: redact secrets + truncate (defense-in-depth,
     # consistent with build_metrics_from_result and build_error_metrics)
-    redact = _get_redact_secrets()
+    redact = get_redact_secrets()
     clean_reason = redact(skip_reason)
-    if len(clean_reason) > MAX_ERROR_MESSAGE_LENGTH:
-        clean_reason = clean_reason[: MAX_ERROR_MESSAGE_LENGTH - 3] + "..."
+    if len(clean_reason) > max_error_len:
+        clean_reason = clean_reason[: max_error_len - 3] + "..."
 
     outcome = ContractOutcomeMetrics(
         result_classification=ContractEnumResultClassification.SKIPPED,
@@ -539,6 +597,11 @@ def instrumented_phase(
         emit_phase_metrics,
         write_metrics_artifact,
     )
+
+    # Explicit init: overwritten in both success and error paths below.
+    # Prevents NameError if code between phase_fn() and the assignment
+    # is ever reordered during maintenance.
+    _completed = started_at
 
     try:
         result = phase_fn()
@@ -732,6 +795,11 @@ def run_measurement_checks(
     Returns:
         List of MeasurementCheckResult instances.
     """
+    from omnibase_spi.contracts.measurement import (
+        ContractEnumResultClassification,
+        MeasurementCheck,
+    )
+
     results: list[MeasurementCheckResult] = []
 
     # CHECK-MEAS-001: Phase metrics were emitted (artifact exists)

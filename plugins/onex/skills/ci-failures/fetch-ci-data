@@ -44,6 +44,7 @@ REPO_NAME=""
 CURRENT_BRANCH=""
 PR_NUMBER=""
 WORKFLOW_FILTER=""
+CHECK_RUNS_TRUNCATED=false
 
 usage() {
     cat >&2 << EOF
@@ -268,6 +269,7 @@ fetch_failures_for_pr() {
 
     if [ "$total_api_count" -ge 100 ]; then
         print_warning "API returned $total_api_count total check runs (per_page=100) — some failed checks may be missing"
+        CHECK_RUNS_TRUNCATED=true
     fi
 
     if [ "$check_count" -eq 0 ]; then
@@ -621,6 +623,7 @@ generate_output() {
         --arg minor "$minor_count" \
         --arg total "$total_count" \
         --arg researched "$researched_count" \
+        --argjson truncated "$CHECK_RUNS_TRUNCATED" \
         --arg fetched_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
         '{
             repository: $repo,
@@ -632,6 +635,7 @@ generate_output() {
                 minor: ($minor | tonumber),
                 researched: ($researched | tonumber)
             },
+            check_runs_truncated: $truncated,
             failures: $failures,
             fetched_at: $fetched_at
         }'

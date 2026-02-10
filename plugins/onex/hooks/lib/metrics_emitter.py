@@ -87,7 +87,7 @@ def _lightweight_redact(text: str) -> str:
     return result
 
 
-def _get_redact_secrets() -> Callable[[str], str]:
+def get_redact_secrets() -> Callable[[str], str]:
     """Return the ``redact_secrets`` callable, with a safe fallback.
 
     If ``secret_redactor`` is unavailable, the fallback uses
@@ -142,7 +142,7 @@ def _sanitize_error_messages(messages: list[str]) -> list[str]:
     Returns:
         Sanitized list of error messages.
     """
-    redact = _get_redact_secrets()
+    redact = get_redact_secrets()
     sanitized = []
     for msg in messages[:MAX_ERROR_MESSAGES]:
         clean = redact(msg)
@@ -164,7 +164,7 @@ def _sanitize_skip_reason(reason: str) -> str:
     Returns:
         Sanitized skip reason string.
     """
-    redact = _get_redact_secrets()
+    redact = get_redact_secrets()
     clean = redact(reason)
     if len(clean) > MAX_ERROR_MESSAGE_LENGTH:
         clean = clean[: MAX_ERROR_MESSAGE_LENGTH - 3] + "..."
@@ -180,7 +180,7 @@ def _sanitize_failed_tests(tests: list[str]) -> list[str]:
     Returns:
         Sanitized list of test names.
     """
-    redact = _get_redact_secrets()
+    redact = get_redact_secrets()
     sanitized = []
     for test in tests[:MAX_FAILED_TESTS]:
         clean = redact(test)
@@ -457,7 +457,7 @@ def read_metrics_artifact(
     Returns:
         Parsed JSON dict, or None if file does not exist or is corrupt.
     """
-    for component in (ticket_id, run_id, phase):
+    for component in (ticket_id, run_id, phase, str(attempt)):
         if any(c in str(component) for c in _INVALID_PATH_CHARS):
             logger.warning(
                 f"Rejected path component with traversal chars: {component!r}"
@@ -521,5 +521,7 @@ __all__ = [
     "write_metrics_artifact",
     "read_metrics_artifact",
     "metrics_artifact_exists",
+    "get_redact_secrets",
+    "MAX_ERROR_MESSAGE_LENGTH",
     "ARTIFACT_BASE_DIR",
 ]

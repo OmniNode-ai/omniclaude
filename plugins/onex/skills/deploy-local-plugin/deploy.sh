@@ -340,6 +340,8 @@ if [[ "$EXECUTE" == "true" ]]; then
         STATUSLINE_PATH_SHORT="~/.claude/plugins/cache/omninode-tools/onex/${NEW_VERSION}/hooks/scripts/statusline.sh"
 
         if jq -e '.statusLine.command' "$SETTINGS_JSON" >/dev/null 2>&1; then
+            # Backup before modification (recoverable if jq fails mid-write)
+            cp "$SETTINGS_JSON" "${SETTINGS_JSON}.bak"
             jq --arg cmd "$STATUSLINE_PATH_SHORT" '
                 .statusLine.command = $cmd
             ' "$SETTINGS_JSON" > "${SETTINGS_JSON}.tmp" && mv "${SETTINGS_JSON}.tmp" "$SETTINGS_JSON"
