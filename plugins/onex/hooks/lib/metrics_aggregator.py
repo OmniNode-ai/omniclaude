@@ -389,15 +389,20 @@ def save_gate(
     pattern_id = context.pattern_id or "_no_pattern"
 
     target_dir = root / pattern_id / baseline_key
+    target = target_dir / "latest.gate.json"
+    tmp = target.with_suffix(".json.tmp")
     try:
         target_dir.mkdir(parents=True, exist_ok=True)
-        target = target_dir / "latest.gate.json"
-        tmp = target.with_suffix(".json.tmp")
         tmp.write_text(gate.model_dump_json(indent=2))
         tmp.rename(target)
     except OSError as e:
         logger.warning("Failed to save gate for %s: %s", pattern_id, e)
-        return target_dir / "latest.gate.json"
+        # Clean up orphaned tmp file from partial write
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return target
     return target
 
 

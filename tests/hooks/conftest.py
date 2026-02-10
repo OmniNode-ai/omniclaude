@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import sys
+from dataclasses import dataclass
 from importlib import reload
 from pathlib import Path
 
@@ -19,6 +20,58 @@ import pytest
 _src_path = str(Path(__file__).parent.parent.parent / "src")
 if _src_path not in sys.path:
     sys.path.insert(0, _src_path)
+
+# =============================================================================
+# Shared test data factories
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class MockPatternRecord:
+    """Mock PatternRecord for testing without importing handler module."""
+
+    pattern_id: str
+    domain: str
+    title: str
+    description: str
+    confidence: float
+    usage_count: int
+    success_rate: float
+    example_reference: str | None = None
+    lifecycle_state: str | None = None
+    evidence_tier: str | None = None
+
+
+def make_pattern(
+    pattern_id: str = "pat-001",
+    domain: str = "testing",
+    title: str = "Test Pattern",
+    description: str = "A test pattern description",
+    confidence: float = 0.9,
+    usage_count: int = 10,
+    success_rate: float = 0.8,
+    example_reference: str | None = None,
+    lifecycle_state: str | None = None,
+    evidence_tier: str | None = None,
+) -> MockPatternRecord:
+    """Create a mock pattern with defaults."""
+    return MockPatternRecord(
+        pattern_id=pattern_id,
+        domain=domain,
+        title=title,
+        description=description,
+        confidence=confidence,
+        usage_count=usage_count,
+        success_rate=success_rate,
+        example_reference=example_reference,
+        lifecycle_state=lifecycle_state,
+        evidence_tier=evidence_tier,
+    )
+
+
+# =============================================================================
+# Kafka integration test support
+# =============================================================================
 
 # Track if we've already restored the real Kafka producer
 _kafka_restored = False

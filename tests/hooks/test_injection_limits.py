@@ -19,8 +19,6 @@ Part of OMN-1671: INJECT-002 - Add injection limits configuration.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 import pytest
 
 from omniclaude.hooks.injection_limits import (
@@ -33,57 +31,10 @@ from omniclaude.hooks.injection_limits import (
     render_single_pattern,
     select_patterns_for_injection,
 )
+from tests.hooks.conftest import make_pattern
 
 # All tests in this module are unit tests
 pytestmark = pytest.mark.unit
-
-
-# =============================================================================
-# Test Data
-# =============================================================================
-
-
-@dataclass(frozen=True)
-class MockPatternRecord:
-    """Mock PatternRecord for testing without importing handler module."""
-
-    pattern_id: str
-    domain: str
-    title: str
-    description: str
-    confidence: float
-    usage_count: int
-    success_rate: float
-    example_reference: str | None = None
-    lifecycle_state: str | None = None
-    evidence_tier: str | None = None
-
-
-def make_pattern(
-    pattern_id: str = "pat-001",
-    domain: str = "testing",
-    title: str = "Test Pattern",
-    description: str = "A test pattern description",
-    confidence: float = 0.9,
-    usage_count: int = 10,
-    success_rate: float = 0.8,
-    example_reference: str | None = None,
-    lifecycle_state: str | None = None,
-    evidence_tier: str | None = None,
-) -> MockPatternRecord:
-    """Create a mock pattern with defaults."""
-    return MockPatternRecord(
-        pattern_id=pattern_id,
-        domain=domain,
-        title=title,
-        description=description,
-        confidence=confidence,
-        usage_count=usage_count,
-        success_rate=success_rate,
-        example_reference=example_reference,
-        lifecycle_state=lifecycle_state,
-        evidence_tier=evidence_tier,
-    )
 
 
 # =============================================================================
