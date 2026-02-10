@@ -122,7 +122,7 @@ def evaluate_promotion_gate(
     # than block because an unknown result doesn't necessarily indicate
     # failure -- it may be a new benign classification.
     if candidate.overall_result != "success":
-        return _gate(  # type: ignore[unreachable]
+        return _gate(  # type: ignore[unreachable]  # OMN-2029: guard for future overall_result values
             run_id=run_id,
             context=context,
             gate_result="insufficient_evidence",

@@ -3,6 +3,12 @@
 Rolls up per-phase ContractPhaseMetrics into ContractAggregatedRun,
 detects flakes via outcome signatures, manages baseline storage,
 and assesses per-dimension evidence sufficiency.
+
+Public helpers (``get_total_tokens``, ``get_total_tests``,
+``make_dimension_evidence``, ``build_dimension_evidence_list``,
+``REQUIRED_DIMENSIONS``) are consumed by ``promotion_gater`` and are
+**internal cross-module API** -- not part of the stable public
+entrypoints listed in CLAUDE.md.
 """
 
 from __future__ import annotations
