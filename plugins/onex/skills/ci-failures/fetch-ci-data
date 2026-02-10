@@ -249,6 +249,10 @@ fetch_failures_for_pr() {
 
     # Query check-runs for this commit (catches ALL CI regardless of trigger event)
     # This is what 'gh pr checks' uses under the hood
+    # NOTE: per_page=100 is the GitHub API maximum. PRs with >100 check runs
+    # (rare, mainly monorepos with large matrix jobs) will have later checks
+    # silently omitted. Pagination not implemented as it adds complexity for
+    # a scenario that practically never occurs in this codebase.
     print_status "Fetching check runs for commit..."
     local failed_checks
     failed_checks=$(gh api "repos/$REPO_OWNER/$REPO_NAME/commits/$head_sha/check-runs?per_page=100" \

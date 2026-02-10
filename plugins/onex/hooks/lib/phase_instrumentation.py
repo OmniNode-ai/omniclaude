@@ -244,13 +244,16 @@ def build_metrics_from_result(
         llm_total_tokens=phase_result.tokens_used,
     )
 
-    # Truncate reason to align with evt topic limit (same as build_error_metrics)
+    # Sanitize reason: redact secrets + truncate to evt topic limit
     error_messages: list[str] = []
     if (
         phase_result.reason
         and classification != ContractEnumResultClassification.SUCCESS
     ):
-        reason_msg = phase_result.reason
+        from plugins.onex.hooks.lib.metrics_emitter import _get_redact_secrets
+
+        redact = _get_redact_secrets()
+        reason_msg = redact(phase_result.reason)
         if len(reason_msg) > MAX_ERROR_MESSAGE_LENGTH:
             reason_msg = reason_msg[: MAX_ERROR_MESSAGE_LENGTH - 3] + "..."
         error_messages = [reason_msg]
@@ -348,9 +351,11 @@ def build_error_metrics(
 
     duration = ContractDurationMetrics(wall_clock_ms=wall_clock_ms)
 
-    # Sanitize error message -- align with evt topic limit (matches
-    # _sanitize_error_messages truncation: trim to limit-3 then append "...")
-    error_msg = str(error)
+    # Sanitize error message: redact secrets + truncate to evt topic limit
+    from plugins.onex.hooks.lib.metrics_emitter import _get_redact_secrets
+
+    redact = _get_redact_secrets()
+    error_msg = redact(str(error))
     if len(error_msg) > MAX_ERROR_MESSAGE_LENGTH:
         error_msg = error_msg[: MAX_ERROR_MESSAGE_LENGTH - 3] + "..."
 

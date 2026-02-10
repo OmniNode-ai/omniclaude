@@ -1389,13 +1389,28 @@ class TestSanitization:
         assert _validate_artifact_uri("\\\\fileserver\\builds\\report.html") is False
         assert _validate_artifact_uri("\\\\192.168.1.1\\share\\artifact.json") is False
 
-    def test_rejects_case_insensitive_prefix_in_url(self):
-        """Path prefixes are matched case-insensitively to prevent PII bypass."""
-        # Lowercase variants that would bypass a case-sensitive check
-        assert _validate_artifact_uri("s3://bucket/users/admin/file.txt") is False
-        assert _validate_artifact_uri("s3://bucket/USERS/admin/file.txt") is False
-        assert _validate_artifact_uri("s3://bucket/volumes/drive/file.txt") is False
-        assert _validate_artifact_uri("s3://bucket/HOME/deploy/file.txt") is False
+    def test_rejects_case_insensitive_prefix_at_start(self):
+        """Absolute path prefixes are matched case-insensitively at URI start."""
+        # Uppercase variants that would bypass a case-sensitive check
+        assert _validate_artifact_uri("/USERS/admin/file.txt") is False
+        assert _validate_artifact_uri("/HOME/deploy/file.txt") is False
+        assert _validate_artifact_uri("/VOLUMES/drive/file.txt") is False
+
+    def test_accepts_path_prefix_as_substring_in_url(self):
+        """Path prefixes appearing as substrings in URLs should NOT be rejected.
+
+        Only URIs that *start with* absolute path prefixes are rejected.
+        S3/GCS/HTTPS URIs containing words like 'users' in their path
+        segments are legitimate artifact pointers.
+        """
+        assert _validate_artifact_uri("s3://bucket/users/admin/file.txt") is True
+        assert _validate_artifact_uri("s3://bucket/USERS/admin/file.txt") is True
+        assert _validate_artifact_uri("s3://bucket/volumes/drive/file.txt") is True
+        assert _validate_artifact_uri("s3://bucket/HOME/deploy/file.txt") is True
+        assert (
+            _validate_artifact_uri("https://cdn.example.com/home/assets/img.png")
+            is True
+        )
 
     def test_accepts_relative_path(self):
         """Relative paths like artifacts/report.html are accepted."""

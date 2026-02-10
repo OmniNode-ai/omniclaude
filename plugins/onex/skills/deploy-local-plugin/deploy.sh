@@ -336,7 +336,6 @@ if [[ "$EXECUTE" == "true" ]]; then
     # Update statusLine in settings.json to point at new version's statusline.sh
     SETTINGS_JSON="$HOME/.claude/settings.json"
     if [[ -f "$SETTINGS_JSON" ]]; then
-        STATUSLINE_PATH="$TARGET/hooks/scripts/statusline.sh"
         # Use ~ for the path since settings.json uses ~ convention
         STATUSLINE_PATH_SHORT="~/.claude/plugins/cache/omninode-tools/onex/${NEW_VERSION}/hooks/scripts/statusline.sh"
 

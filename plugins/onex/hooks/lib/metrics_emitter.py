@@ -177,7 +177,7 @@ def _validate_artifact_uri(uri: str) -> bool:
             f"Artifact URI contains local path scheme, rejecting: {uri[:50]}..."
         )
         return False
-    if any(prefix.lower() in uri_lower for prefix in _ABSOLUTE_PATH_PREFIXES):
+    if any(uri_lower.startswith(prefix.lower()) for prefix in _ABSOLUTE_PATH_PREFIXES):
         logger.warning(f"Artifact URI contains absolute path, rejecting: {uri[:50]}...")
         return False
     if len(uri) > 0 and uri[0] == "/" and not uri.startswith("//"):
