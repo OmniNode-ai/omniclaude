@@ -24,7 +24,6 @@ Usage:
 
 Environment Variables (all required - source .env first):
     KAFKA_BOOTSTRAP_SERVERS: Kafka brokers (required)
-    KAFKA_ENVIRONMENT: Topic prefix (required)
     POSTGRES_HOST: Database host (required)
     POSTGRES_PORT: Database port (required)
     POSTGRES_DATABASE: Database name (required)

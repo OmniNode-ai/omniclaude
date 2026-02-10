@@ -93,6 +93,8 @@ class EmitClient:
         idx = self._buf.index(b"\n")
         resp_line = self._buf[:idx]
         self._buf = self._buf[idx + 1 :]  # Preserve leftover for next call
+        # json.loads returns Any; caller expects dict[str, object] which is
+        # guaranteed by the daemon's newline-delimited JSON protocol.
         return json.loads(resp_line)  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
