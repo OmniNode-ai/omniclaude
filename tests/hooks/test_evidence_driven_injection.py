@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 OmniNode Team
-"""Integration test for evidence-driven injection (OMN-2092).
+"""Unit test for evidence-driven injection full loop (OMN-2092).
 
-Tests the full feedback loop:
+Tests the full feedback loop using only local file I/O (tmp_path):
 save_gate → FileEvidenceResolver → select_patterns_for_injection → verify outcome
 """
 
@@ -17,8 +17,8 @@ from tests.hooks.conftest import make_pattern
 pytestmark = pytest.mark.unit
 
 
-class TestEvidenceDrivenInjectionIntegration:
-    """Integration test for evidence-driven injection feedback loop."""
+class TestEvidenceDrivenInjectionFullLoop:
+    """Full-loop test for evidence-driven injection feedback cycle."""
 
     def test_full_loop_save_resolve_select(self, tmp_path: Path) -> None:
         """Test full loop: save gates → create resolver → run selection → verify.
