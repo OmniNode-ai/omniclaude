@@ -89,6 +89,10 @@ def _get_redact_secrets() -> Callable[[str], str]:
         def _fallback(text: str) -> str:
             return "[redacted - secret_redactor unavailable]"
 
+        # Cache the fallback to prevent repeated warnings and allocations.
+        # If the module is later deployed, reset_client() or process restart
+        # will pick it up (the global is cleared on module reload).
+        _redact_secrets_fn = _fallback
         return _fallback
 
 
@@ -305,7 +309,9 @@ def emit_phase_metrics(
         if isinstance(inner, dict) and "artifact_pointers" in inner:
             pointers = inner.get("artifact_pointers", [])
             inner["artifact_pointers"] = [
-                p for p in pointers if _validate_artifact_uri(p.get("uri", ""))
+                p
+                for p in pointers
+                if isinstance(p, dict) and _validate_artifact_uri(p.get("uri", ""))
             ]
 
         from plugins.onex.hooks.lib.emit_client_wrapper import emit_event
