@@ -38,13 +38,14 @@ if [ "$MODE" = "--ci" ]; then
         BASE_REF="origin/main"
     fi
     # Detect only added (A) files — renames/moves are allowed during freeze
-    NEW_MIGRATIONS=$(git diff --name-status "${BASE_REF}...HEAD" -- "$MIGRATIONS_DIR" \
-        | grep -E '^A' | awk '{print $NF}' || true)
+    # Separate git diff (fail loudly on error) from grep (no-match exit 1 is OK)
+    DIFF_OUTPUT=$(git diff --name-status "${BASE_REF}...HEAD" -- "$MIGRATIONS_DIR")
+    NEW_MIGRATIONS=$(echo "$DIFF_OUTPUT" | grep -E '^A' | awk '{print $NF}' || true)
 else
     # Pre-commit mode: check staged files
     # Only added (A) files — renames/moves are allowed during freeze
-    NEW_MIGRATIONS=$(git diff --cached --name-status -- "$MIGRATIONS_DIR" \
-        | grep -E '^A' | awk '{print $NF}' || true)
+    DIFF_OUTPUT=$(git diff --cached --name-status -- "$MIGRATIONS_DIR")
+    NEW_MIGRATIONS=$(echo "$DIFF_OUTPUT" | grep -E '^A' | awk '{print $NF}' || true)
 fi
 
 if [ -n "$NEW_MIGRATIONS" ]; then
