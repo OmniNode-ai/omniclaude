@@ -1,0 +1,133 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 OmniNode Team
+"""Unit test for evidence-driven injection full loop (OMN-2092).
+
+Tests the full feedback loop using only local file I/O (tmp_path):
+save_gate → FileEvidenceResolver → select_patterns_for_injection → verify outcome
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from tests.hooks.conftest import make_pattern
+
+pytestmark = pytest.mark.unit
+
+
+class TestEvidenceResolverProtocolConformance:
+    """Verify that resolver implementations satisfy the EvidenceResolver protocol."""
+
+    def test_file_evidence_resolver_satisfies_protocol(self) -> None:
+        """FileEvidenceResolver is a valid EvidenceResolver."""
+        from omniclaude.hooks.evidence_resolver import EvidenceResolver
+        from plugins.onex.hooks.lib.file_evidence_resolver import FileEvidenceResolver
+
+        resolver = FileEvidenceResolver()
+        assert isinstance(resolver, EvidenceResolver)
+
+    def test_dict_evidence_resolver_satisfies_protocol(self) -> None:
+        """DictEvidenceResolver is a valid EvidenceResolver."""
+        from omniclaude.hooks.evidence_resolver import EvidenceResolver
+        from tests.hooks.dict_evidence_resolver import DictEvidenceResolver
+
+        resolver = DictEvidenceResolver({})
+        assert isinstance(resolver, EvidenceResolver)
+
+
+class TestEvidenceDrivenInjectionFullLoop:
+    """Full-loop test for evidence-driven injection feedback cycle."""
+
+    def test_full_loop_save_resolve_select(self, tmp_path: Path) -> None:
+        """Test full loop: save gates → create resolver → run selection → verify.
+
+        This test verifies the complete feedback loop:
+        1. Save promotion gates for different patterns with different results
+        2. Create FileEvidenceResolver pointing at saved gates
+        3. Run select_patterns_for_injection with evidence_policy="boost"
+        4. Verify patterns are reranked according to evidence
+        5. Verify evidence_policy="require" filters correctly
+        """
+        from omnibase_spi.contracts.measurement.contract_measurement_context import (
+            ContractMeasurementContext,
+        )
+        from omnibase_spi.contracts.measurement.contract_promotion_gate import (
+            ContractPromotionGate,
+        )
+
+        from omniclaude.hooks.injection_limits import (
+            InjectionLimitsConfig,
+            select_patterns_for_injection,
+        )
+        from plugins.onex.hooks.lib.file_evidence_resolver import FileEvidenceResolver
+        from plugins.onex.hooks.lib.metrics_aggregator import save_gate
+
+        # Step 1: Save gates for 2 patterns
+        ctx_a = ContractMeasurementContext(
+            ticket_id="T1", pattern_id="pat-a", repo_id="r"
+        )
+        gate_a = ContractPromotionGate(
+            run_id="r1",
+            gate_result="pass",
+            baseline_key="k",
+            sufficient_count=3,
+            total_count=3,
+            required_dimensions=["duration", "tokens", "tests"],
+        )
+        save_gate(gate_a, ctx_a, baselines_root=tmp_path)
+
+        ctx_b = ContractMeasurementContext(
+            ticket_id="T1", pattern_id="pat-b", repo_id="r"
+        )
+        gate_b = ContractPromotionGate(
+            run_id="r1",
+            gate_result="fail",
+            baseline_key="k",
+            sufficient_count=1,
+            total_count=3,
+            required_dimensions=["duration", "tokens", "tests"],
+        )
+        save_gate(gate_b, ctx_b, baselines_root=tmp_path)
+
+        # Step 2: Create resolver pointing at tmp_path
+        resolver = FileEvidenceResolver(baselines_root=tmp_path)
+
+        # Step 3: Create patterns matching gate pattern_ids
+        patterns = [
+            make_pattern(pattern_id="pat-a"),
+            make_pattern(pattern_id="pat-b"),
+            make_pattern(pattern_id="pat-c"),  # no gate
+        ]
+
+        # Step 4: Test with boost policy
+        limits_boost = InjectionLimitsConfig(
+            max_patterns_per_injection=10,
+            max_per_domain=10,
+            max_tokens_injected=10000,
+            evidence_policy="boost",
+        )
+        result_boost = select_patterns_for_injection(
+            patterns, limits_boost, evidence_resolver=resolver
+        )  # type: ignore[arg-type]
+        ids_boost = [p.pattern_id for p in result_boost]
+
+        # Verify: pat-a (boosted) should be first, pat-b (penalized) should be last
+        assert ids_boost[0] == "pat-a", "Pattern with pass gate should be first"
+        assert ids_boost[-1] == "pat-b", "Pattern with fail gate should be last"
+
+        # Step 5: Test with require policy
+        limits_require = InjectionLimitsConfig(
+            max_patterns_per_injection=10,
+            max_per_domain=10,
+            max_tokens_injected=10000,
+            evidence_policy="require",
+        )
+        result_require = select_patterns_for_injection(
+            patterns, limits_require, evidence_resolver=resolver
+        )  # type: ignore[arg-type]
+
+        # Verify: only pat-a should pass the filter
+        assert len(result_require) == 1, "Only pass patterns should be selected"
+        assert result_require[0].pattern_id == "pat-a"

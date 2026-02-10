@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -41,6 +42,8 @@ if TYPE_CHECKING:
     from omnibase_spi.contracts.measurement.contract_phase_metrics import (
         ContractPhaseMetrics,
     )
+
+logger = logging.getLogger(__name__)
 
 ALL_PHASES: frozenset[ContractEnumPipelinePhase] = frozenset(ContractEnumPipelinePhase)
 
@@ -211,23 +214,39 @@ def save_baseline(
     context: ContractMeasurementContext,
     *,
     baselines_root: Path | None = None,
-) -> Path:
+) -> Path | None:
     """Persist a run as the baseline for the given context.
 
     Storage: {baselines_root}/{pattern_id}/{baseline_key}/latest.metrics.json
     Uses atomic write (tmp + rename).
+
+    Returns:
+        The path to the saved file on success, or None on failure.
     """
     root = baselines_root or BASELINES_ROOT
     baseline_key = derive_baseline_key(context)
     pattern_id = context.pattern_id or "_no_pattern"
 
-    target_dir = root / pattern_id / baseline_key
-    target_dir.mkdir(parents=True, exist_ok=True)
+    if ".." in pattern_id or "/" in pattern_id or "\\" in pattern_id:
+        logger.warning(
+            "Rejected pattern_id %r: contains path traversal characters", pattern_id
+        )
+        return None
 
+    target_dir = root / pattern_id / baseline_key
     target = target_dir / "latest.metrics.json"
     tmp = target.with_suffix(".json.tmp")
-    tmp.write_text(run.model_dump_json(indent=2))
-    tmp.rename(target)
+    try:
+        target_dir.mkdir(parents=True, exist_ok=True)
+        tmp.write_text(run.model_dump_json(indent=2))
+        tmp.rename(target)
+    except OSError as e:
+        logger.warning("Failed to save baseline for %s: %s", pattern_id, e)
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return None
     return target
 
 
@@ -241,12 +260,22 @@ def load_baseline(
     baseline_key = derive_baseline_key(context)
     pattern_id = context.pattern_id or "_no_pattern"
 
+    if ".." in pattern_id or "/" in pattern_id or "\\" in pattern_id:
+        logger.warning(
+            "Rejected pattern_id %r: contains path traversal characters", pattern_id
+        )
+        return None
+
     target = root / pattern_id / baseline_key / "latest.metrics.json"
     if not target.exists():
         return None
 
-    data = json.loads(target.read_text())
-    return ContractAggregatedRun.model_validate(data)
+    try:
+        data = json.loads(target.read_text())
+        return ContractAggregatedRun.model_validate(data)
+    except (json.JSONDecodeError, OSError, ValueError) as e:
+        logger.warning("Failed to load baseline from %s: %s", target, e)
+        return None
 
 
 # -- Evidence assessment -----------------------------------------------------
@@ -394,3 +423,138 @@ def assess_evidence(
         sufficient_count=sufficient_count,
         total_count=len(dimensions),
     )
+
+
+_VALID_GATE_RESULTS = frozenset({"pass", "fail", "insufficient_evidence"})
+
+# -- Gate storage ------------------------------------------------------------
+
+
+def save_gate(
+    gate: ContractPromotionGate,
+    context: ContractMeasurementContext,
+    *,
+    baselines_root: Path | None = None,
+) -> Path | None:
+    """Persist a gate as the baseline for the given context.
+
+    Storage: {baselines_root}/{pattern_id}/{baseline_key}/latest.gate.json
+    Uses atomic write (tmp + rename).
+
+    Returns:
+        The path to the saved file on success, or None on failure.
+    """
+    root = baselines_root or BASELINES_ROOT
+    baseline_key = derive_baseline_key(context)
+    pattern_id = context.pattern_id or "_no_pattern"
+
+    if ".." in pattern_id or "/" in pattern_id or "\\" in pattern_id:
+        logger.warning(
+            "Rejected pattern_id %r: contains path traversal characters", pattern_id
+        )
+        return None
+
+    target_dir = root / pattern_id / baseline_key
+    target = target_dir / "latest.gate.json"
+    tmp = target.with_suffix(".json.tmp")
+    try:
+        target_dir.mkdir(parents=True, exist_ok=True)
+        tmp.write_text(gate.model_dump_json(indent=2))
+        tmp.rename(target)
+    except OSError as e:
+        logger.warning("Failed to save gate for %s: %s", pattern_id, e)
+        # Clean up orphaned tmp file from partial write
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return None
+    return target
+
+
+def load_gate(
+    context: ContractMeasurementContext,
+    *,
+    baselines_root: Path | None = None,
+) -> ContractPromotionGate | None:
+    """Load the gate for the given context, or None if not found."""
+    root = baselines_root or BASELINES_ROOT
+    baseline_key = derive_baseline_key(context)
+    pattern_id = context.pattern_id or "_no_pattern"
+
+    if ".." in pattern_id or "/" in pattern_id or "\\" in pattern_id:
+        logger.warning(
+            "Rejected pattern_id %r: contains path traversal characters", pattern_id
+        )
+        return None
+
+    target = root / pattern_id / baseline_key / "latest.gate.json"
+    if not target.exists():
+        return None
+
+    try:
+        data = json.loads(target.read_text())
+        return ContractPromotionGate.model_validate(data)
+    except (json.JSONDecodeError, OSError, ValueError) as e:
+        logger.warning("Failed to load gate from %s: %s", target, e)
+        return None
+
+
+def load_latest_gate_result(
+    pattern_id: str,
+    *,
+    baselines_root: Path | None = None,
+) -> str | None:
+    """Scan subdirs for the most recent gate file and return gate_result.
+
+    Searches **one level** of subdirectories under
+    ``{baselines_root}/{pattern_id}/`` for the most recently modified
+    ``latest.gate.json`` file (glob pattern: ``*/latest.gate.json``).
+
+    Returns:
+        The gate_result string ("pass", "fail", or "insufficient_evidence")
+        or None if no gate files found or on any error.
+    """
+    root = baselines_root or BASELINES_ROOT
+    if not pattern_id:
+        logger.debug(
+            "load_latest_gate_result called with empty pattern_id; returning None"
+        )
+        return None
+    if ".." in pattern_id or "/" in pattern_id or "\\" in pattern_id:
+        logger.warning(
+            "Rejected pattern_id %r: contains path traversal characters", pattern_id
+        )
+        return None
+    pattern_dir = root / pattern_id
+
+    if not pattern_dir.exists():
+        return None
+
+    try:
+        # Find all gate files
+        gate_files = list(pattern_dir.glob("*/latest.gate.json"))
+        if not gate_files:
+            return None
+
+        # Find the most recently modified.  When two files share the same
+        # mtime (rare — requires sub-second concurrent writes), the secondary
+        # sort on path string ensures deterministic selection.
+        latest_file = max(gate_files, key=lambda p: (p.stat().st_mtime, str(p)))
+
+        # Parse and extract gate_result
+        data = json.loads(latest_file.read_text())
+        result = data.get("gate_result")
+        if not isinstance(result, str):
+            return None
+        if result not in _VALID_GATE_RESULTS:
+            logger.warning(
+                "Unrecognized gate_result %r in %s; returning None",
+                result,
+                latest_file,
+            )
+            return None
+        return result
+    except (json.JSONDecodeError, OSError) as e:
+        logger.warning("Failed to load latest gate for %s: %s", pattern_id, e)
+        return None
