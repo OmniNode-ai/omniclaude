@@ -254,15 +254,20 @@ fetch_failures_for_pr() {
     # silently omitted. Pagination not implemented as it adds complexity for
     # a scenario that practically never occurs in this codebase.
     print_status "Fetching check runs for commit..."
+    local api_response
+    api_response=$(gh api "repos/$REPO_OWNER/$REPO_NAME/commits/$head_sha/check-runs?per_page=100" 2>/dev/null || echo '{"total_count":0,"check_runs":[]}')
+
+    local total_api_count
+    total_api_count=$(echo "$api_response" | jq '.total_count // 0')
+
     local failed_checks
-    failed_checks=$(gh api "repos/$REPO_OWNER/$REPO_NAME/commits/$head_sha/check-runs?per_page=100" \
-        --jq '[.check_runs[] | select(.conclusion == "failure" and .app.slug == "github-actions")]' 2>/dev/null || echo "[]")
+    failed_checks=$(echo "$api_response" | jq '[.check_runs[] | select(.conclusion == "failure" and .app.slug == "github-actions")]')
 
     local check_count
     check_count=$(echo "$failed_checks" | jq 'length')
 
-    if [ "$check_count" -eq 100 ]; then
-        print_warning "Exactly 100 failed checks returned — results may be truncated (GitHub API pagination limit)"
+    if [ "$total_api_count" -ge 100 ]; then
+        print_warning "API returned $total_api_count total check runs (per_page=100) — some failed checks may be missing"
     fi
 
     if [ "$check_count" -eq 0 ]; then

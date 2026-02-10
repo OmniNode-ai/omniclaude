@@ -336,7 +336,7 @@ if [[ "$EXECUTE" == "true" ]]; then
     # Update statusLine in settings.json to point at new version's statusline.sh
     SETTINGS_JSON="$HOME/.claude/settings.json"
     if [[ -f "$SETTINGS_JSON" ]]; then
-        # Use ~ for the path since settings.json uses ~ convention
+        # Use ~ prefix: Claude Code's settings parser expands ~ to $HOME
         STATUSLINE_PATH_SHORT="~/.claude/plugins/cache/omninode-tools/onex/${NEW_VERSION}/hooks/scripts/statusline.sh"
 
         if jq -e '.statusLine.command' "$SETTINGS_JSON" >/dev/null 2>&1; then

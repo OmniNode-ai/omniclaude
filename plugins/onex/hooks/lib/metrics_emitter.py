@@ -67,9 +67,9 @@ def _get_redact_secrets() -> Callable[[str], str]:
     If ``secret_redactor`` is unavailable, the fallback replaces all input
     with a placeholder to prevent leaking unredacted secrets to evt topics.
 
-    Unlike a permanent cache, this retries the import on each call until it
-    succeeds — a transient import failure at daemon startup will not
-    permanently degrade sanitization for the process lifetime.
+    Both the real redactor and the fallback are cached after first resolution.
+    If the module is later deployed, call ``reset_redactor()`` or restart the
+    process to pick it up — the global is cleared on module reload.
     """
     global _redact_secrets_fn
     if _redact_secrets_fn is not None:
@@ -94,6 +94,16 @@ def _get_redact_secrets() -> Callable[[str], str]:
         # will pick it up (the global is cleared on module reload).
         _redact_secrets_fn = _fallback
         return _fallback
+
+
+def reset_redactor() -> None:
+    """Clear the cached redactor, forcing re-import on next call.
+
+    Use after deploying ``secret_redactor`` at runtime so the fallback
+    placeholder is replaced with the real implementation.
+    """
+    global _redact_secrets_fn
+    _redact_secrets_fn = None
 
 
 def _sanitize_error_messages(messages: list[str]) -> list[str]:
@@ -380,7 +390,7 @@ def write_metrics_artifact(
             if outcome.get("skip_reason"):
                 outcome["skip_reason"] = _sanitize_skip_reason(outcome["skip_reason"])
 
-        # Atomic write via temp file
+        # Atomic write via temp file (same-filesystem rename is atomic on POSIX)
         tmp_path = artifact_path.with_suffix(".json.tmp")
         tmp_path.write_text(json.dumps(data, indent=2))
         tmp_path.rename(artifact_path)

@@ -239,6 +239,9 @@ _client_initialized = False
 def _get_client() -> _SocketEmitClient | None:
     """Get or create the emit client instance (lazy, thread-safe).
 
+    The client object is cached, but each request opens a fresh socket
+    connection (connection-per-request pattern, not persistent).
+
     Returns:
         _SocketEmitClient instance or None if initialization fails.
     """

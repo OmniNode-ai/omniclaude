@@ -37,7 +37,7 @@ import sys
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from omnibase_spi.contracts.measurement import (
     ContractCostMetrics,
@@ -133,10 +133,13 @@ class PhaseResult:
         "tokens_used",
     )
 
+    #: Valid status values for PhaseResult.
+    VALID_STATUSES: tuple[str, ...] = ("completed", "blocked", "failed")
+
     def __init__(
         self,
         *,
-        status: str = "completed",
+        status: Literal["completed", "blocked", "failed"] = "completed",
         blocking_issues: int = 0,
         nit_count: int = 0,
         artifacts: dict[str, Any] | None = None,
@@ -149,6 +152,11 @@ class PhaseResult:
         tests_failed: int = 0,
         review_iteration: int = 0,
     ) -> None:
+        if status not in self.VALID_STATUSES:
+            logger.warning(
+                "Unknown PhaseResult status %r, defaulting to 'failed'", status
+            )
+            status = "failed"
         self.status = status
         self.blocking_issues = blocking_issues
         self.nit_count = nit_count
@@ -263,15 +271,21 @@ def build_metrics_from_result(
         error_codes=([phase_result.block_kind] if phase_result.block_kind else []),
     )
 
+    tests_passed = phase_result.tests_passed
+    tests_total = phase_result.tests_total
+    if tests_total > 0 and tests_passed > tests_total:
+        logger.warning(
+            "tests_passed (%d) > tests_total (%d); clamping to total",
+            tests_passed,
+            tests_total,
+        )
+        tests_passed = tests_total
+
     tests = ContractTestMetrics(
-        total_tests=phase_result.tests_total,
-        passed_tests=phase_result.tests_passed,
+        total_tests=tests_total,
+        passed_tests=tests_passed,
         failed_tests=phase_result.tests_failed,
-        pass_rate=(
-            min(round(phase_result.tests_passed / phase_result.tests_total, 4), 1.0)
-            if phase_result.tests_total > 0
-            else None
-        ),
+        pass_rate=(round(tests_passed / tests_total, 4) if tests_total > 0 else None),
     )
 
     return ContractPhaseMetrics(
