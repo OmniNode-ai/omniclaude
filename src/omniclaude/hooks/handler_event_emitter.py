@@ -605,6 +605,8 @@ async def emit_session_started_from_config(
         session_id=str(config.session_id),
         correlation_id=tracing.correlation_id or config.session_id,
         causation_id=tracing.causation_id or uuid4(),
+        # Graceful degradation: warn (above) for testing visibility, but
+        # fall back to now() so production never drops an event.
         emitted_at=tracing.emitted_at or datetime.now(UTC),
         working_directory=config.working_directory,
         git_branch=config.git_branch,
@@ -695,6 +697,8 @@ async def emit_session_ended_from_config(
         session_id=str(config.session_id),
         correlation_id=tracing.correlation_id or config.session_id,
         causation_id=tracing.causation_id or uuid4(),
+        # Graceful degradation: warn (above) for testing visibility, but
+        # fall back to now() so production never drops an event.
         emitted_at=tracing.emitted_at or datetime.now(UTC),
         reason=config.reason,
         duration_seconds=config.duration_seconds,
@@ -785,6 +789,8 @@ async def emit_prompt_submitted_from_config(
         session_id=str(config.session_id),
         correlation_id=tracing.correlation_id or config.session_id,
         causation_id=tracing.causation_id or uuid4(),
+        # Graceful degradation: warn (above) for testing visibility, but
+        # fall back to now() so production never drops an event.
         emitted_at=tracing.emitted_at or datetime.now(UTC),
         prompt_id=config.prompt_id,
         prompt_preview=config.prompt_preview,
@@ -879,6 +885,8 @@ async def emit_tool_executed_from_config(
         session_id=str(config.session_id),
         correlation_id=tracing.correlation_id or config.session_id,
         causation_id=tracing.causation_id or uuid4(),
+        # Graceful degradation: warn (above) for testing visibility, but
+        # fall back to now() so production never drops an event.
         emitted_at=tracing.emitted_at or datetime.now(UTC),
         tool_execution_id=config.tool_execution_id,
         tool_name=config.tool_name,
@@ -1173,6 +1181,8 @@ async def emit_session_outcome_from_config(
                     "function": "emit_session_outcome_from_config",
                 },
             )
+        # Graceful degradation: warn (above) for testing visibility, but
+        # fall back to now() so production never drops an event.
         emitted_at = tracing.emitted_at or datetime.now(UTC)
 
         payload = ModelSessionOutcome(
@@ -1196,7 +1206,13 @@ async def emit_session_outcome_from_config(
         await bus.start()
 
         # Publish to both topics (fan-out) with per-topic error handling
-        # to avoid partial inconsistency where CMD succeeds but EVT fails
+        # to avoid partial inconsistency where CMD succeeds but EVT fails.
+        #
+        # Publish order matters for error semantics:
+        #   CMD first (unguarded) — failure propagates as success=False
+        #   EVT second (guarded)  — failure yields success=True + error_message
+        # This is intentional: CMD is the primary target (intelligence loop),
+        # EVT is observability-only and may fail without blocking the caller.
         evt_error: str | None = None
 
         await bus.publish(topic=topic_cmd, key=partition_key, value=message_bytes)

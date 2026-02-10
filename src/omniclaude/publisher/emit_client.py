@@ -23,6 +23,10 @@ logger = logging.getLogger(__name__)
 _RECV_BUFSIZE = 4096
 # Guard against unbounded buffer growth from a misbehaving daemon (1 MiB)
 _MAX_RESPONSE_SIZE = 1_048_576
+# Cap read loop iterations to prevent indefinite blocking if the daemon
+# sends data without newlines.  Normal responses arrive in 1-2 iterations;
+# 64 iterations (64 × 4 KiB = 256 KiB) is generous headroom.
+_MAX_READ_ITERATIONS = 64
 
 
 class EmitClient:
@@ -83,13 +87,17 @@ class EmitClient:
 
     def _read_response(self, sock: socket.socket) -> dict[str, object]:
         """Read until newline and parse JSON, preserving leftover bytes."""
+        iterations = 0
         while b"\n" not in self._buf:
             chunk = sock.recv(_RECV_BUFSIZE)
             if not chunk:
                 raise ConnectionResetError("daemon closed connection")
             self._buf.extend(chunk)
+            iterations += 1
             if len(self._buf) > _MAX_RESPONSE_SIZE:
                 raise ValueError("daemon response exceeded size limit")
+            if iterations >= _MAX_READ_ITERATIONS:
+                raise ValueError("daemon response exceeded read iteration limit")
         idx = self._buf.index(b"\n")
         resp_line = self._buf[:idx]
         self._buf = self._buf[idx + 1 :]  # Preserve leftover for next call
