@@ -314,7 +314,7 @@ fetch_failures_for_pr() {
 
         # Apply workflow filter if set
         if [ -n "$WORKFLOW_FILTER" ]; then
-            if ! echo "$workflow_name" | grep -qi "$WORKFLOW_FILTER"; then
+            if ! echo "$workflow_name" | grep -qFi "$WORKFLOW_FILTER"; then
                 print_status "    Skipped (workflow filter: $WORKFLOW_FILTER)"
                 continue
             fi

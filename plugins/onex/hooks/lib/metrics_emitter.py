@@ -49,8 +49,10 @@ MAX_FAILED_TESTS = 20
 # Artifact base directory
 ARTIFACT_BASE_DIR = Path.home() / ".claude" / "pipelines"
 
-# Characters that must not appear in path components to prevent traversal
-_INVALID_PATH_CHARS = ("..", "/", "\\", "\x00")
+# Sequences that must not appear in path components to prevent traversal.
+# Single chars use exact match; ".." uses segment-level check (see usage).
+_INVALID_PATH_SINGLE_CHARS = ("/", "\\", "\x00")
+_TRAVERSAL_SEGMENT = ".."
 
 
 # ---------------------------------------------------------------------------
@@ -415,7 +417,10 @@ def write_metrics_artifact(
     try:
         # Reject path traversal in user-influenced components
         for component in (ticket_id, run_id, phase, str(attempt)):
-            if any(c in str(component) for c in _INVALID_PATH_CHARS):
+            if (
+                any(c in str(component) for c in _INVALID_PATH_SINGLE_CHARS)
+                or str(component) == _TRAVERSAL_SEGMENT
+            ):
                 logger.warning(
                     f"Rejected path component with traversal chars: {component!r}"
                 )
@@ -476,7 +481,10 @@ def read_metrics_artifact(
         Parsed JSON dict, or None if file does not exist or is corrupt.
     """
     for component in (ticket_id, run_id, phase, str(attempt)):
-        if any(c in str(component) for c in _INVALID_PATH_CHARS):
+        if (
+            any(c in str(component) for c in _INVALID_PATH_SINGLE_CHARS)
+            or str(component) == _TRAVERSAL_SEGMENT
+        ):
             logger.warning(
                 f"Rejected path component with traversal chars: {component!r}"
             )
@@ -518,7 +526,10 @@ def metrics_artifact_exists(
         True if the artifact file exists.
     """
     for component in (ticket_id, run_id, phase, str(attempt)):
-        if any(c in str(component) for c in _INVALID_PATH_CHARS):
+        if (
+            any(c in str(component) for c in _INVALID_PATH_SINGLE_CHARS)
+            or str(component) == _TRAVERSAL_SEGMENT
+        ):
             logger.warning(
                 f"Rejected path component with traversal chars: {component!r}"
             )
