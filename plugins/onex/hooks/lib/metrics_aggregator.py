@@ -381,6 +381,8 @@ def assess_evidence(
     )
 
 
+_VALID_GATE_RESULTS = frozenset({"pass", "fail", "insufficient_evidence"})
+
 # -- Gate storage ------------------------------------------------------------
 
 
@@ -475,7 +477,6 @@ def load_latest_gate_result(
 
         # Parse and extract gate_result
         data = json.loads(latest_file.read_text())
-        _VALID_GATE_RESULTS = {"pass", "fail", "insufficient_evidence"}
         result = data.get("gate_result")
         if not isinstance(result, str):
             return None
