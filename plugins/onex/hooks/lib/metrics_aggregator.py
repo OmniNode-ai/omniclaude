@@ -467,7 +467,7 @@ def load_latest_gate_result(
             "load_latest_gate_result called with empty pattern_id; returning None"
         )
         return None
-    if ".." in pattern_id or "/" in pattern_id:
+    if ".." in pattern_id or "/" in pattern_id or "\\" in pattern_id:
         logger.warning(
             "Rejected pattern_id %r: contains path traversal characters", pattern_id
         )

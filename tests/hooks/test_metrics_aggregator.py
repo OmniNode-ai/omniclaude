@@ -332,6 +332,7 @@ class TestBaselineStorage:
         run = aggregate_run(_all_phases_success(), context=ctx)
 
         path = save_baseline(run, ctx, baselines_root=tmp_path)
+        assert path is not None
         assert path.exists()
 
         loaded = load_baseline(ctx, baselines_root=tmp_path)
@@ -357,6 +358,7 @@ class TestBaselineStorage:
         run = aggregate_run(_all_phases_success(), context=ctx, run_id="no-pat")
 
         path = save_baseline(run, ctx, baselines_root=tmp_path)
+        assert path is not None
         assert "_no_pattern" in str(path)
 
     def test_baseline_key_deterministic(self) -> None:
@@ -574,6 +576,7 @@ class TestGateStorage:
         )
 
         path = save_gate(gate, ctx, baselines_root=tmp_path)
+        assert path is not None
         assert path.exists()
 
         loaded = load_gate(ctx, baselines_root=tmp_path)
