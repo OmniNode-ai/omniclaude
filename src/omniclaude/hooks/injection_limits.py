@@ -297,7 +297,8 @@ def compute_effective_score(
         score *= min(evidence_boost, 3.0)  # cap at 3x
     elif gate_result == "fail":
         score *= max(0.0, min(1.0, evidence_penalty))
-    # "insufficient_evidence" or None → no modification (1.0)
+    elif gate_result is not None and gate_result != "insufficient_evidence":
+        logger.warning("Unrecognized gate_result: %r; treating as neutral", gate_result)
 
     return score
 

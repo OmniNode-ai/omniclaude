@@ -217,12 +217,19 @@ def save_baseline(
     pattern_id = context.pattern_id or "_no_pattern"
 
     target_dir = root / pattern_id / baseline_key
-    target_dir.mkdir(parents=True, exist_ok=True)
-
     target = target_dir / "latest.metrics.json"
     tmp = target.with_suffix(".json.tmp")
-    tmp.write_text(run.model_dump_json(indent=2))
-    tmp.rename(target)
+    try:
+        target_dir.mkdir(parents=True, exist_ok=True)
+        tmp.write_text(run.model_dump_json(indent=2))
+        tmp.rename(target)
+    except OSError as e:
+        logger.warning("Failed to save baseline for %s: %s", pattern_id, e)
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return target
     return target
 
 
@@ -240,8 +247,12 @@ def load_baseline(
     if not target.exists():
         return None
 
-    data = json.loads(target.read_text())
-    return ContractAggregatedRun.model_validate(data)
+    try:
+        data = json.loads(target.read_text())
+        return ContractAggregatedRun.model_validate(data)
+    except (json.JSONDecodeError, OSError, ValueError) as e:
+        logger.warning("Failed to load baseline from %s: %s", target, e)
+        return None
 
 
 # -- Evidence assessment -----------------------------------------------------
@@ -443,8 +454,12 @@ def load_latest_gate_result(
         or None if no gate files found or on any error.
     """
     root = baselines_root or BASELINES_ROOT
-    pid = pattern_id or "_no_pattern"
-    pattern_dir = root / pid
+    if not pattern_id:
+        logger.debug(
+            "load_latest_gate_result called with empty pattern_id; returning None"
+        )
+        return None
+    pattern_dir = root / pattern_id
 
     if not pattern_dir.exists():
         return None
@@ -460,8 +475,16 @@ def load_latest_gate_result(
 
         # Parse and extract gate_result
         data = json.loads(latest_file.read_text())
+        _VALID_GATE_RESULTS = {"pass", "fail", "insufficient_evidence"}
         result = data.get("gate_result")
         if not isinstance(result, str):
+            return None
+        if result not in _VALID_GATE_RESULTS:
+            logger.warning(
+                "Unrecognized gate_result %r in %s; returning None",
+                result,
+                latest_file,
+            )
             return None
         return result
     except (json.JSONDecodeError, OSError) as e:
