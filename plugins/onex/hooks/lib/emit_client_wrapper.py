@@ -26,7 +26,7 @@ Example Usage:
     # Emit an event (returns True on success, False on failure)
     success = emit_event(
         event_type="prompt.submitted",
-        payload={"prompt": "Hello", "session_id": "abc123"},
+        payload={"prompt_preview": "Hello", "session_id": "abc123"},
         timeout_ms=50,
     )
     ```
@@ -36,7 +36,7 @@ CLI Usage:
     # Emit an event from shell script
     python -m emit_client_wrapper emit \
         --event-type "prompt.submitted" \
-        --payload '{"session_id": "abc123", "prompt": "Hello"}'
+        --payload '{"session_id": "abc123", "prompt_preview": "Hello"}'
 
     # Check daemon availability
     python -m emit_client_wrapper ping
@@ -179,6 +179,8 @@ class _SocketEmitClient:
         self._socket_path = socket_path
         self._timeout = timeout
 
+    _MAX_RESPONSE_BYTES = 1_048_576  # 1 MB safety cap on daemon responses
+
     def _request(self, data: dict[str, Any]) -> dict[str, Any]:
         """Send a JSON request and return the parsed response."""
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -188,10 +190,16 @@ class _SocketEmitClient:
             sock.sendall(json.dumps(data).encode("utf-8") + b"\n")
             # Read response (daemon always sends newline-terminated JSON)
             chunks: list[bytes] = []
+            total = 0
             while True:
                 chunk = sock.recv(4096)
                 if not chunk:
                     break
+                total += len(chunk)
+                if total > self._MAX_RESPONSE_BYTES:
+                    raise ConnectionError(
+                        f"Daemon response exceeded {self._MAX_RESPONSE_BYTES} bytes"
+                    )
                 chunks.append(chunk)
                 if b"\n" in chunk:
                     break
@@ -343,7 +351,7 @@ def emit_event(
     Example:
         >>> success = emit_event(
         ...     event_type="prompt.submitted",
-        ...     payload={"prompt": "Hello", "session_id": "abc123"},
+        ...     payload={"prompt_preview": "Hello", "session_id": "abc123"},
         ... )
         >>> print(f"Event emitted: {success}")
         Event emitted: True

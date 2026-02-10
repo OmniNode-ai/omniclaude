@@ -57,6 +57,28 @@ _INVALID_PATH_CHARS = ("..", "/", "\\", "\x00")
 # ---------------------------------------------------------------------------
 
 
+def _get_redact_secrets() -> callable:  # type: ignore[valid-type]
+    """Return the ``redact_secrets`` callable, with a safe fallback.
+
+    If ``secret_redactor`` is unavailable, the fallback replaces all input
+    with a placeholder to prevent leaking unredacted secrets to evt topics.
+    """
+    try:
+        from plugins.onex.hooks.lib.secret_redactor import redact_secrets
+
+        return redact_secrets
+    except ImportError:
+        logger.warning(
+            "secret_redactor not available; stripping text to prevent "
+            "unredacted secrets on evt topics"
+        )
+
+        def _fallback(text: str) -> str:
+            return "[redacted - secret_redactor unavailable]"
+
+        return _fallback
+
+
 def _sanitize_error_messages(messages: list[str]) -> list[str]:
     """Sanitize error messages for evt topic emission.
 
@@ -71,20 +93,10 @@ def _sanitize_error_messages(messages: list[str]) -> list[str]:
     Returns:
         Sanitized list of error messages.
     """
-    try:
-        from plugins.onex.hooks.lib.secret_redactor import redact_secrets
-    except ImportError:
-        logger.warning(
-            "secret_redactor not available; stripping error messages to prevent "
-            "unredacted secrets on evt topics"
-        )
-
-        def redact_secrets(text: str) -> str:  # type: ignore[misc]
-            return "[redacted - secret_redactor unavailable]"
-
+    redact = _get_redact_secrets()
     sanitized = []
     for msg in messages[:MAX_ERROR_MESSAGES]:
-        clean = redact_secrets(msg)
+        clean = redact(msg)
         if len(clean) > MAX_ERROR_MESSAGE_LENGTH:
             clean = clean[: MAX_ERROR_MESSAGE_LENGTH - 3] + "..."
         sanitized.append(clean)
@@ -103,18 +115,8 @@ def _sanitize_skip_reason(reason: str) -> str:
     Returns:
         Sanitized skip reason string.
     """
-    try:
-        from plugins.onex.hooks.lib.secret_redactor import redact_secrets
-    except ImportError:
-        logger.warning(
-            "secret_redactor not available; stripping skip_reason to prevent "
-            "unredacted secrets on evt topics"
-        )
-
-        def redact_secrets(text: str) -> str:  # type: ignore[misc]
-            return "[redacted - secret_redactor unavailable]"
-
-    clean = redact_secrets(reason)
+    redact = _get_redact_secrets()
+    clean = redact(reason)
     if len(clean) > MAX_ERROR_MESSAGE_LENGTH:
         clean = clean[: MAX_ERROR_MESSAGE_LENGTH - 3] + "..."
     return clean
