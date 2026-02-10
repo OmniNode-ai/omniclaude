@@ -397,6 +397,50 @@ class TestWarnRegression:
         reasons = gate.extensions["promotion_reasons"]
         assert any("tokens" in r.lower() for r in reasons)
 
+    def test_test_decrease_above_threshold_warns(self) -> None:
+        from plugins.onex.hooks.lib.promotion_gater import evaluate_promotion_gate
+
+        ctx = _make_context()
+        # Baseline: 10 tests/phase, Candidate: 5 tests/phase → -50% decrease
+        baseline = _aggregate(
+            _all_phases_success(run_id="b", total_tests=10),
+            context=ctx,
+            run_id="b",
+        )
+        candidate = _aggregate(
+            _all_phases_success(run_id="c", total_tests=5),
+            context=ctx,
+            run_id="c",
+        )
+
+        gate = evaluate_promotion_gate(candidate, baseline, ctx)
+
+        assert gate.gate_result == "insufficient_evidence"
+        assert gate.extensions["promotion_tier"] == "warn"
+        reasons = gate.extensions["promotion_reasons"]
+        assert any("tests" in r.lower() for r in reasons)
+
+    def test_test_at_decrease_threshold_allows(self) -> None:
+        from plugins.onex.hooks.lib.promotion_gater import evaluate_promotion_gate
+
+        ctx = _make_context()
+        # Exactly 20% decrease → at threshold, not beyond
+        baseline = _aggregate(
+            _all_phases_success(run_id="b", total_tests=10),
+            context=ctx,
+            run_id="b",
+        )
+        candidate = _aggregate(
+            _all_phases_success(run_id="c", total_tests=8),
+            context=ctx,
+            run_id="c",
+        )
+
+        gate = evaluate_promotion_gate(candidate, baseline, ctx)
+
+        assert gate.gate_result == "pass"
+        assert gate.extensions["promotion_tier"] == "allow"
+
     def test_duration_at_threshold_allows(self) -> None:
         from plugins.onex.hooks.lib.promotion_gater import evaluate_promotion_gate
 

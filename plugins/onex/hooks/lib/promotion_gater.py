@@ -46,15 +46,19 @@ if TYPE_CHECKING:
 class PromotionThresholds(BaseModel):
     """Contract-driven regression thresholds for promotion gating.
 
-    Each field specifies the maximum acceptable percentage increase
-    for the corresponding dimension.  Values above the threshold
-    trigger a "warn" gate result.
+    ``duration_regression_pct`` / ``token_regression_pct``: maximum
+    acceptable percentage *increase* (positive delta).
+
+    ``test_decrease_pct``: maximum acceptable percentage *decrease*
+    in test count (negative delta).  A candidate that drops more than
+    this percentage of tests relative to baseline triggers a warn.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     duration_regression_pct: float = 20.0
     token_regression_pct: float = 30.0
+    test_decrease_pct: float = 20.0
 
 
 def evaluate_promotion_gate(
@@ -258,24 +262,41 @@ def _check_regressions(
 ) -> list[str]:
     """Check each dimension against its regression threshold.
 
+    Duration/tokens: flag when delta_pct > positive threshold (increase = bad).
+    Tests: flag when delta_pct < negative threshold (decrease = bad).
+
     Returns a list of human-readable reason strings for any threshold
     violations.  Empty list means all dimensions are within limits.
     """
     reasons: list[str] = []
 
-    threshold_map: dict[str, float] = {
+    # Increase = bad (duration, tokens)
+    increase_map: dict[str, float] = {
         "duration": thresholds.duration_regression_pct,
         "tokens": thresholds.token_regression_pct,
     }
 
+    # Decrease = bad (tests)
+    decrease_map: dict[str, float] = {
+        "tests": thresholds.test_decrease_pct,
+    }
+
     for dim in dimensions:
-        limit = threshold_map.get(dim.dimension)
-        if limit is None:
+        if dim.delta_pct is None:
             continue
-        if dim.delta_pct is not None and dim.delta_pct > limit:
+
+        inc_limit = increase_map.get(dim.dimension)
+        if inc_limit is not None and dim.delta_pct > inc_limit:
             reasons.append(
                 f"{dim.dimension} regression {dim.delta_pct:.1f}% "
-                f"exceeds threshold {limit:.1f}%"
+                f"exceeds threshold {inc_limit:.1f}%"
+            )
+
+        dec_limit = decrease_map.get(dim.dimension)
+        if dec_limit is not None and dim.delta_pct < -dec_limit:
+            reasons.append(
+                f"{dim.dimension} decreased {abs(dim.delta_pct):.1f}% "
+                f"exceeds threshold {dec_limit:.1f}%"
             )
 
     return reasons
