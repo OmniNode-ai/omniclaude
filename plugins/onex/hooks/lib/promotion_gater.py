@@ -28,6 +28,7 @@ from omnibase_spi.contracts.measurement.contract_promotion_gate import (
 from pydantic import BaseModel, ConfigDict
 
 from plugins.onex.hooks.lib.metrics_aggregator import (
+    _get_total_tests,
     _get_total_tokens,
     _make_dimension_evidence,
     detect_flakes,
@@ -234,14 +235,6 @@ def _build_dimensions(
             float(_get_total_tests(candidate)),
         ),
     ]
-
-
-def _get_total_tests(run: ContractAggregatedRun) -> int:
-    total = 0
-    for m in run.phase_metrics:
-        if m.tests is not None:
-            total += m.tests.total_tests
-    return total
 
 
 def _check_regressions(
