@@ -352,7 +352,7 @@ def assess_evidence(
             baseline_key="",
             gate_result="insufficient_evidence",
             dimensions=[],
-            required_dimensions=REQUIRED_DIMENSIONS,
+            required_dimensions=list(REQUIRED_DIMENSIONS),
             sufficient_count=0,
             total_count=0,
         )
@@ -366,7 +366,7 @@ def assess_evidence(
             baseline_key=baseline_key,
             gate_result="insufficient_evidence",
             dimensions=[],
-            required_dimensions=REQUIRED_DIMENSIONS,
+            required_dimensions=list(REQUIRED_DIMENSIONS),
             sufficient_count=0,
             total_count=0,
         )
@@ -384,7 +384,7 @@ def assess_evidence(
         baseline_key=baseline_key,
         gate_result=gate_result,
         dimensions=dimensions,
-        required_dimensions=REQUIRED_DIMENSIONS,
+        required_dimensions=list(REQUIRED_DIMENSIONS),
         sufficient_count=sufficient_count,
         total_count=len(dimensions),
     )

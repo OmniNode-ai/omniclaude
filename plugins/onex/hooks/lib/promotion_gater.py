@@ -122,7 +122,7 @@ def evaluate_promotion_gate(
     # than block because an unknown result doesn't necessarily indicate
     # failure -- it may be a new benign classification.
     if candidate.overall_result != "success":
-        return _gate(
+        return _gate(  # type: ignore[unreachable]
             run_id=run_id,
             context=context,
             gate_result="insufficient_evidence",
@@ -240,7 +240,7 @@ def _gate(
         baseline_key=baseline_key,
         gate_result=gate_result,
         dimensions=dimensions,
-        required_dimensions=required,
+        required_dimensions=list(required),
         sufficient_count=sufficient_count,
         total_count=len(dimensions),
         extensions={
