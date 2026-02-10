@@ -41,7 +41,7 @@ class EmitClient:
         self._socket_path = socket_path
         self._timeout = timeout
         self._sock: socket.socket | None = None
-        self._buf = b""  # Persistent read buffer for TCP stream framing
+        self._buf = b""  # Persistent read buffer for stream framing
 
     # ------------------------------------------------------------------
     # Connection management
@@ -69,7 +69,12 @@ class EmitClient:
             sock = self._connect()
             sock.sendall(line)
             return self._read_response(sock)
-        except (BrokenPipeError, ConnectionResetError, ConnectionRefusedError):
+        except (
+            BrokenPipeError,
+            ConnectionResetError,
+            ConnectionRefusedError,
+            TimeoutError,
+        ):
             # Socket went stale — close and retry once
             self.close()
             sock = self._connect()

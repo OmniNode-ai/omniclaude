@@ -593,6 +593,14 @@ async def emit_session_started_from_config(
         ModelEventPublishResult indicating success or failure.
     """
     tracing = config.tracing
+    if tracing.emitted_at is None:
+        logger.warning(
+            "emitted_at_not_injected",
+            extra={
+                "session_id": str(config.session_id),
+                "function": "emit_session_started_from_config",
+            },
+        )
     payload = ModelHookSessionStartedPayload(
         entity_id=config.session_id,
         session_id=str(config.session_id),
@@ -675,6 +683,14 @@ async def emit_session_ended_from_config(
         ModelEventPublishResult indicating success or failure.
     """
     tracing = config.tracing
+    if tracing.emitted_at is None:
+        logger.warning(
+            "emitted_at_not_injected",
+            extra={
+                "session_id": str(config.session_id),
+                "function": "emit_session_ended_from_config",
+            },
+        )
     payload = ModelHookSessionEndedPayload(
         entity_id=config.session_id,
         session_id=str(config.session_id),
@@ -757,6 +773,14 @@ async def emit_prompt_submitted_from_config(
         ModelEventPublishResult indicating success or failure.
     """
     tracing = config.tracing
+    if tracing.emitted_at is None:
+        logger.warning(
+            "emitted_at_not_injected",
+            extra={
+                "session_id": str(config.session_id),
+                "function": "emit_prompt_submitted_from_config",
+            },
+        )
     payload = ModelHookPromptSubmittedPayload(
         entity_id=config.session_id,
         session_id=str(config.session_id),
@@ -843,6 +867,14 @@ async def emit_tool_executed_from_config(
         ModelEventPublishResult indicating success or failure.
     """
     tracing = config.tracing
+    if tracing.emitted_at is None:
+        logger.warning(
+            "emitted_at_not_injected",
+            extra={
+                "session_id": str(config.session_id),
+                "function": "emit_tool_executed_from_config",
+            },
+        )
     payload = ModelHookToolExecutedPayload(
         entity_id=config.session_id,
         session_id=str(config.session_id),

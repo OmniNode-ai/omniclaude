@@ -12,6 +12,7 @@ Part of OMN-2076: Golden path session + injection + outcome emission.
 from __future__ import annotations
 
 import json
+import logging
 import os
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, patch
@@ -149,11 +150,11 @@ class TestGoldenPathSessionLifecycle:
         start_result = await emit_session_started_from_config(start_config)
         assert start_result.success is True
 
-        # Phase 2: Context Injection (tracked via session marker — not an
-        # emission function, just verify the concept works)
+        # Phase 2: Context Injection — injection is a no-op at the handler
+        # level; actual injection happens in session_marker.py (file I/O).
+        # This placeholder verifies the lifecycle concept flows correctly
+        # without exercising the injection code path itself.
         injection_id = str(uuid4())[:8]
-        # In production, session_marker.py writes this to a file.
-        # Here we just verify the ID is trackable.
         assert len(injection_id) == 8
 
         # Phase 3: Work happens (simulated — tool calls + completion markers)
@@ -453,8 +454,8 @@ class TestEmitSessionOutcome:
 
     @pytest.mark.asyncio
     @patch("omniclaude.hooks.handler_event_emitter.EventBusKafka")
-    async def test_defaults_emitted_at_to_now(self, mock_bus_cls) -> None:
-        """When emitted_at is not provided, defaults to current UTC time."""
+    async def test_defaults_emitted_at_to_now(self, mock_bus_cls, caplog) -> None:
+        """When emitted_at is not provided, defaults to current UTC time and warns."""
         mock_bus = AsyncMock()
         mock_bus_cls.return_value = mock_bus
 
@@ -466,8 +467,14 @@ class TestEmitSessionOutcome:
             # No emitted_at in tracing
         )
 
-        result = await emit_session_outcome_from_config(config)
+        with caplog.at_level(
+            logging.WARNING, logger="omniclaude.hooks.handler_event_emitter"
+        ):
+            result = await emit_session_outcome_from_config(config)
         assert result.success is True
+
+        # Verify warning was emitted for missing emitted_at
+        assert any("emitted_at_not_injected" in r.message for r in caplog.records)
 
         after = datetime.now(UTC)
 
