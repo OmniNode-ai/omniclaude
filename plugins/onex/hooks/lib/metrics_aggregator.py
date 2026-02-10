@@ -244,7 +244,7 @@ def load_baseline(
 # -- Evidence assessment -----------------------------------------------------
 
 
-def _get_total_tokens(run: ContractAggregatedRun) -> int:
+def get_total_tokens(run: ContractAggregatedRun) -> int:
     total = 0
     for m in run.phase_metrics:
         if m.cost is not None:
@@ -252,7 +252,7 @@ def _get_total_tokens(run: ContractAggregatedRun) -> int:
     return total
 
 
-def _get_total_tests(run: ContractAggregatedRun) -> int:
+def get_total_tests(run: ContractAggregatedRun) -> int:
     total = 0
     for m in run.phase_metrics:
         if m.tests is not None:
@@ -260,7 +260,7 @@ def _get_total_tests(run: ContractAggregatedRun) -> int:
     return total
 
 
-def _make_dimension_evidence(
+def make_dimension_evidence(
     dimension: str,
     baseline_value: float,
     current_value: float,
@@ -333,20 +333,20 @@ def assess_evidence(
         )
 
     dimensions = [
-        _make_dimension_evidence(
+        make_dimension_evidence(
             "duration",
             baseline.total_duration_ms or 0.0,
             candidate.total_duration_ms or 0.0,
         ),
-        _make_dimension_evidence(
+        make_dimension_evidence(
             "tokens",
-            float(_get_total_tokens(baseline)),
-            float(_get_total_tokens(candidate)),
+            float(get_total_tokens(baseline)),
+            float(get_total_tokens(candidate)),
         ),
-        _make_dimension_evidence(
+        make_dimension_evidence(
             "tests",
-            float(_get_total_tests(baseline)),
-            float(_get_total_tests(candidate)),
+            float(get_total_tests(baseline)),
+            float(get_total_tests(candidate)),
         ),
     ]
 

@@ -503,45 +503,45 @@ class TestEvidenceAssessment:
 class TestZeroBaselineGuard:
     def test_zero_baseline_delta_pct_none(self) -> None:
         from plugins.onex.hooks.lib.metrics_aggregator import (
-            _make_dimension_evidence,
+            make_dimension_evidence,
         )
 
-        ev = _make_dimension_evidence("duration", 0.0, 100.0)
+        ev = make_dimension_evidence("duration", 0.0, 100.0)
         assert ev.delta_pct is None
 
     def test_zero_baseline_insufficient(self) -> None:
         from plugins.onex.hooks.lib.metrics_aggregator import (
-            _make_dimension_evidence,
+            make_dimension_evidence,
         )
 
-        ev = _make_dimension_evidence("duration", 0.0, 100.0)
+        ev = make_dimension_evidence("duration", 0.0, 100.0)
         assert ev.sufficient is False
 
     def test_nonzero_baseline_has_delta_pct(self) -> None:
         from plugins.onex.hooks.lib.metrics_aggregator import (
-            _make_dimension_evidence,
+            make_dimension_evidence,
         )
 
-        ev = _make_dimension_evidence("duration", 100.0, 120.0)
+        ev = make_dimension_evidence("duration", 100.0, 120.0)
         assert ev.delta_pct is not None
         assert ev.delta_pct == pytest.approx(20.0)
         assert ev.sufficient is True
 
     def test_zero_current_insufficient(self) -> None:
         from plugins.onex.hooks.lib.metrics_aggregator import (
-            _make_dimension_evidence,
+            make_dimension_evidence,
         )
 
-        ev = _make_dimension_evidence("tokens", 100.0, 0.0)
+        ev = make_dimension_evidence("tokens", 100.0, 0.0)
         assert ev.sufficient is False
         assert ev.delta_pct == pytest.approx(-100.0)
 
     def test_no_zero_division_error(self) -> None:
         from plugins.onex.hooks.lib.metrics_aggregator import (
-            _make_dimension_evidence,
+            make_dimension_evidence,
         )
 
         # Should never raise ZeroDivisionError
-        ev = _make_dimension_evidence("tests", 0.0, 0.0)
+        ev = make_dimension_evidence("tests", 0.0, 0.0)
         assert ev.delta_pct is None
         assert ev.sufficient is False

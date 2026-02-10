@@ -28,10 +28,10 @@ from omnibase_spi.contracts.measurement.contract_promotion_gate import (
 from pydantic import BaseModel, ConfigDict
 
 from plugins.onex.hooks.lib.metrics_aggregator import (
-    _get_total_tests,
-    _get_total_tokens,
-    _make_dimension_evidence,
     detect_flakes,
+    get_total_tests,
+    get_total_tokens,
+    make_dimension_evidence,
 )
 
 if TYPE_CHECKING:
@@ -239,20 +239,20 @@ def _build_dimensions(
     baseline: ContractAggregatedRun,
 ) -> list[ContractDimensionEvidence]:
     return [
-        _make_dimension_evidence(
+        make_dimension_evidence(
             "duration",
             baseline.total_duration_ms or 0.0,
             candidate.total_duration_ms or 0.0,
         ),
-        _make_dimension_evidence(
+        make_dimension_evidence(
             "tokens",
-            float(_get_total_tokens(baseline)),
-            float(_get_total_tokens(candidate)),
+            float(get_total_tokens(baseline)),
+            float(get_total_tokens(candidate)),
         ),
-        _make_dimension_evidence(
+        make_dimension_evidence(
             "tests",
-            float(_get_total_tests(baseline)),
-            float(_get_total_tests(candidate)),
+            float(get_total_tests(baseline)),
+            float(get_total_tests(candidate)),
         ),
     ]
 
