@@ -172,7 +172,7 @@ async def get_producer_lock() -> asyncio.Lock:
     return _producer_lock
 
 
-def _get_kafka_bootstrap_servers() -> str:
+def _get_kafka_bootstrap_servers() -> str | None:
     """Get Kafka bootstrap servers from settings."""
     # Use Pydantic settings (fail fast if not configured properly)
     try:
@@ -186,16 +186,12 @@ def _get_kafka_bootstrap_servers() -> str:
     if env_servers:
         return env_servers
 
-    # Use localhost as safe default - works in most development environments
-    # Production deployments should always set KAFKA_BOOTSTRAP_SERVERS explicitly
-    fallback_host = os.getenv("KAFKA_FALLBACK_HOST", "localhost")
-    fallback_port = os.getenv("KAFKA_FALLBACK_PORT", "9092")
-    default_servers = f"{fallback_host}:{fallback_port}"
+    # No localhost defaults — explicit configuration required (architecture handshake rules 7/14)
     logger.warning(
-        f"KAFKA_BOOTSTRAP_SERVERS not configured. Using fallback: {default_servers}. "
-        f"Set KAFKA_BOOTSTRAP_SERVERS environment variable for production use."
+        "KAFKA_BOOTSTRAP_SERVERS not configured. Kafka publishing disabled. "
+        "Set KAFKA_BOOTSTRAP_SERVERS environment variable to enable event publishing."
     )
-    return default_servers
+    return None
 
 
 def _get_kafka_topic_prefix() -> str:
