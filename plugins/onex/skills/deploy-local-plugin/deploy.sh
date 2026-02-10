@@ -316,82 +316,53 @@ if [[ "$EXECUTE" == "true" ]]; then
         echo -e "${YELLOW}  Warning: Registry not found at ${REGISTRY}${NC}"
     fi
 
-    # Update known_marketplaces.json ONLY if using directory source (not GitHub)
+    # Update known_marketplaces.json — always point installLocation at the cache
     KNOWN_MARKETPLACES="$HOME/.claude/plugins/known_marketplaces.json"
     if [[ -f "$KNOWN_MARKETPLACES" ]]; then
-        CURRENT_SOURCE_TYPE="$(jq -r '.["omninode-tools"].source.source // "unknown"' "$KNOWN_MARKETPLACES")"
+        if jq -e '.["omninode-tools"]' "$KNOWN_MARKETPLACES" >/dev/null 2>&1; then
+            TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
 
-        if [[ "$CURRENT_SOURCE_TYPE" == "github" ]]; then
-            echo -e "${YELLOW}  Note: Marketplace uses GitHub source - not modifying known_marketplaces.json${NC}"
-            echo -e "${YELLOW}  Push changes to GitHub and restart Claude Code to deploy${NC}"
-        elif jq -e '.["omninode-tools"]' "$KNOWN_MARKETPLACES" >/dev/null 2>&1; then
-            # Get the plugins directory (parent of SOURCE_ROOT which is the onex plugin)
-            PLUGINS_DIR="$(dirname "$SOURCE_ROOT")"
-
-            # For directory-source deployments, installLocation must be SOURCE_ROOT.
-            # SOURCE_ROOT is the actual plugin directory containing .claude-plugin/,
-            # commands/, agents/, hooks/ etc. PLUGINS_DIR (its parent) would be one
-            # level too high and cause Claude Code to mislocate plugin content.
-            INSTALL_LOCATION="$SOURCE_ROOT"
-
-            jq --arg source_path "$PLUGINS_DIR" --arg install_loc "$INSTALL_LOCATION" '
-                .["omninode-tools"].source.path = $source_path |
-                .["omninode-tools"].installLocation = $install_loc
+            jq --arg p "$TARGET" --arg ts "$TIMESTAMP" '
+                .["omninode-tools"].installLocation = $p |
+                .["omninode-tools"].lastUpdated = $ts
             ' "$KNOWN_MARKETPLACES" > "${KNOWN_MARKETPLACES}.tmp" && mv "${KNOWN_MARKETPLACES}.tmp" "$KNOWN_MARKETPLACES"
 
-            echo -e "${GREEN}  Updated known_marketplaces.json (source: $PLUGINS_DIR, install: $INSTALL_LOCATION)${NC}"
+            echo -e "${GREEN}  Updated known_marketplaces.json (installLocation: $TARGET)${NC}"
         else
             echo -e "${YELLOW}  Warning: omninode-tools not found in known_marketplaces.json${NC}"
         fi
     fi
 
-    # Create namespace symlinks (required until marketplace discovery is fixed)
+    # Update statusLine in settings.json to point at new version's statusline.sh
+    SETTINGS_JSON="$HOME/.claude/settings.json"
+    if [[ -f "$SETTINGS_JSON" ]]; then
+        STATUSLINE_PATH="$TARGET/hooks/scripts/statusline.sh"
+        # Use ~ for the path since settings.json uses ~ convention
+        STATUSLINE_PATH_SHORT="~/.claude/plugins/cache/omninode-tools/onex/${NEW_VERSION}/hooks/scripts/statusline.sh"
+
+        if jq -e '.statusLine.command' "$SETTINGS_JSON" >/dev/null 2>&1; then
+            jq --arg cmd "$STATUSLINE_PATH_SHORT" '
+                .statusLine.command = $cmd
+            ' "$SETTINGS_JSON" > "${SETTINGS_JSON}.tmp" && mv "${SETTINGS_JSON}.tmp" "$SETTINGS_JSON"
+
+            echo -e "${GREEN}  Updated settings.json statusLine -> ${STATUSLINE_PATH_SHORT}${NC}"
+        fi
+    fi
+
+    # Copy plugin components to ~/.claude namespace directories (real copies, not symlinks)
     CLAUDE_DIR="$HOME/.claude"
     mkdir -p "$CLAUDE_DIR/commands" "$CLAUDE_DIR/skills" "$CLAUDE_DIR/agents"
 
-    # Helper function to safely create or update a symlink.
-    # Handles pre-existing symlinks, directories, and regular files at the target.
-    #   - If symlink already points to correct target: skip (idempotent)
-    #   - If symlink points elsewhere: warn and replace
-    #   - If real directory exists: back it up with timestamp, warn, create symlink
-    #   - If regular file exists: remove and create symlink
-    #   - Otherwise: create symlink
-    safe_symlink() {
-        local target="$1"
-        local link_path="$2"
-        local label="${3:-$link_path}"
-
-        if [[ -L "$link_path" ]]; then
-            local current_target
-            current_target="$(readlink "$link_path")"
-            if [[ "$current_target" == "$target" ]]; then
-                echo -e "  = $label (symlink already correct)"
-                return 0
-            fi
-            echo -e "${YELLOW}  Warning: $label symlink points to $current_target, updating to $target${NC}"
-            rm -f "$link_path"
-        elif [[ -d "$link_path" ]]; then
-            # Real directory (not a symlink) - back it up, never delete
-            local backup_path="${link_path}.backup.$(date +%Y%m%d%H%M%S)"
-            echo -e "${YELLOW}  Warning: $label exists as a real directory, backing up to $backup_path${NC}"
-            mv "$link_path" "$backup_path"
-        elif [[ -e "$link_path" ]]; then
-            # Regular file - back it up before replacing (same safety as directories)
-            local backup_path="${link_path}.backup.$(date +%Y%m%d%H%M%S)"
-            echo -e "${YELLOW}  Warning: $label exists as a regular file, backing up to $backup_path${NC}"
-            mv "$link_path" "$backup_path"
+    # Remove stale symlinks or old directories, then rsync fresh copies
+    for component in commands skills agents; do
+        DEST="$CLAUDE_DIR/$component/onex"
+        if [[ -L "$DEST" ]]; then
+            rm -f "$DEST"
         fi
+        rsync -a --delete "$TARGET/$component/" "$DEST/"
+    done
 
-        # Use ln -sfn: -s for symbolic, -f to force, -n to not follow existing symlink target
-        ln -sfn "$target" "$link_path"
-        echo -e "  + $label -> $target"
-    }
-
-    safe_symlink "$TARGET/commands" "$CLAUDE_DIR/commands/onex" "commands/onex"
-    safe_symlink "$TARGET/skills" "$CLAUDE_DIR/skills/onex" "skills/onex"
-    safe_symlink "$TARGET/agents" "$CLAUDE_DIR/agents/onex" "agents/onex"
-
-    echo -e "${GREEN}  Namespace symlinks updated${NC}"
+    echo -e "${GREEN}  Copied commands/skills/agents to ~/.claude/ (no symlinks)${NC}"
 
     echo ""
     echo -e "${GREEN}Deployment complete!${NC}"

@@ -221,7 +221,7 @@ class EventRegistration:
         ...         FanOutRule(topic_base=TopicBase.PROMPT_SUBMITTED, transform=transform_for_observability),
         ...     ],
         ...     partition_key_field="session_id",
-        ...     required_fields=["prompt", "session_id"],
+        ...     required_fields=["prompt_preview", "session_id"],
         ... )
     """
 
@@ -315,7 +315,7 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
             ),
         ],
         partition_key_field="session_id",
-        required_fields=["prompt", "session_id"],
+        required_fields=["prompt_preview", "session_id"],
     ),
     # =========================================================================
     # Tool Events
@@ -527,10 +527,10 @@ def validate_payload(event_type: str, payload: dict[str, object]) -> list[str]:
         KeyError: If the event type is not registered.
 
     Example:
-        >>> missing = validate_payload("prompt.submitted", {"prompt": "hello"})
+        >>> missing = validate_payload("prompt.submitted", {"prompt_preview": "hello"})
         >>> "session_id" in missing  # session_id is required
         True
-        >>> missing = validate_payload("prompt.submitted", {"prompt": "hello", "session_id": "xyz"})
+        >>> missing = validate_payload("prompt.submitted", {"prompt_preview": "hello", "session_id": "xyz"})
         >>> len(missing)
         0
     """
@@ -556,7 +556,7 @@ def get_partition_key(event_type: str, payload: dict[str, object]) -> str | None
         KeyError: If the event type is not registered.
 
     Example:
-        >>> key = get_partition_key("prompt.submitted", {"session_id": "abc123", "prompt": "hello"})
+        >>> key = get_partition_key("prompt.submitted", {"session_id": "abc123", "prompt_preview": "hello"})
         >>> key
         'abc123'
     """
