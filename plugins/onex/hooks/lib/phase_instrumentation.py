@@ -33,10 +33,11 @@ Related Tickets:
 from __future__ import annotations
 
 import logging
+import sys
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any, TypeVar
+from typing import Any
 
 from omnibase_spi.contracts.measurement import (
     ContractCostMetrics,
@@ -54,8 +55,6 @@ from omnibase_spi.contracts.measurement import (
 from plugins.onex.hooks.lib.metrics_emitter import MAX_ERROR_MESSAGE_LENGTH
 
 logger = logging.getLogger(__name__)
-
-T = TypeVar("T")
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -723,7 +722,7 @@ def run_measurement_checks(
     )
 
     # CHECK-MEAS-003: Tokens within budget
-    token_budget = TOKEN_BUDGETS.get(phase, float("inf"))
+    token_budget = TOKEN_BUDGETS.get(phase, sys.maxsize)
     actual_tokens = metrics.cost.llm_total_tokens if metrics.cost else 0
     tokens_ok = actual_tokens <= token_budget
     results.append(
