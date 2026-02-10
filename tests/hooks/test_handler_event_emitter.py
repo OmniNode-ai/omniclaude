@@ -34,9 +34,9 @@ from omniclaude.hooks.handler_event_emitter import (
     TRUNCATION_MARKER,
     ModelClaudeHookEventConfig,
     ModelSessionStartedConfig,
-    _create_kafka_config,
     _get_event_type,
     _get_topic_base,
+    create_kafka_config,
     emit_claude_hook_event,
     emit_hook_event,
     emit_prompt_submitted,
@@ -68,9 +68,10 @@ def kafka_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Set required Kafka environment variables for tests.
 
     This fixture sets KAFKA_BOOTSTRAP_SERVERS which is required by
-    _create_kafka_config() before EventBusKafka is instantiated.
+    create_kafka_config() before EventBusKafka is instantiated.
     """
     monkeypatch.setenv("KAFKA_BOOTSTRAP_SERVERS", "test:9092")
+    monkeypatch.setenv("KAFKA_ENVIRONMENT", "test")
 
 
 # =============================================================================
@@ -226,12 +227,12 @@ class TestKafkaConfig:
             patch.dict("os.environ", {}, clear=True),
             pytest.raises(ModelOnexError, match=r"KAFKA_BOOTSTRAP_SERVERS.*required"),
         ):
-            _create_kafka_config()
+            create_kafka_config()
 
     def test_default_config_values(self) -> None:
         """Default config has expected values for hook latency."""
         with patch.dict("os.environ", {"KAFKA_BOOTSTRAP_SERVERS": "test:9092"}):
-            config = _create_kafka_config()
+            config = create_kafka_config()
 
             # Verify hook-optimized settings
             assert config.timeout_seconds == 2  # Short timeout
@@ -245,13 +246,13 @@ class TestKafkaConfig:
             "os.environ",
             {"KAFKA_BOOTSTRAP_SERVERS": "test:9092", "KAFKA_ENVIRONMENT": "prod"},
         ):
-            config = _create_kafka_config()
+            config = create_kafka_config()
             assert config.environment == "prod"
 
     def test_config_respects_bootstrap_servers(self) -> None:
         """Config respects KAFKA_BOOTSTRAP_SERVERS env var."""
         with patch.dict("os.environ", {"KAFKA_BOOTSTRAP_SERVERS": "kafka:9092"}):
-            config = _create_kafka_config()
+            config = create_kafka_config()
             assert config.bootstrap_servers == "kafka:9092"
 
     def test_config_respects_timeout_override(self) -> None:
@@ -263,7 +264,7 @@ class TestKafkaConfig:
                 "KAFKA_HOOK_TIMEOUT_SECONDS": "30",
             },
         ):
-            config = _create_kafka_config()
+            config = create_kafka_config()
             assert config.timeout_seconds == 30
 
     def test_config_timeout_override_invalid_uses_default(self) -> None:
@@ -275,7 +276,7 @@ class TestKafkaConfig:
                 "KAFKA_HOOK_TIMEOUT_SECONDS": "invalid",
             },
         ):
-            config = _create_kafka_config()
+            config = create_kafka_config()
             assert config.timeout_seconds == 2  # Falls back to default
 
 
@@ -957,12 +958,11 @@ class TestClaudeHookEventEmission:
 
             # Verify correct topic name
             assert result.success is True
-            assert result.topic == "dev.onex.cmd.omniintelligence.claude-hook-event.v1"
+            assert result.topic == "onex.cmd.omniintelligence.claude-hook-event.v1"
             # Verify the topic was passed to publish
             call_kwargs = mock_bus.publish.call_args.kwargs
             assert (
-                call_kwargs["topic"]
-                == "dev.onex.cmd.omniintelligence.claude-hook-event.v1"
+                call_kwargs["topic"] == "onex.cmd.omniintelligence.claude-hook-event.v1"
             )
 
     @pytest.mark.asyncio

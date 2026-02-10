@@ -2,10 +2,10 @@
 """Emit Client Wrapper - Python Client for Hook Event Emission.
 
 This module provides the client-side interface for all hooks to emit events via
-the emit daemon using the EmitClient from omnibase_infra.
+the emit daemon using the EmitClient from omniclaude.publisher.
 
 Design Decisions:
-    - **Python-only**: Uses EmitClient from omnibase_infra (required dependency)
+    - **Python-only**: Uses EmitClient from omniclaude.publisher (OMN-1944 port)
     - **Single emission**: Hook sends once, daemon handles fan-out to multiple topics
     - **Non-blocking**: Never raises exceptions that would break hooks
 
@@ -68,7 +68,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, TypeVar, cast
 
 if TYPE_CHECKING:
-    from omnibase_infra.runtime.emit_daemon.client import EmitClient
+    from omniclaude.publisher.emit_client import EmitClient
 
 logger = logging.getLogger(__name__)
 
@@ -175,7 +175,7 @@ def _get_client() -> EmitClient | None:
             return _emit_client
 
         try:
-            from omnibase_infra.runtime.emit_daemon.client import EmitClient
+            from omniclaude.publisher.emit_client import EmitClient
 
             socket_path = os.environ.get(
                 "OMNICLAUDE_EMIT_SOCKET", str(DEFAULT_SOCKET_PATH)
@@ -349,9 +349,9 @@ def daemon_available() -> bool:
         # If we're inside an async context, run in a thread to avoid
         # "cannot use sync methods from async context" error
         if _is_in_async_context():
-            return cast("bool", _run_sync_in_thread(client.is_daemon_running_sync))
+            return _run_sync_in_thread(client.is_daemon_running_sync)
         else:
-            return cast("bool", client.is_daemon_running_sync())
+            return client.is_daemon_running_sync()
     except Exception as e:
         logger.debug(f"Daemon ping failed: {e}")
         return False

@@ -22,10 +22,10 @@ The ticket-work skill provides:
 
 ## Execution
 
-Use the Skill tool to load the full `ticket-work` skill, then execute with the provided ticket_id argument.
+Use the Skill tool to load the full `onex:ticket-work` skill, then execute with the provided ticket_id argument.
 
 ```
-Skill(skill="ticket-work", args="{ticket_id}")
+Skill(skill="onex:ticket-work", args="{ticket_id}")
 ```
 
 Follow the skill's orchestration logic completely.

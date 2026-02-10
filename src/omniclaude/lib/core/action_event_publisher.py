@@ -42,7 +42,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-# FAIL FAST: Required configuration
+# Configuration (settings provides fallback for bootstrap servers)
 from omniclaude.config import settings
 from omniclaude.hooks.topics import TopicBase, build_topic
 
@@ -172,9 +172,9 @@ async def get_producer_lock() -> asyncio.Lock:
     return _producer_lock
 
 
-def _get_kafka_bootstrap_servers() -> str:
+def _get_kafka_bootstrap_servers() -> str | None:
     """Get Kafka bootstrap servers from settings."""
-    # Use Pydantic settings (fail fast if not configured properly)
+    # Try Pydantic settings first, fall back to env var, else return None
     try:
         servers: str = settings.get_effective_kafka_bootstrap_servers()
         return servers
@@ -186,38 +186,22 @@ def _get_kafka_bootstrap_servers() -> str:
     if env_servers:
         return env_servers
 
-    # Use localhost as safe default - works in most development environments
-    # Production deployments should always set KAFKA_BOOTSTRAP_SERVERS explicitly
-    fallback_host = os.getenv("KAFKA_FALLBACK_HOST", "localhost")
-    fallback_port = os.getenv("KAFKA_FALLBACK_PORT", "9092")
-    default_servers = f"{fallback_host}:{fallback_port}"
+    # No localhost defaults — explicit configuration required (architecture handshake rules 7/14)
     logger.warning(
-        f"KAFKA_BOOTSTRAP_SERVERS not configured. Using fallback: {default_servers}. "
-        f"Set KAFKA_BOOTSTRAP_SERVERS environment variable for production use."
+        "KAFKA_BOOTSTRAP_SERVERS not configured. Kafka publishing disabled. "
+        "Set KAFKA_BOOTSTRAP_SERVERS environment variable to enable event publishing."
     )
-    return default_servers
+    return None
 
 
 def _get_kafka_topic_prefix() -> str:
-    """Get Kafka topic prefix (environment) from settings or environment.
+    """Get Kafka topic prefix.
 
     Returns:
-        Topic prefix (e.g., "dev", "staging", "prod"). Defaults to "dev".
+        Empty string. Topics are realm-agnostic per ONEX convention (OMN-1972):
+        TopicBase values ARE the wire topic names, no environment prefix.
     """
-    # Try Pydantic settings first (if available)
-    if settings is not None:
-        try:
-            prefix: str | None = getattr(settings, "kafka_topic_prefix", None)
-            if prefix:
-                return prefix
-        except Exception as e:
-            logger.debug(f"Failed to get Kafka topic prefix from settings: {e}")
-
-    # Fall back to environment variables
-    # Check KAFKA_TOPIC_PREFIX first (documented in CLAUDE.md)
-    # Then KAFKA_ENVIRONMENT for compatibility with handler_event_emitter.py
-    env_prefix = os.getenv("KAFKA_TOPIC_PREFIX") or os.getenv("KAFKA_ENVIRONMENT")
-    return env_prefix if env_prefix else "dev"
+    return ""
 
 
 async def _get_kafka_producer() -> Any:
@@ -246,6 +230,8 @@ async def _get_kafka_producer() -> Any:
             from aiokafka import AIOKafkaProducer
 
             bootstrap_servers = _get_kafka_bootstrap_servers()
+            if bootstrap_servers is None:
+                return None
 
             producer = AIOKafkaProducer(
                 bootstrap_servers=bootstrap_servers,

@@ -20,7 +20,6 @@ Options:
 
 import argparse
 import json
-import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -66,10 +65,10 @@ def get_transformation_topic() -> str:
     """Build the transformation events topic using ONEX topic conventions.
 
     Returns:
-        Full topic name with environment prefix (e.g., "dev.agent-transformation-events").
+        Canonical topic name (e.g., "agent-transformation-events").
+        Topics are realm-agnostic per OMN-1972: no environment prefix.
     """
-    prefix = os.environ.get("KAFKA_TOPIC_PREFIX", "")
-    return build_topic(prefix, TopicBase.TRANSFORMATIONS)
+    return build_topic("", TopicBase.TRANSFORMATIONS)
 
 
 def publish_to_kafka(event: dict, topic: str | None = None) -> tuple[bool, str]:

@@ -40,7 +40,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
-from omnibase_core.enums import EnumCoreErrorCode
+from omnibase_core.enums import EnumClaudeCodeSessionOutcome, EnumCoreErrorCode
 from omnibase_core.models.errors import ModelOnexError
 from omnibase_core.models.hooks.claude_code import (
     ModelClaudeCodeHookEvent,
@@ -59,6 +59,7 @@ from omniclaude.hooks.schemas import (
     ModelHookSessionEndedPayload,
     ModelHookSessionStartedPayload,
     ModelHookToolExecutedPayload,
+    ModelSessionOutcome,
     SessionEndReason,
 )
 from omniclaude.hooks.topics import TopicBase, build_topic
@@ -86,7 +87,7 @@ class ModelEventTracingConfig:
         correlation_id: Correlation ID for distributed tracing.
         causation_id: ID of the event/trigger that caused this event.
         emitted_at: Event timestamp (defaults to now UTC if not provided).
-        environment: Kafka environment prefix (e.g., "dev", "staging", "prod").
+        environment: Metadata label for config objects (not used for topic prefixing per OMN-1972).
     """
 
     correlation_id: UUID | None = None
@@ -209,7 +210,7 @@ class ModelClaudeHookEventConfig:
         prompt: The full prompt text (for UserPromptSubmit events).
         correlation_id: Optional correlation ID for distributed tracing.
         timestamp_utc: Event timestamp (defaults to now UTC if not provided).
-        environment: Kafka environment prefix (e.g., "dev", "staging", "prod").
+        environment: Metadata label for config origin (not used for topic prefixing per OMN-1972).
     """
 
     event_type: EnumClaudeCodeHookEventType
@@ -218,6 +219,40 @@ class ModelClaudeHookEventConfig:
     correlation_id: UUID | None = None
     timestamp_utc: datetime | None = None
     environment: str | None = None
+
+
+@dataclass(frozen=True)
+class ModelSessionOutcomeConfig:
+    """Configuration for session outcome events.
+
+    Session outcome events are emitted at session end with fan-out to both
+    the intelligence CMD topic and the observability EVT topic.
+
+    Attributes:
+        session_id: Session identifier string (min 1 non-whitespace char).
+        outcome: Classification of how the session ended. Accepts bare strings
+            that match EnumClaudeCodeSessionOutcome values; coerced on init.
+        tracing: Optional tracing configuration (provides emitted_at, environment).
+
+    Raises:
+        ValueError: If session_id is empty/whitespace or outcome is invalid.
+    """
+
+    session_id: str
+    outcome: EnumClaudeCodeSessionOutcome
+    tracing: ModelEventTracingConfig = field(default_factory=ModelEventTracingConfig)
+
+    def __post_init__(self) -> None:
+        """Validate session_id and coerce outcome to enum."""
+        if not self.session_id or not self.session_id.strip():
+            raise ValueError("session_id must be a non-empty, non-whitespace string")
+        # Always coerce to enum — idempotent if already the right type,
+        # converts bare str at runtime (dataclass doesn't enforce types).
+        object.__setattr__(
+            self,
+            "outcome",
+            EnumClaudeCodeSessionOutcome(self.outcome),
+        )
 
 
 # =============================================================================
@@ -254,12 +289,13 @@ TRUNCATION_MARKER: str = "[TRUNCATED]"  # Marker appended to truncated prompts
 # (prompt + envelope) stays within Kafka's message size limit.
 JSON_ENVELOPE_OVERHEAD_BUFFER: int = 500
 
-# Defensive check - ensure MAX_PROMPT_SIZE can accommodate truncation marker and overhead
-assert len(TRUNCATION_MARKER) + JSON_ENVELOPE_OVERHEAD_BUFFER < MAX_PROMPT_SIZE, (
-    f"MAX_PROMPT_SIZE ({MAX_PROMPT_SIZE}) must be greater than "
-    f"TRUNCATION_MARKER length ({len(TRUNCATION_MARKER)}) + "
-    f"JSON_ENVELOPE_OVERHEAD_BUFFER ({JSON_ENVELOPE_OVERHEAD_BUFFER})"
-)
+# Defensive check — survives python -O (assert would be stripped)
+if len(TRUNCATION_MARKER) + JSON_ENVELOPE_OVERHEAD_BUFFER >= MAX_PROMPT_SIZE:
+    raise ValueError(
+        f"MAX_PROMPT_SIZE ({MAX_PROMPT_SIZE}) must be greater than "
+        f"TRUNCATION_MARKER length ({len(TRUNCATION_MARKER)}) + "
+        f"JSON_ENVELOPE_OVERHEAD_BUFFER ({JSON_ENVELOPE_OVERHEAD_BUFFER})"
+    )
 
 
 # =============================================================================
@@ -331,7 +367,7 @@ def _get_topic_base(event_type: HookEventType) -> TopicBase:
     return topic_base
 
 
-def _create_kafka_config() -> ModelKafkaEventBusConfig:
+def create_kafka_config() -> ModelKafkaEventBusConfig:
     """Create Kafka configuration optimized for hook emission.
 
     Configuration is loaded from environment variables with hook-specific
@@ -339,7 +375,6 @@ def _create_kafka_config() -> ModelKafkaEventBusConfig:
 
     Environment Variables:
         KAFKA_BOOTSTRAP_SERVERS: Kafka broker addresses (required)
-        KAFKA_ENVIRONMENT: Environment prefix for topics (default: dev)
         KAFKA_HOOK_TIMEOUT_SECONDS: Connection timeout in seconds (default: 2)
             Set to higher value (e.g., 30) for integration tests with remote brokers.
 
@@ -349,8 +384,9 @@ def _create_kafka_config() -> ModelKafkaEventBusConfig:
     Raises:
         ModelOnexError: If KAFKA_BOOTSTRAP_SERVERS is not set.
     """
-    # Get environment from env var, default to "dev"
-    environment = os.environ.get("KAFKA_ENVIRONMENT", "dev")
+    # Environment label for config metadata (not used for topic prefixing — OMN-1972).
+    # Default "local" signals KAFKA_ENVIRONMENT was not explicitly configured.
+    environment = os.environ.get("KAFKA_ENVIRONMENT", "local")
     bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS")
     if not bootstrap_servers:
         raise ModelOnexError(
@@ -394,8 +430,6 @@ def _create_kafka_config() -> ModelKafkaEventBusConfig:
 
 async def emit_hook_event(
     payload: ModelHookPayload,
-    *,
-    environment: str | None = None,
 ) -> ModelEventPublishResult:
     """Emit a hook event to Kafka.
 
@@ -409,8 +443,6 @@ async def emit_hook_event(
 
     Args:
         payload: The hook event payload (one of the Model*Payload types).
-        environment: Optional environment override for topic prefix.
-            If not provided, uses KAFKA_ENVIRONMENT env var or "dev".
 
     Returns:
         ModelEventPublishResult indicating success or failure.
@@ -439,9 +471,8 @@ async def emit_hook_event(
         event_type = _get_event_type(payload)
         topic_base = _get_topic_base(event_type)
 
-        # Get environment from param, env var, or default
-        env = environment or os.environ.get("KAFKA_ENVIRONMENT", "dev")
-        topic = build_topic(env, topic_base)
+        # Topics are realm-agnostic (OMN-1972): TopicBase values are wire topics
+        topic = build_topic("", topic_base)
 
         # Create envelope
         envelope = ModelHookEventEnvelope(
@@ -450,7 +481,7 @@ async def emit_hook_event(
         )
 
         # Create Kafka config and bus
-        config = _create_kafka_config()
+        config = create_kafka_config()
         bus = EventBusKafka(config=config)
 
         # Start producer
@@ -561,18 +592,28 @@ async def emit_session_started_from_config(
         ModelEventPublishResult indicating success or failure.
     """
     tracing = config.tracing
+    if tracing.emitted_at is None:
+        logger.warning(
+            "emitted_at_not_injected",
+            extra={
+                "session_id": str(config.session_id),
+                "function": "emit_session_started_from_config",
+            },
+        )
     payload = ModelHookSessionStartedPayload(
         entity_id=config.session_id,
         session_id=str(config.session_id),
         correlation_id=tracing.correlation_id or config.session_id,
         causation_id=tracing.causation_id or uuid4(),
+        # Graceful degradation: warn (above) for testing visibility, but
+        # fall back to now() so production never drops an event.
         emitted_at=tracing.emitted_at or datetime.now(UTC),
         working_directory=config.working_directory,
         git_branch=config.git_branch,
         hook_source=config.hook_source,
     )
 
-    return await emit_hook_event(payload, environment=tracing.environment)
+    return await emit_hook_event(payload)
 
 
 async def emit_session_started(
@@ -643,18 +684,28 @@ async def emit_session_ended_from_config(
         ModelEventPublishResult indicating success or failure.
     """
     tracing = config.tracing
+    if tracing.emitted_at is None:
+        logger.warning(
+            "emitted_at_not_injected",
+            extra={
+                "session_id": str(config.session_id),
+                "function": "emit_session_ended_from_config",
+            },
+        )
     payload = ModelHookSessionEndedPayload(
         entity_id=config.session_id,
         session_id=str(config.session_id),
         correlation_id=tracing.correlation_id or config.session_id,
         causation_id=tracing.causation_id or uuid4(),
+        # Graceful degradation: warn (above) for testing visibility, but
+        # fall back to now() so production never drops an event.
         emitted_at=tracing.emitted_at or datetime.now(UTC),
         reason=config.reason,
         duration_seconds=config.duration_seconds,
         tools_used_count=config.tools_used_count,
     )
 
-    return await emit_hook_event(payload, environment=tracing.environment)
+    return await emit_hook_event(payload)
 
 
 async def emit_session_ended(
@@ -725,11 +776,21 @@ async def emit_prompt_submitted_from_config(
         ModelEventPublishResult indicating success or failure.
     """
     tracing = config.tracing
+    if tracing.emitted_at is None:
+        logger.warning(
+            "emitted_at_not_injected",
+            extra={
+                "session_id": str(config.session_id),
+                "function": "emit_prompt_submitted_from_config",
+            },
+        )
     payload = ModelHookPromptSubmittedPayload(
         entity_id=config.session_id,
         session_id=str(config.session_id),
         correlation_id=tracing.correlation_id or config.session_id,
         causation_id=tracing.causation_id or uuid4(),
+        # Graceful degradation: warn (above) for testing visibility, but
+        # fall back to now() so production never drops an event.
         emitted_at=tracing.emitted_at or datetime.now(UTC),
         prompt_id=config.prompt_id,
         prompt_preview=config.prompt_preview,
@@ -737,7 +798,7 @@ async def emit_prompt_submitted_from_config(
         detected_intent=config.detected_intent,
     )
 
-    return await emit_hook_event(payload, environment=tracing.environment)
+    return await emit_hook_event(payload)
 
 
 async def emit_prompt_submitted(
@@ -811,11 +872,21 @@ async def emit_tool_executed_from_config(
         ModelEventPublishResult indicating success or failure.
     """
     tracing = config.tracing
+    if tracing.emitted_at is None:
+        logger.warning(
+            "emitted_at_not_injected",
+            extra={
+                "session_id": str(config.session_id),
+                "function": "emit_tool_executed_from_config",
+            },
+        )
     payload = ModelHookToolExecutedPayload(
         entity_id=config.session_id,
         session_id=str(config.session_id),
         correlation_id=tracing.correlation_id or config.session_id,
         causation_id=tracing.causation_id or uuid4(),
+        # Graceful degradation: warn (above) for testing visibility, but
+        # fall back to now() so production never drops an event.
         emitted_at=tracing.emitted_at or datetime.now(UTC),
         tool_execution_id=config.tool_execution_id,
         tool_name=config.tool_name,
@@ -824,7 +895,7 @@ async def emit_tool_executed_from_config(
         summary=config.summary,
     )
 
-    return await emit_hook_event(payload, environment=tracing.environment)
+    return await emit_hook_event(payload)
 
 
 async def emit_tool_executed(
@@ -938,9 +1009,8 @@ async def emit_claude_hook_event(
     topic = "unknown"
 
     try:
-        # Get environment from config, env var, or default
-        env = config.environment or os.environ.get("KAFKA_ENVIRONMENT", "dev")
-        topic = build_topic(env, TopicBase.CLAUDE_HOOK_EVENT)
+        # Topics are realm-agnostic (OMN-1972): TopicBase values are wire topics
+        topic = build_topic("", TopicBase.CLAUDE_HOOK_EVENT)
 
         # Truncate prompt if it exceeds Kafka message size limit
         # Account for JSON envelope overhead to ensure total message stays within limit
@@ -999,7 +1069,7 @@ async def emit_claude_hook_event(
         )
 
         # Create Kafka config and bus
-        kafka_config = _create_kafka_config()
+        kafka_config = create_kafka_config()
         bus = EventBusKafka(config=kafka_config)
 
         # Start producer
@@ -1065,6 +1135,159 @@ async def emit_claude_hook_event(
                 )
 
 
+# =============================================================================
+# Session Outcome Emission (OMN-2076: fan-out to CMD + EVT)
+# =============================================================================
+
+
+async def emit_session_outcome_from_config(
+    config: ModelSessionOutcomeConfig,
+) -> ModelEventPublishResult:
+    """Emit a session outcome event to both CMD and EVT topics.
+
+    Session outcome events use fan-out: the same payload is published to both
+    the intelligence CMD topic (for feedback loop) and the observability EVT
+    topic (for dashboards/monitoring). This mirrors the daemon's FanOutRule
+    behavior at the Python handler level.
+
+    The function publishes to:
+        - onex.cmd.omniintelligence.session-outcome.v1 (intelligence feedback)
+        - onex.evt.omniclaude.session-outcome.v1 (observability)
+
+    Args:
+        config: Session outcome configuration containing session_id, outcome,
+            and optional tracing config.
+
+    Returns:
+        ModelEventPublishResult indicating success or failure.
+        CMD is the primary target; if CMD succeeds but EVT fails, returns
+        success=True with error_message describing the partial EVT failure.
+        Only returns success=False if CMD publish itself fails.
+    """
+    bus: EventBusKafka | None = None
+    first_topic = "unknown"
+
+    try:
+        # outcome is already validated as EnumClaudeCodeSessionOutcome by config
+        outcome_enum = config.outcome
+
+        # Build payload
+        tracing = config.tracing
+        if tracing.emitted_at is None:
+            logger.warning(
+                "emitted_at_not_injected",
+                extra={
+                    "session_id": config.session_id,
+                    "function": "emit_session_outcome_from_config",
+                },
+            )
+        # Graceful degradation: warn (above) for testing visibility, but
+        # fall back to now() so production never drops an event.
+        emitted_at = tracing.emitted_at or datetime.now(UTC)
+
+        payload = ModelSessionOutcome(
+            session_id=config.session_id,
+            outcome=outcome_enum,
+            emitted_at=emitted_at,
+        )
+
+        # Topics are realm-agnostic (OMN-1972): TopicBase values are wire topics
+        topic_cmd = build_topic("", TopicBase.SESSION_OUTCOME_CMD)
+        topic_evt = build_topic("", TopicBase.SESSION_OUTCOME_EVT)
+        first_topic = topic_cmd
+
+        # Serialize payload
+        message_bytes = payload.model_dump_json().encode("utf-8")
+        partition_key = config.session_id.encode("utf-8")
+
+        # Create Kafka config and bus (per-call, matching emit_hook_event pattern).
+        # A shared bus would halve connection overhead at teardown but would
+        # require lifetime management across independently-failable emitters.
+        kafka_config = create_kafka_config()
+        bus = EventBusKafka(config=kafka_config)
+        await bus.start()
+
+        # Publish to both topics (fan-out) with per-topic error handling
+        # to avoid partial inconsistency where CMD succeeds but EVT fails.
+        #
+        # Publish order matters for error semantics:
+        #   CMD first (unguarded) — failure propagates as success=False
+        #   EVT second (guarded)  — failure yields success=True + error_message
+        # This is intentional: CMD is the primary target (intelligence loop),
+        # EVT is observability-only and may fail without blocking the caller.
+        evt_error: str | None = None
+
+        await bus.publish(topic=topic_cmd, key=partition_key, value=message_bytes)
+
+        try:
+            await bus.publish(topic=topic_evt, key=partition_key, value=message_bytes)
+        except Exception as evt_exc:
+            # CMD succeeded, EVT failed — log but don't lose the CMD success
+            evt_error = f"{type(evt_exc).__name__}: {evt_exc!s}"
+            logger.warning(
+                "session_outcome_evt_publish_failed",
+                extra={
+                    "topic_cmd": topic_cmd,
+                    "topic_evt": topic_evt,
+                    "error": evt_error,
+                    "session_id": config.session_id,
+                },
+            )
+
+        logger.debug(
+            "session_outcome_emitted",
+            extra={
+                "topics": [topic_cmd, topic_evt],
+                "evt_ok": evt_error is None,
+                "session_id": config.session_id,
+                "outcome": config.outcome.value,
+            },
+        )
+
+        # Report success if at least CMD topic was published (primary target)
+        # EVT is observability-only; partial failure is acceptable
+        error_msg = (
+            f"Partial fan-out: EVT publish failed: {evt_error}" if evt_error else None
+        )
+        return ModelEventPublishResult(
+            success=True,
+            topic=topic_cmd,
+            partition=None,
+            offset=None,
+            error_message=error_msg,
+        )
+
+    except Exception as e:
+        logger.warning(
+            "session_outcome_publish_failed",
+            extra={
+                "topic": first_topic,
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "session_id": config.session_id,
+            },
+        )
+
+        error_msg = f"{type(e).__name__}: {e!s}"
+        return ModelEventPublishResult(
+            success=False,
+            topic=first_topic,
+            error_message=(
+                error_msg[:997] + "..." if len(error_msg) > 1000 else error_msg
+            ),
+        )
+
+    finally:
+        if bus is not None:
+            try:
+                await bus.close()
+            except Exception as close_error:
+                logger.debug(
+                    "kafka_bus_close_error",
+                    extra={"error": str(close_error)},
+                )
+
+
 __all__ = [
     # Constants
     "MAX_PROMPT_SIZE",
@@ -1077,6 +1300,9 @@ __all__ = [
     "ModelSessionStartedConfig",
     "ModelSessionEndedConfig",
     "ModelClaudeHookEventConfig",
+    "ModelSessionOutcomeConfig",
+    # Kafka configuration
+    "create_kafka_config",
     # Core emission function
     "emit_hook_event",
     # Config-based convenience functions
@@ -1084,6 +1310,8 @@ __all__ = [
     "emit_session_ended_from_config",
     "emit_prompt_submitted_from_config",
     "emit_tool_executed_from_config",
+    # Session outcome emission (OMN-2076)
+    "emit_session_outcome_from_config",
     # Claude hook event emission (for omniintelligence)
     "emit_claude_hook_event",
     # Backwards-compatible convenience functions

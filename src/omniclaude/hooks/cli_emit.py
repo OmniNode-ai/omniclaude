@@ -57,10 +57,10 @@ except Exception:
 from omnibase_core.enums.hooks.claude_code import EnumClaudeCodeHookEventType
 from omnibase_core.models.intelligence import ModelToolExecutionContent
 from omnibase_infra.event_bus.event_bus_kafka import EventBusKafka
-from omnibase_infra.event_bus.models.config import ModelKafkaEventBusConfig
 
 from omniclaude.hooks.handler_event_emitter import (
     ModelClaudeHookEventConfig,
+    create_kafka_config,
     emit_claude_hook_event,
     emit_prompt_submitted,
     emit_session_ended,
@@ -622,13 +622,11 @@ def cmd_claude_hook_event(
 
 async def _emit_tool_content(
     content: ModelToolExecutionContent,
-    environment: str | None = None,
 ) -> ModelEventPublishResult:
     """Emit a tool content event to Kafka.
 
     Args:
         content: The tool execution content model to emit.
-        environment: Optional environment override for topic prefix.
 
     Returns:
         ModelEventPublishResult indicating success or failure.
@@ -637,29 +635,11 @@ async def _emit_tool_content(
     topic = "unknown"
 
     try:
-        # Get environment from param, env var, or default
-        env = environment or os.environ.get("KAFKA_ENVIRONMENT", "dev")
-        topic = build_topic(env, TopicBase.TOOL_CONTENT)
+        # Topics are realm-agnostic (OMN-1972): TopicBase values are wire topics
+        topic = build_topic("", TopicBase.TOOL_CONTENT)
 
-        # Create Kafka config
-        bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS")
-        if not bootstrap_servers:
-            return ModelEventPublishResult(
-                success=False,
-                topic=topic,
-                error_message="KAFKA_BOOTSTRAP_SERVERS not set",
-            )
-
-        config = ModelKafkaEventBusConfig(
-            bootstrap_servers=bootstrap_servers,
-            environment=env,
-            timeout_seconds=2,
-            max_retry_attempts=0,
-            acks="all",
-            circuit_breaker_threshold=5,
-            circuit_breaker_reset_timeout=10.0,
-            enable_idempotence=False,
-        )
+        # Reuse shared Kafka config (raises ModelOnexError if bootstrap missing)
+        config = create_kafka_config()
         # New bus per call is intentional - each invocation runs in an isolated
         # subshell from the shell hook, so connection pooling isn't beneficial
         bus = EventBusKafka(config=config)

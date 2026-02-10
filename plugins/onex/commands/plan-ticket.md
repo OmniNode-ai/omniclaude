@@ -21,7 +21,7 @@ The plan-ticket skill provides:
 
 ## Execution
 
-Use the Skill tool to load the `plan-ticket` skill, then output the template.
+Use the Skill tool to load the `onex:plan-ticket` skill, then output the template.
 
 ```
 Skill(skill="onex:plan-ticket")

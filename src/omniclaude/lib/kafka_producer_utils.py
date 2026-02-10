@@ -29,13 +29,13 @@ KAFKA_PUBLISH_TIMEOUT_SECONDS = 10.0
 
 
 def get_kafka_topic_prefix() -> str:
-    """Get Kafka topic prefix (environment) from environment.
+    """Get Kafka topic prefix from environment.
 
     Returns:
-        Topic prefix (e.g., "dev", "staging", "prod"). Defaults to "dev".
+        Empty string. Topics are realm-agnostic per ONEX convention (OMN-1972):
+        TopicBase values ARE the wire topic names, no environment prefix.
     """
-    env_prefix = os.getenv("KAFKA_TOPIC_PREFIX") or os.getenv("KAFKA_ENVIRONMENT")
-    return env_prefix if env_prefix else "dev"
+    return ""
 
 
 def get_kafka_bootstrap_servers() -> str | None:
@@ -102,13 +102,16 @@ def create_event_envelope(
 
 
 def build_kafka_topic(topic_base_value: str) -> str:
-    """Build full Kafka topic name with environment prefix.
+    """Build Kafka topic name from TopicBase value.
+
+    Topics are realm-agnostic per OMN-1972: TopicBase values ARE the wire
+    topic names. No environment prefix is applied.
 
     Args:
         topic_base_value: Base topic name from TopicBase enum
 
     Returns:
-        Full topic name with prefix
+        Topic name (same as input since prefix is empty)
     """
     prefix = get_kafka_topic_prefix()
     return build_topic(prefix, topic_base_value)

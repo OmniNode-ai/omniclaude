@@ -723,7 +723,7 @@ def execute_phase(phase_name, state):
 
 1. **Invoke ticket-work:**
    ```
-   Skill(skill="ticket-work", args="{ticket_id}")
+   Skill(skill="onex:ticket-work", args="{ticket_id}")
    ```
    This runs the full ticket-work workflow including human gates (questions, spec, approval).
    The pipeline waits for ticket-work to complete.
@@ -805,7 +805,7 @@ def execute_phase(phase_name, state):
 
 1. **Invoke local-review:**
    ```
-   Skill(skill="local-review", args="--max-iterations {policy.max_review_iterations}")
+   Skill(skill="onex:local-review", args="--max-iterations {policy.max_review_iterations}")
    ```
 
 2. **Parse result:**
@@ -1046,7 +1046,7 @@ EOF
 
 2. **Invoke pr-release-ready:**
    ```
-   Skill(skill="pr-release-ready")
+   Skill(skill="onex:pr-release-ready")
    ```
    This fetches CodeRabbit review issues and invokes `/parallel-solve` to fix them.
 
