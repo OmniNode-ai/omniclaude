@@ -1094,7 +1094,7 @@ class TestEvidencePolicy:
 
     def test_ignore_policy_does_not_consult_resolver(self) -> None:
         """evidence_policy="ignore" doesn't call resolver."""
-        from omniclaude.hooks.dict_evidence_resolver import DictEvidenceResolver
+        from tests.hooks.dict_evidence_resolver import DictEvidenceResolver
 
         # Create resolver that would raise if called
         class StrictResolver(DictEvidenceResolver):
@@ -1118,7 +1118,7 @@ class TestEvidencePolicy:
 
     def test_boost_policy_reranks_by_evidence(self) -> None:
         """KEY DEMO: 3 patterns with same base stats, evidence_policy="boost" reranks by gate_result."""
-        from omniclaude.hooks.dict_evidence_resolver import DictEvidenceResolver
+        from tests.hooks.dict_evidence_resolver import DictEvidenceResolver
 
         resolver = DictEvidenceResolver(
             {
@@ -1155,7 +1155,7 @@ class TestEvidencePolicy:
 
     def test_require_policy_filters_non_pass(self) -> None:
         """evidence_policy="require" only selects pass patterns."""
-        from omniclaude.hooks.dict_evidence_resolver import DictEvidenceResolver
+        from tests.hooks.dict_evidence_resolver import DictEvidenceResolver
 
         resolver = DictEvidenceResolver(
             {
@@ -1184,7 +1184,7 @@ class TestEvidencePolicy:
 
     def test_require_policy_empty_when_no_pass(self) -> None:
         """All fail/None → empty result."""
-        from omniclaude.hooks.dict_evidence_resolver import DictEvidenceResolver
+        from tests.hooks.dict_evidence_resolver import DictEvidenceResolver
 
         resolver = DictEvidenceResolver(
             {

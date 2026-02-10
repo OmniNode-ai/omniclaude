@@ -34,7 +34,6 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from omniclaude.hooks.evidence_resolver import EvidenceResolver, NullEvidenceResolver
-from omniclaude.hooks.file_evidence_resolver import FileEvidenceResolver
 
 if TYPE_CHECKING:
     from omniclaude.hooks.handler_context_injection import PatternRecord
@@ -847,7 +846,6 @@ __all__ = [
     # Evidence Resolution (OMN-2092)
     "EvidenceResolver",
     "NullEvidenceResolver",
-    "FileEvidenceResolver",
     # Constants
     "DOMAIN_ALIASES",
     "KNOWN_DOMAINS",

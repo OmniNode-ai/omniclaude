@@ -80,10 +80,10 @@ class TestEvidenceDrivenInjectionIntegration:
         )
 
         from omniclaude.hooks.injection_limits import (
-            FileEvidenceResolver,
             InjectionLimitsConfig,
             select_patterns_for_injection,
         )
+        from plugins.onex.hooks.lib.file_evidence_resolver import FileEvidenceResolver
         from plugins.onex.hooks.lib.metrics_aggregator import save_gate
 
         # Step 1: Save gates for 2 patterns
