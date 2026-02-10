@@ -289,12 +289,13 @@ TRUNCATION_MARKER: str = "[TRUNCATED]"  # Marker appended to truncated prompts
 # (prompt + envelope) stays within Kafka's message size limit.
 JSON_ENVELOPE_OVERHEAD_BUFFER: int = 500
 
-# Defensive check - ensure MAX_PROMPT_SIZE can accommodate truncation marker and overhead
-assert len(TRUNCATION_MARKER) + JSON_ENVELOPE_OVERHEAD_BUFFER < MAX_PROMPT_SIZE, (
-    f"MAX_PROMPT_SIZE ({MAX_PROMPT_SIZE}) must be greater than "
-    f"TRUNCATION_MARKER length ({len(TRUNCATION_MARKER)}) + "
-    f"JSON_ENVELOPE_OVERHEAD_BUFFER ({JSON_ENVELOPE_OVERHEAD_BUFFER})"
-)
+# Defensive check — survives python -O (assert would be stripped)
+if len(TRUNCATION_MARKER) + JSON_ENVELOPE_OVERHEAD_BUFFER >= MAX_PROMPT_SIZE:
+    raise ValueError(
+        f"MAX_PROMPT_SIZE ({MAX_PROMPT_SIZE}) must be greater than "
+        f"TRUNCATION_MARKER length ({len(TRUNCATION_MARKER)}) + "
+        f"JSON_ENVELOPE_OVERHEAD_BUFFER ({JSON_ENVELOPE_OVERHEAD_BUFFER})"
+    )
 
 
 # =============================================================================
