@@ -15,7 +15,6 @@ Scanned all SQL files that define or alter schema:
 |----------|--------------|---------------------|
 | Active schema (`scripts/init-db.sh`) | 1 | 1 |
 | Active migrations (`sql/migrations/`) | 3 (+ 3 down) | 0 |
-| Active migrations (`migrations/`) | 1 | 0 |
 | Archived migrations (`_archive/`) | 30+ | 30+ (all intra-service) |
 | Python ORM models (`src/`) | all `.py` | 0 |
 
@@ -48,9 +47,8 @@ This is the **only active FK constraint** in the omniclaude schema. Both the sou
 | Migration | Tables/Columns | FK Constraints |
 |-----------|---------------|----------------|
 | `sql/migrations/001_add_project_context_to_observability_tables.sql` | ALTER TABLE (5 tables) + view | 0 |
-| `sql/migrations/002_create_learned_patterns.sql` | CREATE TABLE `learned_patterns` | 0 |
+| `sql/migrations/002_create_learned_patterns.sql` | CREATE TABLE `learned_patterns` (includes `updated_at` trigger consolidated from deleted `migrations/001_create_learned_patterns_table.sql`) | 0 |
 | `sql/migrations/003_add_evidence_tier.sql` | ALTER TABLE `learned_patterns` | 0 |
-| `migrations/001_create_learned_patterns_table.sql` | CREATE TABLE `learned_patterns` | 0 |
 
 All active migrations use only self-contained tables with no foreign key references.
 
