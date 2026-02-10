@@ -88,6 +88,8 @@ repos:
       # Migration Freeze Check - Block new migrations during DB-per-repo refactor
       # Scope: Only triggers when migration files or .migration_freeze change
       # Purpose: Enforces schema freeze (OMN-2055) while .migration_freeze exists
+      # Note: Checks filesystem for freeze file, so removing .migration_freeze in
+      #       the same commit as adding a migration intentionally lifts the freeze.
       # --------------------------------------------------------------------------
       - id: migration-freeze-check
         name: migration freeze check

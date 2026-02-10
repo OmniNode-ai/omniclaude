@@ -28,7 +28,9 @@ if [ "$MODE" = "--ci" ]; then
     # CI mode: compare against base branch
     # MIGRATION_CHECK_BASE: PR base SHA or push-before SHA (set by CI workflow)
     # GITHUB_BASE_REF: branch name, only set for pull_request events
-    if [ -n "${MIGRATION_CHECK_BASE:-}" ]; then
+    NULL_SHA="0000000000000000000000000000000000000000"
+    if [ -n "${MIGRATION_CHECK_BASE:-}" ] && [ "${MIGRATION_CHECK_BASE}" != "$NULL_SHA" ] \
+        && git rev-parse --verify "${MIGRATION_CHECK_BASE}^{commit}" >/dev/null 2>&1; then
         BASE_REF="$MIGRATION_CHECK_BASE"
     elif [ -n "${GITHUB_BASE_REF:-}" ]; then
         BASE_REF="origin/${GITHUB_BASE_REF}"
