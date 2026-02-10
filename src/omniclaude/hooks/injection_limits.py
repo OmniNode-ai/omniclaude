@@ -548,7 +548,8 @@ def render_single_pattern(
 
     Args:
         pattern: Pattern to render.
-        gate_result: Optional promotion gate outcome for evidence badge (OMN-2092).
+        gate_result: Reserved for future evidence badge rendering (OMN-2092).
+            Currently unused; accepted for forward-compatibility.
 
     Returns:
         Markdown string for the pattern.

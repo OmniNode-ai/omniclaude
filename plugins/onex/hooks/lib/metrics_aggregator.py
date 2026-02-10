@@ -478,8 +478,9 @@ def load_latest_gate_result(
 ) -> str | None:
     """Scan subdirs for the most recent gate file and return gate_result.
 
-    Searches all subdirectories under {baselines_root}/{pattern_id}/
-    for the most recently modified latest.gate.json file.
+    Searches **one level** of subdirectories under
+    ``{baselines_root}/{pattern_id}/`` for the most recently modified
+    ``latest.gate.json`` file (glob pattern: ``*/latest.gate.json``).
 
     Returns:
         The gate_result string ("pass", "fail", or "insufficient_evidence")

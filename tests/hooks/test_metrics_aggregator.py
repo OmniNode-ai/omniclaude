@@ -658,6 +658,9 @@ class TestGateStorage:
         new_file = new_dir / "latest.gate.json"
         new_file.write_text(json.dumps({"gate_result": "pass", "run_id": "new"}))
 
+        # Set explicit mtime in the future for deterministic ordering
+        os.utime(new_file, (2000000.0, 2000000.0))
+
         # Should return the most recently modified gate
         result = load_latest_gate_result("pat-multi", baselines_root=tmp_path)
         assert result == "pass"
@@ -670,3 +673,19 @@ class TestGateStorage:
 
         result = load_latest_gate_result("pat-nonexistent", baselines_root=tmp_path)
         assert result is None
+
+    def test_load_latest_gate_result_empty_pattern_id(self, tmp_path: Path) -> None:
+        """Empty pattern_id returns None without error."""
+        from plugins.onex.hooks.lib.metrics_aggregator import load_latest_gate_result
+
+        assert load_latest_gate_result("", baselines_root=tmp_path) is None
+
+    def test_load_latest_gate_result_rejects_path_traversal(
+        self, tmp_path: Path
+    ) -> None:
+        """Pattern IDs with path traversal characters are rejected."""
+        from plugins.onex.hooks.lib.metrics_aggregator import load_latest_gate_result
+
+        assert load_latest_gate_result("../etc", baselines_root=tmp_path) is None
+        assert load_latest_gate_result("foo/bar", baselines_root=tmp_path) is None
+        assert load_latest_gate_result("foo\\bar", baselines_root=tmp_path) is None
