@@ -481,6 +481,17 @@ class InjectionLimitsConfig(BaseSettings):
     @field_validator("evidence_policy")
     @classmethod
     def validate_evidence_policy(cls, v: str) -> str:
+        """Validate that evidence_policy is a known policy.
+
+        Args:
+            v: The evidence policy value to validate.
+
+        Returns:
+            The validated evidence policy.
+
+        Raises:
+            ValueError: If the policy is not recognized.
+        """
         allowed = {"ignore", "boost", "require"}
         if v not in allowed:
             raise ValueError(

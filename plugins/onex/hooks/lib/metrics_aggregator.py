@@ -252,6 +252,12 @@ def load_baseline(
     baseline_key = derive_baseline_key(context)
     pattern_id = context.pattern_id or "_no_pattern"
 
+    if ".." in pattern_id or "/" in pattern_id or "\\" in pattern_id:
+        logger.warning(
+            "Rejected pattern_id %r: contains path traversal characters", pattern_id
+        )
+        return None
+
     target = root / pattern_id / baseline_key / "latest.metrics.json"
     if not target.exists():
         return None
@@ -446,6 +452,12 @@ def load_gate(
     root = baselines_root or BASELINES_ROOT
     baseline_key = derive_baseline_key(context)
     pattern_id = context.pattern_id or "_no_pattern"
+
+    if ".." in pattern_id or "/" in pattern_id or "\\" in pattern_id:
+        logger.warning(
+            "Rejected pattern_id %r: contains path traversal characters", pattern_id
+        )
+        return None
 
     target = root / pattern_id / baseline_key / "latest.gate.json"
     if not target.exists():
