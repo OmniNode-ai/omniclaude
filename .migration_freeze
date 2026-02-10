@@ -1,10 +1,16 @@
 # Migration Freeze
-# Part of DB-SPLIT (OMN-2055)
 #
-# While this file exists, no new schema migrations may be added to this repo.
-# Allowed: migration file moves, ownership fixes.
+# This file enforces a schema freeze during the DB-per-repo refactor (OMN-2055).
+# While this file exists, no new migrations may be added to sql/migrations/.
 #
-# To lift the freeze, delete this file and remove the freeze notice from CLAUDE.md.
+# Allowed during freeze:
+#   - Migration moves (reorg between repos)
+#   - Ownership fixes (table transfers)
+#   - Rollback bug fixes (DB-SPLIT refactor phase)
 #
-# Tracking ticket: OMN-2073
-# Parent epic: OMN-2055
+# To lift the freeze: remove this file once DB boundary work for omniclaude is complete.
+#
+# Enforcement: CI job (migration-freeze) + pre-commit hook (migration-freeze-check)
+# Tracking: OMN-2073
+# Parent:   OMN-2055
+# Created:  2026-02-10

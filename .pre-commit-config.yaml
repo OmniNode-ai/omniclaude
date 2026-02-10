@@ -84,6 +84,19 @@ repos:
         exclude: '\.github/workflows/.*|^\.[^/]*$|^\..*/.*|_archive/.*|src/omniclaude/lib/.*'
         stages: [pre-commit]
 
+      # --------------------------------------------------------------------------
+      # Migration Freeze Check - Block new migrations during DB-per-repo refactor
+      # Scope: Only triggers when migration files or .migration_freeze change
+      # Purpose: Enforces schema freeze (OMN-2055) while .migration_freeze exists
+      # --------------------------------------------------------------------------
+      - id: migration-freeze-check
+        name: migration freeze check
+        entry: ./scripts/check_migration_freeze.sh
+        language: system
+        pass_filenames: false
+        files: ^(sql/migrations/|\.migration_freeze)
+        stages: [pre-commit]
+
       # ============================================================
       # STAGE 2: PRE-PUSH (thorough checks before sharing)
       # ============================================================
