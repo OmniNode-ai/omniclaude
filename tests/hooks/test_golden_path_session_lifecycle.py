@@ -196,11 +196,11 @@ class TestGoldenPathSessionLifecycle:
         outcome_publishes = publish_calls[-2:]
         topics_published = {call.kwargs["topic"] for call in outcome_publishes}
 
-        # Verify both fan-out topics were hit
-        assert any(TopicBase.SESSION_OUTCOME_CMD in t for t in topics_published), (
+        # Verify both fan-out topics were hit (OMN-1972: bare enum values are wire topics)
+        assert TopicBase.SESSION_OUTCOME_CMD in topics_published, (
             f"CMD topic not found in {topics_published}"
         )
-        assert any(TopicBase.SESSION_OUTCOME_EVT in t for t in topics_published), (
+        assert TopicBase.SESSION_OUTCOME_EVT in topics_published, (
             f"EVT topic not found in {topics_published}"
         )
 
@@ -290,8 +290,8 @@ class TestEmitSessionOutcome:
         assert mock_bus.publish.call_count == 2
 
         topics = [call.kwargs["topic"] for call in mock_bus.publish.call_args_list]
-        assert any(TopicBase.SESSION_OUTCOME_CMD in t for t in topics)
-        assert any(TopicBase.SESSION_OUTCOME_EVT in t for t in topics)
+        assert TopicBase.SESSION_OUTCOME_CMD in topics
+        assert TopicBase.SESSION_OUTCOME_EVT in topics
 
     @patch("omniclaude.hooks.handler_event_emitter.EventBusKafka")
     async def test_partition_key_is_session_id(self, mock_bus_cls) -> None:
