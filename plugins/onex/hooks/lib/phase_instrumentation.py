@@ -251,24 +251,30 @@ def build_metrics_from_result(
         llm_total_tokens=phase_result.tokens_used,
     )
 
-    # Sanitize reason: redact secrets + truncate to evt topic limit
+    # Sanitize reason and block_kind: redact secrets before evt topic emission
+    from plugins.onex.hooks.lib.metrics_emitter import _get_redact_secrets
+
     error_messages: list[str] = []
     if (
         phase_result.reason
         and classification != ContractEnumResultClassification.SUCCESS
     ):
-        from plugins.onex.hooks.lib.metrics_emitter import _get_redact_secrets
-
         redact = _get_redact_secrets()
         reason_msg = redact(phase_result.reason)
         if len(reason_msg) > MAX_ERROR_MESSAGE_LENGTH:
             reason_msg = reason_msg[: MAX_ERROR_MESSAGE_LENGTH - 3] + "..."
         error_messages = [reason_msg]
 
+    # Redact block_kind to prevent PII/secrets in error_codes on evt topic
+    error_codes: list[str] = []
+    if phase_result.block_kind:
+        redact = _get_redact_secrets()
+        error_codes = [redact(phase_result.block_kind)]
+
     outcome = ContractOutcomeMetrics(
         result_classification=classification,
         error_messages=error_messages,
-        error_codes=([phase_result.block_kind] if phase_result.block_kind else []),
+        error_codes=error_codes,
     )
 
     tests_passed = phase_result.tests_passed

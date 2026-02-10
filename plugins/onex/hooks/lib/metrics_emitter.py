@@ -90,7 +90,7 @@ def _get_redact_secrets() -> Callable[[str], str]:
             return "[redacted - secret_redactor unavailable]"
 
         # Cache the fallback to prevent repeated warnings and allocations.
-        # If the module is later deployed, reset_client() or process restart
+        # If the module is later deployed, reset_redactor() or process restart
         # will pick it up (the global is cleared on module reload).
         _redact_secrets_fn = _fallback
         return _fallback
@@ -150,19 +150,21 @@ def _sanitize_skip_reason(reason: str) -> str:
 
 
 def _sanitize_failed_tests(tests: list[str]) -> list[str]:
-    """Truncate failed test names per M2 spec.
+    """Redact and truncate failed test names per M2 spec.
 
     Args:
         tests: Failed test name list.
 
     Returns:
-        Truncated list of test names.
+        Sanitized list of test names.
     """
+    redact = _get_redact_secrets()
     sanitized = []
     for test in tests[:MAX_FAILED_TESTS]:
-        if len(test) > MAX_FAILED_TEST_LENGTH:
-            test = test[: MAX_FAILED_TEST_LENGTH - 3] + "..."
-        sanitized.append(test)
+        clean = redact(test)
+        if len(clean) > MAX_FAILED_TEST_LENGTH:
+            clean = clean[: MAX_FAILED_TEST_LENGTH - 3] + "..."
+        sanitized.append(clean)
     return sanitized
 
 
@@ -198,6 +200,9 @@ def _validate_artifact_uri(uri: str) -> bool:
     Returns:
         True if URI is safe for emission.
     """
+    if not uri:
+        logger.warning("Artifact URI is empty, rejecting")
+        return False
     uri_lower = uri.lower()
     if uri_lower.startswith("file://") or uri.startswith("~"):
         logger.warning(
