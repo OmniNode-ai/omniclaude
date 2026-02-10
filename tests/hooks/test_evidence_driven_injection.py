@@ -14,7 +14,7 @@ import pytest
 
 from tests.hooks.conftest import make_pattern
 
-pytestmark = pytest.mark.integration
+pytestmark = pytest.mark.unit
 
 
 class TestEvidenceDrivenInjectionIntegration:

@@ -638,7 +638,7 @@ class TestGateStorage:
     def test_load_latest_gate_result_scans_subdirs(self, tmp_path: Path) -> None:
         """Multiple baseline_keys under one pattern_id; most recent wins."""
         import json
-        import time
+        import os
 
         from plugins.onex.hooks.lib.metrics_aggregator import load_latest_gate_result
 
@@ -650,8 +650,8 @@ class TestGateStorage:
         old_file = old_dir / "latest.gate.json"
         old_file.write_text(json.dumps({"gate_result": "fail", "run_id": "old"}))
 
-        # Ensure mtime difference
-        time.sleep(0.05)
+        # Set explicit mtime in the past for deterministic ordering
+        os.utime(old_file, (1000000.0, 1000000.0))
 
         new_dir = pattern_dir / "baseline-new"
         new_dir.mkdir(parents=True)

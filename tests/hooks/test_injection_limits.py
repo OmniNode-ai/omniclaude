@@ -1034,6 +1034,20 @@ class TestEvidenceScoring:
         )
         assert capped_score == pytest.approx(base_score * 3.0)
 
+    def test_config_rejects_evidence_boost_above_3(self) -> None:
+        """InjectionLimitsConfig rejects evidence_boost > 3.0 at validation time."""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError, match="evidence_boost"):
+            InjectionLimitsConfig(evidence_boost=5.0)
+
+    def test_config_rejects_evidence_boost_at_or_below_1(self) -> None:
+        """InjectionLimitsConfig rejects evidence_boost <= 1.0 at validation time."""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError, match="evidence_boost"):
+            InjectionLimitsConfig(evidence_boost=1.0)
+
 
 # =============================================================================
 # Evidence Policy Tests (OMN-2092)

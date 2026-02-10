@@ -542,6 +542,7 @@ def render_single_pattern(
     Returns:
         Markdown string for the pattern.
     """
+    _ = gate_result  # Forward-compatibility placeholder; see NOTE below.
     confidence_pct = f"{pattern.confidence * 100:.0f}%"
     success_pct = f"{pattern.success_rate * 100:.0f}%"
 

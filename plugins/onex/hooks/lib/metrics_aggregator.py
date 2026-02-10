@@ -14,8 +14,6 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-logger = logging.getLogger(__name__)
-
 from omnibase_spi.contracts.measurement.contract_aggregated_run import (
     ContractAggregatedRun,
 )
@@ -38,6 +36,8 @@ if TYPE_CHECKING:
     from omnibase_spi.contracts.measurement.contract_phase_metrics import (
         ContractPhaseMetrics,
     )
+
+logger = logging.getLogger(__name__)
 
 ALL_PHASES: frozenset[ContractEnumPipelinePhase] = frozenset(ContractEnumPipelinePhase)
 
