@@ -19,6 +19,7 @@ These rules are non-negotiable. Violations will cause production issues.
 | `emitted_at` timestamps must be **explicitly injected** | No `datetime.now()` defaults for deterministic testing |
 | SessionStart must be **idempotent** | May be called multiple times on reconnect |
 | Hooks must exit 0 unless blocking is intentional | Non-zero exit blocks the tool/prompt |
+| **Migration freeze active** (`.migration_freeze`) | DB-SPLIT in progress (OMN-2055) — no new schema migrations |
 
 ---
 

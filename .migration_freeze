@@ -1,0 +1,10 @@
+# Migration Freeze
+# Part of DB-SPLIT (OMN-2055)
+#
+# While this file exists, no new schema migrations may be added to this repo.
+# Allowed: migration file moves, ownership fixes.
+#
+# To lift the freeze, delete this file and remove the freeze notice from CLAUDE.md.
+#
+# Tracking ticket: OMN-2073
+# Parent epic: OMN-2055
