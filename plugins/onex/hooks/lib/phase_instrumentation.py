@@ -377,7 +377,7 @@ def build_error_metrics(
     started_at: datetime,
     error: Exception,
     instance_id: str = "",
-    completed_at: datetime | None = None,
+    completed_at: datetime,
 ) -> ContractPhaseMetrics:
     """Build a ContractPhaseMetrics for an error case.
 
@@ -392,15 +392,11 @@ def build_error_metrics(
         started_at: Phase start timestamp.
         error: The exception that was raised.
         instance_id: Optional instance identifier.
-        completed_at: Phase completion timestamp. Required — callers must
-            inject an explicit timestamp (repository invariant: no
-            ``datetime.now()`` defaults).
+        completed_at: Phase completion timestamp (required — repository
+            invariant: no ``datetime.now()`` defaults).
 
     Returns:
         A ContractPhaseMetrics with ERROR classification.
-
-    Raises:
-        ValueError: If ``completed_at`` is None.
     """
     from omnibase_spi.contracts.measurement import (
         ContractDurationMetrics,
@@ -414,11 +410,6 @@ def build_error_metrics(
 
     from plugins.onex.hooks.lib.metrics_emitter import get_redact_secrets
 
-    if completed_at is None:
-        raise ValueError(
-            "completed_at is required — repository invariant forbids "
-            "datetime.now() defaults for deterministic testing"
-        )
     max_error_len = _get_max_error_length()
     wall_clock_ms = (completed_at - started_at).total_seconds() * 1000.0
 
@@ -594,10 +585,12 @@ def instrumented_phase(
         started_at: Phase start timestamp. Required — callers must
             inject an explicit timestamp (repository invariant: no
             ``datetime.now()`` defaults).
-        completed_at: Explicit completion timestamp for deterministic
-            testing. When *None*, captured via ``datetime.now(UTC)``
-            after *phase_fn* returns or raises. This is the timing
-            boundary — the wrapper measures real phase completion.
+        completed_at: Explicit completion timestamp. When *None*,
+            captured via ``datetime.now(UTC)`` after *phase_fn* returns
+            or raises — this is a **timing boundary**, not a data
+            default, so it is exempt from the "no implicit timestamps"
+            repository invariant. Inject an explicit value in tests for
+            deterministic assertions.
 
     Returns:
         The PhaseResult from phase_fn.
@@ -647,20 +640,30 @@ def instrumented_phase(
                 phase,
             )
         _completed = completed_at if completed_at is not None else datetime.now(UTC)
-        metrics = build_error_metrics(
-            run_id=run_id,
-            phase=phase,
-            attempt=attempt,
-            ticket_id=ticket_id,
-            repo_id=repo_id,
-            started_at=started_at,
-            error=e,
-            instance_id=instance_id,
-            completed_at=_completed,
-        )
-        # Emit and persist even on error
-        emit_phase_metrics(metrics, timestamp_iso=_completed.isoformat())
-        write_metrics_artifact(ticket_id, run_id, phase, attempt, metrics)
+        try:
+            metrics = build_error_metrics(
+                run_id=run_id,
+                phase=phase,
+                attempt=attempt,
+                ticket_id=ticket_id,
+                repo_id=repo_id,
+                started_at=started_at,
+                error=e,
+                instance_id=instance_id,
+                completed_at=_completed,
+            )
+            # Emit and persist even on error
+            emit_phase_metrics(metrics, timestamp_iso=_completed.isoformat())
+            write_metrics_artifact(ticket_id, run_id, phase, attempt, metrics)
+        except Exception as metrics_err:
+            # build_error_metrics imports from omnibase_spi; if that import
+            # fails (degraded mode), we still re-raise the original error.
+            logger.warning(
+                "Failed to build/emit error metrics for %s: %s "
+                "(original error will still be raised)",
+                phase,
+                metrics_err,
+            )
         raise
 
     # Emit and persist on success — wrapped for defense-in-depth so

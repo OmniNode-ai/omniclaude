@@ -50,7 +50,8 @@ MAX_FAILED_TESTS = 20
 ARTIFACT_BASE_DIR = Path.home() / ".claude" / "pipelines"
 
 # Sequences that must not appear in path components to prevent traversal.
-# Single chars use exact match; ".." uses segment-level check (see usage).
+# Single chars use membership check; ".." uses exact string equality
+# (component == "..") — not segment splitting.
 _INVALID_PATH_SINGLE_CHARS = ("/", "\\", "\x00")
 _TRAVERSAL_SEGMENT = ".."
 
