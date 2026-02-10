@@ -197,7 +197,7 @@ fi
 LEARNED_PATTERNS=""
 SESSION_ALREADY_INJECTED=false
 if [[ "$SKIP_IF_SESSION_INJECTED" == "true" ]] && [[ -f "${HOOKS_LIB}/session_marker.py" ]]; then
-    if $PYTHON_CMD "${HOOKS_LIB}/session_marker.py" check --session-id "${SESSION_ID}" 2>/dev/null; then
+    if $PYTHON_CMD "${HOOKS_LIB}/session_marker.py" check --session-id "${SESSION_ID}" >/dev/null 2>/dev/null; then
         SESSION_ALREADY_INJECTED=true
     fi
 fi

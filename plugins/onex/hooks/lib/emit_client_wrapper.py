@@ -2,10 +2,10 @@
 """Emit Client Wrapper - Python Client for Hook Event Emission.
 
 This module provides the client-side interface for all hooks to emit events via
-the emit daemon using the EmitClient from omniclaude.publisher.
+the emit daemon using a built-in socket client (no external dependencies).
 
 Design Decisions:
-    - **Python-only**: Uses EmitClient from omniclaude.publisher (OMN-1944 port)
+    - **Python-only**: Uses a stdlib-only _SocketEmitClient (socket + json, no external deps)
     - **Single emission**: Hook sends once, daemon handles fan-out to multiple topics
     - **Non-blocking**: Never raises exceptions that would break hooks
 
@@ -26,7 +26,7 @@ Example Usage:
     # Emit an event (returns True on success, False on failure)
     success = emit_event(
         event_type="prompt.submitted",
-        payload={"prompt": "Hello", "session_id": "abc123"},
+        payload={"prompt_preview": "Hello", "session_id": "abc123"},
         timeout_ms=50,
     )
     ```
@@ -36,7 +36,7 @@ CLI Usage:
     # Emit an event from shell script
     python -m emit_client_wrapper emit \
         --event-type "prompt.submitted" \
-        --payload '{"session_id": "abc123", "prompt": "Hello"}'
+        --payload '{"session_id": "abc123", "prompt_preview": "Hello"}'
 
     # Check daemon availability
     python -m emit_client_wrapper ping
@@ -61,14 +61,12 @@ import concurrent.futures
 import json
 import logging
 import os
+import socket
 import sys
 import threading
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, TypeVar, cast
-
-if TYPE_CHECKING:
-    from omniclaude.publisher.emit_client import EmitClient
+from typing import Any, TypeVar, cast
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +102,7 @@ SUPPORTED_EVENT_TYPES = frozenset(
         "routing.skipped",  # OMN-1892 - Routing feedback skipped (guardrail gate)
         "notification.blocked",  # OMN-1831 - Slack notifications via emit daemon
         "notification.completed",  # OMN-1831 - Slack notifications via emit daemon
+        "phase.metrics",  # OMN-2027 - Phase instrumentation metrics
     ]
 )
 
@@ -154,19 +153,104 @@ def _run_sync_in_thread(func: Callable[[], T]) -> T:  # noqa: UP047 - Python 3.1
 
 
 # =============================================================================
+# Minimal Socket Client (no external dependencies)
+# =============================================================================
+
+
+class _SocketEmitClient:
+    """Minimal emit daemon client using raw Unix domain sockets.
+
+    Implements the newline-delimited JSON protocol expected by the emit daemon.
+    Protocol:
+        Request:  ``{"event_type": "...", "payload": {...}}\\n``
+        Response: ``{"status": "queued", "event_id": "..."}\\n``
+        Ping:     ``{"command": "ping"}\\n``
+        Pong:     ``{"status": "ok", "queue_size": N, "spool_size": N}\\n``
+
+    This replaces the former ``omnibase_infra.runtime.emit_daemon.client.EmitClient``
+    which was removed in OMN-1945 and moved to omniclaude3.
+
+    .. versionadded:: 0.2.1
+    """
+
+    __slots__ = ("_socket_path", "_timeout")
+
+    _MAX_RESPONSE_BYTES = 1_048_576  # 1 MB safety cap on daemon responses
+
+    def __init__(self, socket_path: str, timeout: float) -> None:
+        self._socket_path = socket_path
+        self._timeout = timeout
+
+    def _request(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Send a JSON request and return the parsed response.
+
+        Raises:
+            FileNotFoundError: If the Unix socket path does not exist.
+            ConnectionRefusedError: If the daemon is not accepting connections.
+            TimeoutError: If the socket operation times out.
+            ConnectionError: If the daemon response is empty or too large.
+        """
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.settimeout(self._timeout)
+        try:
+            sock.connect(self._socket_path)
+            sock.sendall(json.dumps(data).encode("utf-8") + b"\n")
+            # Read response (daemon always sends newline-terminated JSON)
+            chunks: list[bytes] = []
+            total = 0
+            while True:
+                chunk = sock.recv(4096)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > self._MAX_RESPONSE_BYTES:
+                    raise ConnectionError(
+                        f"Daemon response exceeded {self._MAX_RESPONSE_BYTES} bytes"
+                    )
+                chunks.append(chunk)
+                if b"\n" in chunk:
+                    break
+            # Parse only the first newline-terminated line (ignore trailing data)
+            raw = b"".join(chunks).split(b"\n", 1)[0].decode("utf-8").strip()
+            if not raw:
+                raise ConnectionError("Daemon closed connection without responding")
+            return cast("dict[str, Any]", json.loads(raw))
+        finally:
+            sock.close()
+
+    def emit_sync(self, event_type: str, payload: dict[str, Any]) -> str:
+        """Emit event synchronously, returns event_id."""
+        response = self._request({"event_type": event_type, "payload": payload})
+        if response.get("status") == "queued":
+            return str(response.get("event_id", ""))
+        raise RuntimeError(response.get("reason", f"Unexpected response: {response}"))
+
+    def is_daemon_running_sync(self) -> bool:
+        """Return True if daemon responds to ping."""
+        try:
+            response = self._request({"command": "ping"})
+            return response.get("status") == "ok"
+        except Exception:
+            return False
+
+
+# =============================================================================
 # Client Initialization (thread-safe, lazy)
 # =============================================================================
 
 _client_lock = threading.Lock()
-_emit_client: EmitClient | None = None
+_emit_client: _SocketEmitClient | None = None
 _client_initialized = False
 
 
-def _get_client() -> EmitClient | None:
-    """Get or create the EmitClient instance (lazy, thread-safe).
+def _get_client() -> _SocketEmitClient | None:
+    """Get or create the emit client instance (lazy, thread-safe).
+
+    The client object is cached, but each request opens a fresh socket
+    connection (connection-per-request pattern, not persistent).
 
     Returns:
-        EmitClient instance or None if initialization fails.
+        _SocketEmitClient instance or None if initialization fails.
     """
     global _emit_client, _client_initialized
 
@@ -175,8 +259,6 @@ def _get_client() -> EmitClient | None:
             return _emit_client
 
         try:
-            from omniclaude.publisher.emit_client import EmitClient
-
             socket_path = os.environ.get(
                 "OMNICLAUDE_EMIT_SOCKET", str(DEFAULT_SOCKET_PATH)
             )
@@ -185,7 +267,9 @@ def _get_client() -> EmitClient | None:
                     "OMNICLAUDE_EMIT_TIMEOUT", str(DEFAULT_CLIENT_TIMEOUT_SECONDS)
                 )
             )
-            _emit_client = EmitClient(socket_path=socket_path, timeout=timeout_seconds)
+            _emit_client = _SocketEmitClient(
+                socket_path=socket_path, timeout=timeout_seconds
+            )
             logger.debug(
                 f"EmitClient initialized (socket={socket_path}, timeout={timeout_seconds}s)"
             )
@@ -278,7 +362,7 @@ def emit_event(
     Example:
         >>> success = emit_event(
         ...     event_type="prompt.submitted",
-        ...     payload={"prompt": "Hello", "session_id": "abc123"},
+        ...     payload={"prompt_preview": "Hello", "session_id": "abc123"},
         ... )
         >>> print(f"Event emitted: {success}")
         Event emitted: True
@@ -309,7 +393,12 @@ def emit_event(
         logger.debug(f"Event emitted: {event_id}")
         return True
 
-    except (ConnectionRefusedError, FileNotFoundError, BrokenPipeError) as e:
+    except TimeoutError as e:
+        # Socket timeout is a subclass of OSError, but deserves its own message
+        logger.debug(f"Event emission failed (daemon timeout): {e}")
+        return False
+
+    except (ConnectionRefusedError, FileNotFoundError, BrokenPipeError, OSError) as e:
         # Expected during startup or when daemon is not running
         logger.debug(f"Event emission failed (daemon unavailable): {e}")
         return False

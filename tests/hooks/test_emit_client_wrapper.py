@@ -64,8 +64,26 @@ class TestModuleImport:
             "routing.skipped",  # OMN-1892 - Routing feedback skipped
             "notification.blocked",  # OMN-1831
             "notification.completed",  # PR-92
+            "phase.metrics",  # OMN-2027 - Phase instrumentation metrics
         }
         assert expected_types == SUPPORTED_EVENT_TYPES
+
+    def test_supported_event_types_match_event_registry(self) -> None:
+        """SUPPORTED_EVENT_TYPES must stay in sync with EVENT_REGISTRY keys.
+
+        These two sets define the same valid event types in different modules.
+        Drift between them causes events to be silently dropped or accepted
+        but unroutable.
+        """
+        from omniclaude.hooks.event_registry import EVENT_REGISTRY
+        from plugins.onex.hooks.lib.emit_client_wrapper import SUPPORTED_EVENT_TYPES
+
+        registry_types = set(EVENT_REGISTRY.keys())
+        assert registry_types == SUPPORTED_EVENT_TYPES, (
+            f"SUPPORTED_EVENT_TYPES and EVENT_REGISTRY are out of sync.\n"
+            f"  In SUPPORTED_EVENT_TYPES only: {SUPPORTED_EVENT_TYPES - registry_types}\n"
+            f"  In EVENT_REGISTRY only: {registry_types - SUPPORTED_EVENT_TYPES}"
+        )
 
     def test_event_types_are_internal_not_kafka_topics(self) -> None:
         """Verify emit daemon event types are distinct from Kafka topic names.

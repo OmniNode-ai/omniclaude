@@ -1,0 +1,977 @@
+"""Phase Instrumentation Protocol -- mandatory metrics for every pipeline phase.
+
+Every pipeline phase MUST emit metrics via this instrumentation layer.
+A phase that exits without emitting metrics is a protocol violation.
+The orchestrator detects silent omissions and emits a `skipped` record
+with ``skip_reason_code="metrics_missing_protocol_violation"``.
+
+Architecture:
+    - ``instrumented_phase()`` wraps any phase callable, captures timing,
+      outcome, and test metrics, then emits + persists results.
+    - ``detect_silent_omission()`` checks after each phase whether the
+      metrics artifact exists, and emits a violation record if missing.
+    - ``run_measurement_checks()`` produces ContractCheckResult instances
+      for the measurement domain (CHECK-MEAS-001 through 006).
+
+Degraded Mode (omnibase_spi unavailable):
+    If ``omnibase_spi`` is not installed, this module still imports
+    successfully (``PHASE_TO_SPI`` is set to an empty dict). However,
+    functions that construct SPI types (``build_metrics_from_result``,
+    ``build_error_metrics``, ``build_skipped_metrics``,
+    ``run_measurement_checks``) will raise ``ImportError`` at call time
+    from their deferred imports. A warning is logged at import time.
+
+Phase -> SPI Enum Mapping:
+    Pipeline Phase          | SPI ContractEnumPipelinePhase
+    ----------------------- | -----------------------------
+    implement (ticket_work) | IMPLEMENT
+    local_review            | VERIFY
+    create_pr               | RELEASE
+    pr_release_ready        | REVIEW
+    ready_for_merge         | RELEASE (terminal)
+
+Related Tickets:
+    - OMN-2024: M1 Measurement Contracts (SPI)
+    - OMN-2025: M2 Metrics Emission via Emit Daemon
+    - OMN-2027: M6 Phase Instrumentation Protocol
+
+.. versionadded:: 0.2.1
+"""
+
+from __future__ import annotations
+
+import logging
+import sys
+import uuid
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any, Literal
+
+if TYPE_CHECKING:
+    from omnibase_spi.contracts.measurement import (
+        ContractEnumPipelinePhase,
+        ContractEnumResultClassification,
+        ContractPhaseMetrics,
+    )
+
+# Deferred constant: imported at first use via _get_max_error_length()
+_MAX_ERROR_MESSAGE_LENGTH: int | None = None
+
+
+def _get_max_error_length() -> int:
+    """Lazily import MAX_ERROR_MESSAGE_LENGTH from metrics_emitter."""
+    global _MAX_ERROR_MESSAGE_LENGTH
+    if _MAX_ERROR_MESSAGE_LENGTH is not None:
+        return _MAX_ERROR_MESSAGE_LENGTH
+    from plugins.onex.hooks.lib.metrics_emitter import MAX_ERROR_MESSAGE_LENGTH
+
+    _MAX_ERROR_MESSAGE_LENGTH = MAX_ERROR_MESSAGE_LENGTH
+    return MAX_ERROR_MESSAGE_LENGTH
+
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+# Producer identity for phase instrumentation
+PRODUCER_NAME = "ticket-pipeline"
+PRODUCER_VERSION = "0.2.1"
+
+# Pipeline phase -> SPI phase mapping (deferred: graceful degradation
+# if omnibase_spi is not installed — module remains importable but
+# functions that construct SPI types will raise ImportError at call time).
+try:
+    from omnibase_spi.contracts.measurement import ContractEnumPipelinePhase
+
+    PHASE_TO_SPI: dict[str, ContractEnumPipelinePhase] = {
+        "implement": ContractEnumPipelinePhase.IMPLEMENT,
+        "local_review": ContractEnumPipelinePhase.VERIFY,
+        "create_pr": ContractEnumPipelinePhase.RELEASE,
+        "pr_release_ready": ContractEnumPipelinePhase.REVIEW,
+        "ready_for_merge": ContractEnumPipelinePhase.RELEASE,
+    }
+except ImportError:
+    PHASE_TO_SPI = {}  # type: ignore[assignment]
+    logger.warning(
+        "omnibase_spi not available; PHASE_TO_SPI empty — "
+        "phase instrumentation functions will raise ImportError at call time"
+    )
+
+# Phases that are expected to run tests
+TEST_BEARING_PHASES = frozenset({"local_review"})
+
+# Valid PhaseResult status values (frozenset for O(1) membership testing)
+VALID_PHASE_STATUSES: frozenset[str] = frozenset({"completed", "blocked", "failed"})
+
+# Duration budgets per phase (milliseconds)
+DURATION_BUDGETS_MS: dict[str, float] = {
+    "implement": 1_800_000,  # 30 minutes
+    "local_review": 600_000,  # 10 minutes
+    "create_pr": 120_000,  # 2 minutes
+    "pr_release_ready": 600_000,  # 10 minutes
+    "ready_for_merge": 60_000,  # 1 minute
+}
+
+# Token budgets per phase
+TOKEN_BUDGETS: dict[str, int] = {
+    "implement": 500_000,
+    "local_review": 200_000,
+    "create_pr": 50_000,
+    "pr_release_ready": 200_000,
+    "ready_for_merge": 10_000,
+}
+
+
+# ---------------------------------------------------------------------------
+# Phase Result Type
+# ---------------------------------------------------------------------------
+
+
+class PhaseResult:
+    """Structured result from an instrumented phase execution.
+
+    Attributes:
+        status: One of "completed", "blocked", "failed".
+        blocking_issues: Count of remaining blocking issues.
+        nit_count: Count of deferred nit issues.
+        artifacts: Dict of produced artifact keys and values.
+        reason: Human-readable reason if blocked/failed.
+        block_kind: Machine-stable block classification.
+        tokens_used: Total tokens consumed (if tracked).
+        api_calls: Number of API calls made (if tracked).
+        tests_total: Total test count (if applicable).
+        tests_passed: Passed test count (if applicable).
+        tests_failed: Failed test count (if applicable).
+        review_iteration: Review iteration number (if applicable).
+    """
+
+    __slots__ = (
+        "api_calls",
+        "artifacts",
+        "block_kind",
+        "blocking_issues",
+        "nit_count",
+        "reason",
+        "review_iteration",
+        "status",
+        "tests_failed",
+        "tests_passed",
+        "tests_total",
+        "tokens_used",
+    )
+
+    def __init__(
+        self,
+        *,
+        status: Literal["completed", "blocked", "failed"] = "completed",
+        blocking_issues: int = 0,
+        nit_count: int = 0,
+        artifacts: dict[str, Any] | None = None,
+        reason: str | None = None,
+        block_kind: str | None = None,
+        tokens_used: int = 0,
+        api_calls: int = 0,
+        tests_total: int = 0,
+        tests_passed: int = 0,
+        tests_failed: int = 0,
+        review_iteration: int = 0,
+    ) -> None:
+        if status not in VALID_PHASE_STATUSES:
+            logger.warning(
+                "Unknown PhaseResult status %r, defaulting to 'failed'", status
+            )
+            status = "failed"
+        self.status = status
+        self.blocking_issues = blocking_issues
+        self.nit_count = nit_count
+        self.artifacts = artifacts or {}
+        self.reason = reason
+        self.block_kind = block_kind
+        self.tokens_used = tokens_used
+        self.api_calls = api_calls
+        self.tests_total = tests_total
+        self.tests_passed = tests_passed
+        self.tests_failed = tests_failed
+        self.review_iteration = review_iteration
+
+
+# ---------------------------------------------------------------------------
+# Metrics Building
+# ---------------------------------------------------------------------------
+
+
+def _classify_result(phase_result: PhaseResult) -> ContractEnumResultClassification:
+    """Map a PhaseResult status to a ContractEnumResultClassification.
+
+    Args:
+        phase_result: The phase result to classify.
+
+    Returns:
+        The SPI result classification enum value.
+    """
+    from omnibase_spi.contracts.measurement import ContractEnumResultClassification
+
+    mapping = {
+        "completed": ContractEnumResultClassification.SUCCESS,
+        "blocked": ContractEnumResultClassification.PARTIAL,
+        "failed": ContractEnumResultClassification.FAILURE,
+    }
+    return mapping.get(phase_result.status, ContractEnumResultClassification.ERROR)
+
+
+def build_metrics_from_result(
+    *,
+    run_id: str,
+    phase: str,
+    attempt: int,
+    ticket_id: str,
+    repo_id: str,
+    started_at: datetime,
+    completed_at: datetime,
+    phase_result: PhaseResult,
+    instance_id: str = "",
+) -> ContractPhaseMetrics:
+    """Build a ContractPhaseMetrics from a PhaseResult.
+
+    Populates all sub-contracts (duration, cost, outcome, tests) based
+    on the phase result and timing information.
+
+    Args:
+        run_id: Pipeline run identifier.
+        phase: Pipeline phase name.
+        attempt: Attempt number (1-based).
+        ticket_id: Ticket identifier (e.g. OMN-2027).
+        repo_id: Repository identifier.
+        started_at: Phase start timestamp.
+        completed_at: Phase completion timestamp.
+        phase_result: The structured phase result.
+        instance_id: Optional instance identifier.
+
+    Returns:
+        A fully populated ContractPhaseMetrics.
+    """
+    from omnibase_spi.contracts.measurement import (
+        ContractCostMetrics,
+        ContractDurationMetrics,
+        ContractEnumPipelinePhase,
+        ContractEnumResultClassification,
+        ContractMeasurementContext,
+        ContractOutcomeMetrics,
+        ContractPhaseMetrics,
+        ContractProducer,
+        ContractTestMetrics,
+    )
+
+    from plugins.onex.hooks.lib.metrics_emitter import get_redact_secrets
+
+    max_error_len = _get_max_error_length()
+    wall_clock_ms = (completed_at - started_at).total_seconds() * 1000.0
+
+    spi_phase = PHASE_TO_SPI.get(phase)
+    if spi_phase is None:
+        logger.warning("Unknown pipeline phase %r, defaulting to IMPLEMENT", phase)
+        spi_phase = ContractEnumPipelinePhase.IMPLEMENT
+    classification = _classify_result(phase_result)
+
+    context = ContractMeasurementContext(
+        ticket_id=ticket_id,
+        repo_id=repo_id,
+        toolchain="claude-code",
+        strictness="default",
+    )
+
+    producer = ContractProducer(
+        name=PRODUCER_NAME,
+        version=PRODUCER_VERSION,
+        instance_id=instance_id or str(uuid.uuid4())[:8],
+    )
+
+    duration = ContractDurationMetrics(wall_clock_ms=wall_clock_ms)
+
+    cost = ContractCostMetrics(
+        llm_total_tokens=phase_result.tokens_used,
+    )
+
+    # Sanitize reason and block_kind: redact secrets before evt topic emission
+    error_messages: list[str] = []
+    if (
+        phase_result.reason
+        and classification != ContractEnumResultClassification.SUCCESS
+    ):
+        redact = get_redact_secrets()
+        reason_msg = redact(phase_result.reason)
+        if len(reason_msg) > max_error_len:
+            reason_msg = reason_msg[: max_error_len - 3] + "..."
+        error_messages = [reason_msg]
+
+    # Redact block_kind to prevent PII/secrets in error_codes on evt topic
+    error_codes: list[str] = []
+    if phase_result.block_kind:
+        redact = get_redact_secrets()
+        error_codes = [redact(phase_result.block_kind)]
+
+    outcome = ContractOutcomeMetrics(
+        result_classification=classification,
+        error_messages=error_messages,
+        error_codes=error_codes,
+    )
+
+    tests_passed = max(phase_result.tests_passed, 0)
+    tests_total = max(phase_result.tests_total, 0)
+    tests_failed = max(phase_result.tests_failed, 0)
+    if tests_total > 0 and tests_passed > tests_total:
+        logger.warning(
+            "tests_passed (%d) > tests_total (%d); clamping to total",
+            tests_passed,
+            tests_total,
+        )
+        tests_passed = tests_total
+    if tests_total > 0 and tests_failed > tests_total:
+        logger.warning(
+            "tests_failed (%d) > tests_total (%d); clamping to total",
+            tests_failed,
+            tests_total,
+        )
+        tests_failed = tests_total
+    if tests_total > 0 and tests_passed + tests_failed > tests_total:
+        logger.warning(
+            "tests_passed (%d) + tests_failed (%d) > tests_total (%d); "
+            "clamping tests_failed to %d",
+            tests_passed,
+            tests_failed,
+            tests_total,
+            tests_total - tests_passed,
+        )
+        tests_failed = tests_total - tests_passed
+
+    tests = ContractTestMetrics(
+        total_tests=tests_total,
+        passed_tests=tests_passed,
+        failed_tests=tests_failed,
+        pass_rate=(round(tests_passed / tests_total, 4) if tests_total > 0 else None),
+    )
+
+    return ContractPhaseMetrics(
+        run_id=run_id,
+        phase=spi_phase,
+        phase_id=f"{run_id}-{phase}-{attempt}",
+        attempt=attempt,
+        context=context,
+        producer=producer,
+        duration=duration,
+        cost=cost,
+        outcome=outcome,
+        tests=tests,
+    )
+
+
+def build_error_metrics(
+    *,
+    run_id: str,
+    phase: str,
+    attempt: int,
+    ticket_id: str,
+    repo_id: str,
+    started_at: datetime,
+    error: Exception,
+    instance_id: str = "",
+    completed_at: datetime,
+) -> ContractPhaseMetrics:
+    """Build a ContractPhaseMetrics for an error case.
+
+    Called when a phase raises an unexpected exception.
+
+    Args:
+        run_id: Pipeline run identifier.
+        phase: Pipeline phase name.
+        attempt: Attempt number.
+        ticket_id: Ticket identifier.
+        repo_id: Repository identifier.
+        started_at: Phase start timestamp.
+        error: The exception that was raised.
+        instance_id: Optional instance identifier.
+        completed_at: Phase completion timestamp (required — repository
+            invariant: no ``datetime.now()`` defaults).
+
+    Returns:
+        A ContractPhaseMetrics with ERROR classification.
+    """
+    from omnibase_spi.contracts.measurement import (
+        ContractDurationMetrics,
+        ContractEnumPipelinePhase,
+        ContractEnumResultClassification,
+        ContractMeasurementContext,
+        ContractOutcomeMetrics,
+        ContractPhaseMetrics,
+        ContractProducer,
+    )
+
+    from plugins.onex.hooks.lib.metrics_emitter import get_redact_secrets
+
+    max_error_len = _get_max_error_length()
+    wall_clock_ms = (completed_at - started_at).total_seconds() * 1000.0
+
+    spi_phase = PHASE_TO_SPI.get(phase)
+    if spi_phase is None:
+        logger.warning("Unknown pipeline phase %r, defaulting to IMPLEMENT", phase)
+        spi_phase = ContractEnumPipelinePhase.IMPLEMENT
+
+    context = ContractMeasurementContext(
+        ticket_id=ticket_id,
+        repo_id=repo_id,
+        toolchain="claude-code",
+        strictness="default",
+    )
+
+    producer = ContractProducer(
+        name=PRODUCER_NAME,
+        version=PRODUCER_VERSION,
+        instance_id=instance_id or str(uuid.uuid4())[:8],
+    )
+
+    duration = ContractDurationMetrics(wall_clock_ms=wall_clock_ms)
+
+    # Sanitize error message: redact secrets + truncate to evt topic limit
+    redact = get_redact_secrets()
+    error_msg = redact(str(error))
+    if len(error_msg) > max_error_len:
+        error_msg = error_msg[: max_error_len - 3] + "..."
+
+    # Redact error_codes for consistency with build_metrics_from_result
+    # (which redacts block_kind). Exception class names are unlikely to
+    # contain secrets, but defense-in-depth keeps the two builders aligned.
+    error_code = redact(type(error).__name__)
+
+    outcome = ContractOutcomeMetrics(
+        result_classification=ContractEnumResultClassification.ERROR,
+        error_messages=[error_msg],
+        error_codes=[error_code],
+    )
+
+    return ContractPhaseMetrics(
+        run_id=run_id,
+        phase=spi_phase,
+        phase_id=f"{run_id}-{phase}-{attempt}",
+        attempt=attempt,
+        context=context,
+        producer=producer,
+        duration=duration,
+        outcome=outcome,
+    )
+
+
+def build_skipped_metrics(
+    *,
+    run_id: str,
+    phase: str,
+    attempt: int,
+    ticket_id: str,
+    repo_id: str,
+    skip_reason: str,
+    skip_reason_code: str,
+    instance_id: str = "",
+) -> ContractPhaseMetrics:
+    """Build a ContractPhaseMetrics for a skipped phase.
+
+    Used both for explicitly skipped phases and for silent omission
+    violations detected by the orchestrator.
+
+    Args:
+        run_id: Pipeline run identifier.
+        phase: Pipeline phase name.
+        attempt: Attempt number.
+        ticket_id: Ticket identifier.
+        repo_id: Repository identifier.
+        skip_reason: Human-readable skip reason.
+        skip_reason_code: Machine-stable skip reason code.
+        instance_id: Optional instance identifier.
+
+    Returns:
+        A ContractPhaseMetrics with SKIPPED classification.
+    """
+    from omnibase_spi.contracts.measurement import (
+        ContractDurationMetrics,
+        ContractEnumPipelinePhase,
+        ContractEnumResultClassification,
+        ContractMeasurementContext,
+        ContractOutcomeMetrics,
+        ContractPhaseMetrics,
+        ContractProducer,
+    )
+
+    from plugins.onex.hooks.lib.metrics_emitter import get_redact_secrets
+
+    max_error_len = _get_max_error_length()
+    spi_phase = PHASE_TO_SPI.get(phase)
+    if spi_phase is None:
+        logger.warning("Unknown pipeline phase %r, defaulting to IMPLEMENT", phase)
+        spi_phase = ContractEnumPipelinePhase.IMPLEMENT
+
+    context = ContractMeasurementContext(
+        ticket_id=ticket_id,
+        repo_id=repo_id,
+        toolchain="claude-code",
+        strictness="default",
+    )
+
+    producer = ContractProducer(
+        name=PRODUCER_NAME,
+        version=PRODUCER_VERSION,
+        instance_id=instance_id or str(uuid.uuid4())[:8],
+    )
+
+    duration = ContractDurationMetrics(wall_clock_ms=0.0)
+
+    # Sanitize skip_reason: redact secrets + truncate (defense-in-depth,
+    # consistent with build_metrics_from_result and build_error_metrics)
+    redact = get_redact_secrets()
+    clean_reason = redact(skip_reason)
+    if len(clean_reason) > max_error_len:
+        clean_reason = clean_reason[: max_error_len - 3] + "..."
+
+    outcome = ContractOutcomeMetrics(
+        result_classification=ContractEnumResultClassification.SKIPPED,
+        skip_reason=clean_reason,
+        skip_reason_code=skip_reason_code,
+    )
+
+    return ContractPhaseMetrics(
+        run_id=run_id,
+        phase=spi_phase,
+        phase_id=f"{run_id}-{phase}-{attempt}",
+        attempt=attempt,
+        context=context,
+        producer=producer,
+        duration=duration,
+        outcome=outcome,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Instrumentation Wrapper
+# ---------------------------------------------------------------------------
+
+
+def instrumented_phase(
+    *,
+    run_id: str,
+    phase: str,
+    attempt: int,
+    ticket_id: str,
+    repo_id: str,
+    phase_fn: Callable[[], PhaseResult],
+    instance_id: str = "",
+    started_at: datetime,
+    completed_at: datetime | None = None,
+) -> PhaseResult:
+    """Execute a pipeline phase with full instrumentation.
+
+    Wraps the phase callable with timing, metrics building, emission,
+    and artifact persistence. Captures both success and error paths.
+
+    This is the primary entry point for instrumented phase execution.
+    Every pipeline phase MUST be called through this wrapper.
+
+    Args:
+        run_id: Pipeline run identifier.
+        phase: Pipeline phase name.
+        attempt: Attempt number (1-based).
+        ticket_id: Ticket identifier.
+        repo_id: Repository identifier.
+        phase_fn: Zero-argument callable that executes the phase.
+        instance_id: Optional instance identifier.
+        started_at: Phase start timestamp. Required — callers must
+            inject an explicit timestamp (repository invariant: no
+            ``datetime.now()`` defaults).
+        completed_at: Explicit completion timestamp. When *None*,
+            captured via ``datetime.now(UTC)`` after *phase_fn* returns
+            or raises — this is a **timing boundary**, not a data
+            default, so it is exempt from the "no implicit timestamps"
+            repository invariant. Inject an explicit value in tests for
+            deterministic assertions.
+
+    Returns:
+        The PhaseResult from phase_fn.
+
+    Raises:
+        Exception: Re-raises any exception from phase_fn after recording
+            error metrics.
+    """
+    from plugins.onex.hooks.lib.metrics_emitter import (
+        emit_phase_metrics,
+        write_metrics_artifact,
+    )
+
+    # Explicit init: overwritten in both success and error paths below.
+    # Prevents NameError if code between phase_fn() and the assignment
+    # is ever reordered during maintenance. If the except block raises
+    # before reassignment, this gives 0ms wall_clock — a detectable
+    # anomaly, preferable to an unrelated NameError.
+    _completed = started_at
+
+    try:
+        result = phase_fn()
+
+        if completed_at is None:
+            logger.debug(
+                "completed_at not injected for %s; using datetime.now(UTC) "
+                "(timing boundary — acceptable for production, inject for tests)",
+                phase,
+            )
+        _completed = completed_at if completed_at is not None else datetime.now(UTC)
+        metrics = build_metrics_from_result(
+            run_id=run_id,
+            phase=phase,
+            attempt=attempt,
+            ticket_id=ticket_id,
+            repo_id=repo_id,
+            started_at=started_at,
+            completed_at=_completed,
+            phase_result=result,
+            instance_id=instance_id,
+        )
+
+    except Exception as e:
+        if completed_at is None:
+            logger.debug(
+                "completed_at not injected for %s error path; using datetime.now(UTC)",
+                phase,
+            )
+        _completed = completed_at if completed_at is not None else datetime.now(UTC)
+        try:
+            metrics = build_error_metrics(
+                run_id=run_id,
+                phase=phase,
+                attempt=attempt,
+                ticket_id=ticket_id,
+                repo_id=repo_id,
+                started_at=started_at,
+                error=e,
+                instance_id=instance_id,
+                completed_at=_completed,
+            )
+            # Emit and persist even on error
+            emit_phase_metrics(metrics, timestamp_iso=_completed.isoformat())
+            write_metrics_artifact(ticket_id, run_id, phase, attempt, metrics)
+        except Exception as metrics_err:
+            # build_error_metrics imports from omnibase_spi; if that import
+            # fails (degraded mode), we still re-raise the original error.
+            logger.warning(
+                "Failed to build/emit error metrics for %s: %s "
+                "(original error will still be raised)",
+                phase,
+                metrics_err,
+            )
+        raise
+
+    # Emit and persist on success — wrapped for defense-in-depth so
+    # emission failures never prevent the caller from receiving the result.
+    try:
+        emit_phase_metrics(metrics, timestamp_iso=_completed.isoformat())
+        write_metrics_artifact(ticket_id, run_id, phase, attempt, metrics)
+    except Exception as exc:
+        logger.warning("Post-phase emit/write failed for %s: %s", phase, exc)
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Silent Omission Detection
+# ---------------------------------------------------------------------------
+
+
+def detect_silent_omission(
+    *,
+    ticket_id: str,
+    run_id: str,
+    phase: str,
+    attempt: int,
+    repo_id: str,
+    instance_id: str = "",
+    timestamp_iso: str | None = None,
+) -> ContractPhaseMetrics | None:
+    """Detect and record a silent omission violation.
+
+    Called by the pipeline orchestrator after each phase. If no metrics
+    artifact exists for the given phase/attempt, this function builds
+    and emits a skipped record with the protocol violation code.
+
+    Args:
+        ticket_id: Ticket identifier.
+        run_id: Pipeline run identifier.
+        phase: Pipeline phase name.
+        attempt: Attempt number.
+        repo_id: Repository identifier.
+        instance_id: Optional instance identifier.
+        timestamp_iso: Explicit ISO-8601 timestamp for the emission event.
+            Required for deterministic testing. Defaults to
+            ``datetime.now(UTC).isoformat()`` in production.
+
+    Returns:
+        A ContractPhaseMetrics with SKIPPED classification if omission
+        detected, or None if metrics artifact exists.
+    """
+    from plugins.onex.hooks.lib.metrics_emitter import (
+        emit_phase_metrics,
+        metrics_artifact_exists,
+        write_metrics_artifact,
+    )
+
+    if metrics_artifact_exists(ticket_id, run_id, phase, attempt):
+        return None
+
+    logger.warning(
+        "Silent omission detected: %s attempt %d for %s run %s "
+        "did not emit metrics. Recording protocol violation.",
+        phase,
+        attempt,
+        ticket_id,
+        run_id,
+    )
+
+    violation = build_skipped_metrics(
+        run_id=run_id,
+        phase=phase,
+        attempt=attempt,
+        ticket_id=ticket_id,
+        repo_id=repo_id,
+        skip_reason=(
+            f"Phase {phase} exited without emitting metrics. "
+            f"This is a protocol violation."
+        ),
+        skip_reason_code="metrics_missing_protocol_violation",
+        instance_id=instance_id,
+    )
+
+    # Emit and persist the violation record.
+    # Like instrumented_phase(), this is a top-level entry point that
+    # legitimately creates timestamps when none are injected. The lower-
+    # level builders enforce the "no implicit timestamps" invariant.
+    if timestamp_iso is None:
+        logger.debug(
+            "timestamp_iso not injected for silent omission of %s; "
+            "using datetime.now(UTC) (inject for deterministic tests)",
+            phase,
+        )
+    _ts = timestamp_iso if timestamp_iso is not None else datetime.now(UTC).isoformat()
+    emit_phase_metrics(violation, timestamp_iso=_ts)
+    write_metrics_artifact(ticket_id, run_id, phase, attempt, violation)
+
+    return violation
+
+
+# ---------------------------------------------------------------------------
+# MeasurementCheck Integration
+# ---------------------------------------------------------------------------
+
+
+class MeasurementCheckResult:
+    """Result of a single measurement check.
+
+    Compatible with ContractCheckResult(domain="measurement").
+
+    Attributes:
+        check_id: The MeasurementCheck enum value.
+        passed: Whether the check passed.
+        message: Human-readable result message.
+        domain: Always "measurement".
+    """
+
+    __slots__ = ("check_id", "domain", "message", "passed")
+
+    def __init__(
+        self,
+        *,
+        check_id: str,
+        passed: bool,
+        message: str,
+    ) -> None:
+        self.check_id = check_id
+        self.passed = passed
+        self.message = message
+        self.domain = "measurement"
+
+    def __repr__(self) -> str:
+        status = "PASS" if self.passed else "FAIL"
+        return f"MeasurementCheckResult({self.check_id}: {status} - {self.message})"
+
+
+def run_measurement_checks(
+    metrics: ContractPhaseMetrics | None,
+    phase: str,
+) -> list[MeasurementCheckResult]:
+    """Run all measurement checks against a ContractPhaseMetrics.
+
+    Produces CHECK-MEAS-001 through CHECK-MEAS-006 results.
+
+    Args:
+        metrics: The phase metrics to validate, or None if metrics are unavailable.
+        phase: The pipeline phase name (for budget lookups).
+
+    Returns:
+        List of MeasurementCheckResult instances.
+    """
+    from omnibase_spi.contracts.measurement import (
+        ContractEnumResultClassification,
+        MeasurementCheck,
+    )
+
+    results: list[MeasurementCheckResult] = []
+
+    # CHECK-MEAS-001: Phase metrics were emitted (artifact exists)
+    # If we have a metrics object at all, this check passes.
+    results.append(
+        MeasurementCheckResult(
+            check_id=MeasurementCheck.CHECK_MEAS_001,
+            passed=metrics is not None,
+            message="Phase metrics emitted"
+            if metrics is not None
+            else "Phase metrics missing",
+        )
+    )
+
+    if metrics is None:
+        # Remaining checks cannot run without metrics
+        for check in [
+            MeasurementCheck.CHECK_MEAS_002,
+            MeasurementCheck.CHECK_MEAS_003,
+            MeasurementCheck.CHECK_MEAS_004,
+            MeasurementCheck.CHECK_MEAS_005,
+            MeasurementCheck.CHECK_MEAS_006,
+        ]:
+            results.append(
+                MeasurementCheckResult(
+                    check_id=check,
+                    passed=False,
+                    message="Cannot evaluate: no metrics available",
+                )
+            )
+        return results
+
+    # CHECK-MEAS-002: Duration within budget
+    budget_ms = DURATION_BUDGETS_MS.get(phase, float("inf"))
+    actual_ms = metrics.duration.wall_clock_ms if metrics.duration else 0.0
+    within_budget = actual_ms <= budget_ms
+    results.append(
+        MeasurementCheckResult(
+            check_id=MeasurementCheck.CHECK_MEAS_002,
+            passed=within_budget,
+            message=(
+                f"Duration {actual_ms:.0f}ms within budget {budget_ms:.0f}ms"
+                if within_budget
+                else f"Duration {actual_ms:.0f}ms exceeds budget {budget_ms:.0f}ms"
+            ),
+        )
+    )
+
+    # CHECK-MEAS-003: Tokens within budget
+    token_budget = TOKEN_BUDGETS.get(phase, sys.maxsize)
+    actual_tokens = metrics.cost.llm_total_tokens if metrics.cost else 0
+    tokens_ok = actual_tokens <= token_budget
+    results.append(
+        MeasurementCheckResult(
+            check_id=MeasurementCheck.CHECK_MEAS_003,
+            passed=tokens_ok,
+            message=(
+                f"Tokens {actual_tokens} within budget {token_budget}"
+                if tokens_ok
+                else f"Tokens {actual_tokens} exceeds budget {token_budget}"
+            ),
+        )
+    )
+
+    # CHECK-MEAS-004: Tests ran (tests_total > 0 for test-bearing phases)
+    if phase in TEST_BEARING_PHASES:
+        tests_ran = metrics.tests is not None and metrics.tests.total_tests > 0
+        results.append(
+            MeasurementCheckResult(
+                check_id=MeasurementCheck.CHECK_MEAS_004,
+                passed=tests_ran,
+                message=(
+                    f"Tests ran: {metrics.tests.total_tests} total"
+                    if tests_ran and metrics.tests
+                    else "No tests ran for test-bearing phase"
+                ),
+            )
+        )
+    else:
+        results.append(
+            MeasurementCheckResult(
+                check_id=MeasurementCheck.CHECK_MEAS_004,
+                passed=True,
+                message=f"Phase {phase} is not test-bearing, check N/A",
+            )
+        )
+
+    # CHECK-MEAS-005: No flake (stable outcome signature)
+    # A phase is considered flaky if outcome is ERROR with no error_codes
+    outcome = metrics.outcome
+    if outcome:
+        has_stable_outcome = (
+            outcome.result_classification != ContractEnumResultClassification.ERROR
+            or len(outcome.error_codes) > 0
+        )
+    else:
+        has_stable_outcome = False
+    results.append(
+        MeasurementCheckResult(
+            check_id=MeasurementCheck.CHECK_MEAS_005,
+            passed=has_stable_outcome,
+            message=(
+                "Outcome has stable classification"
+                if has_stable_outcome
+                else "Outcome is ERROR with no error codes (possible flake)"
+            ),
+        )
+    )
+
+    # CHECK-MEAS-006: Metrics complete (all mandatory fields non-default)
+    mandatory_present = all(
+        [
+            metrics.run_id,
+            metrics.phase,
+            metrics.duration is not None,
+            metrics.outcome is not None,
+            metrics.context is not None,
+            metrics.producer is not None,
+        ]
+    )
+    results.append(
+        MeasurementCheckResult(
+            check_id=MeasurementCheck.CHECK_MEAS_006,
+            passed=mandatory_present,
+            message=(
+                "All mandatory measurement fields present"
+                if mandatory_present
+                else "Some mandatory measurement fields are missing or default"
+            ),
+        )
+    )
+
+    return results
+
+
+__all__ = [
+    # Core types
+    "PhaseResult",
+    "MeasurementCheckResult",
+    # Constants
+    "PHASE_TO_SPI",
+    "TEST_BEARING_PHASES",
+    "DURATION_BUDGETS_MS",
+    "TOKEN_BUDGETS",
+    "PRODUCER_NAME",
+    "PRODUCER_VERSION",
+    # Metrics building
+    "build_metrics_from_result",
+    "build_error_metrics",
+    "build_skipped_metrics",
+    # Instrumentation
+    "instrumented_phase",
+    # Omission detection
+    "detect_silent_omission",
+    # Checks
+    "run_measurement_checks",
+]

@@ -201,12 +201,12 @@ class TestGetRegistration:
         assert len(reg.fan_out) == 2
 
     def test_get_registration_prompt_submitted_required_fields(self) -> None:
-        """Verify prompt.submitted requires prompt and session_id."""
+        """Verify prompt.submitted requires prompt_preview and session_id."""
         from omniclaude.hooks.event_registry import get_registration
 
         reg = get_registration("prompt.submitted")
         assert reg is not None
-        assert "prompt" in reg.required_fields
+        assert "prompt_preview" in reg.required_fields
         assert "session_id" in reg.required_fields
 
     def test_get_registration_tool_executed(self) -> None:
@@ -231,7 +231,7 @@ class TestValidatePayload:
         """Verify validate_payload returns list of missing fields."""
         from omniclaude.hooks.event_registry import validate_payload
 
-        missing = validate_payload("prompt.submitted", {"prompt": "hello"})
+        missing = validate_payload("prompt.submitted", {"prompt_preview": "hello"})
         assert isinstance(missing, list)
         assert "session_id" in missing
 
@@ -240,7 +240,7 @@ class TestValidatePayload:
         from omniclaude.hooks.event_registry import validate_payload
 
         missing = validate_payload(
-            "prompt.submitted", {"prompt": "hello", "session_id": "xyz"}
+            "prompt.submitted", {"prompt_preview": "hello", "session_id": "xyz"}
         )
         assert len(missing) == 0
 
@@ -285,9 +285,9 @@ class TestValidatePayload:
         """Verify validate_payload returns all missing fields."""
         from omniclaude.hooks.event_registry import validate_payload
 
-        # prompt.submitted requires both prompt and session_id
+        # prompt.submitted requires both prompt_preview and session_id
         missing = validate_payload("prompt.submitted", {})
-        assert "prompt" in missing
+        assert "prompt_preview" in missing
         assert "session_id" in missing
 
     def test_validate_payload_extra_fields_ignored(self) -> None:
@@ -501,6 +501,54 @@ class TestTransformForObservability:
         transform_for_observability(original)
 
         # Original should be unchanged
+        assert original == original_copy
+
+    def test_transform_new_payload_strips_prompt_b64(self) -> None:
+        """New payload shape: prompt_b64 is stripped from observability output."""
+        from omniclaude.hooks.event_registry import transform_for_observability
+
+        payload = {
+            "prompt_preview": "Fix the bug in auth.py",
+            "prompt_b64": "RnVsbCBwcm9tcHQgY29udGVudA==",
+            "prompt_length": 42,
+            "session_id": "abc123",
+        }
+        result = transform_for_observability(payload)
+
+        assert "prompt_b64" not in result
+        assert "prompt_preview" in result
+        assert result["prompt_length"] == 42
+        assert result["session_id"] == "abc123"
+
+    def test_transform_new_payload_preserves_prompt_length(self) -> None:
+        """New payload shape: prompt_length from hook is preserved (not recalculated)."""
+        from omniclaude.hooks.event_registry import transform_for_observability
+
+        payload = {
+            "prompt_preview": "Short preview",
+            "prompt_b64": "TG9uZyBwcm9tcHQ=",
+            "prompt_length": 500,  # Original prompt was 500 chars
+            "session_id": "abc",
+        }
+        result = transform_for_observability(payload)
+
+        # prompt_length should be the original value, not len(prompt_preview)
+        assert result["prompt_length"] == 500
+
+    def test_transform_new_payload_does_not_mutate_original(self) -> None:
+        """New payload shape: original payload is not mutated."""
+        from omniclaude.hooks.event_registry import transform_for_observability
+
+        original = {
+            "prompt_preview": "Hello",
+            "prompt_b64": "SGVsbG8=",
+            "prompt_length": 5,
+            "session_id": "abc",
+        }
+        original_copy = dict(original)
+
+        transform_for_observability(original)
+
         assert original == original_copy
 
 

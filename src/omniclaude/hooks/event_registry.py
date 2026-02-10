@@ -80,41 +80,58 @@ PayloadTransform = Callable[[dict[str, object]], dict[str, object]]
 def transform_for_observability(payload: dict[str, object]) -> dict[str, object]:
     """Transform prompt payload for observability topic.
 
-    This transform:
-    1. Extracts the full prompt from the payload
-    2. Creates a sanitized, truncated preview (max 100 chars)
-    3. Records the original prompt length
-    4. Removes the full prompt from the output
+    Handles two payload shapes:
+
+    **New shape** (OMN-2027): Hook sends ``prompt_preview``, ``prompt_length``,
+    and ``prompt_b64``. This transform strips ``prompt_b64`` (full prompt) and
+    re-sanitizes ``prompt_preview`` for defense-in-depth.
+
+    **Legacy shape**: Hook sends a raw ``prompt`` field. This transform creates
+    a sanitized preview, records original length, and removes the full prompt.
 
     The resulting payload is suitable for the observability topic where
     we want metadata about prompts without storing full content.
 
     Args:
-        payload: Original event payload containing 'prompt' field.
+        payload: Original event payload (new or legacy shape).
 
     Returns:
         Transformed payload with:
         - prompt_preview: Sanitized, truncated preview (max 100 chars)
         - prompt_length: Original prompt length in characters
         - All other original fields preserved
-        - 'prompt' field removed (replaced by preview)
+        - Full prompt fields removed (prompt, prompt_b64)
 
     Example:
-        >>> payload = {"prompt": "Fix the bug in auth.py with API key sk-abc123...", "session_id": "xyz"}
+        >>> payload = {"prompt_preview": "Fix the bug...", "prompt_b64": "RnVsbA==", "prompt_length": 42, "session_id": "xyz"}
         >>> result = transform_for_observability(payload)
-        >>> "prompt" not in result  # Full prompt removed
+        >>> "prompt_b64" not in result  # Full prompt removed
         True
-        >>> "prompt_preview" in result  # Preview added
-        True
-        >>> "prompt_length" in result  # Length added
-        True
-        >>> "sk-" not in result["prompt_preview"]  # Secrets redacted
+        >>> "prompt_preview" in result  # Preview preserved
         True
     """
     # Create a copy to avoid mutating the original
     result: dict[str, object] = dict(payload)
 
-    # Extract the full prompt
+    # New payload shape (OMN-2027): hook sends prompt_preview + prompt_b64
+    # instead of a raw "prompt" field. Detect via prompt_b64 presence.
+    if "prompt_b64" in payload:
+        # prompt_preview and prompt_length are already set by the hook.
+        # Just strip the full-prompt fields that must not reach the evt topic.
+        result.pop("prompt_b64", None)
+        result.pop("prompt", None)
+
+        # Re-sanitize prompt_preview for defense-in-depth (hook truncates
+        # to 100 chars but does not run full secret redaction).
+        preview = payload.get("prompt_preview", "")
+        if not isinstance(preview, str):
+            preview = str(preview) if preview is not None else ""
+        result["prompt_preview"] = _sanitize_prompt_preview(
+            preview, max_length=PROMPT_PREVIEW_MAX_LENGTH
+        )
+        return result
+
+    # Legacy payload shape: raw "prompt" field (backwards compatibility)
     full_prompt = payload.get("prompt", "")
     if not isinstance(full_prompt, str):
         full_prompt = str(full_prompt) if full_prompt is not None else ""
@@ -221,7 +238,7 @@ class EventRegistration:
         ...         FanOutRule(topic_base=TopicBase.PROMPT_SUBMITTED, transform=transform_for_observability),
         ...     ],
         ...     partition_key_field="session_id",
-        ...     required_fields=["prompt", "session_id"],
+        ...     required_fields=["prompt_preview", "session_id"],
         ... )
     """
 
@@ -315,7 +332,7 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
             ),
         ],
         partition_key_field="session_id",
-        required_fields=["prompt", "session_id"],
+        required_fields=["prompt_preview", "session_id"],
     ),
     # =========================================================================
     # Tool Events
@@ -455,6 +472,21 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         partition_key_field="session_id",
         required_fields=["session_id"],
     ),
+    # =========================================================================
+    # Phase Metrics (OMN-2027 - pipeline measurement)
+    # =========================================================================
+    "phase.metrics": EventRegistration(
+        event_type="phase.metrics",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.PHASE_METRICS,
+                transform=None,  # Passthrough (pre-sanitized by metrics_emitter)
+                description="Phase instrumentation metrics for pipeline observability",
+            ),
+        ],
+        partition_key_field=None,  # No partition key; events are round-robin distributed
+        required_fields=["event_id", "event_type", "timestamp_iso", "payload"],
+    ),
 }
 
 
@@ -512,10 +544,10 @@ def validate_payload(event_type: str, payload: dict[str, object]) -> list[str]:
         KeyError: If the event type is not registered.
 
     Example:
-        >>> missing = validate_payload("prompt.submitted", {"prompt": "hello"})
+        >>> missing = validate_payload("prompt.submitted", {"prompt_preview": "hello"})
         >>> "session_id" in missing  # session_id is required
         True
-        >>> missing = validate_payload("prompt.submitted", {"prompt": "hello", "session_id": "xyz"})
+        >>> missing = validate_payload("prompt.submitted", {"prompt_preview": "hello", "session_id": "xyz"})
         >>> len(missing)
         0
     """
@@ -541,7 +573,7 @@ def get_partition_key(event_type: str, payload: dict[str, object]) -> str | None
         KeyError: If the event type is not registered.
 
     Example:
-        >>> key = get_partition_key("prompt.submitted", {"session_id": "abc123", "prompt": "hello"})
+        >>> key = get_partition_key("prompt.submitted", {"session_id": "abc123", "prompt_preview": "hello"})
         >>> key
         'abc123'
     """
