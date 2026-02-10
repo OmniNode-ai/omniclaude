@@ -27,69 +27,20 @@ import functools
 import logging
 import math
 from dataclasses import dataclass
-from pathlib import Path
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING
 
 import tiktoken
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from omniclaude.hooks.dict_evidence_resolver import DictEvidenceResolver
+from omniclaude.hooks.evidence_resolver import EvidenceResolver, NullEvidenceResolver
+from omniclaude.hooks.file_evidence_resolver import FileEvidenceResolver
+
 if TYPE_CHECKING:
     from omniclaude.hooks.handler_context_injection import PatternRecord
 
 logger = logging.getLogger(__name__)
-
-# =============================================================================
-# Evidence Resolver Protocol (OMN-2092)
-# =============================================================================
-
-
-@runtime_checkable
-class EvidenceResolver(Protocol):
-    """Protocol for resolving gate results per pattern.
-
-    Implementations provide the bridge between promotion gate storage
-    and the injection pipeline. The sync path is kept testable by
-    defaulting to NullEvidenceResolver (no file I/O).
-    """
-
-    def resolve(self, pattern_id: str) -> str | None:
-        """Look up the gate_result for a pattern.
-
-        Returns:
-            "pass", "fail", "insufficient_evidence", or None if unknown.
-        """
-        ...
-
-
-class NullEvidenceResolver:
-    """Always returns None — default, preserves current behavior."""
-
-    def resolve(self, pattern_id: str) -> str | None:
-        return None
-
-
-class DictEvidenceResolver:
-    """Test helper — resolves from an in-memory dict."""
-
-    def __init__(self, gates: dict[str, str]) -> None:
-        self._gates = gates
-
-    def resolve(self, pattern_id: str) -> str | None:
-        return self._gates.get(pattern_id)
-
-
-class FileEvidenceResolver:
-    """Reads gate results from ~/.claude/baselines/ via load_latest_gate_result()."""
-
-    def __init__(self, baselines_root: Path | None = None) -> None:
-        self._baselines_root = baselines_root
-
-    def resolve(self, pattern_id: str) -> str | None:
-        from plugins.onex.hooks.lib.metrics_aggregator import load_latest_gate_result
-
-        return load_latest_gate_result(pattern_id, baselines_root=self._baselines_root)
-
 
 # =============================================================================
 # Header Constant (Single Source of Truth)
