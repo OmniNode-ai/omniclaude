@@ -122,10 +122,22 @@ If pipeline runs unattended, worst case:
 - Sends Slack notifications -- ignorable
 - Updates Linear status -- manually reversible
 
+## Supporting Modules (OMN-1970)
+
+| Module | Location | Purpose |
+|--------|----------|---------|
+| `pipeline_slack_notifier.py` | `plugins/onex/hooks/lib/` | Threaded Slack notifications with correlation formatting |
+| `cross_repo_detector.py` | `plugins/onex/hooks/lib/` | Detect changes spanning multiple repo roots |
+| `linear_contract_patcher.py` | `plugins/onex/hooks/lib/` | Safe marker-based patching of Linear descriptions |
+
+These modules are imported by the pipeline orchestration logic in `prompt.md`.
+
 ## See Also
 
 - `ticket-work` skill (Phase 1)
 - `local-review` command (Phase 2)
 - `pr-release-ready` command (Phase 4)
-- `emit_client_wrapper` (Slack notifications)
+- `emit_client_wrapper` (Kafka event emission)
+- `HandlerSlackWebhook` in omnibase_infra (Slack delivery infrastructure)
+- OMN-2157 (Web API threading support — future dependency)
 - Linear MCP tools (`mcp__linear-server__*`)
