@@ -448,10 +448,15 @@ def build_error_metrics(
     if len(error_msg) > max_error_len:
         error_msg = error_msg[: max_error_len - 3] + "..."
 
+    # Redact error_codes for consistency with build_metrics_from_result
+    # (which redacts block_kind). Exception class names are unlikely to
+    # contain secrets, but defense-in-depth keeps the two builders aligned.
+    error_code = redact(type(error).__name__)
+
     outcome = ContractOutcomeMetrics(
         result_classification=ContractEnumResultClassification.ERROR,
         error_messages=[error_msg],
-        error_codes=[type(error).__name__],
+        error_codes=[error_code],
     )
 
     return ContractPhaseMetrics(
@@ -608,7 +613,9 @@ def instrumented_phase(
 
     # Explicit init: overwritten in both success and error paths below.
     # Prevents NameError if code between phase_fn() and the assignment
-    # is ever reordered during maintenance.
+    # is ever reordered during maintenance. If the except block raises
+    # before reassignment, this gives 0ms wall_clock — a detectable
+    # anomaly, preferable to an unrelated NameError.
     _completed = started_at
 
     try:

@@ -262,6 +262,10 @@ fetch_failures_for_pr() {
     total_api_count=$(echo "$api_response" | jq '.total_count // 0')
 
     local failed_checks
+    # NOTE: Only captures GitHub Actions check runs (.app.slug == "github-actions").
+    # Third-party CI systems (CircleCI, Jenkins, etc.) that register check runs
+    # with a different app slug are excluded. Users should verify in the GitHub
+    # Actions UI if they suspect third-party CI failures.
     failed_checks=$(echo "$api_response" | jq '[.check_runs[] | select(.conclusion == "failure" and .app.slug == "github-actions")]')
 
     local check_count
@@ -301,7 +305,12 @@ fetch_failures_for_pr() {
         local workflow_name run_id run_url
         workflow_name=$(echo "$job_details" | jq -r '.workflow_name // "Unknown"')
         run_id=$(echo "$job_details" | jq -r '.run_id // 0')
-        run_url="https://github.com/$REPO_OWNER/$REPO_NAME/actions/runs/$run_id"
+        if [ "$run_id" = "0" ] || [ "$run_id" = "null" ]; then
+            # Job details unavailable — use the check run's own URL instead
+            run_url="$job_url"
+        else
+            run_url="https://github.com/$REPO_OWNER/$REPO_NAME/actions/runs/$run_id"
+        fi
 
         # Apply workflow filter if set
         if [ -n "$WORKFLOW_FILTER" ]; then

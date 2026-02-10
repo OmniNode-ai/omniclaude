@@ -182,7 +182,14 @@ class _SocketEmitClient:
         self._timeout = timeout
 
     def _request(self, data: dict[str, Any]) -> dict[str, Any]:
-        """Send a JSON request and return the parsed response."""
+        """Send a JSON request and return the parsed response.
+
+        Raises:
+            FileNotFoundError: If the Unix socket path does not exist.
+            ConnectionRefusedError: If the daemon is not accepting connections.
+            TimeoutError: If the socket operation times out.
+            ConnectionError: If the daemon response is empty or too large.
+        """
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         sock.settimeout(self._timeout)
         try:

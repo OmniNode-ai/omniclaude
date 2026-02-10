@@ -71,7 +71,7 @@ _FALLBACK_SECRET_PATTERNS = [
     re.compile(r"AKIA[A-Z0-9]{16}"),  # AWS access keys
     re.compile(r"ghp_[A-Za-z0-9]{36,}"),  # GitHub PATs
     re.compile(r"gho_[A-Za-z0-9]{36,}"),  # GitHub OAuth tokens
-    re.compile(r"xox[bpsar]-[A-Za-z0-9\-]+"),  # Slack tokens
+    re.compile(r"xox[bpsar]-[A-Za-z0-9\-]{10,}"),  # Slack tokens (min 10 chars)
     re.compile(r"Bearer\s+[A-Za-z0-9\-._~+/]+=*", re.IGNORECASE),  # Bearer tokens
     re.compile(r"-----BEGIN\s+\w+\s+PRIVATE\s+KEY-----"),  # PEM keys
     re.compile(r"://[^@\s]+:[^@\s]+@"),  # Passwords in URLs
@@ -399,6 +399,8 @@ def write_metrics_artifact(
     Persisted via model_dump(mode="json"). Survives daemon outage.
     Uses atomic write (temp file + rename) which is safe on local POSIX
     filesystems. Not guaranteed atomic on network-mounted filesystems.
+    On crash between write and rename, an orphaned ``.json.tmp`` file
+    may remain; it is overwritten by the next write to the same path.
 
     Args:
         ticket_id: The ticket identifier (e.g. OMN-2027).
