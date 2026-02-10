@@ -206,11 +206,14 @@ def save_baseline(
     context: ContractMeasurementContext,
     *,
     baselines_root: Path | None = None,
-) -> Path:
+) -> Path | None:
     """Persist a run as the baseline for the given context.
 
     Storage: {baselines_root}/{pattern_id}/{baseline_key}/latest.metrics.json
     Uses atomic write (tmp + rename).
+
+    Returns:
+        The path to the saved file on success, or None on failure.
     """
     root = baselines_root or BASELINES_ROOT
     baseline_key = derive_baseline_key(context)
@@ -229,7 +232,7 @@ def save_baseline(
             tmp.unlink(missing_ok=True)
         except OSError:
             pass
-        return target
+        return None
     return target
 
 
@@ -391,11 +394,14 @@ def save_gate(
     context: ContractMeasurementContext,
     *,
     baselines_root: Path | None = None,
-) -> Path:
+) -> Path | None:
     """Persist a gate as the baseline for the given context.
 
     Storage: {baselines_root}/{pattern_id}/{baseline_key}/latest.gate.json
     Uses atomic write (tmp + rename).
+
+    Returns:
+        The path to the saved file on success, or None on failure.
     """
     root = baselines_root or BASELINES_ROOT
     baseline_key = derive_baseline_key(context)
@@ -415,7 +421,7 @@ def save_gate(
             tmp.unlink(missing_ok=True)
         except OSError:
             pass
-        return target
+        return None
     return target
 
 
@@ -459,6 +465,11 @@ def load_latest_gate_result(
     if not pattern_id:
         logger.debug(
             "load_latest_gate_result called with empty pattern_id; returning None"
+        )
+        return None
+    if ".." in pattern_id or "/" in pattern_id:
+        logger.warning(
+            "Rejected pattern_id %r: contains path traversal characters", pattern_id
         )
         return None
     pattern_dir = root / pattern_id

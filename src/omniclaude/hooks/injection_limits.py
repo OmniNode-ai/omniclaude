@@ -245,7 +245,8 @@ def compute_effective_score(
             clamped to [0.0, 1.0] during application.
 
     Returns:
-        Effective score (0.0 to 1.0+, can exceed 1.0 when evidence_boost > 1.0).
+        Effective score, typically 0.0 to 1.0. Can exceed 1.0 (up to 3.0)
+        when evidence_boost is applied to high-scoring patterns.
 
     Examples:
         >>> compute_effective_score(0.9, 0.8, 10)  # High confidence, good success
@@ -655,7 +656,9 @@ def select_patterns_for_injection(
     if limits.evidence_policy != "ignore" and evidence_resolver is None:
         logger.warning(
             "evidence_policy=%r but no evidence_resolver provided; "
-            "evidence policy will have no effect (all patterns pass through)",
+            "falling back to no filtering (all patterns pass through unmodified). "
+            "Wire an EvidenceResolver to enable %s mode.",
+            limits.evidence_policy,
             limits.evidence_policy,
         )
 

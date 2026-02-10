@@ -592,8 +592,8 @@ class TestGateStorage:
         result = load_gate(ctx, baselines_root=tmp_path)
         assert result is None
 
-    def test_load_latest_gate_result_scans_subdirs(self, tmp_path: Path) -> None:
-        """Create gates in multiple subdirs, verify most recent returned."""
+    def test_load_latest_gate_result_per_pattern(self, tmp_path: Path) -> None:
+        """Save gates for different pattern_ids, load by specific pattern_id."""
         from omnibase_spi.contracts.measurement.contract_promotion_gate import (
             ContractPromotionGate,
         )
@@ -606,7 +606,6 @@ class TestGateStorage:
         # Create gates in different patterns (same ticket)
         ctx_a = _make_context(ticket_id="OMN-2092", pattern_id="pat-a")
         ctx_b = _make_context(ticket_id="OMN-2092", pattern_id="pat-b")
-        ctx_c = _make_context(ticket_id="OMN-2092", pattern_id="pat-c")
 
         gate_a = ContractPromotionGate(
             run_id="run-a",
@@ -624,26 +623,41 @@ class TestGateStorage:
             sufficient_count=0,
             total_count=1,
         )
-        gate_c = ContractPromotionGate(
-            run_id="run-c",
-            gate_result="pass",
-            baseline_key="key-c",
-            required_dimensions=["tests"],
-            sufficient_count=1,
-            total_count=1,
-        )
 
-        # Save gates (b is saved last, so it's most recent)
         save_gate(gate_a, ctx_a, baselines_root=tmp_path)
-        save_gate(gate_c, ctx_c, baselines_root=tmp_path)
         path_b = save_gate(gate_b, ctx_b, baselines_root=tmp_path)
 
-        # Load latest gate result for pat-b pattern
-        result = load_latest_gate_result("pat-b", baselines_root=tmp_path)
-        assert result == "fail"
+        # Load by specific pattern_id — should return that pattern's gate
+        assert load_latest_gate_result("pat-a", baselines_root=tmp_path) == "pass"
+        assert load_latest_gate_result("pat-b", baselines_root=tmp_path) == "fail"
+        assert path_b is not None and path_b.exists()
 
-        # Verify it found the most recent file (gate_b)
-        assert path_b.exists()
+    def test_load_latest_gate_result_scans_subdirs(self, tmp_path: Path) -> None:
+        """Multiple baseline_keys under one pattern_id; most recent wins."""
+        import json
+        import time
+
+        from plugins.onex.hooks.lib.metrics_aggregator import load_latest_gate_result
+
+        pattern_dir = tmp_path / "pat-multi"
+
+        # Create two baseline_key subdirs with gate files
+        old_dir = pattern_dir / "baseline-old"
+        old_dir.mkdir(parents=True)
+        old_file = old_dir / "latest.gate.json"
+        old_file.write_text(json.dumps({"gate_result": "fail", "run_id": "old"}))
+
+        # Ensure mtime difference
+        time.sleep(0.05)
+
+        new_dir = pattern_dir / "baseline-new"
+        new_dir.mkdir(parents=True)
+        new_file = new_dir / "latest.gate.json"
+        new_file.write_text(json.dumps({"gate_result": "pass", "run_id": "new"}))
+
+        # Should return the most recently modified gate
+        result = load_latest_gate_result("pat-multi", baselines_root=tmp_path)
+        assert result == "pass"
 
     def test_load_latest_gate_result_nonexistent_returns_none(
         self, tmp_path: Path
