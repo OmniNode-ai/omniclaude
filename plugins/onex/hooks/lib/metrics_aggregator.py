@@ -300,9 +300,9 @@ def build_dimension_evidence_list(
     """Build the standard dimension evidence list from candidate vs baseline.
 
     Precondition: the returned list must cover every entry in
-    ``REQUIRED_DIMENSIONS``.  An assertion enforces this so that adding
-    a new required dimension without a corresponding evidence builder
-    fails loudly rather than silently preventing promotion.
+    ``REQUIRED_DIMENSIONS``.  A ``RuntimeError`` enforces this so that
+    adding a new required dimension without a corresponding evidence
+    builder fails loudly rather than silently preventing promotion.
     """
     dims = [
         make_dimension_evidence(
