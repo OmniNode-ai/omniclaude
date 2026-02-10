@@ -596,7 +596,7 @@ class TestCustomThresholds:
         from plugins.onex.hooks.lib.promotion_gater import PromotionThresholds
 
         with pytest.raises(ValidationError):
-            PromotionThresholds(unknown_field=5.0)  # type: ignore[call-arg]
+            PromotionThresholds(**{"unknown_field": 5.0})  # noqa: PIE804
 
 
 # =============================================================================

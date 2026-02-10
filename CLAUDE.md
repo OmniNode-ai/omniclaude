@@ -87,8 +87,6 @@ These modules are intended for external use:
 | `route_via_events_wrapper.py` | Agent routing |
 | `simple_agent_loader.py` | Load agent YAML |
 | `correlation_manager.py` | Correlation ID persistence |
-| `metrics_aggregator.py` | Run aggregation and dimension evidence |
-| `promotion_gater.py` | Promotion gate evaluation |
 
 **All other modules in `plugins/onex/hooks/lib/` are internal implementation details.**
 
