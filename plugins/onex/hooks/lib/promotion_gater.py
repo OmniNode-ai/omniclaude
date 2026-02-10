@@ -25,7 +25,7 @@ from omnibase_spi.contracts.measurement.contract_promotion_gate import (
     ContractDimensionEvidence,
     ContractPromotionGate,
 )
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from plugins.onex.hooks.lib.metrics_aggregator import (
     detect_flakes,
@@ -56,9 +56,9 @@ class PromotionThresholds(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    duration_regression_pct: float = 20.0
-    token_regression_pct: float = 30.0
-    test_decrease_pct: float = 20.0
+    duration_regression_pct: float = Field(default=20.0, ge=0.0)
+    token_regression_pct: float = Field(default=30.0, ge=0.0)
+    test_decrease_pct: float = Field(default=20.0, ge=0.0)
 
 
 def evaluate_promotion_gate(
@@ -135,7 +135,7 @@ def evaluate_promotion_gate(
 
     # -- Check 2: flake detection ------------------------------------------
     flakes = detect_flakes(candidate.phase_metrics)
-    flaky_phases = [phase.value for phase, is_flaky in flakes.items() if is_flaky]
+    flaky_phases = sorted(phase.value for phase, is_flaky in flakes.items() if is_flaky)
     if flaky_phases:
         return _gate(
             run_id=run_id,
@@ -303,10 +303,10 @@ def _check_regressions(
         "tests": thresholds.test_decrease_pct,
     }
 
-    _all_mapped = set(increase_map) | set(decrease_map)
+    all_mapped = set(increase_map) | set(decrease_map)
 
     for dim in dimensions:
-        if dim.dimension not in _all_mapped:
+        if dim.dimension not in all_mapped:
             reasons.append(f"{dim.dimension} has no regression threshold configured")
             continue
 

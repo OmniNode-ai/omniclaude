@@ -570,10 +570,12 @@ class TestCustomThresholds:
         assert gate.extensions["promotion_tier"] == "allow"
 
     def test_thresholds_model_is_frozen(self) -> None:
+        from pydantic import ValidationError
+
         from plugins.onex.hooks.lib.promotion_gater import PromotionThresholds
 
         t = PromotionThresholds()
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             setattr(t, "duration_regression_pct", 50.0)
 
 
