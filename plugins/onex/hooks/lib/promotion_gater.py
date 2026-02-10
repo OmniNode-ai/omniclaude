@@ -74,6 +74,7 @@ def evaluate_promotion_gate(
 
     1a. Candidate failed  → block (gate_result="fail")
     1b. Candidate partial → warn  (gate_result="insufficient_evidence")
+    1c. Unexpected result → warn  (gate_result="insufficient_evidence")
     2.  Flake detected    → block (gate_result="fail")
     3.  No context / no pattern_id / no baseline → warn (gate_result="insufficient_evidence")
     4.  Insufficient evidence on any dimension → warn (gate_result="insufficient_evidence")
@@ -112,6 +113,18 @@ def evaluate_promotion_gate(
             gate_result="insufficient_evidence",
             tier="warn",
             reasons=["Candidate run is partial (not all phases completed)"],
+            dimensions=[],
+            required=required,
+        )
+
+    # -- Check 1c: unexpected overall_result --------------------------------
+    if candidate.overall_result != "success":
+        return _gate(
+            run_id=run_id,
+            context=context,
+            gate_result="insufficient_evidence",
+            tier="warn",
+            reasons=[f"Unexpected overall_result={candidate.overall_result!r}"],
             dimensions=[],
             required=required,
         )
@@ -264,7 +277,11 @@ def _check_regressions(
     """Check each dimension against its regression threshold.
 
     Duration/tokens: flag when delta_pct > positive threshold (increase = bad).
-    Tests: flag when delta_pct < negative threshold (decrease = bad).
+    Tests: flag when delta_pct < -(threshold) (decrease = bad).
+
+    Every dimension must appear in exactly one of ``increase_map`` or
+    ``decrease_map``; unmapped dimensions trigger a warning reason so
+    that adding a new required dimension without a threshold is caught.
 
     Returns a list of human-readable reason strings for any threshold
     violations.  Empty list means all dimensions are within limits.
@@ -282,7 +299,13 @@ def _check_regressions(
         "tests": thresholds.test_decrease_pct,
     }
 
+    _all_mapped = set(increase_map) | set(decrease_map)
+
     for dim in dimensions:
+        if dim.dimension not in _all_mapped:
+            reasons.append(f"{dim.dimension} has no regression threshold configured")
+            continue
+
         if dim.delta_pct is None:
             continue
 
