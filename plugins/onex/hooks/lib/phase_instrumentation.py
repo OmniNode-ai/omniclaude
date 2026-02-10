@@ -13,6 +13,14 @@ Architecture:
     - ``run_measurement_checks()`` produces ContractCheckResult instances
       for the measurement domain (CHECK-MEAS-001 through 006).
 
+Degraded Mode (omnibase_spi unavailable):
+    If ``omnibase_spi`` is not installed, this module still imports
+    successfully (``PHASE_TO_SPI`` is set to an empty dict). However,
+    functions that construct SPI types (``build_metrics_from_result``,
+    ``build_error_metrics``, ``build_skipped_metrics``,
+    ``run_measurement_checks``) will raise ``ImportError`` at call time
+    from their deferred imports. A warning is logged at import time.
+
 Phase -> SPI Enum Mapping:
     Pipeline Phase          | SPI ContractEnumPipelinePhase
     ----------------------- | -----------------------------

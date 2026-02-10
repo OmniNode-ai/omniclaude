@@ -346,6 +346,14 @@ if [[ "$EXECUTE" == "true" ]]; then
                 .statusLine.command = $cmd
             ' "$SETTINGS_JSON" > "${SETTINGS_JSON}.tmp" && mv "${SETTINGS_JSON}.tmp" "$SETTINGS_JSON"
 
+            # Validate the target statusline.sh actually exists (tilde is
+            # expanded by Claude Code's settings parser, not the shell)
+            STATUSLINE_EXPANDED="${TARGET}/hooks/scripts/statusline.sh"
+            if [[ ! -f "$STATUSLINE_EXPANDED" ]]; then
+                echo -e "${YELLOW}  Warning: statusline.sh not found at ${STATUSLINE_EXPANDED}${NC}"
+                echo -e "${YELLOW}  Settings updated but statusline may not work until file is present${NC}"
+            fi
+
             echo -e "${GREEN}  Updated settings.json statusLine -> ${STATUSLINE_PATH_SHORT}${NC}"
         fi
     fi
@@ -354,7 +362,9 @@ if [[ "$EXECUTE" == "true" ]]; then
     CLAUDE_DIR="$HOME/.claude"
     mkdir -p "$CLAUDE_DIR/commands" "$CLAUDE_DIR/skills" "$CLAUDE_DIR/agents"
 
-    # Remove stale symlinks or old directories, then rsync fresh copies
+    # Remove stale symlinks or old directories, then rsync fresh copies.
+    # On every deploy (including re-deploys), existing real directories are
+    # backed up BEFORE rsync --delete runs, preserving any user customizations.
     for component in commands skills agents; do
         DEST="$CLAUDE_DIR/$component/onex"
         if [[ -L "$DEST" ]]; then
@@ -365,6 +375,7 @@ if [[ "$EXECUTE" == "true" ]]; then
             cp -a "$DEST" "$BACKUP"
             echo -e "${YELLOW}  Backed up existing $component/onex -> $BACKUP${NC}"
         fi
+        mkdir -p "$DEST"
         rsync -a --delete "$TARGET/$component/" "$DEST/"
     done
 

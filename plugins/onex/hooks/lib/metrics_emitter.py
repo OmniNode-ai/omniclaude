@@ -62,6 +62,10 @@ _redact_secrets_fn: Callable[[str], str] | None = None
 
 # Lightweight fallback patterns for common secret formats.
 # Used only when the full secret_redactor module is unavailable.
+# Known coverage gaps vs full secret_redactor: Azure keys, GCP service
+# account JSON, generic high-entropy tokens, JWT tokens, Datadog/Stripe
+# keys. If the full module is never deployed, these gaps are accepted —
+# see OMN-2027 for follow-up tracking.
 _FALLBACK_SECRET_PATTERNS = [
     re.compile(r"sk-[A-Za-z0-9]{20,}"),  # OpenAI API keys
     re.compile(r"AKIA[A-Z0-9]{16}"),  # AWS access keys
@@ -235,10 +239,15 @@ def _validate_artifact_uri(uri: str) -> bool:
         logger.warning(f"Artifact URI contains absolute path, rejecting: {uri[:50]}...")
         return False
     # Reject absolute Unix paths, but allow protocol-relative URIs (//)
-    # that point to remote hosts. Note: //localhost/... could reference
-    # local resources, but artifact URIs are metadata pointers (never fetched
-    # by this code), so the risk is limited to information disclosure in the
-    # evt topic — acceptable trade-off for allowing legitimate CDN URIs.
+    # that point to remote hosts. Reject //localhost and //127.0.0.1 to
+    # prevent local resource references leaking onto the evt topic.
+    if uri.startswith("//"):
+        host = uri[2:].split("/", 1)[0].split(":")[0].lower()
+        if host in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):  # noqa: S104
+            logger.warning(
+                f"Artifact URI references local host, rejecting: {uri[:50]}..."
+            )
+            return False
     if len(uri) > 0 and uri[0] == "/" and not uri.startswith("//"):
         logger.warning(f"Artifact URI contains absolute path, rejecting: {uri[:50]}...")
         return False
@@ -522,6 +531,7 @@ __all__ = [
     "read_metrics_artifact",
     "metrics_artifact_exists",
     "get_redact_secrets",
+    "reset_redactor",
     "MAX_ERROR_MESSAGE_LENGTH",
     "ARTIFACT_BASE_DIR",
 ]

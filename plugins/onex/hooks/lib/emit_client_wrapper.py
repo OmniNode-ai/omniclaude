@@ -386,6 +386,11 @@ def emit_event(
         logger.debug(f"Event emitted: {event_id}")
         return True
 
+    except TimeoutError as e:
+        # Socket timeout is a subclass of OSError, but deserves its own message
+        logger.debug(f"Event emission failed (daemon timeout): {e}")
+        return False
+
     except (ConnectionRefusedError, FileNotFoundError, BrokenPipeError, OSError) as e:
         # Expected during startup or when daemon is not running
         logger.debug(f"Event emission failed (daemon unavailable): {e}")
