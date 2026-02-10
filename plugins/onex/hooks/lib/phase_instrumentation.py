@@ -279,6 +279,7 @@ def build_metrics_from_result(
 
     tests_passed = phase_result.tests_passed
     tests_total = phase_result.tests_total
+    tests_failed = phase_result.tests_failed
     if tests_total > 0 and tests_passed > tests_total:
         logger.warning(
             "tests_passed (%d) > tests_total (%d); clamping to total",
@@ -286,11 +287,18 @@ def build_metrics_from_result(
             tests_total,
         )
         tests_passed = tests_total
+    if tests_total > 0 and tests_failed > tests_total:
+        logger.warning(
+            "tests_failed (%d) > tests_total (%d); clamping to total",
+            tests_failed,
+            tests_total,
+        )
+        tests_failed = tests_total
 
     tests = ContractTestMetrics(
         total_tests=tests_total,
         passed_tests=tests_passed,
-        failed_tests=phase_result.tests_failed,
+        failed_tests=tests_failed,
         pass_rate=(round(tests_passed / tests_total, 4) if tests_total > 0 else None),
     )
 
