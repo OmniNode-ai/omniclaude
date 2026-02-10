@@ -201,12 +201,12 @@ class TestGetRegistration:
         assert len(reg.fan_out) == 2
 
     def test_get_registration_prompt_submitted_required_fields(self) -> None:
-        """Verify prompt.submitted requires prompt and session_id."""
+        """Verify prompt.submitted requires prompt_preview and session_id."""
         from omniclaude.hooks.event_registry import get_registration
 
         reg = get_registration("prompt.submitted")
         assert reg is not None
-        assert "prompt" in reg.required_fields
+        assert "prompt_preview" in reg.required_fields
         assert "session_id" in reg.required_fields
 
     def test_get_registration_tool_executed(self) -> None:
@@ -231,7 +231,7 @@ class TestValidatePayload:
         """Verify validate_payload returns list of missing fields."""
         from omniclaude.hooks.event_registry import validate_payload
 
-        missing = validate_payload("prompt.submitted", {"prompt": "hello"})
+        missing = validate_payload("prompt.submitted", {"prompt_preview": "hello"})
         assert isinstance(missing, list)
         assert "session_id" in missing
 
@@ -240,7 +240,7 @@ class TestValidatePayload:
         from omniclaude.hooks.event_registry import validate_payload
 
         missing = validate_payload(
-            "prompt.submitted", {"prompt": "hello", "session_id": "xyz"}
+            "prompt.submitted", {"prompt_preview": "hello", "session_id": "xyz"}
         )
         assert len(missing) == 0
 
@@ -285,9 +285,9 @@ class TestValidatePayload:
         """Verify validate_payload returns all missing fields."""
         from omniclaude.hooks.event_registry import validate_payload
 
-        # prompt.submitted requires both prompt and session_id
+        # prompt.submitted requires both prompt_preview and session_id
         missing = validate_payload("prompt.submitted", {})
-        assert "prompt" in missing
+        assert "prompt_preview" in missing
         assert "session_id" in missing
 
     def test_validate_payload_extra_fields_ignored(self) -> None:

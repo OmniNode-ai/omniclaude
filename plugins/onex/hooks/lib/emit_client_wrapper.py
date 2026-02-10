@@ -66,7 +66,7 @@ import sys
 import threading
 from collections.abc import Callable
 from pathlib import Path
-from typing import TypeVar, cast
+from typing import Any, TypeVar, cast
 
 logger = logging.getLogger(__name__)
 
@@ -179,7 +179,7 @@ class _SocketEmitClient:
         self._socket_path = socket_path
         self._timeout = timeout
 
-    def _request(self, data: dict) -> dict:
+    def _request(self, data: dict[str, Any]) -> dict[str, Any]:
         """Send a JSON request and return the parsed response."""
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         sock.settimeout(self._timeout)
@@ -195,15 +195,17 @@ class _SocketEmitClient:
                 chunks.append(chunk)
                 if b"\n" in chunk:
                     break
-            return json.loads(b"".join(chunks).decode("utf-8").strip())
+            return cast(
+                "dict[str, Any]", json.loads(b"".join(chunks).decode("utf-8").strip())
+            )
         finally:
             sock.close()
 
-    def emit_sync(self, event_type: str, payload: dict) -> str:
+    def emit_sync(self, event_type: str, payload: dict[str, Any]) -> str:
         """Emit event synchronously, returns event_id."""
         response = self._request({"event_type": event_type, "payload": payload})
         if response.get("status") == "queued":
-            return response["event_id"]
+            return str(response["event_id"])
         raise RuntimeError(response.get("reason", f"Unexpected response: {response}"))
 
     def is_daemon_running_sync(self) -> bool:

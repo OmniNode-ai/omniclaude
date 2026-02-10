@@ -231,60 +231,164 @@ save_cached_data() {
     print_status "Cached data saved to: $cache_file"
 }
 
-fetch_workflow_runs() {
+fetch_failures_for_pr() {
     local pr_number="$1"
-    local workflow_filter="$2"
 
-    print_status "Fetching workflow runs for PR #$pr_number..."
+    # Get the PR's head commit SHA — this is the commit CI actually ran against
+    print_status "Fetching head SHA for PR #$pr_number..."
+    local head_sha
+    head_sha=$(gh pr view "$pr_number" --repo "$REPO_OWNER/$REPO_NAME" --json headRefOid --jq '.headRefOid' 2>/dev/null)
 
-    # Fetch workflow runs for this PR
-    local runs
-    runs=$(gh api "repos/$REPO_OWNER/$REPO_NAME/actions/runs?event=pull_request&per_page=50" \
-        --jq ".workflow_runs[] | select(.pull_requests[]? | .number == $pr_number)" 2>/dev/null || echo "[]")
+    if [ -z "$head_sha" ]; then
+        print_error "Could not get head SHA for PR #$pr_number"
+        echo "[]"
+        return 1
+    fi
 
-    if [ -z "$runs" ] || [ "$runs" = "[]" ]; then
-        print_warning "No workflow runs found for PR #$pr_number"
+    print_status "Head SHA: ${head_sha:0:12}"
+
+    # Query check-runs for this commit (catches ALL CI regardless of trigger event)
+    # This is what 'gh pr checks' uses under the hood
+    print_status "Fetching check runs for commit..."
+    local failed_checks
+    failed_checks=$(gh api "repos/$REPO_OWNER/$REPO_NAME/commits/$head_sha/check-runs?per_page=100" \
+        --jq '[.check_runs[] | select(.conclusion == "failure" and .app.slug == "github-actions")]' 2>/dev/null || echo "[]")
+
+    local check_count
+    check_count=$(echo "$failed_checks" | jq 'length')
+
+    if [ "$check_count" -eq 0 ]; then
+        print_success "No failed checks found"
         echo "[]"
         return 0
     fi
 
-    # Filter by workflow name if specified
-    if [ -n "$workflow_filter" ]; then
-        print_status "Filtering workflows matching: $workflow_filter"
-        runs=$(echo "$runs" | jq -s "map(select(.name | test(\"$workflow_filter\"; \"i\")))")
-    else
-        runs=$(echo "$runs" | jq -s '.')
-    fi
+    print_status "Found $check_count failed check(s), fetching job details..."
 
-    local run_count
-    run_count=$(echo "$runs" | jq 'length')
-    print_success "Found $run_count workflow runs"
+    local all_failures="[]"
 
-    echo "$runs"
-}
+    while IFS= read -r check; do
+        local job_id job_name job_url
+        job_id=$(echo "$check" | jq -r '.id')
+        job_name=$(echo "$check" | jq -r '.name')
+        job_url=$(echo "$check" | jq -r '.html_url')
 
-fetch_jobs_for_run() {
-    local run_id="$1"
+        print_status "  Processing: $job_name"
 
-    print_status "Fetching jobs for run #$run_id..."
+        # Fetch full job details (includes steps and workflow name)
+        local job_details
+        job_details=$(gh api "repos/$REPO_OWNER/$REPO_NAME/actions/jobs/$job_id" 2>/dev/null || echo "{}")
 
-    local jobs
-    jobs=$(gh api "repos/$REPO_OWNER/$REPO_NAME/actions/runs/$run_id/jobs" \
-        --jq '.jobs' 2>/dev/null || echo "[]")
+        local workflow_name run_id run_url
+        workflow_name=$(echo "$job_details" | jq -r '.workflow_name // "Unknown"')
+        run_id=$(echo "$job_details" | jq -r '.run_id // 0')
+        run_url="https://github.com/$REPO_OWNER/$REPO_NAME/actions/runs/$run_id"
 
-    local job_count
-    job_count=$(echo "$jobs" | jq 'length')
-    print_status "  Found $job_count jobs"
+        # Apply workflow filter if set
+        if [ -n "$WORKFLOW_FILTER" ]; then
+            if ! echo "$workflow_name" | grep -qi "$WORKFLOW_FILTER"; then
+                print_status "    Skipped (workflow filter: $WORKFLOW_FILTER)"
+                continue
+            fi
+        fi
 
-    echo "$jobs"
-}
+        # Get failed steps from job details
+        local failed_steps
+        failed_steps=$(echo "$job_details" | jq -c '[.steps[]? | select(.conclusion == "failure")]')
+        local step_count
+        step_count=$(echo "$failed_steps" | jq 'length')
 
-fetch_logs_for_job() {
-    local job_id="$1"
+        if [ "$step_count" -eq 0 ]; then
+            # Job failed but no specific step failed — create generic entry
+            local severity
+            severity=$(classify_failure_severity "$job_name" "" "failure")
 
-    # Fetch raw logs (can be large, so we'll just get a summary)
-    # For now, we'll skip full log fetching and rely on job step info
-    echo ""
+            local research=""
+            if ! is_error_recognized "$job_name" "Unknown"; then
+                print_status "    Unrecognized error, preparing research queries..."
+                research=$(research_error "$job_name" "Unknown" "$workflow_name" "$job_url")
+            fi
+
+            local failure
+            if [ -n "$research" ]; then
+                failure=$(jq -n \
+                    --arg workflow "$workflow_name" \
+                    --arg workflow_id "$run_id" \
+                    --arg workflow_url "$run_url" \
+                    --arg job "$job_name" \
+                    --arg job_id "$job_id" \
+                    --arg job_url "$job_url" \
+                    --arg step "Unknown" \
+                    --arg conclusion "failure" \
+                    --arg severity "$severity" \
+                    --argjson research "$research" \
+                    '{workflow: $workflow, workflow_id: $workflow_id, workflow_url: $workflow_url, job: $job, job_id: $job_id, job_url: $job_url, step: $step, conclusion: $conclusion, severity: $severity, research: $research}')
+            else
+                failure=$(jq -n \
+                    --arg workflow "$workflow_name" \
+                    --arg workflow_id "$run_id" \
+                    --arg workflow_url "$run_url" \
+                    --arg job "$job_name" \
+                    --arg job_id "$job_id" \
+                    --arg job_url "$job_url" \
+                    --arg step "Unknown" \
+                    --arg conclusion "failure" \
+                    --arg severity "$severity" \
+                    '{workflow: $workflow, workflow_id: $workflow_id, workflow_url: $workflow_url, job: $job, job_id: $job_id, job_url: $job_url, step: $step, conclusion: $conclusion, severity: $severity}')
+            fi
+            all_failures=$(echo "$all_failures" | jq --argjson failure "$failure" '. + [$failure]')
+        else
+            while IFS= read -r step; do
+                local step_name step_number
+                step_name=$(echo "$step" | jq -r '.name')
+                step_number=$(echo "$step" | jq -r '.number')
+
+                print_status "    Failed step: $step_name"
+
+                local severity
+                severity=$(classify_failure_severity "$job_name" "$step_name" "failure")
+
+                local research=""
+                if ! is_error_recognized "$job_name" "$step_name"; then
+                    print_status "      Unrecognized error, preparing research queries..."
+                    research=$(research_error "$job_name" "$step_name" "$workflow_name" "$job_url")
+                fi
+
+                local failure
+                if [ -n "$research" ]; then
+                    failure=$(jq -n \
+                        --arg workflow "$workflow_name" \
+                        --arg workflow_id "$run_id" \
+                        --arg workflow_url "$run_url" \
+                        --arg job "$job_name" \
+                        --arg job_id "$job_id" \
+                        --arg job_url "$job_url" \
+                        --arg step "$step_name" \
+                        --arg step_number "$step_number" \
+                        --arg conclusion "failure" \
+                        --arg severity "$severity" \
+                        --argjson research "$research" \
+                        '{workflow: $workflow, workflow_id: $workflow_id, workflow_url: $workflow_url, job: $job, job_id: $job_id, job_url: $job_url, step: $step, step_number: ($step_number | tonumber), conclusion: $conclusion, severity: $severity, research: $research}')
+                else
+                    failure=$(jq -n \
+                        --arg workflow "$workflow_name" \
+                        --arg workflow_id "$run_id" \
+                        --arg workflow_url "$run_url" \
+                        --arg job "$job_name" \
+                        --arg job_id "$job_id" \
+                        --arg job_url "$job_url" \
+                        --arg step "$step_name" \
+                        --arg step_number "$step_number" \
+                        --arg conclusion "failure" \
+                        --arg severity "$severity" \
+                        '{workflow: $workflow, workflow_id: $workflow_id, workflow_url: $workflow_url, job: $job, job_id: $job_id, job_url: $job_url, step: $step, step_number: ($step_number | tonumber), conclusion: $conclusion, severity: $severity}')
+                fi
+                all_failures=$(echo "$all_failures" | jq --argjson failure "$failure" '. + [$failure]')
+            done < <(echo "$failed_steps" | jq -c '.[]')
+        fi
+    done < <(echo "$failed_checks" | jq -c '.[]')
+
+    echo "$all_failures"
 }
 
 classify_failure_severity() {
@@ -473,208 +577,6 @@ research_error() {
         }'
 }
 
-process_workflow_runs() {
-    local runs="$1"
-
-    print_status "Processing workflow runs and jobs..."
-
-    local all_failures="[]"
-
-    # Process each workflow run
-    while IFS= read -r run; do
-        local run_id
-        run_id=$(echo "$run" | jq -r '.id')
-        local run_name
-        run_name=$(echo "$run" | jq -r '.name')
-        local run_status
-        run_status=$(echo "$run" | jq -r '.status')
-        local run_conclusion
-        run_conclusion=$(echo "$run" | jq -r '.conclusion')
-        local run_url
-        run_url=$(echo "$run" | jq -r '.html_url')
-
-        print_status "Processing run: $run_name (ID: $run_id, Status: $run_status, Conclusion: $run_conclusion)"
-
-        # Only process failed or completed runs
-        if [ "$run_status" != "completed" ]; then
-            print_status "  Skipping incomplete run"
-            continue
-        fi
-
-        # Fetch jobs for this run
-        local jobs
-        jobs=$(fetch_jobs_for_run "$run_id")
-
-        # Process each job
-        while IFS= read -r job; do
-            local job_id
-            job_id=$(echo "$job" | jq -r '.id')
-            local job_name
-            job_name=$(echo "$job" | jq -r '.name')
-            local job_conclusion
-            job_conclusion=$(echo "$job" | jq -r '.conclusion')
-            local job_url
-            job_url=$(echo "$job" | jq -r '.html_url')
-
-            # Only process failed jobs
-            if [ "$job_conclusion" != "failure" ]; then
-                continue
-            fi
-
-            print_status "  Processing failed job: $job_name (ID: $job_id)"
-
-            # Process each step in the job
-            local steps
-            steps=$(echo "$job" | jq '.steps[]? | select(.conclusion == "failure")')
-
-            if [ -z "$steps" ]; then
-                # Job failed but no specific step marked as failure
-                # Create a generic failure entry
-                local severity
-                severity=$(classify_failure_severity "$job_name" "" "$job_conclusion")
-
-                # Check if error is recognized
-                local research=""
-                if ! is_error_recognized "$job_name" "Unknown"; then
-                    print_status "    🔍 Unrecognized error detected, preparing research queries..."
-                    research=$(research_error "$job_name" "Unknown" "$run_name" "$job_url")
-                fi
-
-                local failure
-                if [ -n "$research" ]; then
-                    failure=$(jq -n \
-                        --arg workflow "$run_name" \
-                        --arg workflow_id "$run_id" \
-                        --arg workflow_url "$run_url" \
-                        --arg job "$job_name" \
-                        --arg job_id "$job_id" \
-                        --arg job_url "$job_url" \
-                        --arg step "Unknown" \
-                        --arg conclusion "$job_conclusion" \
-                        --arg severity "$severity" \
-                        --argjson research "$research" \
-                        '{
-                            workflow: $workflow,
-                            workflow_id: $workflow_id,
-                            workflow_url: $workflow_url,
-                            job: $job,
-                            job_id: $job_id,
-                            job_url: $job_url,
-                            step: $step,
-                            conclusion: $conclusion,
-                            severity: $severity,
-                            research: $research
-                        }')
-                else
-                    failure=$(jq -n \
-                        --arg workflow "$run_name" \
-                        --arg workflow_id "$run_id" \
-                        --arg workflow_url "$run_url" \
-                        --arg job "$job_name" \
-                        --arg job_id "$job_id" \
-                        --arg job_url "$job_url" \
-                        --arg step "Unknown" \
-                        --arg conclusion "$job_conclusion" \
-                        --arg severity "$severity" \
-                        '{
-                            workflow: $workflow,
-                            workflow_id: $workflow_id,
-                            workflow_url: $workflow_url,
-                            job: $job,
-                            job_id: $job_id,
-                            job_url: $job_url,
-                            step: $step,
-                            conclusion: $conclusion,
-                            severity: $severity
-                        }')
-                fi
-
-                all_failures=$(echo "$all_failures" | jq --argjson failure "$failure" '. + [$failure]')
-            else
-                while IFS= read -r step; do
-                    local step_name
-                    step_name=$(echo "$step" | jq -r '.name')
-                    local step_conclusion
-                    step_conclusion=$(echo "$step" | jq -r '.conclusion')
-                    local step_number
-                    step_number=$(echo "$step" | jq -r '.number')
-
-                    print_status "    Failed step: $step_name (conclusion: $step_conclusion)"
-
-                    # Classify severity
-                    local severity
-                    severity=$(classify_failure_severity "$job_name" "$step_name" "$step_conclusion")
-
-                    # Check if error is recognized
-                    local research=""
-                    if ! is_error_recognized "$job_name" "$step_name"; then
-                        print_status "      🔍 Unrecognized error detected, preparing research queries..."
-                        research=$(research_error "$job_name" "$step_name" "$run_name" "$job_url")
-                    fi
-
-                    # Create failure entry
-                    local failure
-                    if [ -n "$research" ]; then
-                        failure=$(jq -n \
-                            --arg workflow "$run_name" \
-                            --arg workflow_id "$run_id" \
-                            --arg workflow_url "$run_url" \
-                            --arg job "$job_name" \
-                            --arg job_id "$job_id" \
-                            --arg job_url "$job_url" \
-                            --arg step "$step_name" \
-                            --arg step_number "$step_number" \
-                            --arg conclusion "$step_conclusion" \
-                            --arg severity "$severity" \
-                            --argjson research "$research" \
-                            '{
-                                workflow: $workflow,
-                                workflow_id: $workflow_id,
-                                workflow_url: $workflow_url,
-                                job: $job,
-                                job_id: $job_id,
-                                job_url: $job_url,
-                                step: $step,
-                                step_number: ($step_number | tonumber),
-                                conclusion: $conclusion,
-                                severity: $severity,
-                                research: $research
-                            }')
-                    else
-                        failure=$(jq -n \
-                            --arg workflow "$run_name" \
-                            --arg workflow_id "$run_id" \
-                            --arg workflow_url "$run_url" \
-                            --arg job "$job_name" \
-                            --arg job_id "$job_id" \
-                            --arg job_url "$job_url" \
-                            --arg step "$step_name" \
-                            --arg step_number "$step_number" \
-                            --arg conclusion "$step_conclusion" \
-                            --arg severity "$severity" \
-                            '{
-                                workflow: $workflow,
-                                workflow_id: $workflow_id,
-                                workflow_url: $workflow_url,
-                                job: $job,
-                                job_id: $job_id,
-                                job_url: $job_url,
-                                step: $step,
-                                step_number: ($step_number | tonumber),
-                                conclusion: $conclusion,
-                                severity: $severity
-                            }')
-                    fi
-
-                    all_failures=$(echo "$all_failures" | jq --argjson failure "$failure" '. + [$failure]')
-                done < <(echo "$steps" | jq -c '.')
-            fi
-        done < <(echo "$jobs" | jq -c '.[]')
-    done < <(echo "$runs" | jq -c '.[]')
-
-    echo "$all_failures"
-}
-
 generate_output() {
     local pr_number="$1"
     local failures="$2"
@@ -790,21 +692,9 @@ main() {
         fi
     fi
 
-    # Fetch workflow runs
-    local runs
-    runs=$(fetch_workflow_runs "$PR_NUMBER" "$WORKFLOW_FILTER")
-
-    if [ "$runs" = "[]" ] || [ -z "$runs" ]; then
-        print_warning "No workflow runs found"
-        local empty_output
-        empty_output=$(generate_output "$PR_NUMBER" "[]")
-        echo "$empty_output"
-        exit 2
-    fi
-
-    # Process runs and extract failures
+    # Fetch failures via check-runs API (comprehensive — catches all trigger events)
     local failures
-    failures=$(process_workflow_runs "$runs")
+    failures=$(fetch_failures_for_pr "$PR_NUMBER")
 
     if [ "$failures" = "[]" ] || [ -z "$failures" ]; then
         print_success "No CI failures found!"
