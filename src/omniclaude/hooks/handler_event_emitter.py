@@ -1200,7 +1200,9 @@ async def emit_session_outcome_from_config(
         message_bytes = payload.model_dump_json().encode("utf-8")
         partition_key = config.session_id.encode("utf-8")
 
-        # Create Kafka config and bus
+        # Create Kafka config and bus (per-call, matching emit_hook_event pattern).
+        # A shared bus would halve connection overhead at teardown but would
+        # require lifetime management across independently-failable emitters.
         kafka_config = create_kafka_config()
         bus = EventBusKafka(config=kafka_config)
         await bus.start()

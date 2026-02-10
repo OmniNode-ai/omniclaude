@@ -1172,10 +1172,10 @@ async def wait_for_session_outcome(
 
     try:
         await consumer.start()
-        # No seek_to_end needed — auto_offset_reset="latest" positions
-        # the consumer at the current end. Messages published AFTER the
-        # consumer joins will be consumed, avoiding the race window that
-        # existed with the old earliest + seek_to_end pattern.
+        # auto_offset_reset="latest" positions the consumer at the current
+        # end, so only messages published AFTER group-join are consumed.
+        # A small race window remains between start() and join completion;
+        # callers mitigate this with asyncio.sleep() before publishing.
 
         start_time = asyncio.get_running_loop().time()
         while (asyncio.get_running_loop().time() - start_time) < timeout_seconds:
