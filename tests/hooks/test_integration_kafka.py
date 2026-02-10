@@ -1223,7 +1223,6 @@ class TestSessionOutcomeIntegration:
         )
         from omniclaude.hooks.topics import TopicBase, build_topic
 
-        env = get_kafka_environment()
         test_session_id = f"outcome-cmd-test-{uuid4().hex[:12]}"
         topic = build_topic("", TopicBase.SESSION_OUTCOME_CMD)
 
@@ -1243,7 +1242,6 @@ class TestSessionOutcomeIntegration:
             outcome="success",
             tracing=ModelEventTracingConfig(
                 emitted_at=datetime.now(UTC),
-                environment=env,
             ),
         )
 
@@ -1271,7 +1269,6 @@ class TestSessionOutcomeIntegration:
         )
         from omniclaude.hooks.topics import TopicBase, build_topic
 
-        env = get_kafka_environment()
         test_session_id = f"outcome-evt-test-{uuid4().hex[:12]}"
         topic = build_topic("", TopicBase.SESSION_OUTCOME_EVT)
 
@@ -1290,7 +1287,6 @@ class TestSessionOutcomeIntegration:
             outcome="failed",
             tracing=ModelEventTracingConfig(
                 emitted_at=datetime.now(UTC),
-                environment=env,
             ),
         )
 
@@ -1327,7 +1323,6 @@ class TestSessionOutcomeIntegration:
             derive_session_outcome,
         )
 
-        env = get_kafka_environment()
         test_session_id = f"golden-path-test-{uuid4().hex[:12]}"
         topic = build_topic("", TopicBase.SESSION_OUTCOME_CMD)
 
@@ -1357,7 +1352,6 @@ class TestSessionOutcomeIntegration:
             outcome=outcome_result.outcome,
             tracing=ModelEventTracingConfig(
                 emitted_at=datetime.now(UTC),
-                environment=env,
             ),
         )
 

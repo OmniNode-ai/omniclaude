@@ -65,7 +65,7 @@ class EmitClient:
             sock = self._connect()
             sock.sendall(line)
             return self._read_response(sock)
-        except (BrokenPipeError, ConnectionResetError, OSError):
+        except (BrokenPipeError, ConnectionResetError, ConnectionRefusedError):
             # Socket went stale — close and retry once
             self.close()
             sock = self._connect()
@@ -137,7 +137,10 @@ class EmitClient:
 
     def __del__(self) -> None:
         """Best-effort cleanup of open socket on garbage collection."""
-        self.close()
+        try:
+            self.close()
+        except Exception:
+            pass
 
 
 __all__ = ["EmitClient"]

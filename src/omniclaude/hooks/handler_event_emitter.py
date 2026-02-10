@@ -1166,11 +1166,9 @@ async def emit_session_outcome_from_config(
 
         # Publish to both topics (fan-out) with per-topic error handling
         # to avoid partial inconsistency where CMD succeeds but EVT fails
-        cmd_ok = False
         evt_error: str | None = None
 
         await bus.publish(topic=topic_cmd, key=partition_key, value=message_bytes)
-        cmd_ok = True
 
         try:
             await bus.publish(topic=topic_evt, key=partition_key, value=message_bytes)
@@ -1191,10 +1189,9 @@ async def emit_session_outcome_from_config(
             "session_outcome_emitted",
             extra={
                 "topics": [topic_cmd, topic_evt],
-                "cmd_ok": cmd_ok,
                 "evt_ok": evt_error is None,
                 "session_id": config.session_id,
-                "outcome": config.outcome,
+                "outcome": config.outcome.value,
             },
         )
 
@@ -1204,7 +1201,7 @@ async def emit_session_outcome_from_config(
             f"Partial fan-out: EVT publish failed: {evt_error}" if evt_error else None
         )
         return ModelEventPublishResult(
-            success=cmd_ok,
+            success=True,
             topic=topic_cmd,
             partition=None,
             offset=None,

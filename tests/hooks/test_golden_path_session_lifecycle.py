@@ -116,6 +116,7 @@ def derive_and_build_outcome_config(
 class TestGoldenPathSessionLifecycle:
     """Golden path: session start → injection → work → end → outcome emission."""
 
+    @pytest.mark.asyncio
     @patch("omniclaude.hooks.handler_event_emitter.EventBusKafka")
     async def test_full_lifecycle_success_path(self, mock_bus_cls) -> None:
         """Exercise the complete session lifecycle for a successful session.
@@ -213,6 +214,7 @@ class TestGoldenPathSessionLifecycle:
             assert payload["event_name"] == "session.outcome"
             assert "emitted_at" in payload
 
+    @pytest.mark.asyncio
     @patch("omniclaude.hooks.handler_event_emitter.EventBusKafka")
     async def test_full_lifecycle_failed_path(self, mock_bus_cls) -> None:
         """Exercise the complete session lifecycle for a failed session."""
@@ -238,6 +240,7 @@ class TestGoldenPathSessionLifecycle:
         # Verify publishes happened
         assert mock_bus.publish.call_count == 2
 
+    @pytest.mark.asyncio
     @patch("omniclaude.hooks.handler_event_emitter.EventBusKafka")
     async def test_full_lifecycle_abandoned_path(self, mock_bus_cls) -> None:
         """Exercise the session lifecycle for an abandoned session."""
@@ -269,6 +272,7 @@ class TestGoldenPathSessionLifecycle:
 class TestEmitSessionOutcome:
     """Tests for emit_session_outcome_from_config function."""
 
+    @pytest.mark.asyncio
     @patch("omniclaude.hooks.handler_event_emitter.EventBusKafka")
     async def test_publishes_to_both_topics(self, mock_bus_cls) -> None:
         """Session outcome is fan-out published to CMD and EVT topics."""
@@ -293,6 +297,7 @@ class TestEmitSessionOutcome:
         assert TopicBase.SESSION_OUTCOME_CMD in topics
         assert TopicBase.SESSION_OUTCOME_EVT in topics
 
+    @pytest.mark.asyncio
     @patch("omniclaude.hooks.handler_event_emitter.EventBusKafka")
     async def test_partition_key_is_session_id(self, mock_bus_cls) -> None:
         """Partition key is set to session_id for ordering guarantees."""
@@ -313,6 +318,7 @@ class TestEmitSessionOutcome:
         for call in mock_bus.publish.call_args_list:
             assert call.kwargs["key"] == b"my-session-id"
 
+    @pytest.mark.asyncio
     @patch("omniclaude.hooks.handler_event_emitter.EventBusKafka")
     async def test_payload_matches_schema(self, mock_bus_cls) -> None:
         """Published payload matches ModelSessionOutcome schema."""
@@ -329,8 +335,6 @@ class TestEmitSessionOutcome:
         await emit_session_outcome_from_config(config)
 
         # Deserialize the published payload and validate with schema
-        import json
-
         for call in mock_bus.publish.call_args_list:
             raw = json.loads(call.kwargs["value"].decode("utf-8"))
             # Validate with Pydantic model
@@ -340,6 +344,7 @@ class TestEmitSessionOutcome:
             assert validated.event_name == "session.outcome"
             assert validated.emitted_at == ts
 
+    @pytest.mark.asyncio
     @patch("omniclaude.hooks.handler_event_emitter.EventBusKafka")
     async def test_invalid_outcome_raises_at_config_construction(
         self, mock_bus_cls
@@ -371,6 +376,7 @@ class TestEmitSessionOutcome:
                 outcome="success",
             )
 
+    @pytest.mark.asyncio
     @patch("omniclaude.hooks.handler_event_emitter.EventBusKafka")
     async def test_all_four_outcomes_are_valid(self, mock_bus_cls) -> None:
         """All four outcome classifications can be emitted."""
@@ -395,6 +401,7 @@ class TestEmitSessionOutcome:
                 f"Expected 2 publishes for outcome={outcome}"
             )
 
+    @pytest.mark.asyncio
     @patch("omniclaude.hooks.handler_event_emitter.EventBusKafka")
     async def test_never_raises_exceptions(self, mock_bus_cls) -> None:
         """Function never raises, returns failure result instead."""
@@ -416,6 +423,7 @@ class TestEmitSessionOutcome:
         assert result.success is False
         assert result.error_message is not None
 
+    @pytest.mark.asyncio
     @patch("omniclaude.hooks.handler_event_emitter.EventBusKafka")
     async def test_partial_fanout_cmd_ok_evt_fails(self, mock_bus_cls) -> None:
         """CMD succeeds but EVT fails: returns success=True with partial error."""
@@ -439,6 +447,7 @@ class TestEmitSessionOutcome:
         assert result.error_message is not None
         assert "Partial fan-out" in result.error_message
 
+    @pytest.mark.asyncio
     @patch("omniclaude.hooks.handler_event_emitter.EventBusKafka")
     async def test_defaults_emitted_at_to_now(self, mock_bus_cls) -> None:
         """When emitted_at is not provided, defaults to current UTC time."""
@@ -459,8 +468,6 @@ class TestEmitSessionOutcome:
         after = datetime.now(UTC)
 
         # Verify the emitted_at was set between before and after
-        import json
-
         raw = json.loads(
             mock_bus.publish.call_args_list[0].kwargs["value"].decode("utf-8")
         )
