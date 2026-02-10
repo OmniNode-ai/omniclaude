@@ -72,7 +72,7 @@ def evaluate_promotion_gate(
     1b. Candidate partial → warn  (gate_result="insufficient_evidence")
     2.  Flake detected    → block (gate_result="fail")
     3.  No context / no pattern_id / no baseline → warn (gate_result="insufficient_evidence")
-    4.  Zero-baseline on any dimension → warn (gate_result="insufficient_evidence")
+    4.  Insufficient evidence on any dimension → warn (gate_result="insufficient_evidence")
     5.  Duration regression > threshold → warn (gate_result="insufficient_evidence")
     6.  Token regression > threshold   → warn (gate_result="insufficient_evidence")
     7.  All clear → allow (gate_result="pass")
@@ -151,17 +151,19 @@ def evaluate_promotion_gate(
     # -- Build dimension evidence ------------------------------------------
     dimensions = _build_dimensions(candidate, baseline)
 
-    # -- Check 4: zero-baseline on any dimension ---------------------------
-    zero_dims = [d.dimension for d in dimensions if d.delta_pct is None]
-    if zero_dims:
+    # -- Check 4: insufficient evidence on any dimension --------------------
+    #    Covers both zero-baseline (delta_pct=None) and zero-current
+    #    (current_value=0, sufficient=False) cases.
+    insuf_dims = [d.dimension for d in dimensions if not d.sufficient]
+    if insuf_dims:
         return _gate(
             run_id=run_id,
             context=context,
             gate_result="insufficient_evidence",
             tier="warn",
             reasons=[
-                f"Zero baseline for dimensions: {', '.join(zero_dims)} "
-                "(cannot compute meaningful delta)"
+                f"Insufficient evidence for dimensions: {', '.join(insuf_dims)} "
+                "(zero baseline or zero current value)"
             ],
             dimensions=dimensions,
             required=required,

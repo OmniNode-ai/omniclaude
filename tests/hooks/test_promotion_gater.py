@@ -273,11 +273,11 @@ class TestWarnInsufficientEvidence:
 
 
 # =============================================================================
-# Warn on zero baseline
+# Warn on insufficient dimension evidence
 # =============================================================================
 
 
-class TestWarnZeroBaseline:
+class TestWarnInsufficientDimension:
     def test_zero_baseline_duration_warns(self) -> None:
         from plugins.onex.hooks.lib.promotion_gater import evaluate_promotion_gate
 
@@ -297,7 +297,9 @@ class TestWarnZeroBaseline:
 
         assert gate.gate_result == "insufficient_evidence"
         assert gate.extensions["promotion_tier"] == "warn"
-        assert "zero baseline" in gate.extensions["promotion_reasons"][0].lower()
+        assert (
+            "insufficient evidence" in gate.extensions["promotion_reasons"][0].lower()
+        )
 
     def test_zero_baseline_tokens_warns(self) -> None:
         from plugins.onex.hooks.lib.promotion_gater import evaluate_promotion_gate
@@ -318,6 +320,28 @@ class TestWarnZeroBaseline:
 
         assert gate.gate_result == "insufficient_evidence"
         assert gate.extensions["promotion_tier"] == "warn"
+
+    def test_zero_current_tests_warns(self) -> None:
+        """Candidate with zero tests against baseline with tests → insufficient."""
+        from plugins.onex.hooks.lib.promotion_gater import evaluate_promotion_gate
+
+        ctx = _make_context()
+        baseline = _aggregate(
+            _all_phases_success(run_id="b", total_tests=10),
+            context=ctx,
+            run_id="b",
+        )
+        candidate = _aggregate(
+            _all_phases_success(run_id="c", total_tests=0),
+            context=ctx,
+            run_id="c",
+        )
+
+        gate = evaluate_promotion_gate(candidate, baseline, ctx)
+
+        assert gate.gate_result == "insufficient_evidence"
+        assert gate.extensions["promotion_tier"] == "warn"
+        assert "tests" in gate.extensions["promotion_reasons"][0].lower()
 
 
 # =============================================================================
