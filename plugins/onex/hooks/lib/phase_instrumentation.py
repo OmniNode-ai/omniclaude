@@ -311,13 +311,21 @@ def build_error_metrics(
         started_at: Phase start timestamp.
         error: The exception that was raised.
         instance_id: Optional instance identifier.
-        completed_at: Phase completion timestamp. Defaults to now if not provided.
+        completed_at: Phase completion timestamp. Required — callers must
+            inject an explicit timestamp (repository invariant: no
+            ``datetime.now()`` defaults).
 
     Returns:
         A ContractPhaseMetrics with ERROR classification.
+
+    Raises:
+        ValueError: If ``completed_at`` is None.
     """
     if completed_at is None:
-        completed_at = datetime.now(UTC)
+        raise ValueError(
+            "completed_at is required — repository invariant forbids "
+            "datetime.now() defaults for deterministic testing"
+        )
     wall_clock_ms = (completed_at - started_at).total_seconds() * 1000.0
 
     spi_phase = PHASE_TO_SPI.get(phase)
@@ -694,7 +702,7 @@ def run_measurement_checks(
     )
 
     # CHECK-MEAS-003: Tokens within budget
-    token_budget = TOKEN_BUDGETS.get(phase, float("inf"))  # noqa: secrets
+    token_budget = TOKEN_BUDGETS.get(phase, float("inf"))
     actual_tokens = metrics.cost.llm_total_tokens if metrics.cost else 0
     tokens_ok = actual_tokens <= token_budget
     results.append(

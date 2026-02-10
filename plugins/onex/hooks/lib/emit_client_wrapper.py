@@ -195,9 +195,10 @@ class _SocketEmitClient:
                 chunks.append(chunk)
                 if b"\n" in chunk:
                     break
-            return cast(
-                "dict[str, Any]", json.loads(b"".join(chunks).decode("utf-8").strip())
-            )
+            raw = b"".join(chunks).decode("utf-8").strip()
+            if not raw:
+                raise ConnectionError("Daemon closed connection without responding")
+            return cast("dict[str, Any]", json.loads(raw))
         finally:
             sock.close()
 

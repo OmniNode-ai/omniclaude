@@ -75,11 +75,12 @@ def _sanitize_error_messages(messages: list[str]) -> list[str]:
         from plugins.onex.hooks.lib.secret_redactor import redact_secrets
     except ImportError:
         logger.warning(
-            "secret_redactor not available; error messages will not be redacted"
+            "secret_redactor not available; stripping error messages to prevent "
+            "unredacted secrets on evt topics"
         )
 
         def redact_secrets(text: str) -> str:  # type: ignore[misc]
-            return text
+            return "[redacted - secret_redactor unavailable]"
 
     sanitized = []
     for msg in messages[:MAX_ERROR_MESSAGES]:
@@ -106,11 +107,12 @@ def _sanitize_skip_reason(reason: str) -> str:
         from plugins.onex.hooks.lib.secret_redactor import redact_secrets
     except ImportError:
         logger.warning(
-            "secret_redactor not available; skip_reason will not be redacted"
+            "secret_redactor not available; stripping skip_reason to prevent "
+            "unredacted secrets on evt topics"
         )
 
         def redact_secrets(text: str) -> str:  # type: ignore[misc]
-            return text
+            return "[redacted - secret_redactor unavailable]"
 
     clean = redact_secrets(reason)
     if len(clean) > MAX_ERROR_MESSAGE_LENGTH:
