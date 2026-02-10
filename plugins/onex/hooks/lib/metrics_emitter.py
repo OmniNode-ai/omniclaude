@@ -60,6 +60,32 @@ _INVALID_PATH_CHARS = ("..", "/", "\\", "\x00")
 
 _redact_secrets_fn: Callable[[str], str] | None = None
 
+# Lightweight fallback patterns for common secret formats.
+# Used only when the full secret_redactor module is unavailable.
+_FALLBACK_SECRET_PATTERNS = [
+    re.compile(r"sk-[A-Za-z0-9]{20,}"),  # OpenAI API keys
+    re.compile(r"AKIA[A-Z0-9]{16}"),  # AWS access keys
+    re.compile(r"ghp_[A-Za-z0-9]{36,}"),  # GitHub PATs
+    re.compile(r"gho_[A-Za-z0-9]{36,}"),  # GitHub OAuth tokens
+    re.compile(r"xox[bpsar]-[A-Za-z0-9\-]+"),  # Slack tokens
+    re.compile(r"Bearer\s+[A-Za-z0-9\-._~+/]+=*", re.IGNORECASE),  # Bearer tokens
+    re.compile(r"-----BEGIN\s+\w+\s+PRIVATE\s+KEY-----"),  # PEM keys
+    re.compile(r"://[^@\s]+:[^@\s]+@"),  # Passwords in URLs
+]
+
+
+def _lightweight_redact(text: str) -> str:
+    """Fallback redactor that masks common secret patterns.
+
+    Preserves non-secret text for readability while catching the most
+    common secret formats. Less comprehensive than the full
+    ``secret_redactor`` module but avoids blanket replacement.
+    """
+    result = text
+    for pattern in _FALLBACK_SECRET_PATTERNS:
+        result = pattern.sub("[REDACTED]", result)
+    return result
+
 
 def _get_redact_secrets() -> Callable[[str], str]:
     """Return the ``redact_secrets`` callable, with a safe fallback.
@@ -82,18 +108,12 @@ def _get_redact_secrets() -> Callable[[str], str]:
         return redact_secrets
     except ImportError:
         logger.warning(
-            "secret_redactor not available; stripping text to prevent "
-            "unredacted secrets on evt topics"
+            "secret_redactor not available; using lightweight fallback "
+            "redactor for common secret patterns"
         )
 
-        def _fallback(text: str) -> str:
-            return "[redacted - secret_redactor unavailable]"
-
-        # Cache the fallback to prevent repeated warnings and allocations.
-        # If the module is later deployed, reset_redactor() or process restart
-        # will pick it up (the global is cleared on module reload).
-        _redact_secrets_fn = _fallback
-        return _fallback
+        _redact_secrets_fn = _lightweight_redact
+        return _lightweight_redact
 
 
 def reset_redactor() -> None:

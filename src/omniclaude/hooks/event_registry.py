@@ -468,7 +468,7 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
             ),
         ],
         partition_key_field=None,  # No partition key; events are round-robin distributed
-        required_fields=[],  # Payload is a full ContractMeasurementEvent envelope
+        required_fields=["event_id", "event_type", "timestamp_iso", "payload"],
     ),
 }
 

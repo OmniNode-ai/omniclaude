@@ -76,6 +76,9 @@ PHASE_TO_SPI: dict[str, ContractEnumPipelinePhase] = {
 # Phases that are expected to run tests
 TEST_BEARING_PHASES = frozenset({"local_review"})
 
+# Valid PhaseResult status values
+VALID_PHASE_STATUSES: tuple[str, ...] = ("completed", "blocked", "failed")
+
 # Duration budgets per phase (milliseconds)
 DURATION_BUDGETS_MS: dict[str, float] = {
     "implement": 1_800_000,  # 30 minutes
@@ -133,9 +136,6 @@ class PhaseResult:
         "tokens_used",
     )
 
-    #: Valid status values for PhaseResult.
-    VALID_STATUSES: tuple[str, ...] = ("completed", "blocked", "failed")
-
     def __init__(
         self,
         *,
@@ -152,7 +152,7 @@ class PhaseResult:
         tests_failed: int = 0,
         review_iteration: int = 0,
     ) -> None:
-        if status not in self.VALID_STATUSES:
+        if status not in VALID_PHASE_STATUSES:
             logger.warning(
                 "Unknown PhaseResult status %r, defaulting to 'failed'", status
             )
@@ -294,6 +294,16 @@ def build_metrics_from_result(
             tests_total,
         )
         tests_failed = tests_total
+    if tests_total > 0 and tests_passed + tests_failed > tests_total:
+        logger.warning(
+            "tests_passed (%d) + tests_failed (%d) > tests_total (%d); "
+            "clamping tests_failed to %d",
+            tests_passed,
+            tests_failed,
+            tests_total,
+            tests_total - tests_passed,
+        )
+        tests_failed = tests_total - tests_passed
 
     tests = ContractTestMetrics(
         total_tests=tests_total,
@@ -536,6 +546,12 @@ def instrumented_phase(
     try:
         result = phase_fn()
 
+        if completed_at is None:
+            logger.debug(
+                "completed_at not injected for %s; using datetime.now(UTC) "
+                "(timing boundary — acceptable for production, inject for tests)",
+                phase,
+            )
         _completed = completed_at if completed_at is not None else datetime.now(UTC)
         metrics = build_metrics_from_result(
             run_id=run_id,
@@ -550,6 +566,11 @@ def instrumented_phase(
         )
 
     except Exception as e:
+        if completed_at is None:
+            logger.debug(
+                "completed_at not injected for %s error path; using datetime.now(UTC)",
+                phase,
+            )
         _completed = completed_at if completed_at is not None else datetime.now(UTC)
         metrics = build_error_metrics(
             run_id=run_id,
@@ -643,6 +664,12 @@ def detect_silent_omission(
     # Like instrumented_phase(), this is a top-level entry point that
     # legitimately creates timestamps when none are injected. The lower-
     # level builders enforce the "no implicit timestamps" invariant.
+    if timestamp_iso is None:
+        logger.debug(
+            "timestamp_iso not injected for silent omission of %s; "
+            "using datetime.now(UTC) (inject for deterministic tests)",
+            phase,
+        )
     _ts = timestamp_iso if timestamp_iso is not None else datetime.now(UTC).isoformat()
     emit_phase_metrics(violation, timestamp_iso=_ts)
     write_metrics_artifact(ticket_id, run_id, phase, attempt, violation)
