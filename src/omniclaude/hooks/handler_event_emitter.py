@@ -374,7 +374,6 @@ def _create_kafka_config() -> ModelKafkaEventBusConfig:
 
     Environment Variables:
         KAFKA_BOOTSTRAP_SERVERS: Kafka broker addresses (required)
-        KAFKA_ENVIRONMENT: Environment prefix for topics (default: dev)
         KAFKA_HOOK_TIMEOUT_SECONDS: Connection timeout in seconds (default: 2)
             Set to higher value (e.g., 30) for integration tests with remote brokers.
 
@@ -384,8 +383,8 @@ def _create_kafka_config() -> ModelKafkaEventBusConfig:
     Raises:
         ModelOnexError: If KAFKA_BOOTSTRAP_SERVERS is not set.
     """
-    # Get environment from env var, default to "dev"
-    environment = os.environ.get("KAFKA_ENVIRONMENT", "dev")
+    # Environment label for config metadata (not used for topic prefixing — OMN-1972)
+    environment = os.environ.get("KAFKA_ENVIRONMENT", "")
     bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS")
     if not bootstrap_servers:
         raise ModelOnexError(
@@ -444,8 +443,7 @@ async def emit_hook_event(
 
     Args:
         payload: The hook event payload (one of the Model*Payload types).
-        environment: Optional environment override for topic prefix.
-            If not provided, uses KAFKA_ENVIRONMENT env var or "dev".
+        environment: Deprecated, ignored. Topics are realm-agnostic (OMN-1972).
 
     Returns:
         ModelEventPublishResult indicating success or failure.
@@ -474,9 +472,8 @@ async def emit_hook_event(
         event_type = _get_event_type(payload)
         topic_base = _get_topic_base(event_type)
 
-        # Get environment from param, env var, or default
-        env = environment or os.environ.get("KAFKA_ENVIRONMENT", "dev")
-        topic = build_topic(env, topic_base)
+        # Topics are realm-agnostic (OMN-1972): TopicBase values are wire topics
+        topic = build_topic("", topic_base)
 
         # Create envelope
         envelope = ModelHookEventEnvelope(
@@ -973,9 +970,8 @@ async def emit_claude_hook_event(
     topic = "unknown"
 
     try:
-        # Get environment from config, env var, or default
-        env = config.environment or os.environ.get("KAFKA_ENVIRONMENT", "dev")
-        topic = build_topic(env, TopicBase.CLAUDE_HOOK_EVENT)
+        # Topics are realm-agnostic (OMN-1972): TopicBase values are wire topics
+        topic = build_topic("", TopicBase.CLAUDE_HOOK_EVENT)
 
         # Truncate prompt if it exceeds Kafka message size limit
         # Account for JSON envelope overhead to ensure total message stays within limit
@@ -1154,12 +1150,9 @@ async def emit_session_outcome_from_config(
             emitted_at=emitted_at,
         )
 
-        # Get environment
-        env = tracing.environment or os.environ.get("KAFKA_ENVIRONMENT", "dev")
-
-        # Build both topics (fan-out)
-        topic_cmd = build_topic(env, TopicBase.SESSION_OUTCOME_CMD)
-        topic_evt = build_topic(env, TopicBase.SESSION_OUTCOME_EVT)
+        # Topics are realm-agnostic (OMN-1972): TopicBase values are wire topics
+        topic_cmd = build_topic("", TopicBase.SESSION_OUTCOME_CMD)
+        topic_evt = build_topic("", TopicBase.SESSION_OUTCOME_EVT)
         first_topic = topic_cmd
 
         # Serialize payload

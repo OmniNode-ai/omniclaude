@@ -628,7 +628,7 @@ async def _emit_tool_content(
 
     Args:
         content: The tool execution content model to emit.
-        environment: Optional environment override for topic prefix.
+        environment: Deprecated, ignored. Topics are realm-agnostic (OMN-1972).
 
     Returns:
         ModelEventPublishResult indicating success or failure.
@@ -637,9 +637,8 @@ async def _emit_tool_content(
     topic = "unknown"
 
     try:
-        # Get environment from param, env var, or default
-        env = environment or os.environ.get("KAFKA_ENVIRONMENT", "dev")
-        topic = build_topic(env, TopicBase.TOOL_CONTENT)
+        # Topics are realm-agnostic (OMN-1972): TopicBase values are wire topics
+        topic = build_topic("", TopicBase.TOOL_CONTENT)
 
         # Create Kafka config
         bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS")
@@ -652,7 +651,7 @@ async def _emit_tool_content(
 
         config = ModelKafkaEventBusConfig(
             bootstrap_servers=bootstrap_servers,
-            environment=env,
+            environment=os.environ.get("KAFKA_ENVIRONMENT", ""),
             timeout_seconds=2,
             max_retry_attempts=0,
             acks="all",

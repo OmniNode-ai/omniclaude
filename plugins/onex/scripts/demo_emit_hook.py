@@ -19,7 +19,6 @@ Usage:
 
 Environment Variables (REQUIRED - no defaults):
     KAFKA_BOOTSTRAP_SERVERS: Kafka brokers (e.g., 192.168.86.200:29092)
-    KAFKA_ENVIRONMENT: Topic prefix (e.g., dev, staging, prod)
 """
 
 from __future__ import annotations
@@ -54,9 +53,6 @@ def validate_config() -> None:
     missing = []
     if not os.environ.get("KAFKA_BOOTSTRAP_SERVERS"):
         missing.append("KAFKA_BOOTSTRAP_SERVERS")
-    if not os.environ.get("KAFKA_ENVIRONMENT"):
-        missing.append("KAFKA_ENVIRONMENT")
-
     if missing:
         print("[ERROR] Missing required environment variables:")
         for var in missing:
@@ -80,12 +76,11 @@ def print_config() -> None:
     Note: validate_config() must be called before this function.
     """
     kafka_servers = os.environ["KAFKA_BOOTSTRAP_SERVERS"]
-    kafka_env = os.environ["KAFKA_ENVIRONMENT"]
-    topic = build_topic(kafka_env, TopicBase.CLAUDE_HOOK_EVENT)
+    # Topics are realm-agnostic (OMN-1972): no environment prefix
+    topic = build_topic("", TopicBase.CLAUDE_HOOK_EVENT)
 
     print("Configuration:")
     print(f"  Kafka Brokers: {kafka_servers}")
-    print(f"  Environment:   {kafka_env}")
     print(f"  Topic:         {topic}")
     print()
 

@@ -957,12 +957,11 @@ class TestClaudeHookEventEmission:
 
             # Verify correct topic name
             assert result.success is True
-            assert result.topic == "dev.onex.cmd.omniintelligence.claude-hook-event.v1"
+            assert result.topic == "onex.cmd.omniintelligence.claude-hook-event.v1"
             # Verify the topic was passed to publish
             call_kwargs = mock_bus.publish.call_args.kwargs
             assert (
-                call_kwargs["topic"]
-                == "dev.onex.cmd.omniintelligence.claude-hook-event.v1"
+                call_kwargs["topic"] == "onex.cmd.omniintelligence.claude-hook-event.v1"
             )
 
     @pytest.mark.asyncio

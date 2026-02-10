@@ -29,13 +29,13 @@ KAFKA_PUBLISH_TIMEOUT_SECONDS = 10.0
 
 
 def get_kafka_topic_prefix() -> str:
-    """Get Kafka topic prefix (environment) from environment.
+    """Get Kafka topic prefix from environment.
 
     Returns:
-        Topic prefix (e.g., "dev", "staging", "prod"). Defaults to "dev".
+        Empty string. Topics are realm-agnostic per ONEX convention (OMN-1972):
+        TopicBase values ARE the wire topic names, no environment prefix.
     """
-    env_prefix = os.getenv("KAFKA_TOPIC_PREFIX") or os.getenv("KAFKA_ENVIRONMENT")
-    return env_prefix if env_prefix else "dev"
+    return ""
 
 
 def get_kafka_bootstrap_servers() -> str | None:

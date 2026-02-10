@@ -88,13 +88,8 @@ def get_kafka_config() -> dict:
         print("  Run: source .env")
         sys.exit(1)
 
-    kafka_env = os.environ.get("KAFKA_ENVIRONMENT")
-    if not kafka_env:
-        print("[ERROR] KAFKA_ENVIRONMENT environment variable required")
-        print("  Run: source .env")
-        sys.exit(1)
-
-    topic = build_topic(kafka_env, TopicBase.CLAUDE_HOOK_EVENT)
+    # Topics are realm-agnostic (OMN-1972): no environment prefix
+    topic = build_topic("", TopicBase.CLAUDE_HOOK_EVENT)
 
     # Generate unique group ID per run for test isolation
     unique_suffix = uuid.uuid4().hex[:8]

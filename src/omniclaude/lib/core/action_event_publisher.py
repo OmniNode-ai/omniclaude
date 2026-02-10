@@ -213,11 +213,9 @@ def _get_kafka_topic_prefix() -> str:
         except Exception as e:
             logger.debug(f"Failed to get Kafka topic prefix from settings: {e}")
 
-    # Fall back to environment variables
-    # Check KAFKA_TOPIC_PREFIX first (documented in CLAUDE.md)
-    # Then KAFKA_ENVIRONMENT for compatibility with handler_event_emitter.py
-    env_prefix = os.getenv("KAFKA_TOPIC_PREFIX") or os.getenv("KAFKA_ENVIRONMENT")
-    return env_prefix if env_prefix else "dev"
+    # Topics are realm-agnostic (OMN-1972): TopicBase values are wire topics.
+    # No environment prefix. Return empty string.
+    return ""
 
 
 async def _get_kafka_producer() -> Any:
