@@ -210,7 +210,7 @@ class ModelClaudeHookEventConfig:
         prompt: The full prompt text (for UserPromptSubmit events).
         correlation_id: Optional correlation ID for distributed tracing.
         timestamp_utc: Event timestamp (defaults to now UTC if not provided).
-        environment: Kafka environment prefix (e.g., "dev", "staging", "prod").
+        environment: Metadata label for config origin (not used for topic prefixing per OMN-1972).
     """
 
     event_type: EnumClaudeCodeHookEventType

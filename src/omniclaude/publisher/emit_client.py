@@ -63,7 +63,12 @@ class EmitClient:
         return sock
 
     def _send_and_recv(self, request: dict[str, object]) -> dict[str, object]:
-        """Send a request and read the response, reconnecting once on failure."""
+        """Send a request and read the response, reconnecting once on failure.
+
+        Note: On transient connection errors the method retries once with a fresh
+        socket, so worst-case latency is *2x* the configured timeout.  Callers on
+        the synchronous hook path should account for this when budgeting time.
+        """
         line = json.dumps(request).encode("utf-8") + b"\n"
         try:
             sock = self._connect()
