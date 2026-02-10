@@ -33,6 +33,7 @@ Related Tickets:
 from __future__ import annotations
 
 import logging
+import sys
 import uuid
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -621,7 +622,10 @@ def detect_silent_omission(
         instance_id=instance_id,
     )
 
-    # Emit and persist the violation record
+    # Emit and persist the violation record.
+    # Like instrumented_phase(), this is a top-level entry point that
+    # legitimately creates timestamps when none are injected. The lower-
+    # level builders enforce the "no implicit timestamps" invariant.
     _ts = timestamp_iso if timestamp_iso is not None else datetime.now(UTC).isoformat()
     emit_phase_metrics(violation, timestamp_iso=_ts)
     write_metrics_artifact(ticket_id, run_id, phase, attempt, violation)
@@ -729,7 +733,7 @@ def run_measurement_checks(
     )
 
     # CHECK-MEAS-003: Tokens within budget
-    token_budget = TOKEN_BUDGETS.get(phase, float("inf"))
+    token_budget = TOKEN_BUDGETS.get(phase, sys.maxsize)
     actual_tokens = metrics.cost.llm_total_tokens if metrics.cost else 0
     tokens_ok = actual_tokens <= token_budget
     results.append(

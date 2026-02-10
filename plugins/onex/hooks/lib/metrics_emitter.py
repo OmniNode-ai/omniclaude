@@ -18,6 +18,7 @@ Related Tickets:
 
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import re
@@ -58,6 +59,7 @@ _INVALID_PATH_CHARS = ("..", "/", "\\", "\x00")
 # ---------------------------------------------------------------------------
 
 
+@functools.lru_cache(maxsize=1)
 def _get_redact_secrets() -> Callable[[str], str]:
     """Return the ``redact_secrets`` callable, with a safe fallback.
 
@@ -153,11 +155,11 @@ _ABSOLUTE_PATH_PREFIXES = (
     "/Volumes/",
 )
 
-# Matches UNC paths like \\server\share anywhere in the string.
-_UNC_PATH_RE = re.compile(r"\\\\[^\\]+")
+# Matches UNC paths like \\server\share at the start of the string only.
+_UNC_PATH_RE = re.compile(r"^\\\\[^\\]+")
 
-# Matches Windows drive-letter paths like C:\, D:\, c:\, etc. anywhere in the string.
-_WINDOWS_DRIVE_RE = re.compile(r"[A-Za-z]:\\")
+# Matches Windows drive-letter paths like C:\, D:\, c:\ at the start of the string only.
+_WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:\\")
 
 
 def _validate_artifact_uri(uri: str) -> bool:
@@ -181,6 +183,11 @@ def _validate_artifact_uri(uri: str) -> bool:
     if any(uri_lower.startswith(prefix.lower()) for prefix in _ABSOLUTE_PATH_PREFIXES):
         logger.warning(f"Artifact URI contains absolute path, rejecting: {uri[:50]}...")
         return False
+    # Reject absolute Unix paths, but allow protocol-relative URIs (//)
+    # that point to remote hosts. Note: //localhost/... could reference
+    # local resources, but artifact URIs are metadata pointers (never fetched
+    # by this code), so the risk is limited to information disclosure in the
+    # evt topic — acceptable trade-off for allowing legitimate CDN URIs.
     if len(uri) > 0 and uri[0] == "/" and not uri.startswith("//"):
         logger.warning(f"Artifact URI contains absolute path, rejecting: {uri[:50]}...")
         return False
@@ -270,8 +277,9 @@ def emit_phase_metrics(
         # Builders (build_metrics_from_result, build_error_metrics) now also
         # redact and truncate, but this layer ensures safety even for metrics
         # constructed outside the standard builder path.
-        if "payload" in payload and "outcome" in (payload["payload"] or {}):
-            outcome = payload["payload"]["outcome"]
+        inner = payload.get("payload")
+        if isinstance(inner, dict) and "outcome" in inner:
+            outcome = inner["outcome"]
             if outcome and "error_messages" in outcome:
                 outcome["error_messages"] = _sanitize_error_messages(
                     outcome.get("error_messages", [])
@@ -284,8 +292,8 @@ def emit_phase_metrics(
                 outcome["skip_reason"] = _sanitize_skip_reason(outcome["skip_reason"])
 
         # Validate artifact URIs
-        if "payload" in payload and "artifact_pointers" in (payload["payload"] or {}):
-            pointers = payload["payload"].get("artifact_pointers", [])
+        if isinstance(inner, dict) and "artifact_pointers" in inner:
+            pointers = inner.get("artifact_pointers", [])
             payload["payload"]["artifact_pointers"] = [
                 p for p in pointers if _validate_artifact_uri(p.get("uri", ""))
             ]

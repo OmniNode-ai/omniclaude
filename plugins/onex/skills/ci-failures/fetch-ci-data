@@ -261,6 +261,10 @@ fetch_failures_for_pr() {
     local check_count
     check_count=$(echo "$failed_checks" | jq 'length')
 
+    if [ "$check_count" -eq 100 ]; then
+        print_warning "Exactly 100 failed checks returned — results may be truncated (GitHub API pagination limit)"
+    fi
+
     if [ "$check_count" -eq 0 ]; then
         print_success "No failed checks found"
         echo "[]"

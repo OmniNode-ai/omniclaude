@@ -281,12 +281,12 @@ if [[ "$EXECUTE" == "true" ]]; then
     echo -e "${GREEN}  Venv manifest written to ${MANIFEST}${NC}"
 
     # --- Smoke test ---
-    if "$VENV_DIR/bin/python3" -c "import omnibase_infra; import omniclaude; from omniclaude.hooks.topics import TopicBase; print('Smoke test: OK')" 2>&1; then
+    if "$VENV_DIR/bin/python3" -c "import omnibase_spi; import omniclaude; from omniclaude.hooks.topics import TopicBase; print('Smoke test: OK')" 2>&1; then
         echo -e "${GREEN}  Bundled venv smoke test passed${NC}"
     else
         echo -e "${RED}Error: Bundled venv smoke test FAILED. Deploy aborted.${NC}"
         echo "  The following imports must work:"
-        echo "    import omnibase_infra"
+        echo "    import omnibase_spi"
         echo "    import omniclaude"
         echo "    from omniclaude.hooks.topics import TopicBase"
         rm -rf "$VENV_DIR"  # Clean up failed venv

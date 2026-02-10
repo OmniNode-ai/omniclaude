@@ -175,11 +175,11 @@ class _SocketEmitClient:
 
     __slots__ = ("_socket_path", "_timeout")
 
+    _MAX_RESPONSE_BYTES = 1_048_576  # 1 MB safety cap on daemon responses
+
     def __init__(self, socket_path: str, timeout: float) -> None:
         self._socket_path = socket_path
         self._timeout = timeout
-
-    _MAX_RESPONSE_BYTES = 1_048_576  # 1 MB safety cap on daemon responses
 
     def _request(self, data: dict[str, Any]) -> dict[str, Any]:
         """Send a JSON request and return the parsed response."""
