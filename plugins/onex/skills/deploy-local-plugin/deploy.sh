@@ -358,6 +358,11 @@ if [[ "$EXECUTE" == "true" ]]; then
         DEST="$CLAUDE_DIR/$component/onex"
         if [[ -L "$DEST" ]]; then
             rm -f "$DEST"
+        elif [[ -d "$DEST" ]]; then
+            # Back up existing real directory before rsync --delete overwrites it
+            BACKUP="$DEST.bak.$(date +%s)"
+            cp -a "$DEST" "$BACKUP"
+            echo -e "${YELLOW}  Backed up existing $component/onex -> $BACKUP${NC}"
         fi
         rsync -a --delete "$TARGET/$component/" "$DEST/"
     done

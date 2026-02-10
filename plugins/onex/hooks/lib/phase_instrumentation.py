@@ -464,6 +464,14 @@ def instrumented_phase(
     This is the primary entry point for instrumented phase execution.
     Every pipeline phase MUST be called through this wrapper.
 
+    Note:
+        Unlike :func:`build_error_metrics` (which *requires* an explicit
+        ``completed_at`` and raises ``ValueError`` on ``None``), this
+        top-level wrapper intentionally defaults to ``datetime.now(UTC)``
+        because it times real phase execution in production.  The lower-
+        level builders enforce the "no implicit timestamps" invariant;
+        this wrapper is the single place that legitimately creates them.
+
     Args:
         run_id: Pipeline run identifier.
         phase: Pipeline phase name.
@@ -547,6 +555,7 @@ def detect_silent_omission(
     attempt: int,
     repo_id: str,
     instance_id: str = "",
+    timestamp_iso: str | None = None,
 ) -> ContractPhaseMetrics | None:
     """Detect and record a silent omission violation.
 
@@ -561,6 +570,9 @@ def detect_silent_omission(
         attempt: Attempt number.
         repo_id: Repository identifier.
         instance_id: Optional instance identifier.
+        timestamp_iso: Explicit ISO-8601 timestamp for the emission event.
+            Required for deterministic testing. Defaults to
+            ``datetime.now(UTC).isoformat()`` in production.
 
     Returns:
         A ContractPhaseMetrics with SKIPPED classification if omission
@@ -596,7 +608,8 @@ def detect_silent_omission(
     )
 
     # Emit and persist the violation record
-    emit_phase_metrics(violation, timestamp_iso=datetime.now(UTC).isoformat())
+    _ts = timestamp_iso if timestamp_iso is not None else datetime.now(UTC).isoformat()
+    emit_phase_metrics(violation, timestamp_iso=_ts)
     write_metrics_artifact(ticket_id, run_id, phase, attempt, violation)
 
     return violation
