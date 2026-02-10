@@ -219,6 +219,12 @@ def save_baseline(
     baseline_key = derive_baseline_key(context)
     pattern_id = context.pattern_id or "_no_pattern"
 
+    if ".." in pattern_id or "/" in pattern_id or "\\" in pattern_id:
+        logger.warning(
+            "Rejected pattern_id %r: contains path traversal characters", pattern_id
+        )
+        return None
+
     target_dir = root / pattern_id / baseline_key
     target = target_dir / "latest.metrics.json"
     tmp = target.with_suffix(".json.tmp")
@@ -406,6 +412,12 @@ def save_gate(
     root = baselines_root or BASELINES_ROOT
     baseline_key = derive_baseline_key(context)
     pattern_id = context.pattern_id or "_no_pattern"
+
+    if ".." in pattern_id or "/" in pattern_id or "\\" in pattern_id:
+        logger.warning(
+            "Rejected pattern_id %r: contains path traversal characters", pattern_id
+        )
+        return None
 
     target_dir = root / pattern_id / baseline_key
     target = target_dir / "latest.gate.json"

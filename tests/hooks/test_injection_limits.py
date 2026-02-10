@@ -1048,6 +1048,13 @@ class TestEvidenceScoring:
         with pytest.raises(ValidationError, match="evidence_boost"):
             InjectionLimitsConfig(evidence_boost=1.0)
 
+    def test_config_rejects_invalid_evidence_policy(self) -> None:
+        """InjectionLimitsConfig rejects unknown evidence_policy values."""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError, match="evidence_policy"):
+            InjectionLimitsConfig(evidence_policy="invalid")
+
 
 # =============================================================================
 # Evidence Policy Tests (OMN-2092)
