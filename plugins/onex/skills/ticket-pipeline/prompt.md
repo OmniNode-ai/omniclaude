@@ -320,68 +320,127 @@ def get_current_phase(state):
     return "done"  # All phases completed
 ```
 
-### notify_blocked
+### Pipeline Slack Notifier (OMN-1970)
+
+Replaces the inline `notify_blocked`/`notify_completed` helpers with `PipelineSlackNotifier`
+from `plugins/onex/hooks/lib/pipeline_slack_notifier.py`. Provides:
+- Correlation-formatted messages: `[OMN-1804][pipeline:local_review][run:abcd-1234]`
+- Per-ticket Slack threading via `thread_ts` (requires OMN-2157 for full support)
+- Dual-emission: direct Slack delivery + Kafka event for observability
+- Dry-run prefixing: `[DRY RUN]` on all messages when `--dry-run`
+- Graceful degradation when Slack is not configured
 
 ```python
-def notify_blocked(ticket_id, reason, block_kind, run_id=None, phase=None):
-    """Send Slack notification for blocked pipeline. Best-effort, non-blocking.
+# Initialize at pipeline start (after state is loaded/created)
+from pipeline_slack_notifier import PipelineSlackNotifier, notify_sync
 
-    NOTE: No rate limiting. If pipeline hits rapid failures, Slack may be spammed.
-    Mitigation: pipeline exits on first block/fail (no retry loops).
-    Future: add per-ticket rate limiting if retry patterns are added.
-    """
-    prefix = f"[{ticket_id}]"
-    if phase:
-        prefix += f"[pipeline:{phase}]"
-    if run_id:
-        prefix += f"[run:{run_id}]"
+slack_notifier = PipelineSlackNotifier(
+    ticket_id=ticket_id,
+    run_id=run_id,
+    dry_run=dry_run,
+)
 
-    try:
-        from plugins.onex.hooks.lib.emit_client_wrapper import emit_event
-        emit_event(
-            event_type='notification.blocked',
-            payload={
-                'ticket_id': ticket_id,
-                'reason': f"{prefix} {reason}",
-                'details': [f"block_kind: {block_kind}"],
-                'repo': get_current_repo(),
-                'session_id': os.environ.get('CLAUDE_SESSION_ID', 'unknown')
-            }
-        )
-    except Exception:
-        pass  # Best-effort, non-blocking
+# Send pipeline started notification (seeds the Slack thread)
+thread_ts = notify_sync(slack_notifier, "notify_pipeline_started",
+                        thread_ts=state.get("slack_thread_ts"))
+state["slack_thread_ts"] = thread_ts
+save_state(state, state_path)
 ```
 
-### notify_completed
+**Notify phase completed:**
+```python
+thread_ts = notify_sync(slack_notifier, "notify_phase_completed",
+    phase=phase_name,
+    summary=f"0 blocking, {nit_count} nits",
+    thread_ts=state.get("slack_thread_ts"),
+    pr_url=result.get("artifacts", {}).get("pr_url"),
+)
+state["slack_thread_ts"] = thread_ts
+save_state(state, state_path)
+```
+
+**Notify blocked:**
+```python
+thread_ts = notify_sync(slack_notifier, "notify_blocked",
+    phase=phase_name,
+    reason=result.get("reason", "Unknown"),
+    block_kind=result.get("block_kind", "failed_exception"),
+    thread_ts=state.get("slack_thread_ts"),
+)
+state["slack_thread_ts"] = thread_ts
+save_state(state, state_path)
+```
+
+### Cross-Repo Detector (OMN-1970)
+
+Replaces the inline bash cross-repo check with `cross_repo_detector.py`
+from `plugins/onex/hooks/lib/cross_repo_detector.py`. Used in Phase 1 (implement).
 
 ```python
-def notify_completed(ticket_id, summary, run_id=None, phase=None, pr_url=None):
-    """Send Slack notification for completed phase. Best-effort, non-blocking.
+from cross_repo_detector import detect_cross_repo_changes
 
-    NOTE: No rate limiting. If pipeline hits rapid failures, Slack may be spammed.
-    Mitigation: pipeline exits on first block/fail (no retry loops).
-    Future: add per-ticket rate limiting if retry patterns are added.
-    """
-    prefix = f"[{ticket_id}]"
-    if phase:
-        prefix += f"[pipeline:{phase}]"
-    if run_id:
-        prefix += f"[run:{run_id}]"
+if state["policy"]["stop_on_cross_repo"]:
+    cross_repo_result = detect_cross_repo_changes()
+    if cross_repo_result.violation:
+        result = {
+            "status": "blocked",
+            "block_kind": "blocked_policy",
+            "reason": f"Cross-repo change detected: {cross_repo_result.violating_file} resolves outside {cross_repo_result.repo_root}",
+            "blocking_issues": 1,
+            "nit_count": 0,
+            "artifacts": {},
+        }
+```
 
-    try:
-        from plugins.onex.hooks.lib.emit_client_wrapper import emit_event
-        emit_event(
-            event_type='notification.completed',
-            payload={
-                'ticket_id': ticket_id,
-                'summary': f"{prefix} {summary}",
-                'repo': get_current_repo(),
-                'pr_url': pr_url or '',
-                'session_id': os.environ.get('CLAUDE_SESSION_ID', 'unknown')
-            }
-        )
-    except Exception:
-        pass  # Best-effort, non-blocking
+### Linear Contract Patcher (OMN-1970)
+
+Replaces inline marker-based patching with `linear_contract_patcher.py`
+from `plugins/onex/hooks/lib/linear_contract_patcher.py`. Provides:
+- Safe extraction and validation of `## Contract` YAML blocks
+- Patch-only updates that preserve human-authored content
+- YAML validation before every write
+- Separate handler for `## Pipeline Status` blocks
+
+```python
+from linear_contract_patcher import (
+    extract_contract_yaml,
+    patch_contract_yaml,
+    patch_pipeline_status,
+    validate_contract_yaml,
+)
+
+# Read current contract from Linear
+issue = mcp__linear-server__get_issue(id=ticket_id)
+description = issue["description"] or ""
+
+# Extract and validate
+extract_result = extract_contract_yaml(description)
+if not extract_result.success:
+    # Contract marker missing or malformed — stop pipeline
+    notify_sync(slack_notifier, "notify_blocked",
+        phase=phase_name,
+        reason=f"Linear contract error: {extract_result.error}",
+        block_kind="failed_exception",
+        thread_ts=state.get("slack_thread_ts"),
+    )
+
+# Patch contract safely
+patch_result = patch_contract_yaml(description, new_yaml_str)
+if patch_result.success:
+    mcp__linear-server__update_issue(id=ticket_id, description=patch_result.patched_description)
+else:
+    # YAML validation failed — do NOT write
+    notify_sync(slack_notifier, "notify_blocked",
+        phase=phase_name,
+        reason=f"Contract YAML validation failed: {patch_result.validation_error}",
+        block_kind="failed_exception",
+        thread_ts=state.get("slack_thread_ts"),
+    )
+
+# Update pipeline status (separate from contract)
+status_result = patch_pipeline_status(description, status_yaml_str)
+if status_result.success:
+    mcp__linear-server__update_issue(id=ticket_id, description=status_result.patched_description)
 ```
 
 ### get_current_repo
@@ -395,13 +454,14 @@ def get_current_repo():
 
 ### update_linear_pipeline_summary
 
-Updates the Linear ticket with a compact pipeline summary. Uses marker-based patching to preserve existing description content.
+Updates the Linear ticket with a compact pipeline summary. Now delegates to
+`linear_contract_patcher.patch_pipeline_status()` for safe marker-based patching (OMN-1970).
 
 ```python
-def update_linear_pipeline_summary(ticket_id, state, dry_run=False):
+def update_linear_pipeline_summary(ticket_id, state, dry_run=False, slack_notifier=None):
     """Mirror compact pipeline state to Linear ticket description.
 
-    Safety:
+    Safety (delegated to linear_contract_patcher):
     - Uses marker-based patching (## Pipeline Status section)
     - Validates YAML before write
     - Preserves all existing description content outside markers
@@ -409,6 +469,8 @@ def update_linear_pipeline_summary(ticket_id, state, dry_run=False):
     - If dry_run=True, skips the actual Linear update
     """
     import yaml
+    from linear_contract_patcher import patch_pipeline_status
+    from pipeline_slack_notifier import notify_sync
 
     if dry_run:
         print("[DRY RUN] Skipping Linear pipeline summary update")
@@ -431,7 +493,7 @@ artifacts:"""
         if phase_data.get("artifacts"):
             for key, value in phase_data["artifacts"].items():
                 if key != "skipped":
-                    summary_yaml += f"\n  {phase_name}_{key}: \"{value}\""
+                    summary_yaml += f'\n  {phase_name}_{key}: "{value}"'
 
     if not any(pd.get("artifacts") for pd in state["phases"].values()):
         summary_yaml += " {}"
@@ -444,46 +506,21 @@ artifacts:"""
         print(f"Warning: Failed to fetch Linear issue {ticket_id}: {e}")
         return  # Non-blocking: Linear is not critical path
 
-    # Marker-based patching with explicit end marker for safety
-    pipeline_start = "## Pipeline Status"
-    pipeline_end = "<!-- /pipeline-status -->"
-    pipeline_block = f"\n\n{pipeline_start}\n\n```yaml\n{summary_yaml}\n```\n\n{pipeline_end}\n"
-
-    if pipeline_start in description and pipeline_end in description:
-        # Safe: replace between known markers
-        start_idx = description.index(pipeline_start)
-        end_idx = description.index(pipeline_end) + len(pipeline_end)
-        description = description[:start_idx] + pipeline_block.strip() + description[end_idx:]
-    elif pipeline_start in description:
-        # Legacy: has start but no end marker — use heading-based regex
-        import re
-        pattern = r'## Pipeline Status\n+```(?:yaml)?\n.*?\n```'
-        description = re.sub(pattern, pipeline_block.strip(), description, count=1, flags=re.DOTALL)
-    else:
-        # Find the ## Contract marker and insert before it
-        contract_marker = "## Contract"
-        if contract_marker in description:
-            idx = description.find(contract_marker)
-            description = description[:idx].rstrip() + "\n\n" + pipeline_block.strip() + "\n\n---\n\n" + description[idx:]
-        else:
-            # No contract section - append at end
-            description = description.rstrip() + "\n\n" + pipeline_block
-
-    # Validate YAML in pipeline block before writing
-    try:
-        parsed = yaml.safe_load(summary_yaml)
-        # Basic schema validation: required keys must be present
-        required_keys = {"run_id", "phase"}
-        if not isinstance(parsed, dict) or not required_keys.issubset(parsed.keys()):
-            raise ValueError(f"Missing required keys: {required_keys - set(parsed.keys() if isinstance(parsed, dict) else [])}")
-    except (yaml.YAMLError, ValueError) as e:
-        print(f"Warning: Pipeline summary YAML validation failed: {e}")
-        notify_blocked(ticket_id, f"YAML validation failed for pipeline summary: {e}", "failed_exception",
-                       run_id=state.get("run_id"))
+    # Use linear_contract_patcher for safe patching
+    result = patch_pipeline_status(description, summary_yaml)
+    if not result.success:
+        print(f"Warning: Pipeline status patch failed: {result.error}")
+        if slack_notifier:
+            notify_sync(slack_notifier, "notify_blocked",
+                phase=current_phase,
+                reason=f"Pipeline status YAML validation failed: {result.validation_error or result.error}",
+                block_kind="failed_exception",
+                thread_ts=state.get("slack_thread_ts"),
+            )
         return  # Do not write invalid YAML
 
     try:
-        mcp__linear-server__update_issue(id=ticket_id, description=description)
+        mcp__linear-server__update_issue(id=ticket_id, description=result.patched_description)
     except Exception as e:
         print(f"Warning: Failed to update Linear issue {ticket_id}: {e}")
         # Non-blocking: Linear update failure is logged but does not stop pipeline
@@ -616,9 +653,16 @@ for phase_name in phase_order:
         phase_data["blocked_reason"] = str(e)
         save_state(state, state_path)
 
-        notify_blocked(ticket_id, f"Phase {phase_name} failed: {e}", "failed_exception",
-                       run_id=run_id, phase=phase_name)
-        update_linear_pipeline_summary(ticket_id, state, dry_run)
+        # OMN-1970: Use PipelineSlackNotifier for threaded notifications
+        thread_ts = notify_sync(slack_notifier, "notify_blocked",
+            phase=phase_name,
+            reason=f"Phase {phase_name} failed: {e}",
+            block_kind="failed_exception",
+            thread_ts=state.get("slack_thread_ts"),
+        )
+        state["slack_thread_ts"] = thread_ts
+        save_state(state, state_path)
+        update_linear_pipeline_summary(ticket_id, state, dry_run, slack_notifier=slack_notifier)
         print(f"\nPipeline stopped at {phase_name}: {e}")
         release_lock(lock_path)
         exit(1)
@@ -629,9 +673,18 @@ for phase_name in phase_order:
         phase_data["artifacts"].update(result.get("artifacts", {}))
         save_state(state, state_path)
 
-        notify_completed(ticket_id, f"Phase {phase_name} completed", run_id=run_id, phase=phase_name,
-                         pr_url=result.get("artifacts", {}).get("pr_url"))
-        update_linear_pipeline_summary(ticket_id, state, dry_run)
+        # OMN-1970: Use PipelineSlackNotifier for threaded notifications
+        thread_ts = notify_sync(slack_notifier, "notify_phase_completed",
+            phase=phase_name,
+            summary=f"Phase {phase_name} completed",
+            thread_ts=state.get("slack_thread_ts"),
+            pr_url=result.get("artifacts", {}).get("pr_url"),
+            nit_count=result.get("nit_count", 0),
+            blocking_count=result.get("blocking_issues", 0),
+        )
+        state["slack_thread_ts"] = thread_ts
+        save_state(state, state_path)
+        update_linear_pipeline_summary(ticket_id, state, dry_run, slack_notifier=slack_notifier)
 
         # Check auto_advance policy
         if not state["policy"]["auto_advance"]:
@@ -649,9 +702,16 @@ for phase_name in phase_order:
         phase_data["last_error_at"] = datetime.now(timezone.utc).isoformat()
         save_state(state, state_path)
 
-        notify_blocked(ticket_id, result.get("reason", "Unknown"), result.get("block_kind", "failed_exception"),
-                       run_id=run_id, phase=phase_name)
-        update_linear_pipeline_summary(ticket_id, state, dry_run)
+        # OMN-1970: Use PipelineSlackNotifier for threaded notifications
+        thread_ts = notify_sync(slack_notifier, "notify_blocked",
+            phase=phase_name,
+            reason=result.get("reason", "Unknown"),
+            block_kind=result.get("block_kind", "failed_exception"),
+            thread_ts=state.get("slack_thread_ts"),
+        )
+        state["slack_thread_ts"] = thread_ts
+        save_state(state, state_path)
+        update_linear_pipeline_summary(ticket_id, state, dry_run, slack_notifier=slack_notifier)
 
         print(f"\nPipeline stopped at {phase_name}: {result.get('reason')}")
         # Do NOT release lock on block/fail - preserves state for resume
@@ -729,38 +789,25 @@ def execute_phase(phase_name, state):
    The pipeline waits for ticket-work to complete.
 
 2. **Cross-repo check** (if `policy.stop_on_cross_repo == true`):
-   After ticket-work completes, check that all changes are within the current repo:
-   ```bash
-   # Get the repo root
-   REPO_ROOT=$(git rev-parse --show-toplevel)
-
-   # Check all changed and untracked files using null-delimited output
-   # NOTE: Use process substitution (not pipe) so exit 1 affects main shell
-   CROSS_REPO_VIOLATION=""
-   while IFS= read -r -d '' file; do
-       REAL_PATH=$(realpath "$file" 2>/dev/null) || continue
-       if [[ ! "$REAL_PATH" == "$REPO_ROOT"* ]]; then
-           CROSS_REPO_VIOLATION="$file resolves outside $REPO_ROOT"
-           break
-       fi
-   done < <(git diff -z --name-only origin/main...HEAD && git diff -z --name-only HEAD && git ls-files -z --others --exclude-standard)
-
-   if [ -n "$CROSS_REPO_VIOLATION" ]; then
-       echo "CROSS_REPO_VIOLATION: $CROSS_REPO_VIOLATION"
-       exit 1
-   fi
-   ```
-
-   If cross-repo violation detected:
+   After ticket-work completes, use the `cross_repo_detector` module (OMN-1970):
    ```python
-   result = {
-       "status": "blocked",
-       "block_kind": "blocked_policy",
-       "reason": f"Cross-repo change detected: {violating_file} resolves outside {repo_root}",
-       "blocking_issues": 1,
-       "nit_count": 0,
-       "artifacts": {}
-   }
+   from cross_repo_detector import detect_cross_repo_changes
+
+   if state["policy"]["stop_on_cross_repo"]:
+       cross_repo_result = detect_cross_repo_changes()
+       if cross_repo_result.error:
+           print(f"Warning: Cross-repo detection failed: {cross_repo_result.error}")
+           # Non-blocking error: log but don't stop pipeline
+       elif cross_repo_result.violation:
+           result = {
+               "status": "blocked",
+               "block_kind": "blocked_policy",
+               "reason": f"Cross-repo change detected: {cross_repo_result.violating_file} resolves outside {cross_repo_result.repo_root}",
+               "blocking_issues": 1,
+               "nit_count": 0,
+               "artifacts": {}
+           }
+           return result
    ```
 
 3. **Verify implementation is complete:**
@@ -1147,20 +1194,37 @@ Pipeline distinguishes these block reasons for accurate Slack messaging:
 
 ---
 
-## Slack Notification Format (R10)
+## Slack Notification Format (R10, OMN-1970)
 
-All Slack messages include correlation context:
+All Slack messages include correlation context and use per-ticket threading:
 
 ```
 [OMN-XXXX][pipeline:{phase}][run:{run_id}]
 {message}
 ```
 
-- Blocked notifications: `notification.blocked` event type
-- Completed notifications: `notification.completed` event type
+- **Threading**: First notification creates Slack thread; all subsequent reply to `thread_ts`
+- `thread_ts` stored in `pipeline_state.slack_thread_ts` for resume
+- >3 parallel pipelines produce threaded (not flat) Slack messages
+- Blocked notifications: WARNING severity (or ERROR for `failed_exception`)
+- Completed notifications: INFO severity
 - Dry-run: prefix message with `[DRY RUN]`
 - All notifications are best-effort and non-blocking
-- `slack_thread_ts` is a placeholder in pipeline_state (threading deferred to future ticket)
+- Dual-emission: direct Slack via `PipelineSlackNotifier` + Kafka event via `emit_client_wrapper`
+- **Dependency**: Full threading requires OMN-2157 (Web API support in omnibase_infra).
+  Without it, notifications still send but without thread grouping.
+
+### Module: `pipeline_slack_notifier.py`
+
+Located at `plugins/onex/hooks/lib/pipeline_slack_notifier.py`. Key interface:
+
+| Method | Purpose | Returns |
+|--------|---------|---------|
+| `notify_pipeline_started()` | Seed Slack thread on pipeline start | `thread_ts` |
+| `notify_phase_completed()` | Phase completion with summary | `thread_ts` |
+| `notify_blocked()` | Pipeline block with reason and block_kind | `thread_ts` |
+
+Use `notify_sync()` wrapper for synchronous calling context.
 
 ---
 
