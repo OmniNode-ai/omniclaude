@@ -441,7 +441,7 @@ class InjectionLimitsConfig(BaseSettings):
         le=3.0,
         description=(
             "Score multiplier for patterns with gate_result='pass'. "
-            "Applied when evidence_policy='boost'. Default 1.3."
+            "Applied when evidence_policy is not 'ignore'. Default 1.3."
         ),
     )
 
@@ -451,7 +451,7 @@ class InjectionLimitsConfig(BaseSettings):
         le=1.0,
         description=(
             "Score multiplier for patterns with gate_result='fail'. "
-            "Applied when evidence_policy='boost'. Default 0.6."
+            "Applied when evidence_policy is not 'ignore'. Default 0.6."
         ),
     )
 
@@ -667,6 +667,10 @@ def select_patterns_for_injection(
 
     # Warn when evidence_policy is active but no resolver is wired up (OMN-2092)
     if limits.evidence_policy != "ignore" and evidence_resolver is None:
+        # Graceful degradation: when no resolver is wired, ALL patterns pass
+        # through unmodified regardless of policy (including 'require').
+        # This matches the project invariant: context injection failures never
+        # block injection. Wire a resolver to enforce 'require' semantics.
         logger.warning(
             "evidence_policy=%r but no evidence_resolver provided; "
             "falling back to no filtering (all patterns pass through unmodified). "

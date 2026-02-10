@@ -1220,6 +1220,31 @@ class TestEvidencePolicy:
         assert "[Evidence: Pass]" not in rendered
         assert "### Test Pattern" in rendered
 
+    def test_resolver_exception_falls_back_to_none(self) -> None:
+        """When resolver.resolve() raises, gate_result defaults to None."""
+
+        class BrokenResolver:
+            """Resolver that always raises."""
+
+            def resolve(self, pattern_id: str) -> str | None:
+                raise RuntimeError("simulated resolver failure")
+
+        resolver = BrokenResolver()
+        limits = InjectionLimitsConfig(
+            max_patterns_per_injection=10,
+            max_per_domain=10,
+            max_tokens_injected=10000,
+            evidence_policy="boost",
+        )
+        patterns = [make_pattern(pattern_id="pat-err")]
+
+        # Should not raise; pattern passes through with no boost/penalty
+        result = select_patterns_for_injection(
+            patterns, limits, evidence_resolver=resolver
+        )  # type: ignore[arg-type]
+        assert len(result) == 1
+        assert result[0].pattern_id == "pat-err"
+
     def test_default_evidence_policy_is_ignore(self) -> None:
         """InjectionLimitsConfig().evidence_policy == "ignore"."""
         config = InjectionLimitsConfig()
