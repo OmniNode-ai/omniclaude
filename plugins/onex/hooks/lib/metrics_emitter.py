@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 import uuid
 from collections.abc import Callable
@@ -451,8 +452,9 @@ def write_metrics_artifact(
                     outcome.get("error_codes", [])
                 )
 
-        # Atomic write via temp file (same-filesystem rename is atomic on POSIX)
-        tmp_path = artifact_path.with_suffix(".json.tmp")
+        # Atomic write via temp file (same-filesystem rename is atomic on POSIX).
+        # PID suffix avoids clobbering when concurrent hooks target the same path.
+        tmp_path = artifact_path.parent / f"{artifact_path.stem}.{os.getpid()}.tmp"
         tmp_path.write_text(json.dumps(data, indent=2))
         tmp_path.rename(artifact_path)
 

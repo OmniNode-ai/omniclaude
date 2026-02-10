@@ -503,6 +503,54 @@ class TestTransformForObservability:
         # Original should be unchanged
         assert original == original_copy
 
+    def test_transform_new_payload_strips_prompt_b64(self) -> None:
+        """New payload shape: prompt_b64 is stripped from observability output."""
+        from omniclaude.hooks.event_registry import transform_for_observability
+
+        payload = {
+            "prompt_preview": "Fix the bug in auth.py",
+            "prompt_b64": "RnVsbCBwcm9tcHQgY29udGVudA==",
+            "prompt_length": 42,
+            "session_id": "abc123",
+        }
+        result = transform_for_observability(payload)
+
+        assert "prompt_b64" not in result
+        assert "prompt_preview" in result
+        assert result["prompt_length"] == 42
+        assert result["session_id"] == "abc123"
+
+    def test_transform_new_payload_preserves_prompt_length(self) -> None:
+        """New payload shape: prompt_length from hook is preserved (not recalculated)."""
+        from omniclaude.hooks.event_registry import transform_for_observability
+
+        payload = {
+            "prompt_preview": "Short preview",
+            "prompt_b64": "TG9uZyBwcm9tcHQ=",
+            "prompt_length": 500,  # Original prompt was 500 chars
+            "session_id": "abc",
+        }
+        result = transform_for_observability(payload)
+
+        # prompt_length should be the original value, not len(prompt_preview)
+        assert result["prompt_length"] == 500
+
+    def test_transform_new_payload_does_not_mutate_original(self) -> None:
+        """New payload shape: original payload is not mutated."""
+        from omniclaude.hooks.event_registry import transform_for_observability
+
+        original = {
+            "prompt_preview": "Hello",
+            "prompt_b64": "SGVsbG8=",
+            "prompt_length": 5,
+            "session_id": "abc",
+        }
+        original_copy = dict(original)
+
+        transform_for_observability(original)
+
+        assert original == original_copy
+
 
 # =============================================================================
 # transform_passthrough() Tests

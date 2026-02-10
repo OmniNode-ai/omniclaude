@@ -869,6 +869,21 @@ class TestMeasurementChecks:
         check_map = {r.check_id: r for r in results}
         assert not check_map[MeasurementCheck.CHECK_MEAS_006].passed
 
+    def test_none_metrics_fails_all_checks(self):
+        """All checks fail when metrics are None (no metrics emitted)."""
+        results = run_measurement_checks(None, "implement")
+
+        assert len(results) == 6
+        # CHECK-MEAS-001 should fail (no metrics emitted)
+        assert not results[0].passed
+        assert results[0].check_id == MeasurementCheck.CHECK_MEAS_001
+        assert "missing" in results[0].message.lower()
+
+        # All remaining checks should fail with "no metrics available"
+        for r in results[1:]:
+            assert not r.passed
+            assert "no metrics available" in r.message.lower()
+
 
 # ---------------------------------------------------------------------------
 # Tests: Metrics Emitter

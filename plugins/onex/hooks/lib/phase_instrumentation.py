@@ -102,8 +102,8 @@ except ImportError:
 # Phases that are expected to run tests
 TEST_BEARING_PHASES = frozenset({"local_review"})
 
-# Valid PhaseResult status values
-VALID_PHASE_STATUSES: tuple[str, ...] = ("completed", "blocked", "failed")
+# Valid PhaseResult status values (frozenset for O(1) membership testing)
+VALID_PHASE_STATUSES: frozenset[str] = frozenset({"completed", "blocked", "failed"})
 
 # Duration budgets per phase (milliseconds)
 DURATION_BUDGETS_MS: dict[str, float] = {
