@@ -269,7 +269,7 @@ def build_metrics_from_result(
         passed_tests=phase_result.tests_passed,
         failed_tests=phase_result.tests_failed,
         pass_rate=(
-            phase_result.tests_passed / phase_result.tests_total
+            round(phase_result.tests_passed / phase_result.tests_total, 4)
             if phase_result.tests_total > 0
             else None
         ),

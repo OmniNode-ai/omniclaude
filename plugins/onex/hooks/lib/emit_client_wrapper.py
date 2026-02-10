@@ -203,7 +203,8 @@ class _SocketEmitClient:
                 chunks.append(chunk)
                 if b"\n" in chunk:
                     break
-            raw = b"".join(chunks).decode("utf-8").strip()
+            # Parse only the first newline-terminated line (ignore trailing data)
+            raw = b"".join(chunks).split(b"\n", 1)[0].decode("utf-8").strip()
             if not raw:
                 raise ConnectionError("Daemon closed connection without responding")
             return cast("dict[str, Any]", json.loads(raw))
@@ -214,7 +215,7 @@ class _SocketEmitClient:
         """Emit event synchronously, returns event_id."""
         response = self._request({"event_type": event_type, "payload": payload})
         if response.get("status") == "queued":
-            return str(response["event_id"])
+            return str(response.get("event_id", ""))
         raise RuntimeError(response.get("reason", f"Unexpected response: {response}"))
 
     def is_daemon_running_sync(self) -> bool:

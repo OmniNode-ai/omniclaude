@@ -22,6 +22,7 @@ import json
 import logging
 import re
 import uuid
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -57,7 +58,7 @@ _INVALID_PATH_CHARS = ("..", "/", "\\", "\x00")
 # ---------------------------------------------------------------------------
 
 
-def _get_redact_secrets() -> callable:  # type: ignore[valid-type]
+def _get_redact_secrets() -> Callable[[str], str]:
     """Return the ``redact_secrets`` callable, with a safe fallback.
 
     If ``secret_redactor`` is unavailable, the fallback replaces all input
@@ -265,7 +266,10 @@ def emit_phase_metrics(
         )
         payload = event.model_dump(mode="json")
 
-        # Sanitize before emission
+        # Sanitize before emission — defense-in-depth layer.
+        # Builders (build_metrics_from_result, build_error_metrics) now also
+        # redact and truncate, but this layer ensures safety even for metrics
+        # constructed outside the standard builder path.
         if "payload" in payload and "outcome" in (payload["payload"] or {}):
             outcome = payload["payload"]["outcome"]
             if outcome and "error_messages" in outcome:
