@@ -174,7 +174,7 @@ async def get_producer_lock() -> asyncio.Lock:
 
 def _get_kafka_bootstrap_servers() -> str | None:
     """Get Kafka bootstrap servers from settings."""
-    # Use Pydantic settings (fail fast if not configured properly)
+    # Try Pydantic settings first, fall back to env var, else return None
     try:
         servers: str = settings.get_effective_kafka_bootstrap_servers()
         return servers
