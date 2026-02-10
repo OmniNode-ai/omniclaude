@@ -41,7 +41,7 @@ class EmitClient:
         self._socket_path = socket_path
         self._timeout = timeout
         self._sock: socket.socket | None = None
-        self._buf = b""  # Persistent read buffer for stream framing
+        self._buf = bytearray()  # Persistent read buffer for stream framing
 
     # ------------------------------------------------------------------
     # Connection management
@@ -59,7 +59,7 @@ class EmitClient:
             sock.close()
             raise
         self._sock = sock
-        self._buf = b""  # Reset buffer on new connection
+        self._buf = bytearray()  # Reset buffer on new connection
         return sock
 
     def _send_and_recv(self, request: dict[str, object]) -> dict[str, object]:
@@ -87,7 +87,7 @@ class EmitClient:
             chunk = sock.recv(_RECV_BUFSIZE)
             if not chunk:
                 raise ConnectionResetError("daemon closed connection")
-            self._buf += chunk
+            self._buf.extend(chunk)
             if len(self._buf) > _MAX_RESPONSE_SIZE:
                 raise ValueError("daemon response exceeded size limit")
         idx = self._buf.index(b"\n")
@@ -138,7 +138,7 @@ class EmitClient:
             except OSError:
                 pass
             self._sock = None
-            self._buf = b""
+            self._buf = bytearray()
 
     def __enter__(self) -> EmitClient:
         return self

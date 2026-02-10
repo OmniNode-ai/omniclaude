@@ -60,7 +60,7 @@ from omnibase_infra.event_bus.event_bus_kafka import EventBusKafka
 
 from omniclaude.hooks.handler_event_emitter import (
     ModelClaudeHookEventConfig,
-    _create_kafka_config,
+    create_kafka_config,
     emit_claude_hook_event,
     emit_prompt_submitted,
     emit_session_ended,
@@ -641,7 +641,7 @@ async def _emit_tool_content(
         topic = build_topic("", TopicBase.TOOL_CONTENT)
 
         # Reuse shared Kafka config (raises ModelOnexError if bootstrap missing)
-        config = _create_kafka_config()
+        config = create_kafka_config()
         # New bus per call is intentional - each invocation runs in an isolated
         # subshell from the shell hook, so connection pooling isn't beneficial
         bus = EventBusKafka(config=config)

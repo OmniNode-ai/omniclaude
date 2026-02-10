@@ -366,7 +366,7 @@ def _get_topic_base(event_type: HookEventType) -> TopicBase:
     return topic_base
 
 
-def _create_kafka_config() -> ModelKafkaEventBusConfig:
+def create_kafka_config() -> ModelKafkaEventBusConfig:
     """Create Kafka configuration optimized for hook emission.
 
     Configuration is loaded from environment variables with hook-specific
@@ -384,7 +384,7 @@ def _create_kafka_config() -> ModelKafkaEventBusConfig:
         ModelOnexError: If KAFKA_BOOTSTRAP_SERVERS is not set.
     """
     # Environment label for config metadata (not used for topic prefixing — OMN-1972)
-    environment = os.environ.get("KAFKA_ENVIRONMENT", "prod")
+    environment = os.environ.get("KAFKA_ENVIRONMENT", "unknown")
     bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS")
     if not bootstrap_servers:
         raise ModelOnexError(
@@ -482,7 +482,7 @@ async def emit_hook_event(
         )
 
         # Create Kafka config and bus
-        config = _create_kafka_config()
+        config = create_kafka_config()
         bus = EventBusKafka(config=config)
 
         # Start producer
@@ -1062,7 +1062,7 @@ async def emit_claude_hook_event(
         )
 
         # Create Kafka config and bus
-        kafka_config = _create_kafka_config()
+        kafka_config = create_kafka_config()
         bus = EventBusKafka(config=kafka_config)
 
         # Start producer
@@ -1192,7 +1192,7 @@ async def emit_session_outcome_from_config(
         partition_key = config.session_id.encode("utf-8")
 
         # Create Kafka config and bus
-        kafka_config = _create_kafka_config()
+        kafka_config = create_kafka_config()
         bus = EventBusKafka(config=kafka_config)
         await bus.start()
 
@@ -1284,6 +1284,8 @@ __all__ = [
     "ModelSessionEndedConfig",
     "ModelClaudeHookEventConfig",
     "ModelSessionOutcomeConfig",
+    # Kafka configuration
+    "create_kafka_config",
     # Core emission function
     "emit_hook_event",
     # Config-based convenience functions
