@@ -28,10 +28,9 @@ from omnibase_spi.contracts.measurement.contract_promotion_gate import (
 from pydantic import BaseModel, ConfigDict, Field
 
 from plugins.onex.hooks.lib.metrics_aggregator import (
+    REQUIRED_DIMENSIONS,
+    build_dimension_evidence_list,
     detect_flakes,
-    get_total_tests,
-    get_total_tokens,
-    make_dimension_evidence,
 )
 
 if TYPE_CHECKING:
@@ -91,7 +90,7 @@ def evaluate_promotion_gate(
         thresholds = PromotionThresholds()
 
     run_id = candidate.run_id
-    required = ["duration", "tokens", "tests"]
+    required = REQUIRED_DIMENSIONS
 
     # -- Check 1a: candidate overall failure --------------------------------
     if candidate.overall_result == "failure":
@@ -171,7 +170,7 @@ def evaluate_promotion_gate(
         )
 
     # -- Build dimension evidence ------------------------------------------
-    dimensions = _build_dimensions(candidate, baseline)
+    dimensions = build_dimension_evidence_list(candidate, baseline)
 
     # -- Check 4: insufficient evidence on any dimension --------------------
     #    Covers both zero-baseline (delta_pct=None) and zero-current
@@ -249,29 +248,6 @@ def _gate(
             "promotion_reasons": reasons,
         },
     )
-
-
-def _build_dimensions(
-    candidate: ContractAggregatedRun,
-    baseline: ContractAggregatedRun,
-) -> list[ContractDimensionEvidence]:
-    return [
-        make_dimension_evidence(
-            "duration",
-            baseline.total_duration_ms or 0.0,
-            candidate.total_duration_ms or 0.0,
-        ),
-        make_dimension_evidence(
-            "tokens",
-            float(get_total_tokens(baseline)),
-            float(get_total_tokens(candidate)),
-        ),
-        make_dimension_evidence(
-            "tests",
-            float(get_total_tests(baseline)),
-            float(get_total_tests(candidate)),
-        ),
-    ]
 
 
 def _check_regressions(

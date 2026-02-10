@@ -578,6 +578,26 @@ class TestCustomThresholds:
         with pytest.raises(ValidationError):
             setattr(t, "duration_regression_pct", 50.0)
 
+    def test_thresholds_reject_negative_values(self) -> None:
+        from pydantic import ValidationError
+
+        from plugins.onex.hooks.lib.promotion_gater import PromotionThresholds
+
+        with pytest.raises(ValidationError):
+            PromotionThresholds(duration_regression_pct=-1.0)
+        with pytest.raises(ValidationError):
+            PromotionThresholds(token_regression_pct=-0.1)
+        with pytest.raises(ValidationError):
+            PromotionThresholds(test_decrease_pct=-5.0)
+
+    def test_thresholds_forbid_extra_fields(self) -> None:
+        from pydantic import ValidationError
+
+        from plugins.onex.hooks.lib.promotion_gater import PromotionThresholds
+
+        with pytest.raises(ValidationError):
+            PromotionThresholds(unknown_field=5.0)  # type: ignore[call-arg]
+
 
 # =============================================================================
 # Extensions metadata

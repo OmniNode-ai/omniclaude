@@ -40,6 +40,8 @@ ALL_PHASES: frozenset[ContractEnumPipelinePhase] = frozenset(ContractEnumPipelin
 
 BASELINES_ROOT = Path.home() / ".claude" / "baselines"
 
+REQUIRED_DIMENSIONS: list[str] = ["duration", "tokens", "tests"]
+
 
 # -- Outcome signatures (flake detection) ------------------------------------
 
@@ -291,48 +293,12 @@ def make_dimension_evidence(
     )
 
 
-def assess_evidence(
+def build_dimension_evidence_list(
     candidate: ContractAggregatedRun,
-    baseline: ContractAggregatedRun | None,
-    context: ContractMeasurementContext | None = None,
-) -> ContractPromotionGate:
-    """Assess per-dimension evidence sufficiency for a candidate run.
-
-    Returns ContractPromotionGate with:
-    - gate_result='insufficient_evidence' when pattern_id missing or no baseline
-    - gate_result='pass' when all required dimensions are sufficient
-    - gate_result='fail' when any required dimension is insufficient
-    """
-    run_id = candidate.run_id
-    required = ["duration", "tokens", "tests"]
-
-    if context is None or not context.pattern_id:
-        return ContractPromotionGate(
-            run_id=run_id,
-            context=context,
-            baseline_key="",
-            gate_result="insufficient_evidence",
-            dimensions=[],
-            required_dimensions=required,
-            sufficient_count=0,
-            total_count=0,
-        )
-
-    baseline_key = derive_baseline_key(context)
-
-    if baseline is None:
-        return ContractPromotionGate(
-            run_id=run_id,
-            context=context,
-            baseline_key=baseline_key,
-            gate_result="insufficient_evidence",
-            dimensions=[],
-            required_dimensions=required,
-            sufficient_count=0,
-            total_count=0,
-        )
-
-    dimensions = [
+    baseline: ContractAggregatedRun,
+) -> list[ContractDimensionEvidence]:
+    """Build the standard dimension evidence list from candidate vs baseline."""
+    return [
         make_dimension_evidence(
             "duration",
             baseline.total_duration_ms or 0.0,
@@ -350,9 +316,52 @@ def assess_evidence(
         ),
     ]
 
+
+def assess_evidence(
+    candidate: ContractAggregatedRun,
+    baseline: ContractAggregatedRun | None,
+    context: ContractMeasurementContext | None = None,
+) -> ContractPromotionGate:
+    """Assess per-dimension evidence sufficiency for a candidate run.
+
+    Returns ContractPromotionGate with:
+    - gate_result='insufficient_evidence' when pattern_id missing or no baseline
+    - gate_result='pass' when all required dimensions are sufficient
+    - gate_result='fail' when any required dimension is insufficient
+    """
+    run_id = candidate.run_id
+
+    if context is None or not context.pattern_id:
+        return ContractPromotionGate(
+            run_id=run_id,
+            context=context,
+            baseline_key="",
+            gate_result="insufficient_evidence",
+            dimensions=[],
+            required_dimensions=REQUIRED_DIMENSIONS,
+            sufficient_count=0,
+            total_count=0,
+        )
+
+    baseline_key = derive_baseline_key(context)
+
+    if baseline is None:
+        return ContractPromotionGate(
+            run_id=run_id,
+            context=context,
+            baseline_key=baseline_key,
+            gate_result="insufficient_evidence",
+            dimensions=[],
+            required_dimensions=REQUIRED_DIMENSIONS,
+            sufficient_count=0,
+            total_count=0,
+        )
+
+    dimensions = build_dimension_evidence_list(candidate, baseline)
+
     sufficient_count = sum(1 for d in dimensions if d.sufficient)
     gate_result: Literal["pass", "fail"] = (
-        "pass" if sufficient_count == len(required) else "fail"
+        "pass" if sufficient_count == len(REQUIRED_DIMENSIONS) else "fail"
     )
 
     return ContractPromotionGate(
@@ -361,7 +370,7 @@ def assess_evidence(
         baseline_key=baseline_key,
         gate_result=gate_result,
         dimensions=dimensions,
-        required_dimensions=required,
+        required_dimensions=REQUIRED_DIMENSIONS,
         sufficient_count=sufficient_count,
         total_count=len(dimensions),
     )
