@@ -863,7 +863,7 @@ class TestClaudeHookEventIntegration:
         env = get_kafka_environment()
 
         # Build topic name
-        topic = build_topic(env, TopicBase.CLAUDE_HOOK_EVENT)
+        topic = build_topic("", TopicBase.CLAUDE_HOOK_EVENT)
 
         # Start consumer BEFORE publishing (to catch the message)
         consumer_task = asyncio.create_task(
@@ -930,7 +930,7 @@ class TestClaudeHookEventIntegration:
 
         env = get_kafka_environment()
         test_session_id = f"partition-key-test-{uuid4().hex[:12]}"
-        topic = build_topic(env, TopicBase.CLAUDE_HOOK_EVENT)
+        topic = build_topic("", TopicBase.CLAUDE_HOOK_EVENT)
 
         consumer_task = asyncio.create_task(
             wait_for_claude_hook_event(
@@ -982,7 +982,7 @@ class TestClaudeHookEventIntegration:
         test_session_id = f"full-prompt-test-{uuid4().hex[:12]}"
         # Create a long prompt (500 chars - well over 100 char observability limit)
         long_prompt = "A" * 500
-        topic = build_topic(env, TopicBase.CLAUDE_HOOK_EVENT)
+        topic = build_topic("", TopicBase.CLAUDE_HOOK_EVENT)
 
         consumer_task = asyncio.create_task(
             wait_for_claude_hook_event(
@@ -1033,7 +1033,7 @@ class TestClaudeHookEventIntegration:
         env = get_kafka_environment()
         test_session_id = f"correlation-test-{uuid4().hex[:12]}"
         test_correlation_id = uuid4()
-        topic = build_topic(env, TopicBase.CLAUDE_HOOK_EVENT)
+        topic = build_topic("", TopicBase.CLAUDE_HOOK_EVENT)
 
         consumer_task = asyncio.create_task(
             wait_for_claude_hook_event(
@@ -1083,7 +1083,7 @@ class TestClaudeHookEventIntegration:
         env = get_kafka_environment()
         test_session_id = f"timestamp-test-{uuid4().hex[:12]}"
         before_emit = datetime.now(UTC)
-        topic = build_topic(env, TopicBase.CLAUDE_HOOK_EVENT)
+        topic = build_topic("", TopicBase.CLAUDE_HOOK_EVENT)
 
         consumer_task = asyncio.create_task(
             wait_for_claude_hook_event(
@@ -1220,7 +1220,7 @@ class TestSessionOutcomeIntegration:
 
         env = get_kafka_environment()
         test_session_id = f"outcome-cmd-test-{uuid4().hex[:12]}"
-        topic = build_topic(env, TopicBase.SESSION_OUTCOME_CMD)
+        topic = build_topic("", TopicBase.SESSION_OUTCOME_CMD)
 
         # Start consumer BEFORE publishing
         consumer_task = asyncio.create_task(
@@ -1268,7 +1268,7 @@ class TestSessionOutcomeIntegration:
 
         env = get_kafka_environment()
         test_session_id = f"outcome-evt-test-{uuid4().hex[:12]}"
-        topic = build_topic(env, TopicBase.SESSION_OUTCOME_EVT)
+        topic = build_topic("", TopicBase.SESSION_OUTCOME_EVT)
 
         consumer_task = asyncio.create_task(
             wait_for_session_outcome(
@@ -1324,7 +1324,7 @@ class TestSessionOutcomeIntegration:
 
         env = get_kafka_environment()
         test_session_id = f"golden-path-test-{uuid4().hex[:12]}"
-        topic = build_topic(env, TopicBase.SESSION_OUTCOME_CMD)
+        topic = build_topic("", TopicBase.SESSION_OUTCOME_CMD)
 
         # Step 1: Derive outcome
         outcome_result = derive_session_outcome(

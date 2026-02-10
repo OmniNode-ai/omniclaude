@@ -199,22 +199,12 @@ def _get_kafka_bootstrap_servers() -> str:
 
 
 def _get_kafka_topic_prefix() -> str:
-    """Get Kafka topic prefix (environment) from settings or environment.
+    """Get Kafka topic prefix.
 
     Returns:
-        Topic prefix (e.g., "dev", "staging", "prod"). Defaults to "dev".
+        Empty string. Topics are realm-agnostic per ONEX convention (OMN-1972):
+        TopicBase values ARE the wire topic names, no environment prefix.
     """
-    # Try Pydantic settings first (if available)
-    if settings is not None:
-        try:
-            prefix: str | None = getattr(settings, "kafka_topic_prefix", None)
-            if prefix:
-                return prefix
-        except Exception as e:
-            logger.debug(f"Failed to get Kafka topic prefix from settings: {e}")
-
-    # Topics are realm-agnostic (OMN-1972): TopicBase values are wire topics.
-    # No environment prefix. Return empty string.
     return ""
 
 

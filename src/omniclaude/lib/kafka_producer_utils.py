@@ -102,13 +102,16 @@ def create_event_envelope(
 
 
 def build_kafka_topic(topic_base_value: str) -> str:
-    """Build full Kafka topic name with environment prefix.
+    """Build Kafka topic name from TopicBase value.
+
+    Topics are realm-agnostic per OMN-1972: TopicBase values ARE the wire
+    topic names. No environment prefix is applied.
 
     Args:
         topic_base_value: Base topic name from TopicBase enum
 
     Returns:
-        Full topic name with prefix
+        Topic name (same as input since prefix is empty)
     """
     prefix = get_kafka_topic_prefix()
     return build_topic(prefix, topic_base_value)
