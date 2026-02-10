@@ -52,7 +52,10 @@ from omnibase_spi.contracts.measurement import (
     MeasurementCheck,
 )
 
-from plugins.onex.hooks.lib.metrics_emitter import MAX_ERROR_MESSAGE_LENGTH
+from plugins.onex.hooks.lib.metrics_emitter import (
+    MAX_ERROR_MESSAGE_LENGTH,
+    _get_redact_secrets,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -252,8 +255,6 @@ def build_metrics_from_result(
     )
 
     # Sanitize reason and block_kind: redact secrets before evt topic emission
-    from plugins.onex.hooks.lib.metrics_emitter import _get_redact_secrets
-
     error_messages: list[str] = []
     if (
         phase_result.reason
@@ -389,8 +390,6 @@ def build_error_metrics(
     duration = ContractDurationMetrics(wall_clock_ms=wall_clock_ms)
 
     # Sanitize error message: redact secrets + truncate to evt topic limit
-    from plugins.onex.hooks.lib.metrics_emitter import _get_redact_secrets
-
     redact = _get_redact_secrets()
     error_msg = redact(str(error))
     if len(error_msg) > MAX_ERROR_MESSAGE_LENGTH:
@@ -465,8 +464,6 @@ def build_skipped_metrics(
 
     # Sanitize skip_reason: redact secrets + truncate (defense-in-depth,
     # consistent with build_metrics_from_result and build_error_metrics)
-    from plugins.onex.hooks.lib.metrics_emitter import _get_redact_secrets
-
     redact = _get_redact_secrets()
     clean_reason = redact(skip_reason)
     if len(clean_reason) > MAX_ERROR_MESSAGE_LENGTH:
@@ -588,9 +585,13 @@ def instrumented_phase(
         write_metrics_artifact(ticket_id, run_id, phase, attempt, metrics)
         raise
 
-    # Emit and persist on success
-    emit_phase_metrics(metrics, timestamp_iso=_completed.isoformat())
-    write_metrics_artifact(ticket_id, run_id, phase, attempt, metrics)
+    # Emit and persist on success — wrapped for defense-in-depth so
+    # emission failures never prevent the caller from receiving the result.
+    try:
+        emit_phase_metrics(metrics, timestamp_iso=_completed.isoformat())
+        write_metrics_artifact(ticket_id, run_id, phase, attempt, metrics)
+    except Exception as exc:
+        logger.warning("Post-phase emit/write failed for %s: %s", phase, exc)
 
     return result
 
@@ -641,9 +642,12 @@ def detect_silent_omission(
         return None
 
     logger.warning(
-        f"Silent omission detected: {phase} attempt {attempt} "
-        f"for {ticket_id} run {run_id} did not emit metrics. "
-        f"Recording protocol violation."
+        "Silent omission detected: %s attempt %d for %s run %s "
+        "did not emit metrics. Recording protocol violation.",
+        phase,
+        attempt,
+        ticket_id,
+        run_id,
     )
 
     violation = build_skipped_metrics(

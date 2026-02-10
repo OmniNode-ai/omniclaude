@@ -381,6 +381,8 @@ def write_metrics_artifact(
     File path: ~/.claude/pipelines/{ticket_id}/metrics/{run_id}/{phase}_{attempt}.metrics.json
 
     Persisted via model_dump(mode="json"). Survives daemon outage.
+    Uses atomic write (temp file + rename) which is safe on local POSIX
+    filesystems. Not guaranteed atomic on network-mounted filesystems.
 
     Args:
         ticket_id: The ticket identifier (e.g. OMN-2027).
@@ -394,7 +396,7 @@ def write_metrics_artifact(
     """
     try:
         # Reject path traversal in user-influenced components
-        for component in (ticket_id, run_id, phase):
+        for component in (ticket_id, run_id, phase, str(attempt)):
             if any(c in str(component) for c in _INVALID_PATH_CHARS):
                 logger.warning(
                     f"Rejected path component with traversal chars: {component!r}"
@@ -497,7 +499,7 @@ def metrics_artifact_exists(
     Returns:
         True if the artifact file exists.
     """
-    for component in (ticket_id, run_id, phase):
+    for component in (ticket_id, run_id, phase, str(attempt)):
         if any(c in str(component) for c in _INVALID_PATH_CHARS):
             logger.warning(
                 f"Rejected path component with traversal chars: {component!r}"

@@ -1197,6 +1197,17 @@ class TestPhaseResult:
         assert result.blocking_issues == 5
         assert result.tokens_used == 50000
 
+    def test_invalid_status_coerced_to_failed(self):
+        """Invalid status values are silently coerced to 'failed' for safety."""
+        result = PhaseResult(status="success")  # type: ignore[arg-type]
+        assert result.status == "failed"
+
+    def test_all_valid_statuses_accepted(self):
+        """All valid statuses are accepted without coercion."""
+        for status in ("completed", "blocked", "failed"):
+            result = PhaseResult(status=status)  # type: ignore[arg-type]
+            assert result.status == status
+
 
 # ---------------------------------------------------------------------------
 # Tests: MeasurementCheckResult
