@@ -68,13 +68,14 @@ def evaluate_promotion_gate(
 
     Checks are applied in strict priority order (first match wins):
 
-    1. Candidate failed → block (gate_result="fail")
-    2. Flake detected   → block (gate_result="fail")
-    3. No context / no pattern_id / no baseline → warn (gate_result="insufficient_evidence")
-    4. Zero-baseline on any dimension → warn (gate_result="insufficient_evidence")
-    5. Duration regression > threshold → warn (gate_result="insufficient_evidence")
-    6. Token regression > threshold   → warn (gate_result="insufficient_evidence")
-    7. All clear → allow (gate_result="pass")
+    1a. Candidate failed  → block (gate_result="fail")
+    1b. Candidate partial → warn  (gate_result="insufficient_evidence")
+    2.  Flake detected    → block (gate_result="fail")
+    3.  No context / no pattern_id / no baseline → warn (gate_result="insufficient_evidence")
+    4.  Zero-baseline on any dimension → warn (gate_result="insufficient_evidence")
+    5.  Duration regression > threshold → warn (gate_result="insufficient_evidence")
+    6.  Token regression > threshold   → warn (gate_result="insufficient_evidence")
+    7.  All clear → allow (gate_result="pass")
 
     The ``extensions`` dict on the returned gate carries:
         promotion_tier: "block" | "warn" | "allow"
@@ -86,7 +87,7 @@ def evaluate_promotion_gate(
     run_id = candidate.run_id
     required = ["duration", "tokens", "tests"]
 
-    # -- Check 1: candidate overall failure --------------------------------
+    # -- Check 1a: candidate overall failure --------------------------------
     if candidate.overall_result == "failure":
         return _gate(
             run_id=run_id,
@@ -94,6 +95,18 @@ def evaluate_promotion_gate(
             gate_result="fail",
             tier="block",
             reasons=["Candidate run failed (overall_result=failure)"],
+            dimensions=[],
+            required=required,
+        )
+
+    # -- Check 1b: candidate partial run ------------------------------------
+    if candidate.overall_result == "partial":
+        return _gate(
+            run_id=run_id,
+            context=context,
+            gate_result="insufficient_evidence",
+            tier="warn",
+            reasons=["Candidate run is partial (not all phases completed)"],
             dimensions=[],
             required=required,
         )

@@ -165,6 +165,25 @@ class TestBlockOnFailure:
         assert gate.gate_result == "fail"
         assert gate.extensions["promotion_tier"] == "block"
 
+    def test_partial_overall_result_warns(self) -> None:
+        from plugins.onex.hooks.lib.promotion_gater import evaluate_promotion_gate
+
+        ctx = _make_context()
+        # Candidate missing VERIFY phase entirely → overall_result="partial"
+        metrics = [
+            _make_phase(phase, run_id="c")
+            for phase in ContractEnumPipelinePhase
+            if phase != ContractEnumPipelinePhase.VERIFY
+        ]
+        candidate = _aggregate(metrics, context=ctx, run_id="c")
+        baseline = _aggregate(_all_phases_success(run_id="b"), context=ctx, run_id="b")
+
+        gate = evaluate_promotion_gate(candidate, baseline, ctx)
+
+        assert gate.gate_result == "insufficient_evidence"
+        assert gate.extensions["promotion_tier"] == "warn"
+        assert "partial" in gate.extensions["promotion_reasons"][0].lower()
+
 
 # =============================================================================
 # Block on flake
