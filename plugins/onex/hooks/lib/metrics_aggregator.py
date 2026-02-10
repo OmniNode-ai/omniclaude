@@ -297,8 +297,14 @@ def build_dimension_evidence_list(
     candidate: ContractAggregatedRun,
     baseline: ContractAggregatedRun,
 ) -> list[ContractDimensionEvidence]:
-    """Build the standard dimension evidence list from candidate vs baseline."""
-    return [
+    """Build the standard dimension evidence list from candidate vs baseline.
+
+    Precondition: the returned list must cover every entry in
+    ``REQUIRED_DIMENSIONS``.  An assertion enforces this so that adding
+    a new required dimension without a corresponding evidence builder
+    fails loudly rather than silently preventing promotion.
+    """
+    dims = [
         make_dimension_evidence(
             "duration",
             baseline.total_duration_ms or 0.0,
@@ -315,6 +321,13 @@ def build_dimension_evidence_list(
             float(get_total_tests(candidate)),
         ),
     ]
+    built = {d.dimension for d in dims}
+    missing = set(REQUIRED_DIMENSIONS) - built
+    assert not missing, (
+        f"build_dimension_evidence_list is missing dimensions: {sorted(missing)}. "
+        f"Update this function to cover all REQUIRED_DIMENSIONS."
+    )
+    return dims
 
 
 def assess_evidence(
