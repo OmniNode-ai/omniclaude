@@ -707,7 +707,14 @@ def select_patterns_for_injection(
         # Evidence resolution (OMN-2092)
         gate_result: str | None = None
         if evidence_resolver is not None and limits.evidence_policy != "ignore":
-            gate_result = evidence_resolver.resolve(pattern.pattern_id)
+            try:
+                gate_result = evidence_resolver.resolve(pattern.pattern_id)
+            except Exception:
+                logger.warning(
+                    "evidence_resolver.resolve(%s) failed; treating as no evidence",
+                    pattern.pattern_id,
+                    exc_info=True,
+                )
 
         effective_score = compute_effective_score(
             confidence=pattern.confidence,

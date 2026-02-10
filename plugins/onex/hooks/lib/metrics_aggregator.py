@@ -389,12 +389,15 @@ def save_gate(
     pattern_id = context.pattern_id or "_no_pattern"
 
     target_dir = root / pattern_id / baseline_key
-    target_dir.mkdir(parents=True, exist_ok=True)
-
-    target = target_dir / "latest.gate.json"
-    tmp = target.with_suffix(".json.tmp")
-    tmp.write_text(gate.model_dump_json(indent=2))
-    tmp.rename(target)
+    try:
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target = target_dir / "latest.gate.json"
+        tmp = target.with_suffix(".json.tmp")
+        tmp.write_text(gate.model_dump_json(indent=2))
+        tmp.rename(target)
+    except OSError as e:
+        logger.warning("Failed to save gate for %s: %s", pattern_id, e)
+        return target_dir / "latest.gate.json"
     return target
 
 
@@ -453,7 +456,9 @@ def load_latest_gate_result(
         # Parse and extract gate_result
         data = json.loads(latest_file.read_text())
         result = data.get("gate_result")
-        return str(result) if result is not None else None
+        if not isinstance(result, str):
+            return None
+        return result
     except (json.JSONDecodeError, OSError) as e:
         logger.warning("Failed to load latest gate for %s: %s", pid, e)
         return None
