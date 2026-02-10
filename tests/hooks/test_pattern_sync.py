@@ -181,16 +181,16 @@ class TestPatternRecordSync:
                 f"These definitions MUST stay in sync."
             )
 
-    def test_field_count_is_nine(
+    def test_field_count_is_ten(
         self,
         cli_pattern_types_path: Path,
         handler_module_path: Path,
     ) -> None:
-        """Verify both PatternRecord classes have exactly 9 fields.
+        """Verify both PatternRecord classes have exactly 10 fields.
 
-        The API model should have exactly 9 core fields (8 original + lifecycle_state
-        from OMN-2042). If this changes, it likely means someone added
-        database-specific fields that should be in DbPatternRecord instead.
+        The API model should have exactly 10 core fields (8 original + lifecycle_state
+        from OMN-2042 + evidence_tier from OMN-2044). If this changes, it likely
+        means someone added database-specific fields that should be in DbPatternRecord instead.
         """
         cli_fields = extract_dataclass_fields_from_ast(
             cli_pattern_types_path, "PatternRecord"
@@ -199,14 +199,14 @@ class TestPatternRecordSync:
             handler_module_path, "PatternRecord"
         )
 
-        assert len(cli_fields) == 9, (
-            f"CLI PatternRecord has {len(cli_fields)} fields, expected 9.\n"
+        assert len(cli_fields) == 10, (
+            f"CLI PatternRecord has {len(cli_fields)} fields, expected 10.\n"
             f"Fields: {[f[0] for f in cli_fields]}\n"
             f"If adding database fields, use DbPatternRecord instead."
         )
 
-        assert len(handler_fields) == 9, (
-            f"Handler PatternRecord has {len(handler_fields)} fields, expected 9.\n"
+        assert len(handler_fields) == 10, (
+            f"Handler PatternRecord has {len(handler_fields)} fields, expected 10.\n"
             f"Fields: {[f[0] for f in handler_fields]}\n"
             f"If adding database fields, use DbPatternRecord instead."
         )
@@ -226,6 +226,7 @@ class TestPatternRecordSync:
             "success_rate",
             "example_reference",
             "lifecycle_state",
+            "evidence_tier",
         ]
 
         cli_fields = extract_dataclass_fields_from_ast(

@@ -46,7 +46,7 @@ pytestmark = pytest.mark.unit
 
 @dataclass(frozen=True)
 class MockPatternRecord:
-    """Mock PatternRecord with lifecycle_state for testing."""
+    """Mock PatternRecord with lifecycle_state and evidence_tier for testing."""
 
     pattern_id: str
     domain: str
@@ -57,6 +57,7 @@ class MockPatternRecord:
     success_rate: float
     example_reference: str | None = None
     lifecycle_state: str | None = None
+    evidence_tier: str | None = None
 
 
 def make_pattern(
@@ -409,6 +410,123 @@ class TestProvisionalBadge:
             single_stripped = single_stripped[:-3].rstrip()
 
         handler_stripped = handler_pattern.rstrip()
+
+        assert single_stripped == handler_stripped
+
+    def test_format_sync_measured_badge(self) -> None:
+        """render_single_pattern and handler format match for MEASURED patterns."""
+        from omniclaude.hooks.handler_context_injection import (
+            HandlerContextInjection,
+            PatternRecord,
+        )
+
+        pattern = PatternRecord(
+            pattern_id="sync-meas-001",
+            domain="testing",
+            title="Sync Test Measured",
+            description="Verifying sync for measured patterns.",
+            confidence=0.85,
+            usage_count=12,
+            success_rate=0.8,
+            evidence_tier="MEASURED",
+        )
+
+        single_render = render_single_pattern(pattern)
+        handler = HandlerContextInjection()
+        handler_render = handler._format_patterns_markdown([pattern], max_patterns=1)
+
+        # Both should contain the [Measured] badge
+        assert "[Measured]" in single_render
+        assert "[Measured]" in handler_render
+
+        # Extract pattern portion from handler (skip header, strip separator)
+        header_end = handler_render.find("### ")
+        handler_pattern_text = handler_render[header_end:]
+
+        single_stripped = single_render.rstrip()
+        if single_stripped.endswith("---"):
+            single_stripped = single_stripped[:-3].rstrip()
+
+        handler_stripped = handler_pattern_text.rstrip()
+
+        assert single_stripped == handler_stripped
+
+    def test_format_sync_verified_badge(self) -> None:
+        """render_single_pattern and handler format match for VERIFIED patterns."""
+        from omniclaude.hooks.handler_context_injection import (
+            HandlerContextInjection,
+            PatternRecord,
+        )
+
+        pattern = PatternRecord(
+            pattern_id="sync-ver-001",
+            domain="code_review",
+            title="Sync Test Verified",
+            description="Verifying sync for verified patterns.",
+            confidence=0.95,
+            usage_count=25,
+            success_rate=0.92,
+            evidence_tier="VERIFIED",
+        )
+
+        single_render = render_single_pattern(pattern)
+        handler = HandlerContextInjection()
+        handler_render = handler._format_patterns_markdown([pattern], max_patterns=1)
+
+        # Both should contain the [Verified] badge
+        assert "[Verified]" in single_render
+        assert "[Verified]" in handler_render
+
+        # Extract pattern portion from handler (skip header, strip separator)
+        header_end = handler_render.find("### ")
+        handler_pattern_text = handler_render[header_end:]
+
+        single_stripped = single_render.rstrip()
+        if single_stripped.endswith("---"):
+            single_stripped = single_stripped[:-3].rstrip()
+
+        handler_stripped = handler_pattern_text.rstrip()
+
+        assert single_stripped == handler_stripped
+
+    def test_format_sync_combined_provisional_measured(self) -> None:
+        """render_single_pattern and handler format match for provisional + measured."""
+        from omniclaude.hooks.handler_context_injection import (
+            HandlerContextInjection,
+            PatternRecord,
+        )
+
+        pattern = PatternRecord(
+            pattern_id="sync-combo-001",
+            domain="testing",
+            title="Sync Test Combined",
+            description="Verifying sync for combined badges.",
+            confidence=0.75,
+            usage_count=8,
+            success_rate=0.7,
+            lifecycle_state="provisional",
+            evidence_tier="MEASURED",
+        )
+
+        single_render = render_single_pattern(pattern)
+        handler = HandlerContextInjection()
+        handler_render = handler._format_patterns_markdown([pattern], max_patterns=1)
+
+        # Both should contain both badges
+        assert "[Provisional]" in single_render
+        assert "[Measured]" in single_render
+        assert "[Provisional]" in handler_render
+        assert "[Measured]" in handler_render
+
+        # Extract pattern portion from handler (skip header, strip separator)
+        header_end = handler_render.find("### ")
+        handler_pattern_text = handler_render[header_end:]
+
+        single_stripped = single_render.rstrip()
+        if single_stripped.endswith("---"):
+            single_stripped = single_stripped[:-3].rstrip()
+
+        handler_stripped = handler_pattern_text.rstrip()
 
         assert single_stripped == handler_stripped
 
