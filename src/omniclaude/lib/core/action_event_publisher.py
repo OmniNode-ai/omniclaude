@@ -42,7 +42,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-# FAIL FAST: Required configuration
+# Configuration (settings provides fallback for bootstrap servers)
 from omniclaude.config import settings
 from omniclaude.hooks.topics import TopicBase, build_topic
 

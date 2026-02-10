@@ -28,7 +28,8 @@ Requirements:
 Environment Variables:
     KAFKA_INTEGRATION_TESTS: Set to "1" to enable integration tests
     KAFKA_BOOTSTRAP_SERVERS: Kafka broker address(es)
-    KAFKA_ENVIRONMENT: Topic prefix (default: "dev")
+    KAFKA_ENVIRONMENT: Metadata tag for test isolation (default: "dev").
+        Not used for topic naming — topics are realm-agnostic per OMN-1972.
     KAFKA_HOOK_TIMEOUT_SECONDS: Connection timeout in seconds (default: 30 for
         integration tests, 2 for production hooks). Set higher if connecting
         to remote brokers with high latency.
@@ -90,7 +91,11 @@ def get_kafka_bootstrap_servers() -> str:
 
 
 def get_kafka_environment() -> str:
-    """Get Kafka environment prefix from environment."""
+    """Get Kafka environment tag for test metadata (not topic naming).
+
+    Used as metadata in config objects (e.g., environment=env) and for test
+    isolation prefixes. Topics are realm-agnostic per OMN-1972.
+    """
     return os.environ.get("KAFKA_ENVIRONMENT", "dev")
 
 
