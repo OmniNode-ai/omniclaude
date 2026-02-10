@@ -118,6 +118,10 @@ def evaluate_promotion_gate(
         )
 
     # -- Check 1c: unexpected overall_result --------------------------------
+    # Upstream _compute_overall_result returns Literal["success", "partial",
+    # "failure"] so this guard should be unreachable today.  We warn rather
+    # than block because an unknown result doesn't necessarily indicate
+    # failure -- it may be a new benign classification.
     if candidate.overall_result != "success":
         return _gate(
             run_id=run_id,
@@ -306,6 +310,9 @@ def _check_regressions(
             reasons.append(f"{dim.dimension} has no regression threshold configured")
             continue
 
+        # Precondition: check 4 (insufficient evidence) catches all
+        # dimensions with delta_pct=None before _check_regressions runs.
+        # This guard is defence-in-depth for safety if ordering changes.
         if dim.delta_pct is None:
             continue
 
