@@ -40,7 +40,7 @@ ALL_PHASES: frozenset[ContractEnumPipelinePhase] = frozenset(ContractEnumPipelin
 
 BASELINES_ROOT = Path.home() / ".claude" / "baselines"
 
-REQUIRED_DIMENSIONS: list[str] = ["duration", "tokens", "tests"]
+REQUIRED_DIMENSIONS: tuple[str, ...] = ("duration", "tokens", "tests")
 
 
 # -- Outcome signatures (flake detection) ------------------------------------

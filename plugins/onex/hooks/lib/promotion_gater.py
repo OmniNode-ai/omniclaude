@@ -16,6 +16,7 @@ for downstream consumers.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Literal
 
 from omnibase_spi.contracts.measurement.contract_measurement_context import (
@@ -76,7 +77,7 @@ def evaluate_promotion_gate(
     1c. Unexpected result → warn  (gate_result="insufficient_evidence")
     2.  Flake detected    → block (gate_result="fail")
     3.  No context / no pattern_id / no baseline → warn (gate_result="insufficient_evidence")
-    4.  Insufficient evidence on any dimension → warn (gate_result="insufficient_evidence")
+    4.  Insufficient evidence on any dimension → warn (early exit, skips regression checks)
     5.  Duration regression > threshold → warn (gate_result="insufficient_evidence")
     6a. Token regression > threshold    → warn (gate_result="insufficient_evidence")
     6b. Test count decrease > threshold → warn (gate_result="insufficient_evidence")
@@ -90,7 +91,6 @@ def evaluate_promotion_gate(
         thresholds = PromotionThresholds()
 
     run_id = candidate.run_id
-    required = REQUIRED_DIMENSIONS
 
     # -- Check 1a: candidate overall failure --------------------------------
     if candidate.overall_result == "failure":
@@ -101,7 +101,7 @@ def evaluate_promotion_gate(
             tier="block",
             reasons=["Candidate run failed (overall_result=failure)"],
             dimensions=[],
-            required=required,
+            required=REQUIRED_DIMENSIONS,
         )
 
     # -- Check 1b: candidate partial run ------------------------------------
@@ -113,7 +113,7 @@ def evaluate_promotion_gate(
             tier="warn",
             reasons=["Candidate run is partial (not all phases completed)"],
             dimensions=[],
-            required=required,
+            required=REQUIRED_DIMENSIONS,
         )
 
     # -- Check 1c: unexpected overall_result --------------------------------
@@ -129,7 +129,7 @@ def evaluate_promotion_gate(
             tier="warn",
             reasons=[f"Unexpected overall_result={candidate.overall_result!r}"],
             dimensions=[],
-            required=required,
+            required=REQUIRED_DIMENSIONS,
         )
 
     # -- Check 2: flake detection ------------------------------------------
@@ -143,7 +143,7 @@ def evaluate_promotion_gate(
             tier="block",
             reasons=[f"Flake detected in phases: {', '.join(flaky_phases)}"],
             dimensions=[],
-            required=required,
+            required=REQUIRED_DIMENSIONS,
         )
 
     # -- Check 3: insufficient context / baseline --------------------------
@@ -155,7 +155,7 @@ def evaluate_promotion_gate(
             tier="warn",
             reasons=["No measurement context or pattern_id available"],
             dimensions=[],
-            required=required,
+            required=REQUIRED_DIMENSIONS,
         )
 
     if baseline is None:
@@ -166,7 +166,7 @@ def evaluate_promotion_gate(
             tier="warn",
             reasons=["No baseline available for comparison"],
             dimensions=[],
-            required=required,
+            required=REQUIRED_DIMENSIONS,
         )
 
     # -- Build dimension evidence ------------------------------------------
@@ -187,7 +187,7 @@ def evaluate_promotion_gate(
                 "(zero baseline or zero current value)"
             ],
             dimensions=dimensions,
-            required=required,
+            required=REQUIRED_DIMENSIONS,
         )
 
     # -- Check 5, 6a, 6b: regression thresholds -----------------------------
@@ -200,7 +200,7 @@ def evaluate_promotion_gate(
             tier="warn",
             reasons=regression_reasons,
             dimensions=dimensions,
-            required=required,
+            required=REQUIRED_DIMENSIONS,
         )
 
     # -- Check 7: all clear ------------------------------------------------
@@ -211,7 +211,7 @@ def evaluate_promotion_gate(
         tier="allow",
         reasons=["Evidence supports promotion"],
         dimensions=dimensions,
-        required=required,
+        required=REQUIRED_DIMENSIONS,
     )
 
 
@@ -226,7 +226,7 @@ def _gate(
     tier: Literal["block", "warn", "allow"],
     reasons: list[str],
     dimensions: list[ContractDimensionEvidence],
-    required: list[str],
+    required: Sequence[str],
 ) -> ContractPromotionGate:
     baseline_key = ""
     if context is not None and context.pattern_id:
