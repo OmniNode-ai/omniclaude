@@ -23,6 +23,7 @@ import json
 import logging
 import os
 import socket
+import sys
 import tempfile
 import threading
 import time
@@ -43,7 +44,6 @@ logger = logging.getLogger("golden_path_harness")
 # ---------------------------------------------------------------------------
 # Sys.path for plugin lib (mirrors conftest.py)
 # ---------------------------------------------------------------------------
-import sys
 
 _plugin_lib_path = str(
     Path(__file__).resolve().parent.parent.parent / "plugins" / "onex" / "hooks" / "lib"
@@ -239,17 +239,20 @@ class MockEmitDaemon:
         """Poll until ``count`` events are captured or timeout expires."""
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            if len(self.captured_events) >= count:
-                return
+            with self._lock:
+                if len(self.captured_events) >= count:
+                    return
             time.sleep(0.02)
 
     def events_by_type(self, event_type: str) -> list[dict[str, Any]]:
         """Return captured events filtered by event_type."""
-        return [e for e in self.captured_events if e["event_type"] == event_type]
+        with self._lock:
+            return [e for e in self.captured_events if e["event_type"] == event_type]
 
     def event_types_in_order(self) -> list[str]:
         """Return the ordered list of event types received."""
-        return [e["event_type"] for e in self.captured_events]
+        with self._lock:
+            return [e["event_type"] for e in self.captured_events]
 
 
 # ===========================================================================
@@ -645,8 +648,9 @@ class TestGoldenPathStandalone:
             # Verify frozen (immutable) — Pydantic frozen models raise ValidationError
             from pydantic import ValidationError
 
+            frozen_field = next(iter(instance.model_fields))
             with pytest.raises(ValidationError):
-                instance.session_id = "tampered"  # type: ignore[misc]
+                setattr(instance, frozen_field, "tampered")  # type: ignore[misc]
 
             logger.debug("Schema validation passed for %s", event_type)
 
