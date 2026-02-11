@@ -1,16 +1,21 @@
 ---
-name: ultimate_validate_command
+name: ultimate-validate
 description: Generate comprehensive validation command for this codebase
-tags: [validation, testing, quality, automation]
----
-
----
-description: Generate comprehensive validation command for this codebase
+version: 1.0.0
+category: tooling
+tags:
+  - validation
+  - testing
+  - quality
+  - generator
+author: OmniClaude Team
 ---
 
 # Generate Ultimate Validation Command
 
 Analyze this codebase deeply and create `.claude/commands/validate.md` that comprehensively validates everything.
+
+**Announce at start:** "I'm using the ultimate-validate skill to generate a comprehensive validation command."
 
 ## Step 0: Discover Real User Workflows
 
@@ -27,7 +32,7 @@ Analyze this codebase deeply and create `.claude/commands/validate.md` that comp
    - What services does it interact with?
 
 3. Extract complete user journeys from docs:
-   - Find examples like "Fix Issue (GitHub):" or "User does X → then Y → then Z"
+   - Find examples like "Fix Issue (GitHub):" or "User does X -> then Y -> then Z"
    - Each workflow becomes an E2E test scenario
 
 **Critical: Your E2E tests should mirror actual workflows from docs, not just test internal APIs.**
@@ -88,13 +93,13 @@ Test COMPLETE user workflows from documentation, not just internal APIs.
 
 3. **Complete User Journeys** (what gives 100% confidence):
    - Follow workflows from docs start-to-finish
-   - Example: "User asks bot to fix GitHub issue" → Bot clones repo → Makes changes → Creates PR → Comments on issue
+   - Example: "User asks bot to fix GitHub issue" -> Bot clones repo -> Makes changes -> Creates PR -> Comments on issue
    - Test like a user would actually use the application in production
 
 **Examples of good vs. bad E2E tests:**
-- ❌ Bad: Tests that `/clone` command stores data in database
-- ✅ Good: Clone repo → Load commands → Execute command → Verify git commit created
-- ✅ Great: Create GitHub issue → Bot receives webhook → Analyzes issue → Creates PR → Comments on issue with PR link
+- Bad: Tests that `/clone` command stores data in database
+- Good: Clone repo -> Load commands -> Execute command -> Verify git commit created
+- Great: Create GitHub issue -> Bot receives webhook -> Analyzes issue -> Creates PR -> Comments on issue with PR link
 
 **Approach:**
 - Use Docker for isolated, reproducible testing

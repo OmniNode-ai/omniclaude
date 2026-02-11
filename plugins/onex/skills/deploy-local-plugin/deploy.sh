@@ -2,11 +2,12 @@
 # deploy-local-plugin: Sync local plugin to Claude Code cache
 #
 # Usage:
-#   ./deploy.sh [--execute] [--no-version-bump]
+#   ./deploy.sh [--execute] [--no-version-bump] [--force]
 #
 # Default: Dry run (preview only)
 # --execute: Actually perform deployment
 # --no-version-bump: Skip patch version increment
+# --force / -f: Skip confirmation when overwriting ~/.claude dirs
 
 set -euo pipefail
 
@@ -28,6 +29,7 @@ NC='\033[0m' # No Color
 # Parse arguments
 EXECUTE=false
 NO_VERSION_BUMP=false
+FORCE=false
 
 for arg in "$@"; do
     case $arg in
@@ -37,12 +39,16 @@ for arg in "$@"; do
         --no-version-bump)
             NO_VERSION_BUMP=true
             ;;
+        --force|-f)
+            FORCE=true
+            ;;
         --help|-h)
-            echo "Usage: deploy.sh [--execute] [--no-version-bump]"
+            echo "Usage: deploy.sh [--execute] [--no-version-bump] [--force]"
             echo ""
             echo "Options:"
             echo "  --execute         Actually perform deployment (default: dry run)"
             echo "  --no-version-bump Skip auto-incrementing patch version"
+            echo "  --force, -f       Skip confirmation prompt when overwriting ~/.claude dirs"
             echo "  --help            Show this help message"
             exit 0
             ;;
@@ -316,18 +322,24 @@ if [[ "$EXECUTE" == "true" ]]; then
         echo -e "${YELLOW}  Warning: Registry not found at ${REGISTRY}${NC}"
     fi
 
-    # Update known_marketplaces.json — always point installLocation at the cache
+    # Update known_marketplaces.json — point installLocation at the repo root
+    # (NOT the cache). Claude Code uses this for plugin/skill discovery via
+    # .claude-plugin/marketplace.json. Pointing to cache breaks skill loading.
     KNOWN_MARKETPLACES="$HOME/.claude/plugins/known_marketplaces.json"
     if [[ -f "$KNOWN_MARKETPLACES" ]]; then
         if jq -e '.["omninode-tools"]' "$KNOWN_MARKETPLACES" >/dev/null 2>&1; then
             TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
 
-            jq --arg p "$TARGET" --arg ts "$TIMESTAMP" '
+            jq --arg p "$PROJECT_ROOT_FOR_INSTALL" --arg ts "$TIMESTAMP" '
+                .["omninode-tools"].source.source = "directory" |
+                .["omninode-tools"].source.path = $p |
+                del(.["omninode-tools"].source.repo) |
+                del(.["omninode-tools"].source.ref) |
                 .["omninode-tools"].installLocation = $p |
                 .["omninode-tools"].lastUpdated = $ts
             ' "$KNOWN_MARKETPLACES" > "${KNOWN_MARKETPLACES}.tmp" && mv "${KNOWN_MARKETPLACES}.tmp" "$KNOWN_MARKETPLACES"
 
-            echo -e "${GREEN}  Updated known_marketplaces.json (installLocation: $TARGET)${NC}"
+            echo -e "${GREEN}  Updated known_marketplaces.json (installLocation: $PROJECT_ROOT_FOR_INSTALL)${NC}"
         else
             echo -e "${YELLOW}  Warning: omninode-tools not found in known_marketplaces.json${NC}"
         fi
@@ -362,19 +374,41 @@ if [[ "$EXECUTE" == "true" ]]; then
     CLAUDE_DIR="$HOME/.claude"
     mkdir -p "$CLAUDE_DIR/commands" "$CLAUDE_DIR/skills" "$CLAUDE_DIR/agents"
 
-    # Remove stale symlinks or old directories, then rsync fresh copies.
-    # On every deploy (including re-deploys), existing real directories are
-    # backed up BEFORE rsync --delete runs, preserving any user customizations.
+    # Check whether any target directories already exist (non-symlink).
+    # If so, rsync --delete will destroy local customizations.
+    EXISTING_DIRS=()
     for component in commands skills agents; do
         DEST="$CLAUDE_DIR/$component/onex"
-        if [[ -L "$DEST" ]]; then
-            rm -f "$DEST"
-        elif [[ -d "$DEST" ]]; then
-            # Back up existing real directory before rsync --delete overwrites it
-            BACKUP="$DEST.bak.$(date +%s)"
-            cp -a "$DEST" "$BACKUP"
-            echo -e "${YELLOW}  Backed up existing $component/onex -> $BACKUP${NC}"
+        if [[ -d "$DEST" && ! -L "$DEST" ]]; then
+            EXISTING_DIRS+=("$DEST")
         fi
+    done
+
+    if [[ ${#EXISTING_DIRS[@]} -gt 0 && "$FORCE" != "true" ]]; then
+        echo -e "${YELLOW}  The following directories already exist and will be overwritten:${NC}"
+        for d in "${EXISTING_DIRS[@]}"; do
+            echo -e "${YELLOW}    - $d${NC}"
+        done
+        echo ""
+        if [[ -t 0 ]]; then
+            echo -n "  Overwrite these directories? Local customizations will be lost. [y/N] "
+            read -r CONFIRM
+            if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
+                echo -e "${RED}  Aborted by user. No files were overwritten.${NC}"
+                echo "  Re-run with --force to skip this prompt."
+                exit 1
+            fi
+        else
+            echo -e "${YELLOW}  Non-interactive mode detected. Use --force to suppress this warning.${NC}"
+            echo -e "${RED}  Aborting to protect existing directories.${NC}"
+            exit 1
+        fi
+    fi
+
+    # Remove stale symlinks, then rsync fresh copies (overwrite in place).
+    for component in commands skills agents; do
+        DEST="$CLAUDE_DIR/$component/onex"
+        [[ -L "$DEST" ]] && rm -f "$DEST"
         mkdir -p "$DEST"
         rsync -a --delete "$TARGET/$component/" "$DEST/"
     done

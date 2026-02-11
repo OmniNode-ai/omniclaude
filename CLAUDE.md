@@ -36,6 +36,8 @@ What happens when infrastructure is unavailable:
 | **Malformed stdin JSON** | Hook logs error, passes through empty | 0 | No |
 | **Agent YAML not found** | Uses default agent, logs warning | 0 | No |
 | **Context injection fails** | Proceeds without patterns | 0 | No |
+| **Agent loader timeout (1s)** | Falls back to empty YAML, hook continues | 0 | No |
+| **Context injection timeout (1s)** | Proceeds without patterns, hook continues | 0 | No |
 | **No valid Python found** | Hook exits with actionable error | 1 | No |
 
 **Design principle**: Hooks never block Claude Code. Data loss is acceptable; UI freeze is not.
@@ -54,8 +56,12 @@ Targets for **synchronous path only** (excludes backgrounded processes):
 |------|--------|-------------|---------------------|
 | SessionStart | <50ms | Daemon check, stdin read | Kafka emit, Postgres log |
 | SessionEnd | <50ms | stdin read | Kafka emit, Postgres log |
-| UserPromptSubmit | <500ms | Routing, agent load, context injection | Kafka emit, intelligence requests |
+| UserPromptSubmit | <500ms typical (~7s worst-case) | Routing, agent load, context injection | Kafka emit, intelligence requests |
 | PostToolUse | <100ms | stdin read, quality check | Kafka emit, content capture |
+
+> **Note**: UserPromptSubmit's 500ms target is for typical runs. Worst-case with all timeout
+> paths (routing 5s + loader 1s + injection 1s) is ~7s. These timeouts are safety nets;
+> normal execution stays well under 500ms.
 
 If hooks exceed budget, check:
 1. Network latency to routing service

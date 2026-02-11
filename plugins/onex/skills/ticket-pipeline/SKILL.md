@@ -58,20 +58,22 @@ stateDiagram-v2
 
 ### Phase 1: implement
 
-- Invokes `ticket-work` skill (human gates still fire for questions/spec)
+- Dispatches `ticket-work` to a polymorphic agent via `Task()` (own context window)
+- Human gates still fire for questions/spec within the agent
 - Cross-repo detection: blocks if changes touch multiple repo roots
 - Slack: `notification.blocked` when waiting for human input
 - AUTO-ADVANCE to Phase 2
 
 ### Phase 2: local_review
 
-- Invokes `local-review` with `--max-iterations` from policy
+- Dispatches `local-review` to a polymorphic agent via `Task()` (own context window)
 - Autonomous: loops until clean or policy limits hit
 - Stop on: 0 blocking issues, max iterations, repeat issues, new major after iteration 1
 - AUTO-ADVANCE to Phase 3 (only if 0 blocking issues)
 
 ### Phase 3: create_pr
 
+- Runs inline in orchestrator (lightweight git/gh operations)
 - Idempotent: skips creation if PR already exists on branch
 - Pre-checks: clean tree, branch tracks remote, branch name pattern, gh auth, realm/topic invariant
 - Pushes branch, creates PR via `gh`, updates Linear status
@@ -79,7 +81,8 @@ stateDiagram-v2
 
 ### Phase 4: pr_release_ready
 
-- Invokes `pr-release-ready` to fix CodeRabbit issues
+- Dispatches `pr-release-ready` to a polymorphic agent via `Task()` (own context window)
+- Fixes CodeRabbit and CI issues
 - Same iteration limits as Phase 2
 - AUTO-ADVANCE to Phase 5 (only if 0 blocking issues)
 
@@ -132,11 +135,101 @@ If pipeline runs unattended, worst case:
 
 These modules are imported by the pipeline orchestration logic in `prompt.md`.
 
+## Dispatch Contracts (Execution-Critical)
+
+**This section governs how you execute the pipeline. Follow it exactly.**
+
+You are an orchestrator. You coordinate phase transitions, state persistence, and policy checks.
+You do NOT implement, review, or fix code yourself. Heavy phases run in separate agents via `Task()`.
+
+**Rule: The coordinator must NEVER call Edit(), Write(), or Bash(code-modifying commands) directly.**
+If code changes are needed, dispatch a polymorphic agent. If you find yourself wanting to make an
+edit, that is the signal to dispatch instead.
+
+### Phase 1: implement — dispatch to polymorphic agent
+
+```
+Task(
+  subagent_type="polymorphic-agent",
+  description="ticket-pipeline: Phase 1 implement for {ticket_id}: {title}",
+  prompt="You are executing ticket-work for {ticket_id}.
+    Invoke: Skill(skill=\"onex:ticket-work\", args=\"{ticket_id}\")
+
+    Ticket: {ticket_id} - {title}
+    Description: {description}
+    Branch: {branch_name}
+    Repo: {repo_path}
+
+    Execute the full ticket-work workflow (intake -> research -> questions -> spec -> implementation).
+    Do NOT commit changes -- the orchestrator handles git operations.
+    Report back with: files changed, tests run, any blockers encountered."
+)
+```
+
+### Phase 2: local_review — dispatch to polymorphic agent
+
+```
+Task(
+  subagent_type="polymorphic-agent",
+  description="ticket-pipeline: Phase 2 local-review for {ticket_id}",
+  prompt="You are executing local-review for {ticket_id}.
+    Invoke: Skill(skill=\"onex:local-review\", args=\"--max-iterations {max_review_iterations}\")
+
+    Branch: {branch_name}
+    Repo: {repo_path}
+    Previous phase: implementation complete
+
+    Execute the local review loop.
+    Report back with:
+    - Number of iterations completed
+    - Blocking issues found (count and descriptions)
+    - Whether review passed (0 blocking issues)"
+)
+```
+
+### Phase 3: create_pr — runs inline (lightweight git/gh operations only)
+
+No dispatch needed. The orchestrator runs `git push`, `gh pr create`, and Linear MCP calls directly.
+
+### Phase 4: pr_release_ready — dispatch to polymorphic agent
+
+```
+Task(
+  subagent_type="polymorphic-agent",
+  description="ticket-pipeline: Phase 4 pr-release-ready for {ticket_id}",
+  prompt="You are executing pr-release-ready for {ticket_id}.
+    Invoke: Skill(skill=\"onex:pr-release-ready\")
+
+    PR: #{pr_number} on branch {branch_name}
+    Repo: {repo_path}
+
+    Fix all CodeRabbit and CI issues on the PR.
+    Report back with:
+    - Issues found and fixed
+    - Remaining blocking issues (if any)"
+)
+```
+
+### Phase 5: ready_for_merge — runs inline (Linear label + Slack notification only)
+
+No dispatch needed. The orchestrator adds labels and sends notifications directly.
+
+---
+
+## Detailed Orchestration
+
+Full orchestration logic (state machine, helper functions, error handling, resume behavior)
+is documented in `prompt.md`. The dispatch contracts above are sufficient to execute the pipeline.
+Load `prompt.md` only if you need reference details for state schema, helper functions, or
+edge case handling.
+
+---
+
 ## See Also
 
 - `ticket-work` skill (Phase 1)
-- `local-review` command (Phase 2)
-- `pr-release-ready` command (Phase 4)
+- `local-review` skill (Phase 2)
+- `pr-release-ready` skill (Phase 4)
 - `emit_client_wrapper` (Kafka event emission)
 - `HandlerSlackWebhook` in omnibase_infra (Slack delivery infrastructure)
 - OMN-2157 (Web API threading support — future dependency)

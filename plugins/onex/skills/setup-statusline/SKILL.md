@@ -1,7 +1,10 @@
 ---
 name: setup-statusline
 description: Configure Claude Code status line to show folder name, git branch, and PR number
-tags: [tooling, setup, statusline]
+version: 1.0.0
+category: configuration
+tags: [statusline, setup, configuration]
+author: OmniClaude Team
 ---
 
 # Setup ONEX Status Line

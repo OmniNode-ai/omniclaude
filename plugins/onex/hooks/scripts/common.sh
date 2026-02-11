@@ -204,8 +204,46 @@ emit_via_daemon() {
 # Writes a lightweight file read by statusline.sh on each render.
 # Activity persists until the next prompt clears or replaces it.
 #
-# Usage: update_tab_activity "ticket-work"    # Set activity
+# The activity file stores an ANSI 256-color code (integer). The statusline
+# renders a colored dot (●) using that code. Each skill gets a deterministic
+# color via skill_dot_color(). Skills can override by setting `dot_color: NNN`
+# in their SKILL.md frontmatter.
+#
+# Usage: update_tab_activity "ticket-work"    # Set activity (auto-color)
 #        update_tab_activity ""               # Clear activity
+
+# Curated palette of 16 visually distinct 256-colors for skill dots
+_DOT_PALETTE=(196 208 220 82 46 49 39 27 129 165 205 214 117 156 183 209)
+
+# Map a skill name to a deterministic 256-color code from the palette.
+# Checks SKILL.md frontmatter for `dot_color:` override first.
+skill_dot_color() {
+    local skill="$1"
+
+    # Check for frontmatter override (dot_color: NNN)
+    local plugin_root="${CLAUDE_PLUGIN_ROOT:-${PLUGIN_ROOT:-}}"
+    if [ -n "$plugin_root" ]; then
+        local skill_md="${plugin_root}/skills/${skill}/SKILL.md"
+        if [ -f "$skill_md" ]; then
+            local override
+            override=$(sed -n '/^---$/,/^---$/{ /^dot_color:/{ s/^dot_color:[[:space:]]*//; s/[^0-9]//g; p; q; } }' "$skill_md" 2>/dev/null)
+            if [ -n "$override" ]; then
+                echo "$override"
+                return 0
+            fi
+        fi
+    fi
+
+    # Hash skill name to palette index
+    # Multiplier 37 chosen for better distribution: 37 mod 16 = 5 (coprime to 16),
+    # whereas 31 mod 16 = 15 which biases lower bits toward last few chars.
+    local hash=0 i char_val
+    for ((i=0; i<${#skill}; i++)); do
+        printf -v char_val '%d' "'${skill:$i:1}"
+        hash=$(( (hash * 37 + char_val) % ${#_DOT_PALETTE[@]} ))
+    done
+    echo "${_DOT_PALETTE[$hash]}"
+}
 
 update_tab_activity() {
     local activity="$1"
@@ -214,7 +252,34 @@ update_tab_activity() {
     local guid="${iterm_guid#*:}"
     local activity_file="/tmp/omniclaude-tabs/${guid}.activity"
     mkdir -p "/tmp/omniclaude-tabs" 2>/dev/null || true
-    printf '%s' "$activity" > "$activity_file" 2>/dev/null || true
+    if [ -n "$activity" ]; then
+        local color
+        color=$(skill_dot_color "$activity")
+        printf '%s' "$color" > "$activity_file" 2>/dev/null || true
+    else
+        : > "$activity_file" 2>/dev/null || true
+    fi
+}
+
+# =============================================================================
+# Secret Redaction
+# =============================================================================
+# Redacts known secret patterns from stdin. Used by hook scripts before writing
+# to trace logs or Kafka payloads. Covers API keys, tokens, PEM keys, and
+# bearer tokens. Reads from stdin, writes redacted output to stdout.
+#
+# Usage: echo "$sensitive_text" | redact_secrets
+
+redact_secrets() {
+    sed -E \
+        -e 's/sk-[a-zA-Z0-9]{20,}/sk-***REDACTED***/g' \
+        -e 's/AKIA[A-Z0-9]{16}/AKIA***REDACTED***/g' \
+        -e 's/ghp_[a-zA-Z0-9]{36}/ghp_***REDACTED***/g' \
+        -e 's/gho_[a-zA-Z0-9]{36}/gho_***REDACTED***/g' \
+        -e 's/xox[baprs]-[a-zA-Z0-9-]+/xox*-***REDACTED***/g' \
+        -e 's/Bearer [a-zA-Z0-9._-]{20,}/Bearer ***REDACTED***/g' \
+        -e 's/:\/\/[^:]+:[^@]+@/:\/\/***:***@/g' \
+    | perl -0777 -pe 's/-----BEGIN [A-Z ]*(?:PRIVATE|RSA|EC|DSA) KEY-----[\s\S]*?-----END [A-Z ]*(?:PRIVATE|RSA|EC|DSA) KEY-----/[REDACTED PEM KEY]/g'
 }
 
 # =============================================================================
