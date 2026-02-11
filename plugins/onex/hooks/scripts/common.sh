@@ -204,8 +204,44 @@ emit_via_daemon() {
 # Writes a lightweight file read by statusline.sh on each render.
 # Activity persists until the next prompt clears or replaces it.
 #
-# Usage: update_tab_activity "ticket-work"    # Set activity
+# The activity file stores an ANSI 256-color code (integer). The statusline
+# renders a colored dot (●) using that code. Each skill gets a deterministic
+# color via skill_dot_color(). Skills can override by setting `dot_color: NNN`
+# in their SKILL.md frontmatter.
+#
+# Usage: update_tab_activity "ticket-work"    # Set activity (auto-color)
 #        update_tab_activity ""               # Clear activity
+
+# Curated palette of 16 visually distinct 256-colors for skill dots
+_DOT_PALETTE=(196 208 220 82 46 49 39 27 129 165 205 214 117 156 183 209)
+
+# Map a skill name to a deterministic 256-color code from the palette.
+# Checks SKILL.md frontmatter for `dot_color:` override first.
+skill_dot_color() {
+    local skill="$1"
+
+    # Check for frontmatter override (dot_color: NNN)
+    local plugin_root="${CLAUDE_PLUGIN_ROOT:-}"
+    if [ -n "$plugin_root" ]; then
+        local skill_md="${plugin_root}/skills/${skill}/SKILL.md"
+        if [ -f "$skill_md" ]; then
+            local override
+            override=$(sed -n '/^---$/,/^---$/{ /^dot_color:/{ s/^dot_color:[[:space:]]*//; s/[^0-9]//g; p; q; } }' "$skill_md" 2>/dev/null)
+            if [ -n "$override" ]; then
+                echo "$override"
+                return 0
+            fi
+        fi
+    fi
+
+    # Hash skill name to palette index
+    local hash=0 i char_val
+    for ((i=0; i<${#skill}; i++)); do
+        printf -v char_val '%d' "'${skill:$i:1}"
+        hash=$(( (hash * 31 + char_val) % ${#_DOT_PALETTE[@]} ))
+    done
+    echo "${_DOT_PALETTE[$hash]}"
+}
 
 update_tab_activity() {
     local activity="$1"
@@ -214,7 +250,13 @@ update_tab_activity() {
     local guid="${iterm_guid#*:}"
     local activity_file="/tmp/omniclaude-tabs/${guid}.activity"
     mkdir -p "/tmp/omniclaude-tabs" 2>/dev/null || true
-    printf '%s' "$activity" > "$activity_file" 2>/dev/null || true
+    if [ -n "$activity" ]; then
+        local color
+        color=$(skill_dot_color "$activity")
+        printf '%s' "$color" > "$activity_file" 2>/dev/null || true
+    else
+        : > "$activity_file" 2>/dev/null || true
+    fi
 }
 
 # =============================================================================

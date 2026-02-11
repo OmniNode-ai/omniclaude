@@ -316,18 +316,24 @@ if [[ "$EXECUTE" == "true" ]]; then
         echo -e "${YELLOW}  Warning: Registry not found at ${REGISTRY}${NC}"
     fi
 
-    # Update known_marketplaces.json — always point installLocation at the cache
+    # Update known_marketplaces.json — point installLocation at the repo root
+    # (NOT the cache). Claude Code uses this for plugin/skill discovery via
+    # .claude-plugin/marketplace.json. Pointing to cache breaks skill loading.
     KNOWN_MARKETPLACES="$HOME/.claude/plugins/known_marketplaces.json"
     if [[ -f "$KNOWN_MARKETPLACES" ]]; then
         if jq -e '.["omninode-tools"]' "$KNOWN_MARKETPLACES" >/dev/null 2>&1; then
             TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
 
-            jq --arg p "$TARGET" --arg ts "$TIMESTAMP" '
+            jq --arg p "$PROJECT_ROOT_FOR_INSTALL" --arg ts "$TIMESTAMP" '
+                .["omninode-tools"].source.source = "directory" |
+                .["omninode-tools"].source.path = $p |
+                del(.["omninode-tools"].source.repo) |
+                del(.["omninode-tools"].source.ref) |
                 .["omninode-tools"].installLocation = $p |
                 .["omninode-tools"].lastUpdated = $ts
             ' "$KNOWN_MARKETPLACES" > "${KNOWN_MARKETPLACES}.tmp" && mv "${KNOWN_MARKETPLACES}.tmp" "$KNOWN_MARKETPLACES"
 
-            echo -e "${GREEN}  Updated known_marketplaces.json (installLocation: $TARGET)${NC}"
+            echo -e "${GREEN}  Updated known_marketplaces.json (installLocation: $PROJECT_ROOT_FOR_INSTALL)${NC}"
         else
             echo -e "${YELLOW}  Warning: omninode-tools not found in known_marketplaces.json${NC}"
         fi
@@ -362,19 +368,10 @@ if [[ "$EXECUTE" == "true" ]]; then
     CLAUDE_DIR="$HOME/.claude"
     mkdir -p "$CLAUDE_DIR/commands" "$CLAUDE_DIR/skills" "$CLAUDE_DIR/agents"
 
-    # Remove stale symlinks or old directories, then rsync fresh copies.
-    # On every deploy (including re-deploys), existing real directories are
-    # backed up BEFORE rsync --delete runs, preserving any user customizations.
+    # Remove stale symlinks, then rsync fresh copies (overwrite in place).
     for component in commands skills agents; do
         DEST="$CLAUDE_DIR/$component/onex"
-        if [[ -L "$DEST" ]]; then
-            rm -f "$DEST"
-        elif [[ -d "$DEST" ]]; then
-            # Back up existing real directory before rsync --delete overwrites it
-            BACKUP="$DEST.bak.$(date +%s)"
-            cp -a "$DEST" "$BACKUP"
-            echo -e "${YELLOW}  Backed up existing $component/onex -> $BACKUP${NC}"
-        fi
+        [[ -L "$DEST" ]] && rm -f "$DEST"
         mkdir -p "$DEST"
         rsync -a --delete "$TARGET/$component/" "$DEST/"
     done

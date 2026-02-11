@@ -1,7 +1,38 @@
 ---
 name: velocity-estimate
 description: Velocity Estimate Command - Project Velocity & ETA Analysis
-tags: [linear, velocity, estimation, planning]
+version: 1.0.0
+category: reporting
+tags: [linear, velocity, estimation, reporting]
+author: OmniClaude Team
+args:
+  - name: project
+    description: Project name (MVP, Beta, Production, NodeReducer)
+    required: false
+  - name: --project
+    description: Explicit project name or ID
+    required: false
+  - name: --all
+    description: Show all milestones overview
+    required: false
+  - name: --confidence
+    description: Include confidence intervals
+    required: false
+  - name: --history
+    description: Show velocity history (last 30 days)
+    required: false
+  - name: --weighted
+    description: Use weighted rolling average (recent data weighted higher)
+    required: false
+  - name: --method
+    description: Velocity calculation method (simple, priority, points, labels, cycle_time)
+    required: false
+  - name: --deep-dive-dir
+    description: Custom directory for deep dive files
+    required: false
+  - name: --json
+    description: Output as JSON for programmatic use
+    required: false
 ---
 
 # Velocity Estimate Command - Project Velocity & ETA Analysis

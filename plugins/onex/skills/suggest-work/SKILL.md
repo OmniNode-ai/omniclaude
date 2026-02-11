@@ -1,7 +1,35 @@
 ---
 name: suggest-work
 description: Suggest Work Command - Priority Backlog Recommendations
-tags: [linear, backlog, priority, planning]
+version: 1.0.0
+category: workflow
+tags: [linear, backlog, suggestions, priority]
+author: OmniClaude Team
+args:
+  - name: --count
+    description: Number of suggestions to return (default 5)
+    required: false
+  - name: --project
+    description: Project name (MVP, Beta, Production, etc.)
+    required: false
+  - name: --repo
+    description: Override auto-detected repo context
+    required: false
+  - name: --no-repo
+    description: Disable repo-based prioritization
+    required: false
+  - name: --label
+    description: Filter to issues with specific label
+    required: false
+  - name: --json
+    description: Output as JSON instead of markdown
+    required: false
+  - name: --execute
+    description: Output ONLY the execution prompt (pipeable)
+    required: false
+  - name: --no-cache
+    description: Bypass cache (force fresh query)
+    required: false
 ---
 
 # Suggest Work Command - Priority Backlog Recommendations

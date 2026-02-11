@@ -1,7 +1,29 @@
 ---
 name: project-status
 description: Project Status Command - Linear Insights Dashboard
-tags: [linear, project, status, reporting]
+version: 1.0.0
+category: reporting
+tags: [linear, reporting, project, status]
+author: OmniClaude Team
+args:
+  - name: project
+    description: Project name/shortcut (MVP, Beta, Production, etc.)
+    required: false
+  - name: --all
+    description: Show all projects overview instead of single project
+    required: false
+  - name: --blockers
+    description: Include blocked issues detail with duration
+    required: false
+  - name: --risks
+    description: Highlight risk factors (high priority backlog, velocity drops)
+    required: false
+  - name: --confidence
+    description: Show detailed confidence level breakdown
+    required: false
+  - name: --json
+    description: Output as JSON instead of markdown
+    required: false
 ---
 
 # Project Status Command - Linear Insights Dashboard

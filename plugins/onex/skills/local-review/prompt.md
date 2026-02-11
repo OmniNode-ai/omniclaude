@@ -1,18 +1,6 @@
----
-name: local-review
-description: Local code review loop that iterates through review, fix, commit cycles without pushing
-tags: [review, code-quality, local, iteration]
----
+# Local Review Orchestration
 
-# /local-review - Local Code Review Loop
-
-Review local changes, fix issues, commit fixes, and iterate until clean or max iterations reached.
-
-**Workflow**: Gather changes → Review → Fix → Commit → Repeat until clean
-
-> **Classification System**: Uses onex pr-review keyword-based classification (not confidence scoring).
-> ALL Critical/Major/Minor issues MUST be resolved. Only Nits are optional.
-> See: `${CLAUDE_PLUGIN_ROOT}/skills/pr-review/SKILL.md` for full priority definitions.
+You are executing the local-review skill. This prompt defines the complete orchestration logic.
 
 ---
 
@@ -123,11 +111,11 @@ fi
 
 Dispatch a `polymorphic-agent` with strict keyword-based classification (matching onex pr-review standards):
 
-**IMPORTANT**: Always use `subagent_type="onex:polymorphic-agent"` - do NOT use `feature-dev:code-reviewer` or other specialized review agents. The polymorphic-agent has ONEX capabilities and uses keyword-based classification (not confidence scoring).
+**IMPORTANT**: Always use `subagent_type="polymorphic-agent"` - do NOT use `feature-dev:code-reviewer` or other specialized review agents. The polymorphic-agent has ONEX capabilities and uses keyword-based classification (not confidence scoring).
 
 ```
 Task(
-  subagent_type="onex:polymorphic-agent",
+  subagent_type="polymorphic-agent",
   description="Review iteration {iteration+1} changes",
   prompt="**AGENT REQUIREMENT**: You MUST be a polymorphic-agent. Do NOT delegate to feature-dev:code-reviewer.
 
@@ -319,11 +307,11 @@ for severity in ["critical", "major", "minor"]:
 
 For each severity level (critical first, then major, then minor), dispatch a `polymorphic-agent`:
 
-**IMPORTANT**: Always use `subagent_type="onex:polymorphic-agent"` for fixes - this ensures ONEX capabilities and proper observability.
+**IMPORTANT**: Always use `subagent_type="polymorphic-agent"` for fixes - this ensures ONEX capabilities and proper observability.
 
 ```
 Task(
-  subagent_type="onex:polymorphic-agent",
+  subagent_type="polymorphic-agent",
   description="Fix {severity} issues from review",
   prompt="**AGENT REQUIREMENT**: You MUST be a polymorphic-agent.
 
@@ -472,48 +460,48 @@ else:
 ```
 
 **Status indicators** (choose based on total_issues_fixed and mode):
-- `✅ Clean - No issues found` (no Critical/Major/Minor on first review, 0 issues fixed)
-- `✅ Clean - Ready to push` (all issues fixed and committed)
-- `⚪ Clean with nits - No changes needed` (only nits found, 0 issues fixed)
-- `⚪ Clean with nits - Ready to push` (blocking issues fixed and committed, nits remain)
-- `❌ Max iterations reached - {n} blocking issues remain` (hit limit with Critical/Major/Minor remaining)
-- `📋 Report only - {n} blocking issues found` (--no-fix mode)
-- `📝 Changes staged - review before commit` (--no-commit mode, issues were fixed but not committed)
-- `⚠️ Parse failed - manual review needed` (review response couldn't be parsed)
-- `⚠️ Agent failed - {error}. Manual review required.` (review agent crashed/timed out)
-- `⚠️ Fix failed - {n} issues need manual attention` (all fix attempts failed in Step 2.4)
-- `⚠️ Stage failed - check file permissions` (git add failed)
-- `⚠️ Commit failed - {reason}. Files staged for manual review.` (commit step failed)
+- `Clean - No issues found` (no Critical/Major/Minor on first review, 0 issues fixed)
+- `Clean - Ready to push` (all issues fixed and committed)
+- `Clean with nits - No changes needed` (only nits found, 0 issues fixed)
+- `Clean with nits - Ready to push` (blocking issues fixed and committed, nits remain)
+- `Max iterations reached - {n} blocking issues remain` (hit limit with Critical/Major/Minor remaining)
+- `Report only - {n} blocking issues found` (--no-fix mode)
+- `Changes staged - review before commit` (--no-commit mode, issues were fixed but not committed)
+- `Parse failed - manual review needed` (review response couldn't be parsed)
+- `Agent failed - {error}. Manual review required.` (review agent crashed/timed out)
+- `Fix failed - {n} issues need manual attention` (all fix attempts failed in Step 2.4)
+- `Stage failed - check file permissions` (git add failed)
+- `Commit failed - {reason}. Files staged for manual review.` (commit step failed)
 
 **Status selection logic**:
 ```
 if parse_failed:
-    "⚠️ Parse failed - manual review needed"
+    "Parse failed - manual review needed"
 elif agent_failed:
-    "⚠️ Agent failed - {error}. Manual review required."
+    "Agent failed - {error}. Manual review required."
 elif fix_failed:
-    "⚠️ Fix failed - {n} issues need manual attention"
+    "Fix failed - {n} issues need manual attention"
 elif stage_failed:
-    "⚠️ Stage failed - check file permissions"
+    "Stage failed - check file permissions"
 elif commit_failed:
-    "⚠️ Commit failed - {reason}. Files staged for manual review."
+    "Commit failed - {reason}. Files staged for manual review."
 elif --no-fix:
-    "📋 Report only - {n} blocking issues found"
+    "Report only - {n} blocking issues found"
 elif blocking_issues_remain:
-    "❌ Max iterations reached - {n} blocking issues remain"
+    "Max iterations reached - {n} blocking issues remain"
 elif total_issues_fixed == 0:
     # No blocking issues found to fix (only nits which are optional)
     if nits_remain:
-        "⚪ Clean with nits - No changes needed"
+        "Clean with nits - No changes needed"
     else:
-        "✅ Clean - No issues found"
+        "Clean - No issues found"
 elif --no-commit:
     # Issues were fixed but not committed (staged only)
-    "📝 Changes staged - review before commit"
+    "Changes staged - review before commit"
 elif nits_remain:
-    "⚪ Clean with nits - Ready to push"
+    "Clean with nits - Ready to push"
 else:
-    "✅ Clean - Ready to push"
+    "Clean - Ready to push"
 ```
 
 ---

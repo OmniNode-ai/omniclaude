@@ -74,6 +74,10 @@ elif [[ "$TOOL_NAME" == "Task" ]]; then
     TASK_DESC="${TASK_DESC:0:200}"
     TASK_MODEL=$(echo "$TOOL_INFO" | jq -r '.tool_input.model // "default"' 2>/dev/null)
     echo "[$TS] [PostToolUse] TASK_DISPATCHED subagent_type=$SUBAGENT_TYPE model=$TASK_MODEL description=$TASK_DESC" >> "$TRACE_LOG"
+elif [[ "$TOOL_NAME" == "Edit" || "$TOOL_NAME" == "Write" ]]; then
+    EDIT_FILE=$(echo "$TOOL_INFO" | jq -r '.tool_input.file_path // "unknown"' 2>/dev/null)
+    EDIT_FILE_SHORT="${EDIT_FILE##*/}"
+    echo "[$TS] [PostToolUse] FILE_MODIFIED tool=$TOOL_NAME file=$EDIT_FILE_SHORT path=$EDIT_FILE" >> "$TRACE_LOG"
 fi
 
 # For Write/Edit tools, apply auto-fixes
