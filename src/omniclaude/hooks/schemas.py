@@ -65,7 +65,7 @@ import re
 import warnings
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
 from omnibase_core.enums import EnumClaudeCodeSessionOutcome
@@ -1716,9 +1716,9 @@ class ModelAgentStatusPayload(BaseModel):
     )
 
     # Metadata
-    metadata: dict[str, Any] = Field(
+    metadata: dict[str, str] = Field(
         default_factory=dict,
-        description="Additional metadata (new dict per instance)",
+        description="Additional string metadata (new dict per instance)",
     )
 
 

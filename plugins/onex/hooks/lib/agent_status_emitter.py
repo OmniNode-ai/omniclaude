@@ -19,7 +19,6 @@ from __future__ import annotations
 import logging
 import os
 from datetime import UTC, datetime
-from typing import Any
 from uuid import UUID
 
 logger = logging.getLogger(__name__)
@@ -37,7 +36,7 @@ def emit_agent_status(
     current_phase: str | None = None,
     current_task: str | None = None,
     blocking_reason: str | None = None,
-    metadata: dict[str, Any] | None = None,
+    metadata: dict[str, str] | None = None,
 ) -> bool:
     """Emit agent status event via the emit daemon (non-blocking, fail-open).
 
