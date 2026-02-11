@@ -129,6 +129,7 @@ class MockEmitDaemon:
         self.captured_events: list[dict[str, Any]] = []
         self._server_socket: socket.socket | None = None
         self._thread: threading.Thread | None = None
+        self._handler_threads: list[threading.Thread] = []
         self._stop_event = threading.Event()
         self._event_counter = 0
         self._lock = threading.Lock()
@@ -152,10 +153,14 @@ class MockEmitDaemon:
         logger.info("MockEmitDaemon started on %s", self.socket_path)
 
     def stop(self) -> None:
-        """Stop the mock daemon and clean up."""
+        """Stop the mock daemon, join all handler threads, and clean up."""
         self._stop_event.set()
         if self._thread:
             self._thread.join(timeout=3.0)
+        # Join handler threads to ensure no concurrent writes to captured_events
+        for t in self._handler_threads:
+            t.join(timeout=2.0)
+        self._handler_threads.clear()
         if self._server_socket:
             self._server_socket.close()
         Path(self.socket_path).unlink(missing_ok=True)
@@ -178,6 +183,7 @@ class MockEmitDaemon:
                     target=self._handle_connection, args=(conn,), daemon=True
                 )
                 t.start()
+                self._handler_threads.append(t)
             except TimeoutError:
                 continue
             except OSError:
@@ -552,6 +558,30 @@ SCHEMA_MAP: dict[str, type] = {
 
 
 # ===========================================================================
+# Helpers
+# ===========================================================================
+
+
+def _emit_all_events(
+    daemon: MockEmitDaemon, ids: GoldenPathIDs, *, timeout_ms: int = 2000
+) -> list[tuple[str, dict[str, Any]]]:
+    """Emit all 10 golden path events and wait for daemon capture.
+
+    Returns the built events list for further assertions.
+    """
+    from emit_client_wrapper import emit_event
+
+    events = _build_golden_path_events(ids)
+    for event_type, payload in events:
+        success = emit_event(
+            event_type=event_type, payload=payload, timeout_ms=timeout_ms
+        )
+        assert success, f"emit_event failed for {event_type}"
+    daemon.wait_for_events(len(events))
+    return events
+
+
+# ===========================================================================
 # Tests — Standalone (mock emit daemon)
 # ===========================================================================
 
@@ -563,29 +593,13 @@ class TestGoldenPathStandalone:
         self, mock_emit_daemon: MockEmitDaemon, gp_ids: GoldenPathIDs
     ) -> None:
         """Emit all 10 golden path events and verify they arrive at the mock daemon."""
-        from emit_client_wrapper import emit_event
-
-        events = _build_golden_path_events(gp_ids)
-
-        for step, (event_type, payload) in enumerate(events, 1):
-            logger.info(
-                "Step %02d/10: Emitting %s (session_id=%s)",
-                step,
-                event_type,
-                payload.get("session_id", "n/a"),
-            )
-            success = emit_event(
-                event_type=event_type, payload=payload, timeout_ms=2000
-            )
-            assert success, f"Step {step}: emit_event failed for {event_type}"
-            logger.debug("Step %02d/10: %s emitted successfully", step, event_type)
-
-        # Wait for all events to arrive (polling with timeout, not fixed sleep)
-        mock_emit_daemon.wait_for_events(10)
+        _emit_all_events(mock_emit_daemon, gp_ids)
 
         # Verify all 10 events captured
-        assert len(mock_emit_daemon.captured_events) == 10, (
-            f"Expected 10 captured events, got {len(mock_emit_daemon.captured_events)}. "
+        with mock_emit_daemon._lock:
+            count = len(mock_emit_daemon.captured_events)
+        assert count == 10, (
+            f"Expected 10 captured events, got {count}. "
             f"Types received: {mock_emit_daemon.event_types_in_order()}"
         )
 
@@ -602,12 +616,7 @@ class TestGoldenPathStandalone:
         self, mock_emit_daemon: MockEmitDaemon, gp_ids: GoldenPathIDs
     ) -> None:
         """Verify all events that carry a correlation_id share the same value."""
-        from emit_client_wrapper import emit_event
-
-        events = _build_golden_path_events(gp_ids)
-        for event_type, payload in events:
-            emit_event(event_type=event_type, payload=payload, timeout_ms=2000)
-        mock_emit_daemon.wait_for_events(10)
+        _emit_all_events(mock_emit_daemon, gp_ids)
 
         expected_cid = gp_ids.correlation_id
         for captured in mock_emit_daemon.captured_events:
@@ -624,12 +633,7 @@ class TestGoldenPathStandalone:
         self, mock_emit_daemon: MockEmitDaemon, gp_ids: GoldenPathIDs
     ) -> None:
         """Validate each captured event payload against its Pydantic model."""
-        from emit_client_wrapper import emit_event
-
-        events = _build_golden_path_events(gp_ids)
-        for event_type, payload in events:
-            emit_event(event_type=event_type, payload=payload, timeout_ms=2000)
-        mock_emit_daemon.wait_for_events(10)
+        _emit_all_events(mock_emit_daemon, gp_ids)
 
         for captured in mock_emit_daemon.captured_events:
             event_type = captured["event_type"]
@@ -669,12 +673,7 @@ class TestGoldenPathStandalone:
         self, mock_emit_daemon: MockEmitDaemon, gp_ids: GoldenPathIDs
     ) -> None:
         """Verify all emitted_at timestamps are timezone-aware (UTC)."""
-        from emit_client_wrapper import emit_event
-
-        events = _build_golden_path_events(gp_ids)
-        for event_type, payload in events:
-            emit_event(event_type=event_type, payload=payload, timeout_ms=2000)
-        mock_emit_daemon.wait_for_events(10)
+        _emit_all_events(mock_emit_daemon, gp_ids)
 
         for captured in mock_emit_daemon.captured_events:
             payload = captured["payload"]
@@ -694,12 +693,7 @@ class TestGoldenPathStandalone:
         self, mock_emit_daemon: MockEmitDaemon, gp_ids: GoldenPathIDs
     ) -> None:
         """Verify the utilization event references identifiers from tool output."""
-        from emit_client_wrapper import emit_event
-
-        events = _build_golden_path_events(gp_ids)
-        for event_type, payload in events:
-            emit_event(event_type=event_type, payload=payload, timeout_ms=2000)
-        mock_emit_daemon.wait_for_events(10)
+        _emit_all_events(mock_emit_daemon, gp_ids)
 
         # Get tool.executed and context.utilization events
         tool_events = mock_emit_daemon.events_by_type("tool.executed")
@@ -730,6 +724,35 @@ class TestGoldenPathStandalone:
             util_payload["injected_count"],
             util_payload["reused_count"],
         )
+
+    def test_schema_rejects_invalid_payloads(
+        self, mock_emit_daemon: MockEmitDaemon, gp_ids: GoldenPathIDs
+    ) -> None:
+        """Verify schemas reject payloads with missing required fields and extra fields."""
+        from pydantic import ValidationError
+
+        # Missing required field (session_id)
+        with pytest.raises(ValidationError):
+            ModelHookSessionStartedPayload.model_validate(
+                {
+                    "working_directory": "/tmp",
+                    "git_branch": "main",
+                    "hook_source": "startup",
+                }
+            )
+
+        # Extra field on a model with extra="forbid"
+        with pytest.raises(ValidationError):
+            ModelSessionOutcome.model_validate(
+                {
+                    "session_id": gp_ids.session_id,
+                    "outcome": "success",
+                    "emitted_at": T0.isoformat(),
+                    "unexpected_field": "should_fail",
+                }
+            )
+
+        logger.info("Schema rejection of invalid payloads verified.")
 
     def test_secret_redaction_on_prompt(
         self, mock_emit_daemon: MockEmitDaemon, gp_ids: GoldenPathIDs
@@ -793,7 +816,12 @@ class TestGoldenPathIntegration:
     """
 
     def test_events_reach_daemon(self, gp_ids: GoldenPathIDs) -> None:
-        """Emit golden path events via real daemon and verify acceptance."""
+        """Emit golden path events via real daemon and verify acceptance.
+
+        Scope: Verifies daemon acceptance (emit_event returns True for all events)
+        and that the daemon remains healthy after ingestion. Kafka delivery
+        verification requires a consumer and is covered by separate E2E tests.
+        """
         from emit_client_wrapper import daemon_available, emit_event
 
         if not daemon_available():
@@ -818,4 +846,7 @@ class TestGoldenPathIntegration:
         # All events should be accepted by the daemon
         failed = [(et, s) for et, s in results if not s]
         assert not failed, f"Events failed to emit: {failed}"
-        logger.info("All 10 events accepted by real emit daemon.")
+
+        # Verify daemon is still healthy after ingesting all events
+        assert daemon_available(), "Daemon became unavailable after ingesting events"
+        logger.info("All 10 events accepted by real emit daemon. Daemon still healthy.")
