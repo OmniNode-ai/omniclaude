@@ -262,6 +262,27 @@ update_tab_activity() {
 }
 
 # =============================================================================
+# Secret Redaction
+# =============================================================================
+# Redacts known secret patterns from stdin. Used by hook scripts before writing
+# to trace logs or Kafka payloads. Covers API keys, tokens, PEM keys, and
+# bearer tokens. Reads from stdin, writes redacted output to stdout.
+#
+# Usage: echo "$sensitive_text" | redact_secrets
+
+redact_secrets() {
+    sed -E \
+        -e 's/sk-[a-zA-Z0-9]{20,}/sk-***REDACTED***/g' \
+        -e 's/AKIA[A-Z0-9]{16}/AKIA***REDACTED***/g' \
+        -e 's/ghp_[a-zA-Z0-9]{36}/ghp_***REDACTED***/g' \
+        -e 's/gho_[a-zA-Z0-9]{36}/gho_***REDACTED***/g' \
+        -e 's/xox[baprs]-[a-zA-Z0-9-]+/xox*-***REDACTED***/g' \
+        -e 's/Bearer [a-zA-Z0-9._-]{20,}/Bearer ***REDACTED***/g' \
+        -e 's/-----BEGIN [A-Z ]*PRIVATE KEY-----/-----BEGIN ***REDACTED*** PRIVATE KEY-----/g' \
+        -e 's/:\/\/[^:]+:[^@]+@/:\/\/***:***@/g'
+}
+
+# =============================================================================
 # Logging Helper
 # =============================================================================
 # Simple timestamped logging to a file.

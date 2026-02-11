@@ -61,7 +61,7 @@ TS="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
 if [[ "$TOOL_NAME" == "Skill" ]]; then
     SKILL_NAME=$(echo "$TOOL_INFO" | jq -r '.tool_input.skill // .tool_input.name // "unknown"' 2>/dev/null)
-    SKILL_ARGS=$(echo "$TOOL_INFO" | jq -r '.tool_input.args // ""' 2>/dev/null)
+    SKILL_ARGS=$(echo "$TOOL_INFO" | jq -r '.tool_input.args // ""' 2>/dev/null | redact_secrets)
     SKILL_ERROR=$(echo "$TOOL_INFO" | jq -r '.tool_response.error // ""' 2>/dev/null)
     if [[ -n "$SKILL_ERROR" ]]; then
         echo "[$TS] [PostToolUse] SKILL_LOAD_FAILED skill=$SKILL_NAME error=$SKILL_ERROR" >> "$TRACE_LOG"
@@ -71,7 +71,7 @@ if [[ "$TOOL_NAME" == "Skill" ]]; then
 elif [[ "$TOOL_NAME" == "Task" ]]; then
     SUBAGENT_TYPE=$(echo "$TOOL_INFO" | jq -r '.tool_input.subagent_type // "unknown"' 2>/dev/null)
     TASK_DESC=$(echo "$TOOL_INFO" | jq -r '.tool_input.description // ""' 2>/dev/null)
-    TASK_DESC="${TASK_DESC:0:200}"
+    TASK_DESC="$(printf '%s' "${TASK_DESC:0:200}" | redact_secrets)"
     TASK_MODEL=$(echo "$TOOL_INFO" | jq -r '.tool_input.model // "default"' 2>/dev/null)
     echo "[$TS] [PostToolUse] TASK_DISPATCHED subagent_type=$SUBAGENT_TYPE model=$TASK_MODEL description=$TASK_DESC" >> "$TRACE_LOG"
 elif [[ "$TOOL_NAME" == "Edit" || "$TOOL_NAME" == "Write" ]]; then

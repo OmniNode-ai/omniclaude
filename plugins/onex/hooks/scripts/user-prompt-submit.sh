@@ -94,14 +94,7 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && [ "${SKIP_CLAUDE_HOOK_EVENT_EMIT:-0}" -ne
     #   cmd payloads include prompt_b64 for intelligence processing.
     PROMPT_PAYLOAD=$(jq -n \
         --arg session_id "$SESSION_ID" \
-        --arg prompt_preview "$(printf '%s' "${PROMPT:0:100}" | sed -E \
-            -e 's/sk-[a-zA-Z0-9]{20,}/sk-***REDACTED***/g' \
-            -e 's/AKIA[A-Z0-9]{16}/AKIA***REDACTED***/g' \
-            -e 's/ghp_[a-zA-Z0-9]{36}/ghp_***REDACTED***/g' \
-            -e 's/gho_[a-zA-Z0-9]{36}/gho_***REDACTED***/g' \
-            -e 's/xox[baprs]-[a-zA-Z0-9-]+/xox*-***REDACTED***/g' \
-            -e 's/Bearer [a-zA-Z0-9._-]{20,}/Bearer ***REDACTED***/g' \
-            -e 's/-----BEGIN [A-Z ]*PRIVATE KEY-----/-----BEGIN ***REDACTED*** PRIVATE KEY-----/g')" \
+        --arg prompt_preview "$(printf '%s' "${PROMPT:0:100}" | redact_secrets)" \
         --argjson prompt_length "${#PROMPT}" \
         --arg prompt_b64 "$PROMPT_B64" \
         --arg correlation_id "$CORRELATION_ID" \
@@ -164,15 +157,7 @@ fi
 TRACE_LOG="$HOME/.claude/logs/pipeline-trace.log"
 mkdir -p "$(dirname "$TRACE_LOG")" 2>/dev/null
 _TS="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-# Reuse the same secret redaction applied to Kafka prompt_preview (lines 97-104)
-_PROMPT_SHORT="$(printf '%s' "${PROMPT:0:80}" | sed -E \
-    -e 's/sk-[a-zA-Z0-9]{20,}/sk-***REDACTED***/g' \
-    -e 's/AKIA[A-Z0-9]{16}/AKIA***REDACTED***/g' \
-    -e 's/ghp_[a-zA-Z0-9]{36}/ghp_***REDACTED***/g' \
-    -e 's/gho_[a-zA-Z0-9]{36}/gho_***REDACTED***/g' \
-    -e 's/xox[baprs]-[a-zA-Z0-9-]+/xox*-***REDACTED***/g' \
-    -e 's/Bearer [a-zA-Z0-9._-]{20,}/Bearer ***REDACTED***/g' \
-    -e 's/-----BEGIN [A-Z ]*PRIVATE KEY-----/-----BEGIN ***REDACTED*** PRIVATE KEY-----/g')"
+_PROMPT_SHORT="$(printf '%s' "${PROMPT:0:80}" | redact_secrets)"
 echo "[$_TS] [UserPromptSubmit] PROMPT prompt_length=${#PROMPT} preview=\"${_PROMPT_SHORT}\"" >> "$TRACE_LOG"
 
 # Parse JSON response

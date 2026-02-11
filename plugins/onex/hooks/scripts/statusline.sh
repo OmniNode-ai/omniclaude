@@ -170,7 +170,7 @@ APPLESCRIPT
         if [ -n "$project_path" ] && [ -d "$project_path" ]; then
           live_branch=$(git -C "$project_path" branch --show-current 2>/dev/null || echo "")
           if [ -n "$live_branch" ]; then
-            ticket=$(echo "$live_branch" | grep -oiE 'omn-[0-9]+' | head -1 | tr '[:lower:]' '[:upper:]')
+            ticket=$(echo "$live_branch" | grep -oiE '[a-z]{2,5}-[0-9]+' | head -1 | tr '[:lower:]' '[:upper:]')
           fi
         fi
 
