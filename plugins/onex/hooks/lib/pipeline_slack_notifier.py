@@ -87,14 +87,15 @@ class AlertSeverity:
     """Severity level constants for pipeline alerts.
 
     Mirrors EnumAlertSeverity from omnibase_infra but without the dependency.
+    Values are lowercase to match EnumAlertSeverity.value (e.g. "warning", "error").
     When omnibase_infra IS available, _create_alert() uses the real enum values.
     When it is NOT available, these string constants are used instead.
     """
 
-    INFO = "INFO"
-    WARNING = "WARNING"
-    ERROR = "ERROR"
-    CRITICAL = "CRITICAL"
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
+    CRITICAL = "critical"
 
 
 @dataclass(frozen=True)
@@ -326,7 +327,7 @@ class PipelineSlackNotifier:
             "omnibase_infra models not available — using local PipelineAlert fallback"
         )
         return PipelineAlert(
-            severity=severity,
+            severity=severity.lower(),
             message=formatted_message,
             title=f"{prefix} Pipeline Notification",
             details=alert_details,

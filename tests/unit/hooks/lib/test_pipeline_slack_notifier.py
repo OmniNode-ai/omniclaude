@@ -241,7 +241,7 @@ class TestNotifyBlocked:
 
         alert = handler.calls[0]
         # Compare using string value — works with both the local AlertSeverity
-        # fallback and the real EnumAlertSeverity (whose .value is "WARNING").
+        # fallback and the real EnumAlertSeverity (whose .value is "warning").
         severity_value = getattr(alert.severity, "value", alert.severity)
         assert severity_value == AlertSeverity.WARNING
 
@@ -257,6 +257,7 @@ class TestNotifyBlocked:
         )
 
         alert = handler.calls[0]
+        # Same extraction: .value for real enum, raw string for fallback.
         severity_value = getattr(alert.severity, "value", alert.severity)
         assert severity_value == AlertSeverity.ERROR
 
