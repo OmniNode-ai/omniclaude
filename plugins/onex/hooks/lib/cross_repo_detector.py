@@ -107,6 +107,12 @@ def detect_cross_repo_changes(
     """
     work_dir = cwd or os.getcwd()
 
+    # Validate base_ref: prevent git flag injection (e.g., "--output=/tmp/evil")
+    if base_ref.startswith("-"):
+        return CrossRepoResult(
+            error=f"Invalid base_ref: '{base_ref}' (must not start with '-')"
+        )
+
     # Get repo root
     repo_root, rc = _run_git(["rev-parse", "--show-toplevel"], cwd=work_dir)
     if rc != 0 or not repo_root:
@@ -151,6 +157,15 @@ def detect_cross_repo_changes(
     violating: list[str] = []
     for rel_path in sorted(all_files):
         if not rel_path:
+            continue
+        # Guard: if git returns an absolute path (e.g., submodules, worktrees),
+        # Path.__truediv__ silently discards the left operand. Flag immediately.
+        if Path(rel_path).is_absolute():
+            violating.append(rel_path)
+            logger.info(
+                f"Cross-repo violation: {rel_path} is an absolute path "
+                f"(outside {repo_root_resolved})"
+            )
             continue
         abs_path = Path(repo_root_resolved) / rel_path
         try:

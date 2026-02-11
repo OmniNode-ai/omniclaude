@@ -302,3 +302,89 @@ class TestPatchPipelineStatus:
         result = patch_pipeline_status(SAMPLE_WITH_PIPELINE_STATUS, status_yaml)
         assert result.success
         assert "Human content here." in result.patched_description
+
+    def test_pipeline_status_skips_contract_inside_fence(self) -> None:
+        """Pipeline Status is inserted before the real Contract, skipping fenced ones.
+
+        When a description contains '## Contract' inside a fenced code block
+        (e.g., documentation examples), _find_outside_fence skips it and
+        inserts Pipeline Status before the real (unfenced) Contract block.
+
+        Fence parity count for the description below:
+          Line "```\\n"           → marker #1 (opens outer fence)
+          Line "```yaml\\n"       → marker #2 (inside outer fence, literal text)
+          Line "```\\n" (close)   → marker #3 (closes inner ```, literal text)
+          Line "```\\n\\n"        → marker #4 (closes outer fence)
+          → count=4 (even) at the real "## Contract", so it's outside a fence.
+        """
+        desc = (
+            "## Summary\n\n"
+            "Here's an example of a contract format:\n\n"
+            "```\n"
+            "## Contract\n\n"
+            "```yaml\n"
+            'example: "not real"\n'
+            "```\n"
+            "```\n\n"
+            "## Contract\n\n"
+            "```yaml\n"
+            'ticket_id: "OMN-1234"\n'
+            "phase: implementation\n"
+            "```\n"
+        )
+        status_yaml = 'run_id: "r1"\nphase: "implement"'
+        result = patch_pipeline_status(desc, status_yaml)
+        assert result.success
+        patched = result.patched_description
+
+        # Pipeline Status must appear before the real (unfenced) Contract.
+        status_idx = patched.index("## Pipeline Status")
+        # The real contract is the second occurrence of "## Contract"
+        real_contract_idx = patched.index(
+            "## Contract", patched.index("## Contract") + 1
+        )
+        assert status_idx < real_contract_idx
+        # The fenced example should remain untouched before Pipeline Status
+        fenced_example_idx = patched.index("```\n## Contract")
+        assert fenced_example_idx < status_idx
+        # The outer fence closes with the second-to-last ``` before Pipeline Status.
+        # Find the end of the last ``` before the real contract (outer fence close).
+        outer_fence_close = patched.rindex("```\n", 0, status_idx)
+        assert outer_fence_close < status_idx, (
+            "Pipeline Status must appear after the outer fence closes"
+        )
+
+
+# =============================================================================
+# Bare fence / whitespace edge-case tests
+# =============================================================================
+
+
+class TestEdgeCases:
+    """Edge-case tests for fence syntax and whitespace handling."""
+
+    def test_bare_fence_without_yaml_specifier(self) -> None:
+        """Contract block using ``` instead of ```yaml should still extract."""
+        desc = '## Contract\n\n```\nticket_id: "OMN-5678"\nphase: review\n```\n'
+        result = extract_contract_yaml(desc)
+        assert result.success
+        assert result.parsed is not None
+        assert result.parsed["ticket_id"] == "OMN-5678"
+        assert result.parsed["phase"] == "review"
+
+    def test_lstrip_yaml_content(self) -> None:
+        """Leading whitespace in new YAML must not produce extra blank lines."""
+        new_yaml = '\n\n  ticket_id: "OMN-1234"\n  phase: review\n\n'
+        result = patch_contract_yaml(SAMPLE_DESCRIPTION, new_yaml)
+        assert result.success
+        # The YAML inserted into the fence should not start with blank lines
+        assert "```yaml\n\n" not in result.patched_description
+        # Verify content is present (stripped)
+        assert 'ticket_id: "OMN-1234"' in result.patched_description
+
+        # Same check for patch_pipeline_status
+        status_yaml = "\n  run_id: abc\n  phase: implement\n\n"
+        result2 = patch_pipeline_status(SAMPLE_DESCRIPTION, status_yaml)
+        assert result2.success
+        assert "```yaml\n\n" not in result2.patched_description
+        assert "run_id: abc" in result2.patched_description

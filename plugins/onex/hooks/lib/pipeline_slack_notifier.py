@@ -79,6 +79,43 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
+# Local Fallback Alert Model (used when omnibase_infra is not available)
+# =============================================================================
+
+
+class AlertSeverity:
+    """Severity level constants for pipeline alerts.
+
+    Mirrors EnumAlertSeverity from omnibase_infra but without the dependency.
+    Values are lowercase to match EnumAlertSeverity.value (e.g. "warning", "error").
+    When omnibase_infra IS available, _create_alert() uses the real enum values.
+    When it is NOT available, these string constants are used instead.
+    """
+
+    INFO = "info"
+    WARNING = "warning"
+    ERROR = "error"
+    CRITICAL = "critical"
+
+
+@dataclass(frozen=True)
+class PipelineAlert:
+    """Local fallback alert model for when omnibase_infra is unavailable.
+
+    Provides the same attribute interface as ModelSlackAlert so that
+    handlers (real or mock) can access .severity, .message, .title,
+    .details, and .correlation_id uniformly.
+    """
+
+    severity: str
+    message: str
+    title: str
+    details: dict[str, str]
+    correlation_id: UUID
+    thread_ts: str | None = None
+
+
+# =============================================================================
 # Protocol for Slack Handler (DI boundary for OMN-2157)
 # =============================================================================
 
@@ -229,10 +266,37 @@ class PipelineSlackNotifier:
         details: dict[str, str] | None = None,
         correlation_id: UUID | None = None,
     ) -> object | None:
-        """Create a ModelSlackAlert from omnibase_infra.
+        """Create an alert object for Slack delivery.
 
-        Returns None if the model is not available.
+        Tries to use ModelSlackAlert from omnibase_infra first (production).
+        Falls back to the local PipelineAlert dataclass if omnibase_infra
+        is not installed (unit test / standalone environment).
+
+        Args:
+            severity: One of "INFO", "WARNING", "ERROR", "CRITICAL" (case-insensitive).
+                Normalized to uppercase for the EnumAlertSeverity lookup, and to
+                lowercase for the local PipelineAlert fallback.
+
+        Returns None only if neither model can be constructed (should not happen).
         """
+        prefix = self._format_prefix(phase)
+        formatted_message = f"{prefix}\n{message}"
+
+        alert_details: dict[str, str] = {
+            "Ticket": self.ticket_id,
+            "Run": self.run_id,
+        }
+        if phase:
+            alert_details["Phase"] = phase
+        if details:
+            alert_details.update(details)
+
+        cid = correlation_id or uuid4()
+
+        # Normalize severity to uppercase for severity_map lookup
+        severity_key = severity.upper()
+
+        # --- Try omnibase_infra first (production path) ---
         try:
             from omnibase_infra.handlers.models.model_slack_alert import (
                 EnumAlertSeverity,
@@ -246,31 +310,17 @@ class PipelineSlackNotifier:
                 "CRITICAL": EnumAlertSeverity.CRITICAL,
             }
 
-            prefix = self._format_prefix(phase)
-            formatted_message = f"{prefix}\n{message}"
-
-            alert_details: dict[str, str] = {
-                "Ticket": self.ticket_id,
-                "Run": self.run_id,
-            }
-            if phase:
-                alert_details["Phase"] = phase
-            if details:
-                alert_details.update(details)
-
-            # Build kwargs — thread_ts will be supported when OMN-2157 lands
             alert_kwargs: dict[str, object] = {
-                "severity": severity_map.get(severity, EnumAlertSeverity.INFO),
+                "severity": severity_map.get(severity_key, EnumAlertSeverity.INFO),
                 "message": formatted_message,
                 "title": f"{prefix} Pipeline Notification",
                 "details": alert_details,
-                "correlation_id": correlation_id or uuid4(),
+                "correlation_id": cid,
             }
 
             # Forward-compatible: pass thread_ts if the model accepts it
             # (OMN-2157 will add this field to ModelSlackAlert)
             if thread_ts:
-                # Check if ModelSlackAlert supports thread_ts before passing
                 model_fields = set(ModelSlackAlert.model_fields.keys())
                 if "thread_ts" in model_fields:
                     alert_kwargs["thread_ts"] = thread_ts
@@ -278,8 +328,20 @@ class PipelineSlackNotifier:
             return ModelSlackAlert(**alert_kwargs)  # type: ignore[arg-type]
 
         except ImportError:
-            logger.debug("omnibase_infra models not available")
-            return None
+            pass
+
+        # --- Fallback: local PipelineAlert dataclass ---
+        logger.debug(
+            "omnibase_infra models not available — using local PipelineAlert fallback"
+        )
+        return PipelineAlert(
+            severity=severity_key.lower(),
+            message=formatted_message,
+            title=f"{prefix} Pipeline Notification",
+            details=alert_details,
+            correlation_id=cid,
+            thread_ts=thread_ts,
+        )
 
     async def _send_alert(
         self,
@@ -511,7 +573,9 @@ class PipelineSlackNotifier:
             emit_event(event_type=event_type, payload=payload)
 
         except Exception:
-            pass  # Best-effort, non-blocking
+            logger.debug(
+                "_emit_event failed (best-effort, non-blocking)", exc_info=True
+            )
 
 
 # =============================================================================
@@ -554,7 +618,9 @@ def notify_sync(
 
 
 __all__ = [
+    "AlertSeverity",
     "NotifyResult",
+    "PipelineAlert",
     "PipelineSlackNotifier",
     "SlackHandlerProtocol",
     "notify_sync",

@@ -70,6 +70,32 @@ _PIPELINE_STATUS_PATTERN = re.compile(
     re.MULTILINE,
 )
 
+# Pattern to count top-level fence markers (lines starting with ```)
+_FENCE_MARKER = re.compile(r"^```", re.MULTILINE)
+
+
+def _find_outside_fence(pattern: re.Pattern[str], text: str) -> re.Match[str] | None:
+    """Return the first match of *pattern* that is NOT inside a fenced code block.
+
+    Uses a parity heuristic: count ``` lines before the match position.
+    If the count is odd we are inside a fence and skip to the next match.
+
+    Logs a warning if matches exist but all are inside fences, which usually
+    indicates an unclosed fence marker somewhere above the real content.
+    """
+    found_any = False
+    for match in pattern.finditer(text):
+        found_any = True
+        fence_count = len(_FENCE_MARKER.findall(text[: match.start()]))
+        if fence_count % 2 == 0:
+            return match
+    if found_any:
+        logger.warning(
+            "Pattern matched but all occurrences are inside fenced code blocks "
+            "(possible unclosed fence in description)"
+        )
+    return None
+
 
 @dataclass(frozen=True)
 class ContractExtractResult:
@@ -80,7 +106,9 @@ class ContractExtractResult:
         raw_yaml: The raw YAML string (before parsing).
         parsed: The parsed YAML as a dict (None if parsing failed).
         error: Error message if extraction/parsing failed.
-        has_contract_marker: Whether the ## Contract marker exists at all.
+        has_contract_marker: Whether the ``## Contract`` substring exists anywhere
+            in the description (raw check, not fence-aware). May be True even when
+            the marker only appears inside a fenced code block.
     """
 
     success: bool
@@ -128,11 +156,18 @@ def extract_contract_yaml(description: str) -> ContractExtractResult:
 
     has_marker = "## Contract" in description
 
-    match = _CONTRACT_PATTERN.search(description)
+    match = _find_outside_fence(_CONTRACT_PATTERN, description)
     if not match:
+        if has_marker and _CONTRACT_PATTERN.search(description):
+            error = (
+                "## Contract section found but appears inside a fenced code block. "
+                "Check for unclosed ``` markers above the contract."
+            )
+        else:
+            error = "No ## Contract section with fenced YAML block found"
         return ContractExtractResult(
             success=False,
-            error="No ## Contract section with fenced YAML block found",
+            error=error,
             has_contract_marker=has_marker,
         )
 
@@ -235,17 +270,26 @@ def patch_contract_yaml(
                 validation_error=validation_error,
             )
 
-    # Find the contract block
-    match = _CONTRACT_PATTERN.search(description)
+    # Find the contract block (skip matches inside fenced code blocks)
+    match = _find_outside_fence(_CONTRACT_PATTERN, description)
     if not match:
+        if _CONTRACT_PATTERN.search(description):
+            error = (
+                "## Contract section found but appears inside a fenced code block. "
+                "Check for unclosed ``` markers above the contract."
+            )
+        else:
+            error = (
+                "No ## Contract section with fenced YAML block found. "
+                "Cannot patch without existing contract marker."
+            )
         return ContractPatchResult(
             success=False,
-            error="No ## Contract section with fenced YAML block found. "
-            "Cannot patch without existing contract marker.",
+            error=error,
         )
 
     # Ensure new YAML doesn't have leading/trailing whitespace issues
-    clean_yaml = new_yaml_str.rstrip()
+    clean_yaml = new_yaml_str.strip()
 
     # Replace only the YAML content (group 2), preserving header and fences
     patched = description[: match.start(2)] + clean_yaml + description[match.end(2) :]
@@ -291,11 +335,11 @@ def patch_pipeline_status(
             validation_error=str(e),
         )
 
-    clean_yaml = status_yaml_str.rstrip()
+    clean_yaml = status_yaml_str.strip()
     new_block = f"## Pipeline Status\n\n```yaml\n{clean_yaml}\n```"
 
-    # Try to find existing Pipeline Status block
-    match = _PIPELINE_STATUS_PATTERN.search(description)
+    # Try to find existing Pipeline Status block (skip matches inside fences)
+    match = _find_outside_fence(_PIPELINE_STATUS_PATTERN, description)
     if match:
         # Replace existing block content
         patched = (
@@ -303,9 +347,10 @@ def patch_pipeline_status(
         )
         return ContractPatchResult(success=True, patched_description=patched)
 
-    # No existing block — insert before ## Contract
-    contract_idx = description.find("## Contract")
-    if contract_idx >= 0:
+    # No existing block — insert before ## Contract (skip matches inside fences)
+    contract_match = _find_outside_fence(_CONTRACT_PATTERN, description)
+    if contract_match:
+        contract_idx = contract_match.start()
         patched = (
             description[:contract_idx].rstrip()
             + "\n\n"
