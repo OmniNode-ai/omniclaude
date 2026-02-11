@@ -65,8 +65,8 @@ import re
 import warnings
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated, Literal
-from uuid import UUID
+from typing import Annotated, Any, Literal
+from uuid import UUID, uuid4
 
 from omnibase_core.enums import EnumClaudeCodeSessionOutcome
 from omnibase_infra.utils import ensure_timezone_aware
@@ -1616,6 +1616,112 @@ ModelHookPayload = Annotated[
 ]
 
 
+# =============================================================================
+# Agent Status Events (OMN-1848)
+# =============================================================================
+
+
+class EnumAgentState(StrEnum):
+    """Closed enum for agent lifecycle states. Schema version: 1.
+
+    These states are intentionally minimal and closed.
+    Adding new states is a BREAKING CHANGE requiring version increment
+    and consumer updates.
+    """
+
+    IDLE = "idle"
+    WORKING = "working"
+    BLOCKED = "blocked"
+    AWAITING_INPUT = "awaiting_input"
+    FINISHED = "finished"
+    ERROR = "error"
+
+
+class ModelAgentStatusPayload(BaseModel):
+    """Event payload for agent status reporting.
+
+    Emitted by agents to report their current lifecycle state via the
+    emit daemon. This is an OBSERVATIONAL event — it must never directly
+    cause state mutation without passing through a reducer.
+
+    Defined locally in omniclaude (not omnibase_core) per OMN-1848.
+    Designed for easy promotion to omnibase_core when OMN-1847 is completed.
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+    )
+
+    # Identity
+    correlation_id: UUID = Field(
+        default_factory=uuid4,
+        description="Correlation ID for distributed tracing",
+    )
+    agent_name: str = Field(
+        ...,
+        min_length=1,
+        description="Name of the reporting agent",
+    )
+    session_id: str = Field(
+        ...,
+        min_length=1,
+        description="Session identifier for ordering",
+    )
+    agent_instance_id: str | None = Field(
+        default=None,
+        description="Durable instance ID to disambiguate parallel agents with same name",
+    )
+
+    # State
+    state: EnumAgentState = Field(
+        ...,
+        description="Current agent lifecycle state",
+    )
+    schema_version: Literal[1] = Field(
+        default=1,
+        description="Schema version for forward compatibility",
+    )
+    message: str = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="Human-readable status message (max 500 chars)",
+    )
+
+    # Optional progress
+    progress: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Progress 0.0-1.0, monotonic within a task",
+    )
+    current_phase: str | None = Field(
+        default=None,
+        description="Current workflow phase (e.g., 'research', 'implementation')",
+    )
+    current_task: str | None = Field(
+        default=None,
+        description="Current task description",
+    )
+    blocking_reason: str | None = Field(
+        default=None,
+        description="Why the agent is blocked (for notification routing)",
+    )
+
+    # Timestamps — MUST be explicitly injected (no default_factory)
+    emitted_at: TimezoneAwareDatetime = Field(
+        ...,
+        description="Timestamp when the status was emitted (UTC). Must be explicitly injected.",
+    )
+
+    # Metadata
+    metadata: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Additional metadata (new dict per instance)",
+    )
+
+
 __all__ = [
     # Constants
     "PROMPT_PREVIEW_MAX_LENGTH",
@@ -1625,6 +1731,7 @@ __all__ = [
     "SessionEndReason",
     "ContextSource",
     "EnumClaudeCodeSessionOutcome",
+    "EnumAgentState",
     # Annotated types (reusable validators)
     "TimezoneAwareDatetime",
     # Sanitization utilities
@@ -1642,6 +1749,7 @@ __all__ = [
     "ModelAgentMatchPayload",
     "ModelLatencyBreakdownPayload",
     "ModelHookManifestInjectedPayload",
+    "ModelAgentStatusPayload",
     # Envelope and types
     "ModelHookEventEnvelope",
     "ModelHookPayload",

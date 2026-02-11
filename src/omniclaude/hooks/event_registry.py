@@ -487,6 +487,21 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         partition_key_field=None,  # No partition key; events are round-robin distributed
         required_fields=["event_id", "event_type", "timestamp_iso", "payload"],
     ),
+    # =========================================================================
+    # Agent Status (OMN-1848 - agent lifecycle reporting)
+    # =========================================================================
+    "agent.status": EventRegistration(
+        event_type="agent.status",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.AGENT_STATUS,
+                transform=None,  # Passthrough (pre-validated by agent_status_emitter)
+                description="Agent lifecycle status for observability and coordination",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["agent_name", "session_id", "state", "message"],
+    ),
 }
 
 
