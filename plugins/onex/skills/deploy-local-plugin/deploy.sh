@@ -372,6 +372,9 @@ if [[ "$EXECUTE" == "true" ]]; then
     for component in commands skills agents; do
         DEST="$CLAUDE_DIR/$component/onex"
         [[ -L "$DEST" ]] && rm -f "$DEST"
+        if [[ -d "$DEST" ]]; then
+            echo -e "${YELLOW}  Warning: overwriting existing $DEST (not a symlink) — local customizations will be replaced${NC}"
+        fi
         mkdir -p "$DEST"
         rsync -a --delete "$TARGET/$component/" "$DEST/"
     done

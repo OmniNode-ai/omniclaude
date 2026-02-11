@@ -229,7 +229,7 @@ edge case handling.
 
 - `ticket-work` skill (Phase 1)
 - `local-review` skill (Phase 2)
-- `pr-release-ready` command (Phase 4)
+- `pr-release-ready` skill (Phase 4)
 - `emit_client_wrapper` (Kafka event emission)
 - `HandlerSlackWebhook` in omnibase_infra (Slack delivery infrastructure)
 - OMN-2157 (Web API threading support — future dependency)

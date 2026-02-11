@@ -138,4 +138,4 @@ or edge case handling.
 
 - `ticket-pipeline` skill (structured ticket-based pipeline)
 - `ticket-work` skill (single-ticket implementation)
-- `local-review` command (code review)
+- `local-review` skill (code review)

@@ -235,10 +235,12 @@ skill_dot_color() {
     fi
 
     # Hash skill name to palette index
+    # Multiplier 37 chosen for better distribution: 37 mod 16 = 5 (coprime to 16),
+    # whereas 31 mod 16 = 15 which biases lower bits toward last few chars.
     local hash=0 i char_val
     for ((i=0; i<${#skill}; i++)); do
         printf -v char_val '%d' "'${skill:$i:1}"
-        hash=$(( (hash * 31 + char_val) % ${#_DOT_PALETTE[@]} ))
+        hash=$(( (hash * 37 + char_val) % ${#_DOT_PALETTE[@]} ))
     done
     echo "${_DOT_PALETTE[$hash]}"
 }

@@ -54,8 +54,12 @@ Targets for **synchronous path only** (excludes backgrounded processes):
 |------|--------|-------------|---------------------|
 | SessionStart | <50ms | Daemon check, stdin read | Kafka emit, Postgres log |
 | SessionEnd | <50ms | stdin read | Kafka emit, Postgres log |
-| UserPromptSubmit | <500ms | Routing, agent load, context injection | Kafka emit, intelligence requests |
+| UserPromptSubmit | <500ms typical (~7s worst-case) | Routing, agent load, context injection | Kafka emit, intelligence requests |
 | PostToolUse | <100ms | stdin read, quality check | Kafka emit, content capture |
+
+> **Note**: UserPromptSubmit's 500ms target is for typical runs. Worst-case with all timeout
+> paths (routing 5s + loader 1s + injection 1s) is ~7s. These timeouts are safety nets;
+> normal execution stays well under 500ms.
 
 If hooks exceed budget, check:
 1. Network latency to routing service
