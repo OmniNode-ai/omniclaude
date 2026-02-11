@@ -42,16 +42,22 @@ import pytest
 logger = logging.getLogger("golden_path_harness")
 
 # ---------------------------------------------------------------------------
-# Sys.path for plugin lib (mirrors conftest.py)
+# Sys.path for plugin lib — intentionally duplicates conftest.py so this
+# file can also be run standalone (python -m pytest tests/integration/...).
+# Anchored to _REPO_ROOT via pyproject.toml marker for resilience.
 # ---------------------------------------------------------------------------
 
-_plugin_lib_path = str(
-    Path(__file__).resolve().parent.parent.parent / "plugins" / "onex" / "hooks" / "lib"
-)
+_REPO_ROOT = Path(__file__).resolve().parent
+while _REPO_ROOT.parent != _REPO_ROOT:
+    if (_REPO_ROOT / "pyproject.toml").exists():
+        break
+    _REPO_ROOT = _REPO_ROOT.parent
+
+_plugin_lib_path = str(_REPO_ROOT / "plugins" / "onex" / "hooks" / "lib")
 if _plugin_lib_path not in sys.path:
     sys.path.insert(0, _plugin_lib_path)
 
-_src_path = str(Path(__file__).resolve().parent.parent.parent / "src")
+_src_path = str(_REPO_ROOT / "src")
 if _src_path not in sys.path:
     sys.path.insert(0, _src_path)
 
@@ -235,14 +241,24 @@ class MockEmitDaemon:
 
     # -- query helpers -------------------------------------------------------
 
-    def wait_for_events(self, count: int, timeout: float = 2.0) -> None:
-        """Poll until ``count`` events are captured or timeout expires."""
+    def wait_for_events(self, count: int, timeout: float = 5.0) -> None:
+        """Poll until ``count`` events are captured or timeout expires.
+
+        Raises TimeoutError if the expected event count is not reached,
+        providing a clear diagnostic instead of silently returning.
+        """
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             with self._lock:
                 if len(self.captured_events) >= count:
                     return
             time.sleep(0.02)
+        with self._lock:
+            got = len(self.captured_events)
+        raise TimeoutError(
+            f"wait_for_events: expected {count} events within {timeout}s, "
+            f"got {got}. Types received: {self.event_types_in_order()}"
+        )
 
     def events_by_type(self, event_type: str) -> list[dict[str, Any]]:
         """Return captured events filtered by event_type."""
@@ -261,7 +277,7 @@ class MockEmitDaemon:
 
 
 @pytest.fixture
-def mock_emit_daemon():
+def mock_emit_daemon(monkeypatch: pytest.MonkeyPatch):
     """Provide a MockEmitDaemon with a temporary socket path.
 
     Uses /tmp directly to stay within the ~104-char Unix socket path limit
@@ -278,9 +294,8 @@ def mock_emit_daemon():
     daemon = MockEmitDaemon(sock_path)
     daemon.start()
 
-    # Point the emit client at our mock socket
-    original_env = os.environ.get("OMNICLAUDE_EMIT_SOCKET")
-    os.environ["OMNICLAUDE_EMIT_SOCKET"] = sock_path
+    # Point the emit client at our mock socket (monkeypatch scopes to test)
+    monkeypatch.setenv("OMNICLAUDE_EMIT_SOCKET", sock_path)
 
     # Reset the module-level singleton so it picks up the new socket path
     from emit_client_wrapper import reset_client
@@ -289,13 +304,9 @@ def mock_emit_daemon():
 
     yield daemon
 
-    # Restore
+    # Restore (monkeypatch handles env var teardown automatically)
     daemon.stop()
     reset_client()
-    if original_env is not None:
-        os.environ["OMNICLAUDE_EMIT_SOCKET"] = original_env
-    else:
-        os.environ.pop("OMNICLAUDE_EMIT_SOCKET", None)
 
 
 # ===========================================================================
@@ -645,12 +656,10 @@ class TestGoldenPathStandalone:
                     f"Payload: {json.dumps(payload, indent=2, default=str)}"
                 )
 
-            # Verify frozen (immutable) — Pydantic frozen models raise ValidationError
-            from pydantic import ValidationError
-
-            frozen_field = next(iter(instance.model_fields))
-            with pytest.raises(ValidationError):
-                setattr(instance, frozen_field, "tampered")  # type: ignore[misc]
+            # Verify frozen (immutable) — model_config must declare frozen=True
+            assert model_cls.model_config.get("frozen") is True, (
+                f"{event_type} model {model_cls.__name__} is not frozen"
+            )
 
             logger.debug("Schema validation passed for %s", event_type)
 
@@ -753,7 +762,9 @@ class TestGoldenPathStandalone:
 
         # Validate via Pydantic — the model's field_validator should redact
         captured = mock_emit_daemon.events_by_type("prompt.submitted")
-        assert len(captured) >= 1
+        assert len(captured) == 1, (
+            f"Expected 1 prompt.submitted event, got {len(captured)}"
+        )
 
         model = ModelHookPromptSubmittedPayload.model_validate(captured[-1]["payload"])
         assert "sk-1234567890" not in model.prompt_preview
