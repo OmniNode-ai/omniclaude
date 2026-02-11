@@ -170,7 +170,7 @@ APPLESCRIPT
         if [ -n "$project_path" ] && [ -d "$project_path" ]; then
           live_branch=$(git -C "$project_path" branch --show-current 2>/dev/null || echo "")
           if [ -n "$live_branch" ]; then
-            ticket=$(echo "$live_branch" | grep -oiE 'omn-[0-9]+' | head -1 | grep -oE '[0-9]+')
+            ticket=$(echo "$live_branch" | grep -oiE 'omn-[0-9]+' | head -1 | tr '[:lower:]' '[:upper:]')
           fi
         fi
 
@@ -202,7 +202,7 @@ APPLESCRIPT
         if [ -n "$CURRENT_ITERM" ] && [ "$entry_guid" = "$CURRENT_ITERM" ]; then
           if [ "$is_dupe" -eq 1 ]; then
             # DUPLICATE FOLDER: bright white on red bg — unmissable collision warning
-            LINE2="${LINE2}\033[97;41m \xe2\x9a\xa0 ${label} \033[0m${activity_dot} "
+            LINE2="${LINE2}\033[97;41m ⚠ ${label} \033[0m${activity_dot} "
           else
             # Current tab: black text on cyan background
             LINE2="${LINE2}\033[30;46m ${label} \033[0m${activity_dot} "
@@ -210,7 +210,7 @@ APPLESCRIPT
         else
           if [ "$is_dupe" -eq 1 ]; then
             # DUPLICATE FOLDER: bright red text — collision warning
-            LINE2="${LINE2}\033[91m\xe2\x9a\xa0 ${label}\033[0m${activity_dot} "
+            LINE2="${LINE2}\033[91m⚠ ${label}\033[0m${activity_dot} "
           else
             # Other tabs: white text
             LINE2="${LINE2}\033[37m${label}\033[0m${activity_dot} "

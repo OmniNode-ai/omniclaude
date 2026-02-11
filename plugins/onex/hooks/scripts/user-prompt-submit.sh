@@ -171,7 +171,8 @@ _PROMPT_SHORT="$(printf '%s' "${PROMPT:0:80}" | sed -E \
     -e 's/ghp_[a-zA-Z0-9]{36}/ghp_***REDACTED***/g' \
     -e 's/gho_[a-zA-Z0-9]{36}/gho_***REDACTED***/g' \
     -e 's/xox[baprs]-[a-zA-Z0-9-]+/xox*-***REDACTED***/g' \
-    -e 's/Bearer [a-zA-Z0-9._-]{20,}/Bearer ***REDACTED***/g')"
+    -e 's/Bearer [a-zA-Z0-9._-]{20,}/Bearer ***REDACTED***/g' \
+    -e 's/-----BEGIN [A-Z ]*PRIVATE KEY-----/-----BEGIN ***REDACTED*** PRIVATE KEY-----/g')"
 echo "[$_TS] [UserPromptSubmit] PROMPT prompt_length=${#PROMPT} preview=\"${_PROMPT_SHORT}\"" >> "$TRACE_LOG"
 
 # Parse JSON response
