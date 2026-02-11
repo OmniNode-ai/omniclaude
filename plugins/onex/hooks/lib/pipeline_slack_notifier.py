@@ -272,6 +272,11 @@ class PipelineSlackNotifier:
         Falls back to the local PipelineAlert dataclass if omnibase_infra
         is not installed (unit test / standalone environment).
 
+        Args:
+            severity: One of "INFO", "WARNING", "ERROR", "CRITICAL" (case-insensitive).
+                Normalized to uppercase for the EnumAlertSeverity lookup, and to
+                lowercase for the local PipelineAlert fallback.
+
         Returns None only if neither model can be constructed (should not happen).
         """
         prefix = self._format_prefix(phase)

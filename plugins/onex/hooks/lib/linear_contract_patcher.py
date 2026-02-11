@@ -79,11 +79,21 @@ def _find_outside_fence(pattern: re.Pattern[str], text: str) -> re.Match[str] | 
 
     Uses a parity heuristic: count ``` lines before the match position.
     If the count is odd we are inside a fence and skip to the next match.
+
+    Logs a warning if matches exist but all are inside fences, which usually
+    indicates an unclosed fence marker somewhere above the real content.
     """
+    found_any = False
     for match in pattern.finditer(text):
+        found_any = True
         fence_count = len(_FENCE_MARKER.findall(text[: match.start()]))
         if fence_count % 2 == 0:
             return match
+    if found_any:
+        logger.warning(
+            "Pattern matched but all occurrences are inside fenced code blocks "
+            "(possible unclosed fence in description)"
+        )
     return None
 
 
@@ -96,7 +106,9 @@ class ContractExtractResult:
         raw_yaml: The raw YAML string (before parsing).
         parsed: The parsed YAML as a dict (None if parsing failed).
         error: Error message if extraction/parsing failed.
-        has_contract_marker: Whether the ## Contract marker exists at all.
+        has_contract_marker: Whether the ``## Contract`` substring exists anywhere
+            in the description (raw check, not fence-aware). May be True even when
+            the marker only appears inside a fenced code block.
     """
 
     success: bool
@@ -146,9 +158,16 @@ def extract_contract_yaml(description: str) -> ContractExtractResult:
 
     match = _find_outside_fence(_CONTRACT_PATTERN, description)
     if not match:
+        if has_marker and _CONTRACT_PATTERN.search(description):
+            error = (
+                "## Contract section found but appears inside a fenced code block. "
+                "Check for unclosed ``` markers above the contract."
+            )
+        else:
+            error = "No ## Contract section with fenced YAML block found"
         return ContractExtractResult(
             success=False,
-            error="No ## Contract section with fenced YAML block found",
+            error=error,
             has_contract_marker=has_marker,
         )
 
@@ -254,10 +273,19 @@ def patch_contract_yaml(
     # Find the contract block (skip matches inside fenced code blocks)
     match = _find_outside_fence(_CONTRACT_PATTERN, description)
     if not match:
+        if _CONTRACT_PATTERN.search(description):
+            error = (
+                "## Contract section found but appears inside a fenced code block. "
+                "Check for unclosed ``` markers above the contract."
+            )
+        else:
+            error = (
+                "No ## Contract section with fenced YAML block found. "
+                "Cannot patch without existing contract marker."
+            )
         return ContractPatchResult(
             success=False,
-            error="No ## Contract section with fenced YAML block found. "
-            "Cannot patch without existing contract marker.",
+            error=error,
         )
 
     # Ensure new YAML doesn't have leading/trailing whitespace issues

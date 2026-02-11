@@ -309,6 +309,13 @@ class TestPatchPipelineStatus:
         When a description contains '## Contract' inside a fenced code block
         (e.g., documentation examples), _find_outside_fence skips it and
         inserts Pipeline Status before the real (unfenced) Contract block.
+
+        Fence parity count for the description below:
+          Line "```\\n"           → marker #1 (opens outer fence)
+          Line "```yaml\\n"       → marker #2 (inside outer fence, literal text)
+          Line "```\\n" (close)   → marker #3 (closes inner ```, literal text)
+          Line "```\\n\\n"        → marker #4 (closes outer fence)
+          → count=4 (even) at the real "## Contract", so it's outside a fence.
         """
         desc = (
             "## Summary\n\n"
