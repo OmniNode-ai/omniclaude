@@ -26,6 +26,7 @@ import socket
 import tempfile
 import threading
 import time
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -73,13 +74,6 @@ from omniclaude.hooks.schemas import (
 # ---------------------------------------------------------------------------
 # Constants for the golden path scenario
 # ---------------------------------------------------------------------------
-
-# Fixed IDs for deterministic assertions
-SESSION_ID = uuid4()
-CORRELATION_ID = SESSION_ID  # Convention: correlation_id == session_id for first event
-CAUSATION_ID = uuid4()
-PROMPT_ID = uuid4()
-TOOL_EXECUTION_ID = uuid4()
 
 # Fixed timestamp base — all events offset from this
 T0 = datetime(2026, 2, 11, 12, 0, 0, tzinfo=UTC)
@@ -166,11 +160,18 @@ class MockEmitDaemon:
     # -- internal ------------------------------------------------------------
 
     def _accept_loop(self) -> None:
-        """Accept connections until stopped."""
+        """Accept connections until stopped.
+
+        Each connection is handled in a separate daemon thread to prevent
+        a slow/blocked connection from stalling the accept loop.
+        """
         while not self._stop_event.is_set():
             try:
                 conn, _ = self._server_socket.accept()  # type: ignore[union-attr]
-                self._handle_connection(conn)
+                t = threading.Thread(
+                    target=self._handle_connection, args=(conn,), daemon=True
+                )
+                t.start()
             except TimeoutError:
                 continue
             except OSError:
@@ -234,6 +235,14 @@ class MockEmitDaemon:
 
     # -- query helpers -------------------------------------------------------
 
+    def wait_for_events(self, count: int, timeout: float = 2.0) -> None:
+        """Poll until ``count`` events are captured or timeout expires."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if len(self.captured_events) >= count:
+                return
+            time.sleep(0.02)
+
     def events_by_type(self, event_type: str) -> list[dict[str, Any]]:
         """Return captured events filtered by event_type."""
         return [e for e in self.captured_events if e["event_type"] == event_type]
@@ -287,18 +296,49 @@ def mock_emit_daemon():
 
 
 # ===========================================================================
+# Per-test ID fixture — generates fresh UUIDs for test isolation
+# ===========================================================================
+
+
+@dataclass(frozen=True)
+class GoldenPathIDs:
+    """Deterministic IDs for a single golden path test run."""
+
+    session_id: str
+    correlation_id: str
+    causation_id: str
+    prompt_id: str
+    tool_execution_id: str
+
+
+@pytest.fixture
+def gp_ids() -> GoldenPathIDs:
+    """Generate fresh UUIDs per test to ensure test isolation."""
+    session_id = uuid4()
+    return GoldenPathIDs(
+        session_id=str(session_id),
+        correlation_id=str(session_id),  # Convention: correlation_id == session_id
+        causation_id=str(uuid4()),
+        prompt_id=str(uuid4()),
+        tool_execution_id=str(uuid4()),
+    )
+
+
+# ===========================================================================
 # Golden Path Event Builders
 # ===========================================================================
 
 
-def _build_golden_path_events() -> list[tuple[str, dict[str, Any]]]:
+def _build_golden_path_events(
+    ids: GoldenPathIDs,
+) -> list[tuple[str, dict[str, Any]]]:
     """Build the 10 golden path events with known deterministic values.
 
     Returns a list of (event_type, payload_dict) tuples in emission order.
     """
-    sid = str(SESSION_ID)
-    cid = str(CORRELATION_ID)
-    caus = str(CAUSATION_ID)
+    sid = ids.session_id
+    cid = ids.correlation_id
+    caus = ids.causation_id
 
     events: list[tuple[str, dict[str, Any]]] = []
 
@@ -329,7 +369,7 @@ def _build_golden_path_events() -> list[tuple[str, dict[str, Any]]]:
                 "correlation_id": cid,
                 "causation_id": caus,
                 "emitted_at": (T0 + timedelta(seconds=2)).isoformat(),
-                "prompt_id": str(PROMPT_ID),
+                "prompt_id": ids.prompt_id,
                 "prompt_preview": "Implement the ProtocolPatternPersistence handler for emit_client_wrapper",
                 "prompt_length": 78,
                 "detected_intent": "implement",
@@ -366,9 +406,9 @@ def _build_golden_path_events() -> list[tuple[str, dict[str, Any]]]:
                 "entity_id": sid,
                 "session_id": sid,
                 "correlation_id": cid,
-                "causation_id": str(PROMPT_ID),
+                "causation_id": ids.prompt_id,
                 "emitted_at": (T0 + timedelta(seconds=5)).isoformat(),
-                "tool_execution_id": str(TOOL_EXECUTION_ID),
+                "tool_execution_id": ids.tool_execution_id,
                 "tool_name": "Read",
                 "success": True,
                 "duration_ms": 45,
@@ -452,7 +492,7 @@ def _build_golden_path_events() -> list[tuple[str, dict[str, Any]]]:
                 "entity_id": sid,
                 "session_id": sid,
                 "correlation_id": cid,
-                "causation_id": str(PROMPT_ID),
+                "causation_id": ids.prompt_id,
                 "emitted_at": (T0 + timedelta(minutes=30, seconds=4)).isoformat(),
                 "routing_ms": 45,
                 "agent_load_ms": 12,
@@ -505,11 +545,13 @@ SCHEMA_MAP: dict[str, type] = {
 class TestGoldenPathStandalone:
     """Golden path tests using mock emit daemon (no external services)."""
 
-    def test_full_session_lifecycle(self, mock_emit_daemon: MockEmitDaemon) -> None:
+    def test_full_session_lifecycle(
+        self, mock_emit_daemon: MockEmitDaemon, gp_ids: GoldenPathIDs
+    ) -> None:
         """Emit all 10 golden path events and verify they arrive at the mock daemon."""
         from emit_client_wrapper import emit_event
 
-        events = _build_golden_path_events()
+        events = _build_golden_path_events(gp_ids)
 
         for step, (event_type, payload) in enumerate(events, 1):
             logger.info(
@@ -524,8 +566,8 @@ class TestGoldenPathStandalone:
             assert success, f"Step {step}: emit_event failed for {event_type}"
             logger.debug("Step %02d/10: %s emitted successfully", step, event_type)
 
-        # Give the mock daemon a moment to process
-        time.sleep(0.1)
+        # Wait for all events to arrive (polling with timeout, not fixed sleep)
+        mock_emit_daemon.wait_for_events(10)
 
         # Verify all 10 events captured
         assert len(mock_emit_daemon.captured_events) == 10, (
@@ -542,16 +584,18 @@ class TestGoldenPathStandalone:
 
         logger.info("All 10 golden path events captured in correct order.")
 
-    def test_correlation_id_consistency(self, mock_emit_daemon: MockEmitDaemon) -> None:
+    def test_correlation_id_consistency(
+        self, mock_emit_daemon: MockEmitDaemon, gp_ids: GoldenPathIDs
+    ) -> None:
         """Verify all events that carry a correlation_id share the same value."""
         from emit_client_wrapper import emit_event
 
-        events = _build_golden_path_events()
+        events = _build_golden_path_events(gp_ids)
         for event_type, payload in events:
             emit_event(event_type=event_type, payload=payload, timeout_ms=2000)
-        time.sleep(0.1)
+        mock_emit_daemon.wait_for_events(10)
 
-        expected_cid = str(CORRELATION_ID)
+        expected_cid = gp_ids.correlation_id
         for captured in mock_emit_daemon.captured_events:
             payload = captured["payload"]
             if "correlation_id" in payload:
@@ -562,14 +606,16 @@ class TestGoldenPathStandalone:
 
         logger.info("Correlation ID consistency verified across all events.")
 
-    def test_schema_validation(self, mock_emit_daemon: MockEmitDaemon) -> None:
+    def test_schema_validation(
+        self, mock_emit_daemon: MockEmitDaemon, gp_ids: GoldenPathIDs
+    ) -> None:
         """Validate each captured event payload against its Pydantic model."""
         from emit_client_wrapper import emit_event
 
-        events = _build_golden_path_events()
+        events = _build_golden_path_events(gp_ids)
         for event_type, payload in events:
             emit_event(event_type=event_type, payload=payload, timeout_ms=2000)
-        time.sleep(0.1)
+        mock_emit_daemon.wait_for_events(10)
 
         for captured in mock_emit_daemon.captured_events:
             event_type = captured["event_type"]
@@ -596,8 +642,10 @@ class TestGoldenPathStandalone:
                     f"Payload: {json.dumps(payload, indent=2, default=str)}"
                 )
 
-            # Verify frozen (immutable)
-            with pytest.raises(Exception):  # noqa: B017 — frozen model raises on assignment
+            # Verify frozen (immutable) — Pydantic frozen models raise ValidationError
+            from pydantic import ValidationError
+
+            with pytest.raises(ValidationError):
                 instance.session_id = "tampered"  # type: ignore[misc]
 
             logger.debug("Schema validation passed for %s", event_type)
@@ -605,15 +653,15 @@ class TestGoldenPathStandalone:
         logger.info("All event payloads validated against Pydantic schemas.")
 
     def test_timestamps_are_timezone_aware(
-        self, mock_emit_daemon: MockEmitDaemon
+        self, mock_emit_daemon: MockEmitDaemon, gp_ids: GoldenPathIDs
     ) -> None:
         """Verify all emitted_at timestamps are timezone-aware (UTC)."""
         from emit_client_wrapper import emit_event
 
-        events = _build_golden_path_events()
+        events = _build_golden_path_events(gp_ids)
         for event_type, payload in events:
             emit_event(event_type=event_type, payload=payload, timeout_ms=2000)
-        time.sleep(0.1)
+        mock_emit_daemon.wait_for_events(10)
 
         for captured in mock_emit_daemon.captured_events:
             payload = captured["payload"]
@@ -630,15 +678,15 @@ class TestGoldenPathStandalone:
         logger.info("All timestamps verified as timezone-aware.")
 
     def test_utilization_reflects_tool_output(
-        self, mock_emit_daemon: MockEmitDaemon
+        self, mock_emit_daemon: MockEmitDaemon, gp_ids: GoldenPathIDs
     ) -> None:
         """Verify the utilization event references identifiers from tool output."""
         from emit_client_wrapper import emit_event
 
-        events = _build_golden_path_events()
+        events = _build_golden_path_events(gp_ids)
         for event_type, payload in events:
             emit_event(event_type=event_type, payload=payload, timeout_ms=2000)
-        time.sleep(0.1)
+        mock_emit_daemon.wait_for_events(10)
 
         # Get tool.executed and context.utilization events
         tool_events = mock_emit_daemon.events_by_type("tool.executed")
@@ -670,16 +718,25 @@ class TestGoldenPathStandalone:
             util_payload["reused_count"],
         )
 
-    def test_secret_redaction_on_prompt(self, mock_emit_daemon: MockEmitDaemon) -> None:
-        """Verify secret redaction works on prompt_preview."""
+    def test_secret_redaction_on_prompt(
+        self, mock_emit_daemon: MockEmitDaemon, gp_ids: GoldenPathIDs
+    ) -> None:
+        """Verify Pydantic schema redaction works on prompt_preview.
+
+        Note: The emit client transmits payloads as-is (no redaction at emission
+        time). Redaction happens at the Pydantic model layer when consumers
+        validate the payload. This test verifies that the model_validate path
+        correctly redacts secrets — which is the production behavior since all
+        consumers validate with Pydantic before processing.
+        """
         from emit_client_wrapper import emit_event
 
         # Emit a prompt with an embedded API key
         payload = {
-            "entity_id": str(SESSION_ID),
-            "session_id": str(SESSION_ID),
-            "correlation_id": str(CORRELATION_ID),
-            "causation_id": str(CAUSATION_ID),
+            "entity_id": gp_ids.session_id,
+            "session_id": gp_ids.session_id,
+            "correlation_id": gp_ids.correlation_id,
+            "causation_id": gp_ids.causation_id,
             "emitted_at": T0.isoformat(),
             "prompt_id": str(uuid4()),
             "prompt_preview": "Use sk-1234567890abcdefghijklmnop to call the API",
@@ -688,7 +745,7 @@ class TestGoldenPathStandalone:
         }
 
         emit_event(event_type="prompt.submitted", payload=payload, timeout_ms=2000)
-        time.sleep(0.1)
+        mock_emit_daemon.wait_for_events(1)
 
         # Validate via Pydantic — the model's field_validator should redact
         captured = mock_emit_daemon.events_by_type("prompt.submitted")
@@ -720,14 +777,14 @@ class TestGoldenPathIntegration:
         - KAFKA_INTEGRATION_TESTS=1 env var set
     """
 
-    def test_events_reach_daemon(self) -> None:
+    def test_events_reach_daemon(self, gp_ids: GoldenPathIDs) -> None:
         """Emit golden path events via real daemon and verify acceptance."""
         from emit_client_wrapper import daemon_available, emit_event
 
         if not daemon_available():
             pytest.skip("Emit daemon not running")
 
-        events = _build_golden_path_events()
+        events = _build_golden_path_events(gp_ids)
         results = []
 
         for step, (event_type, payload) in enumerate(events, 1):
