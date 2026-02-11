@@ -145,8 +145,12 @@ if [[ "$PROMPT" =~ ^/[a-zA-Z_-] ]]; then
     SLASH_CMD="$(echo "$PROMPT" | grep -oE '^/[a-zA-Z_-]+' || echo "")"
     log "Slash command detected: ${SLASH_CMD} — skipping agent routing, defaulting to polymorphic-agent"
     ROUTING_RESULT='{"selected_agent":"polymorphic-agent","confidence":1.0,"reasoning":"slash_command_bypass","method":"slash_command","domain":"workflow_coordination","purpose":"Slash commands manage their own agent dispatch","candidates":[]}'
+    # Update tab activity for statusline (e.g. "/ticket-work" → "ticket-work")
+    update_tab_activity "${SLASH_CMD#/}"
 else
     ROUTING_RESULT="$($PYTHON_CMD "${HOOKS_LIB}/route_via_events_wrapper.py" "$PROMPT" "$CORRELATION_ID" "5000" "$SESSION_ID" 2>>"$LOG_FILE" || echo "")"
+    # Clear activity on regular prompts (no longer in a skill workflow)
+    update_tab_activity ""
 fi
 
 if [ -z "$ROUTING_RESULT" ]; then

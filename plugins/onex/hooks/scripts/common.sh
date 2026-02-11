@@ -198,6 +198,26 @@ emit_via_daemon() {
 }
 
 # =============================================================================
+# Tab Activity Helper (Statusline Integration)
+# =============================================================================
+# Updates the tab activity for the statusline tab bar.
+# Writes a lightweight file read by statusline.sh on each render.
+# Activity persists until the next prompt clears or replaces it.
+#
+# Usage: update_tab_activity "ticket-work"    # Set activity
+#        update_tab_activity ""               # Clear activity
+
+update_tab_activity() {
+    local activity="$1"
+    local iterm_guid="${ITERM_SESSION_ID:-}"
+    [ -z "$iterm_guid" ] && return 0
+    local guid="${iterm_guid#*:}"
+    local activity_file="/tmp/omniclaude-tabs/${guid}.activity"
+    mkdir -p "/tmp/omniclaude-tabs" 2>/dev/null || true
+    printf '%s' "$activity" > "$activity_file" 2>/dev/null || true
+}
+
+# =============================================================================
 # Logging Helper
 # =============================================================================
 # Simple timestamped logging to a file.

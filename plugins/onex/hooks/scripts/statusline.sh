@@ -95,10 +95,15 @@ APPLESCRIPT
       # Remove old entry for this GUID if it exists under a different session ID
       [ -n "$EXISTING" ] && rm -f "$EXISTING" 2>/dev/null
       ( "$HOME/.claude/register-tab.sh" "auto-${CURRENT_ITERM}" "$PROJECT_DIR" >/dev/null 2>&1 ) &
+    elif [ -n "$EXISTING" ]; then
+      # Keep mtime fresh to prevent staleness eviction
+      touch "$EXISTING" 2>/dev/null
     fi
   fi
 
   # Stale threshold: skip entries older than 24 hours (86400 seconds)
+  # Only applied when live position data is unavailable (non-macOS/non-iTerm).
+  # When live data IS available, GUID matching filters dead entries instead.
   NOW=$(date +%s)
   STALE_THRESHOLD=$((NOW - 86400))
 
@@ -107,9 +112,11 @@ APPLESCRIPT
   ENTRIES=""
   for f in "$TAB_REGISTRY_DIR"/*.json; do
     [ -f "$f" ] || continue
-    # Skip stale files (older than 24h) using file mtime
-    FILE_MTIME=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null || echo "0")
-    [ "$FILE_MTIME" -lt "$STALE_THRESHOLD" ] && continue
+    # Skip stale files only when we lack live position data to verify liveness
+    if [ -z "$LIVE_POSITIONS" ]; then
+      FILE_MTIME=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f" 2>/dev/null || echo "0")
+      [ "$FILE_MTIME" -lt "$STALE_THRESHOLD" ] && continue
+    fi
     ENTRIES="${ENTRIES}$(cat "$f" 2>/dev/null)
 "
   done
@@ -141,8 +148,10 @@ APPLESCRIPT
         FORMATTED=$(echo "$RESOLVED" | sort -t'|' -k1 -n)
       fi
 
+      TAB_NUM=0
       while IFS='|' read -r tab_pos repo ticket iterm_guid project_path; do
         [ -z "$tab_pos" ] && continue
+        TAB_NUM=$((TAB_NUM + 1))
         # Convert placeholders back to empty
         [ "$ticket" = "-" ] && ticket=""
         [ "$iterm_guid" = "-" ] && iterm_guid=""
@@ -159,17 +168,34 @@ APPLESCRIPT
           fi
         fi
 
-        # Build label: T{pos}·{repo} or T{pos}·{repo}·{ticket}
-        label="T${tab_pos}·${repo}"
+        # Read tab activity (active skill/command, written by hooks)
+        tab_activity=""
+        activity_file="${TAB_REGISTRY_DIR}/${entry_guid}.activity"
+        if [ -f "$activity_file" ]; then
+          tab_activity=$(cat "$activity_file" 2>/dev/null)
+        fi
+
+        # Build label: T{n}·{repo}[·{ticket}][·{activity}]
+        # Sequential numbering (sorted by iTerm position for spatial consistency)
+        label="T${TAB_NUM}·${repo}"
         [ -n "$ticket" ] && label="${label}·${ticket}"
 
         # Highlight current tab (match by iTerm GUID)
         if [ -n "$CURRENT_ITERM" ] && [ "$entry_guid" = "$CURRENT_ITERM" ]; then
-          # Current tab: black text on cyan background
-          LINE2="${LINE2}\033[30;46m ${label} \033[0m  "
+          # Current tab: black text on cyan background, activity in yellow
+          if [ -n "$tab_activity" ]; then
+            LINE2="${LINE2}\033[30;46m ${label} \033[33;46m${tab_activity} \033[0m "
+          else
+            LINE2="${LINE2}\033[30;46m ${label} \033[0m "
+          fi
         else
-          # Inactive tabs: gray text (bright black = gray on most terminals)
-          LINE2="${LINE2}\033[37m${label}\033[0m  "
+          if [ -n "$tab_activity" ]; then
+            # Active skill: white text with yellow activity suffix
+            LINE2="${LINE2}\033[37m${label}·\033[33m${tab_activity}\033[0m "
+          else
+            # Inactive tabs: gray text
+            LINE2="${LINE2}\033[37m${label}\033[0m "
+          fi
         fi
       done <<< "$FORMATTED"
     fi
