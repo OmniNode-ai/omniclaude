@@ -144,7 +144,7 @@ def extract_contract_yaml(description: str) -> ContractExtractResult:
 
     has_marker = "## Contract" in description
 
-    match = _CONTRACT_PATTERN.search(description)
+    match = _find_outside_fence(_CONTRACT_PATTERN, description)
     if not match:
         return ContractExtractResult(
             success=False,
@@ -251,8 +251,8 @@ def patch_contract_yaml(
                 validation_error=validation_error,
             )
 
-    # Find the contract block
-    match = _CONTRACT_PATTERN.search(description)
+    # Find the contract block (skip matches inside fenced code blocks)
+    match = _find_outside_fence(_CONTRACT_PATTERN, description)
     if not match:
         return ContractPatchResult(
             success=False,
