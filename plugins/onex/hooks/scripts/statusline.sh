@@ -169,10 +169,12 @@ APPLESCRIPT
         fi
 
         # Read tab activity (active skill/command, written by hooks)
+        # Truncate to 20 chars and strip control characters for safe ANSI rendering
         tab_activity=""
         activity_file="${TAB_REGISTRY_DIR}/${entry_guid}.activity"
         if [ -f "$activity_file" ]; then
-          tab_activity=$(cat "$activity_file" 2>/dev/null)
+          tab_activity=$(cat "$activity_file" 2>/dev/null | tr -d '[:cntrl:]')
+          tab_activity="${tab_activity:0:20}"
         fi
 
         # Build label: T{n}·{repo}[·{ticket}][·{activity}]

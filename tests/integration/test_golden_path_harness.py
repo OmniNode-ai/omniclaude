@@ -30,10 +30,13 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 import pytest
+
+if TYPE_CHECKING:
+    import pydantic
 
 # ---------------------------------------------------------------------------
 # Logging setup — acceptance criterion: step-by-step debugging
@@ -294,7 +297,7 @@ def mock_emit_daemon(monkeypatch: pytest.MonkeyPatch):
     # pytest's tmp_path is too long, so we use tempfile in /tmp directly.
     # mkstemp creates the file atomically (safe), then we remove it so the
     # socket can bind to that path.
-    fd, sock_path = tempfile.mkstemp(prefix="gp-", suffix=".sock", dir="/tmp")  # noqa: S108
+    fd, sock_path = tempfile.mkstemp(prefix="gp-", suffix=".sock", dir="/tmp")  # noqa: S108 — Unix socket paths must be <104 chars on macOS
     os.close(fd)
     Path(sock_path).unlink()  # Socket bind needs the path to not exist
     daemon = MockEmitDaemon(sock_path)
@@ -543,7 +546,7 @@ def _build_golden_path_events(
 # Pydantic validation map — event_type → model class
 # ===========================================================================
 
-SCHEMA_MAP: dict[str, type] = {
+SCHEMA_MAP: dict[str, type[pydantic.BaseModel]] = {
     "session.started": ModelHookSessionStartedPayload,
     "prompt.submitted": ModelHookPromptSubmittedPayload,
     # routing.decision has no Pydantic model (dict-based via HookEventAdapter)
