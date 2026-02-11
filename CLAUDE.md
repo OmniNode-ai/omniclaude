@@ -36,6 +36,8 @@ What happens when infrastructure is unavailable:
 | **Malformed stdin JSON** | Hook logs error, passes through empty | 0 | No |
 | **Agent YAML not found** | Uses default agent, logs warning | 0 | No |
 | **Context injection fails** | Proceeds without patterns | 0 | No |
+| **Agent loader timeout (1s)** | Falls back to empty YAML, hook continues | 0 | No |
+| **Context injection timeout (1s)** | Proceeds without patterns, hook continues | 0 | No |
 | **No valid Python found** | Hook exits with actionable error | 1 | No |
 
 **Design principle**: Hooks never block Claude Code. Data loss is acceptable; UI freeze is not.

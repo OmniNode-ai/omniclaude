@@ -221,7 +221,7 @@ skill_dot_color() {
     local skill="$1"
 
     # Check for frontmatter override (dot_color: NNN)
-    local plugin_root="${CLAUDE_PLUGIN_ROOT:-}"
+    local plugin_root="${CLAUDE_PLUGIN_ROOT:-${PLUGIN_ROOT:-}}"
     if [ -n "$plugin_root" ]; then
         local skill_md="${plugin_root}/skills/${skill}/SKILL.md"
         if [ -f "$skill_md" ]; then
@@ -278,8 +278,8 @@ redact_secrets() {
         -e 's/gho_[a-zA-Z0-9]{36}/gho_***REDACTED***/g' \
         -e 's/xox[baprs]-[a-zA-Z0-9-]+/xox*-***REDACTED***/g' \
         -e 's/Bearer [a-zA-Z0-9._-]{20,}/Bearer ***REDACTED***/g' \
-        -e 's/-----BEGIN [A-Z ]*PRIVATE KEY-----/-----BEGIN ***REDACTED*** PRIVATE KEY-----/g' \
-        -e 's/:\/\/[^:]+:[^@]+@/:\/\/***:***@/g'
+        -e 's/:\/\/[^:]+:[^@]+@/:\/\/***:***@/g' \
+    | perl -0777 -pe 's/-----BEGIN [A-Z ]*(?:PRIVATE|RSA|EC|DSA) KEY-----[\s\S]*?-----END [A-Z ]*(?:PRIVATE|RSA|EC|DSA) KEY-----/[REDACTED PEM KEY]/g'
 }
 
 # =============================================================================

@@ -176,26 +176,32 @@ echo "[$_TS] [UserPromptSubmit] ROUTING agent=$AGENT_NAME confidence=$CONFIDENCE
 # Agent YAML Loading via simple_agent_loader.py
 # -----------------------------
 AGENT_YAML_CONTENT=""
+LOADER_DURATION_MS=0
 if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]] && [[ -f "${HOOKS_LIB}/simple_agent_loader.py" ]]; then
     log "Loading agent YAML via simple_agent_loader.py for ${AGENT_NAME}..."
     LOADER_INPUT="$(jq -n --arg agent "$AGENT_NAME" '{agent_name: $agent}')"
     # Budget note: perl alarm() only supports integer seconds (min 1s).
+    # 1s is the minimum viable timeout — perl alarm() truncates to integer,
+    # so sub-second values become 0 (cancels the alarm entirely).
     # Combined worst-case: routing(5s) + loader(1s) + injection(1s) = 7s.
     # In practice, loader reads a local YAML (~5ms). The 1s cap is a safety net
     # for Python startup, not expected latency. Documented budget (500ms) is a
     # target for typical runs, not a hard cap on worst-case.
+    _LOADER_T0="$(get_time_ms)"
     LOADER_RESULT="$(echo "$LOADER_INPUT" | run_with_timeout 1 $PYTHON_CMD "${HOOKS_LIB}/simple_agent_loader.py" 2>>"$LOG_FILE" || echo '{}')"
+    _LOADER_T1="$(get_time_ms)"
+    LOADER_DURATION_MS=$(( _LOADER_T1 - _LOADER_T0 ))
     LOADER_SUCCESS="$(echo "$LOADER_RESULT" | jq -r '.success // false' 2>/dev/null || echo 'false')"
     if [[ "$LOADER_SUCCESS" == "true" ]]; then
         AGENT_YAML_CONTENT="$(echo "$LOADER_RESULT" | jq -r '.context_injection // ""' 2>/dev/null || echo '')"
         if [[ -n "$AGENT_YAML_CONTENT" ]]; then
-            log "Agent YAML loaded successfully for ${AGENT_NAME} (${#AGENT_YAML_CONTENT} chars)"
+            log "Agent YAML loaded successfully for ${AGENT_NAME} (${#AGENT_YAML_CONTENT} chars, ${LOADER_DURATION_MS}ms)"
         else
             log "WARNING: Agent loader succeeded but returned empty content for ${AGENT_NAME}"
         fi
     else
         LOADER_ERROR="$(echo "$LOADER_RESULT" | jq -r '.error // "unknown"' 2>/dev/null || echo 'unknown')"
-        log "WARNING: Agent loader failed for ${AGENT_NAME}: ${LOADER_ERROR}"
+        log "WARNING: Agent loader failed for ${AGENT_NAME}: ${LOADER_ERROR} (${LOADER_DURATION_MS}ms)"
     fi
 else
     if [[ ! -f "${HOOKS_LIB}/simple_agent_loader.py" ]]; then
@@ -204,7 +210,7 @@ else
 fi
 
 _TS2="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-echo "[$_TS2] [UserPromptSubmit] AGENT_YAML agent=$AGENT_NAME loaded=${#AGENT_YAML_CONTENT}chars" >> "$TRACE_LOG"
+echo "[$_TS2] [UserPromptSubmit] AGENT_YAML agent=$AGENT_NAME loaded=${#AGENT_YAML_CONTENT}chars duration_ms=${LOADER_DURATION_MS}" >> "$TRACE_LOG"
 
 # -----------------------------
 # Candidate List Injection & Pattern Injection

@@ -250,6 +250,9 @@ hardening_tickets: []
    ```
 
    Then immediately dispatch implementation to a separate agent:
+
+   > **Note**: This dispatch block is intentionally duplicated from the implementation phase handler. Both are needed because the spec-to-implementation transition and the phase handler context are different entry points.
+
    ```
    Task(
      subagent_type="polymorphic-agent",

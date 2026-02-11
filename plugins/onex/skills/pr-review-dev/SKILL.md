@@ -66,6 +66,8 @@ Filter nitpicks by default.
 Skill(skill="onex:parallel-solve")
 ```
 
+> **Note**: The `onex:` prefix is required for `Skill(skill=...)` calls (plugin namespace) but is NOT used for `subagent_type=` (direct agent name). This is intentional.
+
 Pass collated issues as context.
 
 ### Nit Phase -- ask user

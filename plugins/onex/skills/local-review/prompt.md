@@ -211,7 +211,7 @@ If no issues found, return: {\"critical\": [], \"major\": [], \"minor\": [], \"n
 3. Validate each issue: must have `file` (string), `line` (positive integer), `description` (string), `keyword` (string)
 4. **Partial validation**: Skip individual malformed issues but continue processing valid ones. Only fall back to text extraction if ALL issues are malformed or JSON structure is invalid.
 
-**Text Extraction Fallback**: If JSON parsing/validation fails:
+**Text Extraction Fallback**: If JSON parsing/validation fails **OR** all parsed issues are malformed/filtered out:
 1. Try to extract issues from markdown/text format using these patterns:
    - `**{file}:{line}** - {description}` (markdown bold format)
    - `{file}:{line}: {description}` (compiler-style format)

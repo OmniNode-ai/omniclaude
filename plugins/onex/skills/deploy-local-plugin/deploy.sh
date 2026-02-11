@@ -2,11 +2,12 @@
 # deploy-local-plugin: Sync local plugin to Claude Code cache
 #
 # Usage:
-#   ./deploy.sh [--execute] [--no-version-bump]
+#   ./deploy.sh [--execute] [--no-version-bump] [--force]
 #
 # Default: Dry run (preview only)
 # --execute: Actually perform deployment
 # --no-version-bump: Skip patch version increment
+# --force / -f: Skip confirmation when overwriting ~/.claude dirs
 
 set -euo pipefail
 
@@ -28,6 +29,7 @@ NC='\033[0m' # No Color
 # Parse arguments
 EXECUTE=false
 NO_VERSION_BUMP=false
+FORCE=false
 
 for arg in "$@"; do
     case $arg in
@@ -37,12 +39,16 @@ for arg in "$@"; do
         --no-version-bump)
             NO_VERSION_BUMP=true
             ;;
+        --force|-f)
+            FORCE=true
+            ;;
         --help|-h)
-            echo "Usage: deploy.sh [--execute] [--no-version-bump]"
+            echo "Usage: deploy.sh [--execute] [--no-version-bump] [--force]"
             echo ""
             echo "Options:"
             echo "  --execute         Actually perform deployment (default: dry run)"
             echo "  --no-version-bump Skip auto-incrementing patch version"
+            echo "  --force, -f       Skip confirmation prompt when overwriting ~/.claude dirs"
             echo "  --help            Show this help message"
             exit 0
             ;;
@@ -368,13 +374,41 @@ if [[ "$EXECUTE" == "true" ]]; then
     CLAUDE_DIR="$HOME/.claude"
     mkdir -p "$CLAUDE_DIR/commands" "$CLAUDE_DIR/skills" "$CLAUDE_DIR/agents"
 
+    # Check whether any target directories already exist (non-symlink).
+    # If so, rsync --delete will destroy local customizations.
+    EXISTING_DIRS=()
+    for component in commands skills agents; do
+        DEST="$CLAUDE_DIR/$component/onex"
+        if [[ -d "$DEST" && ! -L "$DEST" ]]; then
+            EXISTING_DIRS+=("$DEST")
+        fi
+    done
+
+    if [[ ${#EXISTING_DIRS[@]} -gt 0 && "$FORCE" != "true" ]]; then
+        echo -e "${YELLOW}  The following directories already exist and will be overwritten:${NC}"
+        for d in "${EXISTING_DIRS[@]}"; do
+            echo -e "${YELLOW}    - $d${NC}"
+        done
+        echo ""
+        if [[ -t 0 ]]; then
+            echo -n "  Overwrite these directories? Local customizations will be lost. [y/N] "
+            read -r CONFIRM
+            if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
+                echo -e "${RED}  Aborted by user. No files were overwritten.${NC}"
+                echo "  Re-run with --force to skip this prompt."
+                exit 1
+            fi
+        else
+            echo -e "${YELLOW}  Non-interactive mode detected. Use --force to suppress this warning.${NC}"
+            echo -e "${RED}  Aborting to protect existing directories.${NC}"
+            exit 1
+        fi
+    fi
+
     # Remove stale symlinks, then rsync fresh copies (overwrite in place).
     for component in commands skills agents; do
         DEST="$CLAUDE_DIR/$component/onex"
         [[ -L "$DEST" ]] && rm -f "$DEST"
-        if [[ -d "$DEST" ]]; then
-            echo -e "${YELLOW}  Warning: overwriting existing $DEST (not a symlink) — local customizations will be replaced${NC}"
-        fi
         mkdir -p "$DEST"
         rsync -a --delete "$TARGET/$component/" "$DEST/"
     done

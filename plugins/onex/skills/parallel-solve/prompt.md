@@ -326,7 +326,7 @@ After all fixes are complete, **ASK the user** if they want to:
 ## Refactor Attempt Tracking
 
 ```
-task_refactor_counts = {}  # Track attempts per task
+task_refactor_counts: dict[str, int] = {}  # Track attempts per task
 
 After each cycle:
   if code_quality_issues_found:
