@@ -303,8 +303,15 @@ class TestPatchPipelineStatus:
         assert result.success
         assert "Human content here." in result.patched_description
 
-    def test_pipeline_status_insertion_ignores_contract_in_code_block(self) -> None:
-        """Insertion uses regex, so '## Contract' inside a code fence is skipped."""
+    def test_pipeline_status_inserted_before_first_contract_match(self) -> None:
+        """Pipeline Status is inserted before the first _CONTRACT_PATTERN match.
+
+        _CONTRACT_PATTERN matches any '## Contract' heading followed by a fenced
+        YAML block — it does NOT distinguish whether the heading is inside an
+        outer code fence. This test verifies the insertion ordering: Pipeline
+        Status must appear before the first regex match, which is the behaviour
+        the production code relies on.
+        """
         desc = (
             "## Summary\n\n"
             "Here's an example of a contract format:\n\n"
@@ -325,16 +332,13 @@ class TestPatchPipelineStatus:
         assert result.success
         patched = result.patched_description
 
-        # Pipeline Status must appear before the real ## Contract (the one
-        # matched by _CONTRACT_PATTERN with a valid fenced YAML block).
+        # Pipeline Status must appear before the first _CONTRACT_PATTERN match.
         status_idx = patched.index("## Pipeline Status")
-        # The real contract block starts at the second occurrence matched by
-        # _CONTRACT_PATTERN — verify status comes before it.
         from linear_contract_patcher import _CONTRACT_PATTERN
 
-        real_match = _CONTRACT_PATTERN.search(patched)
-        assert real_match is not None
-        assert status_idx < real_match.start()
+        first_match = _CONTRACT_PATTERN.search(patched)
+        assert first_match is not None
+        assert status_idx < first_match.start()
 
 
 # =============================================================================
