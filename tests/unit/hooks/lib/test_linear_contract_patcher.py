@@ -303,14 +303,12 @@ class TestPatchPipelineStatus:
         assert result.success
         assert "Human content here." in result.patched_description
 
-    def test_pipeline_status_inserted_before_first_contract_match(self) -> None:
-        """Pipeline Status is inserted before the first _CONTRACT_PATTERN match.
+    def test_pipeline_status_skips_contract_inside_fence(self) -> None:
+        """Pipeline Status is inserted before the real Contract, skipping fenced ones.
 
-        _CONTRACT_PATTERN matches any '## Contract' heading followed by a fenced
-        YAML block — it does NOT distinguish whether the heading is inside an
-        outer code fence. This test verifies the insertion ordering: Pipeline
-        Status must appear before the first regex match, which is the behaviour
-        the production code relies on.
+        When a description contains '## Contract' inside a fenced code block
+        (e.g., documentation examples), _find_outside_fence skips it and
+        inserts Pipeline Status before the real (unfenced) Contract block.
         """
         desc = (
             "## Summary\n\n"
@@ -332,13 +330,16 @@ class TestPatchPipelineStatus:
         assert result.success
         patched = result.patched_description
 
-        # Pipeline Status must appear before the first _CONTRACT_PATTERN match.
+        # Pipeline Status must appear before the real (unfenced) Contract.
         status_idx = patched.index("## Pipeline Status")
-        from linear_contract_patcher import _CONTRACT_PATTERN
-
-        first_match = _CONTRACT_PATTERN.search(patched)
-        assert first_match is not None
-        assert status_idx < first_match.start()
+        # The real contract is the second occurrence of "## Contract"
+        real_contract_idx = patched.index(
+            "## Contract", patched.index("## Contract") + 1
+        )
+        assert status_idx < real_contract_idx
+        # The fenced example should remain untouched before Pipeline Status
+        fenced_example_idx = patched.index("```\n## Contract")
+        assert fenced_example_idx < status_idx
 
 
 # =============================================================================

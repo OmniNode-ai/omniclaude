@@ -70,6 +70,22 @@ _PIPELINE_STATUS_PATTERN = re.compile(
     re.MULTILINE,
 )
 
+# Pattern to count top-level fence markers (lines starting with ```)
+_FENCE_MARKER = re.compile(r"^```", re.MULTILINE)
+
+
+def _find_outside_fence(pattern: re.Pattern[str], text: str) -> re.Match[str] | None:
+    """Return the first match of *pattern* that is NOT inside a fenced code block.
+
+    Uses a parity heuristic: count ``` lines before the match position.
+    If the count is odd we are inside a fence and skip to the next match.
+    """
+    for match in pattern.finditer(text):
+        fence_count = len(_FENCE_MARKER.findall(text[: match.start()]))
+        if fence_count % 2 == 0:
+            return match
+    return None
+
 
 @dataclass(frozen=True)
 class ContractExtractResult:
@@ -303,8 +319,8 @@ def patch_pipeline_status(
         )
         return ContractPatchResult(success=True, patched_description=patched)
 
-    # No existing block — insert before ## Contract (use regex for accuracy)
-    contract_match = _CONTRACT_PATTERN.search(description)
+    # No existing block — insert before ## Contract (skip matches inside fences)
+    contract_match = _find_outside_fence(_CONTRACT_PATTERN, description)
     if contract_match:
         contract_idx = contract_match.start()
         patched = (

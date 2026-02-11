@@ -565,7 +565,9 @@ class PipelineSlackNotifier:
             emit_event(event_type=event_type, payload=payload)
 
         except Exception:
-            pass  # Best-effort, non-blocking
+            logger.debug(
+                "_emit_event failed (best-effort, non-blocking)", exc_info=True
+            )
 
 
 # =============================================================================
