@@ -288,6 +288,9 @@ class PipelineSlackNotifier:
 
         cid = correlation_id or uuid4()
 
+        # Normalize severity to uppercase for severity_map lookup
+        severity_key = severity.upper()
+
         # --- Try omnibase_infra first (production path) ---
         try:
             from omnibase_infra.handlers.models.model_slack_alert import (
@@ -303,7 +306,7 @@ class PipelineSlackNotifier:
             }
 
             alert_kwargs: dict[str, object] = {
-                "severity": severity_map.get(severity, EnumAlertSeverity.INFO),
+                "severity": severity_map.get(severity_key, EnumAlertSeverity.INFO),
                 "message": formatted_message,
                 "title": f"{prefix} Pipeline Notification",
                 "details": alert_details,
@@ -327,7 +330,7 @@ class PipelineSlackNotifier:
             "omnibase_infra models not available — using local PipelineAlert fallback"
         )
         return PipelineAlert(
-            severity=severity.lower(),
+            severity=severity_key.lower(),
             message=formatted_message,
             title=f"{prefix} Pipeline Notification",
             details=alert_details,

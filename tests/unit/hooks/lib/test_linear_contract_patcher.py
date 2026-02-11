@@ -340,6 +340,12 @@ class TestPatchPipelineStatus:
         # The fenced example should remain untouched before Pipeline Status
         fenced_example_idx = patched.index("```\n## Contract")
         assert fenced_example_idx < status_idx
+        # The outer fence closes with the second-to-last ``` before Pipeline Status.
+        # Find the end of the last ``` before the real contract (outer fence close).
+        outer_fence_close = patched.rindex("```\n", 0, status_idx)
+        assert outer_fence_close < status_idx, (
+            "Pipeline Status must appear after the outer fence closes"
+        )
 
 
 # =============================================================================
