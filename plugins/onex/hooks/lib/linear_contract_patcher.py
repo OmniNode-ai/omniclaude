@@ -310,8 +310,8 @@ def patch_pipeline_status(
     clean_yaml = status_yaml_str.strip()
     new_block = f"## Pipeline Status\n\n```yaml\n{clean_yaml}\n```"
 
-    # Try to find existing Pipeline Status block
-    match = _PIPELINE_STATUS_PATTERN.search(description)
+    # Try to find existing Pipeline Status block (skip matches inside fences)
+    match = _find_outside_fence(_PIPELINE_STATUS_PATTERN, description)
     if match:
         # Replace existing block content
         patched = (
