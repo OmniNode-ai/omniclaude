@@ -148,6 +148,18 @@ APPLESCRIPT
         FORMATTED=$(echo "$RESOLVED" | sort -t'|' -k1 -n)
       fi
 
+      # Pre-scan: detect tabs sharing the same project directory (collision warning)
+      # Any project_path appearing 2+ times means multiple sessions in the same folder
+      DUPE_PATHS=""
+      _paths=$(echo "$FORMATTED" | awk -F'|' '$5 != "" && $5 != "-" {print $5}' | sort)
+      [ -n "$_paths" ] && DUPE_PATHS=$(echo "$_paths" | uniq -d)
+
+      # Pre-scan: detect tabs sharing the same ticket number
+      # Any ticket appearing 2+ times means multiple sessions on the same ticket
+      DUPE_TICKETS=""
+      _tickets=$(echo "$FORMATTED" | awk -F'|' '$3 != "" && $3 != "-" {print $3}' | sort)
+      [ -n "$_tickets" ] && DUPE_TICKETS=$(echo "$_tickets" | uniq -d)
+
       TAB_NUM=0
       while IFS='|' read -r tab_pos repo ticket iterm_guid project_path; do
         [ -z "$tab_pos" ] && continue
@@ -164,39 +176,53 @@ APPLESCRIPT
         if [ -n "$project_path" ] && [ -d "$project_path" ]; then
           live_branch=$(git -C "$project_path" branch --show-current 2>/dev/null || echo "")
           if [ -n "$live_branch" ]; then
-            ticket=$(echo "$live_branch" | grep -oiE 'omn-[0-9]+' | head -1 | tr '[:lower:]' '[:upper:]')
+            ticket=$(echo "$live_branch" | grep -oiE 'omn-[0-9]+' | head -1 | grep -oE '[0-9]+')
           fi
         fi
 
-        # Read tab activity (active skill/command, written by hooks)
-        # Truncate to 20 chars and strip control characters for safe ANSI rendering
-        tab_activity=""
+        # Read tab activity color (ANSI 256-color code written by hooks)
+        activity_color=""
         activity_file="${TAB_REGISTRY_DIR}/${entry_guid}.activity"
         if [ -f "$activity_file" ]; then
-          tab_activity=$(cat "$activity_file" 2>/dev/null | tr -d '[:cntrl:]')
-          tab_activity="${tab_activity:0:20}"
+          activity_color=$(cat "$activity_file" 2>/dev/null | tr -d '[:cntrl:][:space:]')
+          # Validate: must be a number (ANSI 256-color code)
+          [[ "$activity_color" =~ ^[0-9]+$ ]] || activity_color=""
         fi
 
-        # Build label: T{n}·{repo}[·{ticket}][·{activity}]
+        # Build label: T{n}·{repo}[·{ticket}]
         # Sequential numbering (sorted by iTerm position for spatial consistency)
         label="T${TAB_NUM}·${repo}"
         [ -n "$ticket" ] && label="${label}·${ticket}"
 
+        # Check if this tab's folder or ticket is shared with another tab
+        is_dupe=0
+        if [ -n "$DUPE_PATHS" ] && [ -n "$project_path" ] && [ "$project_path" != "-" ]; then
+          echo "$DUPE_PATHS" | grep -qxF "$project_path" && is_dupe=1
+        fi
+        if [ "$is_dupe" -eq 0 ] && [ -n "$DUPE_TICKETS" ] && [ -n "$ticket" ]; then
+          echo "$DUPE_TICKETS" | grep -qxF "$ticket" && is_dupe=1
+        fi
+
+        # Activity indicator: colored dot per-skill (color from activity file)
+        activity_dot=""
+        [ -n "$activity_color" ] && activity_dot="\033[38;5;${activity_color}m●\033[0m"
+
         # Highlight current tab (match by iTerm GUID)
         if [ -n "$CURRENT_ITERM" ] && [ "$entry_guid" = "$CURRENT_ITERM" ]; then
-          # Current tab: black text on cyan background, activity in yellow
-          if [ -n "$tab_activity" ]; then
-            LINE2="${LINE2}\033[30;46m ${label} \033[33;46m${tab_activity} \033[0m "
+          if [ "$is_dupe" -eq 1 ]; then
+            # DUPLICATE FOLDER: bright white on red bg — unmissable collision warning
+            LINE2="${LINE2}\033[97;41m \xe2\x9a\xa0 ${label} \033[0m${activity_dot} "
           else
-            LINE2="${LINE2}\033[30;46m ${label} \033[0m "
+            # Current tab: black text on cyan background
+            LINE2="${LINE2}\033[30;46m ${label} \033[0m${activity_dot} "
           fi
         else
-          if [ -n "$tab_activity" ]; then
-            # Active skill: white text with yellow activity suffix
-            LINE2="${LINE2}\033[37m${label}·\033[33m${tab_activity}\033[0m "
+          if [ "$is_dupe" -eq 1 ]; then
+            # DUPLICATE FOLDER: bright red text — collision warning
+            LINE2="${LINE2}\033[91m\xe2\x9a\xa0 ${label}\033[0m${activity_dot} "
           else
-            # Inactive tabs: gray text
-            LINE2="${LINE2}\033[37m${label}\033[0m "
+            # Other tabs: white text
+            LINE2="${LINE2}\033[37m${label}\033[0m${activity_dot} "
           fi
         fi
       done <<< "$FORMATTED"
