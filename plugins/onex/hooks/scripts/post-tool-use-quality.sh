@@ -51,6 +51,31 @@ echo "$TOOL_INFO" | jq '.' >> "$LOG_FILE" 2>&1 || echo "$TOOL_INFO" >> "$LOG_FIL
 TOOL_NAME=$(echo "$TOOL_INFO" | jq -r '.tool_name // "unknown"')
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] PostToolUse hook triggered for $TOOL_NAME (plugin mode)" >> "$LOG_FILE"
 
+# -----------------------------------------------------------------------
+# Pipeline Trace Logging — unified trace for Skill/Task/routing visibility
+# tail -f ~/.claude/logs/pipeline-trace.log to see the full chain
+# -----------------------------------------------------------------------
+TRACE_LOG="$HOME/.claude/logs/pipeline-trace.log"
+mkdir -p "$(dirname "$TRACE_LOG")" 2>/dev/null
+TS="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+if [[ "$TOOL_NAME" == "Skill" ]]; then
+    SKILL_NAME=$(echo "$TOOL_INFO" | jq -r '.tool_input.skill // .tool_input.name // "unknown"' 2>/dev/null)
+    SKILL_ARGS=$(echo "$TOOL_INFO" | jq -r '.tool_input.args // ""' 2>/dev/null)
+    SKILL_ERROR=$(echo "$TOOL_INFO" | jq -r '.tool_response.error // ""' 2>/dev/null)
+    if [[ -n "$SKILL_ERROR" ]]; then
+        echo "[$TS] [PostToolUse] SKILL_LOAD_FAILED skill=$SKILL_NAME error=$SKILL_ERROR" >> "$TRACE_LOG"
+    else
+        echo "[$TS] [PostToolUse] SKILL_LOADED skill=$SKILL_NAME args=$SKILL_ARGS" >> "$TRACE_LOG"
+    fi
+elif [[ "$TOOL_NAME" == "Task" ]]; then
+    SUBAGENT_TYPE=$(echo "$TOOL_INFO" | jq -r '.tool_input.subagent_type // "unknown"' 2>/dev/null)
+    TASK_DESC=$(echo "$TOOL_INFO" | jq -r '.tool_input.description // ""' 2>/dev/null)
+    TASK_DESC="${TASK_DESC:0:200}"
+    TASK_MODEL=$(echo "$TOOL_INFO" | jq -r '.tool_input.model // "default"' 2>/dev/null)
+    echo "[$TS] [PostToolUse] TASK_DISPATCHED subagent_type=$SUBAGENT_TYPE model=$TASK_MODEL description=$TASK_DESC" >> "$TRACE_LOG"
+fi
+
 # For Write/Edit tools, apply auto-fixes
 if [ "$TOOL_NAME" = "Write" ] || [ "$TOOL_NAME" = "Edit" ]; then
     FILE_PATH=$(echo "$TOOL_INFO" | jq -r '.tool_input.file_path // .tool_response.filePath // empty')
