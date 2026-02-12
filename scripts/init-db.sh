@@ -75,7 +75,7 @@ EOSQL
             migration_name="$(basename "$migration")"
             # Use psql variable binding (-v) to avoid SQL injection via filenames.
             # :'varname' is psql's syntax for a string-quoted variable reference.
-            already_applied=$(psql -v ON_ERROR_STOP=1 -v migration_name="${migration_name}" --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --host="$POSTGRES_HOST" -tAc "SELECT 1 FROM schema_migrations WHERE filename = :'migration_name' LIMIT 1;")
+            already_applied=$(echo "SELECT 1 FROM schema_migrations WHERE filename = :'migration_name' LIMIT 1;" | psql -v ON_ERROR_STOP=1 -v migration_name="${migration_name}" --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --host="$POSTGRES_HOST" -tA)
             if [ "$already_applied" = "1" ]; then
                 echo "  Skipping ${migration_name} (already applied)"
                 continue
