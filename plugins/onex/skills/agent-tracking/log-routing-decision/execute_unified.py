@@ -39,6 +39,12 @@ from hook_event_adapter import get_hook_event_adapter
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "_shared"))
 from db_helper import get_correlation_id, parse_json_param
 
+# Add src to path for omniclaude.hooks.topics
+sys.path.insert(
+    0, str(Path(__file__).parent.parent.parent.parent.parent.parent / "src")
+)
+from omniclaude.hooks.topics import TopicBase
+
 
 def log_routing_decision_unified(args):
     """
@@ -108,7 +114,7 @@ def log_routing_decision_unified(args):
             "routing_strategy": args.strategy,
             "routing_time_ms": int(args.latency_ms),
             "published_via": "unified_event_adapter",
-            "topic": "onex.evt.omniclaude.routing-decision.v1",
+            "topic": TopicBase.ROUTING_DECISION,
         }
         print(json.dumps(output, indent=2))
         return 0

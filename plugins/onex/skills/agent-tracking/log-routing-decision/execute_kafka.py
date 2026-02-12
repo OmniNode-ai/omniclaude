@@ -51,13 +51,17 @@ sys.path.insert(
 )
 from kafka_publisher import get_kafka_producer
 
+# Add src to path for omniclaude.hooks.topics
+sys.path.insert(
+    0, str(Path(__file__).parent.parent.parent.parent.parent.parent / "src")
+)
+from omniclaude.hooks.topics import TopicBase
+
 # Load .env on import
 load_env_file()
 
 
-def publish_to_kafka(
-    event: dict, topic: str = "onex.evt.omniclaude.routing-decision.v1"
-) -> bool:
+def publish_to_kafka(event: dict, topic: str = TopicBase.ROUTING_DECISION) -> bool:
     """
     Publish event to Kafka topic.
 
@@ -167,7 +171,7 @@ def log_routing_decision_kafka(args):
             "routing_strategy": args.strategy,
             "routing_time_ms": int(args.latency_ms),
             "published_to": "kafka",
-            "topic": "onex.evt.omniclaude.routing-decision.v1",
+            "topic": TopicBase.ROUTING_DECISION,
         }
         print(json.dumps(output, indent=2))
         return 0

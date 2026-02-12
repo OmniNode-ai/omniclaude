@@ -80,10 +80,10 @@ The shift from direct database writes to Kafka-based event streaming provides:
 │  │  │  Broker 1      Broker 2      Broker 3     (Replication)   │  │ │
 │  │  │                                                             │  │ │
 │  │  │  Topics (with partitions):                                 │  │ │
-│  │  │  ├─ agent-actions (12 partitions)                          │  │ │
+│  │  │  ├─ onex.evt.omniclaude.agent-actions.v1 (12 partitions)    │  │ │
 │  │  │  ├─ onex.evt.omniclaude.routing-decision.v1 (6 partitions) │  │ │
-│  │  │  ├─ agent-transformation-events (6 partitions)             │  │ │
-│  │  │  ├─ router-performance-metrics (6 partitions)              │  │ │
+│  │  │  ├─ onex.evt.omniclaude.agent-transformation.v1 (6 parts)  │  │ │
+│  │  │  ├─ onex.evt.omniclaude.performance-metrics.v1 (6 parts)   │  │ │
 │  │  │  ├─ task-executions (12 partitions)                        │  │ │
 │  │  │  ├─ code-quality-metrics (6 partitions)                    │  │ │
 │  │  │  ├─ success-patterns (6 partitions)                        │  │ │
@@ -163,16 +163,13 @@ The shift from direct database writes to Kafka-based event streaming provides:
 
 **Pattern**: `onex.{kind}.{producer}.{event-name}.v{n}` (ONEX canonical format)
 
-> **Note**: Some legacy topics still use the older `{domain}-{entity}-{plural}` convention (e.g., `agent-actions`). New and migrated topics use the ONEX format.
-
 Examples:
 - `onex.evt.omniclaude.routing-decision.v1`
-- `agent-actions` (legacy format, not yet migrated)
-- `code-quality-metrics` (legacy format, not yet migrated)
+- `onex.evt.omniclaude.agent-actions.v1`
 
 ### Topic Schema Specifications
 
-#### 1. `agent-actions` Topic
+#### 1. `onex.evt.omniclaude.agent-actions.v1` Topic
 
 **Purpose**: Log every action an agent takes (tool calls, decisions, errors).
 
@@ -264,7 +261,7 @@ Examples:
 
 ---
 
-#### 3. `agent-transformation-events` Topic
+#### 3. `onex.evt.omniclaude.agent-transformation.v1` Topic
 
 **Purpose**: Track polymorphic agent transformations (identity changes).
 
@@ -302,7 +299,7 @@ Examples:
 
 ---
 
-#### 4. `router-performance-metrics` Topic
+#### 4. `onex.evt.omniclaude.performance-metrics.v1` Topic
 
 **Purpose**: Router performance metrics for optimization.
 
@@ -875,10 +872,10 @@ from psycopg2.extras import execute_batch
 KAFKA_BROKERS = os.getenv('KAFKA_BROKERS', 'localhost:9092').split(',')
 CONSUMER_GROUP_ID = 'db-writer-group'
 TOPICS = [
-    'agent-actions',
+    'onex.evt.omniclaude.agent-actions.v1',
     'onex.evt.omniclaude.routing-decision.v1',
-    'agent-transformation-events',
-    'router-performance-metrics',
+    'onex.evt.omniclaude.agent-transformation.v1',
+    'onex.evt.omniclaude.performance-metrics.v1',
     'task-executions',
     'code-quality-metrics',
     'success-patterns',
@@ -941,9 +938,9 @@ def process_batch(consumer, conn, cursor):
                 # Route to appropriate handler
                 if topic == 'onex.evt.omniclaude.routing-decision.v1':
                     insert_routing_decision(cursor, event)
-                elif topic == 'agent-transformation-events':
+                elif topic == 'onex.evt.omniclaude.agent-transformation.v1':
                     insert_transformation_event(cursor, event)
-                elif topic == 'router-performance-metrics':
+                elif topic == 'onex.evt.omniclaude.performance-metrics.v1':
                     insert_performance_metric(cursor, event)
                 elif topic == 'task-executions':
                     insert_task_execution(cursor, event)
@@ -953,7 +950,7 @@ def process_batch(consumer, conn, cursor):
                     insert_success_pattern(cursor, event)
                 elif topic == 'failure-patterns':
                     insert_failure_pattern(cursor, event)
-                elif topic == 'agent-actions':
+                elif topic == 'onex.evt.omniclaude.agent-actions.v1':
                     insert_agent_action(cursor, event)
 
                 events_processed += 1
@@ -1214,10 +1211,10 @@ create_topic() {
 }
 
 # Create all topics
-create_topic "agent-actions" 12 604800000  # 7 days
+create_topic "onex.evt.omniclaude.agent-actions.v1" 12 604800000  # 7 days
 create_topic "onex.evt.omniclaude.routing-decision.v1" 6 2592000000  # 30 days
-create_topic "agent-transformation-events" 6 2592000000  # 30 days
-create_topic "router-performance-metrics" 6 2592000000  # 30 days
+create_topic "onex.evt.omniclaude.agent-transformation.v1" 6 2592000000  # 30 days
+create_topic "onex.evt.omniclaude.performance-metrics.v1" 6 2592000000  # 30 days
 create_topic "task-executions" 12 7776000000  # 90 days
 create_topic "code-quality-metrics" 6 7776000000  # 90 days
 create_topic "success-patterns" 6 31536000000  # 365 days
@@ -1623,7 +1620,7 @@ kafka-log-dirs --bootstrap-server localhost:9092 --describe
 1. **Reduce retention**: Shorten retention period
    ```bash
    kafka-configs --bootstrap-server localhost:9092 \
-     --entity-type topics --entity-name agent-actions \
+     --entity-type topics --entity-name onex.evt.omniclaude.agent-actions.v1 \
      --alter --add-config retention.ms=259200000  # 3 days
    ```
 2. **Delete old data**: Manual cleanup

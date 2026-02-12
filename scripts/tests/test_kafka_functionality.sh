@@ -151,15 +151,15 @@ echo "-----------------------------------"
 
 # Define critical topics (must exist for core functionality)
 CRITICAL_TOPICS=(
-    "agent-actions"
+    "onex.evt.omniclaude.agent-actions.v1"
     "agent.routing.requested.v1"
     "agent.routing.completed.v1"
     "agent.routing.failed.v1"
     "dev.archon-intelligence.intelligence.code-analysis-requested.v1"
     "dev.archon-intelligence.intelligence.code-analysis-completed.v1"
     "dev.archon-intelligence.intelligence.code-analysis-failed.v1"
-    "agent-transformation-events"
-    "router-performance-metrics"
+    "onex.evt.omniclaude.agent-transformation.v1"
+    "onex.evt.omniclaude.performance-metrics.v1"
 )
 
 # Define optional topics (will be auto-created on first publish)

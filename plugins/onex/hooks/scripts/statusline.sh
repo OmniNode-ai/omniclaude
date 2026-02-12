@@ -154,6 +154,12 @@ APPLESCRIPT
       _paths=$(echo "$FORMATTED" | awk -F'|' '$5 != "" && $5 != "-" {print $5}' | sort)
       [ -n "$_paths" ] && DUPE_PATHS=$(echo "$_paths" | uniq -d)
 
+      # Pre-scan: detect tabs sharing the same ticket number
+      # Any ticket appearing 2+ times means multiple sessions on the same ticket
+      DUPE_TICKETS=""
+      _tickets=$(echo "$FORMATTED" | awk -F'|' '$3 != "" && $3 != "-" {print $3}' | sort)
+      [ -n "$_tickets" ] && DUPE_TICKETS=$(echo "$_tickets" | uniq -d)
+
       TAB_NUM=0
       while IFS='|' read -r tab_pos repo ticket iterm_guid project_path; do
         [ -z "$tab_pos" ] && continue
@@ -189,10 +195,13 @@ APPLESCRIPT
         label="T${TAB_NUM}·${repo}"
         [ -n "$ticket" ] && label="${label}·${ticket}"
 
-        # Check if this tab's folder is shared with another tab
+        # Check if this tab's folder or ticket is shared with another tab
         is_dupe=0
         if [ -n "$DUPE_PATHS" ] && [ -n "$project_path" ] && [ "$project_path" != "-" ]; then
           echo "$DUPE_PATHS" | grep -qxF "$project_path" && is_dupe=1
+        fi
+        if [ "$is_dupe" -eq 0 ] && [ -n "$DUPE_TICKETS" ] && [ -n "$ticket" ]; then
+          echo "$DUPE_TICKETS" | grep -qxF "$ticket" && is_dupe=1
         fi
 
         # Activity indicator: colored dot per-skill (color from activity file)

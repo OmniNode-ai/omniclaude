@@ -24,10 +24,8 @@ from kafka import KafkaProducer
 # Import type-safe settings from omniclaude package
 from omniclaude.config.settings import settings
 
-# TODO(OMN-2058): This topic is the legacy 'agent-actions' topic from before
-# DB-SPLIT. Update to the appropriate ONEX-format topic once the new consumer
-# schema is implemented. See TopicBase in src/omniclaude/hooks/topics.py.
-_TEST_TOPIC = "agent-actions"
+# Use canonical topic enum instead of hardcoded string
+from omniclaude.hooks.topics import TopicBase
 
 
 def _get_db_dsn() -> str:
@@ -92,7 +90,7 @@ def publish_test_events(count: int = 10) -> list[str]:
 
         correlation_ids.append(event["correlation_id"])
 
-        producer.send(_TEST_TOPIC, value=event)
+        producer.send(TopicBase.AGENT_ACTIONS, value=event)
         print(f"  ✓ Event {i + 1}/{count}: {event['correlation_id']}")
 
     producer.flush()

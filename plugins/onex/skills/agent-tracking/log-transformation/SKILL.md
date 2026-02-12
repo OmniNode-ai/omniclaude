@@ -26,7 +26,7 @@ This skill logs agent transformation events for tracking polymorphic agent behav
 - 🚀 **Scalability**: Handles 1M+ events/sec
 - 🛡️ **Fault Tolerance**: Events persisted even if consumers fail
 
-**Kafka Topic**: `agent-transformation-events`
+**Kafka Topic**: `onex.evt.omniclaude.agent-transformation.v1`
 
 **How to Use (Kafka)**:
 
@@ -144,7 +144,7 @@ Skills are version-controlled in the repository and symlinked to `${CLAUDE_PLUGI
   "transformation_success": true,
   "duration_ms": 85,
   "published_to": "kafka",
-  "topic": "agent-transformation-events"
+  "topic": "onex.evt.omniclaude.agent-transformation.v1"
 }
 ```
 

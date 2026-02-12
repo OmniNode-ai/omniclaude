@@ -103,6 +103,7 @@ SUPPORTED_EVENT_TYPES = frozenset(
         "notification.blocked",  # OMN-1831 - Slack notifications via emit daemon
         "notification.completed",  # OMN-1831 - Slack notifications via emit daemon
         "phase.metrics",  # OMN-2027 - Phase instrumentation metrics
+        "agent.status",  # OMN-1848 - Agent status reporting
     ]
 )
 

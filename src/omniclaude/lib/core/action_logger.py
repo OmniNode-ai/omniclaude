@@ -576,6 +576,6 @@ if __name__ == "__main__":
 
         print("✓ One-off action logged")
 
-        print("\nAll tests passed! Check Kafka topic 'agent-actions' for events.")
+        print("\nAll tests passed! Check Kafka topic 'onex.evt.omniclaude.agent-actions.v1' for events.")
 
     asyncio.run(test())

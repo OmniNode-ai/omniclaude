@@ -3,7 +3,7 @@
 Agent Observability Kafka Consumer - Production Implementation
 
 Consumes agent observability events from multiple Kafka topics and persists to PostgreSQL with:
-- Multi-topic subscription (agent-actions, onex.evt.omniclaude.routing-decision.v1, agent-transformation-events, router-performance-metrics)
+- Multi-topic subscription (ONEX-format topics via TopicBase enum)
 - Topic-based routing to appropriate database tables
 - Batch processing (100 events or 1 second intervals)
 - Dead letter queue for failed messages
@@ -49,6 +49,10 @@ import psycopg2
 import psycopg2.pool
 from kafka import KafkaConsumer, KafkaProducer, OffsetAndMetadata, TopicPartition
 from psycopg2.extras import execute_batch
+
+# Add src to path for omniclaude.hooks.topics
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+from omniclaude.hooks.topics import TopicBase
 
 # Add _shared to path for db_helper
 SCRIPT_DIR = Path(__file__).parent
@@ -234,12 +238,12 @@ class AgentActionsConsumer:
         self.topics = config.get(
             "topics",
             [
-                "agent-actions",
-                "onex.evt.omniclaude.routing-decision.v1",
-                "agent-transformation-events",
-                "router-performance-metrics",
-                "agent-detection-failures",
-                "agent-execution-logs",
+                TopicBase.AGENT_ACTIONS,
+                TopicBase.ROUTING_DECISION,
+                TopicBase.TRANSFORMATIONS,
+                TopicBase.PERFORMANCE_METRICS,
+                TopicBase.DETECTION_FAILURES,
+                TopicBase.EXECUTION_LOGS,
             ],
         )
 
@@ -577,27 +581,27 @@ class AgentActionsConsumer:
                     if not events:
                         continue
 
-                    if topic == "agent-actions":
+                    if topic == TopicBase.AGENT_ACTIONS:
                         inserted, duplicates = self._insert_agent_actions(
                             cursor, events
                         )
-                    elif topic == "onex.evt.omniclaude.routing-decision.v1":
+                    elif topic == TopicBase.ROUTING_DECISION:
                         inserted, duplicates = self._insert_routing_decisions(
                             cursor, events
                         )
-                    elif topic == "agent-transformation-events":
+                    elif topic == TopicBase.TRANSFORMATIONS:
                         inserted, duplicates = self._insert_transformation_events(
                             cursor, events
                         )
-                    elif topic == "router-performance-metrics":
+                    elif topic == TopicBase.PERFORMANCE_METRICS:
                         inserted, duplicates = self._insert_performance_metrics(
                             cursor, events
                         )
-                    elif topic == "agent-detection-failures":
+                    elif topic == TopicBase.DETECTION_FAILURES:
                         inserted, duplicates = self._insert_detection_failures(
                             cursor, events
                         )
-                    elif topic == "agent-execution-logs":
+                    elif topic == TopicBase.EXECUTION_LOGS:
                         inserted, duplicates = self._insert_execution_logs(
                             cursor, events
                         )
@@ -1059,7 +1063,7 @@ class AgentActionsConsumer:
         self,
         events: list[dict[str, Any]],
         error: str,
-        topic: str = "agent-observability",
+        topic: str = TopicBase.AGENT_OBSERVABILITY,
     ):
         """Send failed events to dead letter queue."""
         dlq_topic = f"{topic}-dlq"

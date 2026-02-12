@@ -45,11 +45,25 @@ class TestTopicBase:
             == "onex.cmd.omniintelligence.claude-hook-event.v1"
         )
 
-        # Legacy observability topics (to be migrated)
-        assert TopicBase.AGENT_ACTIONS == "agent-actions"
-        assert TopicBase.PERFORMANCE_METRICS == "router-performance-metrics"
-        assert TopicBase.TRANSFORMATIONS == "agent-transformation-events"
-        assert TopicBase.DETECTION_FAILURES == "agent-detection-failures"
+        # Hook adapter observability topics (migrated to ONEX format, OMN-1552)
+        assert TopicBase.AGENT_ACTIONS == "onex.evt.omniclaude.agent-actions.v1"
+        assert (
+            TopicBase.PERFORMANCE_METRICS
+            == "onex.evt.omniclaude.performance-metrics.v1"
+        )
+        assert (
+            TopicBase.TRANSFORMATIONS == "onex.evt.omniclaude.agent-transformation.v1"
+        )
+        assert (
+            TopicBase.DETECTION_FAILURES == "onex.evt.omniclaude.detection-failure.v1"
+        )
+
+        # Execution and observability topics (OMN-1552 migration)
+        assert TopicBase.EXECUTION_LOGS == "onex.evt.omniclaude.agent-execution-logs.v1"
+        assert (
+            TopicBase.AGENT_OBSERVABILITY
+            == "onex.evt.omniclaude.agent-observability.v1"
+        )
 
     def test_topic_base_is_str_enum(self) -> None:
         """TopicBase values are strings (StrEnum)."""
@@ -71,27 +85,12 @@ class TestTopicBase:
             r"^onex\.(cmd|evt|dlq|intent|snapshot)\.[a-z]+\.[a-z-]+\.v\d+$"
         )
 
-        # Legacy observability topics (to be migrated in future PR)
-        # These use simple hyphenated names without the onex prefix
-        legacy_topics = {
-            TopicBase.AGENT_ACTIONS,
-            TopicBase.PERFORMANCE_METRICS,
-            TopicBase.TRANSFORMATIONS,
-            TopicBase.DETECTION_FAILURES,
-        }
-        legacy_pattern = re.compile(r"^[a-z]+-[a-z-]+$")
-
+        # All topics now follow ONEX canonical format (OMN-1552 migrated legacy topics)
         for topic in TopicBase:
-            if topic in legacy_topics:
-                # Legacy topics use simple hyphenated names
-                assert legacy_pattern.match(topic.value), (
-                    f"Legacy topic {topic.name} does not follow naming convention: {topic.value}"
-                )
-            else:
-                # ONEX canonical format: onex.{kind}.{producer}.{event-name}.v{n}
-                assert onex_pattern.match(topic.value), (
-                    f"Topic {topic.name} does not follow ONEX canonical format: {topic.value}"
-                )
+            # ONEX canonical format: onex.{kind}.{producer}.{event-name}.v{n}
+            assert onex_pattern.match(topic.value), (
+                f"Topic {topic.name} does not follow ONEX canonical format: {topic.value}"
+            )
 
 
 # =============================================================================
