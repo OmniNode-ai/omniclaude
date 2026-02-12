@@ -248,7 +248,7 @@ def contracts_root() -> Path:
     """Return the path to the contracts/handlers directory.
 
     This is the actual contracts directory in the repository,
-    containing the pattern_storage_postgres contract.
+    used for handler contract publishing tests.
     """
     # Path resolution: tests/runtime/test_wiring.py -> repo_root
     # .parent chain: test_wiring.py -> runtime/ -> tests/ -> repo_root

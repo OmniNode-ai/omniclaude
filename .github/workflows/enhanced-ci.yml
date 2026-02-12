@@ -836,15 +836,18 @@ jobs:
           # Run init script as bash (not as SQL input)
           bash scripts/init-db.sh
 
-          # Validate tables were created
-          echo "Validating agent_routing_decisions table..."
-          psql -h localhost -U schema_test -d schema_test_db -c '\d agent_routing_decisions'
+          # Validate tables were created (post DB-SPLIT-07: session tables only)
+          echo "Validating schema_migrations table..."
+          psql -h localhost -U schema_test -d schema_test_db -c '\d schema_migrations'
 
-          echo "Validating agent_transformation_events table..."
-          psql -h localhost -U schema_test -d schema_test_db -c '\d agent_transformation_events'
+          echo "Validating claude_session_snapshots table..."
+          psql -h localhost -U schema_test -d schema_test_db -c '\d claude_session_snapshots'
 
-          echo "Validating router_performance_metrics table..."
-          psql -h localhost -U schema_test -d schema_test_db -c '\d router_performance_metrics'
+          echo "Validating claude_session_prompts table..."
+          psql -h localhost -U schema_test -d schema_test_db -c '\d claude_session_prompts'
+
+          echo "Validating claude_session_tools table..."
+          psql -h localhost -U schema_test -d schema_test_db -c '\d claude_session_tools'
 
           # Validate indexes
           echo "Validating indexes..."

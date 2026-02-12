@@ -61,7 +61,7 @@ except ImportError:
     POSTGRES_PORT = int(os.getenv("POSTGRES_PORT", "5436"))
     POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
     POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
-    POSTGRES_DATABASE = os.getenv("POSTGRES_DATABASE", "omninode_bridge")
+    POSTGRES_DATABASE = os.getenv("POSTGRES_DATABASE", "omniclaude")
 
 console = Console()
 

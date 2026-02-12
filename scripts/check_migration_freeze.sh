@@ -5,8 +5,13 @@
 #   Pre-commit: ./scripts/check_migration_freeze.sh           (checks staged files)
 #   CI:         ./scripts/check_migration_freeze.sh --ci       (checks diff vs base branch)
 #
+# Bypass:
+#   Add 'db-split-bypass' label to the PR. CI sets MIGRATION_FREEZE_BYPASS=true,
+#   and the script extracts the ticket ID from the branch name for audit logging.
+#   The bypass is logged, not silent. Branch must contain a ticket ref (e.g., omn-2058).
+#
 # Exit codes:
-#   0 — No freeze active, or no new migrations detected
+#   0 — No freeze active, no new migrations, or bypass active
 #   1 — Freeze violation: new migration files added
 
 set -euo pipefail
@@ -21,6 +26,28 @@ if [ ! -f "$FREEZE_FILE" ]; then
 fi
 
 echo "Migration freeze is ACTIVE ($FREEZE_FILE exists)"
+
+# Auditable bypass for DB-SPLIT ownership transfers.
+# Gate: CI sets MIGRATION_FREEZE_BYPASS=true when 'db-split-bypass' label is present.
+# Ticket ID is extracted from branch name for the audit trail.
+if [ "${MIGRATION_FREEZE_BYPASS:-}" = "true" ]; then
+    # Extract ticket ID from branch name (e.g., jonah/omn-2058-db-split-... → OMN-2058)
+    BRANCH_NAME="${GITHUB_HEAD_REF:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '')}"
+    TICKET_ID=""
+    if [[ "$BRANCH_NAME" =~ [Oo][Mm][Nn]-([0-9]+) ]]; then
+        TICKET_ID="OMN-${BASH_REMATCH[1]}"
+    fi
+    if [ -z "$TICKET_ID" ]; then
+        echo "ERROR: MIGRATION_FREEZE_BYPASS is set but could not extract ticket ID from branch '$BRANCH_NAME'"
+        echo "  Branch name must contain a ticket reference (e.g., omn-2058)"
+        exit 1
+    fi
+    echo "BYPASS ACTIVE: Migration freeze bypassed for $TICKET_ID"
+    echo "  Branch: $BRANCH_NAME"
+    echo "  Authorized category: ownership transfer / DB-SPLIT boundary work"
+    echo "  Gate: 'db-split-bypass' label on PR"
+    exit 0
+fi
 
 MODE="${1:-precommit}"
 

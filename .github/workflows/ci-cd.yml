@@ -327,6 +327,7 @@ jobs:
         run: ./scripts/check_migration_freeze.sh --ci
         env:
           MIGRATION_CHECK_BASE: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
+          MIGRATION_FREEZE_BYPASS: ${{ contains(github.event.pull_request.labels.*.name, 'db-split-bypass') && 'true' || '' }}
 
   # ============================================================================
   # Security Scanning - Python Dependencies
