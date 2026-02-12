@@ -27,7 +27,7 @@ This skill logs router performance metrics for tracking routing efficiency, cach
 - 🚀 **Scalability**: Handles 1M+ events/sec
 - 🛡️ **Fault Tolerance**: Events persisted even if consumers fail
 
-**Kafka Topic**: `router-performance-metrics`
+**Kafka Topic**: `onex.evt.omniclaude.performance-metrics.v1`
 
 **How to Use (Kafka)**:
 
@@ -143,7 +143,7 @@ Skills are version-controlled in the repository and symlinked to `${CLAUDE_PLUGI
   "cache_hit": false,
   "candidates_evaluated": 5,
   "published_to": "kafka",
-  "topic": "router-performance-metrics"
+  "topic": "onex.evt.omniclaude.performance-metrics.v1"
 }
 ```
 

@@ -65,7 +65,7 @@ def get_transformation_topic() -> str:
     """Build the transformation events topic using ONEX topic conventions.
 
     Returns:
-        Canonical topic name (e.g., "agent-transformation-events").
+        Canonical topic name (e.g., "onex.evt.omniclaude.agent-transformation.v1").
         Topics are realm-agnostic per OMN-1972: no environment prefix.
     """
     return build_topic("", TopicBase.TRANSFORMATIONS)

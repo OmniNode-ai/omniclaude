@@ -135,7 +135,7 @@ send_slack_notification=False  # Don't spam Slack for execution failures
 | Layer | Purpose | Destination | Use Case |
 |-------|---------|-------------|----------|
 | **Kafka Events** | Agent lifecycle tracking | `omninode.agent.execution.*` topics | Workflow orchestration, event-driven intelligence |
-| **Action Logs** | Detailed action tracking | `agent-actions` topic → PostgreSQL | Performance analysis, debugging, metrics |
+| **Action Logs** | Detailed action tracking | `onex.evt.omniclaude.agent-actions.v1` topic → PostgreSQL | Performance analysis, debugging, metrics |
 
 ### 2. Complete Correlation Tracking
 
@@ -203,7 +203,7 @@ All Tests Passed!
 ============================================================
 
 Events published to:
-1. Kafka topic 'agent-actions' (ActionLogger events)
+1. Kafka topic 'onex.evt.omniclaude.agent-actions.v1' (ActionLogger events)
 2. Kafka topics 'omninode.agent.execution.*' (execution events)
 ```
 
@@ -214,7 +214,7 @@ Events published to:
 python3 agents/tests/test_agent_execution_publisher_action_logger_integration.py
 
 # Verify ActionLogger events in Kafka
-kcat -C -b 192.168.86.200:29092 -t agent-actions -f '%k: %s\n' | tail -20
+kcat -C -b 192.168.86.200:29092 -t onex.evt.omniclaude.agent-actions.v1 -f '%k: %s\n' | tail -20
 
 # Verify execution events in Kafka
 kcat -C -b 192.168.86.200:29092 -t omninode.agent.execution.started.v1 -f '%k: %s\n' | tail -5
@@ -371,7 +371,7 @@ docker logs -f app | grep "ActionLogger"
 **Kafka Topics**:
 ```bash
 # Watch ActionLogger events
-kcat -C -b 192.168.86.200:29092 -t agent-actions -f '%k: %s\n'
+kcat -C -b 192.168.86.200:29092 -t onex.evt.omniclaude.agent-actions.v1 -f '%k: %s\n'
 
 # Watch execution events
 kcat -C -b 192.168.86.200:29092 -t omninode.agent.execution.started.v1 -f '%k: %s\n'

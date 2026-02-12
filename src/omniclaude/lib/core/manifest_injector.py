@@ -82,6 +82,7 @@ except ImportError:
 
 # FAIL FAST: Required dependencies
 # FAIL FAST: Required ONEX error classes
+from omniclaude.hooks.topics import TopicBase
 from omniclaude.lib.errors import EnumCoreErrorCode, OnexError
 from omniclaude.lib.intelligence_usage_tracker import IntelligenceUsageTracker
 from omniclaude.lib.pattern_quality_scorer import PatternQualityScorer
@@ -4108,7 +4109,7 @@ class ManifestInjector:
             "framework": "ActionLogger (omniclaude.lib.core.action_logger)",
             "kafka_integration": {
                 "enabled": True,
-                "topic": "agent-actions",
+                "topic": TopicBase.AGENT_ACTIONS,
                 "bootstrap_servers": os.environ.get(
                     "KAFKA_BOOTSTRAP_SERVERS", ""
                 ),
@@ -5114,7 +5115,7 @@ class ManifestInjector:
 
         # Performance and infrastructure note
         output.append("  Performance: <5ms overhead per action, non-blocking")
-        output.append("  Kafka Topic: agent-actions")
+        output.append("  Kafka Topic: onex.evt.omniclaude.agent-actions.v1")
         output.append("  Benefits: Complete traceability, debug intelligence, performance metrics")
 
         return "\n".join(output)

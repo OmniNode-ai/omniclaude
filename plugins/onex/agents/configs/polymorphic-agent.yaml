@@ -140,7 +140,7 @@ capabilities:
       - "Error logging with stack traces and debugging context"
       - "Success logging for workflow milestone tracking"
       - "Correlation ID tracking across complete agent lifecycle"
-      - "Non-blocking async event publishing to Kafka (agent-actions topic)"
+      - "Non-blocking async event publishing to Kafka (onex.evt.omniclaude.agent-actions.v1 topic)"
       - "Graceful degradation when Kafka infrastructure unavailable"
       - "Context manager support for automatic timing and error capture"
       - "Project context preservation (path, name, working directory)"
@@ -508,7 +508,7 @@ action_logging_integration:
     graceful_degradation: "Logs warning but never fails execution"
 
   infrastructure_requirements:
-    kafka_topic: "agent-actions"
+    kafka_topic: "onex.evt.omniclaude.agent-actions.v1"
     kafka_bootstrap_servers: "192.168.86.200:29092"
     consumer_service: "agent_actions_consumer.py"
     database_table: "agent_actions (PostgreSQL)"

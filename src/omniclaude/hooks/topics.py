@@ -60,14 +60,12 @@ class TopicBase(StrEnum):
     SESSION_OUTCOME_EVT = "onex.evt.omniclaude.session-outcome.v1"
 
     # ==========================================================================
-    # Legacy observability topics (to be migrated in future PR)
-    # These use simple hyphenated names for backward compatibility
-    # NOTE: ROUTING_DECISIONS removed — migrated to ROUTING_DECISION (ONEX format)
+    # Hook adapter observability topics (migrated to ONEX format, OMN-1552)
     # ==========================================================================
-    AGENT_ACTIONS = "agent-actions"
-    PERFORMANCE_METRICS = "router-performance-metrics"
-    TRANSFORMATIONS = "agent-transformation-events"
-    DETECTION_FAILURES = "agent-detection-failures"
+    AGENT_ACTIONS = "onex.evt.omniclaude.agent-actions.v1"
+    PERFORMANCE_METRICS = "onex.evt.omniclaude.performance-metrics.v1"
+    TRANSFORMATIONS = "onex.evt.omniclaude.agent-transformation.v1"
+    DETECTION_FAILURES = "onex.evt.omniclaude.detection-failure.v1"
 
     # ==========================================================================
     # Context injection topics (OMN-1403)
@@ -125,6 +123,12 @@ class TopicBase(StrEnum):
     TRANSFORMATION_STARTED = "onex.evt.omniclaude.transformation-started.v1"
     TRANSFORMATION_COMPLETED = "onex.evt.omniclaude.transformation-completed.v1"
     TRANSFORMATION_FAILED = "onex.evt.omniclaude.transformation-failed.v1"
+
+    # ==========================================================================
+    # Execution and observability topics (OMN-1552 migration)
+    # ==========================================================================
+    EXECUTION_LOGS = "onex.evt.omniclaude.agent-execution-logs.v1"
+    AGENT_OBSERVABILITY = "onex.evt.omniclaude.agent-observability.v1"
 
 
 def _validate_topic_segment(segment: str, name: str) -> str:

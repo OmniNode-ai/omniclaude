@@ -35,6 +35,12 @@ description: >
   Capability-oriented effect node for routing decision emission operations.
   Handles emission of routing decisions to event topics with pluggable backends.
 
+# Event bus configuration
+event_bus:
+  topic_base: "onex.evt.omniclaude.routing-decision.v1"
+  partition_key_field: "session_id"
+  partition_strategy: "hash"
+
 # Strongly typed I/O models
 input_model:
   name: ModelEmissionRequest

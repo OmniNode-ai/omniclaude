@@ -33,7 +33,7 @@ This skill logs detailed agent actions for debug tracing and observability. It p
 - 🚀 **Scalability**: Handles 1M+ events/sec
 - 🛡️ **Fault Tolerance**: Events persisted even if consumers fail
 
-**Kafka Topic**: `agent-actions`
+**Kafka Topic**: `onex.evt.omniclaude.agent-actions.v1`
 
 **How to Use (Kafka)**:
 
@@ -156,7 +156,7 @@ Skills are version-controlled in the repository and symlinked to `${CLAUDE_PLUGI
   "action_name": "route_to_specialized_agent",
   "debug_mode": true,
   "published_to": "kafka",
-  "topic": "agent-actions"
+  "topic": "onex.evt.omniclaude.agent-actions.v1"
 }
 ```
 

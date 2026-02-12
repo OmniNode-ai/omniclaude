@@ -304,7 +304,7 @@ try:
     consumer_timeout = int(os.environ['KAFKA_CONSUMER_TIMEOUT'])
 
     consumer = KafkaConsumer(
-        'agent-actions',
+        'onex.evt.omniclaude.agent-actions.v1',
         bootstrap_servers=bootstrap_servers,
         auto_offset_reset='earliest',
         consumer_timeout_ms=consumer_timeout,

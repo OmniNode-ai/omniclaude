@@ -45,12 +45,12 @@ Health: ✅ Healthy
 ✅ Connected to 192.168.86.200:29092
 ✅ Joined consumer group: agent-observability-postgres
 ✅ Assigned 6 partitions:
-   - agent-actions
+   - onex.evt.omniclaude.agent-actions.v1
    - onex.evt.omniclaude.routing-decision.v1
-   - agent-transformation-events
-   - router-performance-metrics
-   - agent-detection-failures
-   - agent-execution-logs
+   - onex.evt.omniclaude.agent-transformation.v1
+   - onex.evt.omniclaude.performance-metrics.v1
+   - onex.evt.omniclaude.detection-failure.v1
+   - onex.evt.omniclaude.agent-execution-logs.v1
 ```
 
 ### Database Connection
@@ -146,7 +146,7 @@ psql -h ${POSTGRES_HOST} -p ${POSTGRES_PORT} -U ${POSTGRES_USER} -d ${POSTGRES_D
 ### If No Messages Are Consumed
 1. Check if messages exist in topic:
    ```bash
-   docker exec omninode-bridge-redpanda rpk topic consume agent-actions --num 1
+   docker exec omninode-bridge-redpanda rpk topic consume onex.evt.omniclaude.agent-actions.v1 --num 1
    ```
 2. Check consumer group lag:
    ```bash

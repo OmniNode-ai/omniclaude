@@ -410,7 +410,7 @@ record_action_log(
 
 # Record event publish
 record_event_publish(
-    topic="agent-actions",
+    topic="onex.evt.omniclaude.agent-actions.v1",
     duration=0.005,
     size_bytes=1024,
     status="success"
