@@ -91,8 +91,12 @@ def _check_and_update_rate_limit(key: str) -> bool:
     # Open or create the file for read/write
     fd = os.open(rate_limit_path, os.O_RDWR | os.O_CREAT, 0o644)
     try:
-        # Advisory lock (blocking)
-        fcntl.flock(fd, fcntl.LOCK_EX)
+        # Advisory lock (non-blocking to avoid indefinite hang)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            logger.debug("Rate limit file locked by another process, skipping")
+            return False
 
         # Read existing data
         with os.fdopen(os.dup(fd), "r") as f:
@@ -210,7 +214,11 @@ def _send_via_handler(webhook_url: str, message: str) -> bool:
 
         alert = _FallbackAlert(message=message)  # type: ignore[assignment]
 
-    asyncio.run(handler.handle(alert))
+    try:
+        asyncio.run(asyncio.wait_for(handler.handle(alert), timeout=10.0))
+    except TimeoutError:
+        logger.debug("HandlerSlackWebhook timed out after 10s")
+        return False
     return True
 
 

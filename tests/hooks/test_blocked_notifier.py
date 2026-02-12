@@ -484,7 +484,7 @@ class TestEmitterIntegration:
     """Tests for integration between agent_status_emitter and blocked_notifier."""
 
     def test_blocked_state_triggers_notification(self) -> None:
-        """emit_agent_status with state='blocked' calls maybe_notify_blocked."""
+        """emit_agent_status with state='blocked' spawns a daemon thread for notification."""
         from plugins.onex.hooks.lib.agent_status_emitter import emit_agent_status
 
         with (
@@ -493,10 +493,10 @@ class TestEmitterIntegration:
                 return_value=True,
             ),
             patch(
-                "plugins.onex.hooks.lib.blocked_notifier.maybe_notify_blocked",
-                return_value=True,
-            ) as mock_notify,
+                "plugins.onex.hooks.lib.agent_status_emitter.threading.Thread",
+            ) as mock_thread_cls,
         ):
+            mock_thread_instance = mock_thread_cls.return_value
             result = emit_agent_status(
                 "blocked",
                 "Waiting for human approval",
@@ -506,10 +506,15 @@ class TestEmitterIntegration:
             )
 
         assert result is True
-        mock_notify.assert_called_once()
-        # Verify the payload passed is a dict with state=blocked
-        call_payload = mock_notify.call_args[0][0]
-        assert call_payload["state"] == "blocked"
+        mock_thread_cls.assert_called_once()
+        # Verify thread was created with correct target and daemon=True
+        call_kwargs = mock_thread_cls.call_args[1]
+        assert call_kwargs["daemon"] is True
+        # Verify the payload arg contains state=blocked
+        thread_args = call_kwargs["args"]
+        assert thread_args[0]["state"] == "blocked"
+        # Verify .start() was called
+        mock_thread_instance.start.assert_called_once()
 
     def test_non_blocked_state_does_not_trigger_notification(self) -> None:
         """emit_agent_status with state='working' does NOT call maybe_notify_blocked."""
@@ -535,7 +540,7 @@ class TestEmitterIntegration:
         mock_notify.assert_not_called()
 
     def test_notification_failure_does_not_affect_emission(self) -> None:
-        """maybe_notify_blocked raising does NOT affect emit_agent_status return."""
+        """Thread creation raising does NOT affect emit_agent_status return."""
         from plugins.onex.hooks.lib.agent_status_emitter import emit_agent_status
 
         with (
@@ -544,8 +549,8 @@ class TestEmitterIntegration:
                 return_value=True,
             ),
             patch(
-                "plugins.onex.hooks.lib.blocked_notifier.maybe_notify_blocked",
-                side_effect=RuntimeError("Notification exploded"),
+                "plugins.onex.hooks.lib.agent_status_emitter.threading.Thread",
+                side_effect=RuntimeError("Thread creation exploded"),
             ),
         ):
             result = emit_agent_status(
@@ -559,7 +564,7 @@ class TestEmitterIntegration:
         assert result is True
 
     def test_emit_failure_does_not_trigger_notification(self) -> None:
-        """When emit_event returns False, maybe_notify_blocked is NOT called."""
+        """When emit_event returns False, no notification thread is spawned."""
         from plugins.onex.hooks.lib.agent_status_emitter import emit_agent_status
 
         with (
@@ -568,8 +573,8 @@ class TestEmitterIntegration:
                 return_value=False,
             ),
             patch(
-                "plugins.onex.hooks.lib.blocked_notifier.maybe_notify_blocked",
-            ) as mock_notify,
+                "plugins.onex.hooks.lib.agent_status_emitter.threading.Thread",
+            ) as mock_thread_cls,
         ):
             result = emit_agent_status(
                 "blocked",
@@ -579,4 +584,4 @@ class TestEmitterIntegration:
             )
 
         assert result is False
-        mock_notify.assert_not_called()
+        mock_thread_cls.assert_not_called()
