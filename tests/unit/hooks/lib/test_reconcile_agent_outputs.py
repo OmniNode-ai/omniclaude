@@ -185,12 +185,8 @@ class TestLowConflictValues:
     returns IDENTICAL / OPPOSITE / ORTHOGONAL / AMBIGUOUS).  We verify the
     routing logic handles LOW_CONFLICT correctly by testing with a mock."""
 
-    def test_low_conflict_routing(self) -> None:
-        """LOW_CONFLICT fields get auto-resolved with lexically-first agent,
-        and appear in optional_review_fields."""
-        # We cannot trigger LOW_CONFLICT from the fallback classifier directly
-        # because it only knows IDENTICAL / OPPOSITE / ORTHOGONAL / AMBIGUOUS.
-        # Instead we verify the data model accepts the constant.
+    def test_low_conflict_data_model(self) -> None:
+        """FieldDecision accepts LOW_CONFLICT as a valid conflict_type."""
         dec = FieldDecision(
             field="retry.delay",
             conflict_type=LOW_CONFLICT,
@@ -203,12 +199,42 @@ class TestLowConflictValues:
         assert dec.conflict_type == LOW_CONFLICT
         assert dec.needs_approval is False
 
+    def test_low_conflict_routing_via_mock(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Mock _classify to return LOW_CONFLICT, verify reconcile_outputs
+        auto-resolves with lexically-first agent and flags for review."""
+        import reconcile_agent_outputs as mod
+
+        monkeypatch.setattr(
+            mod, "_classify", lambda _base, _vals, classifier=None: LOW_CONFLICT
+        )
+
+        base = {"retry": {"delay": 100}}
+        outputs = {
+            "agent-beta": {"retry": {"delay": 150}},
+            "agent-alpha": {"retry": {"delay": 120}},
+        }
+        result = reconcile_outputs(base, outputs)
+
+        dec = result.field_decisions["retry.delay"]
+        assert dec.conflict_type == LOW_CONFLICT
+        assert dec.needs_approval is False
+        assert dec.needs_review is False
+        # Lexically-first agent is "agent-alpha"
+        assert dec.chosen_value == 120
+        assert result.merged_values["retry.delay"] == 120
+        assert "retry.delay" in result.optional_review_fields
+        assert "retry.delay" in result.auto_resolved_fields
+        assert result.requires_approval is False
+
 
 class TestConflictingValues:
     """Fallback classifier does not produce CONFLICTING directly.  We verify
     the FieldDecision model and routing contract for CONFLICTING."""
 
-    def test_conflicting_field_decision(self) -> None:
+    def test_conflicting_data_model(self) -> None:
+        """FieldDecision accepts CONFLICTING as a valid conflict_type."""
         dec = FieldDecision(
             field="auth.strategy",
             conflict_type=CONFLICTING,
@@ -221,6 +247,35 @@ class TestConflictingValues:
         assert dec.conflict_type == CONFLICTING
         assert dec.needs_review is True
         assert dec.needs_approval is False
+
+    def test_conflicting_routing_via_mock(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Mock _classify to return CONFLICTING, verify reconcile_outputs
+        auto-resolves with lexically-first agent and sets needs_review."""
+        import reconcile_agent_outputs as mod
+
+        monkeypatch.setattr(
+            mod, "_classify", lambda _base, _vals, classifier=None: CONFLICTING
+        )
+
+        base = {"auth": {"strategy": "basic"}}
+        outputs = {
+            "agent-beta": {"auth": {"strategy": "oauth2"}},
+            "agent-alpha": {"auth": {"strategy": "jwt"}},
+        }
+        result = reconcile_outputs(base, outputs)
+
+        dec = result.field_decisions["auth.strategy"]
+        assert dec.conflict_type == CONFLICTING
+        assert dec.needs_review is True
+        assert dec.needs_approval is False
+        # Lexically-first agent is "agent-alpha"
+        assert dec.chosen_value == "jwt"
+        assert result.merged_values["auth.strategy"] == "jwt"
+        assert "auth.strategy" in result.optional_review_fields
+        assert "auth.strategy" in result.auto_resolved_fields
+        assert result.requires_approval is False
 
 
 class TestOppositeValues:

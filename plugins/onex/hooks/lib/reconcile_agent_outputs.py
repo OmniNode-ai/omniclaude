@@ -19,7 +19,7 @@ Design constraints:
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -28,9 +28,6 @@ from pydantic import BaseModel, ConfigDict
 # ---------------------------------------------------------------------------
 
 try:
-    from omnibase_core.enums.enum_merge_conflict_type import (  # noqa: F401
-        EnumMergeConflictType,
-    )
     from omnibase_core.merge.geometric_conflict_classifier import (
         GeometricConflictClassifier,
     )
@@ -50,9 +47,9 @@ CONFLICTING = "CONFLICTING"
 OPPOSITE = "OPPOSITE"
 AMBIGUOUS = "AMBIGUOUS"
 
-_ALL_CONFLICT_TYPES = frozenset(
-    {IDENTICAL, ORTHOGONAL, LOW_CONFLICT, CONFLICTING, OPPOSITE, AMBIGUOUS}
-)
+ConflictType = Literal[
+    "IDENTICAL", "ORTHOGONAL", "LOW_CONFLICT", "CONFLICTING", "OPPOSITE", "AMBIGUOUS"
+]
 
 # ---------------------------------------------------------------------------
 # Models
@@ -67,7 +64,7 @@ class FieldDecision(BaseModel):
     field: str
     """Dot-path, e.g. ``db.pool.max_size``."""
 
-    conflict_type: str
+    conflict_type: ConflictType
     """One of: IDENTICAL, ORTHOGONAL, LOW_CONFLICT, CONFLICTING, OPPOSITE, AMBIGUOUS."""
 
     sources: list[str]
@@ -126,6 +123,15 @@ def flatten_to_paths(d: dict, prefix: str = "") -> dict[str, Any]:
         {"db": {"pool": {"max_size": 10}}} -> {"db.pool.max_size": 10}
 
     Non-dict values at any level become leaf entries.
+
+    .. note::
+
+        Keys containing literal dots (e.g. ``{"a.b": 1}``) are
+        indistinguishable from nested paths after flattening.  For example,
+        ``{"a.b": 1}`` and ``{"a": {"b": 1}}`` both flatten to
+        ``{"a.b": 1}``.  This is a known limitation; callers that may
+        encounter dotted keys should pre-escape them before calling this
+        function.
     """
     result: dict[str, Any] = {}
     for key, value in d.items():
@@ -181,7 +187,7 @@ def _are_antonyms(a: Any, b: Any) -> bool:
     return pair in _ANTONYM_PAIRS
 
 
-def _fallback_classify(base_value: Any, agent_values: dict[str, Any]) -> str:
+def _fallback_classify(base_value: Any, agent_values: dict[str, Any]) -> ConflictType:
     """Lightweight conflict classifier -- no external deps.
 
     Rules (in order):
@@ -218,15 +224,25 @@ def _fallback_classify(base_value: Any, agent_values: dict[str, Any]) -> str:
     return AMBIGUOUS
 
 
-def _classify(base_value: Any, agent_values: dict[str, Any]) -> str:
-    """Dispatch to real classifier or fallback."""
-    if _HAS_CLASSIFIER:
-        classifier = GeometricConflictClassifier()
+def _classify(
+    base_value: Any,
+    agent_values: dict[str, Any],
+    classifier: Any | None = None,
+) -> ConflictType:
+    """Dispatch to real classifier or fallback.
+
+    Args:
+        base_value: The original value before any agent modifications.
+        agent_values: Map of agent_name -> value for this field.
+        classifier: Pre-instantiated ``GeometricConflictClassifier``, or
+            ``None`` to use the lightweight fallback.
+    """
+    if classifier is not None:
         # Real classifier expects list[tuple[str, object]], not dict
         values_list = [(name, val) for name, val in sorted(agent_values.items())]
         details = classifier.classify(base_value, values_list)
         # details is ModelGeometricConflictDetails; extract enum name
-        return details.conflict_type.name
+        return details.conflict_type.name  # type: ignore[return-value]
     return _fallback_classify(base_value, agent_values)
 
 
@@ -265,11 +281,6 @@ def _build_summary(
         lines.append(f"- REQUIRES APPROVAL: {len(approval_fields)} field(s)")
         for f in approval_fields:
             dec = field_decisions[f]
-            # Show each agent's value
-            val_parts = []
-            for src in sorted(dec.sources):
-                # rationale already contains the values; also include them inline
-                val_parts.append(f"{src}=<see rationale>")
             lines.append(f"  - {f} ({dec.conflict_type})")
 
     lines.append("")
@@ -326,6 +337,13 @@ def reconcile_outputs(
             f"got {len(agent_outputs)}"
         )
 
+    # Instantiate the classifier once for the entire reconciliation pass.
+    # If omnibase_core is not installed, classifier stays None and _classify
+    # will use the lightweight fallback path.
+    classifier: Any | None = None
+    if _HAS_CLASSIFIER:
+        classifier = GeometricConflictClassifier()
+
     # 1. Flatten
     flat_base = flatten_to_paths(base_values)
     flat_agents: dict[str, dict[str, Any]] = {
@@ -374,7 +392,7 @@ def reconcile_outputs(
         # 2-3. Overlapping field -- classify
         agent_values = {a: flat_agents[a][field] for a in sorted(agents)}
         base_val = flat_base.get(field)
-        conflict_type = _classify(base_val, agent_values)
+        conflict_type = _classify(base_val, agent_values, classifier=classifier)
 
         if logger:
             logger(
@@ -518,6 +536,7 @@ def reconcile_outputs(
 
 
 __all__ = [
+    "ConflictType",
     "FieldDecision",
     "ReconciliationResult",
     "flatten_to_paths",
