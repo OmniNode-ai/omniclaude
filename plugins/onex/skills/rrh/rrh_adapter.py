@@ -143,7 +143,8 @@ def _resolve_node_client() -> ProtocolRRHNodeClient:
         # fmt: on
 
         # Nodes exist but full runtime wiring is not ready yet.
-        # When it is, return an ONEXRuntimeNodeClient here.
+        # TODO(OMN-2138): When runtime wiring is complete, return an
+        # ONEXRuntimeNodeClient here instead of the fallback.
         return FallbackNodeClient()
     except ImportError:
         return FallbackNodeClient()

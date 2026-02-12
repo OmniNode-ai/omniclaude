@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from enum import Enum
 from hashlib import sha256
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from omnibase_core.models.ticket.model_ticket_contract import ModelTicketContract
@@ -66,7 +66,7 @@ PHASE_PROFILE_MAP: dict[PipelinePhase, str] = {
 class RRHDecision:
     """Actionable decision produced by the hook adapter."""
 
-    verdict: str  # PASS | FAIL | QUARANTINE
+    verdict: Literal["PASS", "FAIL", "QUARANTINE"]
     should_block: bool
     human_summary: str
     result: ContractRRHResult
@@ -156,18 +156,31 @@ class RRHHookAdapter:
         for iface in contract.interfaces_consumed:
             interfaces.append(iface.name)
 
-        # Derive evidence requirements from verification step kinds
+        # Derive evidence requirements from verification step kinds.
+        # Only unit_tests and integration map to an evidence tag ("tests")
+        # because those are the kinds that produce machine-verifiable
+        # artifacts.  VERIFY_INTERFACE, SCRIPT, and MANUAL_CHECK are
+        # governance-level concerns enforced elsewhere in the pipeline
+        # (e.g., interface compatibility checks, manual sign-off gates)
+        # and do not translate to RRH evidence requirements.
         evidence: list[str] = []
         for step in contract.verification_steps:
             kind_value = step.kind.value
             if kind_value in ("unit_tests", "integration"):
                 evidence.append("tests")
 
+        # Type guard: context is dict[str, Any], so deployment_targets
+        # could be a string (e.g. "prod") instead of a list.  Without this
+        # guard, tuple("prod") silently yields ("p", "r", "o", "d").
+        targets = contract.context.get("deployment_targets", [])
+        if isinstance(targets, str):
+            targets = [targets]
+
         return RRHGovernance(
             ticket_id=contract.ticket_id,
             evidence_requirements=tuple(sorted(set(evidence))),
             interfaces_touched=tuple(sorted(set(interfaces))),
-            deployment_targets=tuple(contract.context.get("deployment_targets", [])),
+            deployment_targets=tuple(targets),
             is_seam_ticket=contract.context.get("is_seam_ticket", False),
             expected_branch_pattern=contract.context.get("expected_branch_pattern", ""),
         )
