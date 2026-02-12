@@ -16,6 +16,10 @@ from pathlib import Path
 import requests
 from kafka import KafkaProducer
 
+# Add src to path for omniclaude.hooks.topics
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+from omniclaude.hooks.topics import TopicBase
+
 # Add consumers to path
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -43,7 +47,7 @@ def test_poison_message_handling():
         "duration_ms": 100,
         "timestamp": "2025-01-01T00:00:00Z",
     }
-    producer.send("agent-actions", value=valid_message)
+    producer.send(TopicBase.AGENT_ACTIONS, value=valid_message)
     producer.flush()
     print("✅ Valid message sent")
 
@@ -57,7 +61,7 @@ def test_poison_message_handling():
         "action_details": "not_a_dict",  # Wrong type
         "duration_ms": "not_an_int",  # Wrong type
     }
-    producer.send("agent-actions", value=poison_message)
+    producer.send(TopicBase.AGENT_ACTIONS, value=poison_message)
     producer.flush()
     print("✅ Poison message sent")
 

@@ -36,6 +36,12 @@ sys.path.insert(
 )
 from kafka_publisher import get_kafka_producer
 
+# Add src to path for omniclaude.hooks.topics
+sys.path.insert(
+    0, str(Path(__file__).parent.parent.parent.parent.parent.parent / "src")
+)
+from omniclaude.hooks.topics import TopicBase
+
 # Load .env on import
 load_env_file()
 
@@ -47,7 +53,7 @@ def parse_boolean(value: str) -> bool:
     return value.lower() in ("true", "1", "yes", "y")
 
 
-def publish_to_kafka(event: dict, topic: str = "router-performance-metrics") -> bool:
+def publish_to_kafka(event: dict, topic: str = TopicBase.PERFORMANCE_METRICS) -> bool:
     """
     Publish event to Kafka topic.
 
@@ -122,7 +128,7 @@ def log_performance_metrics_kafka(args):
     }
 
     # Publish to Kafka
-    success = publish_to_kafka(event, topic="router-performance-metrics")
+    success = publish_to_kafka(event, topic=TopicBase.PERFORMANCE_METRICS)
 
     if success:
         output = {
@@ -133,7 +139,7 @@ def log_performance_metrics_kafka(args):
             "cache_hit": cache_hit,
             "candidates_evaluated": int(args.candidates),
             "published_to": "kafka",
-            "topic": "router-performance-metrics",
+            "topic": TopicBase.PERFORMANCE_METRICS,
         }
         print(json.dumps(output, indent=2))
         return 0

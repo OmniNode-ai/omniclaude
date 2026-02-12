@@ -27,6 +27,10 @@ from kafka import KafkaProducer
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config import settings
 
+# Add src to path for omniclaude.hooks.topics
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+from omniclaude.hooks.topics import TopicBase
+
 # Add _shared to path
 SCRIPT_DIR = Path(__file__).parent
 SHARED_DIR = SCRIPT_DIR.parent / "skills" / "_shared"
@@ -83,7 +87,7 @@ def publish_test_events(count: int = 10) -> list[str]:
 
         correlation_ids.append(event["correlation_id"])
 
-        producer.send("agent-actions", value=event)
+        producer.send(TopicBase.AGENT_ACTIONS, value=event)
         print(f"  ✓ Event {i + 1}/{count}: {event['correlation_id']}")
 
     producer.flush()

@@ -41,11 +41,17 @@ sys.path.insert(
 )
 from kafka_publisher import get_kafka_producer, should_log_debug
 
+# Add src to path for omniclaude.hooks.topics
+sys.path.insert(
+    0, str(Path(__file__).parent.parent.parent.parent.parent.parent / "src")
+)
+from omniclaude.hooks.topics import TopicBase
+
 # Load .env on import
 load_env_file()
 
 
-def publish_to_kafka(event: dict, topic: str = "agent-actions") -> bool:
+def publish_to_kafka(event: dict, topic: str = TopicBase.AGENT_ACTIONS) -> bool:
     """
     Publish event to Kafka topic.
 
@@ -137,7 +143,7 @@ def log_agent_action_kafka(args):
     }
 
     # Publish to Kafka
-    success = publish_to_kafka(event, topic="agent-actions")
+    success = publish_to_kafka(event, topic=TopicBase.AGENT_ACTIONS)
 
     if success:
         output = {
@@ -148,7 +154,7 @@ def log_agent_action_kafka(args):
             "action_name": args.action_name,
             "debug_mode": True,
             "published_to": "kafka",
-            "topic": "agent-actions",
+            "topic": TopicBase.AGENT_ACTIONS,
         }
         print(json.dumps(output, indent=2))
         return 0
