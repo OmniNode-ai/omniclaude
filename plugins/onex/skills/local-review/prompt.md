@@ -452,6 +452,7 @@ if checkpoint_arg and checkpoint_ticket_id and checkpoint_run_id:
                 for issue in issues.get(severity, [])
             ],
             "last_clean_sha": _head_sha,
+            "recent_commit_shas": [c["hash"] for c in commits_made[-3:]],  # metadata only
         })
         _cp_cmd = [
             sys.executable, _CHECKPOINT_MANAGER, "write",
@@ -460,7 +461,7 @@ if checkpoint_arg and checkpoint_ticket_id and checkpoint_run_id:
             "--phase", "local_review",
             "--attempt", str(iteration + 1),
             "--repo-commit-map", json.dumps({get_current_repo(): _head_sha}),
-            "--artifact-paths", json.dumps([c["hash"] for c in commits_made[-3:]]),  # recent commits
+            "--artifact-paths", json.dumps([]),  # no file artifacts produced by local-review
             "--payload", _cp_payload,
         ]
         _cp_proc = _sp.run(_cp_cmd, capture_output=True, text=True, timeout=30)

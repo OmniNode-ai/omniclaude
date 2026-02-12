@@ -494,14 +494,14 @@ Checkpoint operations delegate to `checkpoint_manager.py` via Bash.  All checkpo
 writes are **non-blocking**: failures log a warning but never stop the pipeline.
 
 ```python
-import subprocess
+import subprocess, sys
 
-_CHECKPOINT_MANAGER = Path(__file__).resolve().parent.parent / "hooks" / "lib" / "checkpoint_manager.py"
-# Fallback: use CLAUDE_PLUGIN_ROOT if available
-if not _CHECKPOINT_MANAGER.exists():
-    _plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT", "")
-    if _plugin_root:
-        _CHECKPOINT_MANAGER = Path(_plugin_root) / "hooks" / "lib" / "checkpoint_manager.py"
+_plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT", "")
+if _plugin_root:
+    _CHECKPOINT_MANAGER = Path(_plugin_root) / "hooks" / "lib" / "checkpoint_manager.py"
+else:
+    # Hardcoded known location relative to home when CLAUDE_PLUGIN_ROOT is not set
+    _CHECKPOINT_MANAGER = Path.home() / ".claude" / "plugins" / "onex" / "hooks" / "lib" / "checkpoint_manager.py"
 
 
 def write_checkpoint(ticket_id, run_id, phase_name, attempt_number, repo_commit_map, artifact_paths, phase_payload):
@@ -540,6 +540,8 @@ def read_checkpoint(ticket_id, run_id, phase_name):
             "--phase", phase_name,
         ]
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if proc.returncode != 0:
+            return {"success": False, "error": f"checkpoint read failed: {proc.stderr}"}
         return json.loads(proc.stdout)
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -555,9 +557,21 @@ def validate_checkpoint(ticket_id, run_id, phase_name):
             "--phase", phase_name,
         ]
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if proc.returncode != 0:
+            return {"valid": False, "error": f"validation failed: {proc.stderr}"}
         return json.loads(proc.stdout)
     except Exception as e:
         return {"success": False, "is_valid": False, "errors": [str(e)]}
+
+
+def get_head_sha():
+    """Return the short HEAD SHA, or '0000000' on failure."""
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--short=7", "HEAD"], text=True
+        ).strip()
+    except Exception:
+        return "0000000"
 
 
 def build_phase_payload(phase_name, state, result):
@@ -569,13 +583,6 @@ def build_phase_payload(phase_name, state, result):
     artifacts = result.get("artifacts", {})
 
     if phase_name == "implement":
-        # Get current HEAD SHA
-        try:
-            head_sha = subprocess.check_output(
-                ["git", "rev-parse", "--short=7", "HEAD"], text=True
-            ).strip()
-        except Exception:
-            head_sha = "0000000"
         try:
             branch = subprocess.check_output(
                 ["git", "rev-parse", "--abbrev-ref", "HEAD"], text=True
@@ -584,45 +591,27 @@ def build_phase_payload(phase_name, state, result):
             branch = "unknown"
         return {
             "branch_name": artifacts.get("branch_name", branch),
-            "commit_sha": head_sha,
+            "commit_sha": get_head_sha(),
             "files_changed": list(artifacts.get("files_changed", [])),
         }
 
     elif phase_name == "local_review":
-        try:
-            head_sha = subprocess.check_output(
-                ["git", "rev-parse", "--short=7", "HEAD"], text=True
-            ).strip()
-        except Exception:
-            head_sha = "0000000"
         return {
             "iteration_count": artifacts.get("iterations", 1),
             "issue_fingerprints": list(artifacts.get("issue_fingerprints", [])),
-            "last_clean_sha": head_sha,
+            "last_clean_sha": get_head_sha(),
         }
 
     elif phase_name == "create_pr":
-        try:
-            head_sha = subprocess.check_output(
-                ["git", "rev-parse", "--short=7", "HEAD"], text=True
-            ).strip()
-        except Exception:
-            head_sha = "0000000"
         return {
             "pr_url": artifacts.get("pr_url", ""),
             "pr_number": artifacts.get("pr_number", 0),
-            "head_sha": head_sha,
+            "head_sha": get_head_sha(),
         }
 
     elif phase_name == "pr_release_ready":
-        try:
-            head_sha = subprocess.check_output(
-                ["git", "rev-parse", "--short=7", "HEAD"], text=True
-            ).strip()
-        except Exception:
-            head_sha = "0000000"
         return {
-            "last_review_sha": head_sha,
+            "last_review_sha": get_head_sha(),
             "issue_fingerprints": list(artifacts.get("issue_fingerprints", [])),
         }
 
@@ -912,12 +901,7 @@ for phase_name in phase_order:
         try:
             attempt_num = get_checkpoint_attempt_number(ticket_id, run_id, phase_name)
             repo_name = get_current_repo()
-            try:
-                head_sha = subprocess.check_output(
-                    ["git", "rev-parse", "--short=7", "HEAD"], text=True
-                ).strip()
-            except Exception:
-                head_sha = "0000000"
+            head_sha = get_head_sha()
             phase_payload = build_phase_payload(phase_name, state, result)
             write_checkpoint(
                 ticket_id=ticket_id,
@@ -925,7 +909,7 @@ for phase_name in phase_order:
                 phase_name=phase_name,
                 attempt_number=attempt_num,
                 repo_commit_map={repo_name: head_sha},
-                artifact_paths=list(result.get("artifacts", {}).keys()),
+                artifact_paths=[],  # Artifact metadata keys are not file paths; real paths not tracked
                 phase_payload=phase_payload,
             )
         except Exception as cp_err:

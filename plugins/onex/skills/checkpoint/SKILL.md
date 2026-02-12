@@ -18,8 +18,8 @@ args:
     description: "Ticket identifier (e.g., OMN-2144)"
     required: true
   - name: --run-id
-    description: "Pipeline run UUID"
-    required: false
+    description: "Pipeline run UUID (required for write, read, and validate; optional for list)"
+    required: false  # conditionally required -- see description
   - name: --phase
     description: "Pipeline phase: implement | local_review | create_pr | pr_release_ready | ready_for_merge"
     required: false

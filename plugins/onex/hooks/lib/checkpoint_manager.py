@@ -54,7 +54,7 @@ import logging
 import sys
 from datetime import UTC, datetime
 from typing import Any, cast
-from uuid import UUID, uuid4
+from uuid import UUID, uuid4, uuid5
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +100,20 @@ class _ContainerStub:
     The checkpoint handlers store the container but never call methods on it
     during normal operation.  This stub allows CLI instantiation without the
     full DI container stack.
+
+    Defensive ``__getattr__``: If a handler *does* access a container attribute
+    (e.g. during future refactoring or in an error path), this returns a no-op
+    callable rather than raising ``AttributeError``.  The no-op returns ``None``
+    so callers that inspect the result see a falsy sentinel instead of crashing.
     """
+
+    def __getattr__(self, name: str) -> Any:
+        """Return a no-op callable for any missing attribute access."""
+
+        def _noop(*args: Any, **kwargs: Any) -> None:  # noqa: ANN401
+            return None
+
+        return _noop
 
 
 # =============================================================================
@@ -111,6 +124,11 @@ class _ContainerStub:
 _PHASE_MAP: dict[str, Any] = {}
 if _INFRA_AVAILABLE:
     _PHASE_MAP = {phase.value: phase for phase in EnumCheckpointPhase}
+
+# Project-specific UUID namespace for deterministic ID generation.
+# Derived via ``uuid5(NAMESPACE_DNS, "onex.omninode.io")`` so it is stable
+# and does NOT collide with the well-known RFC 4122 namespaces (DNS, URL, etc.).
+_ONEX_NAMESPACE = UUID("e176b05f-f761-5a9d-9a51-ac6d5a3566ee")
 
 
 def _error_json(message: str) -> str:
@@ -138,14 +156,11 @@ def _normalize_run_id(run_id: str) -> str:
 
     If the input is already a valid UUID, it is returned unchanged.
     """
-    from uuid import uuid5
-
     try:
         UUID(run_id)
         return run_id  # Already valid
     except ValueError:
         # Deterministic UUID5 from ONEX namespace + short run_id
-        _ONEX_NAMESPACE = UUID("6ba7b810-9dad-11d1-80b4-00c04fd430c8")
         return str(uuid5(_ONEX_NAMESPACE, run_id))
 
 
@@ -158,10 +173,15 @@ def _build_checkpoint_dict(
     repo_commit_map: dict[str, str],
     artifact_paths: list[str],
     payload: dict[str, Any],
+    timestamp: str | None = None,
 ) -> dict[str, Any]:
     """Build a checkpoint dict suitable for ModelCheckpoint.model_validate().
 
-    Timestamps are explicitly injected (never defaults) per repo invariant.
+    Args:
+        timestamp: ISO-8601 timestamp string.  If ``None`` (the default),
+            ``datetime.now(UTC).isoformat()`` is used.  Accepting an explicit
+            value enables deterministic testing per the repo invariant that
+            timestamps must be explicitly injectable.
     """
     # Ensure the payload has the phase discriminator
     payload_with_phase = {**payload, "phase": phase}
@@ -171,7 +191,9 @@ def _build_checkpoint_dict(
         "run_id": _normalize_run_id(run_id),
         "ticket_id": ticket_id,
         "phase": phase,
-        "timestamp_utc": datetime.now(UTC).isoformat(),
+        "timestamp_utc": timestamp
+        if timestamp is not None
+        else datetime.now(UTC).isoformat(),
         "repo_commit_map": repo_commit_map,
         "artifact_paths": tuple(artifact_paths),
         "attempt_number": attempt,
