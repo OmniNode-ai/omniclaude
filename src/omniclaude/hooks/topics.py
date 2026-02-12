@@ -115,6 +115,11 @@ class TopicBase(StrEnum):
     MANIFEST_INJECTION_FAILED = "onex.evt.omniclaude.manifest-injection-failed.v1"
 
     # ==========================================================================
+    # Agent status topics (OMN-1848 - agent lifecycle reporting)
+    # ==========================================================================
+    AGENT_STATUS = "onex.evt.agent.status.v1"
+
+    # ==========================================================================
     # Transformation topics (agent transformation observability)
     # ==========================================================================
     TRANSFORMATION_STARTED = "onex.evt.omniclaude.transformation-started.v1"
