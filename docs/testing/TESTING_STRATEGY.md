@@ -411,7 +411,7 @@ Service Combination Tests:
 
 Kafka → Database:
   ✅ onex.evt.omniclaude.agent-actions.v1 topic → agent_actions table
-  ✅ agent-routing-decisions → agent_routing_decisions table
+  ✅ onex.evt.omniclaude.routing-decision.v1 → agent_routing_decisions table
   ✅ intelligence-events → agent_manifest_injections table
 
 API → Database:
@@ -858,7 +858,7 @@ async def test_schema_validation(postgres_connection):
 
 - [ ] Kafka → Database flow tests (10 tests)
   - [ ] agent-actions topic → agent_actions table
-  - [ ] agent-routing-decisions → agent_routing_decisions table
+  - [ ] onex.evt.omniclaude.routing-decision.v1 → agent_routing_decisions table
   - [ ] intelligence-events → agent_manifest_injections table
 
 - [ ] Complete action lifecycle tests (5 tests)
