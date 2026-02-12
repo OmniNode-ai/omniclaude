@@ -28,6 +28,7 @@ import argparse
 import json
 import os
 import sys
+import tempfile
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -84,9 +85,22 @@ def _import_emit_client() -> object | None:
         return None
 
 
+def _find_daemon_socket() -> str:
+    """Resolve the emit daemon socket path.
+
+    Matches session-start.sh logic: ${OMNICLAUDE_EMIT_SOCKET:-${TMPDIR:-/tmp}/omniclaude-emit.sock}
+    Uses tempfile.gettempdir() which checks TMPDIR first (critical on macOS where
+    TMPDIR is /var/folders/... not /tmp/).
+    """
+    explicit = os.environ.get("OMNICLAUDE_EMIT_SOCKET")
+    if explicit:
+        return explicit
+    return os.path.join(tempfile.gettempdir(), "omniclaude-emit.sock")
+
+
 def _check_daemon_socket() -> tuple[bool, str]:
     """Check if the emit daemon socket file exists."""
-    socket_path = os.environ.get("OMNICLAUDE_EMIT_SOCKET", "/tmp/omniclaude-emit.sock")  # noqa: S108
+    socket_path = _find_daemon_socket()
     if Path(socket_path).exists():
         return True, f"Emit daemon socket exists at {socket_path}"
     return False, f"Emit daemon socket not found at {socket_path}"
@@ -94,6 +108,9 @@ def _check_daemon_socket() -> tuple[bool, str]:
 
 def _check_daemon_ping() -> tuple[bool, str]:
     """Ping the emit daemon via emit_client_wrapper.daemon_available()."""
+    # Ensure emit_client_wrapper uses the correct socket path (macOS TMPDIR compat)
+    if "OMNICLAUDE_EMIT_SOCKET" not in os.environ:
+        os.environ["OMNICLAUDE_EMIT_SOCKET"] = _find_daemon_socket()
     ecw = _import_emit_client()
     if ecw is None:
         return (
@@ -309,7 +326,7 @@ def _format_event_line(topic: str, timestamp_ms: int | None, payload: dict) -> s
         return f"  {_CYAN}[{ts}]{_RESET} session_id={session_id} {json.dumps(payload)[:120]}"
 
 
-def cmd_verify() -> int:
+def cmd_verify(lookback_minutes: int = 10) -> int:
     """Consume recent events from demo topics and display them."""
     print(_header("OmniClaude Demo Event Verification"))
 
@@ -320,7 +337,9 @@ def cmd_verify() -> int:
         return 1
 
     bootstrap = _get_bootstrap()
-    print(f"  Checking recent events (last 60 seconds) from {bootstrap}...\n")
+    print(
+        f"  Checking recent events (last {lookback_minutes} minutes) from {bootstrap}...\n"
+    )
 
     try:
         consumer = KafkaConsumer(
@@ -334,8 +353,8 @@ def cmd_verify() -> int:
         print(_fail(f"Could not connect to Kafka: {exc}"))
         return 1
 
-    # Compute the cutoff timestamp (60 seconds ago)
-    cutoff_ms = int((time.time() - 60) * 1000)
+    # Compute the cutoff timestamp
+    cutoff_ms = int((time.time() - lookback_minutes * 60) * 1000)
 
     total_events = 0
 
@@ -356,7 +375,7 @@ def cmd_verify() -> int:
         tps = [TopicPartition(topic, p) for p in partitions]
         consumer.assign(tps)
 
-        # Use offsets_for_times to find where 60 seconds ago is
+        # Use offsets_for_times to find the offset at the cutoff
         offsets = consumer.offsets_for_times(dict.fromkeys(tps, cutoff_ms))
 
         for tp in tps:
@@ -364,8 +383,10 @@ def cmd_verify() -> int:
             if offset_info is not None:
                 consumer.seek(tp, offset_info.offset)
             else:
-                # No messages at that timestamp, seek to end
+                # No messages at that timestamp — seek to end minus 10 (show latest)
                 consumer.seek_to_end(tp)
+                end_offset = consumer.position(tp)
+                consumer.seek(tp, max(0, end_offset - 10))
 
         # Consume messages
         events = []
@@ -501,12 +522,19 @@ def main(argv: list[str] | None = None) -> int:
         help="List all ONEX and agent Kafka topics",
     )
 
+    parser.add_argument(
+        "--minutes",
+        type=int,
+        default=10,
+        help="Lookback window in minutes for --verify (default: 10)",
+    )
+
     args = parser.parse_args(argv)
 
     if args.check:
         return cmd_check()
     elif args.verify:
-        return cmd_verify()
+        return cmd_verify(lookback_minutes=args.minutes)
     elif args.topics:
         return cmd_topics()
 
