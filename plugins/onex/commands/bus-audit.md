@@ -30,7 +30,7 @@ When invoked:
    - `-v` / `--verbose` - Include sample payloads for failed checks
    - `--skip-daemon` - Skip emit daemon health check
    - `--broker <host:port>` - Override Kafka broker address
-   - `--sample-count <n>` - Number of messages to sample per topic (default: 5)
+   - `--sample-count <n>` - Number of messages to sample per topic (default: 20)
 
 3. Display the audit results to the user, including:
    - Topic presence and accessibility

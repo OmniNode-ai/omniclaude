@@ -430,7 +430,7 @@ def validate_with_exemptions(
                 exempted += 1
             else:
                 real_errors += 1
-                detail = str(e)[:300]
+                detail = f"[{topic}] {str(e)[:300]}"
                 if len(details) < 20:
                     details.append(detail)
 
