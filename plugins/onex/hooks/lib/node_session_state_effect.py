@@ -28,7 +28,7 @@ from collections.abc import Callable
 from datetime import UTC
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 # =============================================================================
 # Contract-style Configuration (via env vars)
@@ -59,7 +59,7 @@ class ContractSessionIndex(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     active_run_id: str | None = None
-    recent_run_ids: list[str] = []
+    recent_run_ids: list[str] = Field(default_factory=list)
     updated_at: str = ""
 
 
@@ -158,7 +158,7 @@ def _acquire_lock(lock_path: Path, timeout_ms: int) -> tuple[LockResult, int]:
     deadline = time.monotonic() + (timeout_ms / 1000.0)
     fd = -1
     try:
-        fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR)
+        fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o644)
         while True:
             try:
                 fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -199,7 +199,7 @@ def _atomic_write(target: Path, data: str) -> None:
     """
     target.parent.mkdir(parents=True, exist_ok=True)
     tmp_path = target.parent / f".tmp.{os.getpid()}.{threading.get_ident()}"
-    fd = os.open(str(tmp_path), os.O_CREAT | os.O_WRONLY | os.O_TRUNC)
+    fd = os.open(str(tmp_path), os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o644)
     try:
         os.write(fd, data.encode("utf-8"))
         os.fsync(fd)
@@ -254,6 +254,53 @@ def write_session_index(index: ContractSessionIndex) -> LockResult:
 
     try:
         _atomic_write(path, index.model_dump_json(indent=2))
+        return LockResult.ACQUIRED
+    finally:
+        _release_lock(fd)
+
+
+def update_session_index(
+    mutate_fn: Callable[[ContractSessionIndex], ContractSessionIndex],
+) -> LockResult:
+    """Atomic read-modify-write of the session index under a single flock.
+
+    Eliminates the TOCTOU race present when read_session_index() and
+    write_session_index() are called separately: the read, mutation, and
+    write all happen while the lock is held.
+
+    Args:
+        mutate_fn: A callable that receives the current ContractSessionIndex
+            (or a default if the file does not exist) and returns the updated
+            index to be written back.
+
+    Returns:
+        LockResult indicating whether the update succeeded.
+    """
+    path = _session_index_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    lock_path = path.parent / "session.json.lock"
+    result, fd = _acquire_lock(lock_path, CLAUDE_STATE_LOCK_TIMEOUT_MS)
+    if result != LockResult.ACQUIRED:
+        return result
+
+    try:
+        # Read current index under lock
+        try:
+            if path.exists():
+                raw = path.read_text(encoding="utf-8")
+                data = json.loads(raw)
+                current = ContractSessionIndex(**data)
+            else:
+                current = ContractSessionIndex()
+        except Exception:
+            current = ContractSessionIndex()
+
+        # Apply mutation
+        updated = mutate_fn(current)
+
+        # Write back
+        _atomic_write(path, updated.model_dump_json(indent=2))
         return LockResult.ACQUIRED
     finally:
         _release_lock(fd)
@@ -358,6 +405,7 @@ def gc_stale_runs() -> int:
 HANDLERS: dict[str, Callable] = {
     "read_session_index": read_session_index,
     "write_session_index": write_session_index,
+    "update_session_index": update_session_index,
     "read_run_context": read_run_context,
     "write_run_context": write_run_context,
     "gc_stale_runs": gc_stale_runs,

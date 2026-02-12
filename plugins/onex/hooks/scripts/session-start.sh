@@ -301,7 +301,9 @@ _init_session_state() {
     mkdir -p "${HOME}/.claude/state/runs" 2>/dev/null || true
 
     # Guard: prevent duplicate background spawns for same session
-    local guard_file="/tmp/omniclaude-state-init-${SESSION_ID}.pid"
+    local safe_id
+    safe_id=$(echo "$SESSION_ID" | tr -cd 'a-zA-Z0-9-')
+    local guard_file="/tmp/omniclaude-state-init-${safe_id}.pid"
     if [[ -f "$guard_file" ]] && kill -0 "$(cat "$guard_file" 2>/dev/null)" 2>/dev/null; then
         log "Session state init already running (PID $(cat "$guard_file")), skipping"
         return 0

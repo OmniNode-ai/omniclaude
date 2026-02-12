@@ -74,7 +74,7 @@ def cmd_init(stdin_data: dict) -> dict:
     """Initialize a new run.
 
     Reads session_id from stdin, creates run doc, transitions through FSM,
-    updates session index with flock, triggers GC check.
+    updates session index atomically with flock, triggers GC check.
 
     Returns:
         {"run_id": "...", "state": "run_active"} on success, {} on failure.
@@ -85,9 +85,8 @@ def cmd_init(stdin_data: dict) -> dict:
         ContractRunContext,
         LockResult,
         gc_stale_runs,
-        read_session_index,
+        update_session_index,
         write_run_context,
-        write_session_index,
     )
 
     session_id = _get_key(stdin_data, "session_id", "sessionId")
@@ -113,16 +112,17 @@ def cmd_init(stdin_data: dict) -> dict:
     )
     write_run_context(ctx)
 
-    # Update session index with flock
-    index = read_session_index()
-    index.active_run_id = run_id
-    if run_id not in index.recent_run_ids:
-        index.recent_run_ids.insert(0, run_id)
-        # Keep only last 20 run IDs
-        index.recent_run_ids = index.recent_run_ids[:20]
-    index.updated_at = now
+    # Atomic read-modify-write of session index (eliminates TOCTOU race)
+    def _mutate_init(index):
+        index.active_run_id = run_id
+        if run_id not in index.recent_run_ids:
+            index.recent_run_ids.insert(0, run_id)
+            # Keep only last 20 run IDs
+            index.recent_run_ids = index.recent_run_ids[:20]
+        index.updated_at = now
+        return index
 
-    lock_result = write_session_index(index)
+    lock_result = update_session_index(_mutate_init)
     if lock_result == LockResult.TIMEOUT:
         print("WARNING: Lock timeout writing session index", file=sys.stderr)
         # Run doc was already written; index update failed. Fail-open.
@@ -188,7 +188,7 @@ def cmd_end(stdin_data: dict) -> dict:
 def cmd_set_active_run(stdin_data: dict) -> dict:
     """Set the active run ID in the session index.
 
-    Reads run_id from stdin, validates non-empty, writes to session.json.
+    Reads run_id from stdin, validates non-empty, atomically updates session.json.
 
     Returns:
         {"active_run_id": "..."} on success, {} on failure.
@@ -196,8 +196,7 @@ def cmd_set_active_run(stdin_data: dict) -> dict:
     from node_session_state_effect import (
         LockResult,
         read_run_context,
-        read_session_index,
-        write_session_index,
+        update_session_index,
     )
 
     run_id = _get_key(stdin_data, "run_id", "runId")
@@ -213,11 +212,15 @@ def cmd_set_active_run(stdin_data: dict) -> dict:
             file=sys.stderr,
         )
 
-    index = read_session_index()
-    index.active_run_id = run_id
-    index.updated_at = _now_iso()
+    # Atomic read-modify-write of session index (eliminates TOCTOU race)
+    now = _now_iso()
 
-    lock_result = write_session_index(index)
+    def _mutate_set_active(index):
+        index.active_run_id = run_id
+        index.updated_at = now
+        return index
+
+    lock_result = update_session_index(_mutate_set_active)
     if lock_result == LockResult.TIMEOUT:
         print("WARNING: Lock timeout writing session index", file=sys.stderr)
         return {}

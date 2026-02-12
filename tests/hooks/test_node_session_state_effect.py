@@ -402,6 +402,7 @@ class TestHandlerRegistry:
         expected = {
             "read_session_index",
             "write_session_index",
+            "update_session_index",
             "read_run_context",
             "write_run_context",
             "gc_stale_runs",
