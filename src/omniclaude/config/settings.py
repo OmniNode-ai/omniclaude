@@ -441,7 +441,7 @@ class Settings(BaseSettings):
         Returns:
             PostgreSQL DSN connection string.
         """
-        raw_url = self.omniclaude_db_url.get_secret_value()
+        raw_url = self.omniclaude_db_url.get_secret_value().strip()
         if raw_url:
             if not raw_url.startswith(("postgresql://", "postgres://")):
                 raise ValueError(
