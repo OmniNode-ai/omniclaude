@@ -311,7 +311,11 @@ if skip_to:
 
         # Populate pipeline state from the validated checkpoint
         cp = checkpoint["checkpoint"]
-        phase_data["completed_at"] = cp.get("timestamp_utc", datetime.now(timezone.utc).isoformat())
+        timestamp_utc = cp.get("timestamp_utc")
+        if not timestamp_utc:
+            print(f"Warning: Checkpoint for '{phase_name}' is missing 'timestamp_utc'. Using sentinel value.")
+            timestamp_utc = "unknown"
+        phase_data["completed_at"] = timestamp_utc
         phase_data["artifacts"] = extract_artifacts_from_checkpoint(cp)
         save_state(state, state_path)
         print(f"Restored phase '{phase_name}' from checkpoint (attempt {cp.get('attempt_number', '?')})")
@@ -545,7 +549,7 @@ def read_checkpoint(ticket_id, run_id, phase_name):
         ]
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         if proc.returncode != 0:
-            return {"success": False, "error": f"checkpoint read failed: {proc.stderr}"}
+            return {"success": False, "error": f"checkpoint read failed: {proc.stdout or proc.stderr}"}
         return json.loads(proc.stdout)
     except Exception as e:
         return {"success": False, "error": str(e)}
@@ -562,7 +566,7 @@ def validate_checkpoint(ticket_id, run_id, phase_name):
         ]
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         if proc.returncode != 0:
-            return {"is_valid": False, "errors": [f"validation failed: {proc.stderr}"]}
+            return {"is_valid": False, "errors": [f"validation failed: {proc.stdout or proc.stderr}"]}
         return json.loads(proc.stdout)
     except Exception as e:
         return {"success": False, "is_valid": False, "errors": [str(e)]}
@@ -624,6 +628,7 @@ def build_phase_payload(phase_name, state, result):
             "label_applied_at": datetime.now(timezone.utc).isoformat(),
         }
 
+    print(f"Warning: build_phase_payload called with unrecognized phase '{phase_name}'. Returning empty payload.")
     return {}
 
 
@@ -635,6 +640,9 @@ def get_checkpoint_attempt_number(ticket_id, run_id, phase_name):
              "--ticket-id", ticket_id, "--run-id", run_id],
             capture_output=True, text=True, timeout=30,
         )
+        if list_result_raw.returncode != 0:
+            print(f"Warning: checkpoint list failed for phase '{phase_name}': {list_result_raw.stdout or list_result_raw.stderr}")
+            return 1
         list_result = json.loads(list_result_raw.stdout)
         if list_result.get("success"):
             count = sum(
@@ -642,8 +650,8 @@ def get_checkpoint_attempt_number(ticket_id, run_id, phase_name):
                 if cp.get("phase") == phase_name
             )
             return count + 1
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Warning: checkpoint attempt number lookup failed for phase '{phase_name}': {e}")
     return 1
 
 

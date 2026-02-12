@@ -432,8 +432,13 @@ After a successful commit (or stage in `--no-commit` mode), write a checkpoint i
 if checkpoint_arg and checkpoint_ticket_id and checkpoint_run_id:
     try:
         import subprocess as _sp, sys
+        from pathlib import Path as _Path
+        _plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT", "")
+        if not _plugin_root:
+            # Hardcoded known location relative to home when CLAUDE_PLUGIN_ROOT is not set
+            _plugin_root = str(_Path.home() / ".claude" / "plugins" / "onex")
         _CHECKPOINT_MANAGER = os.path.join(
-            os.environ.get("CLAUDE_PLUGIN_ROOT", ""),
+            _plugin_root,
             "hooks", "lib", "checkpoint_manager.py"
         )
         # Get current HEAD SHA for the checkpoint

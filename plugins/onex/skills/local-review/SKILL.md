@@ -56,6 +56,7 @@ Review local changes, fix issues, commit fixes, and iterate until clean or max i
 /local-review --max-iterations 5        # Limit iterations
 /local-review --files "src/**/*.py"     # Specific files only
 /local-review --no-fix                  # Report only mode
+/local-review --checkpoint OMN-2144:abcd1234  # Write checkpoints per iteration
 ```
 
 ## Arguments
@@ -70,6 +71,7 @@ Parse arguments from `$ARGUMENTS`:
 | `--files <glob>` | all | Glob pattern to limit scope |
 | `--no-fix` | false | Report only, don't attempt fixes |
 | `--no-commit` | false | Fix but don't commit (stage only) |
+| `--checkpoint <ticket:run>` | none | Write checkpoint after each iteration (format: `ticket_id:run_id`) |
 
 ## Dispatch Contracts (Execution-Critical)
 

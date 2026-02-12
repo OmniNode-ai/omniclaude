@@ -111,7 +111,12 @@ class _ContainerStub:
         """Return a no-op callable for any missing attribute access."""
 
         def _noop(*args: Any, **kwargs: Any) -> None:  # noqa: ANN401
-            return None
+            sys.stderr.write(
+                f"WARNING: _ContainerStub.__getattr__ called for '{name}' "
+                f"with args={args}, kwargs={kwargs}. "
+                f"This may indicate a handler is using container features "
+                f"not available in CLI mode.\n"
+            )
 
         return _noop
 
@@ -270,6 +275,7 @@ def _cli_write(args: argparse.Namespace) -> int:
             repo_commit_map=repo_commit_map,
             artifact_paths=artifact_paths,
             payload=payload,
+            timestamp=args.timestamp,
         )
 
         # Validate the checkpoint data via Pydantic before writing
@@ -525,6 +531,12 @@ def main(argv: list[str] | None = None) -> int:
         "--payload",
         default="{}",
         help="JSON object with phase-specific payload fields",
+    )
+    write_parser.add_argument(
+        "--timestamp",
+        default=None,
+        help="ISO-8601 UTC timestamp for the checkpoint (default: now). "
+        "Accepts an explicit value for deterministic testing.",
     )
     write_parser.set_defaults(func=_cli_write)
 
