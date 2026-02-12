@@ -507,19 +507,24 @@ def reconcile_outputs(
                     merged.update(v)  # type: ignore[union-attr]
                 merged_values[field] = merged
                 value = merged
+                ortho_rationale = (
+                    f"Agents modified non-overlapping aspects. "
+                    f"Merged from: {', '.join(sorted_agents)}."
+                )
             else:
                 value = agent_values[first_agent]
                 merged_values[field] = value
+                ortho_rationale = (
+                    f"Orthogonal non-dict values; selected from "
+                    f"{first_agent} (lexically first)."
+                )
             auto_resolved.append(field)
             field_decisions[field] = FieldDecision(
                 field=field,
                 conflict_type=ORTHOGONAL,
                 sources=tuple(sorted_agents),
                 chosen_value=value,
-                rationale=(
-                    f"Agents modified non-overlapping aspects. "
-                    f"Merged from: {', '.join(sorted_agents)}."
-                ),
+                rationale=ortho_rationale,
                 needs_approval=False,
                 needs_review=False,
             )
