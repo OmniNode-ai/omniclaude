@@ -27,14 +27,32 @@ logger = logging.getLogger(__name__)
 # Add config for type-safe settings (Pydantic Settings framework)
 from omniclaude.config import settings
 
-# Database configuration - all values from type-safe Pydantic Settings
-DB_CONFIG = {
-    "host": settings.postgres_host,
-    "port": settings.postgres_port,
-    "database": settings.postgres_database,
-    "user": settings.postgres_user,
-    "password": settings.get_effective_postgres_password(),
-}
+# Database configuration
+# Check for OMNICLAUDE_DB_URL first (preferred), fallback to individual settings
+_omniclaude_db_url = os.environ.get("OMNICLAUDE_DB_URL", "")
+
+if _omniclaude_db_url:
+    # Parse URL into components for psycopg2 (which doesn't accept DSN URLs directly
+    # via SimpleConnectionPool -- we extract components)
+    from urllib.parse import urlparse
+
+    _parsed = urlparse(_omniclaude_db_url)
+    DB_CONFIG = {
+        "host": _parsed.hostname or "",
+        "port": _parsed.port or 5432,
+        "database": _parsed.path.lstrip("/") if _parsed.path else "",
+        "user": _parsed.username or "",
+        "password": _parsed.password or "",
+    }
+else:
+    # Fallback to individual POSTGRES_* settings
+    DB_CONFIG = {
+        "host": settings.postgres_host,
+        "port": settings.postgres_port,
+        "database": settings.postgres_database,
+        "user": settings.postgres_user,
+        "password": settings.get_effective_postgres_password(),
+    }
 
 # Connection pool (lazy initialization)
 _connection_pool: SimpleConnectionPool | None = None

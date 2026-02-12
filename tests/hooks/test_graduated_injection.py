@@ -18,7 +18,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -959,21 +958,8 @@ class TestHandlerIntegration:
         assert "[Provisional]" not in result.context_markdown
 
     @pytest.mark.asyncio
-    async def test_domain_with_provisional_falls_back_with_warning(self) -> None:
-        """Domain filter + include_provisional=True falls back to validated-only with warning."""
-        validated_row = {
-            "pattern_id": "val-1",
-            "domain": "testing",
-            "title": "Validated Pattern",
-            "description": "A validated pattern.",
-            "confidence": 0.9,
-            "usage_count": 10,
-            "success_rate": 0.8,
-        }
-
-        mock_runtime = MagicMock()
-        mock_runtime.call = AsyncMock(return_value=[validated_row])
-
+    async def test_load_patterns_disabled_returns_empty_with_warning(self) -> None:
+        """DB pattern loading is disabled (OMN-2058) — returns empty result with warning."""
         config = ContextInjectionConfig(
             enabled=True,
             db_enabled=True,
@@ -981,52 +967,17 @@ class TestHandlerIntegration:
             limits=InjectionLimitsConfig(include_provisional=True),
         )
         handler = HandlerContextInjection(config=config)
-        handler._get_repository_runtime = AsyncMock(return_value=mock_runtime)
 
         result = await handler._load_patterns_from_database(domain="testing")
 
-        # Should call list_patterns_by_domain (not list_injectable_patterns)
-        mock_runtime.call.assert_called_once()
-        call_args = mock_runtime.call.call_args
-        assert call_args[0][0] == "list_patterns_by_domain"
-
-        # Should include a warning about the fallback
+        # Should return empty patterns (DB access disabled)
+        assert len(result.patterns) == 0
         assert len(result.warnings) == 1
-        assert "include_provisional=True ignored" in result.warnings[0]
-
-        # Should still return the validated patterns
-        assert len(result.patterns) == 1
-        assert result.patterns[0].pattern_id == "val-1"
+        assert "OMN-2059" in result.warnings[0]
 
     @pytest.mark.asyncio
-    async def test_list_injectable_patterns_called_when_provisional_no_domain(
-        self,
-    ) -> None:
-        """include_provisional=True without domain dispatches to list_injectable_patterns."""
-        prov_row = {
-            "pattern_id": "prov-1",
-            "domain": "general",
-            "title": "Provisional Pattern",
-            "description": "A provisional pattern.",
-            "confidence": 0.7,
-            "usage_count": 3,
-            "success_rate": 0.6,
-            "lifecycle_state": "provisional",
-        }
-        val_row = {
-            "pattern_id": "val-1",
-            "domain": "testing",
-            "title": "Validated Pattern",
-            "description": "A validated pattern.",
-            "confidence": 0.9,
-            "usage_count": 10,
-            "success_rate": 0.8,
-            "lifecycle_state": "validated",
-        }
-
-        mock_runtime = MagicMock()
-        mock_runtime.call = AsyncMock(return_value=[val_row, prov_row])
-
+    async def test_load_patterns_disabled_without_domain(self) -> None:
+        """DB pattern loading is disabled even without domain filter."""
         config = ContextInjectionConfig(
             enabled=True,
             db_enabled=True,
@@ -1034,23 +985,10 @@ class TestHandlerIntegration:
             limits=InjectionLimitsConfig(include_provisional=True),
         )
         handler = HandlerContextInjection(config=config)
-        handler._get_repository_runtime = AsyncMock(return_value=mock_runtime)
 
         result = await handler._load_patterns_from_database(domain=None)
 
-        # Should call list_injectable_patterns (not list_validated_patterns)
-        mock_runtime.call.assert_called_once()
-        call_args = mock_runtime.call.call_args
-        assert call_args[0][0] == "list_injectable_patterns"
-
-        # Should return both validated and provisional patterns
-        assert len(result.patterns) == 2
-        ids = {p.pattern_id for p in result.patterns}
-        assert ids == {"val-1", "prov-1"}
-
-        # Provisional pattern should have lifecycle_state set
-        prov = next(p for p in result.patterns if p.pattern_id == "prov-1")
-        assert prov.lifecycle_state == "provisional"
-
-        # No warnings expected (no fallback needed)
-        assert len(result.warnings) == 0
+        # Should return empty patterns (DB access disabled)
+        assert len(result.patterns) == 0
+        assert len(result.warnings) == 1
+        assert "patterns_read_disabled_pending_api" in result.warnings[0]

@@ -152,6 +152,14 @@ class Settings(BaseSettings):
         default="",
         description="PostgreSQL password. REQUIRED when ENABLE_POSTGRES=true.",
     )
+    omniclaude_db_url: str = Field(
+        default="",
+        description=(
+            "Full PostgreSQL connection URL for omniclaude database. "
+            "When set, takes precedence over individual POSTGRES_* fields. "
+            "Format: postgresql://user:password@host:port/dbname"
+        ),
+    )
     enable_postgres: bool = Field(
         default=False,
         description=(
@@ -402,6 +410,26 @@ class Settings(BaseSettings):
             f"{driver}://{encoded_user}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_database}"
         )
+
+    def get_omniclaude_dsn(self, async_driver: bool = False) -> str:
+        """Build omniclaude database connection string.
+
+        Precedence:
+            1. OMNICLAUDE_DB_URL (if set)
+            2. Individual POSTGRES_* fields (fallback)
+
+        Args:
+            async_driver: If True, replace postgresql:// with postgresql+asyncpg://.
+
+        Returns:
+            PostgreSQL DSN connection string.
+        """
+        if self.omniclaude_db_url:
+            dsn = self.omniclaude_db_url
+            if async_driver and dsn.startswith("postgresql://"):
+                dsn = "postgresql+asyncpg://" + dsn[len("postgresql://") :]
+            return dsn
+        return self.get_postgres_dsn(async_driver=async_driver)
 
     def validate_required_services(self) -> list[str]:
         """Validate that required services are configured.

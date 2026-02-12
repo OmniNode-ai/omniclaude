@@ -1,6 +1,10 @@
 #!/bin/bash
 # PostgreSQL Database Initialization Script for OmniClaude
 # Runs automatically when the database container starts for the first time
+#
+# Connection precedence:
+#   1. OMNICLAUDE_DB_URL (if set, components are extracted automatically)
+#   2. Individual POSTGRES_* environment variables (fallback)
 
 set -e
 
@@ -10,7 +14,8 @@ echo "Initializing OmniClaude database..."
 POSTGRES_HOST="${POSTGRES_HOST:-localhost}"
 
 # Support both POSTGRES_DB and POSTGRES_DATABASE environment variable names
-POSTGRES_DB="${POSTGRES_DB:-${POSTGRES_DATABASE:-postgres}}"
+# Default changed from 'postgres' to 'omniclaude' as part of DB-SPLIT-07 (OMN-2058)
+POSTGRES_DB="${POSTGRES_DB:-${POSTGRES_DATABASE:-omniclaude}}"
 
 # Create extensions if needed
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --host="$POSTGRES_HOST" <<-EOSQL

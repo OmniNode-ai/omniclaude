@@ -252,6 +252,6 @@ class TestContextInjectionConfigDatabaseDsn:
 
         assert "192.168.86.200" in dsn  # Default host
         assert "5436" in dsn  # Default port
-        assert "omninode_bridge" in dsn  # Default db name
+        assert "omniclaude" in dsn  # Default db name
         assert "postgres" in dsn  # Default user
         assert "mypassword" in dsn  # Password we set

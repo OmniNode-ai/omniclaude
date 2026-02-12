@@ -98,7 +98,7 @@ class TestDatabaseErrorHandling:
         with patch.object(execute, "execute_query") as mock_query:
             mock_query.return_value = {
                 "success": False,
-                "error": 'database "omninode_bridge" does not exist',
+                "error": 'database "omniclaude" does not exist',
                 "rows": [],
             }
 

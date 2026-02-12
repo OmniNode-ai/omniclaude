@@ -81,7 +81,7 @@ class TestCheckInfrastructure:
                     "rows": [{"count": 34}],
                     "host": "192.168.86.200",
                     "port": "5436",
-                    "database": "omninode_bridge",
+                    "database": "omniclaude",
                 },
                 {
                     "success": True,

@@ -400,13 +400,13 @@ class ManifestInjectionStorage:
         Args:
             db_host: PostgreSQL host (default: env POSTGRES_HOST or localhost)
             db_port: PostgreSQL port (default: env POSTGRES_PORT or 5436)
-            db_name: Database name (default: env POSTGRES_DATABASE or omninode_bridge)
+            db_name: Database name (default: env POSTGRES_DATABASE or omniclaude)
             db_user: Database user (default: env POSTGRES_USER or postgres)
             db_password: Database password (default: env POSTGRES_PASSWORD)
         """
         self.db_host = db_host or os.environ.get("POSTGRES_HOST", "localhost")
         self.db_port = db_port or int(os.environ.get("POSTGRES_PORT", "5436"))
-        self.db_name = db_name or os.environ.get("POSTGRES_DATABASE", "omninode_bridge")
+        self.db_name = db_name or os.environ.get("POSTGRES_DATABASE", "omniclaude")
         self.db_user = db_user or os.environ.get("POSTGRES_USER", "postgres")
         self.db_password = db_password or os.environ.get("POSTGRES_PASSWORD")
         if not self.db_password:
@@ -2930,7 +2930,7 @@ class ManifestInjector:
             pg_port = int(os.environ.get("POSTGRES_PORT", "5436"))
             pg_user = os.environ.get("POSTGRES_USER", "postgres")
             pg_password = os.environ.get("POSTGRES_PASSWORD", "")
-            pg_database = os.environ.get("POSTGRES_DATABASE", "omninode_bridge")
+            pg_database = os.environ.get("POSTGRES_DATABASE", "omniclaude")
 
             if not pg_password:
                 self.logger.warning(
@@ -4423,7 +4423,7 @@ class ManifestInjector:
                     "postgresql": {
                         "host": os.environ.get("POSTGRES_HOST", "localhost"),
                         "port": int(os.environ.get("POSTGRES_PORT", "5436")),
-                        "database": os.environ.get("POSTGRES_DATABASE", "omninode_bridge"),
+                        "database": os.environ.get("POSTGRES_DATABASE", "omniclaude"),
                         "note": "Connection details only - schemas unavailable",
                     },
                     "kafka": {

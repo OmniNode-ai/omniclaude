@@ -49,10 +49,7 @@ from omniclaude.hooks.models_injection_tracking import (
 from omniclaude.hooks.schemas import ContextSource, ModelHookContextInjectedPayload
 
 if TYPE_CHECKING:
-    import asyncpg
-    from omnibase_core.models.contracts import ModelDbRepositoryContract
     from omnibase_core.types.type_json import StrictJsonPrimitive  # noqa: TC004
-    from omnibase_infra.runtime.db import PostgresRepositoryRuntime
 
 
 # Exception classes for graceful degradation
@@ -280,24 +277,17 @@ class HandlerContextInjection:
     def __init__(
         self,
         config: ContextInjectionConfig | None = None,
-        runtime: PostgresRepositoryRuntime | None = None,
+        runtime: object | None = None,
     ) -> None:
         """Initialize the handler.
 
         Args:
             config: Optional configuration. If None, loads from environment at init time.
-            runtime: Optional PostgresRepositoryRuntime for contract-driven database access.
-                If None, creates one from config when db_enabled is True.
-                When provided externally, lifecycle is managed by caller.
+            runtime: Deprecated. Ignored (OMN-2058). Retained for API compatibility.
         """
         self._config = (
             config if config is not None else ContextInjectionConfig.from_env()
         )
-        self._runtime: PostgresRepositoryRuntime | None = runtime
-        self._pool: asyncpg.Pool | None = None
-        self._contract: ModelDbRepositoryContract | None = None
-        # Track whether we created the runtime (and thus should close pool)
-        self._runtime_owned = runtime is None
 
     @property
     def handler_id(self) -> str:
@@ -305,23 +295,12 @@ class HandlerContextInjection:
         return "handler-context-injection"
 
     async def close(self) -> None:
-        """Close database connections.
+        """Close handler resources.
 
-        Should be called when the handler is no longer needed to release
-        database pool resources. Safe to call multiple times.
-
-        Only closes resources if the runtime was created internally
-        (not provided externally via constructor).
+        No-op after OMN-2058 (direct DB access removed).
+        Retained for API compatibility. Safe to call multiple times.
         """
-        if self._pool is not None and self._runtime_owned:
-            try:
-                await self._pool.close()
-            except Exception as e:
-                logger.warning(f"Error closing database pool: {e}")
-            self._pool = None
-        # Clear references regardless of ownership to allow GC and prevent stale state
-        self._runtime = None
-        self._contract = None
+        pass
 
     def _emit_injection_record(
         self,
@@ -592,93 +571,16 @@ class HandlerContextInjection:
     # Database Methods
     # =========================================================================
 
-    async def _get_repository_runtime(self) -> PostgresRepositoryRuntime:
-        """Get or create the contract-driven repository runtime.
-
-        Creates a PostgresRepositoryRuntime using the learned_patterns contract.
-        This is the contract-driven approach from OMN-1779 - no adapter classes,
-        just runtime + contract.
-
-        Returns:
-            Initialized PostgresRepositoryRuntime.
+    async def _get_repository_runtime(self) -> None:
+        """DISABLED (OMN-2058): No longer connects to learned_patterns DB.
 
         Raises:
-            PatternConnectionError: If connection fails or contract loading fails.
+            PatternConnectionError: Always, as direct DB access is disabled.
         """
-        if self._runtime is not None:
-            return self._runtime
-
-        # Lazy import to avoid circular dependencies
-        try:
-            import asyncpg
-            import yaml
-            from omnibase_core.models.contracts import ModelDbRepositoryContract
-            from omnibase_infra.runtime.db import PostgresRepositoryRuntime
-            from pydantic import ValidationError
-        except ImportError as e:
-            raise PatternConnectionError(
-                f"Contract runtime unavailable - dependencies not installed: {e}"
-            ) from e
-
-        cfg = self._config
-
-        # Load contract YAML
-        try:
-            if cfg.db_contract_path:
-                contract_path = Path(cfg.db_contract_path)
-            else:
-                # Use bundled contract
-                contract_path = (
-                    Path(__file__).parent
-                    / "contracts"
-                    / "repository_learned_patterns.yaml"
-                )
-
-            if not contract_path.exists():
-                raise PatternConnectionError(
-                    f"Contract file not found: {contract_path}"
-                )
-
-            with contract_path.open() as f:
-                contract_data = yaml.safe_load(f)
-
-            self._contract = ModelDbRepositoryContract.model_validate(contract_data)
-        except ValidationError as e:
-            # Preserve field-level validation errors from Pydantic
-            raise PatternConnectionError(
-                f"Contract validation failed for {contract_path}: {e.error_count()} errors - {e}"
-            ) from e
-        except Exception as e:
-            raise PatternConnectionError(
-                f"Failed to load repository contract: {e}"
-            ) from e
-
-        # Create asyncpg pool
-        try:
-            dsn = cfg.get_db_dsn()  # noqa: secrets - DSN from config, not hardcoded
-            self._pool = await asyncpg.create_pool(
-                dsn,
-                min_size=cfg.db_pool_min_size,
-                max_size=cfg.db_pool_max_size,
-                command_timeout=cfg.timeout_ms / 1000.0,
-            )
-        except Exception as e:
-            # Clear contract to ensure clean state for retry
-            self._contract = None
-            raise PatternConnectionError(f"Failed to create database pool: {e}") from e
-
-        # Create runtime - wrap in try/except to handle partial initialization
-        try:
-            self._runtime = PostgresRepositoryRuntime(self._pool, self._contract)
-        except Exception as e:
-            # Close pool on runtime creation failure to prevent resource leak
-            if self._pool is not None:
-                await self._pool.close()
-            self._pool = None
-            self._contract = None
-            raise PatternConnectionError(f"Failed to create runtime: {e}") from e
-
-        return self._runtime
+        raise PatternConnectionError(
+            "Direct learned_patterns DB access disabled (OMN-2058). "
+            "Pattern reads pending omniintelligence API (OMN-2059)."
+        )
 
     async def _load_patterns_from_database(
         self,
@@ -687,112 +589,20 @@ class HandlerContextInjection:
     ) -> ModelLoadPatternsResult:
         """Load patterns from the database using contract-driven runtime.
 
-        Uses PostgresRepositoryRuntime with the learned_patterns contract.
-        This is the contract-driven approach from OMN-1779.
+        DISABLED (OMN-2058): learned_patterns table moved to omniintelligence
+        as part of DB-SPLIT-07. Direct DB reads are disabled pending API
+        integration (OMN-2059).
 
-        Args:
-            domain: Domain to filter by (None = all domains).
-            project_scope: Project scope to filter by (currently unused).
-
-        Returns:
-            ModelLoadPatternsResult with patterns and source attribution.
-
-        Raises:
-            PatternConnectionError: If database connection fails.
-            PatternPersistenceError: If query fails.
+        Returns empty result with structured warning.
         """
-        cfg = self._config
-        runtime = await self._get_repository_runtime()
-
-        # Get extra patterns for filtering (will be filtered by confidence/domain later)
-        # Use limits config to stay synchronized with select_patterns_for_injection
-        limit = cfg.limits.max_patterns_per_injection * 2
-        warnings: list[str] = []
-
-        try:
-            # Determine which operation to call based on include_provisional config (OMN-2042)
-            include_provisional = cfg.limits.include_provisional
-
-            if include_provisional and not domain:
-                # Use graduated injection query that includes validated + provisional
-                rows = await runtime.call(
-                    "list_injectable_patterns",
-                    limit,  # positional arg
-                )
-            elif domain:
-                if include_provisional:
-                    msg = (
-                        f"include_provisional=True ignored: domain filter '{domain}' "
-                        f"is active but domain-filtered graduated injection is not yet "
-                        f"implemented (see OMN-2042 follow-up). Returning VALIDATED "
-                        f"patterns only."
-                    )
-                    logger.warning(msg)
-                    warnings.append(msg)
-                # Use domain-filtered operation (validated only; graduated domain query is a follow-up)
-                rows = await runtime.call(
-                    "list_patterns_by_domain",
-                    domain,  # positional arg
-                    limit,  # positional arg
-                )
-            else:
-                rows = await runtime.call(
-                    "list_validated_patterns",
-                    limit,  # positional arg
-                )
-        except Exception as e:
-            raise PatternPersistenceError(f"Pattern query failed: {e}") from e
-
-        # Convert row dicts to PatternRecord objects
-        patterns: list[ModelPatternRecord] = []
-        if rows:
-            for row in rows:
-                try:
-                    pattern_id = row.get("pattern_id")
-                    if not pattern_id:
-                        logger.warning("Skipping row with missing pattern_id")
-                        continue
-
-                    # Map lifecycle_state from DB (OMN-2042)
-                    # list_injectable_patterns returns status as lifecycle_state;
-                    # list_validated_patterns does not include it (defaults to None/"validated")
-                    raw_lifecycle = row.get("lifecycle_state")
-                    lifecycle_state = (
-                        str(raw_lifecycle) if raw_lifecycle is not None else None
-                    )
-
-                    # Map evidence_tier from DB (OMN-2044)
-                    raw_evidence_tier = row.get("evidence_tier")
-                    evidence_tier = (
-                        str(raw_evidence_tier)
-                        if raw_evidence_tier is not None
-                        else None
-                    )
-
-                    patterns.append(
-                        PatternRecord(
-                            pattern_id=str(pattern_id),
-                            domain=_safe_str(row.get("domain")),
-                            title=_safe_str(row.get("title")),
-                            description=_safe_str(row.get("description")),
-                            confidence=_safe_float(row.get("confidence")),
-                            usage_count=_safe_int(row.get("usage_count")),
-                            success_rate=_safe_float(row.get("success_rate")),
-                            example_reference=row.get("example_reference"),
-                            lifecycle_state=lifecycle_state,
-                            evidence_tier=evidence_tier,
-                        )
-                    )
-                except (ValueError, TypeError) as e:
-                    logger.warning(f"Skipping invalid pattern row: {e}")
-                    continue
-
-        # Build source attribution
-        source = f"database:contract:{cfg.db_host}:{cfg.db_port}/{cfg.db_name}"
+        logger.info(
+            "patterns_read_disabled_pending_api: learned_patterns moved to "
+            "omniintelligence (OMN-2059). Returning empty patterns."
+        )
         return ModelLoadPatternsResult(
-            patterns=patterns,
-            source_files=[Path(source)],
-            warnings=warnings,
+            patterns=[],
+            source_files=[],
+            warnings=["patterns_read_disabled_pending_api (OMN-2059)"],
         )
 
     def _format_source_attribution(self, source_files: list[Path]) -> str:
