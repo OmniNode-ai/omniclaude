@@ -119,16 +119,16 @@ COMMENT ON TABLE claude_session_event_idempotency IS 'Idempotency tracking for s
 -- ============================================================================
 DO $$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'claude_session_snapshots') THEN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'claude_session_snapshots' AND table_schema = 'public') THEN
         RAISE EXCEPTION 'claude_session_snapshots table was not created';
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'claude_session_prompts') THEN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'claude_session_prompts' AND table_schema = 'public') THEN
         RAISE EXCEPTION 'claude_session_prompts table was not created';
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'claude_session_tools') THEN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'claude_session_tools' AND table_schema = 'public') THEN
         RAISE EXCEPTION 'claude_session_tools table was not created';
     END IF;
-    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'claude_session_event_idempotency') THEN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'claude_session_event_idempotency' AND table_schema = 'public') THEN
         RAISE EXCEPTION 'claude_session_event_idempotency table was not created';
     END IF;
     RAISE NOTICE 'All claude_session_* tables created successfully (OMN-2058)';

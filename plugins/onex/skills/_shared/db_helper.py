@@ -28,8 +28,11 @@ logger = logging.getLogger(__name__)
 from omniclaude.config import settings
 
 # Database configuration
-# Check for OMNICLAUDE_DB_URL first (preferred), fallback to individual settings
-_omniclaude_db_url = os.environ.get("OMNICLAUDE_DB_URL", "")
+# Use Pydantic Settings as the single source of truth for OMNICLAUDE_DB_URL.
+# The settings object reads from environment variables automatically, so this
+# stays consistent with the rest of the codebase rather than diverging via
+# a separate os.environ.get() code path.
+_omniclaude_db_url = settings.omniclaude_db_url
 
 if _omniclaude_db_url:
     # Parse URL into components for psycopg2 (which doesn't accept DSN URLs directly

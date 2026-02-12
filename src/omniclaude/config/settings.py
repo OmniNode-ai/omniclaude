@@ -469,35 +469,38 @@ class Settings(BaseSettings):
 
         # =====================================================================
         # POSTGRESQL VALIDATION
-        # When enabled, ALL connection parameters must be explicitly configured.
+        # When enabled, either OMNICLAUDE_DB_URL (full DSN) must be set, or
+        # ALL individual POSTGRES_* connection parameters must be configured.
         # No localhost defaults to prevent silent local connections in production.
         # =====================================================================
         if self.enable_postgres:
-            if not self.postgres_host:
-                errors.append(
-                    "POSTGRES_HOST is required when ENABLE_POSTGRES=true. "
-                    "Set POSTGRES_HOST in .env or set ENABLE_POSTGRES=false."
-                )
-            if self.postgres_port == 0:
-                errors.append(
-                    "POSTGRES_PORT is required when ENABLE_POSTGRES=true. "
-                    "Standard port is 5432. Set POSTGRES_PORT in .env or set ENABLE_POSTGRES=false."
-                )
-            if not self.postgres_database:
-                errors.append(
-                    "POSTGRES_DATABASE is required when ENABLE_POSTGRES=true. "
-                    "Set POSTGRES_DATABASE in .env or set ENABLE_POSTGRES=false."
-                )
-            if not self.postgres_user:
-                errors.append(
-                    "POSTGRES_USER is required when ENABLE_POSTGRES=true. "
-                    "Set POSTGRES_USER in .env or set ENABLE_POSTGRES=false."
-                )
-            if not self.postgres_password:
-                errors.append(
-                    "POSTGRES_PASSWORD is required when ENABLE_POSTGRES=true. "
-                    "Set POSTGRES_PASSWORD in .env or set ENABLE_POSTGRES=false."
-                )
+            if not self.omniclaude_db_url:
+                # Only require individual fields when no full DSN is provided
+                if not self.postgres_host:
+                    errors.append(
+                        "POSTGRES_HOST is required when ENABLE_POSTGRES=true and OMNICLAUDE_DB_URL is not set. "
+                        "Set POSTGRES_HOST or OMNICLAUDE_DB_URL in .env, or set ENABLE_POSTGRES=false."
+                    )
+                if self.postgres_port == 0:
+                    errors.append(
+                        "POSTGRES_PORT is required when ENABLE_POSTGRES=true and OMNICLAUDE_DB_URL is not set. "
+                        "Standard port is 5432. Set POSTGRES_PORT or OMNICLAUDE_DB_URL in .env, or set ENABLE_POSTGRES=false."
+                    )
+                if not self.postgres_database:
+                    errors.append(
+                        "POSTGRES_DATABASE is required when ENABLE_POSTGRES=true and OMNICLAUDE_DB_URL is not set. "
+                        "Set POSTGRES_DATABASE or OMNICLAUDE_DB_URL in .env, or set ENABLE_POSTGRES=false."
+                    )
+                if not self.postgres_user:
+                    errors.append(
+                        "POSTGRES_USER is required when ENABLE_POSTGRES=true and OMNICLAUDE_DB_URL is not set. "
+                        "Set POSTGRES_USER or OMNICLAUDE_DB_URL in .env, or set ENABLE_POSTGRES=false."
+                    )
+                if not self.postgres_password:
+                    errors.append(
+                        "POSTGRES_PASSWORD is required when ENABLE_POSTGRES=true and OMNICLAUDE_DB_URL is not set. "
+                        "Set POSTGRES_PASSWORD or OMNICLAUDE_DB_URL in .env, or set ENABLE_POSTGRES=false."
+                    )
 
         # =====================================================================
         # QDRANT VALIDATION

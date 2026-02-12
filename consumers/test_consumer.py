@@ -13,6 +13,7 @@ Usage:
 """
 
 import json
+import os
 import sys
 import time
 import uuid
@@ -36,7 +37,7 @@ sys.path.insert(0, str(SHARED_DIR))
 DB_CONFIG = {
     "host": "localhost",
     "port": 5436,
-    "database": "omninode_bridge",
+    "database": os.environ.get("POSTGRES_DATABASE", "omniclaude"),
     "user": "postgres",
     "password": settings.get_effective_postgres_password(),
 }

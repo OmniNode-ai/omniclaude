@@ -20,7 +20,7 @@ Environment Variables:
     KAFKA_GROUP_ID: Consumer group ID (default: agent-observability-postgres)
     POSTGRES_HOST: PostgreSQL host (REQUIRED - no default)
     POSTGRES_PORT: PostgreSQL port (default: 5436)
-    POSTGRES_DATABASE: Database name (default: omninode_bridge)
+    POSTGRES_DATABASE: Database name (default: omniclaude)
     POSTGRES_USER: Database user (default: postgres)
     POSTGRES_PASSWORD: Database password (REQUIRED - no default for security)
     BATCH_SIZE: Max events per batch (default: 100)
@@ -301,7 +301,7 @@ class AgentActionsConsumer:
                 ),
                 "database": config.get(
                     "postgres_database",
-                    os.getenv("POSTGRES_DATABASE", "omninode_bridge"),
+                    os.getenv("POSTGRES_DATABASE", "omniclaude"),
                 ),
                 "user": config.get(
                     "postgres_user", os.getenv("POSTGRES_USER", "postgres")
