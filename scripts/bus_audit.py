@@ -980,15 +980,6 @@ def _verdict_symbol(verdict: str) -> str:
     return "XX"
 
 
-def _status_marker(status: str) -> str:
-    """Return status with optional warning marker."""
-    if status == EnumTopicStatus.EMPTY:
-        return f"{status}   !!"
-    if status == EnumTopicStatus.MISSING:
-        return f"{status} XX"
-    return status
-
-
 def format_human(
     report: dict[str, Any],
     failures_only: bool = False,
