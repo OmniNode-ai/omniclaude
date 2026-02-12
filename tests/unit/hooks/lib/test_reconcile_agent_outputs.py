@@ -633,3 +633,12 @@ class TestUnflattenConflictingPaths:
         """'a.b' is both a leaf (value 5) and an intermediate (parent of 'a.b.c')."""
         with pytest.raises(ValueError, match="Conflicting paths"):
             unflatten_paths({"a.b": 5, "a.b.c": 10})
+
+    def test_conflicting_deeper_path_first(self) -> None:
+        """Reverse order: deeper path processed first must still raise.
+
+        Before the depth-sort fix, {'a.b.c': 10, 'a.b': 5} silently
+        dropped the deeper key and returned {'a': {'b': 5}}.
+        """
+        with pytest.raises(ValueError, match="Conflicting paths"):
+            unflatten_paths({"a.b.c": 10, "a.b": 5})

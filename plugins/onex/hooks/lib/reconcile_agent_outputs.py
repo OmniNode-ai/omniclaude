@@ -72,7 +72,7 @@ class FieldDecision(BaseModel):
     """Dot-path, e.g. ``db.pool.max_size``."""
 
     conflict_type: ConflictType
-    """One of: IDENTICAL, ORTHOGONAL, LOW_CONFLICT, CONFLICTING, OPPOSITE, AMBIGUOUS."""
+    """One of: IDENTICAL, UNCONTESTED, ORTHOGONAL, LOW_CONFLICT, CONFLICTING, OPPOSITE, AMBIGUOUS."""
 
     sources: list[str]
     """Agent names that touched this field."""
@@ -162,14 +162,14 @@ def unflatten_paths(d: dict[str, Any]) -> dict:
             where ``a.b`` is both a leaf value and an intermediate).
     """
     result: dict[str, Any] = {}
-    for compound_key, value in d.items():
+    for compound_key, value in sorted(d.items(), key=lambda kv: kv[0].count(".")):
         parts = compound_key.split(".")
         target = result
-        for part in parts[:-1]:
+        for idx, part in enumerate(parts[:-1]):
             existing = target.get(part)
             if existing is not None and not isinstance(existing, dict):
                 raise ValueError(
-                    f"Conflicting paths: '{'.'.join(parts[: parts.index(part) + 1])}' "
+                    f"Conflicting paths: '{'.'.join(parts[: idx + 1])}' "
                     f"is both a leaf and an intermediate in key '{compound_key}'"
                 )
             target = target.setdefault(part, {})
