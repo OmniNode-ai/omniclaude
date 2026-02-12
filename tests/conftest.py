@@ -1035,7 +1035,6 @@ def _cleanup_dynamically_loaded_modules():
     # or sys.path manipulation adds a module during tests.
     dynamic_modules = [
         "omniclaude.tests.transformation_event_publisher",  # From test_transformation_event_publisher.py
-        "test_simple_agent_loader__sentinel",  # From test_simple_agent_loader.py (via restore_sys_modules)
     ]
 
     for module_name in dynamic_modules:

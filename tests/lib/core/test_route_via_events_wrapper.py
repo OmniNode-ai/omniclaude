@@ -415,6 +415,234 @@ class TestRoutingEnums:
             assert path.value in VALID_ROUTING_PATHS
 
 
+class TestCandidateListFormatting:
+    """Tests for candidate list structure in routing results (OMN-1980).
+
+    The candidates array is the primary agent selection mechanism:
+    the hook generates candidates, Claude makes the final semantic selection.
+    These tests verify the contract between the routing wrapper and
+    downstream consumers (Claude, local LLM).
+    """
+
+    def test_candidates_array_is_always_present(self):
+        """Candidates array must always exist in routing result, even if empty."""
+        result = route_via_events("test prompt", "corr-123")
+        assert "candidates" in result
+        assert isinstance(result["candidates"], list)
+
+    def test_candidates_populated_on_high_confidence_match(self):
+        """When a good match is found, candidates should include all recommendations."""
+        mock_recs = []
+        for i, (name, score, desc) in enumerate(
+            [
+                ("agent-pr-review", 0.85, "PR review specialist"),
+                ("agent-code-quality", 0.72, "Code quality analysis"),
+                ("agent-testing", 0.60, "Testing agent"),
+            ]
+        ):
+            mock_conf = MagicMock()
+            mock_conf.total = score
+            mock_conf.explanation = f"Match {i}"
+            rec = MagicMock()
+            rec.agent_name = name
+            rec.agent_title = name.replace("agent-", "").replace("-", " ").title()
+            rec.confidence = mock_conf
+            rec.reason = f"Trigger match: '{name}'"
+            rec.is_explicit = False
+            mock_recs.append(rec)
+
+        mock_router = MagicMock()
+        mock_router.route.return_value = mock_recs
+        mock_router.registry = {
+            "agents": {
+                "agent-pr-review": {
+                    "domain_context": "code_review",
+                    "description": "PR review specialist",
+                },
+                "agent-code-quality": {
+                    "domain_context": "code_quality",
+                    "description": "Code quality analysis",
+                },
+                "agent-testing": {
+                    "domain_context": "testing",
+                    "description": "Testing agent",
+                },
+            }
+        }
+
+        with patch("route_via_events_wrapper._get_router", return_value=mock_router):
+            result = route_via_events("review PR 92", "corr-123")
+
+        candidates = result["candidates"]
+        assert len(candidates) == 3
+        assert candidates[0]["name"] == "agent-pr-review"
+        assert candidates[0]["score"] == 0.85
+
+    def test_candidate_object_structure(self):
+        """Each candidate must have name, score, description, and reason."""
+        mock_conf = MagicMock()
+        mock_conf.total = 0.80
+        mock_conf.explanation = "Good match"
+
+        mock_rec = MagicMock()
+        mock_rec.agent_name = "agent-debug"
+        mock_rec.agent_title = "Debug Agent"
+        mock_rec.confidence = mock_conf
+        mock_rec.reason = "Exact match: 'debug'"
+        mock_rec.is_explicit = False
+
+        mock_router = MagicMock()
+        mock_router.route.return_value = [mock_rec]
+        mock_router.registry = {
+            "agents": {
+                "agent-debug": {
+                    "domain_context": "debugging",
+                    "description": "Debug and troubleshoot",
+                }
+            }
+        }
+
+        with patch("route_via_events_wrapper._get_router", return_value=mock_router):
+            result = route_via_events("debug this error", "corr-123")
+
+        candidate = result["candidates"][0]
+        assert "name" in candidate
+        assert "score" in candidate
+        assert "description" in candidate
+        assert "reason" in candidate
+        assert isinstance(candidate["name"], str)
+        assert isinstance(candidate["score"], (int, float))
+        assert isinstance(candidate["description"], str)
+        assert isinstance(candidate["reason"], str)
+
+    def test_candidates_empty_when_no_matches(self):
+        """Candidates should be empty when no trigger matches found."""
+        mock_router = MagicMock()
+        mock_router.route.return_value = []
+        mock_router.registry = {"agents": {}}
+
+        with patch("route_via_events_wrapper._get_router", return_value=mock_router):
+            result = route_via_events("completely unrelated text", "corr-123")
+
+        assert result["candidates"] == []
+
+    def test_candidates_empty_when_router_unavailable(self):
+        """Candidates should be empty when router is not available."""
+        with patch("route_via_events_wrapper._get_router", return_value=None):
+            result = route_via_events("test prompt", "corr-123")
+
+        assert result["candidates"] == []
+
+    def test_candidates_sorted_by_score_descending(self):
+        """Candidates must be sorted by score, highest first."""
+        mock_recs = []
+        for name, score in [
+            ("agent-a", 0.60),
+            ("agent-b", 0.85),
+            ("agent-c", 0.72),
+        ]:
+            mock_conf = MagicMock()
+            mock_conf.total = score
+            mock_conf.explanation = "Match"
+            rec = MagicMock()
+            rec.agent_name = name
+            rec.agent_title = name
+            rec.confidence = mock_conf
+            rec.reason = "Trigger match"
+            rec.is_explicit = False
+            mock_recs.append(rec)
+
+        mock_router = MagicMock()
+        # AgentRouter.route() returns sorted results, so the wrapper
+        # should preserve that ordering when building the candidates list.
+        mock_router.route.return_value = sorted(
+            mock_recs, key=lambda r: r.confidence.total, reverse=True
+        )
+        mock_router.registry = {
+            "agents": {
+                "agent-a": {"description": "Agent A"},
+                "agent-b": {"description": "Agent B"},
+                "agent-c": {"description": "Agent C"},
+            }
+        }
+
+        with patch("route_via_events_wrapper._get_router", return_value=mock_router):
+            result = route_via_events("test prompt", "corr-123")
+
+        scores = [c["score"] for c in result["candidates"]]
+        assert scores == sorted(scores, reverse=True)
+
+    def test_candidates_cleared_on_timeout(self):
+        """Candidates must be empty when routing exceeds timeout."""
+        import time
+
+        mock_conf = MagicMock()
+        mock_conf.total = 0.90
+        mock_conf.explanation = "Good match"
+
+        mock_rec = MagicMock()
+        mock_rec.agent_name = "agent-test"
+        mock_rec.agent_title = "Test Agent"
+        mock_rec.confidence = mock_conf
+        mock_rec.reason = "Match"
+        mock_rec.is_explicit = False
+
+        mock_router = MagicMock()
+        mock_router.route.return_value = [mock_rec]
+        mock_router.registry = {"agents": {"agent-test": {"description": "Test"}}}
+
+        with patch("route_via_events_wrapper._get_router", return_value=mock_router):
+            # Force timeout by setting _start_time far in the past (10 seconds ago),
+            # so elapsed time exceeds the 1ms timeout_ms budget.
+            result = route_via_events(
+                "test", "corr-123", timeout_ms=1, _start_time=time.time() - 10
+            )
+
+        assert result["candidates"] == []
+        assert result["selected_agent"] == DEFAULT_AGENT
+
+    def test_candidates_empty_on_invalid_input(self):
+        """Empty or invalid input should return empty candidates."""
+        result = route_via_events("", "corr-123")
+        assert result["candidates"] == []
+
+        result = route_via_events("  ", "corr-123")
+        assert result["candidates"] == []
+
+    def test_candidates_use_description_from_registry(self):
+        """Candidate descriptions should come from agent registry, not recommendation title."""
+        mock_conf = MagicMock()
+        mock_conf.total = 0.80
+        mock_conf.explanation = "Match"
+
+        mock_rec = MagicMock()
+        mock_rec.agent_name = "agent-deploy"
+        mock_rec.agent_title = "Deploy Agent"  # Title from recommendation
+        mock_rec.confidence = mock_conf
+        mock_rec.reason = "Trigger match"
+        mock_rec.is_explicit = False
+
+        mock_router = MagicMock()
+        mock_router.route.return_value = [mock_rec]
+        mock_router.registry = {
+            "agents": {
+                "agent-deploy": {
+                    "domain_context": "devops",
+                    # Description from registry should take precedence
+                    "description": "Infrastructure deployment specialist",
+                }
+            }
+        }
+
+        with patch("route_via_events_wrapper._get_router", return_value=mock_router):
+            result = route_via_events("deploy to production", "corr-123")
+
+        assert (
+            result["candidates"][0]["description"]
+            == "Infrastructure deployment specialist"
+        )
+
+
 class TestConfidenceThreshold:
     """Tests for confidence threshold behavior."""
 
