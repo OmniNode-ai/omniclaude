@@ -50,7 +50,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import quote
 
-from pydantic import Field, HttpUrl, PrivateAttr
+from pydantic import Field, HttpUrl, PrivateAttr, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -152,8 +152,8 @@ class Settings(BaseSettings):
         default="",
         description="PostgreSQL password. REQUIRED when ENABLE_POSTGRES=true.",
     )
-    omniclaude_db_url: str = Field(
-        default="",
+    omniclaude_db_url: SecretStr = Field(
+        default=SecretStr(""),
         description=(
             "Full PostgreSQL connection URL for omniclaude database. "
             "When set, takes precedence over individual POSTGRES_* fields. "
@@ -163,8 +163,9 @@ class Settings(BaseSettings):
     enable_postgres: bool = Field(
         default=False,
         description=(
-            "Enable PostgreSQL database connection. When True, all POSTGRES_* "
-            "fields must be configured. Defaults to False for safety."
+            "Enable PostgreSQL database connection. When True, either "
+            "OMNICLAUDE_DB_URL must be set (takes precedence) or all individual "
+            "POSTGRES_* fields must be configured. Defaults to False for safety."
         ),
     )
 
@@ -424,8 +425,9 @@ class Settings(BaseSettings):
         Returns:
             PostgreSQL DSN connection string.
         """
-        if self.omniclaude_db_url:
-            dsn = self.omniclaude_db_url
+        raw_url = self.omniclaude_db_url.get_secret_value()
+        if raw_url:
+            dsn = raw_url
             if async_driver and dsn.startswith("postgresql://"):
                 dsn = "postgresql+asyncpg://" + dsn[len("postgresql://") :]
             return dsn
@@ -474,7 +476,7 @@ class Settings(BaseSettings):
         # No localhost defaults to prevent silent local connections in production.
         # =====================================================================
         if self.enable_postgres:
-            if not self.omniclaude_db_url:
+            if not self.omniclaude_db_url.get_secret_value():
                 # Only require individual fields when no full DSN is provided
                 if not self.postgres_host:
                     errors.append(

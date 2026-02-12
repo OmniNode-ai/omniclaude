@@ -277,13 +277,11 @@ class HandlerContextInjection:
     def __init__(
         self,
         config: ContextInjectionConfig | None = None,
-        runtime: object | None = None,
     ) -> None:
         """Initialize the handler.
 
         Args:
             config: Optional configuration. If None, loads from environment at init time.
-            runtime: Deprecated. Ignored (OMN-2058). Retained for API compatibility.
         """
         self._config = (
             config if config is not None else ContextInjectionConfig.from_env()

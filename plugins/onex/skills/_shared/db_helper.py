@@ -32,11 +32,12 @@ from omniclaude.config import settings
 # The settings object reads from environment variables automatically, so this
 # stays consistent with the rest of the codebase rather than diverging via
 # a separate os.environ.get() code path.
-_omniclaude_db_url = settings.omniclaude_db_url
+_omniclaude_db_url = settings.omniclaude_db_url.get_secret_value()
 
 if _omniclaude_db_url:
-    # Parse URL into components for psycopg2 (which doesn't accept DSN URLs directly
-    # via SimpleConnectionPool -- we extract components)
+    # Parse URL into components for explicit parameter passing to SimpleConnectionPool.
+    # This gives us visibility into individual connection parameters (host, port, etc.)
+    # for error reporting and DB_CONFIG introspection.
     from urllib.parse import urlparse
 
     _parsed = urlparse(_omniclaude_db_url)

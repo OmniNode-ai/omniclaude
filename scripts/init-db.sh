@@ -2,9 +2,8 @@
 # PostgreSQL Database Initialization Script for OmniClaude
 # Runs automatically when the database container starts for the first time
 #
-# Connection precedence:
-#   1. OMNICLAUDE_DB_URL (if set, components are extracted automatically)
-#   2. Individual POSTGRES_* environment variables (fallback)
+# Uses individual POSTGRES_* environment variables (POSTGRES_HOST, POSTGRES_USER,
+# POSTGRES_DB / POSTGRES_DATABASE) for connection configuration.
 #
 # DB-SPLIT-07 (OMN-2058): This script only sets up extensions, schemas, and
 # privileges. Session tables are created by sql/migrations/001_create_claude_session_tables.sql.
