@@ -28,6 +28,9 @@ psql -v ON_ERROR_STOP=1 -v db_user="${POSTGRES_USER}" --username "$POSTGRES_USER
     -- Enable UUID extensions for generating UUIDs
     -- uuid-ossp: provides uuid_generate_v4() (legacy, retained for compatibility)
     -- pgcrypto: provides gen_random_uuid() (modern, used by migrations)
+    -- NOTE: On managed databases (RDS, Cloud SQL, Azure), CREATE EXTENSION may require
+    -- admin privileges or pre-provisioning. If this fails, ask your DBA to enable
+    -- uuid-ossp and pgcrypto before running init-db.sh.
     CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
     CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
@@ -93,14 +96,18 @@ EOSQL
             # Pattern matching uses ^COMMIT; (start-of-line anchor) via grep/awk
             # to avoid false matches on COMMIT; inside SQL comments or strings.
             migration_content=$(cat "$migration")
-            escaped_name="${migration_name//\'/\'\'}"
-            tracking_sql="INSERT INTO schema_migrations (filename) VALUES ('${escaped_name}');"
-            # Find the LAST line where COMMIT; starts at column 1.
-            # Anchoring to ^COMMIT; avoids false matches inside SQL comments
+            # Migration filenames come from ls sql/migrations/*.sql (local
+            # filesystem under our control) so they will never contain single
+            # quotes. Use the raw filename directly — the previous bash
+            # substitution (${var//\'/\'\'}) was unreliable across bash versions.
+            tracking_sql="INSERT INTO schema_migrations (filename) VALUES ('${migration_name}');"
+            # Find the LAST line where COMMIT; appears (with optional leading whitespace).
+            # The start-of-line anchor avoids false matches inside SQL comments
             # (e.g., "-- See COMMIT; behavior") or string literals.
-            last_commit_line=$(echo "$migration_content" | grep -n '^COMMIT;' | tail -1 | cut -d: -f1)
+            last_commit_line=$(echo "$migration_content" | grep -n '^[[:space:]]*COMMIT;' | tail -1 | cut -d: -f1)
             if [ -n "$last_commit_line" ]; then
-                # Inject tracking INSERT on the line before the last ^COMMIT;
+                # Inject tracking INSERT immediately before COMMIT
+                # (awk prints the tracking SQL, then the COMMIT line, on the same pass)
                 modified_content=$(echo "$migration_content" | awk -v line="$last_commit_line" -v sql="$tracking_sql" 'NR==line{print sql} {print}')
             else
                 # No line-anchored COMMIT — append tracking INSERT at the end

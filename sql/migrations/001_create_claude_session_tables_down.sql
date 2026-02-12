@@ -32,4 +32,7 @@ DROP TABLE IF EXISTS claude_session_event_idempotency CASCADE;
 -- 5. Drop parent table last.
 DROP TABLE IF EXISTS claude_session_snapshots CASCADE;
 
+-- 6. Remove migration tracking record so init-db.sh will re-apply on next run.
+DELETE FROM schema_migrations WHERE filename = '001_create_claude_session_tables.sql';
+
 COMMIT;

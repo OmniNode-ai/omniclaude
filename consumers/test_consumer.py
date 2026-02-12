@@ -3,7 +3,7 @@
 Test script for Claude Session Events Kafka Consumer
 
 This script:
-1. Publishes test events to the agent-actions topic
+1. Publishes test events to the Kafka topic (see _TEST_TOPIC)
 2. Verifies the consumer processes them correctly
 3. Checks database for inserted records
 4. Tests health check endpoint
@@ -17,7 +17,6 @@ import os
 import sys
 import uuid
 from datetime import UTC, datetime
-from pathlib import Path
 
 import psycopg2
 import requests
@@ -26,10 +25,10 @@ from kafka import KafkaProducer
 # Import type-safe settings from omniclaude package
 from omniclaude.config.settings import settings
 
-# Add _shared to path
-SCRIPT_DIR = Path(__file__).parent
-SHARED_DIR = SCRIPT_DIR.parent / "skills" / "_shared"
-sys.path.insert(0, str(SHARED_DIR))
+# TODO(OMN-2058): This topic is the legacy 'agent-actions' topic from before
+# DB-SPLIT. Update to the appropriate ONEX-format topic once the new consumer
+# schema is implemented. See TopicBase in src/omniclaude/hooks/topics.py.
+_TEST_TOPIC = "agent-actions"
 
 
 def _get_db_dsn() -> str:
@@ -37,20 +36,32 @@ def _get_db_dsn() -> str:
     return settings.get_omniclaude_dsn()
 
 
-def create_test_event(agent_name: str, action_type: str = "tool_call") -> dict:
-    """Create a test agent action event."""
+def create_test_event(agent_name: str) -> dict:
+    """Create a test event compatible with the claude_session_snapshots schema.
+
+    TODO(OMN-2058): This function was updated to produce session-compatible events
+    as part of DB-SPLIT-07.  The old agent_actions schema (correlation_id, agent_name,
+    action_type, action_name, action_details) no longer has a backing table.  The
+    fields below match claude_session_snapshots columns from migration 001.  Once a
+    real Kafka consumer for session events is implemented, align this further with the
+    actual event envelope used in production.
+    """
+    session_id = str(uuid.uuid4())
+    now = datetime.now(UTC)
     return {
+        "session_id": session_id,
         "correlation_id": str(uuid.uuid4()),
-        "agent_name": agent_name,
-        "action_type": action_type,
-        "action_name": f"Test{action_type.title()}",
-        "action_details": {
-            "test": True,
-            "timestamp": datetime.now(UTC).isoformat(),
-        },
-        "debug_mode": True,
-        "duration_ms": 42,
-        "timestamp": datetime.now(UTC).isoformat(),
+        "status": "active",
+        "started_at": now.isoformat(),
+        "working_directory": f"/test/{agent_name}",
+        "git_branch": "test-branch",
+        "hook_source": "test_consumer",
+        "prompt_count": 0,
+        "tool_count": 0,
+        "tools_used_count": 0,
+        "event_count": 1,
+        "last_event_at": now.isoformat(),
+        "schema_version": "1.0.0",
     }
 
 
@@ -75,12 +86,11 @@ def publish_test_events(count: int = 10) -> list[str]:
     for i in range(count):
         event = create_test_event(
             agent_name=f"test-agent-{i % 3}",
-            action_type=["tool_call", "decision", "success"][i % 3],
         )
 
         correlation_ids.append(event["correlation_id"])
 
-        producer.send("agent-actions", value=event)
+        producer.send(_TEST_TOPIC, value=event)
         print(f"  ✓ Event {i + 1}/{count}: {event['correlation_id']}")
 
     producer.flush()
