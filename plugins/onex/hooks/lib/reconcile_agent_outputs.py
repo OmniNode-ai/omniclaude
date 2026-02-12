@@ -18,10 +18,14 @@ Design constraints:
 
 from __future__ import annotations
 
+import logging
+import types
 from collections.abc import Callable
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
+
+_log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Classifier import -- omnibase_core may not be installed
@@ -107,15 +111,37 @@ class FieldDecision(BaseModel):
 
 
 class ReconciliationResult(BaseModel):
-    """Aggregate reconciliation output."""
+    """Aggregate reconciliation output.
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    Immutability enforcement:
+        Pydantic's ``frozen=True`` prevents attribute reassignment (e.g.
+        ``result.merged_values = new_dict`` raises), but it does NOT prevent
+        in-place mutation of mutable containers (e.g.
+        ``result.merged_values["injected"] = "bad"`` would silently succeed
+        on a plain dict).
 
-    merged_values: dict[str, Any]
-    """Only auto-resolved fields included (dot-paths as keys)."""
+        To enforce true immutability, ``model_post_init`` wraps
+        ``merged_values`` and ``field_decisions`` in
+        ``types.MappingProxyType``, which is a read-only view of the
+        underlying dict.  Any attempt to mutate via ``__setitem__``,
+        ``__delitem__``, ``update()``, ``pop()``, etc. raises ``TypeError``.
 
-    field_decisions: dict[str, FieldDecision]
-    """Every field gets a decision."""
+        We use ``object.__setattr__`` in ``model_post_init`` to bypass
+        the frozen guard during construction -- this is the standard
+        Pydantic pattern for post-init fixups on frozen models.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid", arbitrary_types_allowed=True)
+
+    merged_values: Any
+    """Only auto-resolved fields included (dot-paths as keys).
+    Wrapped in ``types.MappingProxyType`` after construction for true
+    immutability.  Accepts ``dict[str, Any]`` at construction time."""
+
+    field_decisions: Any
+    """Every field gets a decision.
+    Wrapped in ``types.MappingProxyType`` after construction for true
+    immutability.  Accepts ``dict[str, FieldDecision]`` at construction time."""
 
     requires_approval: bool
     """``True`` if ANY field is OPPOSITE / AMBIGUOUS."""
@@ -133,6 +159,21 @@ class ReconciliationResult(BaseModel):
 
     summary: str
     """Formatted report string."""
+
+    def model_post_init(self, __context: Any) -> None:
+        """Wrap mutable dict fields in MappingProxyType for true immutability.
+
+        Uses ``object.__setattr__`` to bypass the frozen guard -- this is
+        the standard Pydantic pattern for post-init fixups on frozen models.
+        """
+        if isinstance(self.merged_values, dict):
+            object.__setattr__(
+                self, "merged_values", types.MappingProxyType(self.merged_values)
+            )
+        if isinstance(self.field_decisions, dict):
+            object.__setattr__(
+                self, "field_decisions", types.MappingProxyType(self.field_decisions)
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -161,17 +202,21 @@ def flatten_to_paths(d: dict, prefix: str = "") -> dict[str, Any]:
         values and are not recursed into.  Only ``dict`` values trigger
         recursive descent.
 
-    .. note::
-
-        Keys containing literal dots (e.g. ``{"a.b": 1}``) are
-        indistinguishable from nested paths after flattening.  For example,
-        ``{"a.b": 1}`` and ``{"a": {"b": 1}}`` both flatten to
-        ``{"a.b": 1}``.  This is a known limitation; callers that may
-        encounter dotted keys should pre-escape them before calling this
-        function.
+    Raises:
+        ValueError: If any key at any nesting level contains a literal dot.
+            Dotted keys are indistinguishable from nested paths after
+            flattening (e.g. ``{"a.b": 1}`` and ``{"a": {"b": 1}}`` both
+            produce ``{"a.b": 1}``).  Callers with dotted keys must
+            pre-escape them before calling this function.
     """
     result: dict[str, Any] = {}
     for key, value in d.items():
+        if "." in key:
+            raise ValueError(
+                f"Key {key!r} contains a literal dot. flatten_to_paths uses "
+                f"dots as path separators, so dotted keys are ambiguous. "
+                f"Pre-escape dots in keys before calling this function."
+            )
         full_key = f"{prefix}.{key}" if prefix else key
         if isinstance(value, dict):
             result.update(flatten_to_paths(value, full_key))
@@ -188,10 +233,24 @@ def unflatten_paths(d: dict[str, Any]) -> dict:
         {"db.pool.max_size": 10} -> {"db": {"pool": {"max_size": 10}}}
 
     This function assumes all paths represent leaf values (as produced by
-    :func:`flatten_to_paths`).  Same-depth sibling overwrites of
-    intermediate dicts are not detected; callers must ensure that the
-    input does not contain paths that would silently overwrite previously
-    set intermediate dicts at the same depth.
+    :func:`flatten_to_paths`).
+
+    Depth-conflict guard:
+        A ``ValueError`` is raised when a shorter path sets a leaf value
+        and a longer path tries to use that same node as an intermediate
+        dict (e.g. ``{"a.b": 5, "a.b.c": 10}``).  Paths are processed
+        shallowest-first so the leaf is always written before the deeper
+        path attempts to traverse through it.
+
+    Same-depth sibling overwrites:
+        Two paths that share the same terminal key at the same depth
+        (e.g. ``{"a.b": 1, "a.b": 2}``) are not a concern here because
+        Python ``dict`` already deduplicates keys at construction time.
+        True same-depth conflicts between *different agents* (e.g.
+        agent-alpha writes ``a.b = 1`` and agent-beta writes ``a.b = 2``)
+        are handled upstream by the conflict classifier in
+        :func:`reconcile_outputs`, which classifies and resolves them
+        before values reach ``unflatten_paths``.
 
     Raises:
         ValueError: If paths conflict (e.g. ``{"a.b": 5, "a.b.c": 10}``
@@ -312,7 +371,7 @@ def _classify(
     """
     if classifier is not None:
         # Real classifier expects list[tuple[str, object]], not dict
-        values_list = [(name, val) for name, val in sorted(agent_values.items())]
+        values_list = sorted(agent_values.items())
         details = classifier.classify(base_value, values_list)
         # details is ModelGeometricConflictDetails; extract enum name
         return details.conflict_type.name  # type: ignore[return-value]
@@ -502,6 +561,52 @@ def reconcile_outputs(
             # leaf values only), but guards against direct _classify callers
             # passing dict values.
             if all(isinstance(v, dict) for v in vals):
+                # Overlap check: the ORTHOGONAL classification assumes
+                # non-overlapping keys.  If the classifier returns
+                # ORTHOGONAL for dicts with partially-overlapping keys,
+                # the update() loop below would silently overwrite earlier
+                # agent values.  Detect and warn so data loss is visible.
+                seen_keys: dict[str, str] = {}  # key -> first agent name
+                overlapping: list[
+                    tuple[str, str, str]
+                ] = []  # (key, first_agent, later_agent)
+                agent_names_iter = iter(sorted_agents)
+                for v in vals:
+                    agent_name = next(agent_names_iter)
+                    for k in v:  # type: ignore[union-attr]
+                        if k in seen_keys:
+                            overlapping.append((k, seen_keys[k], agent_name))
+                        else:
+                            seen_keys[k] = agent_name
+                if overlapping:
+                    overlap_details = "; ".join(
+                        f"key={k!r}: {first_agent} value dropped in "
+                        f"favour of {later_agent}"
+                        for k, first_agent, later_agent in overlapping
+                    )
+                    _log.warning(
+                        "ORTHOGONAL dict-merge has overlapping keys on "
+                        "field %r -- earlier agent values silently "
+                        "overwritten: %s",
+                        field,
+                        overlap_details,
+                    )
+                    if logger:
+                        logger(
+                            {
+                                "event": "orthogonal_overlap_warning",
+                                "field": field,
+                                "overlapping_keys": [
+                                    {
+                                        "key": k,
+                                        "dropped_agent": first_agent,
+                                        "kept_agent": later_agent,
+                                    }
+                                    for k, first_agent, later_agent in overlapping
+                                ],
+                            }
+                        )
+
                 merged: dict[str, Any] = {}
                 for v in vals:
                     merged.update(v)  # type: ignore[union-attr]

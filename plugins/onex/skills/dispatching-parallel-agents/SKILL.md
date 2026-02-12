@@ -95,11 +95,26 @@ When agents return outputs that overlap (modify the same fields), use geometric 
 
 #### 5.1 Import the Reconciliation Helper
 
+Within hook scripts, the plugin lib directory (`plugins/onex/hooks/lib/`) is already on `sys.path`, so the import is a bare module name:
+
 ```python
-from plugins.onex.hooks.lib.reconcile_agent_outputs import reconcile_outputs
+from reconcile_agent_outputs import reconcile_outputs
 ```
 
-Note: This import assumes the repository root is on `sys.path`. Within hook scripts, the plugin lib path is set automatically.
+If importing from tests or other code outside the plugin context, add the plugin lib to `sys.path` first (the test suite uses a `pyproject.toml`-anchored helper to locate the project root):
+
+```python
+import sys
+from pathlib import Path
+
+# Walk up to project root (directory containing pyproject.toml)
+root = Path(__file__).resolve().parent
+while not (root / "pyproject.toml").exists():
+    root = root.parent
+sys.path.insert(0, str(root / "plugins" / "onex" / "hooks" / "lib"))
+
+from reconcile_agent_outputs import reconcile_outputs
+```
 
 #### 5.2 Gather Agent Outputs
 
@@ -125,7 +140,7 @@ result = reconcile_outputs(base_values, agent_outputs)
 **If `result.requires_approval` is False**: Apply `result.merged_values` directly. Note that `merged_values` is a flat dict of dot-separated paths (e.g. `{"db.pool.max_size": 10}`). To reconstruct a nested structure, use:
 
 ```python
-from plugins.onex.hooks.lib.reconcile_agent_outputs import unflatten_paths
+from reconcile_agent_outputs import unflatten_paths
 
 nested = unflatten_paths(result.merged_values)
 # {"db": {"pool": {"max_size": 10}}}

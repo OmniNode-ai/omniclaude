@@ -10,6 +10,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+
 # Ensure plugin lib is on sys.path (conftest.py also does this, but make the
 # test file self-sufficient for direct invocation).
 #
@@ -19,13 +20,23 @@ from pathlib import Path
 # ``from plugins.onex.hooks.lib.reconcile_agent_outputs import ...`` are not
 # tested because the plugin lib directory is not on the standard Python path
 # and is not structured as an installable package.
-_plugin_lib = str(
-    Path(__file__).parent.parent.parent.parent.parent
-    / "plugins"
-    / "onex"
-    / "hooks"
-    / "lib"
-)
+#
+# Walk upward from this file until we find pyproject.toml to locate the
+# project root, rather than relying on a fragile hard-coded parent count.
+def _find_project_root() -> Path:
+    """Walk up from __file__ until pyproject.toml is found."""
+    candidate = Path(__file__).resolve().parent
+    while candidate != candidate.parent:
+        if (candidate / "pyproject.toml").exists():
+            return candidate
+        candidate = candidate.parent
+    raise RuntimeError(
+        "Could not find project root (no pyproject.toml found in ancestors "
+        f"of {__file__})"
+    )
+
+
+_plugin_lib = str(_find_project_root() / "plugins" / "onex" / "hooks" / "lib")
 if _plugin_lib not in sys.path:
     sys.path.insert(0, _plugin_lib)
 
@@ -661,3 +672,84 @@ class TestUnflattenConflictingPaths:
         """
         with pytest.raises(ValueError, match="Conflicting paths"):
             unflatten_paths({"a.b.c": 10, "a.b": 5})
+
+
+# =============================================================================
+# flatten_to_paths dotted key validation
+# =============================================================================
+
+
+class TestFlattenDottedKeyValidation:
+    """flatten_to_paths must reject keys containing literal dots."""
+
+    def test_top_level_dotted_key_raises(self) -> None:
+        with pytest.raises(ValueError, match="contains a literal dot"):
+            flatten_to_paths({"a.b": 1})
+
+    def test_nested_dotted_key_raises(self) -> None:
+        with pytest.raises(ValueError, match="contains a literal dot"):
+            flatten_to_paths({"outer": {"inner.key": 42}})
+
+
+# =============================================================================
+# _fallback_classify edge cases
+# =============================================================================
+
+
+class TestFallbackClassifyEdgeCases:
+    """Edge cases for the fallback classifier."""
+
+    def test_fewer_than_two_agents_raises(self) -> None:
+        """_fallback_classify requires at least 2 agent values."""
+        from reconcile_agent_outputs import _fallback_classify
+
+        with pytest.raises(ValueError, match="at least 2"):
+            _fallback_classify(base_value=None, agent_values={"solo": 42})
+
+    def test_zero_agents_raises(self) -> None:
+        from reconcile_agent_outputs import _fallback_classify
+
+        with pytest.raises(ValueError, match="at least 2"):
+            _fallback_classify(base_value=None, agent_values={})
+
+
+# =============================================================================
+# Unknown conflict type branch in reconcile_outputs
+# =============================================================================
+
+
+class TestUnknownConflictType:
+    """Unknown conflict types from the classifier are coerced to AMBIGUOUS."""
+
+    def test_unknown_conflict_type_becomes_ambiguous(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Mock _classify to return an unknown type string, verify
+        reconcile_outputs falls through to the else branch and produces
+        an AMBIGUOUS decision with needs_approval=True."""
+        import reconcile_agent_outputs as mod
+
+        monkeypatch.setattr(
+            mod,
+            "_classify",
+            lambda _base, _vals, classifier=None: "TOTALLY_UNKNOWN",
+        )
+
+        base = {"setting": "original"}
+        outputs = {
+            "agent-a": {"setting": "value_a"},
+            "agent-b": {"setting": "value_b"},
+        }
+        result = reconcile_outputs(base, outputs)
+
+        dec = result.field_decisions["setting"]
+        assert dec.conflict_type == AMBIGUOUS, (
+            f"Unknown conflict type should be coerced to AMBIGUOUS, "
+            f"got {dec.conflict_type}"
+        )
+        assert dec.needs_approval is True
+        assert dec.chosen_value is None
+        assert "setting" not in result.merged_values
+        assert "setting" in result.approval_fields
+        assert result.requires_approval is True
+        assert "TOTALLY_UNKNOWN" in dec.rationale
