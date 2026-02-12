@@ -61,15 +61,15 @@ def _get_db_config() -> dict[str, Any]:
             # Parse URL into components for explicit parameter passing to SimpleConnectionPool.
             # This gives us visibility into individual connection parameters (host, port, etc.)
             # for error reporting and DB_CONFIG introspection.
-            from urllib.parse import parse_qs, urlparse
+            from urllib.parse import parse_qs, unquote, urlparse
 
             _parsed = urlparse(_omniclaude_db_url)
             DB_CONFIG = {
                 "host": _parsed.hostname or "",
                 "port": _parsed.port or 5432,
                 "database": _parsed.path.lstrip("/") if _parsed.path else "",
-                "user": _parsed.username or "",
-                "password": _parsed.password or "",
+                "user": unquote(_parsed.username) if _parsed.username else "",
+                "password": unquote(_parsed.password) if _parsed.password else "",
             }
 
             # Preserve query parameters from the URL (e.g., sslmode=require, connect_timeout=10).
@@ -80,6 +80,19 @@ def _get_db_config() -> dict[str, Any]:
                     # parse_qs returns lists; take the last value for each key
                     # (matching standard URL semantics where last value wins).
                     DB_CONFIG[_key] = _values[-1]
+
+            # Coerce known numeric parameters from URL query strings.
+            # parse_qs always returns strings, but psycopg2 expects int for these.
+            _int_params = {
+                "connect_timeout",
+                "keepalives",
+                "keepalives_idle",
+                "keepalives_interval",
+                "keepalives_count",
+            }
+            for _key in _int_params:
+                if _key in DB_CONFIG and isinstance(DB_CONFIG[_key], str):
+                    DB_CONFIG[_key] = int(DB_CONFIG[_key])
         else:
             # Fallback to individual POSTGRES_* settings
             DB_CONFIG = {

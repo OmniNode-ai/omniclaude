@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test script for Agent Actions Kafka Consumer
+Test script for Claude Session Events Kafka Consumer
 
 This script:
 1. Publishes test events to the agent-actions topic
@@ -113,33 +113,12 @@ def verify_database_records(correlation_ids: list[str], timeout: int = 30):
     # This verification will always find 0 records and time out.
     # Update this function to match the new schema (claude_sessions /
     # claude_session_snapshots) once a consumer for the new schema is implemented.
-    while time.time() - start_time < timeout:
-        cursor.execute(
-            """
-            SELECT COUNT(*)
-            FROM claude_session_snapshots
-            WHERE correlation_id = ANY(%s::uuid[])
-            """,
-            (correlation_ids,),
-        )
-
-        found_count = cursor.fetchone()[0]
-
-        if found_count == len(correlation_ids):
-            print(f"✅ All {found_count} records found in database!\n")
-            cursor.close()
-            conn.close()
-            return True
-
-        print(f"  ⏳ Found {found_count}/{len(correlation_ids)}, waiting...")
-        time.sleep(2)
-
+    print(
+        "  [SKIP] verify_database_records queries the wrong table (see TODO OMN-2058). "
+        "Skipping 30s polling loop until schema is updated.\n"
+    )
     cursor.close()
     conn.close()
-
-    print(
-        f"❌ Only found {found_count}/{len(correlation_ids)} records after {timeout}s\n"
-    )
     return False
 
 
@@ -236,7 +215,7 @@ def query_recent_sessions():
 def run_tests():
     """Run all tests."""
     print("=" * 70)
-    print("Agent Actions Kafka Consumer - Test Suite")
+    print("Claude Session Events Kafka Consumer - Test Suite")
     print("=" * 70)
     print()
 

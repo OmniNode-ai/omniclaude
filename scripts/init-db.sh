@@ -78,12 +78,34 @@ EOSQL
                 continue
             fi
             echo "  Applying ${migration_name}..."
-            # Run the migration SQL and record it in schema_migrations within
-            # a single psql invocation so both succeed or fail atomically.
-            {
-                cat "$migration"
-                printf "\nINSERT INTO schema_migrations (filename) VALUES ('%s');\n" "${migration_name//\'/\'\'}"
-            } | psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --host="$POSTGRES_HOST" --single-transaction
+            # Run the migration SQL and record it in schema_migrations atomically.
+            #
+            # We inject the tracking INSERT *inside* the migration's own transaction
+            # (before the final COMMIT;) rather than using --single-transaction.
+            # Why: --single-transaction wraps everything in an implicit BEGIN/COMMIT,
+            # but migrations with an explicit COMMIT (like 001) terminate the outer
+            # transaction early, leaving the tracking INSERT in autocommit mode.
+            # By injecting before the migration's COMMIT, both DDL and tracking run
+            # in the same transaction. If the migration has no COMMIT, we append
+            # the INSERT at the end (it will run in autocommit, which is acceptable
+            # for migrations that manage their own transaction boundaries).
+            migration_content=$(cat "$migration")
+            escaped_name="${migration_name//\'/\'\'}"
+            tracking_sql="INSERT INTO schema_migrations (filename) VALUES ('${escaped_name}');"
+            if [[ "$migration_content" == *"COMMIT;"* ]]; then
+                # Inject tracking INSERT before the last COMMIT;
+                # ${var%PATTERN} removes the shortest suffix match, so
+                # ${migration_content%COMMIT;*} gives everything before the last COMMIT;
+                before_last_commit="${migration_content%COMMIT;*}"
+                after_last_commit="${migration_content##*COMMIT;}"
+                modified_content="${before_last_commit}${tracking_sql}
+COMMIT;${after_last_commit}"
+            else
+                # No explicit COMMIT — append tracking INSERT at the end
+                modified_content="${migration_content}
+${tracking_sql}"
+            fi
+            echo "$modified_content" | psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --host="$POSTGRES_HOST"
         fi
     done
 else
