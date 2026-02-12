@@ -22,6 +22,9 @@ Required environment variables when services are enabled:
     KAFKA_ENVIRONMENT=dev  # or staging, prod - MUST be explicit
 
     # PostgreSQL (required when ENABLE_POSTGRES=true)
+    # Option A: Full DSN (preferred, takes precedence)
+    OMNICLAUDE_DB_URL=postgresql://user:password@host:port/dbname
+    # Option B: Individual fields (used when OMNICLAUDE_DB_URL is not set)
     POSTGRES_HOST=localhost
     POSTGRES_PORT=5432
     POSTGRES_DATABASE=mydb
@@ -385,7 +388,12 @@ class Settings(BaseSettings):
         return self.postgres_password
 
     def get_postgres_dsn(self, async_driver: bool = False) -> str:
-        """Build PostgreSQL connection string.
+        """Build PostgreSQL connection string from individual POSTGRES_* fields.
+
+        NOTE: Prefer ``get_omniclaude_dsn()`` which respects OMNICLAUDE_DB_URL
+        precedence. This method only uses individual POSTGRES_* fields and will
+        produce an invalid DSN if those fields are empty (e.g., when only
+        OMNICLAUDE_DB_URL is configured).
 
         Args:
             async_driver: If True, use asyncpg driver prefix; otherwise psycopg2.
@@ -393,6 +401,14 @@ class Settings(BaseSettings):
         Returns:
             Full PostgreSQL DSN connection string.
         """
+        # Guard: warn if individual fields are empty but OMNICLAUDE_DB_URL is set.
+        # Callers should use get_omniclaude_dsn() instead.
+        if not self.postgres_host and self.omniclaude_db_url.get_secret_value():
+            logger.warning(
+                "get_postgres_dsn() called but individual POSTGRES_* fields are empty. "
+                "OMNICLAUDE_DB_URL is set — use get_omniclaude_dsn() instead."
+            )
+
         driver = "postgresql+asyncpg" if async_driver else "postgresql"
         password = self.get_effective_postgres_password()  # nosec
 
@@ -543,7 +559,8 @@ class Settings(BaseSettings):
         if not self.enable_postgres:
             logger.info(
                 "PostgreSQL is disabled (ENABLE_POSTGRES=false). "
-                "Set ENABLE_POSTGRES=true and configure POSTGRES_* variables to enable."
+                "Set ENABLE_POSTGRES=true and configure OMNICLAUDE_DB_URL (or individual "
+                "POSTGRES_* variables) to enable."
             )
 
         if not self.use_event_routing:

@@ -9,6 +9,9 @@
 --   claude_session_tools      - Child table for tool execution records
 --   claude_session_event_idempotency - Deduplication tracking (24h TTL)
 
+-- pgcrypto is required for gen_random_uuid()
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 BEGIN;
 
 -- ============================================================================
@@ -36,7 +39,7 @@ CREATE TABLE IF NOT EXISTS claude_session_snapshots (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_session_snapshots_session_id ON claude_session_snapshots(session_id);
+-- Note: no explicit index on session_id — the UNIQUE constraint already creates one.
 CREATE INDEX IF NOT EXISTS idx_session_snapshots_status ON claude_session_snapshots(status);
 CREATE INDEX IF NOT EXISTS idx_session_snapshots_last_event ON claude_session_snapshots(last_event_at DESC);
 CREATE INDEX IF NOT EXISTS idx_session_snapshots_working_dir ON claude_session_snapshots(working_directory);

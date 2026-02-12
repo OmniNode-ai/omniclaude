@@ -38,7 +38,7 @@ if _omniclaude_db_url:
     # Parse URL into components for explicit parameter passing to SimpleConnectionPool.
     # This gives us visibility into individual connection parameters (host, port, etc.)
     # for error reporting and DB_CONFIG introspection.
-    from urllib.parse import urlparse
+    from urllib.parse import parse_qs, urlparse
 
     _parsed = urlparse(_omniclaude_db_url)
     DB_CONFIG = {
@@ -48,6 +48,15 @@ if _omniclaude_db_url:
         "user": _parsed.username or "",
         "password": _parsed.password or "",
     }
+
+    # Preserve query parameters from the URL (e.g., sslmode=require, connect_timeout=10).
+    # These are passed as keyword arguments to psycopg2.connect() via the pool constructor.
+    if _parsed.query:
+        _query_params = parse_qs(_parsed.query, keep_blank_values=False)
+        for _key, _values in _query_params.items():
+            # parse_qs returns lists; take the last value for each key
+            # (matching standard URL semantics where last value wins).
+            DB_CONFIG[_key] = _values[-1]
 else:
     # Fallback to individual POSTGRES_* settings
     DB_CONFIG = {
