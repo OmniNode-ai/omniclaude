@@ -615,6 +615,7 @@ def check_daemon_health(
         # from a misbehaving daemon before the 2s timeout fires).
         _MAX_RESPONSE_BYTES = 65536
         response_data = b""
+        _cap_exceeded = False
         try:
             while True:
                 chunk = sock.recv(4096)
@@ -628,11 +629,14 @@ def check_daemon_health(
                         f"Daemon response exceeded {_MAX_RESPONSE_BYTES} bytes, "
                         "aborting read"
                     )
+                    _cap_exceeded = True
                     break
         except TimeoutError:
             pass
 
-        if response_data:
+        if _cap_exceeded:
+            pass  # result["error"] already set by the cap guard above
+        elif response_data:
             try:
                 resp = json.loads(response_data.decode("utf-8").strip())
                 if isinstance(resp, dict):
