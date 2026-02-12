@@ -165,11 +165,7 @@ def _connect_postgres(**extra_kwargs: Any) -> Any:
     """
     import psycopg2
 
-    dsn = (
-        settings.omniclaude_db_url.get_secret_value()
-        if hasattr(settings, "omniclaude_db_url")
-        else ""
-    )
+    dsn = settings.omniclaude_db_url.get_secret_value()
     if dsn:
         return psycopg2.connect(dsn, **extra_kwargs)
     return psycopg2.connect(

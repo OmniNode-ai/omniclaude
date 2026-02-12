@@ -24,7 +24,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn
 from uuid import UUID, uuid4
 
 from omniclaude.hooks.cohort_assignment import (
@@ -569,7 +569,7 @@ class HandlerContextInjection:
     # Database Methods
     # =========================================================================
 
-    async def _get_repository_runtime(self) -> None:
+    async def _get_repository_runtime(self) -> NoReturn:
         """DISABLED (OMN-2058): No longer connects to learned_patterns DB.
 
         Raises:

@@ -37,7 +37,9 @@ sys.path.insert(0, str(SHARED_DIR))
 DB_CONFIG = {
     "host": os.environ.get("POSTGRES_HOST", settings.postgres_host or "localhost"),
     "port": int(os.environ.get("POSTGRES_PORT", settings.postgres_port or 5436)),
-    "database": os.environ.get("POSTGRES_DATABASE", "omninode_bridge"),
+    "database": os.environ.get(
+        "POSTGRES_DATABASE", settings.postgres_database or "omniclaude"
+    ),
     "user": os.environ.get("POSTGRES_USER", settings.postgres_user or "postgres"),
     "password": settings.get_effective_postgres_password(),
 }

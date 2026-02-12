@@ -10,6 +10,10 @@
 --   claude_session_event_idempotency - Deduplication tracking (24h TTL)
 
 -- pgcrypto is required for gen_random_uuid()
+-- NOTE: CREATE EXTENSION is intentionally placed outside the transaction block.
+-- On managed databases (e.g., AWS RDS, Azure), CREATE EXTENSION cannot run inside
+-- a transaction. Keeping it here ensures compatibility with both self-hosted and
+-- managed PostgreSQL instances.
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 BEGIN;
@@ -105,6 +109,13 @@ COMMENT ON TABLE claude_session_tools IS 'Tool execution records within a sessio
 
 -- ============================================================================
 -- claude_session_event_idempotency - deduplication tracking
+--
+-- KNOWN GAP: The expires_at column provides a 24-hour TTL default, but there
+-- is no automated cleanup mechanism (e.g., pg_cron job or application-level
+-- scheduled task) to delete expired rows. Until an external cleanup process is
+-- configured, expired rows will accumulate. This is acceptable for moderate
+-- event volumes but should be addressed for production scale.
+-- See: OMN-2058 follow-up for cleanup automation.
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS claude_session_event_idempotency (
     message_id UUID PRIMARY KEY,

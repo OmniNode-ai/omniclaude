@@ -53,13 +53,30 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIGRATIONS_DIR="${SCRIPT_DIR}/../sql/migrations"
 
 if [ -d "$MIGRATIONS_DIR" ]; then
+    # Create migration tracking table if it doesn't exist
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --host="$POSTGRES_HOST" <<-EOSQL
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            filename TEXT PRIMARY KEY,
+            applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+EOSQL
+
     echo "Running migrations from ${MIGRATIONS_DIR}..."
     for migration in "$MIGRATIONS_DIR"/*.sql; do
         # Skip rollback (down) migrations — only run forward migrations
         [[ "$migration" == *_down.sql ]] && continue
         if [ -f "$migration" ]; then
-            echo "  Applying $(basename "$migration")..."
+            migration_name="$(basename "$migration")"
+            # Skip already-applied migrations
+            already_applied=$(psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --host="$POSTGRES_HOST" -tAc "SELECT 1 FROM schema_migrations WHERE filename = '${migration_name}' LIMIT 1;")
+            if [ "$already_applied" = "1" ]; then
+                echo "  Skipping ${migration_name} (already applied)"
+                continue
+            fi
+            echo "  Applying ${migration_name}..."
             psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --host="$POSTGRES_HOST" -f "$migration"
+            # Record successful migration
+            psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --host="$POSTGRES_HOST" -c "INSERT INTO schema_migrations (filename) VALUES ('${migration_name}');"
         fi
     done
 else
