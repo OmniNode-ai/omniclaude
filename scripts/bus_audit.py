@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-# Copyright (c) 2025 OmniNode Team
+# Copyright (c) 2026 OmniNode Team
 """OmniClaude Bus Audit (Layer 2) -- Domain schema validation CLI.
 
 Builds on the generic Layer 1 bus audit engine (omnibase_infra.diagnostics)
@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import socket
 import sys
@@ -150,9 +151,11 @@ TOPIC_SCHEMA_MAP: dict[str, type[BaseModel]] = {
     "onex.evt.agent.status.v1": ModelAgentStatusPayload,
 }
 
-# Topics where certain required fields are legitimately missing from wire format
-# entity_id: shell hooks don't send it, daemon doesn't inject it
-# causation_id: daemon injects None, models require UUID
+# Topics where certain required fields are legitimately missing from wire format.
+# entity_id: shell hooks don't send it, daemon doesn't inject it.
+# causation_id: daemon injects None, models require UUID.
+# These exemptions apply to ALL topics emitted through the daemon pipeline --
+# if a topic is in TOPIC_SCHEMA_MAP it should be listed here.
 FIELD_EXEMPTIONS: dict[str, set[str]] = {
     "onex.evt.omniclaude.session-started.v1": {"entity_id", "causation_id"},
     "onex.evt.omniclaude.session-ended.v1": {"entity_id", "causation_id"},
@@ -163,13 +166,24 @@ FIELD_EXEMPTIONS: dict[str, set[str]] = {
     "onex.evt.omniclaude.agent-match.v1": {"entity_id", "causation_id"},
     "onex.evt.omniclaude.latency-breakdown.v1": {"entity_id", "causation_id"},
     "onex.evt.omniclaude.manifest-injected.v1": {"entity_id", "causation_id"},
+    # Previously missing -- same daemon pipeline, same missing fields
+    "onex.cmd.omniintelligence.session-outcome.v1": {"entity_id", "causation_id"},
+    "onex.evt.omniclaude.session-outcome.v1": {"entity_id", "causation_id"},
+    "onex.evt.omniclaude.routing-feedback.v1": {"entity_id", "causation_id"},
+    "onex.evt.omniclaude.routing-feedback-skipped.v1": {"entity_id", "causation_id"},
+    # agent.status.v1: also has schema_version mismatch (model expects Literal[1],
+    # daemon injects "1.0.0"). This is a known daemon/model mismatch to be fixed
+    # upstream. For now, exempt schema_version as a field-level exemption rather
+    # than skipping all validation on this topic.
+    "onex.evt.agent.status.v1": {"entity_id", "causation_id", "schema_version"},
 }
 
-# Topics where domain validation is skipped entirely (with reason)
+# Topics where domain validation is skipped entirely (with reason).
+# Prefer FIELD_EXEMPTIONS for individual field mismatches instead of skipping
+# all validation on a topic. This dict should only be used when the topic's
+# wire format is fundamentally incompatible with the model.
 VALIDATION_SKIP_TOPICS: dict[str, str] = {
-    "onex.evt.agent.status.v1": (
-        "schema_version type mismatch: model expects Literal[1], wire injects '1.0.0'"
-    ),
+    # agent.status.v1 moved to FIELD_EXEMPTIONS (schema_version field-level exemption)
 }
 
 LEGACY_TOPICS: set[str] = {
@@ -217,6 +231,20 @@ HOOK_EMISSIONS: dict[str, list[str]] = {
     ],
     "PostToolUse": ["onex.evt.omniclaude.tool-executed.v1"],
 }
+
+
+# =============================================================================
+# Startup Validation: TOPIC_SCHEMA_MAP keys must be valid TopicBase values
+# =============================================================================
+
+_topicbase_values: set[str] = {str(m.value) for m in TopicBase}
+_schema_map_orphans = set(TOPIC_SCHEMA_MAP.keys()) - _topicbase_values
+if _schema_map_orphans:
+    raise AssertionError(
+        f"TOPIC_SCHEMA_MAP contains keys not in TopicBase: {sorted(_schema_map_orphans)}. "
+        "Update TopicBase or remove stale entries from TOPIC_SCHEMA_MAP."
+    )
+del _topicbase_values, _schema_map_orphans
 
 
 # =============================================================================
@@ -302,6 +330,10 @@ def sample_messages(
 
             messages: list[dict[str, Any]] = []
 
+            # Distribute sample budget evenly across partitions to avoid
+            # biasing toward lower-numbered partitions.
+            per_partition = math.ceil(sample_count / len(partitions))
+
             for part_id in partitions:
                 tp = TopicPartition(topic, part_id)
 
@@ -314,14 +346,15 @@ def sample_messages(
                 if high <= low:
                     continue  # No messages in this partition
 
-                # Seek to tail - sample_count
-                seek_offset = max(low, high - sample_count)
+                # Seek to tail - per_partition
+                seek_offset = max(low, high - per_partition)
                 tp.offset = seek_offset
                 consumer.assign([tp])
 
-                # Poll messages
-                polls_remaining = sample_count * 2  # safety factor
-                while len(messages) < sample_count and polls_remaining > 0:
+                # Poll messages from this partition
+                partition_collected = 0
+                polls_remaining = per_partition * 2  # safety factor
+                while partition_collected < per_partition and polls_remaining > 0:
                     polls_remaining -= 1
                     msg = consumer.poll(timeout=1.0)
                     if msg is None:
@@ -335,6 +368,7 @@ def sample_messages(
                         parsed = json.loads(value.decode("utf-8"))
                         if isinstance(parsed, dict):
                             messages.append(parsed)
+                            partition_collected += 1
                     except (json.JSONDecodeError, UnicodeDecodeError):
                         continue
 
@@ -523,13 +557,19 @@ def check_daemon_health(
     """Check emit daemon health via Unix socket.
 
     Attempts raw socket connect to the daemon socket. If connectable,
-    sends a JSON status request and parses the response.
+    sends a JSON status request and validates the response to distinguish
+    between a healthy daemon and a degraded one.
+
+    Status values:
+      - RUNNING: Socket connected AND daemon returned valid JSON status.
+      - DEGRADED: Socket connected but daemon returned invalid/empty response.
+      - NOT_RUNNING: Socket does not exist or connection refused.
 
     Args:
         socket_path: Path to the daemon Unix socket.
 
     Returns:
-        Dict with keys: status ("RUNNING" | "NOT_RUNNING"), queue, spool, error.
+        Dict with keys: status, queue, spool, error.
     """
     result: dict[str, Any] = {
         "status": "NOT_RUNNING",
@@ -546,7 +586,10 @@ def check_daemon_health(
     sock.settimeout(2.0)
     try:
         sock.connect(socket_path)
-        result["status"] = "RUNNING"
+
+        # Socket is connectable -- tentatively mark as DEGRADED until we
+        # confirm a valid health response from the daemon.
+        result["status"] = "DEGRADED"
 
         # Try sending a status request
         status_request = json.dumps({"action": "status"}) + "\n"
@@ -568,11 +611,20 @@ def check_daemon_health(
         if response_data:
             try:
                 resp = json.loads(response_data.decode("utf-8").strip())
-                result["queue"] = resp.get("queue_size", resp.get("queue", 0))
-                result["spool"] = resp.get("spool_size", resp.get("spool", 0))
-            except (json.JSONDecodeError, UnicodeDecodeError):
-                # Connected but status response unparseable -- still RUNNING
-                pass
+                if isinstance(resp, dict):
+                    # Valid JSON dict response -- daemon is healthy
+                    result["status"] = "RUNNING"
+                    result["queue"] = resp.get("queue_size", resp.get("queue", 0))
+                    result["spool"] = resp.get("spool_size", resp.get("spool", 0))
+                else:
+                    # Parseable JSON but not a dict -- unexpected format
+                    result["error"] = (
+                        f"Daemon returned unexpected JSON type: {type(resp).__name__}"
+                    )
+            except (json.JSONDecodeError, UnicodeDecodeError) as parse_exc:
+                result["error"] = f"Daemon response not valid JSON: {parse_exc}"
+        else:
+            result["error"] = "Daemon connected but returned empty response"
 
     except (ConnectionRefusedError, FileNotFoundError, OSError) as exc:
         result["status"] = "NOT_RUNNING"
@@ -665,9 +717,14 @@ def compute_verdict(
     if is_skip:
         return EnumVerdict.PASS
 
-    # Core topic with real schema errors -> FAIL
+    # Core schema topic with real schema errors -> FAIL
     if is_core_schema and real_errors > 0:
         return EnumVerdict.FAIL
+
+    # Core presence topic (not a core schema topic) with real schema errors -> WARN
+    # These topics are important enough to flag but don't have strict schema contracts.
+    if is_core_presence and real_errors > 0:
+        return EnumVerdict.WARN
 
     # Non-core topic with schema errors -> WARN
     if not is_core and real_errors > 0:
@@ -974,6 +1031,9 @@ def format_human(
             q = daemon.get("queue", "?")
             s = daemon.get("spool", "?")
             lines.append(f"  RUNNING (queue: {q}, spool: {s})")
+        elif daemon["status"] == "DEGRADED":
+            err = daemon.get("error", "unknown")
+            lines.append(f"  DEGRADED -- socket connectable but unhealthy ({err})")
         else:
             err = daemon.get("error", "unknown")
             lines.append(f"  NOT_RUNNING ({err})")
@@ -1171,6 +1231,11 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    # Exit codes:
+    #   0 = success (PASS or WARN verdict)
+    #   1 = Kafka connection failure
+    #   2 = FAIL verdict (audit found critical issues)
+    #   3 = unexpected error (script bug or unforeseen exception)
     try:
         report = run_bus_audit(
             broker=args.broker,
@@ -1187,7 +1252,7 @@ def main() -> None:
             import traceback
 
             traceback.print_exc()
-        sys.exit(1)
+        sys.exit(3)
 
     if args.json_output:
         print(json.dumps(report, indent=2, default=str))
@@ -1200,7 +1265,7 @@ def main() -> None:
             )
         )
 
-    # Exit code: 0 for PASS/WARN, 2 for FAIL
+    # Exit code: 0=PASS/WARN, 2=FAIL verdict
     if report.get("overall_verdict") == EnumVerdict.FAIL:
         sys.exit(2)
 

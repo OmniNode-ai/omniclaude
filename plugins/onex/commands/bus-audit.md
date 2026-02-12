@@ -24,7 +24,7 @@ Audits the Kafka event bus for OmniClaude-specific health:
 Run the bus audit CLI script:
 
 ```bash
-python /Volumes/PRO-G40/Code/omniclaude3/scripts/bus_audit.py
+python scripts/bus_audit.py
 ```
 
 Forward any user-provided flags (e.g., `--json`, `--failures-only`, `-v`, `--skip-daemon`, `--broker`, `--sample-count`).
