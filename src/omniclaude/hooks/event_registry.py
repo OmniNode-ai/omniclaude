@@ -490,6 +490,11 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
     # =========================================================================
     # Agent Status (OMN-1848 - agent lifecycle reporting)
     # =========================================================================
+    # NOTE: agent_name and session_id may carry the sentinel value "unknown".
+    # This indicates the caller did not provide these fields explicitly and
+    # the corresponding environment variables (AGENT_NAME, SESSION_ID) were
+    # also unset. Consumers should treat "unknown" as "not provided", not as
+    # a literal agent name or session identifier.
     "agent.status": EventRegistration(
         event_type="agent.status",
         fan_out=[
@@ -499,6 +504,10 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
                 description="Agent lifecycle status for observability and coordination",
             ),
         ],
+        # Known limitation: when session_id falls back to "unknown" (env var
+        # unset and caller omits it), all such events hash to the same Kafka
+        # partition, creating a hot-partition.  Acceptable for low-volume
+        # fallback traffic; revisit if "unknown" events become frequent.
         partition_key_field="session_id",
         required_fields=["agent_name", "session_id", "state", "message"],
     ),
