@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -136,7 +137,24 @@ def emit_agent_status(
 
         from .emit_client_wrapper import emit_event
 
-        return emit_event("agent.status", payload)
+        result = emit_event("agent.status", payload)
+
+        # Trigger Slack notification for blocked state (OMN-1851)
+        # Only notify when emit_event succeeds (P0-6)
+        # Runs in a daemon thread to avoid blocking the hook path.
+        if result and validated_state == EnumAgentState.BLOCKED:
+            try:
+                from .blocked_notifier import maybe_notify_blocked
+
+                threading.Thread(
+                    target=maybe_notify_blocked,
+                    args=(payload,),
+                    daemon=True,
+                ).start()
+            except Exception:
+                pass  # Notification failure must never affect status emission
+
+        return result
 
     except Exception as e:
         # Structured failure log for debugging (explicit None check preserves empty strings)
