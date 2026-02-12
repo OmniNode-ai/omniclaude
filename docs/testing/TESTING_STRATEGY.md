@@ -277,7 +277,7 @@ async def test_agent_action_event_flow(kafka_producer, postgres_connection):
 
     # Publish event to Kafka
     await kafka_producer.send_and_wait(
-        topic="agent-actions",
+        topic="onex.evt.omniclaude.agent-actions.v1",
         value={
             "correlation_id": correlation_id,
             "action_type": "tool_call",
@@ -410,7 +410,7 @@ pytest --cov=consumers --cov=agents/lib --cov-fail-under=80
 Service Combination Tests:
 
 Kafka → Database:
-  ✅ agent-actions topic → agent_actions table
+  ✅ onex.evt.omniclaude.agent-actions.v1 topic → agent_actions table
   ✅ agent-routing-decisions → agent_routing_decisions table
   ✅ intelligence-events → agent_manifest_injections table
 
@@ -767,7 +767,7 @@ async def test_schema_validation(postgres_connection):
 ### Short-Term (Next Sprint)
 
 1. **Add Integration Tests for Critical Flows** (1 week)
-   - Kafka → Database flow (agent-actions topic)
+   - Kafka → Database flow (onex.evt.omniclaude.agent-actions.v1 topic)
    - Agent routing → Database logging
    - Complete action lifecycle (all 4 event types)
    - UUID serialization in all paths

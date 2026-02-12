@@ -58,6 +58,13 @@ class TestTopicBase:
             TopicBase.DETECTION_FAILURES == "onex.evt.omniclaude.detection-failure.v1"
         )
 
+        # Execution and observability topics (OMN-1552 migration)
+        assert TopicBase.EXECUTION_LOGS == "onex.evt.omniclaude.agent-execution-logs.v1"
+        assert (
+            TopicBase.AGENT_OBSERVABILITY
+            == "onex.evt.omniclaude.agent-observability.v1"
+        )
+
     def test_topic_base_is_str_enum(self) -> None:
         """TopicBase values are strings (StrEnum)."""
         for topic in TopicBase:

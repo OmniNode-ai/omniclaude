@@ -34,7 +34,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-kafka-topics/execute.py
 
 # Check specific topics
 python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-kafka-topics/execute.py \
-  --topics agent-actions,agent.routing.requested.v1
+  --topics onex.evt.omniclaude.agent-actions.v1,agent.routing.requested.v1
 
 # Check topics with wildcard patterns
 python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-kafka-topics/execute.py \
@@ -42,13 +42,13 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-kafka-topics/execute.py
 
 # Include partition details
 python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-kafka-topics/execute.py \
-  --topics agent-actions --include-partitions
+  --topics onex.evt.omniclaude.agent-actions.v1 --include-partitions
 ```
 
 ## Arguments
 
 - `--topics`: Comma-separated list of topic names or patterns
-  - Supports exact names: `agent-actions`
+  - Supports exact names: `onex.evt.omniclaude.agent-actions.v1`
   - Supports wildcards: `agent.*`, `test-*`, `*.v1`
   - Default: None (returns only total topic count)
 - `--include-partitions`: Include partition counts for each topic
@@ -72,7 +72,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-kafka-topics/execute.py
   "status": "healthy",
   "total_topics": 15,
   "topics": {
-    "agent-actions": {
+    "onex.evt.omniclaude.agent-actions.v1": {
       "exists": true
     },
     "nonexistent-topic": {
@@ -89,7 +89,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-kafka-topics/execute.py
   "status": "healthy",
   "total_topics": 15,
   "topics": {
-    "agent-actions": {
+    "onex.evt.omniclaude.agent-actions.v1": {
       "exists": true,
       "partitions": 3
     },
@@ -108,7 +108,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-kafka-topics/execute.py
   "status": "healthy",
   "total_topics": 15,
   "topics": {
-    "agent-actions": {
+    "onex.evt.omniclaude.agent-actions.v1": {
       "exists": true
     },
     "agent.routing.requested.v1": {
@@ -144,7 +144,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-kafka-topics/execute.py
   "status": "healthy",
   "total_topics": 15,
   "topics": {
-    "agent-actions": {
+    "onex.evt.omniclaude.agent-actions.v1": {
       "exists": true,
       "error": "Stats query failed: Permission denied"
     }
@@ -204,7 +204,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-kafka-topics/execute.py
 **Stats query failures** (`"error": "Stats query failed"`):
 - Verify `kafkacat`/`kcat` is installed: `which kcat`
 - Check permissions: Ensure user has topic describe permissions
-- Try manual query: `kcat -L -b 192.168.86.200:29092 -t agent-actions`
+- Try manual query: `kcat -L -b 192.168.86.200:29092 -t onex.evt.omniclaude.agent-actions.v1`
 
 **Wildcard not matching expected topics**:
 - List all topics manually: `kcat -L -b 192.168.86.200:29092`

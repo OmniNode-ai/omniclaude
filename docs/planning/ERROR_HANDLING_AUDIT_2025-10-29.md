@@ -191,11 +191,11 @@ $ tail ~/.claude/hooks/hook-enhanced.log
    - Docker container logs (consumer, services)
 
 3. **Kafka Topics** (event bus):
-   - `agent-routing-decisions`
-   - `agent-transformation-events`
-   - `router-performance-metrics`
-   - `agent-detection-failures`
-   - `agent-actions`
+   - `onex.evt.omniclaude.routing-decision.v1`
+   - `onex.evt.omniclaude.agent-transformation.v1`
+   - `onex.evt.omniclaude.performance-metrics.v1`
+   - `onex.evt.omniclaude.detection-failure.v1`
+   - `onex.evt.omniclaude.agent-actions.v1`
 
 ---
 
@@ -334,7 +334,7 @@ def _insert_detection_failures(self, cursor, events: List[Dict[str, Any]]) -> tu
 
 **✅ Publishing Method Exists**: `claude_hooks/lib/hook_event_adapter.py:73`
 ```python
-TOPIC_DETECTION_FAILURES = "agent-detection-failures"
+TOPIC_DETECTION_FAILURES = "onex.evt.omniclaude.detection-failure.v1"
 
 def publish_detection_failure(self, user_request, failure_reason, ...):
     event = {...}
