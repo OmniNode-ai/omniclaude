@@ -296,6 +296,9 @@ goto Phase 3
 
 **Pre-filter previously failed issues**:
 ```python
+# Snapshot all issues BEFORE filtering so checkpoint fingerprints reflect the full review
+_original_issues = {sev: list(lst) for sev, lst in issues.items()}
+
 # Filter out issues that already failed in previous iterations (do not retry)
 # Create set once for O(1) lookups instead of O(n*m) list comprehension
 failed_fixes_set = {(f["file"], f["line"]) for f in failed_fixes}
@@ -431,7 +434,7 @@ After a successful commit (or stage in `--no-commit` mode), write a checkpoint i
 ```python
 if checkpoint_arg and checkpoint_ticket_id and checkpoint_run_id:
     try:
-        import subprocess as _sp, sys
+        import subprocess as _sp, sys, os, json
         from pathlib import Path as _Path
         _plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT", "")
         if not _plugin_root:
@@ -454,7 +457,7 @@ if checkpoint_arg and checkpoint_ticket_id and checkpoint_run_id:
             "issue_fingerprints": [
                 f"{issue['file']}:{issue['line']}"
                 for severity in ["critical", "major", "minor"]
-                for issue in issues.get(severity, [])
+                for issue in _original_issues.get(severity, [])
             ],
             "last_clean_sha": _head_sha,
         })
