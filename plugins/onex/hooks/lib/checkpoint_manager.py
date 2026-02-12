@@ -125,6 +125,21 @@ _PHASE_MAP: dict[str, Any] = {}
 if _INFRA_AVAILABLE:
     _PHASE_MAP = {phase.value: phase for phase in EnumCheckpointPhase}
 
+# Canonical list of valid phase names for argparse choices.
+# Derived from _PHASE_MAP when omnibase_infra is available; hardcoded fallback otherwise
+# so that ``--help`` always displays the valid options.
+_PHASE_CHOICES: list[str] = (
+    list(_PHASE_MAP.keys())
+    if _PHASE_MAP
+    else [
+        "implement",
+        "local_review",
+        "create_pr",
+        "pr_release_ready",
+        "ready_for_merge",
+    ]
+)
+
 # Project-specific UUID namespace for deterministic ID generation.
 # Derived via ``uuid5(NAMESPACE_DNS, "onex.omninode.io")`` so it is stable
 # and does NOT collide with the well-known RFC 4122 namespaces (DNS, URL, etc.).
@@ -490,13 +505,7 @@ def main(argv: list[str] | None = None) -> int:
     write_parser.add_argument(
         "--phase",
         required=True,
-        choices=[
-            "implement",
-            "local_review",
-            "create_pr",
-            "pr_release_ready",
-            "ready_for_merge",
-        ],
+        choices=_PHASE_CHOICES,
         help="Pipeline phase that completed",
     )
     write_parser.add_argument(
@@ -529,13 +538,7 @@ def main(argv: list[str] | None = None) -> int:
     read_parser.add_argument(
         "--phase",
         required=True,
-        choices=[
-            "implement",
-            "local_review",
-            "create_pr",
-            "pr_release_ready",
-            "ready_for_merge",
-        ],
+        choices=_PHASE_CHOICES,
         help="Phase to read",
     )
     read_parser.set_defaults(func=_cli_read)
@@ -550,13 +553,7 @@ def main(argv: list[str] | None = None) -> int:
     validate_parser.add_argument(
         "--phase",
         required=True,
-        choices=[
-            "implement",
-            "local_review",
-            "create_pr",
-            "pr_release_ready",
-            "ready_for_merge",
-        ],
+        choices=_PHASE_CHOICES,
         help="Phase to validate",
     )
     validate_parser.set_defaults(func=_cli_validate)

@@ -505,7 +505,11 @@ else:
 
 
 def write_checkpoint(ticket_id, run_id, phase_name, attempt_number, repo_commit_map, artifact_paths, phase_payload):
-    """Write a checkpoint after a phase completes.  Non-blocking on failure."""
+    """Write a checkpoint after a phase completes.  Non-blocking on failure.
+
+    artifact_paths: relative paths of file-level outputs (e.g., generated reports, diffs).
+    phase_payload: structured metadata for the phase (e.g., pr_url, branch_name, commit_sha).
+    """
     try:
         cmd = [
             sys.executable, str(_CHECKPOINT_MANAGER), "write",
@@ -909,7 +913,7 @@ for phase_name in phase_order:
                 phase_name=phase_name,
                 attempt_number=attempt_num,
                 repo_commit_map={repo_name: head_sha},
-                artifact_paths=[],  # Artifact metadata keys are not file paths; real paths not tracked
+                artifact_paths=[],  # artifact_paths is for file-level outputs (e.g., generated reports); pipeline metadata lives in phase_payload
                 phase_payload=phase_payload,
             )
         except Exception as cp_err:

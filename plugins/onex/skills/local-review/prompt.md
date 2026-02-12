@@ -431,7 +431,7 @@ After a successful commit (or stage in `--no-commit` mode), write a checkpoint i
 ```python
 if checkpoint_arg and checkpoint_ticket_id and checkpoint_run_id:
     try:
-        import subprocess as _sp
+        import subprocess as _sp, sys
         _CHECKPOINT_MANAGER = os.path.join(
             os.environ.get("CLAUDE_PLUGIN_ROOT", ""),
             "hooks", "lib", "checkpoint_manager.py"
@@ -459,8 +459,8 @@ if checkpoint_arg and checkpoint_ticket_id and checkpoint_run_id:
             "--run-id", checkpoint_run_id,
             "--phase", "local_review",
             "--attempt", str(iteration + 1),
-            "--repo-commit-map", json.dumps({get_current_repo(): _head_sha}),
-            "--artifact-paths", json.dumps([]),  # no file artifacts produced by local-review
+            "--repo-commit-map", json.dumps({os.path.basename(os.getcwd()): _head_sha}),
+            "--artifact-paths", json.dumps([]),  # artifact_paths tracks new file outputs; local-review modifies existing files via commits, so none
             "--payload", _cp_payload,
         ]
         _cp_proc = _sp.run(_cp_cmd, capture_output=True, text=True, timeout=30)
