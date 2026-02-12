@@ -13,7 +13,6 @@ Usage:
 """
 
 import json
-import os
 import sys
 import uuid
 from datetime import UTC, datetime
@@ -74,10 +73,13 @@ def publish_test_events(count: int = 10) -> list[str]:
     """
     print(f"📤 Publishing {count} test events to Kafka...")
 
+    kafka_servers = settings.get_effective_kafka_bootstrap_servers()
+    if not kafka_servers:
+        print("  ✗ KAFKA_BOOTSTRAP_SERVERS not configured. Set it in .env.")
+        sys.exit(1)
+
     producer = KafkaProducer(
-        bootstrap_servers=os.environ.get(
-            "KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"
-        ).split(","),
+        bootstrap_servers=kafka_servers.split(","),
         value_serializer=lambda v: json.dumps(v).encode("utf-8"),
     )
 
