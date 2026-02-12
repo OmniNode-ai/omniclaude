@@ -434,8 +434,12 @@ After a successful commit (or stage in `--no-commit` mode), write a checkpoint i
 ```python
 if checkpoint_arg and checkpoint_ticket_id and checkpoint_run_id:
     try:
-        import subprocess as _sp, sys, os, json
+        import subprocess as _sp
+        import sys
+        import os
+        import json
         from pathlib import Path as _Path
+
         _plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT", "")
         if not _plugin_root:
             # Hardcoded known location relative to home when CLAUDE_PLUGIN_ROOT is not set
@@ -452,6 +456,21 @@ if checkpoint_arg and checkpoint_ticket_id and checkpoint_run_id:
         except Exception:
             _head_sha = "0000000"
 
+        # Derive next attempt number from existing checkpoints.
+        # This prevents collisions if the pipeline resumes after a crash
+        # (where iteration + 1 could duplicate an existing attempt number).
+        _list_proc = _sp.run(
+            [sys.executable, _CHECKPOINT_MANAGER, "list",
+             "--ticket-id", checkpoint_ticket_id,
+             "--phase", "local_review"],
+            capture_output=True, text=True
+        )
+        _existing = (
+            json.loads(_list_proc.stdout).get("checkpoints", [])
+            if _list_proc.returncode == 0 else []
+        )
+        _next_attempt = str(len(_existing) + 1) if _existing is not None else str(iteration + 1)
+
         _cp_payload = json.dumps({
             "iteration_count": iteration + 1,  # 1-based (iteration hasn't been incremented yet)
             "issue_fingerprints": [
@@ -461,25 +480,32 @@ if checkpoint_arg and checkpoint_ticket_id and checkpoint_run_id:
             ],
             "last_clean_sha": _head_sha,
         })
+        # Direct subprocess to checkpoint_manager (not polymorphic-agent dispatch)
+        # because checkpoint writes are non-blocking side-effects that don't need
+        # agent orchestration overhead.
         _cp_cmd = [
             sys.executable, _CHECKPOINT_MANAGER, "write",
             "--ticket-id", checkpoint_ticket_id,
             "--run-id", checkpoint_run_id,
             "--phase", "local_review",
-            "--attempt", str(iteration + 1),
+            "--attempt", _next_attempt,
             # Inline repo detection (self-contained; no cross-skill dependency on get_current_repo)
             "--repo-commit-map", json.dumps({os.path.basename(os.getcwd()): _head_sha}),
-            # artifact_paths: file-level outputs (e.g. generated reports, saved files).
-            # Distinct from repo_commit_map which tracks commit SHAs per repo.
-            # local-review modifies existing files via commits, so no artifact paths are produced.
+            # artifact_paths is a list[str] of file-system paths for generated outputs
+            # (reports, saved files). Distinct from repo_commit_map which tracks commit
+            # SHAs per repository. local-review modifies existing files via commits,
+            # so no artifact paths are produced.
             "--artifact-paths", json.dumps([]),
             "--payload", _cp_payload,
         ]
         _cp_proc = _sp.run(_cp_cmd, capture_output=True, text=True, timeout=30)
-        if _cp_proc.returncode == 0:
-            print(f"Checkpoint written for local_review iteration {iteration + 1}")
+        # Parse checkpoint write result from JSON stdout (exit code is always 0)
+        _cp_result = json.loads(_cp_proc.stdout) if _cp_proc.stdout.strip() else {}
+        if _cp_result.get("success", False):
+            print(f"Checkpoint written for local_review attempt {_next_attempt}")
         else:
-            print(f"Warning: Checkpoint write failed: {_cp_proc.stdout or _cp_proc.stderr}")
+            _cp_err_msg = _cp_result.get("error", _cp_proc.stderr or "unknown error")
+            print(f"Warning: Checkpoint write failed: {_cp_err_msg}")
     except Exception as _cp_err:
         print(f"Warning: Checkpoint write failed: {_cp_err}")
         # Non-blocking: continue pipeline

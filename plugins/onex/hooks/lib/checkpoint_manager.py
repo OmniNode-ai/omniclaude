@@ -12,7 +12,8 @@ Design Decisions:
     - **Non-blocking**: Checkpoint write failures in the pipeline context are
       non-blocking (the caller decides; this CLI reports success/failure).
     - **Graceful degradation**: If ``omnibase_infra`` is not installed, the CLI
-      prints an error JSON and exits with code 1.
+      prints an error JSON.  Write commands still exit 0 (non-blocking);
+      read/validate exit 1 so callers can make control-flow decisions.
 
 Storage Layout::
 
@@ -150,6 +151,7 @@ _PHASE_CHOICES: list[str] = (
 # Derived via ``uuid5(NAMESPACE_DNS, "onex.omninode.io")`` so it is stable
 # and does NOT collide with the well-known RFC 4122 namespaces (DNS, URL, etc.).
 _ONEX_NAMESPACE = UUID("e176b05f-f761-5a9d-9a51-ac6d5a3566ee")
+# TODO: Extract to shared onex constants module when multiple consumers exist.
 
 
 def _error_json(message: str) -> str:
@@ -233,10 +235,16 @@ def _checkpoint_to_dict(checkpoint: Any) -> dict[str, Any]:
 
 
 def _cli_write(args: argparse.Namespace) -> int:
-    """Write a checkpoint to disk."""
+    """Write a checkpoint to disk.
+
+    Always exits 0: checkpoint writes are non-blocking.  Callers check JSON
+    stdout for the ``success`` field to determine the outcome.
+    """
     if not _INFRA_AVAILABLE:
         print(_error_json(f"omnibase_infra not available: {_IMPORT_ERROR}"))
-        return 1
+        # Always exit 0: checkpoint writes are non-blocking.
+        # Callers check JSON stdout for success/failure.
+        return 0
 
     try:
         repo_commit_map = (
@@ -246,17 +254,17 @@ def _cli_write(args: argparse.Namespace) -> int:
         payload = json.loads(args.payload) if args.payload else {}
     except json.JSONDecodeError as exc:
         print(_error_json(f"Invalid JSON argument: {exc}"))
-        return 1
+        return 0
 
     if not isinstance(repo_commit_map, dict):
         print(_error_json("--repo-commit-map must be a JSON object"))
-        return 1
+        return 0
     if not isinstance(artifact_paths, list):
         print(_error_json("--artifact-paths must be a JSON array"))
-        return 1
+        return 0
     if not isinstance(payload, dict):
         print(_error_json("--payload must be a JSON object"))
-        return 1
+        return 0
 
     # Validate phase name
     if args.phase not in _PHASE_MAP:
@@ -265,7 +273,7 @@ def _cli_write(args: argparse.Namespace) -> int:
                 f"Invalid phase: {args.phase}. Valid: {list(_PHASE_MAP.keys())}"
             )
         )
-        return 1
+        return 0
 
     try:
         checkpoint_dict = _build_checkpoint_dict(
@@ -303,15 +311,24 @@ def _cli_write(args: argparse.Namespace) -> int:
                 }
             )
         )
-        return 0 if output_model.success else 1
+        # Always exit 0: checkpoint writes are non-blocking.
+        # Callers check JSON stdout for success/failure.
+        return 0
 
     except Exception as exc:
         print(_error_json(f"Write failed: {exc}"))
-        return 1
+        # Always exit 0: checkpoint writes are non-blocking.
+        # Callers check JSON stdout for success/failure.
+        return 0
 
 
 def _cli_read(args: argparse.Namespace) -> int:
-    """Read the latest checkpoint for a given phase."""
+    """Read the latest checkpoint for a given phase.
+
+    Exit code 1 on failure: read is a blocking operation used for --skip-to
+    validation.  Unlike _cli_write (always 0, non-blocking), callers depend
+    on the exit code to make control-flow decisions.
+    """
     if not _INFRA_AVAILABLE:
         print(_error_json(f"omnibase_infra not available: {_IMPORT_ERROR}"))
         return 1
@@ -358,7 +375,12 @@ def _cli_read(args: argparse.Namespace) -> int:
 
 
 def _cli_validate(args: argparse.Namespace) -> int:
-    """Validate a checkpoint by reading it first, then running structural validation."""
+    """Validate a checkpoint by reading it first, then running structural validation.
+
+    Exit code 1 on failure: validate is a blocking operation used for --skip-to
+    validation.  Unlike _cli_write (always 0, non-blocking), callers depend
+    on the exit code to make control-flow decisions.
+    """
     if not _INFRA_AVAILABLE:
         print(_error_json(f"omnibase_infra not available: {_IMPORT_ERROR}"))
         return 1

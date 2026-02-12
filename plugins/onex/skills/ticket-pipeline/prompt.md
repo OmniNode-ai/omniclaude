@@ -511,12 +511,16 @@ else:
 def write_checkpoint(ticket_id, run_id, phase_name, attempt_number, repo_commit_map, artifact_paths, phase_payload):
     """Write a checkpoint after a phase completes.  Non-blocking on failure.
 
-    artifact_paths: relative file paths of generated outputs (reports, diffs, etc.).
-        These are file-system artifacts -- NOT commit hashes or code-state references.
-    repo_commit_map: dict mapping repository names to commit SHAs (e.g., {"omniclaude": "abc1234"}).
-        Tracks the code state at checkpoint time.  Distinct from artifact_paths.
-    phase_payload: structured metadata about the phase execution (e.g., pr_url, branch_name,
-        iteration_count).  Schema varies per phase -- see build_phase_payload().
+    Args:
+        artifact_paths: list[str] of relative file-system paths for generated outputs
+            (e.g., ["reports/review.md", "coverage/lcov.info"]).  Each entry is a path
+            on disk -- NOT a dictionary, not commit hashes, and not code-state references.
+        repo_commit_map: dict[str, str] mapping repository names to commit SHAs
+            (e.g., {"omniclaude": "abc1234"}).  Tracks the code state at checkpoint time.
+            This is the correct place for commit hashes -- distinct from artifact_paths.
+        phase_payload: dict of structured metadata about the phase execution (e.g.,
+            pr_url, branch_name, iteration_count).  Schema varies per phase -- see
+            build_phase_payload().
     """
     try:
         cmd = [
@@ -530,13 +534,15 @@ def write_checkpoint(ticket_id, run_id, phase_name, attempt_number, repo_commit_
             "--payload", json.dumps(phase_payload),
         ]
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        if proc.returncode == 0:
-            result = json.loads(proc.stdout)
-            print(f"Checkpoint written for phase '{phase_name}' (attempt {attempt_number}): {result.get('checkpoint_path', 'ok')}")
-            return result
+        # checkpoint_manager.py always returns exit code 0; success/failure is
+        # encoded in JSON stdout.  Parse stdout to determine the outcome.
+        _cp_result = json.loads(proc.stdout) if proc.stdout.strip() else {}
+        if _cp_result.get("success", False):
+            print(f"Checkpoint written for phase '{phase_name}' (attempt {attempt_number}): {_cp_result.get('checkpoint_path', 'ok')}")
+            return _cp_result
         else:
-            print(f"Warning: Checkpoint write failed for phase '{phase_name}': {proc.stdout or proc.stderr}")
-            return {"success": False, "error": proc.stdout or proc.stderr}
+            print(f"Warning: Checkpoint write failed for phase '{phase_name}': {_cp_result.get('error', proc.stderr or 'unknown')}")
+            return {"success": False, "error": _cp_result.get("error", proc.stderr or "unknown")}
     except Exception as e:
         print(f"Warning: Checkpoint write failed for phase '{phase_name}': {e}")
         return {"success": False, "error": str(e)}
@@ -586,6 +592,17 @@ def get_head_sha():
         return "0000000"
 
 
+def get_current_branch():
+    """Return current git branch name, or 'unknown' on failure."""
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            text=True, timeout=5
+        ).strip()
+    except (subprocess.SubprocessError, OSError):
+        return "unknown"
+
+
 def build_phase_payload(phase_name, state, result):
     """Build the phase-specific payload dict from pipeline state and phase result.
 
@@ -596,12 +613,7 @@ def build_phase_payload(phase_name, state, result):
     head_sha = get_head_sha()
 
     if phase_name == "implement":
-        try:
-            branch = subprocess.check_output(
-                ["git", "rev-parse", "--abbrev-ref", "HEAD"], text=True
-            ).strip()
-        except Exception:
-            branch = "unknown"
+        branch = get_current_branch()
         return {
             "branch_name": artifacts.get("branch_name", branch),
             "commit_sha": head_sha,
