@@ -1,5 +1,7 @@
 # VERTICAL-001 Demo Runbook
 
+> **Note**: This runbook references demo scripts (`demo_consume_store.py`, `demo_query_patterns.py`) removed during OMN-2058 (DB-SPLIT). Pattern storage functionality has been migrated. See updated documentation for current workflows.
+
 **Ticket**: OMN-1802
 **Purpose**: End-to-end pattern flow validation with shortcuts
 **Last Updated**: 2026-02-02

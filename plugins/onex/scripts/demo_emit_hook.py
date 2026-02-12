@@ -157,11 +157,11 @@ def main() -> int:
     print()
     print("=" * 70)
     if success:
-        print("Demo step 1/3 complete: Event emitted to Kafka")
+        print("Event emitted to Kafka successfully.")
         print()
-        print("Next steps:")
-        print("  1. Run consumer: python plugins/onex/scripts/demo_consume_store.py")
-        print("  2. Query patterns: python plugins/onex/scripts/demo_query_patterns.py")
+        print("Note: The demo_consume_store.py and demo_query_patterns.py scripts")
+        print("were removed during OMN-2058 (DB-SPLIT). Pattern storage functionality")
+        print("has been migrated to omnibase_infra.")
     else:
         print("Demo failed at step 1/3: Event emission")
         print()
