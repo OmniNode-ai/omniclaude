@@ -799,11 +799,16 @@ def run_bus_audit(
     topics_to_sample = sorted(
         validatable_topics | CORE_PRESENCE_TOPICS | set(VALIDATION_SKIP_TOPICS.keys())
     )
-    # Also sample cmd topics for misroute detection
+    # Also sample cmd and evt topics for misroute detection
     cmd_topics_on_broker = {
         t for t in broker_topics if ".cmd." in t and t not in topics_to_sample
     }
-    all_sample_targets = sorted(set(topics_to_sample) | cmd_topics_on_broker)
+    evt_topics_on_broker = {
+        t for t in broker_topics if ".evt." in t and t not in topics_to_sample
+    }
+    all_sample_targets = sorted(
+        set(topics_to_sample) | cmd_topics_on_broker | evt_topics_on_broker
+    )
 
     sampled = sample_messages(broker, all_sample_targets, sample_count)
 

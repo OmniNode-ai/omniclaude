@@ -21,13 +21,24 @@ Audits the Kafka event bus for OmniClaude-specific health:
 
 ## Implementation
 
-Run the bus audit CLI script:
+When invoked:
 
-```bash
-python scripts/bus_audit.py
-```
+1. Execute the bus audit script located at `scripts/bus_audit.py` in the repository root
+2. Pass through any user-provided flags to the script:
+   - `--json` - Output results in JSON format for dashboard integration
+   - `--failures-only` - Show only failed checks
+   - `-v` / `--verbose` - Include sample payloads for failed checks
+   - `--skip-daemon` - Skip emit daemon health check
+   - `--broker <host:port>` - Override Kafka broker address
+   - `--sample-count <n>` - Number of messages to sample per topic (default: 5)
 
-Forward any user-provided flags (e.g., `--json`, `--failures-only`, `-v`, `--skip-daemon`, `--broker`, `--sample-count`).
+3. Display the audit results to the user, including:
+   - Topic presence and accessibility
+   - Schema validation status for each topic
+   - Hook emission status (SessionStart, SessionEnd, UserPromptSubmit, PostToolUse)
+   - Misroute detection results
+   - Emit daemon health status (unless skipped)
+   - Overall verdict with upgrade logic for core lifecycle topics
 
 ## Examples
 
