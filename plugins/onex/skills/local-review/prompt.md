@@ -16,6 +16,7 @@ Parse arguments from `$ARGUMENTS`:
 | `--files <glob>` | all | Glob pattern to limit scope |
 | `--no-fix` | false | Report only, don't attempt fixes |
 | `--no-commit` | false | Fix but don't commit (stage only) |
+| `--checkpoint <ticket:run>` | none | Write checkpoint after each iteration (format: `ticket_id:run_id`) |
 
 **Examples**:
 ```bash
@@ -295,6 +296,9 @@ goto Phase 3
 
 **Pre-filter previously failed issues**:
 ```python
+# Snapshot all issues BEFORE filtering so checkpoint fingerprints reflect the full review
+_original_issues = {sev: list(lst) for sev, lst in issues.items()}
+
 # Filter out issues that already failed in previous iterations (do not retry)
 # Create set once for O(1) lookups instead of O(n*m) list comprehension
 failed_fixes_set = {(f["file"], f["line"]) for f in failed_fixes}
@@ -421,6 +425,92 @@ Note: `total_issues_fixed` was already incremented in the "Track issues fixed" s
 5. Final status: "Commit failed - {reason}. Files staged for manual review."
 
 This prevents re-reviewing the same changes and gives the user clear next steps.
+
+### Step 2.5b: Write Checkpoint (OMN-2144)
+
+After a successful commit (or stage in `--no-commit` mode), write a checkpoint if
+`--checkpoint` was provided.  Checkpoint write failure is **non-blocking**.
+
+```python
+if checkpoint_arg and checkpoint_ticket_id and checkpoint_run_id:
+    try:
+        import subprocess as _sp
+        import sys
+        import os
+        import json
+        from pathlib import Path as _Path
+
+        _plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT", "")
+        if not _plugin_root:
+            # Hardcoded known location relative to home when CLAUDE_PLUGIN_ROOT is not set
+            _plugin_root = str(_Path.home() / ".claude" / "plugins" / "onex")
+        _CHECKPOINT_MANAGER = os.path.join(
+            _plugin_root,
+            "hooks", "lib", "checkpoint_manager.py"
+        )
+        # Get current HEAD SHA for the checkpoint
+        try:
+            _head_sha = _sp.check_output(
+                ["git", "rev-parse", "--short=7", "HEAD"], text=True
+            ).strip()
+        except Exception:
+            _head_sha = "0000000"
+
+        # Derive next attempt number from existing checkpoints.
+        # This prevents collisions if the pipeline resumes after a crash
+        # (where iteration + 1 could duplicate an existing attempt number).
+        _list_proc = _sp.run(
+            [sys.executable, _CHECKPOINT_MANAGER, "list",
+             "--ticket-id", checkpoint_ticket_id,
+             "--run-id", checkpoint_run_id],
+            capture_output=True, text=True
+        )
+        _all_checkpoints = (
+            json.loads(_list_proc.stdout).get("checkpoints", [])
+            if _list_proc.returncode == 0 else []
+        )
+        _existing = [cp for cp in _all_checkpoints if cp.get("phase") == "local_review"]
+        _next_attempt = str(len(_existing) + 1)
+
+        _cp_payload = json.dumps({
+            "iteration_count": iteration + 1,  # 1-based (iteration hasn't been incremented yet)
+            "issue_fingerprints": [
+                f"{issue['file']}:{issue['line']}"
+                for severity in ["critical", "major", "minor"]
+                for issue in _original_issues.get(severity, [])
+            ],
+            "last_clean_sha": _head_sha,
+        })
+        # Direct subprocess to checkpoint_manager (not polymorphic-agent dispatch)
+        # because checkpoint writes are non-blocking side-effects that don't need
+        # agent orchestration overhead.
+        _cp_cmd = [
+            sys.executable, _CHECKPOINT_MANAGER, "write",
+            "--ticket-id", checkpoint_ticket_id,
+            "--run-id", checkpoint_run_id,
+            "--phase", "local_review",
+            "--attempt", _next_attempt,
+            # Inline repo detection (self-contained; no cross-skill dependency on get_current_repo)
+            "--repo-commit-map", json.dumps({os.path.basename(os.getcwd()): _head_sha}),
+            # artifact_paths is a list[str] of file-system paths for generated outputs
+            # (reports, saved files). Distinct from repo_commit_map which tracks commit
+            # SHAs per repository. local-review modifies existing files via commits,
+            # so no artifact paths are produced.
+            "--artifact-paths", json.dumps([]),
+            "--payload", _cp_payload,
+        ]
+        _cp_proc = _sp.run(_cp_cmd, capture_output=True, text=True, timeout=30)
+        # Parse checkpoint write result from JSON stdout (exit code is always 0)
+        _cp_result = json.loads(_cp_proc.stdout) if _cp_proc.stdout.strip() else {}
+        if _cp_result.get("success", False):
+            print(f"Checkpoint written for local_review attempt {_next_attempt}")
+        else:
+            _cp_err_msg = _cp_result.get("error", _cp_proc.stderr or "unknown error")
+            print(f"Warning: Checkpoint write failed: {_cp_err_msg}")
+    except Exception as _cp_err:
+        print(f"Warning: Checkpoint write failed: {_cp_err}")
+        # Non-blocking: continue pipeline
+```
 
 ### Step 2.6: Check Loop Condition
 
@@ -549,6 +639,22 @@ if "--files" in args:
         files_glob = None
     else:
         files_glob = args[idx + 1]
+
+# Extract --checkpoint value (OMN-2144)
+checkpoint_arg = None
+checkpoint_ticket_id = None
+checkpoint_run_id = None
+if "--checkpoint" in args:
+    idx = args.index("--checkpoint")
+    if idx + 1 < len(args) and not args[idx + 1].startswith("--"):
+        checkpoint_arg = args[idx + 1]
+        parts = checkpoint_arg.split(":", 1)
+        if len(parts) == 2:
+            checkpoint_ticket_id = parts[0]
+            checkpoint_run_id = parts[1]
+        else:
+            print(f"Warning: --checkpoint requires format 'ticket_id:run_id', got '{checkpoint_arg}'. Ignoring.")
+            checkpoint_arg = None
 ```
 
 ### Base Branch Detection
