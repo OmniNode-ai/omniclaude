@@ -218,6 +218,23 @@ class TestCLIParsing:
         metadata = mock_emit.call_args.kwargs["metadata"]
         assert metadata == {}
 
+    def test_message_over_limit_exits_zero(self) -> None:
+        """Over-limit --message (>500 chars) still exits 0 (fail-open).
+
+        The CLI validates --message length via a custom argparse type callback
+        (_message_within_limit). Messages exceeding 500 characters cause argparse
+        to call sys.exit(2), which the SystemExit handler catches (fail-open).
+        The emitter is never called.
+        """
+        with patch(
+            "plugins.onex.hooks.lib.agent_status_emitter.emit_agent_status",
+            return_value=True,
+        ) as mock_emit:
+            # 501 characters -- rejected by argparse, emitter never called
+            main(["--state", "working", "--message", "x" * 501])
+
+        mock_emit.assert_not_called()
+
     def test_progress_out_of_range_exits_zero(self) -> None:
         """Out-of-range --progress values (e.g., 1.5, -0.1) still exit 0 (fail-open).
 
