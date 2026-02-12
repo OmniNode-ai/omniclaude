@@ -43,8 +43,8 @@ try:
 except ImportError:
     print(
         "ERROR: confluent-kafka is required but not installed.\n"
-        "  Install with:  uv pip install confluent-kafka\n"
-        "  Or:            pip install confluent-kafka",
+        "  Install with:  uv sync --group kafka\n"
+        "  Or:            uv pip install confluent-kafka",
         file=sys.stderr,
     )
     sys.exit(1)
@@ -237,7 +237,7 @@ HOOK_EMISSIONS: dict[str, list[str]] = {
 # Startup Validation: TOPIC_SCHEMA_MAP keys must be valid TopicBase values
 # =============================================================================
 
-_topicbase_values: set[str] = {str(m.value) for m in TopicBase}
+_topicbase_values: set[str] = {m.value for m in TopicBase}
 _schema_map_orphans = set(TOPIC_SCHEMA_MAP.keys()) - _topicbase_values
 if _schema_map_orphans:
     raise AssertionError(
@@ -262,6 +262,8 @@ def discover_topics(broker: str, timeout: float = 10.0) -> set[str]:
     Returns:
         Set of topic names present on the broker.
     """
+    # Ephemeral group ID per invocation is intentional -- these are cleaned up
+    # automatically by Redpanda's group_topic_partitions_timeout_sec (default 7 days).
     consumer = Consumer(
         {
             "bootstrap.servers": broker,
@@ -300,6 +302,8 @@ def sample_messages(
     if not topics:
         return {}
 
+    # Ephemeral group ID per invocation is intentional -- these are cleaned up
+    # automatically by Redpanda's group_topic_partitions_timeout_sec (default 7 days).
     consumer = Consumer(
         {
             "bootstrap.servers": broker,
@@ -428,6 +432,18 @@ def validate_with_exemptions(
 
             if error_fields and error_fields <= exemptions:
                 exempted += 1
+            elif not error_fields:
+                # Model-level (non-field) validation errors have empty loc
+                # tuples, so error_fields is empty. These cannot be matched
+                # against field-name exemptions -- treat as real errors with
+                # an explicit diagnostic note.
+                real_errors += 1
+                detail = (
+                    f"[{topic}] model-level validation error "
+                    f"(non-field validator, empty loc): {str(e)[:250]}"
+                )
+                if len(details) < 20:
+                    details.append(detail)
             else:
                 real_errors += 1
                 detail = f"[{topic}] {str(e)[:300]}"
@@ -533,11 +549,11 @@ def find_unmapped_topics() -> list[str]:
     registry_topics: set[str] = set()
     for reg in EVENT_REGISTRY.values():
         for rule in reg.fan_out:
-            registry_topics.add(str(rule.topic_base.value))
+            registry_topics.add(rule.topic_base.value)
 
     unmapped: list[str] = []
     for member in TopicBase:
-        topic_val = str(member.value)
+        topic_val = member.value
         if topic_val in LEGACY_TOPICS:
             continue
         if topic_val not in schema_mapped and topic_val not in registry_topics:
@@ -595,7 +611,9 @@ def check_daemon_health(
         status_request = json.dumps({"action": "status"}) + "\n"
         sock.sendall(status_request.encode("utf-8"))
 
-        # Read response
+        # Read response (capped at 64 KB to prevent unbounded memory growth
+        # from a misbehaving daemon before the 2s timeout fires).
+        _MAX_RESPONSE_BYTES = 65536
         response_data = b""
         try:
             while True:
@@ -604,6 +622,12 @@ def check_daemon_health(
                     break
                 response_data += chunk
                 if b"\n" in response_data:
+                    break
+                if len(response_data) > _MAX_RESPONSE_BYTES:
+                    result["error"] = (
+                        f"Daemon response exceeded {_MAX_RESPONSE_BYTES} bytes, "
+                        "aborting read"
+                    )
                     break
         except TimeoutError:
             pass
@@ -774,7 +798,7 @@ def run_bus_audit(
     now = datetime.now(UTC).isoformat()
 
     # Expected topics from TopicBase
-    all_expected: set[str] = {str(m.value) for m in TopicBase}
+    all_expected: set[str] = {m.value for m in TopicBase}
     schema_mapped_topics = set(TOPIC_SCHEMA_MAP.keys())
     validatable_topics = {
         t for t in schema_mapped_topics if t not in VALIDATION_SKIP_TOPICS
@@ -806,8 +830,18 @@ def run_bus_audit(
     evt_topics_on_broker = {
         t for t in broker_topics if ".evt." in t and t not in topics_to_sample
     }
+    # Include canonical evt topics from TopicBase that exist on the broker so
+    # misroute detection can compare event types across cmd/evt pairs (OMN-2116).
+    # Only broker-present topics are included to avoid unnecessary network
+    # round-trips for topics that sample_messages would return empty anyway.
+    canonical_evt_topics = {
+        t.value for t in TopicBase if ".evt." in t.value
+    } & broker_topics
     all_sample_targets = sorted(
-        set(topics_to_sample) | cmd_topics_on_broker | evt_topics_on_broker
+        set(topics_to_sample)
+        | cmd_topics_on_broker
+        | evt_topics_on_broker
+        | canonical_evt_topics
     )
 
     sampled = sample_messages(broker, all_sample_targets, sample_count)
@@ -1261,8 +1295,12 @@ def main() -> None:
             )
         )
 
+    # Exit code: 1=Kafka connection failure (report contains "error" key)
+    if "error" in report:
+        sys.exit(1)
+
     # Exit code: 0=PASS/WARN, 2=FAIL verdict
-    if report.get("overall_verdict") == EnumVerdict.FAIL:
+    elif report.get("overall_verdict") == EnumVerdict.FAIL:
         sys.exit(2)
 
 
