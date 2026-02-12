@@ -24,9 +24,8 @@ import psycopg2
 import requests
 from kafka import KafkaProducer
 
-# Add config for type-safe settings
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from config import settings
+# Import type-safe settings from omniclaude package
+from omniclaude.config.settings import settings
 
 # Add _shared to path
 SCRIPT_DIR = Path(__file__).parent
@@ -118,8 +117,8 @@ def verify_database_records(correlation_ids: list[str], timeout: int = 30):
         cursor.execute(
             """
             SELECT COUNT(*)
-            FROM agent_actions
-            WHERE correlation_id = ANY(%s)
+            FROM claude_session_snapshots
+            WHERE correlation_id::text = ANY(%s)
             """,
             (correlation_ids,),
         )
@@ -193,9 +192,9 @@ def check_metrics_endpoint():
         return False
 
 
-def query_recent_traces():
-    """Query recent debug traces view."""
-    print("📋 Querying recent debug traces...")
+def query_recent_sessions():
+    """Query recent session snapshots with prompt and tool counts."""
+    print("📋 Querying recent session snapshots...")
 
     conn = psycopg2.connect(**DB_CONFIG)
     cursor = conn.cursor()
@@ -203,13 +202,15 @@ def query_recent_traces():
     cursor.execute(
         """
         SELECT
-            correlation_id,
-            agent_name,
-            action_count,
-            error_count,
-            success_count,
-            total_duration_ms
-        FROM recent_debug_traces
+            session_id,
+            status,
+            prompt_count,
+            tool_count,
+            event_count,
+            duration_seconds,
+            last_event_at
+        FROM claude_session_snapshots
+        ORDER BY last_event_at DESC
         LIMIT 5
         """
     )
@@ -217,15 +218,16 @@ def query_recent_traces():
     rows = cursor.fetchall()
 
     if rows:
-        print("✅ Recent traces:")
+        print("✅ Recent sessions:")
         for row in rows:
-            _corr_id, agent, actions, errors, successes, duration = row
+            session_id, status, prompts, tools, events, duration, _last_event = row
+            duration_str = f"{duration}s" if duration is not None else "ongoing"
             print(
-                f"  - {agent}: {actions} actions, {errors} errors, {successes} successes ({duration:.1f}ms)"
+                f"  - {session_id[:12]}... [{status}]: {prompts} prompts, {tools} tools, {events} events ({duration_str})"
             )
         print()
     else:
-        print("  No traces found\n")
+        print("  No sessions found\n")
 
     cursor.close()
     conn.close()
@@ -264,10 +266,10 @@ def run_tests():
     print("-" * 70)
     metrics_ok = check_metrics_endpoint()
 
-    # Step 5: Query recent traces
-    print("Step 5: Query recent traces")
+    # Step 5: Query recent sessions
+    print("Step 5: Query recent sessions")
     print("-" * 70)
-    query_recent_traces()
+    query_recent_sessions()
 
     # Summary
     print("=" * 70)
