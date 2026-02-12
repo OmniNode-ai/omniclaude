@@ -1,7 +1,7 @@
 ---
 name: dispatching-parallel-agents
 description: Use when facing 3+ independent failures that can be investigated without shared state or dependencies - dispatches multiple Claude agents to investigate and fix independent problems concurrently
-version: 1.0.0
+version: 1.1.0
 category: workflow
 tags:
   - parallelization
@@ -9,6 +9,7 @@ tags:
   - concurrency
   - debugging
   - efficiency
+  - reconciliation
 author: OmniClaude Team
 ---
 
@@ -87,6 +88,62 @@ When agents return:
 - Verify fixes don't conflict
 - Run full test suite
 - Integrate all changes
+
+### 5. Reconcile Results
+
+When agents return outputs that overlap (modify the same fields), use geometric conflict classification to merge intelligently.
+
+#### 5.1 Import the Reconciliation Helper
+
+```python
+from plugins.onex.hooks.lib.reconcile_agent_outputs import reconcile_outputs
+```
+
+#### 5.2 Gather Agent Outputs
+
+Collect outputs from all completed agents into a dict mapping agent name to output:
+
+```python
+agent_outputs = {
+    "agent-1": agent_1_result,
+    "agent-2": agent_2_result,
+    "agent-3": agent_3_result,
+}
+base_values = original_state  # state before agents ran
+```
+
+#### 5.3 Run Reconciliation
+
+```python
+result = reconcile_outputs(base_values, agent_outputs)
+```
+
+#### 5.4 Handle the Result
+
+**If `result.requires_approval` is False**: Apply `result.merged_values` directly.
+
+**If `result.requires_approval` is True**: STOP. Use `AskUserQuestion` to present each approval-required field with the competing values from each agent. Do NOT attempt to resolve these yourself.
+
+```python
+if result.requires_approval:
+    # Present each conflict to the user
+    for field in result.approval_fields:
+        decision = result.field_decisions[field]
+        # Show: field name, conflict type, each agent's value
+        # Ask user to pick one
+    # WAIT for approval before proceeding
+```
+
+#### 5.5 Rules
+
+- **Never hand-merge approval-required fields.** The helper returns `chosen_value=None` for these -- there is no value to extract.
+- **Always surface the exact competing values** and which agent produced them.
+- **Apply only `result.merged_values`** from the helper. Do not construct merge results manually.
+- **Review optional-review fields** (`result.optional_review_fields`) if time permits, but they have auto-resolved values.
+
+#### 5.6 Reconciliation Summary
+
+Print `result.summary` for the user. It shows counts per category and lists fields requiring action.
 
 ## Agent Prompt Structure
 
