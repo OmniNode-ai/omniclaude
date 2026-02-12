@@ -243,7 +243,7 @@ class AgentActionsConsumer:
                 TopicBase.TRANSFORMATIONS,
                 TopicBase.PERFORMANCE_METRICS,
                 TopicBase.DETECTION_FAILURES,
-                "agent-execution-logs",
+                TopicBase.EXECUTION_LOGS,
             ],
         )
 
@@ -601,7 +601,7 @@ class AgentActionsConsumer:
                         inserted, duplicates = self._insert_detection_failures(
                             cursor, events
                         )
-                    elif topic == "agent-execution-logs":
+                    elif topic == TopicBase.EXECUTION_LOGS:
                         inserted, duplicates = self._insert_execution_logs(
                             cursor, events
                         )
@@ -1063,7 +1063,7 @@ class AgentActionsConsumer:
         self,
         events: list[dict[str, Any]],
         error: str,
-        topic: str = "agent-observability",
+        topic: str = TopicBase.AGENT_OBSERVABILITY,
     ):
         """Send failed events to dead letter queue."""
         dlq_topic = f"{topic}-dlq"

@@ -124,6 +124,12 @@ class TopicBase(StrEnum):
     TRANSFORMATION_COMPLETED = "onex.evt.omniclaude.transformation-completed.v1"
     TRANSFORMATION_FAILED = "onex.evt.omniclaude.transformation-failed.v1"
 
+    # ==========================================================================
+    # Execution and observability topics (OMN-1552 migration)
+    # ==========================================================================
+    EXECUTION_LOGS = "onex.evt.omniclaude.agent-execution-logs.v1"
+    AGENT_OBSERVABILITY = "onex.evt.omniclaude.agent-observability.v1"
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).
