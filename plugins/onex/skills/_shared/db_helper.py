@@ -55,9 +55,9 @@ def _get_db_config() -> dict[str, Any]:
         if DB_CONFIG is not None:
             return DB_CONFIG
 
-        _omniclaude_db_url = settings.omniclaude_db_url.get_secret_value()
+        _omniclaude_db_url = settings.omniclaude_db_url.get_secret_value().strip()
 
-        if _omniclaude_db_url and _omniclaude_db_url.strip():
+        if _omniclaude_db_url:
             # Parse URL into components for explicit parameter passing to SimpleConnectionPool.
             # This gives us visibility into individual connection parameters (host, port, etc.)
             # for error reporting and DB_CONFIG introspection.

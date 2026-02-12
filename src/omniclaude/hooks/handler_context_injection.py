@@ -24,7 +24,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, NoReturn
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from omniclaude.hooks.cohort_assignment import (
@@ -568,19 +568,6 @@ class HandlerContextInjection:
     # =========================================================================
     # Database Methods
     # =========================================================================
-
-    async def _get_repository_runtime(
-        self,
-    ) -> NoReturn:  # Always raises; will change when OMN-2059 re-enables this
-        """DISABLED (OMN-2058): No longer connects to learned_patterns DB.
-
-        Raises:
-            PatternConnectionError: Always, as direct DB access is disabled.
-        """
-        raise PatternConnectionError(
-            "Direct learned_patterns DB access disabled (OMN-2058). "
-            "Pattern reads pending omniintelligence API (OMN-2059)."
-        )
 
     async def _load_patterns_from_database(
         self,

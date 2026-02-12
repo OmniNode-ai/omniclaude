@@ -451,7 +451,7 @@ class ManifestInjectionStorage:
         """
         # Resolve DSN: explicit param > settings.omniclaude_db_url > individual fields
         settings_dsn = settings.omniclaude_db_url.get_secret_value().strip()
-        self._db_url: str | None = db_url or settings_dsn or None
+        self._db_url: str | None = (db_url.strip() if db_url else None) or settings_dsn or None
 
         if self._db_url:
             # DSN mode: individual fields are unused for connections but stored

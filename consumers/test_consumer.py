@@ -107,6 +107,12 @@ def verify_database_records(correlation_ids: list[str], timeout: int = 30):
     start_time = time.time()
     found_count = 0
 
+    # TODO(OMN-2058): This test consumer was written for the old agent_actions
+    # table which no longer exists. The test events produced by create_test_event()
+    # are 'agent_actions' type events that are NOT written to claude_session_snapshots.
+    # This verification will always find 0 records and time out.
+    # Update this function to match the new schema (claude_sessions /
+    # claude_session_snapshots) once a consumer for the new schema is implemented.
     while time.time() - start_time < timeout:
         cursor.execute(
             """

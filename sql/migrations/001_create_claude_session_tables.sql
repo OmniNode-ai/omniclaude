@@ -14,6 +14,8 @@
 -- On managed databases (e.g., AWS RDS, Azure), CREATE EXTENSION cannot run inside
 -- a transaction. Keeping it here ensures compatibility with both self-hosted and
 -- managed PostgreSQL instances.
+-- NOTE: On managed databases (RDS, Cloud SQL), pgcrypto may need to be enabled by
+-- an admin. If gen_random_uuid() fails, ensure the pgcrypto extension is installed.
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 BEGIN;
@@ -115,7 +117,7 @@ COMMENT ON TABLE claude_session_tools IS 'Tool execution records within a sessio
 -- scheduled task) to delete expired rows. Until an external cleanup process is
 -- configured, expired rows will accumulate. This is acceptable for moderate
 -- event volumes but should be addressed for production scale.
--- See: OMN-2058 follow-up for cleanup automation.
+-- TODO(OMN-2058): Create follow-up ticket for pg_cron cleanup of expired idempotency rows.
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS claude_session_event_idempotency (
     message_id UUID PRIMARY KEY,
