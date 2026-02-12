@@ -23,7 +23,7 @@ import types
 from collections.abc import Callable
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_serializer
 
 _log = logging.getLogger(__name__)
 
@@ -174,6 +174,21 @@ class ReconciliationResult(BaseModel):
             object.__setattr__(
                 self, "field_decisions", types.MappingProxyType(self.field_decisions)
             )
+
+    @field_serializer("merged_values")
+    @classmethod
+    def _serialize_merged_values(cls, v: Any) -> dict[str, Any]:
+        """Convert MappingProxyType back to plain dict for JSON serialization."""
+        return dict(v)
+
+    @field_serializer("field_decisions")
+    @classmethod
+    def _serialize_field_decisions(cls, v: Any) -> dict[str, Any]:
+        """Convert MappingProxyType of FieldDecision objects to serializable dicts."""
+        return {
+            k: fd.model_dump() if hasattr(fd, "model_dump") else fd
+            for k, fd in v.items()
+        }
 
 
 # ---------------------------------------------------------------------------

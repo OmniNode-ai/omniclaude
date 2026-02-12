@@ -611,6 +611,79 @@ class TestModelImmutability:
         with pytest.raises(Exception):
             result.requires_approval = True  # type: ignore[misc]
 
+    def test_merged_values_mapping_proxy_rejects_setitem(self) -> None:
+        """MappingProxyType wrapping prevents in-place mutation of merged_values."""
+        result = reconcile_outputs(
+            {"a": 1},
+            {"agent-1": {"a": 1}, "agent-2": {"a": 1}},
+        )
+        with pytest.raises(TypeError):
+            result.merged_values["injected"] = "bad"  # type: ignore[index]
+
+    def test_field_decisions_mapping_proxy_rejects_setitem(self) -> None:
+        """MappingProxyType wrapping prevents in-place mutation of field_decisions."""
+        result = reconcile_outputs(
+            {"a": 1},
+            {"agent-1": {"a": 1}, "agent-2": {"a": 1}},
+        )
+        with pytest.raises(TypeError):
+            result.field_decisions["injected"] = "bad"  # type: ignore[index]
+
+
+# =============================================================================
+# JSON serialization of ReconciliationResult
+# =============================================================================
+
+
+class TestReconciliationResultSerialization:
+    """Verify ReconciliationResult serializes to JSON despite MappingProxyType."""
+
+    def test_model_dump_returns_plain_dict(self) -> None:
+        """model_dump() must return plain dicts, not MappingProxyType."""
+        import types as _types
+
+        result = reconcile_outputs(
+            {"a": 1},
+            {"agent-1": {"a": 10}, "agent-2": {"a": 10}},
+        )
+        dumped = result.model_dump()
+
+        assert isinstance(dumped, dict)
+        assert not isinstance(dumped["merged_values"], _types.MappingProxyType)
+        assert not isinstance(dumped["field_decisions"], _types.MappingProxyType)
+        assert isinstance(dumped["merged_values"], dict)
+        assert isinstance(dumped["field_decisions"], dict)
+
+    def test_model_dump_json_produces_valid_json(self) -> None:
+        """model_dump_json() must succeed and produce a valid JSON string."""
+        import json
+
+        result = reconcile_outputs(
+            {"a": 1},
+            {"agent-1": {"a": 10}, "agent-2": {"a": 10}},
+        )
+        json_str = result.model_dump_json()
+
+        assert isinstance(json_str, str)
+        # Must be parseable as valid JSON
+        parsed = json.loads(json_str)
+        assert isinstance(parsed, dict)
+        assert "merged_values" in parsed
+        assert "field_decisions" in parsed
+
+    def test_json_dumps_on_model_dump(self) -> None:
+        """json.dumps(result.model_dump()) must not raise TypeError."""
+        import json
+
+        result = reconcile_outputs(
+            {"a": 1},
+            {"agent-1": {"a": 10}, "agent-2": {"a": 10}},
+        )
+        # This would raise TypeError: Object of type mappingproxy is not
+        # JSON serializable -- before the field_serializer fix.
+        json_str = json.dumps(result.model_dump())
+        assert isinstance(json_str, str)
+
 
 # =============================================================================
 # Three-agent disagreement
