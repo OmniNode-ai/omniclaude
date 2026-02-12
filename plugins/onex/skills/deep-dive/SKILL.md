@@ -1,7 +1,44 @@
 ---
 name: deep-dive
 description: Deep Dive Command - Daily Work Analysis Report
-tags: [reporting, analysis, linear, productivity]
+version: 1.0.0
+category: reporting
+tags: [reporting, analysis, daily]
+author: OmniClaude Team
+args:
+  - name: --date
+    description: Specific date (YYYY-MM-DD)
+    required: false
+  - name: --days
+    description: Analyze last N days (for weekly summary)
+    required: false
+  - name: --save
+    description: Save to output directory
+    required: false
+  - name: --output
+    description: Save to specific file (overrides --save)
+    required: false
+  - name: --output-dir
+    description: Set output directory
+    required: false
+  - name: --json
+    description: Output as JSON (for programmatic processing)
+    required: false
+  - name: --generate
+    description: Output MCP tool call instructions for direct execution
+    required: false
+  - name: --repos
+    description: Comma-separated list of repos
+    required: false
+  - name: --snapshot-only
+    description: Create snapshot without markdown output
+    required: false
+  - name: --no-snapshot
+    description: Skip snapshot creation (markdown only)
+    required: false
+  - name: --project-id
+    description: Linear project UUID for snapshot
+    required: false
 ---
 
 # Deep Dive Command - Daily Work Analysis Report

@@ -143,6 +143,56 @@ skill -> emit_event() -> emit daemon -> Kafka -> NotificationConsumer -> Slack
 
 **Important:** Notifications are best-effort and non-blocking. If `SLACK_WEBHOOK_URL` is not configured on the runtime, they silently no-op. Do not let notification failures block workflow progress.
 
+## Dispatch Contract (Execution-Critical)
+
+**This section governs how the implementation phase executes. Follow it exactly.**
+
+You are an orchestrator for ticket-work phases. You manage the contract, human gates, and phase
+transitions. You do NOT write implementation code yourself.
+
+**Rule: When entering the implementation phase, dispatch a polymorphic agent via Task().
+Do NOT call Edit(), Write(), or implement code directly in the orchestrator context.**
+
+### spec → implementation transition
+
+After user approves spec ("approve spec", "build it"), execute automation steps (branch, Linear
+status, contract update) then dispatch:
+
+```
+Task(
+  subagent_type="polymorphic-agent",
+  description="Implement {ticket_id}: {title}",
+  prompt="Implement the following requirements for {ticket_id}: {title}.
+
+    Requirements:
+    {requirements_list}
+
+    Relevant files:
+    {relevant_files}
+
+    Execute the implementation. Do NOT commit changes (the orchestrator handles git).
+    Report: files changed, what was implemented, any issues encountered."
+)
+```
+
+The orchestrator reads the agent's result, runs verification, and manages the commit.
+
+### Other phases (intake, research, questions, spec, review, done)
+
+These phases run inline in the orchestrator. They involve reading tickets, asking questions,
+presenting specs, and running verification — all lightweight operations that don't need dispatch.
+
+---
+
+## Detailed Orchestration
+
+Full orchestration logic (contract schema, phase handlers, persistence, error handling)
+is documented in `prompt.md`. The dispatch contract above is sufficient for the implementation
+phase. Load `prompt.md` only if you need reference details for contract parsing, completion
+checks, or edge case handling.
+
+---
+
 ## See Also
 
 - Linear MCP tools (`mcp__linear-server__*`)

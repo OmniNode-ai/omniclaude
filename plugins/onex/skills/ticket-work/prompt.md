@@ -240,18 +240,34 @@ hardening_tickets: []
    - Set `branch` field to the git branch name
    - Persist to both Linear and local
 
-4. **Announce readiness and invoke parallel-solve:**
+4. **Announce readiness and dispatch implementation:**
    ```
-   ✅ Branch created: {branchName}
-   ✅ Ticket moved to In Progress
-   ✅ Ready for implementation
+   Branch created: {branchName}
+   Ticket moved to In Progress
+   Ready for implementation
 
-   Dispatching {N} requirements to /parallel-solve...
+   Dispatching {N} requirements to implementation agent...
    ```
 
-   Then immediately invoke:
+   Then immediately dispatch implementation to a separate agent:
+
+   > **Note**: This dispatch block is intentionally duplicated from the implementation phase handler. Both are needed because the spec-to-implementation transition and the phase handler context are different entry points.
+
    ```
-   Skill(skill="onex:parallel-solve", args="Implement {ticket_id}: {title}. Requirements: {r1}, {r2}, ...")
+   Task(
+     subagent_type="polymorphic-agent",
+     description="Implement {ticket_id}: {title}",
+     prompt="Implement the following requirements for {ticket_id}: {title}.
+
+       Requirements:
+       {requirements_list}
+
+       Relevant files:
+       {relevant_files}
+
+       Execute the implementation. Do NOT commit changes (the orchestrator handles git).
+       Report: files changed, what was implemented, any issues encountered."
+   )
    ```
 
 **⚠️ DO NOT proceed to implementation actions until ALL automation steps complete successfully.**
@@ -318,23 +334,34 @@ except AutomationError as e:
 
 **Actions:**
 1. Verify branch is checked out (should already exist from transition automation)
-2. **Execute requirements using /parallel-solve:**
+2. **Dispatch implementation to a separate agent:**
    ```
-   Invoke: Skill(skill="onex:parallel-solve", args="Implement requirements for {ticket_id}: {title}.
-   Requirements: {requirements_summary}.
-   Files to modify: {context.relevant_files}")
+   Task(
+     subagent_type="polymorphic-agent",
+     description="Implement {ticket_id}: {title}",
+     prompt="Implement the following requirements for {ticket_id}: {title}.
+
+       Requirements:
+       {requirements_summary}
+
+       Relevant files:
+       {context.relevant_files}
+
+       Execute the implementation. Do NOT commit changes (the orchestrator handles git).
+       Report: files changed, what was implemented, any issues encountered."
+   )
    ```
 
-   This dispatches polymorphic agents to implement each requirement in parallel where possible.
+   This spawns a polymorphic agent with its own context window to implement the requirements.
 
-3. After parallel-solve completes, commit changes (append to `commits[]`)
+3. After the implementation agent completes, commit changes (append to `commits[]`)
 4. Update `pr_url` if PR created
 
-**Implementation via parallel-solve:**
-- Requirements from the contract are passed to parallel-solve
-- Independent requirements are executed in parallel by polymorphic agents
-- Sequential dependencies are handled automatically
-- Quality gates are enforced after each agent cycle
+**Implementation via Task dispatch:**
+- Requirements from the contract are passed to a polymorphic agent via Task()
+- The agent runs in its own context window (avoids exhausting the orchestrator's context)
+- The orchestrator reads the agent's result to determine success/failure
+- Quality gates are enforced after the agent completes
 
 **Mutations allowed:**
 - `branch`

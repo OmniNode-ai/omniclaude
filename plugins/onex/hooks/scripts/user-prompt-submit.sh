@@ -94,14 +94,7 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && [ "${SKIP_CLAUDE_HOOK_EVENT_EMIT:-0}" -ne
     #   cmd payloads include prompt_b64 for intelligence processing.
     PROMPT_PAYLOAD=$(jq -n \
         --arg session_id "$SESSION_ID" \
-        --arg prompt_preview "$(printf '%s' "${PROMPT:0:100}" | sed -E \
-            -e 's/sk-[a-zA-Z0-9]{20,}/sk-***REDACTED***/g' \
-            -e 's/AKIA[A-Z0-9]{16}/AKIA***REDACTED***/g' \
-            -e 's/ghp_[a-zA-Z0-9]{36}/ghp_***REDACTED***/g' \
-            -e 's/gho_[a-zA-Z0-9]{36}/gho_***REDACTED***/g' \
-            -e 's/xox[baprs]-[a-zA-Z0-9-]+/xox*-***REDACTED***/g' \
-            -e 's/Bearer [a-zA-Z0-9._-]{20,}/Bearer ***REDACTED***/g' \
-            -e 's/-----BEGIN [A-Z ]*PRIVATE KEY-----/-----BEGIN ***REDACTED*** PRIVATE KEY-----/g')" \
+        --arg prompt_preview "$(printf '%s' "${PROMPT:0:100}" | redact_secrets)" \
         --argjson prompt_length "${#PROMPT}" \
         --arg prompt_b64 "$PROMPT_B64" \
         --arg correlation_id "$CORRELATION_ID" \
@@ -157,6 +150,16 @@ if [ -z "$ROUTING_RESULT" ]; then
     ROUTING_RESULT='{"selected_agent":"polymorphic-agent","confidence":0.5,"reasoning":"fallback","method":"fallback","domain":"workflow_coordination"}'
 fi
 
+# -----------------------------------------------------------------------
+# Pipeline Trace Logging — unified trace for routing/injection visibility
+# tail -f ~/.claude/logs/pipeline-trace.log to see the full chain
+# -----------------------------------------------------------------------
+TRACE_LOG="$HOME/.claude/logs/pipeline-trace.log"
+mkdir -p "$(dirname "$TRACE_LOG")" 2>/dev/null
+_TS="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+_PROMPT_SHORT="$(printf '%s' "${PROMPT:0:80}" | redact_secrets)"
+echo "[$_TS] [UserPromptSubmit] PROMPT prompt_length=${#PROMPT} preview=\"${_PROMPT_SHORT}\"" >> "$TRACE_LOG"
+
 # Parse JSON response
 AGENT_NAME="$(echo "$ROUTING_RESULT" | jq -r '.selected_agent // "NO_AGENT_DETECTED"')"
 CONFIDENCE="$(echo "$ROUTING_RESULT" | jq -r '.confidence // "0.5"')"
@@ -167,10 +170,65 @@ SELECTION_REASONING="$(echo "$ROUTING_RESULT" | jq -r '.reasoning // ""')"
 LATENCY_MS="$(echo "$ROUTING_RESULT" | jq -r '.latency_ms // "0"')"
 CANDIDATES_JSON="$(echo "$ROUTING_RESULT" | jq -r '.candidates // "[]"')"
 
+echo "[$_TS] [UserPromptSubmit] ROUTING agent=$AGENT_NAME confidence=$CONFIDENCE method=$SELECTION_METHOD latency_ms=$LATENCY_MS" >> "$TRACE_LOG"
+
+# -----------------------------
+# Agent YAML Loading via simple_agent_loader.py
+# -----------------------------
+AGENT_YAML_CONTENT=""
+LOADER_DURATION_MS=0
+if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]] && [[ -f "${HOOKS_LIB}/simple_agent_loader.py" ]]; then
+    log "Loading agent YAML via simple_agent_loader.py for ${AGENT_NAME}..."
+    LOADER_INPUT="$(jq -n --arg agent "$AGENT_NAME" '{agent_name: $agent}')"
+    # Budget note: perl alarm() only supports integer seconds (min 1s).
+    # 1s is the minimum viable timeout — perl alarm() truncates to integer,
+    # so sub-second values become 0 (cancels the alarm entirely).
+    # Combined worst-case: routing(5s) + loader(1s) + injection(1s) = 7s.
+    # In practice, loader reads a local YAML (~5ms). The 1s cap is a safety net
+    # for Python startup, not expected latency. Documented budget (500ms) is a
+    # target for typical runs, not a hard cap on worst-case.
+    _LOADER_T0="$(get_time_ms)"
+    LOADER_RESULT="$(echo "$LOADER_INPUT" | run_with_timeout 1 $PYTHON_CMD "${HOOKS_LIB}/simple_agent_loader.py" 2>>"$LOG_FILE" || echo '{}')"
+    _LOADER_T1="$(get_time_ms)"
+    LOADER_DURATION_MS=$(( _LOADER_T1 - _LOADER_T0 ))
+    LOADER_SUCCESS="$(echo "$LOADER_RESULT" | jq -r '.success // false' 2>/dev/null || echo 'false')"
+    if [[ "$LOADER_SUCCESS" == "true" ]]; then
+        AGENT_YAML_CONTENT="$(echo "$LOADER_RESULT" | jq -r '.context_injection // ""' 2>/dev/null || echo '')"
+        if [[ -n "$AGENT_YAML_CONTENT" ]]; then
+            log "Agent YAML loaded successfully for ${AGENT_NAME} (${#AGENT_YAML_CONTENT} chars, ${LOADER_DURATION_MS}ms)"
+        else
+            log "WARNING: Agent loader succeeded but returned empty content for ${AGENT_NAME}"
+        fi
+    else
+        LOADER_ERROR="$(echo "$LOADER_RESULT" | jq -r '.error // "unknown"' 2>/dev/null || echo 'unknown')"
+        log "WARNING: Agent loader failed for ${AGENT_NAME}: ${LOADER_ERROR} (${LOADER_DURATION_MS}ms)"
+    fi
+else
+    if [[ ! -f "${HOOKS_LIB}/simple_agent_loader.py" ]]; then
+        log "WARNING: simple_agent_loader.py not found at ${HOOKS_LIB}"
+    fi
+fi
+
+_TS2="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+echo "[$_TS2] [UserPromptSubmit] AGENT_YAML agent=$AGENT_NAME loaded=${#AGENT_YAML_CONTENT}chars duration_ms=${LOADER_DURATION_MS}" >> "$TRACE_LOG"
+
 # -----------------------------
 # Candidate List Injection & Pattern Injection
 # -----------------------------
+# Build AGENT_YAML_INJECTION: agent YAML content first, then candidate list
 AGENT_YAML_INJECTION=""
+
+# Inject the loaded agent YAML content (behavioral directive) first
+if [[ -n "$AGENT_YAML_CONTENT" ]]; then
+    AGENT_YAML_INJECTION="========================================================================
+AGENT DEFINITION - ${AGENT_NAME}
+========================================================================
+${AGENT_YAML_CONTENT}
+========================================================================
+
+"
+fi
+
 CANDIDATE_COUNT="$(echo "$CANDIDATES_JSON" | jq 'if type == "array" then length else 0 end' 2>/dev/null || echo "0")"
 
 if [[ "$CANDIDATE_COUNT" -gt 0 ]]; then
@@ -181,14 +239,11 @@ if [[ "$CANDIDATE_COUNT" -gt 0 ]]; then
     FUZZY_BEST="$(echo "$CANDIDATES_JSON" | jq -r '.[0].name // "polymorphic-agent"' 2>/dev/null || echo "polymorphic-agent")"
     FUZZY_BEST_SCORE="$(echo "$CANDIDATES_JSON" | jq -r '.[0].score // "0.5"' 2>/dev/null || echo "0.5")"
 
-    AGENT_YAML_INJECTION="========================================================================
-AGENT ROUTING - SELECT AND ACT
+    AGENT_YAML_INJECTION="${AGENT_YAML_INJECTION}========================================================================
+AGENT ROUTING - CANDIDATES
 ========================================================================
-The following agents matched your request. Pick the best match,
-then read its full YAML from plugins/onex/agents/configs/{name}.yaml
-and follow its behavioral directives.
+The following agents also matched your request (ranked by score):
 
-CANDIDATES (ranked by score):
 ${CANDIDATE_LIST}
 
 FUZZY BEST: ${FUZZY_BEST} (${FUZZY_BEST_SCORE})
@@ -294,6 +349,10 @@ AGENT_CONTEXT=$(jq -rn \
     "REASONING: " + $reason + "\n" +
     "========================================================================\n"
     ')
+
+# Final trace: total context injected
+_TS3="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+echo "[$_TS3] [UserPromptSubmit] INJECTED context_chars=${#AGENT_CONTEXT} meets_threshold=$MEETS_THRESHOLD agent=$AGENT_NAME" >> "$TRACE_LOG"
 
 # Final Output via jq to ensure JSON integrity
 printf %s "$INPUT" | jq --arg ctx "$AGENT_CONTEXT" \

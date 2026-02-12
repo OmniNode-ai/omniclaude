@@ -1,7 +1,41 @@
 ---
 name: create-ticket
 description: Create a single Linear ticket from args, contract file, or plan milestone with conflict resolution
+version: 1.0.0
+category: workflow
 tags: [linear, tickets, automation]
+author: OmniClaude Team
+args:
+  - name: title
+    description: Ticket title (mutually exclusive with --from-contract, --from-plan)
+    required: false
+  - name: --from-contract
+    description: Path to YAML contract file
+    required: false
+  - name: --from-plan
+    description: Path to plan markdown file
+    required: false
+  - name: --milestone
+    description: Milestone ID when using --from-plan (e.g., M4)
+    required: false
+  - name: --repo
+    description: Repository label (e.g., omniclaude, omnibase_core)
+    required: false
+  - name: --parent
+    description: Parent issue ID for epic relationship (e.g., OMN-1800)
+    required: false
+  - name: --blocked-by
+    description: Comma-separated issue IDs that block this ticket
+    required: false
+  - name: --project
+    description: Linear project name
+    required: false
+  - name: --team
+    description: Linear team name (default: Omninode)
+    required: false
+  - name: --allow-arch-violation
+    description: Bypass architecture dependency validation
+    required: false
 ---
 
 # Create Linear Ticket
@@ -485,7 +519,7 @@ if args.blocked_by:
                 print("\nDependency architecture violations detected:\n")
                 for err in errors:
                     print(f"  - {err.message}\n")
-                print("\nValid dependencies flow: app→foundation or foundation→foundation.")
+                print("\nValid dependencies flow: app->foundation or foundation->foundation.")
                 print("To proceed anyway, use --allow-arch-violation flag.")
                 raise SystemExit(1)
             else:
@@ -499,8 +533,8 @@ if args.blocked_by:
 **Architecture Rules**:
 | Ticket Repo | Blocked By Repo | Verdict |
 |-------------|-----------------|---------|
-| application | application | INVALID (app→app) |
-| foundation | application | INVALID (foundation→app) |
+| application | application | INVALID (app->app) |
+| foundation | application | INVALID (foundation->app) |
 | application | foundation | VALID |
 | foundation | foundation | VALID |
 

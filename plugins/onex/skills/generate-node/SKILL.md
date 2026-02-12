@@ -17,10 +17,10 @@ Bash(${CLAUDE_PLUGIN_ROOT}/skills/generate-node/generate "Create PostgreSQL CRUD
 Bash(${CLAUDE_PLUGIN_ROOT}/skills/generate-node/regenerate src/nodes/my_node)
 ```
 
-### ✅ CORRECT - Dispatch to onex:polymorphic-agent:
+### ✅ CORRECT - Dispatch to polymorphic-agent:
 ```
 Task(
-  subagent_type="onex:polymorphic-agent",
+  subagent_type="polymorphic-agent",
   description="Generate PostgreSQL CRUD Effect node",
   prompt="Generate an ONEX node with the following requirements:
     Description: Create a PostgreSQL CRUD Effect node for user management

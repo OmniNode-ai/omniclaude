@@ -29,10 +29,10 @@ Bash(${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review 33)
 Bash(${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/fetch-ci-data 33)
 ```
 
-### ✅ CORRECT - Dispatch to onex:polymorphic-agent:
+### ✅ CORRECT - Dispatch to polymorphic-agent:
 ```
 Task(
-  subagent_type="onex:polymorphic-agent",
+  subagent_type="polymorphic-agent",
   description="CI failure analysis for PR #33",
   prompt="Analyze CI failures for PR #33. Use the ci-failures skill tools:
     1. Run: ${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review 33

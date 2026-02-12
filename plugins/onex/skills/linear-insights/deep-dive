@@ -477,7 +477,7 @@ echo "To generate the report, use the polymorphic agent with this prompt:"
 echo ""
 cat << 'PROMPT'
 Task(
-  subagent_type="onex:polymorphic-agent",
+  subagent_type="polymorphic-agent",
   description="Generate deep dive report",
   prompt="""Generate a comprehensive deep dive report for {DATE}.
 

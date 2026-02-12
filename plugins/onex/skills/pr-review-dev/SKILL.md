@@ -1,74 +1,94 @@
 ---
 name: pr-review-dev
 description: PR Dev Review - Fix Critical/Major/Minor Issues (PR Review + CI Failures)
-tags: [pr, review, github, ci, automation]
+version: 1.0.0
+category: workflow
+tags:
+  - pr
+  - review
+  - ci
+  - code-quality
+author: OmniClaude Team
+args:
+  - name: pr_url
+    description: PR URL or number (auto-detects from branch)
+    required: false
+  - name: --no-ci
+    description: Skip CI failure analysis
+    required: false
+  - name: --ci-only
+    description: Only analyze CI failures
+    required: false
+  - name: --hide-resolved
+    description: Hide resolved review comments
+    required: false
+  - name: --show-resolved-only
+    description: Only show resolved comments
+    required: false
 ---
 
 # PR Dev Review - Fix Critical/Major/Minor Issues (PR Review + CI Failures)
 
-**Workflow**: Fetch PR issues → Fetch CI failures → Combine → **AUTO-RUN** `/parallel-solve` (non-nits) → Ask about nitpicks
+**Workflow**: Fetch PR issues -> Fetch CI failures -> Combine -> **AUTO-RUN** parallel-solve (non-nits) -> Ask about nitpicks
 
----
+**Announce at start:** "I'm using the pr-review-dev skill to review and fix PR issues."
 
-## TL;DR - Quick Workflow (Fully Automated)
+## Quick Start (Fully Automated)
 
 1. **Fetch and collate all issues** (PR review + CI failures):
    ```bash
    ${CLAUDE_PLUGIN_ROOT}/skills/pr-review/collate-issues-with-ci "${1:-}" 2>&1
    ```
 
-2. **Automatically fire /parallel-solve** with the collated output (excluding ⚪ NITPICK sections)
+2. **Automatically dispatch parallel-solve** with the collated output (excluding NITPICK sections)
 
-3. **Ask about nitpicks** after /parallel-solve completes
+3. **Ask about nitpicks** after parallel-solve completes
 
-**Done!** This fully automated workflow fetches issues AND runs parallel-solve automatically.
+## Dispatch Contracts (Execution-Critical)
 
----
+You are an orchestrator. You gather and collate issues, then dispatch parallel-solve.
+You do NOT fix issues yourself.
 
-## Implementation Instructions
+**Rule: NEVER call Edit() or Write() to fix PR issues.**
 
-**CRITICAL**: After fetching and collating issues, you MUST automatically invoke the `/parallel-solve` command.
+### Gather Phase -- inline (MCP + gh operations)
 
-**Steps**:
+Fetch PR review comments and CI failure logs. No dispatch needed.
 
-1. **Fetch collated issues**:
-   - Run the unified helper script: `${CLAUDE_PLUGIN_ROOT}/skills/pr-review/collate-issues-with-ci "${1:-}" 2>&1`
-   - Save the output
+### Collate Phase -- inline
 
-2. **Extract non-nitpick issues**:
-   - Take sections: 🔴 CRITICAL, 🟠 MAJOR, 🟡 MINOR
-   - **EXCLUDE**: ⚪ NITPICK section (ask about these separately)
-   - **EXCLUDE**: ❓ UNMATCHED section
+Merge issues into severity-classified list: CRITICAL -> MAJOR -> MINOR -> NIT.
+Filter nitpicks by default.
 
-3. **Auto-invoke /parallel-solve**:
-   - Use the SlashCommand tool to invoke `/parallel-solve`
-   - Pass the extracted non-nitpick issues as the command argument
-   - Example: `/parallel-solve Fix all PR #33 issues:\n\n🔴 CRITICAL:\n- [file:line] issue\n\n🟠 MAJOR:\n- [file:line] issue`
+### Fix Phase -- dispatch via parallel-solve
 
-4. **Ask about nitpicks** (after /parallel-solve completes):
-   - Check if the collated output contained a ⚪ NITPICK section
-   - If yes, ask: "Critical/major/minor issues fixed. Found N nitpick items. Address them now?"
-   - If user approves, run `/parallel-solve` again with just the nitpick items
+```
+Skill(skill="onex:parallel-solve")
+```
 
----
+> **Note**: The `onex:` prefix is required for `Skill(skill=...)` calls (plugin namespace) but is NOT used for `subagent_type=` (direct agent name). This is intentional.
 
-## Detailed Workflow (Manual Control)
+Pass collated issues as context.
 
-For more control over each step, follow the detailed workflow below:
+### Nit Phase -- ask user
+
+After fixes complete, offer to fix deferred nitpicks.
 
 ---
 
-## Step 1: Fetch PR Review Issues
+## Detailed Workflow
 
-Execute the collate-issues helper to get PR review issues in /parallel-solve-ready format:
+### Step 1: Fetch PR Review Issues
+
+Execute the collate-issues helper to get PR review issues in parallel-solve-ready format:
 
 ```bash
 ${CLAUDE_PLUGIN_ROOT}/skills/pr-review/collate-issues "${1:-}" --parallel-solve-format 2>&1
 ```
 
-**Save this output** - we'll need it for Step 3.
+**Save this output** - it is needed for Step 3.
 
-### Resolution Filtering Options
+#### Resolution Filtering Options
 
 The collate-issues command supports filtering issues by their resolution status:
 
@@ -101,7 +121,7 @@ ${CLAUDE_PLUGIN_ROOT}/skills/pr-review/collate-issues "${1:-}" --show-resolved-o
 
 ---
 
-## Step 2: Fetch CI Failures
+### Step 2: Fetch CI Failures
 
 Execute the ci-quick-review helper to get CI failure data in JSON format:
 
@@ -116,89 +136,80 @@ ${CLAUDE_PLUGIN_ROOT}/skills/ci-failures/ci-quick-review --json "${1:-}" 2>&1
 - Exit code 2: No CI failures (success!)
 
 **Handle the response**:
-- If exit code 2 → Skip to Step 3 (no CI failures to fix)
-- If exit code 1 → Report error and skip to Step 3 (continue with PR review issues only)
-- If exit code 0 → Parse JSON and proceed to Step 2.5
+- If exit code 2 -> Skip to Step 3 (no CI failures to fix)
+- If exit code 1 -> Report error and skip to Step 3 (continue with PR review issues only)
+- If exit code 0 -> Parse JSON and proceed to Step 2.5
 
 ---
 
-## Step 2.5: Parse and Format CI Failures
+### Step 2.5: Parse and Format CI Failures
 
 If CI failures were found (exit code 0), parse the JSON and format for parallel-solve:
 
-```bash
-# Example parsing (you can do this inline or mentally):
+```
 # Extract from JSON:
 #   - summary.critical, summary.major, summary.minor
 #   - failures[].workflow, failures[].job, failures[].step, failures[].severity
 #
-# Format as:
-# 🔴 CRITICAL (CI Failures):
-# - [workflow:job:step] error description
-#
-# 🟠 MAJOR (CI Failures):
-# - [workflow:job:step] error description
-#
-# 🟡 MINOR (CI Failures):
-# - [workflow:job:step] error description
+# Format as severity-grouped list with [Workflow:Job:Step] prefixes
 ```
 
 **Example formatted output**:
 ```
-🔴 CRITICAL (CI Failures):
+CRITICAL (CI Failures):
 - [CI/CD:Build:Run Tests] ModuleNotFoundError: No module named 'pydantic'
 - [CI/CD:Lint:Ruff Check] F401 'os' imported but unused
 
-🟠 MAJOR (CI Failures):
+MAJOR (CI Failures):
 - [CI/CD:Type Check:Mypy] error: Incompatible types in assignment
 
-🟡 MINOR (CI Failures):
+MINOR (CI Failures):
 - [Deploy:Bundle:Size Check] Bundle size exceeds recommendation
 ```
 
 ---
 
-## Step 3: Combine and Fire Parallel-Solve
+### Step 3: Combine and Fire Parallel-Solve
 
 **Combine the outputs from Step 1 and Step 2.5**, grouping by severity:
 
 1. Take PR review issues from Step 1
 2. Take CI failures from Step 2.5 (if any)
-3. Combine under each severity heading (🔴 CRITICAL, 🟠 MAJOR, 🟡 MINOR)
-4. **EXCLUDE any ⚪ NITPICK sections** from Step 1
+3. Combine under each severity heading (CRITICAL, MAJOR, MINOR)
+4. **EXCLUDE any NITPICK sections** from Step 1
 
 **Example combined output**:
 ```
-/parallel-solve Fix all PR #33 issues (PR review + CI failures):
+Fix all PR #33 issues (PR review + CI failures):
 
-🔴 CRITICAL:
+CRITICAL:
 - [file.py:123] SQL injection vulnerability (PR Review)
 - [config.py:45] Missing environment variable validation (PR Review)
 - [CI/CD:Build:Compile] ModuleNotFoundError: No module named 'pydantic' (CI Failure)
 
-🟠 MAJOR:
+MAJOR:
 - [helper.py:67] Missing error handling (PR Review)
 - [CI/CD:Lint:Ruff] F401 'os' imported but unused (CI Failure)
 
-🟡 MINOR:
+MINOR:
 - [docs.md:12] Missing documentation (PR Review)
 - [Deploy:Bundle:Size] Bundle size warning (CI Failure)
 ```
 
-**IMPORTANT**: Do NOT include the ⚪ NITPICK section in the /parallel-solve command.
+**IMPORTANT**: Do NOT include the NITPICK section in the parallel-solve dispatch.
 
 ---
 
-## Step 4: Ask About Nitpicks
+### Step 4: Ask About Nitpicks
 
-After `/parallel-solve` completes, check the **Step 1 output** for any ⚪ NITPICK sections:
+After parallel-solve completes, check the **Step 1 output** for any NITPICK sections:
 
 - If nitpicks were found in the original collate-issues output, ask the user:
   "Critical/major/minor issues (PR review + CI failures) are being addressed. There are [N] nitpick items from the PR review. Address them now?"
 
-- If yes → Fire another `/parallel-solve` with just the nitpick items from the Step 1 output.
+- If yes -> Fire another parallel-solve with just the nitpick items from the Step 1 output.
 
-**Note**: Nitpicks are discovered from the Step 1 collate-issues output but excluded from Step 3's /parallel-solve command.
+**Note**: Nitpicks are discovered from the Step 1 collate-issues output but excluded from Step 3's parallel-solve dispatch.
 
 ---
 
@@ -214,12 +225,12 @@ ${CLAUDE_PLUGIN_ROOT}/skills/pr-review/collate-issues-with-ci "${1:-}" 2>&1
 ```
 
 This script:
-- ✅ Automatically fetches PR review issues (Step 1)
-- ✅ Automatically fetches CI failures (Step 2)
-- ✅ Parses and formats CI failures (Step 2.5)
-- ✅ Combines both by severity (Step 3)
-- ✅ Outputs ready-to-use /parallel-solve format
-- ✅ Gracefully handles CI fetch failures (continues with PR review only)
+- Automatically fetches PR review issues (Step 1)
+- Automatically fetches CI failures (Step 2)
+- Parses and formats CI failures (Step 2.5)
+- Combines both by severity (Step 3)
+- Outputs ready-to-use parallel-solve format
+- Gracefully handles CI fetch failures (continues with PR review only)
 
 **Manual Approach** (if you need finer control):
 

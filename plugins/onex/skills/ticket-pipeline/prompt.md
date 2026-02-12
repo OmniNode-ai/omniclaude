@@ -781,12 +781,27 @@ def execute_phase(phase_name, state):
 
 **Actions:**
 
-1. **Invoke ticket-work:**
+1. **Dispatch ticket-work to a separate agent:**
    ```
-   Skill(skill="onex:ticket-work", args="{ticket_id}")
+   Task(
+     subagent_type="polymorphic-agent",
+     description="Implement {ticket_id}: {title}",
+     prompt="You are executing ticket-work for {ticket_id}.
+       Invoke: Skill(skill=\"onex:ticket-work\", args=\"{ticket_id}\")
+
+       Ticket: {ticket_id} - {title}
+       Description: {description}
+       Branch: {branch_name}
+       Repo: {repo_path}
+
+       Execute the full ticket-work workflow (intake -> research -> questions -> spec -> implementation).
+       Do NOT commit changes -- the orchestrator handles git operations.
+       Report back with: files changed, tests run, any blockers encountered."
+   )
    ```
-   This runs the full ticket-work workflow including human gates (questions, spec, approval).
-   The pipeline waits for ticket-work to complete.
+   This spawns a polymorphic agent with its own context window to run the full ticket-work
+   workflow including human gates (questions, spec, approval). The pipeline waits for the
+   agent to complete and reads its result.
 
 2. **Cross-repo check** (if `policy.stop_on_cross_repo == true`):
    After ticket-work completes, use the `cross_repo_detector` module (OMN-1970):
@@ -850,9 +865,25 @@ def execute_phase(phase_name, state):
 
 **Actions:**
 
-1. **Invoke local-review:**
+1. **Dispatch local-review to a separate agent:**
    ```
-   Skill(skill="onex:local-review", args="--max-iterations {policy.max_review_iterations}")
+   Task(
+     subagent_type="polymorphic-agent",
+     description="Local review for {ticket_id}",
+     prompt="You are executing local-review for {ticket_id}.
+       Invoke: Skill(skill=\"onex:local-review\", args=\"--max-iterations {max_iterations}\")
+
+       Branch: {branch_name}
+       Repo: {repo_path}
+       Previous phase: implementation complete
+
+       Execute the local review loop.
+       Do NOT commit changes -- the orchestrator handles git operations.
+       Report back with:
+       - Number of iterations completed
+       - Blocking issues found (count and descriptions)
+       - Whether review passed (0 blocking issues)"
+   )
    ```
 
 2. **Parse result:**
@@ -1091,11 +1122,25 @@ EOF
        return result
    ```
 
-2. **Invoke pr-release-ready:**
+2. **Dispatch pr-release-ready to a separate agent:**
    ```
-   Skill(skill="onex:pr-release-ready")
+   Task(
+     subagent_type="polymorphic-agent",
+     description="PR release-ready for {ticket_id}",
+     prompt="You are executing pr-release-ready for {ticket_id}.
+       Invoke: Skill(skill=\"onex:pr-release-ready\")
+
+       PR: #{pr_number} on branch {branch_name}
+       Repo: {repo_path}
+
+       Fix all CodeRabbit and CI issues on the PR.
+       Do NOT push changes -- the orchestrator handles git push.
+       Report back with:
+       - Issues found and fixed
+       - Remaining blocking issues (if any)"
+   )
    ```
-   This fetches CodeRabbit review issues and invokes `/parallel-solve` to fix them.
+   This spawns a polymorphic agent to fetch CodeRabbit review issues and fix them.
 
 3. **Parse result:**
    Use `parse_phase_output()` to determine status:

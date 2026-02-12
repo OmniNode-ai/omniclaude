@@ -1,7 +1,38 @@
 ---
 name: plan-to-tickets
 description: Batch create Linear tickets from a plan markdown file - parses phases/milestones, creates epic if needed, links dependencies
-tags: [linear, tickets, planning, batch, automation]
+version: 1.0.0
+category: workflow
+tags: [linear, tickets, planning, batch]
+author: OmniClaude Team
+args:
+  - name: plan-file
+    description: Path to plan markdown file
+    required: true
+  - name: --project
+    description: Linear project name
+    required: false
+  - name: --epic-title
+    description: Title for epic (overrides auto-detection from plan)
+    required: false
+  - name: --no-create-epic
+    description: Fail if epic doesn't exist (don't auto-create)
+    required: false
+  - name: --dry-run
+    description: Show what would be created without creating
+    required: false
+  - name: --skip-existing
+    description: Skip tickets that already exist (don't ask)
+    required: false
+  - name: --team
+    description: Linear team name (default: Omninode)
+    required: false
+  - name: --repo
+    description: Repository label for all tickets (e.g., omniclaude, omnibase_core)
+    required: false
+  - name: --allow-arch-violation
+    description: Bypass architecture dependency validation
+    required: false
 ---
 
 # Batch Create Tickets from Plan
@@ -45,9 +76,9 @@ If file doesn't exist, report error and stop.
 ## Step 2: Detect Plan Structure
 
 **Detection Cascade:**
-1. If `## Phase` sections exist → use them (canonical)
-2. Else if `## Milestones Overview` table exists → fall back
-3. Else → fail fast with clear error
+1. If `## Phase` sections exist -> use them (canonical)
+2. Else if `## Milestones Overview` table exists -> fall back
+3. Else -> fail fast with clear error
 
 ```python
 import re
@@ -497,7 +528,7 @@ def validate_plan_dependencies(
             print("[WARNING] Proceeding with architecture violations (--allow-arch-violation)\n")
             return (True, True)  # proceed, violations WERE overridden
         else:
-            print("Valid dependencies flow: app→foundation or foundation→foundation.")
+            print("Valid dependencies flow: app->foundation or foundation->foundation.")
             print("To proceed anyway, use --allow-arch-violation flag.")
             print("\nNo tickets created. Fix dependencies or use override flag.")
             return (False, False)  # abort, no override
