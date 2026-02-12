@@ -450,11 +450,7 @@ class ManifestInjectionStorage:
             db_url: Full PostgreSQL DSN. When provided, individual fields are ignored.
         """
         # Resolve DSN: explicit param > settings.omniclaude_db_url > individual fields
-        settings_dsn = (
-            settings.omniclaude_db_url.get_secret_value()
-            if hasattr(settings, "omniclaude_db_url")
-            else ""
-        )
+        settings_dsn = settings.omniclaude_db_url.get_secret_value()
         self._db_url: str | None = db_url or settings_dsn or None
 
         if self._db_url:
@@ -1095,11 +1091,7 @@ class ManifestInjector:
             # Check that we have *some* viable credential path.  When
             # OMNICLAUDE_DB_URL is set the individual fields may be empty,
             # so we only gate on password when there is no DSN.
-            dsn = (
-                settings.omniclaude_db_url.get_secret_value()
-                if hasattr(settings, "omniclaude_db_url")
-                else ""
-            )
+            dsn = settings.omniclaude_db_url.get_secret_value()
             if not dsn:
                 try:
                     password = settings.get_effective_postgres_password()  # nosec
@@ -2515,11 +2507,7 @@ class ManifestInjector:
         def _blocking_query() -> dict[str, Any]:
             """Blocking PostgreSQL operations."""
             # Derive display info for the response regardless of DSN vs fields
-            dsn = (
-                settings.omniclaude_db_url.get_secret_value()
-                if hasattr(settings, "omniclaude_db_url")
-                else ""
-            )
+            dsn = settings.omniclaude_db_url.get_secret_value()
             host = settings.postgres_host or ("(via DSN)" if dsn else "")
             port = settings.postgres_port or (0 if dsn else 0)
             database = settings.postgres_database or ("(via DSN)" if dsn else "")

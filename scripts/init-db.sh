@@ -68,7 +68,7 @@ EOSQL
         if [ -f "$migration" ]; then
             migration_name="$(basename "$migration")"
             # Skip already-applied migrations
-            already_applied=$(psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --host="$POSTGRES_HOST" -tAc "SELECT 1 FROM schema_migrations WHERE filename = '${migration_name}' LIMIT 1;")
+            already_applied=$(psql -v ON_ERROR_STOP=1 -v migration_name="${migration_name}" --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --host="$POSTGRES_HOST" -tAc "SELECT 1 FROM schema_migrations WHERE filename = :'migration_name' LIMIT 1;")
             if [ "$already_applied" = "1" ]; then
                 echo "  Skipping ${migration_name} (already applied)"
                 continue
@@ -76,7 +76,7 @@ EOSQL
             echo "  Applying ${migration_name}..."
             psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --host="$POSTGRES_HOST" -f "$migration"
             # Record successful migration
-            psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --host="$POSTGRES_HOST" -c "INSERT INTO schema_migrations (filename) VALUES ('${migration_name}');"
+            psql -v ON_ERROR_STOP=1 -v migration_name="${migration_name}" --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --host="$POSTGRES_HOST" -c "INSERT INTO schema_migrations (filename) VALUES (:'migration_name');"
         fi
     done
 else
