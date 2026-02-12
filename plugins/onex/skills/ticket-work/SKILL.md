@@ -165,7 +165,7 @@ Emit a status event when entering each phase:
 |-------------|-------|----------|------------|
 | intake | working | 0.00 | `--task "Ticket intake"` |
 | research | working | 0.15 | `--task "Researching codebase"` |
-| questions | awaiting_input | 0.30 | `--blocking-reason "Waiting for answers to clarifying questions"` |
+| questions | awaiting_input | 0.30 | `--task "Waiting for clarification"` `--blocking-reason "Waiting for answers to clarifying questions"` |
 | spec | working | 0.45 | `--task "Generating specification"` |
 | spec gate | blocked | 0.45 | `--blocking-reason "Awaiting spec approval"` |
 | implementation | working | 0.70 | `--task "Implementing requirements"` |

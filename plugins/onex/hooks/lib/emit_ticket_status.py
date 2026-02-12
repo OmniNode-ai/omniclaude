@@ -20,7 +20,20 @@ import argparse
 import json
 import sys
 
-_VALID_STATES = ["idle", "working", "blocked", "awaiting_input", "finished", "error"]
+try:
+    from omniclaude.hooks.schemas import EnumAgentState as _EnumAgentState
+
+    _VALID_STATES = [s.value for s in _EnumAgentState]
+except Exception:
+    # Fallback: hardcoded list when schemas are unavailable (e.g., standalone execution)
+    _VALID_STATES = [
+        "idle",
+        "working",
+        "blocked",
+        "awaiting_input",
+        "finished",
+        "error",
+    ]
 
 
 def _progress_in_range(raw: str) -> float:
@@ -31,6 +44,15 @@ def _progress_in_range(raw: str) -> float:
             f"progress must be between 0.0 and 1.0, got {value}"
         )
     return value
+
+
+def _message_within_limit(raw: str) -> str:
+    """Argparse *type* callback: enforce max 500 character message length."""
+    if len(raw) > 500:
+        raise argparse.ArgumentTypeError(
+            f"message must be at most 500 characters, got {len(raw)}"
+        )
+    return raw
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -54,6 +76,7 @@ def main(argv: list[str] | None = None) -> None:
         parser.add_argument(
             "--message",
             required=True,
+            type=_message_within_limit,
             help="Human-readable status message (max 500 chars)",
         )
         parser.add_argument(
