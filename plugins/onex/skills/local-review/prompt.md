@@ -462,14 +462,15 @@ if checkpoint_arg and checkpoint_ticket_id and checkpoint_run_id:
         _list_proc = _sp.run(
             [sys.executable, _CHECKPOINT_MANAGER, "list",
              "--ticket-id", checkpoint_ticket_id,
-             "--phase", "local_review"],
+             "--run-id", checkpoint_run_id],
             capture_output=True, text=True
         )
-        _existing = (
+        _all_checkpoints = (
             json.loads(_list_proc.stdout).get("checkpoints", [])
             if _list_proc.returncode == 0 else []
         )
-        _next_attempt = str(len(_existing) + 1) if _existing is not None else str(iteration + 1)
+        _existing = [cp for cp in _all_checkpoints if cp.get("phase") == "local_review"]
+        _next_attempt = str(len(_existing) + 1)
 
         _cp_payload = json.dumps({
             "iteration_count": iteration + 1,  # 1-based (iteration hasn't been incremented yet)
