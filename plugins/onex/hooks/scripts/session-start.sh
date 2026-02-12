@@ -289,6 +289,39 @@ log "CWD: $CWD"
 # This ensures daemon is ready for downstream hooks (UserPromptSubmit, PostToolUse)
 start_emit_daemon_if_needed
 
+# -----------------------------
+# Session State Initialization (OMN-2119)
+# -----------------------------
+# Sync path: mkdir only (O(1), <5ms).
+# Async path: adapter creates run + updates index (backgrounded).
+# Duplicate spawn guard: PID file with fail-open.
+
+_init_session_state() {
+    # Sync: ensure state directory exists (O(1))
+    mkdir -p "${HOME}/.claude/state/runs" 2>/dev/null || true
+
+    # Guard: prevent duplicate background spawns for same session
+    local guard_file="/tmp/omniclaude-state-init-${SESSION_ID}.pid"
+    if [[ -f "$guard_file" ]] && kill -0 "$(cat "$guard_file" 2>/dev/null)" 2>/dev/null; then
+        log "Session state init already running (PID $(cat "$guard_file")), skipping"
+        return 0
+    fi
+
+    # Async: background the adapter call
+    if [[ -f "${HOOKS_LIB}/node_session_state_adapter.py" ]]; then
+        (
+            echo "$guard_file" > /dev/null  # capture in subshell scope
+            echo "$$" > "$guard_file" 2>/dev/null || true
+            echo "$INPUT" | "$PYTHON_CMD" "${HOOKS_LIB}/node_session_state_adapter.py" init \
+                >> "$LOG_FILE" 2>&1
+            rm -f "$guard_file" 2>/dev/null || true
+        ) &
+        log "Session state init started in background (PID: $!)"
+    fi
+}
+
+_init_session_state
+
 # Log session start to database (async, non-blocking)
 if [[ -f "${HOOKS_LIB}/session_intelligence.py" ]]; then
     (
