@@ -32,16 +32,9 @@ SCRIPT_DIR = Path(__file__).parent
 SHARED_DIR = SCRIPT_DIR.parent / "skills" / "_shared"
 sys.path.insert(0, str(SHARED_DIR))
 
-# Database configuration
-DB_CONFIG = {
-    "host": os.environ.get("POSTGRES_HOST", settings.postgres_host or "localhost"),
-    "port": int(os.environ.get("POSTGRES_PORT", settings.postgres_port or 5436)),
-    "database": os.environ.get(
-        "POSTGRES_DATABASE", settings.postgres_database or "omniclaude"
-    ),
-    "user": os.environ.get("POSTGRES_USER", settings.postgres_user or "postgres"),
-    "password": settings.get_effective_postgres_password(),
-}
+# Database configuration — single source of truth via settings DSN.
+# No hardcoded fallbacks; let it fail fast if not configured.
+DB_DSN = settings.get_omniclaude_dsn()
 
 
 def create_test_event(agent_name: str, action_type: str = "tool_call") -> dict:
@@ -107,7 +100,7 @@ def verify_database_records(correlation_ids: list[str], timeout: int = 30):
     """
     print(f"🔍 Verifying {len(correlation_ids)} records in database...")
 
-    conn = psycopg2.connect(**DB_CONFIG)
+    conn = psycopg2.connect(DB_DSN)
     cursor = conn.cursor()
 
     start_time = time.time()
@@ -118,7 +111,7 @@ def verify_database_records(correlation_ids: list[str], timeout: int = 30):
             """
             SELECT COUNT(*)
             FROM claude_session_snapshots
-            WHERE correlation_id::text = ANY(%s)
+            WHERE correlation_id = ANY(%s::uuid[])
             """,
             (correlation_ids,),
         )
@@ -196,7 +189,7 @@ def query_recent_sessions():
     """Query recent session snapshots with prompt and tool counts."""
     print("📋 Querying recent session snapshots...")
 
-    conn = psycopg2.connect(**DB_CONFIG)
+    conn = psycopg2.connect(DB_DSN)
     cursor = conn.cursor()
 
     cursor.execute(

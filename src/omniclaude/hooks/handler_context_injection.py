@@ -569,7 +569,9 @@ class HandlerContextInjection:
     # Database Methods
     # =========================================================================
 
-    async def _get_repository_runtime(self) -> NoReturn:
+    async def _get_repository_runtime(
+        self,
+    ) -> NoReturn:  # Always raises; will change when OMN-2059 re-enables this
         """DISABLED (OMN-2058): No longer connects to learned_patterns DB.
 
         Raises:

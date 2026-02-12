@@ -25,8 +25,11 @@ POSTGRES_DB="${POSTGRES_DB:-${POSTGRES_DATABASE:-omniclaude}}"
 
 # Create extensions and schema, then run migrations
 psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --host="$POSTGRES_HOST" <<-EOSQL
-    -- Enable UUID extension for generating UUIDs
+    -- Enable UUID extensions for generating UUIDs
+    -- uuid-ossp: provides uuid_generate_v4() (legacy, retained for compatibility)
+    -- pgcrypto: provides gen_random_uuid() (modern, used by migrations)
     CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
     -- Enable pg_trgm for fuzzy text search
     CREATE EXTENSION IF NOT EXISTS pg_trgm;
@@ -38,13 +41,13 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --ho
     CREATE SCHEMA IF NOT EXISTS omniclaude;
 
     -- Grant privileges
-    GRANT ALL PRIVILEGES ON SCHEMA omniclaude TO $POSTGRES_USER;
-    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA omniclaude TO $POSTGRES_USER;
-    GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA omniclaude TO $POSTGRES_USER;
+    GRANT ALL PRIVILEGES ON SCHEMA omniclaude TO "${POSTGRES_USER}";
+    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA omniclaude TO "${POSTGRES_USER}";
+    GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA omniclaude TO "${POSTGRES_USER}";
 
     -- Set default privileges for future tables
-    ALTER DEFAULT PRIVILEGES IN SCHEMA omniclaude GRANT ALL ON TABLES TO $POSTGRES_USER;
-    ALTER DEFAULT PRIVILEGES IN SCHEMA omniclaude GRANT ALL ON SEQUENCES TO $POSTGRES_USER;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA omniclaude GRANT ALL ON TABLES TO "${POSTGRES_USER}";
+    ALTER DEFAULT PRIVILEGES IN SCHEMA omniclaude GRANT ALL ON SEQUENCES TO "${POSTGRES_USER}";
 
 EOSQL
 
@@ -67,10 +70,9 @@ EOSQL
         [[ "$migration" == *_down.sql ]] && continue
         if [ -f "$migration" ]; then
             migration_name="$(basename "$migration")"
-            # Escape single quotes for safe SQL interpolation (defense-in-depth)
-            safe_name="${migration_name//\'/\'\'}"
-            # Skip already-applied migrations
-            already_applied=$(psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --host="$POSTGRES_HOST" -tAc "SELECT 1 FROM schema_migrations WHERE filename = '${safe_name}' LIMIT 1;")
+            # Use psql variable binding (-v) to avoid SQL injection via filenames.
+            # :'varname' is psql's syntax for a string-quoted variable reference.
+            already_applied=$(psql -v ON_ERROR_STOP=1 -v migration_name="${migration_name}" --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --host="$POSTGRES_HOST" -tAc "SELECT 1 FROM schema_migrations WHERE filename = :'migration_name' LIMIT 1;")
             if [ "$already_applied" = "1" ]; then
                 echo "  Skipping ${migration_name} (already applied)"
                 continue
@@ -78,7 +80,7 @@ EOSQL
             echo "  Applying ${migration_name}..."
             psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --host="$POSTGRES_HOST" -f "$migration"
             # Record successful migration
-            psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --host="$POSTGRES_HOST" -c "INSERT INTO schema_migrations (filename) VALUES ('${safe_name}');"
+            psql -v ON_ERROR_STOP=1 -v migration_name="${migration_name}" --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --host="$POSTGRES_HOST" -c "INSERT INTO schema_migrations (filename) VALUES (:'migration_name');"
         fi
     done
 else

@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import sys
+import threading
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -31,6 +32,7 @@ from omniclaude.config import settings
 # Resolved on first access via _get_db_config() rather than at import time,
 # so that importing this module never fails due to missing env vars.
 DB_CONFIG: dict[str, Any] | None = None
+_db_config_lock = threading.Lock()
 
 
 def _get_db_config() -> dict[str, Any]:
@@ -40,47 +42,55 @@ def _get_db_config() -> dict[str, Any]:
     The settings object reads from environment variables automatically, so this
     stays consistent with the rest of the codebase rather than diverging via
     a separate os.environ.get() code path.
+
+    Thread-safe: uses a lock to prevent partial initialization when two threads
+    call simultaneously during first access.
     """
     global DB_CONFIG
     if DB_CONFIG is not None:
         return DB_CONFIG
 
-    _omniclaude_db_url = settings.omniclaude_db_url.get_secret_value()
+    with _db_config_lock:
+        # Re-check after acquiring lock (double-checked locking)
+        if DB_CONFIG is not None:
+            return DB_CONFIG
 
-    if _omniclaude_db_url:
-        # Parse URL into components for explicit parameter passing to SimpleConnectionPool.
-        # This gives us visibility into individual connection parameters (host, port, etc.)
-        # for error reporting and DB_CONFIG introspection.
-        from urllib.parse import parse_qs, urlparse
+        _omniclaude_db_url = settings.omniclaude_db_url.get_secret_value()
 
-        _parsed = urlparse(_omniclaude_db_url)
-        DB_CONFIG = {
-            "host": _parsed.hostname or "",
-            "port": _parsed.port or 5432,
-            "database": _parsed.path.lstrip("/") if _parsed.path else "",
-            "user": _parsed.username or "",
-            "password": _parsed.password or "",
-        }
+        if _omniclaude_db_url and _omniclaude_db_url.strip():
+            # Parse URL into components for explicit parameter passing to SimpleConnectionPool.
+            # This gives us visibility into individual connection parameters (host, port, etc.)
+            # for error reporting and DB_CONFIG introspection.
+            from urllib.parse import parse_qs, urlparse
 
-        # Preserve query parameters from the URL (e.g., sslmode=require, connect_timeout=10).
-        # These are passed as keyword arguments to psycopg2.connect() via the pool constructor.
-        if _parsed.query:
-            _query_params = parse_qs(_parsed.query, keep_blank_values=False)
-            for _key, _values in _query_params.items():
-                # parse_qs returns lists; take the last value for each key
-                # (matching standard URL semantics where last value wins).
-                DB_CONFIG[_key] = _values[-1]
-    else:
-        # Fallback to individual POSTGRES_* settings
-        DB_CONFIG = {
-            "host": settings.postgres_host,
-            "port": settings.postgres_port,
-            "database": settings.postgres_database,
-            "user": settings.postgres_user,
-            "password": settings.get_effective_postgres_password(),
-        }
+            _parsed = urlparse(_omniclaude_db_url)
+            DB_CONFIG = {
+                "host": _parsed.hostname or "",
+                "port": _parsed.port or 5432,
+                "database": _parsed.path.lstrip("/") if _parsed.path else "",
+                "user": _parsed.username or "",
+                "password": _parsed.password or "",
+            }
 
-    return DB_CONFIG
+            # Preserve query parameters from the URL (e.g., sslmode=require, connect_timeout=10).
+            # These are passed as keyword arguments to psycopg2.connect() via the pool constructor.
+            if _parsed.query:
+                _query_params = parse_qs(_parsed.query, keep_blank_values=False)
+                for _key, _values in _query_params.items():
+                    # parse_qs returns lists; take the last value for each key
+                    # (matching standard URL semantics where last value wins).
+                    DB_CONFIG[_key] = _values[-1]
+        else:
+            # Fallback to individual POSTGRES_* settings
+            DB_CONFIG = {
+                "host": settings.postgres_host,
+                "port": settings.postgres_port,
+                "database": settings.postgres_database,
+                "user": settings.postgres_user,
+                "password": settings.get_effective_postgres_password(),
+            }
+
+        return DB_CONFIG
 
 
 # Connection pool (lazy initialization)

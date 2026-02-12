@@ -443,6 +443,11 @@ class Settings(BaseSettings):
         """
         raw_url = self.omniclaude_db_url.get_secret_value()
         if raw_url:
+            if not raw_url.startswith(("postgresql://", "postgres://")):
+                raise ValueError(
+                    f"OMNICLAUDE_DB_URL must start with 'postgresql://' or 'postgres://', "
+                    f"got: {raw_url[:30]}..."
+                )
             dsn = raw_url
             if async_driver and dsn.startswith("postgresql://"):
                 dsn = "postgresql+asyncpg://" + dsn[len("postgresql://") :]
