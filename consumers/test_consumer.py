@@ -35,10 +35,10 @@ sys.path.insert(0, str(SHARED_DIR))
 
 # Database configuration
 DB_CONFIG = {
-    "host": "localhost",
-    "port": 5436,
+    "host": os.environ.get("POSTGRES_HOST", settings.postgres_host or "localhost"),
+    "port": int(os.environ.get("POSTGRES_PORT", settings.postgres_port or 5436)),
     "database": os.environ.get("POSTGRES_DATABASE", "omniclaude"),
-    "user": "postgres",
+    "user": os.environ.get("POSTGRES_USER", settings.postgres_user or "postgres"),
     "password": settings.get_effective_postgres_password(),
 }
 
@@ -70,7 +70,9 @@ def publish_test_events(count: int = 10) -> list[str]:
     print(f"📤 Publishing {count} test events to Kafka...")
 
     producer = KafkaProducer(
-        bootstrap_servers=["localhost:9092"],
+        bootstrap_servers=os.environ.get(
+            "KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"
+        ).split(","),
         value_serializer=lambda v: json.dumps(v).encode("utf-8"),
     )
 
