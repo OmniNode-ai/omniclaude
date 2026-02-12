@@ -65,15 +65,15 @@ def get_connection_pool() -> SimpleConnectionPool:
     """
     Get or create connection pool.
 
-    Pool sizes are configurable via environment variables:
-    - POSTGRES_POOL_MIN_SIZE (default: 1)
-    - POSTGRES_POOL_MAX_SIZE (default: 5)
+    Uses fixed pool sizes appropriate for skill helper usage.
     """
     global _connection_pool
     if _connection_pool is None:
+        # Hardcoded defaults — pool config fields (postgres_pool_min_size,
+        # postgres_pool_max_size) were removed from Settings in DB-SPLIT-07.
         _connection_pool = SimpleConnectionPool(
-            minconn=settings.postgres_pool_min_size,
-            maxconn=settings.postgres_pool_max_size,
+            minconn=1,
+            maxconn=5,
             **DB_CONFIG,
         )
     return _connection_pool

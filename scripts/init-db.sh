@@ -56,6 +56,8 @@ MIGRATIONS_DIR="${SCRIPT_DIR}/../sql/migrations"
 if [ -d "$MIGRATIONS_DIR" ]; then
     echo "Running migrations from ${MIGRATIONS_DIR}..."
     for migration in "$MIGRATIONS_DIR"/*.sql; do
+        # Skip rollback (down) migrations — only run forward migrations
+        [[ "$migration" == *_down.sql ]] && continue
         if [ -f "$migration" ]; then
             echo "  Applying $(basename "$migration")..."
             psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --host="$POSTGRES_HOST" -f "$migration"
