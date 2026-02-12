@@ -26,7 +26,7 @@ NC='\033[0m' # No Color
 
 # Configuration (no fallbacks - must be set in .env)
 KAFKA_BROKER="${KAFKA_BOOTSTRAP_SERVERS}"
-KAFKA_TOPIC="agent-actions"
+KAFKA_TOPIC="onex.evt.omniclaude.agent-actions.v1"
 POSTGRES_HOST="${POSTGRES_HOST}"
 POSTGRES_PORT="${POSTGRES_PORT}"
 POSTGRES_USER="${POSTGRES_USER}"
