@@ -159,18 +159,20 @@ python3 "${CLAUDE_PLUGIN_ROOT}/hooks/lib/emit_ticket_status.py" \
 
 ### Phase Transition Emissions
 
-Emit a status event when entering each phase:
+Emit a status event when entering each phase.
 
-| Phase Entry | State | Progress | Extra Args |
-|-------------|-------|----------|------------|
-| intake | working | 0.00 | `--task "Ticket intake"` |
-| research | working | 0.15 | `--task "Researching codebase"` |
-| questions | awaiting_input | 0.30 | `--task "Waiting for clarification"` `--blocking-reason "Waiting for answers to clarifying questions"` |
-| spec | working | 0.45 | `--task "Generating specification"` |
-| spec gate | blocked | 0.45 | `--blocking-reason "Awaiting spec approval"` |
-| implementation | working | 0.70 | `--task "Implementing requirements"` |
-| review | working | 0.90 | `--task "Running verification"` |
-| done | finished | 1.00 | `--task "Ticket complete"` |
+**Note:** Every emission requires `--state`, `--message`, `--phase`, and `--ticket-id`. The `--message` column below shows the value to pass for each phase entry. Use the CLI invocation pattern from above.
+
+| Phase Entry | State | Progress | Message | Extra Args |
+|-------------|-------|----------|---------|------------|
+| intake | working | 0.00 | `"Starting ticket intake"` | `--task "Ticket intake"` |
+| research | working | 0.15 | `"Researching codebase"` | `--task "Researching codebase"` |
+| questions | awaiting_input | 0.30 | `"Waiting for clarification"` | `--task "Waiting for clarification"` `--blocking-reason "Waiting for answers to clarifying questions"` |
+| spec | working | 0.45 | `"Generating specification"` | `--task "Generating specification"` |
+| spec gate | blocked | 0.45 | `"Awaiting spec approval"` | `--blocking-reason "Awaiting spec approval"` |
+| implementation | working | 0.70 | `"Implementing requirements"` | `--task "Implementing requirements"` |
+| review | working | 0.90 | `"Running verification"` | `--task "Running verification"` |
+| done | finished | 1.00 | `"Ticket complete"` | `--task "Ticket complete"` |
 
 ### Implementation Sub-Progress
 

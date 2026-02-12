@@ -135,6 +135,12 @@ def main(argv: list[str] | None = None) -> None:
         if args.ticket_id is not None:
             if metadata is None:
                 metadata = {}
+            if "ticket_id" in metadata and metadata["ticket_id"] != args.ticket_id:
+                print(
+                    f"Warning: --ticket-id '{args.ticket_id}' overwrites "
+                    f"metadata ticket_id '{metadata['ticket_id']}'",
+                    file=sys.stderr,
+                )
             metadata["ticket_id"] = args.ticket_id
 
         # Delegate to the real emitter.
