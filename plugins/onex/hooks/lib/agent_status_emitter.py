@@ -136,7 +136,19 @@ def emit_agent_status(
 
         from .emit_client_wrapper import emit_event
 
-        return emit_event("agent.status", payload)
+        result = emit_event("agent.status", payload)
+
+        # Trigger Slack notification for blocked state (OMN-1851)
+        # Only notify when emit_event succeeds (P0-6)
+        if result and validated_state == EnumAgentState.BLOCKED:
+            try:
+                from .blocked_notifier import maybe_notify_blocked
+
+                maybe_notify_blocked(payload)
+            except Exception:
+                pass  # Notification failure must never affect status emission
+
+        return result
 
     except Exception as e:
         # Structured failure log for debugging (explicit None check preserves empty strings)
