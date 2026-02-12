@@ -25,7 +25,7 @@ import re
 import threading
 import time
 from collections.abc import Callable
-from datetime import UTC
+from datetime import UTC, datetime
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -371,8 +371,8 @@ def gc_stale_runs() -> int:
     now = time.time()
     cutoff = now - CLAUDE_STATE_GC_TTL_SECONDS
 
-    # Import here (not at module level) since datetime is only needed for GC
-    from datetime import datetime
+    # Also define a longer cutoff for orphaned runs (not in "run_ended" state)
+    orphan_cutoff = now - (CLAUDE_STATE_GC_TTL_SECONDS * 7)  # 7x normal TTL
 
     try:
         for path in runs_dir.iterdir():
@@ -382,14 +382,22 @@ def gc_stale_runs() -> int:
                 raw = path.read_text(encoding="utf-8")
                 data = json.loads(raw)
                 ctx = ContractRunContext(**data)
-                if ctx.state == "run_ended" and ctx.updated_at:
-                    # Parse ISO timestamp to epoch for comparison
+
+                if ctx.updated_at:
                     updated = datetime.fromisoformat(ctx.updated_at)
                     if updated.tzinfo is None:
                         updated = updated.replace(tzinfo=UTC)
-                    if updated.timestamp() < cutoff:
-                        path.unlink()
-                        removed += 1
+                    ts = updated.timestamp()
+                else:
+                    # No updated_at — use file mtime as fallback
+                    ts = path.stat().st_mtime
+
+                # Normal GC: ended runs past TTL
+                if (ctx.state == "run_ended" and ts < cutoff) or (
+                    ctx.state != "run_ended" and ts < orphan_cutoff
+                ):
+                    path.unlink()
+                    removed += 1
             except Exception:
                 continue
     except OSError:

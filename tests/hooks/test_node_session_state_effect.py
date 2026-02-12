@@ -280,8 +280,11 @@ class TestGarbageCollection:
         assert read_run_context("old-ended") is None
 
     def test_gc_preserves_active_runs(self, monkeypatch) -> None:
-        """GC does not remove runs that are still active."""
-        monkeypatch.setattr("node_session_state_effect.CLAUDE_STATE_GC_TTL_SECONDS", 0)
+        """GC does not remove active runs within orphan TTL (7x normal TTL)."""
+        # Use 1 hour TTL — orphan cutoff is 7 hours. A 5-hour-old active run survives.
+        monkeypatch.setattr(
+            "node_session_state_effect.CLAUDE_STATE_GC_TTL_SECONDS", 3600
+        )
 
         old_time = (datetime.now(UTC) - timedelta(hours=5)).isoformat()
         ctx = ContractRunContext(
