@@ -143,6 +143,69 @@ skill -> emit_event() -> emit daemon -> Kafka -> NotificationConsumer -> Slack
 
 **Important:** Notifications are best-effort and non-blocking. If `SLACK_WEBHOOK_URL` is not configured on the runtime, they silently no-op. Do not let notification failures block workflow progress.
 
+## Status Emission
+
+Emit agent status events at key workflow points so external systems (dashboards, alerting, observability) can track ticket progress. Status emission is **non-blocking and fail-open** -- if emission fails, log a warning to stderr and continue. Never let a status emission failure block workflow progress.
+
+**CLI invocation pattern:**
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/hooks/lib/emit_ticket_status.py" \
+  --state STATE --message "MESSAGE" \
+  --phase PHASE --ticket-id {ticket_id} [--progress N] [--blocking-reason REASON]
+```
+
+**Note:** Always include `--progress` when transitioning phases, using the values from the table below to ensure dashboards and alerting accurately reflect workflow position.
+
+### Phase Transition Emissions
+
+Emit a status event when entering each phase.
+
+**Note:** Every emission requires `--state`, `--message`, `--phase`, and `--ticket-id`. The `--message` column below shows the value to pass for each phase entry. Use the CLI invocation pattern from above.
+
+| Phase Entry | State | Progress | Message | Extra Args |
+|-------------|-------|----------|---------|------------|
+| intake | working | 0.00 | `"Starting ticket intake"` | `--task "Ticket intake"` |
+| research | working | 0.15 | `"Researching codebase"` | `--task "Researching codebase"` |
+| questions | awaiting_input | 0.30 | `"Waiting for clarification"` | `--task "Waiting for clarification"`<br>`--blocking-reason "Waiting for answers to clarifying questions"` |
+| spec | working | 0.45 | `"Generating specification"` | `--task "Generating specification"` |
+| spec gate | blocked | 0.45 | `"Awaiting spec approval"` | `--task "Awaiting spec approval"`<br>`--blocking-reason "Awaiting spec approval"` |
+| implementation | working | 0.70 | `"Implementing requirements"` | `--task "Implementing requirements"` |
+| review | working | 0.90 | `"Running verification"` | `--task "Running verification"` |
+| done | finished | 1.00 | `"Ticket complete"` | `--task "Ticket complete"` |
+
+### Implementation Sub-Progress
+
+During the implementation phase, report granular progress as requirements are completed:
+
+```
+progress = 0.70 + 0.20 * (completed_requirements / total_requirements)
+```
+
+Example: 3 of 5 requirements done yields progress = 0.82.
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/hooks/lib/emit_ticket_status.py" \
+  --state working --message "Implemented 3/5 requirements" \
+  --phase implementation --ticket-id {ticket_id} --progress 0.82 \
+  --metadata '{"requirements_completed": "3", "requirements_total": "5"}'
+```
+
+### Error Emission
+
+When a phase encounters an error (e.g., verification failure), emit an error status:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/hooks/lib/emit_ticket_status.py" \
+  --state error --message "Verification failed: tests" \
+  --phase review --ticket-id {ticket_id} \
+  --metadata '{"error": "pytest exit code 1"}'
+```
+
+### Important
+
+Status emission must NEVER block workflow progress. If emission fails, log and continue. The CLI wrapper always exits 0 regardless of whether the underlying Kafka emit succeeded.
+
 ## Dispatch Contract (Execution-Critical)
 
 **This section governs how the implementation phase executes. Follow it exactly.**
