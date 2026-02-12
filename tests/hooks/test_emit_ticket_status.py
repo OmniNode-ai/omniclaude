@@ -175,7 +175,7 @@ class TestCLIParsing:
         assert isinstance(metadata, dict)
         assert metadata["key"] == "val"
 
-    def test_metadata_non_dict_json(self) -> None:
+    def test_metadata_non_dict_json(self, capsys: pytest.CaptureFixture[str]) -> None:
         """--metadata '[1,2,3]' is valid JSON but not a dict; falls back to empty dict."""
         with patch(
             "plugins.onex.hooks.lib.agent_status_emitter.emit_agent_status",
@@ -198,7 +198,14 @@ class TestCLIParsing:
         metadata = mock_emit.call_args.kwargs["metadata"]
         assert metadata == {"ticket_id": "OMN-1850"}
 
-    def test_metadata_non_dict_json_without_ticket_id(self) -> None:
+        # Verify warning was printed to stderr
+        captured = capsys.readouterr()
+        assert "Warning: --metadata must be a JSON object" in captured.err
+        assert "got list" in captured.err
+
+    def test_metadata_non_dict_json_without_ticket_id(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         """--metadata '"just a string"' (valid JSON, not dict) without --ticket-id."""
         with patch(
             "plugins.onex.hooks.lib.agent_status_emitter.emit_agent_status",
@@ -218,6 +225,11 @@ class TestCLIParsing:
         # Non-dict JSON falls back to empty dict; no ticket_id to inject
         metadata = mock_emit.call_args.kwargs["metadata"]
         assert metadata == {}
+
+        # Verify warning was printed to stderr
+        captured = capsys.readouterr()
+        assert "Warning: --metadata must be a JSON object" in captured.err
+        assert "got str" in captured.err
 
     def test_message_over_limit_exits_zero(self) -> None:
         """Over-limit --message (>500 chars) still exits 0 (fail-open).
@@ -337,6 +349,36 @@ class TestTicketIdInjection:
         metadata = mock_emit.call_args.kwargs["metadata"]
         assert metadata is None
 
+    def test_ticket_id_overwrite_warning(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """When --ticket-id conflicts with metadata ticket_id, warning is printed."""
+        with patch(
+            "plugins.onex.hooks.lib.agent_status_emitter.emit_agent_status",
+            return_value=True,
+        ) as mock_emit:
+            main(
+                [
+                    "--state",
+                    "working",
+                    "--message",
+                    "test",
+                    "--ticket-id",
+                    "OMN-1850",
+                    "--metadata",
+                    '{"ticket_id": "OMN-1234"}',
+                ]
+            )
+
+        # ticket_id from CLI overwrites the one in metadata
+        metadata = mock_emit.call_args.kwargs["metadata"]
+        assert metadata == {"ticket_id": "OMN-1850"}
+
+        # Verify warning was printed to stderr
+        captured = capsys.readouterr()
+        assert "Warning: --ticket-id 'OMN-1850' overwrites" in captured.err
+        assert "metadata ticket_id 'OMN-1234'" in captured.err
+
 
 # =============================================================================
 # Emission Delegation Tests
@@ -392,7 +434,9 @@ class TestEmissionDelegation:
             # Should not raise
             main(["--state", "working", "--message", "Success path"])
 
-    def test_exit_code_zero_on_failure(self) -> None:
+    def test_exit_code_zero_on_failure(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         """main() does not raise when emit_agent_status returns False (fail-open)."""
         with patch(
             "plugins.onex.hooks.lib.agent_status_emitter.emit_agent_status",
@@ -401,7 +445,13 @@ class TestEmissionDelegation:
             # Should not raise (fail-open)
             main(["--state", "working", "--message", "Emission failed"])
 
-    def test_exit_code_zero_on_exception(self) -> None:
+        # Verify warning was printed to stderr
+        captured = capsys.readouterr()
+        assert "Warning: status emission returned False" in captured.err
+
+    def test_exit_code_zero_on_exception(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         """main() does not raise when emit_agent_status raises an exception."""
         with patch(
             "plugins.onex.hooks.lib.agent_status_emitter.emit_agent_status",
@@ -409,6 +459,11 @@ class TestEmissionDelegation:
         ):
             # Should not raise (fail-open catches all exceptions)
             main(["--state", "working", "--message", "Exception path"])
+
+        # Verify warning was printed to stderr
+        captured = capsys.readouterr()
+        assert "Warning: emit_ticket_status failed" in captured.err
+        assert "ConnectionRefusedError" in captured.err
 
     def test_exit_code_zero_on_import_error(self) -> None:
         """main() does not raise when the emitter import fails."""
@@ -426,7 +481,9 @@ class TestEmissionDelegation:
             # Should not raise
             main(["--state", "working", "--message", "Import failure"])
 
-    def test_invalid_metadata_json_still_exits_zero(self) -> None:
+    def test_invalid_metadata_json_still_exits_zero(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         """Invalid JSON in --metadata prints warning but does not crash."""
         with patch(
             "plugins.onex.hooks.lib.agent_status_emitter.emit_agent_status",
@@ -448,6 +505,11 @@ class TestEmissionDelegation:
         # Should still call emit with ticket_id in metadata (invalid JSON -> empty dict)
         metadata = mock_emit.call_args.kwargs["metadata"]
         assert metadata == {"ticket_id": "OMN-1850"}
+
+        # Verify warning was printed to stderr
+        captured = capsys.readouterr()
+        assert "Warning: --metadata is not valid JSON" in captured.err
+        assert "not-valid-json" in captured.err
 
     def test_dunder_main_guard_invokes_main(self) -> None:
         """The ``if __name__ == '__main__': main()`` guard works end-to-end."""
