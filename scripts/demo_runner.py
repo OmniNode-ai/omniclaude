@@ -130,8 +130,6 @@ def _check_daemon_ping() -> tuple[bool, str]:
 # Kafka helpers
 # ---------------------------------------------------------------------------
 
-_DEFAULT_BOOTSTRAP = "192.168.86.200:29092"
-
 # Core demo topics
 _DEMO_EVT_TOPICS = [
     "onex.evt.omniclaude.session-started.v1",
@@ -148,8 +146,16 @@ _DEMO_CMD_TOPICS = [
 
 
 def _get_bootstrap() -> str:
-    """Return Kafka bootstrap servers from env or default."""
-    return os.environ.get("KAFKA_BOOTSTRAP_SERVERS", _DEFAULT_BOOTSTRAP)
+    """Return Kafka bootstrap servers from KAFKA_BOOTSTRAP_SERVERS env var.
+
+    Raises SystemExit if not configured (no hardcoded defaults per repo invariant).
+    """
+    bootstrap = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "")
+    if not bootstrap:
+        print(_fail("KAFKA_BOOTSTRAP_SERVERS not set. Add it to .env or export it."))
+        print(f"  {_YELLOW}Hint: source .env before running this script{_RESET}")
+        sys.exit(1)
+    return bootstrap
 
 
 def _get_admin_client() -> object | None:
