@@ -66,7 +66,7 @@ import warnings
 from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Literal
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from omnibase_core.enums import EnumClaudeCodeSessionOutcome
 from omnibase_infra.utils import ensure_timezone_aware
@@ -1637,6 +1637,7 @@ class EnumAgentState(StrEnum):
     ERROR = "error"
 
 
+# NOTE: Not included in ModelHookEventEnvelope — emitted directly via emit daemon, not envelope-wrapped.
 class ModelAgentStatusPayload(BaseModel):
     """Event payload for agent status reporting.
 
@@ -1655,7 +1656,7 @@ class ModelAgentStatusPayload(BaseModel):
 
     # Identity
     correlation_id: UUID = Field(
-        default_factory=uuid4,
+        ...,
         description="Correlation ID for distributed tracing",
     )
     agent_name: str = Field(
@@ -1715,7 +1716,9 @@ class ModelAgentStatusPayload(BaseModel):
         description="Timestamp when the status was emitted (UTC). Must be explicitly injected.",
     )
 
-    # Metadata
+    # Metadata — default_factory=dict creates a fresh dict per instance.
+    # The model is frozen (field reassignment blocked), but dict values
+    # remain mutable after construction (e.g., payload.metadata["k"] = "v").
     metadata: dict[str, str] = Field(
         default_factory=dict,
         description="Additional string metadata (new dict per instance)",
