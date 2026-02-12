@@ -41,6 +41,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 
 IDENTICAL = "IDENTICAL"
+UNCONTESTED = "UNCONTESTED"
 ORTHOGONAL = "ORTHOGONAL"
 LOW_CONFLICT = "LOW_CONFLICT"
 CONFLICTING = "CONFLICTING"
@@ -48,7 +49,13 @@ OPPOSITE = "OPPOSITE"
 AMBIGUOUS = "AMBIGUOUS"
 
 ConflictType = Literal[
-    "IDENTICAL", "ORTHOGONAL", "LOW_CONFLICT", "CONFLICTING", "OPPOSITE", "AMBIGUOUS"
+    "IDENTICAL",
+    "UNCONTESTED",
+    "ORTHOGONAL",
+    "LOW_CONFLICT",
+    "CONFLICTING",
+    "OPPOSITE",
+    "AMBIGUOUS",
 ]
 
 # ---------------------------------------------------------------------------
@@ -149,12 +156,22 @@ def unflatten_paths(d: dict[str, Any]) -> dict:
     Example::
 
         {"db.pool.max_size": 10} -> {"db": {"pool": {"max_size": 10}}}
+
+    Raises:
+        ValueError: If paths conflict (e.g. ``{"a.b": 5, "a.b.c": 10}``
+            where ``a.b`` is both a leaf value and an intermediate).
     """
     result: dict[str, Any] = {}
     for compound_key, value in d.items():
         parts = compound_key.split(".")
         target = result
         for part in parts[:-1]:
+            existing = target.get(part)
+            if existing is not None and not isinstance(existing, dict):
+                raise ValueError(
+                    f"Conflicting paths: '{'.'.join(parts[: parts.index(part) + 1])}' "
+                    f"is both a leaf and an intermediate in key '{compound_key}'"
+                )
             target = target.setdefault(part, {})
         target[parts[-1]] = value
     return result
@@ -180,7 +197,14 @@ _ANTONYM_PAIRS: frozenset[frozenset[str]] = frozenset(
 
 
 def _are_antonyms(a: Any, b: Any) -> bool:
-    """Return ``True`` if *a* and *b* form a known antonym pair."""
+    """Return ``True`` if *a* and *b* form a known antonym pair.
+
+    Cross-type comparisons (e.g. ``True`` vs ``"false"``) are never
+    antonyms -- they are a type mismatch and should fall through to
+    AMBIGUOUS in the caller.
+    """
+    if type(a) is not type(b):
+        return False
     if isinstance(a, bool) and isinstance(b, bool):
         return a != b
     pair = frozenset({str(a).lower().strip(), str(b).lower().strip()})
@@ -364,14 +388,14 @@ def reconcile_outputs(
 
     for field, agents in sorted(field_to_agents.items()):
         if len(agents) == 1:
-            # 5. Single-agent field -- auto-include
+            # 5. Single-agent field -- auto-include (no conflict, uncontested)
             agent = agents[0]
             value = flat_agents[agent][field]
             merged_values[field] = value
             auto_resolved.append(field)
             field_decisions[field] = FieldDecision(
                 field=field,
-                conflict_type=IDENTICAL,
+                conflict_type=UNCONTESTED,
                 sources=[agent],
                 chosen_value=value,
                 rationale=f"Only agent {agent} modified this field.",
@@ -383,7 +407,7 @@ def reconcile_outputs(
                     {
                         "event": "field_classified",
                         "field": field,
-                        "conflict_type": IDENTICAL,
+                        "conflict_type": UNCONTESTED,
                         "sources": [agent],
                     }
                 )
@@ -543,6 +567,7 @@ __all__ = [
     "unflatten_paths",
     "reconcile_outputs",
     "IDENTICAL",
+    "UNCONTESTED",
     "ORTHOGONAL",
     "LOW_CONFLICT",
     "CONFLICTING",

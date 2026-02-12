@@ -99,6 +99,8 @@ When agents return outputs that overlap (modify the same fields), use geometric 
 from plugins.onex.hooks.lib.reconcile_agent_outputs import reconcile_outputs
 ```
 
+Note: This import assumes the repository root is on `sys.path`. Within hook scripts, the plugin lib path is set automatically.
+
 #### 5.2 Gather Agent Outputs
 
 Collect outputs from all completed agents into a dict mapping agent name to output:
@@ -120,7 +122,14 @@ result = reconcile_outputs(base_values, agent_outputs)
 
 #### 5.4 Handle the Result
 
-**If `result.requires_approval` is False**: Apply `result.merged_values` directly.
+**If `result.requires_approval` is False**: Apply `result.merged_values` directly. Note that `merged_values` is a flat dict of dot-separated paths (e.g. `{"db.pool.max_size": 10}`). To reconstruct a nested structure, use:
+
+```python
+from plugins.onex.hooks.lib.reconcile_agent_outputs import unflatten_paths
+
+nested = unflatten_paths(result.merged_values)
+# {"db": {"pool": {"max_size": 10}}}
+```
 
 **If `result.requires_approval` is True**: STOP. Use `AskUserQuestion` to present each approval-required field with the competing values from each agent. Do NOT attempt to resolve these yourself.
 

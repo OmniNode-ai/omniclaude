@@ -30,6 +30,7 @@ from reconcile_agent_outputs import (
     LOW_CONFLICT,
     OPPOSITE,
     ORTHOGONAL,
+    UNCONTESTED,
     FieldDecision,
     ReconciliationResult,
     flatten_to_paths,
@@ -298,6 +299,58 @@ class TestOppositeValues:
         assert result.requires_approval is True
 
 
+class TestAreAntonymsCrossType:
+    """Cross-type comparisons must NOT be classified as antonyms.
+
+    Regression: ``_are_antonyms(True, "false")`` previously returned ``True``
+    because ``str(True).lower()`` == ``"true"`` matched the ``{"true", "false"}``
+    antonym pair.  The fix adds a ``type(a) is not type(b)`` guard.
+    """
+
+    def test_bool_vs_string_is_not_antonym(self) -> None:
+        from reconcile_agent_outputs import _are_antonyms
+
+        assert _are_antonyms(True, "false") is False
+
+    def test_string_vs_bool_is_not_antonym(self) -> None:
+        from reconcile_agent_outputs import _are_antonyms
+
+        assert _are_antonyms("true", False) is False
+
+    def test_bool_vs_int_is_not_antonym(self) -> None:
+        from reconcile_agent_outputs import _are_antonyms
+
+        # 0/1 could look like True/False after str() conversion
+        assert _are_antonyms(True, 0) is False
+
+    def test_same_type_bools_still_detected(self) -> None:
+        from reconcile_agent_outputs import _are_antonyms
+
+        assert _are_antonyms(True, False) is True
+        assert _are_antonyms(False, True) is True
+
+    def test_same_type_strings_still_detected(self) -> None:
+        from reconcile_agent_outputs import _are_antonyms
+
+        assert _are_antonyms("enable", "disable") is True
+        assert _are_antonyms("yes", "no") is True
+
+    def test_cross_type_falls_to_ambiguous_in_reconcile(self) -> None:
+        """End-to-end: bool True vs string 'false' should be AMBIGUOUS,
+        not OPPOSITE."""
+        base = {"flag": "initial"}
+        outputs = {
+            "agent-a": {"flag": True},
+            "agent-b": {"flag": "false"},
+        }
+        result = reconcile_outputs(base, outputs)
+        dec = result.field_decisions["flag"]
+        assert dec.conflict_type == AMBIGUOUS, (
+            f"Expected AMBIGUOUS for cross-type disagreement, got {dec.conflict_type}"
+        )
+        assert dec.needs_approval is True
+
+
 class TestAmbiguousValues:
     """Two agents produce very different strings -> AMBIGUOUS."""
 
@@ -395,6 +448,7 @@ class TestSingleAgentField:
         assert "y" in result.merged_values
         assert result.merged_values["y"] == 2
         dec = result.field_decisions["y"]
+        assert dec.conflict_type == UNCONTESTED
         assert dec.sources == ["agent-a"]
         assert dec.needs_approval is False
 
@@ -530,3 +584,52 @@ class TestModelImmutability:
         )
         with pytest.raises(Exception):
             result.requires_approval = True  # type: ignore[misc]
+
+
+# =============================================================================
+# Three-agent disagreement
+# =============================================================================
+
+
+class TestThreeAgentDisagreement:
+    """Three agents with boolean disagreement -> AMBIGUOUS, not OPPOSITE.
+
+    The fallback classifier's OPPOSITE check is gated on ``len(vals) == 2``,
+    so a 3-agent boolean disagreement (two True, one False) correctly falls
+    through to AMBIGUOUS.  This test documents that intentional behaviour.
+    """
+
+    def test_three_agents_boolean_disagreement_is_ambiguous(self) -> None:
+        base = {"feature": {"enabled": False}}
+        outputs = {
+            "agent-alpha": {"feature": {"enabled": True}},
+            "agent-beta": {"feature": {"enabled": True}},
+            "agent-gamma": {"feature": {"enabled": False}},
+        }
+        result = reconcile_outputs(base, outputs)
+
+        dec = result.field_decisions["feature.enabled"]
+        assert dec.conflict_type == AMBIGUOUS, (
+            f"Expected AMBIGUOUS for 3-agent boolean disagreement, "
+            f"got {dec.conflict_type}"
+        )
+        assert dec.needs_approval is True
+        assert dec.chosen_value is None
+        assert "feature.enabled" not in result.merged_values
+        assert "feature.enabled" in result.approval_fields
+        assert result.requires_approval is True
+        assert sorted(dec.sources) == ["agent-alpha", "agent-beta", "agent-gamma"]
+
+
+# =============================================================================
+# unflatten_paths conflicting paths
+# =============================================================================
+
+
+class TestUnflattenConflictingPaths:
+    """unflatten_paths must raise ValueError on conflicting paths."""
+
+    def test_conflicting_leaf_and_intermediate(self) -> None:
+        """'a.b' is both a leaf (value 5) and an intermediate (parent of 'a.b.c')."""
+        with pytest.raises(ValueError, match="Conflicting paths"):
+            unflatten_paths({"a.b": 5, "a.b.c": 10})
