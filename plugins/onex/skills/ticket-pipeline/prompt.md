@@ -558,7 +558,7 @@ def validate_checkpoint(ticket_id, run_id, phase_name):
         ]
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         if proc.returncode != 0:
-            return {"valid": False, "error": f"validation failed: {proc.stderr}"}
+            return {"is_valid": False, "errors": [f"validation failed: {proc.stderr}"]}
         return json.loads(proc.stdout)
     except Exception as e:
         return {"success": False, "is_valid": False, "errors": [str(e)]}

@@ -452,7 +452,6 @@ if checkpoint_arg and checkpoint_ticket_id and checkpoint_run_id:
                 for issue in issues.get(severity, [])
             ],
             "last_clean_sha": _head_sha,
-            "recent_commit_shas": [c["hash"] for c in commits_made[-3:]],  # metadata only
         })
         _cp_cmd = [
             sys.executable, _CHECKPOINT_MANAGER, "write",
