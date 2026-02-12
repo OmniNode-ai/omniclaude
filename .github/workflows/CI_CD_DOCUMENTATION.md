@@ -74,10 +74,11 @@ The enhanced-ci.yml workflow provides 11 specialized jobs organized into validat
 **Process**:
 1. Start PostgreSQL 16 service
 2. Run `scripts/init-db.sh` initialization script
-3. Validate tables:
-   - `agent_routing_decisions`
-   - `agent_transformation_events`
-   - `router_performance_metrics`
+3. Validate tables (post DB-SPLIT-07):
+   - `schema_migrations`
+   - `claude_session_snapshots`
+   - `claude_session_prompts`
+   - `claude_session_tools`
 4. Validate indexes and constraints
 5. Verify schema integrity
 
