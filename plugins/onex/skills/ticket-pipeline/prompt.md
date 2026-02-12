@@ -256,20 +256,65 @@ else:
     }
 ```
 
-### 3. Handle --skip-to
+### 3. Handle --skip-to (Checkpoint-Validated Resume, OMN-2144)
+
+When `--skip-to` is used, the pipeline validates checkpoints for all prior phases.
+This replaces the naive "mark as skipped" approach with structural verification
+that prior work actually completed.
 
 ```python
 if skip_to:
     phase_order = ["implement", "local_review", "create_pr", "pr_release_ready", "ready_for_merge"]
     skip_idx = phase_order.index(skip_to)
 
-    # Mark all phases before skip_to as completed (if not already)
     for phase_name in phase_order[:skip_idx]:
         phase_data = state["phases"][phase_name]
-        if not phase_data.get("completed_at"):
-            phase_data["completed_at"] = datetime.now(timezone.utc).isoformat()
-            phase_data["artifacts"]["skipped"] = True
-            print(f"Skipping phase: {phase_name}")
+
+        # If phase is already completed in state, trust it (resume case)
+        if phase_data.get("completed_at"):
+            print(f"Phase '{phase_name}': already completed at {phase_data['completed_at']}. OK.")
+            continue
+
+        # Read checkpoint for this phase
+        checkpoint = read_checkpoint(ticket_id, run_id, phase_name)
+        if not checkpoint.get("success"):
+            print(f"Error: No checkpoint found for phase '{phase_name}'. "
+                  f"Cannot skip to '{skip_to}' without completed checkpoints for all prior phases.")
+            print(f"Hint: Run the pipeline from the beginning, or use --force-run to start fresh.")
+            thread_ts = notify_sync(slack_notifier, "notify_blocked",
+                phase=phase_name,
+                reason=f"Missing checkpoint for {phase_name} — cannot skip to {skip_to}",
+                block_kind="blocked_policy",
+                thread_ts=state.get("slack_thread_ts"),
+            )
+            state["slack_thread_ts"] = thread_ts
+            save_state(state, state_path)
+            release_lock(lock_path)
+            exit(1)
+
+        # Validate the checkpoint structurally
+        validation = validate_checkpoint(ticket_id, run_id, phase_name)
+        if not validation.get("is_valid"):
+            errors = validation.get("errors", ["Unknown validation error"])
+            print(f"Error: Checkpoint for '{phase_name}' failed validation: {errors}")
+            print(f"Hint: Re-run the pipeline from phase '{phase_name}' to produce a valid checkpoint.")
+            thread_ts = notify_sync(slack_notifier, "notify_blocked",
+                phase=phase_name,
+                reason=f"Checkpoint validation failed for {phase_name}: {errors}",
+                block_kind="blocked_policy",
+                thread_ts=state.get("slack_thread_ts"),
+            )
+            state["slack_thread_ts"] = thread_ts
+            save_state(state, state_path)
+            release_lock(lock_path)
+            exit(1)
+
+        # Populate pipeline state from the validated checkpoint
+        cp = checkpoint["checkpoint"]
+        phase_data["completed_at"] = cp.get("timestamp_utc", datetime.now(timezone.utc).isoformat())
+        phase_data["artifacts"] = extract_artifacts_from_checkpoint(cp)
+        save_state(state, state_path)
+        print(f"Restored phase '{phase_name}' from checkpoint (attempt {cp.get('attempt_number', '?')})")
 ```
 
 ### 4. Save State and Announce
@@ -441,6 +486,196 @@ else:
 status_result = patch_pipeline_status(description, status_yaml_str)
 if status_result.success:
     mcp__linear-server__update_issue(id=ticket_id, description=status_result.patched_description)
+```
+
+### Checkpoint Helpers (OMN-2144)
+
+Checkpoint operations delegate to `checkpoint_manager.py` via Bash.  All checkpoint
+writes are **non-blocking**: failures log a warning but never stop the pipeline.
+
+```python
+import subprocess
+
+_CHECKPOINT_MANAGER = Path(__file__).resolve().parent.parent / "hooks" / "lib" / "checkpoint_manager.py"
+# Fallback: use CLAUDE_PLUGIN_ROOT if available
+if not _CHECKPOINT_MANAGER.exists():
+    _plugin_root = os.environ.get("CLAUDE_PLUGIN_ROOT", "")
+    if _plugin_root:
+        _CHECKPOINT_MANAGER = Path(_plugin_root) / "hooks" / "lib" / "checkpoint_manager.py"
+
+
+def write_checkpoint(ticket_id, run_id, phase_name, attempt_number, repo_commit_map, artifact_paths, phase_payload):
+    """Write a checkpoint after a phase completes.  Non-blocking on failure."""
+    try:
+        cmd = [
+            sys.executable, str(_CHECKPOINT_MANAGER), "write",
+            "--ticket-id", ticket_id,
+            "--run-id", run_id,
+            "--phase", phase_name,
+            "--attempt", str(attempt_number),
+            "--repo-commit-map", json.dumps(repo_commit_map),
+            "--artifact-paths", json.dumps(artifact_paths),
+            "--payload", json.dumps(phase_payload),
+        ]
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if proc.returncode == 0:
+            result = json.loads(proc.stdout)
+            print(f"Checkpoint written for phase '{phase_name}' (attempt {attempt_number}): {result.get('checkpoint_path', 'ok')}")
+            return result
+        else:
+            print(f"Warning: Checkpoint write failed for phase '{phase_name}': {proc.stdout or proc.stderr}")
+            return {"success": False, "error": proc.stdout or proc.stderr}
+    except Exception as e:
+        print(f"Warning: Checkpoint write failed for phase '{phase_name}': {e}")
+        return {"success": False, "error": str(e)}
+
+
+def read_checkpoint(ticket_id, run_id, phase_name):
+    """Read the latest checkpoint for a phase.  Returns parsed JSON result."""
+    try:
+        cmd = [
+            sys.executable, str(_CHECKPOINT_MANAGER), "read",
+            "--ticket-id", ticket_id,
+            "--run-id", run_id,
+            "--phase", phase_name,
+        ]
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        return json.loads(proc.stdout)
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def validate_checkpoint(ticket_id, run_id, phase_name):
+    """Validate a checkpoint structurally.  Returns parsed JSON result."""
+    try:
+        cmd = [
+            sys.executable, str(_CHECKPOINT_MANAGER), "validate",
+            "--ticket-id", ticket_id,
+            "--run-id", run_id,
+            "--phase", phase_name,
+        ]
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        return json.loads(proc.stdout)
+    except Exception as e:
+        return {"success": False, "is_valid": False, "errors": [str(e)]}
+
+
+def build_phase_payload(phase_name, state, result):
+    """Build the phase-specific payload dict from pipeline state and phase result.
+
+    Each phase has a different payload schema.  This helper constructs the correct
+    dict based on the phase name and available data.
+    """
+    artifacts = result.get("artifacts", {})
+
+    if phase_name == "implement":
+        # Get current HEAD SHA
+        try:
+            head_sha = subprocess.check_output(
+                ["git", "rev-parse", "--short=7", "HEAD"], text=True
+            ).strip()
+        except Exception:
+            head_sha = "0000000"
+        try:
+            branch = subprocess.check_output(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"], text=True
+            ).strip()
+        except Exception:
+            branch = "unknown"
+        return {
+            "branch_name": artifacts.get("branch_name", branch),
+            "commit_sha": head_sha,
+            "files_changed": list(artifacts.get("files_changed", [])),
+        }
+
+    elif phase_name == "local_review":
+        try:
+            head_sha = subprocess.check_output(
+                ["git", "rev-parse", "--short=7", "HEAD"], text=True
+            ).strip()
+        except Exception:
+            head_sha = "0000000"
+        return {
+            "iteration_count": artifacts.get("iterations", 1),
+            "issue_fingerprints": list(artifacts.get("issue_fingerprints", [])),
+            "last_clean_sha": head_sha,
+        }
+
+    elif phase_name == "create_pr":
+        try:
+            head_sha = subprocess.check_output(
+                ["git", "rev-parse", "--short=7", "HEAD"], text=True
+            ).strip()
+        except Exception:
+            head_sha = "0000000"
+        return {
+            "pr_url": artifacts.get("pr_url", ""),
+            "pr_number": artifacts.get("pr_number", 0),
+            "head_sha": head_sha,
+        }
+
+    elif phase_name == "pr_release_ready":
+        try:
+            head_sha = subprocess.check_output(
+                ["git", "rev-parse", "--short=7", "HEAD"], text=True
+            ).strip()
+        except Exception:
+            head_sha = "0000000"
+        return {
+            "last_review_sha": head_sha,
+            "issue_fingerprints": list(artifacts.get("issue_fingerprints", [])),
+        }
+
+    elif phase_name == "ready_for_merge":
+        return {
+            "label_applied_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    return {}
+
+
+def get_checkpoint_attempt_number(ticket_id, run_id, phase_name):
+    """Count existing checkpoints for a phase and return next attempt number."""
+    try:
+        list_result_raw = subprocess.run(
+            [sys.executable, str(_CHECKPOINT_MANAGER), "list",
+             "--ticket-id", ticket_id, "--run-id", run_id],
+            capture_output=True, text=True, timeout=30,
+        )
+        list_result = json.loads(list_result_raw.stdout)
+        if list_result.get("success"):
+            count = sum(
+                1 for cp in list_result.get("checkpoints", [])
+                if cp.get("phase") == phase_name
+            )
+            return count + 1
+    except Exception:
+        pass
+    return 1
+
+
+def extract_artifacts_from_checkpoint(checkpoint_data):
+    """Extract pipeline-compatible artifacts dict from a checkpoint's phase_payload."""
+    payload = checkpoint_data.get("phase_payload", {})
+    phase = checkpoint_data.get("phase", "")
+    artifacts = {}
+
+    if phase == "implement":
+        artifacts["branch_name"] = payload.get("branch_name", "")
+        artifacts["commit_sha"] = payload.get("commit_sha", "")
+        artifacts["files_changed"] = payload.get("files_changed", [])
+    elif phase == "local_review":
+        artifacts["iterations"] = payload.get("iteration_count", 1)
+        artifacts["last_clean_sha"] = payload.get("last_clean_sha", "")
+    elif phase == "create_pr":
+        artifacts["pr_url"] = payload.get("pr_url", "")
+        artifacts["pr_number"] = payload.get("pr_number", 0)
+    elif phase == "pr_release_ready":
+        artifacts["last_review_sha"] = payload.get("last_review_sha", "")
+    elif phase == "ready_for_merge":
+        artifacts["label_applied_at"] = payload.get("label_applied_at", "")
+
+    return artifacts
 ```
 
 ### get_current_repo
@@ -673,6 +908,30 @@ for phase_name in phase_order:
         phase_data["artifacts"].update(result.get("artifacts", {}))
         save_state(state, state_path)
 
+        # OMN-2144: Write checkpoint after phase completion (non-blocking)
+        try:
+            attempt_num = get_checkpoint_attempt_number(ticket_id, run_id, phase_name)
+            repo_name = get_current_repo()
+            try:
+                head_sha = subprocess.check_output(
+                    ["git", "rev-parse", "--short=7", "HEAD"], text=True
+                ).strip()
+            except Exception:
+                head_sha = "0000000"
+            phase_payload = build_phase_payload(phase_name, state, result)
+            write_checkpoint(
+                ticket_id=ticket_id,
+                run_id=run_id,
+                phase_name=phase_name,
+                attempt_number=attempt_num,
+                repo_commit_map={repo_name: head_sha},
+                artifact_paths=list(result.get("artifacts", {}).keys()),
+                phase_payload=phase_payload,
+            )
+        except Exception as cp_err:
+            print(f"Warning: Checkpoint write failed for phase '{phase_name}': {cp_err}")
+            # Non-blocking: checkpoint failure does not stop the pipeline
+
         # OMN-1970: Use PipelineSlackNotifier for threaded notifications
         thread_ts = notify_sync(slack_notifier, "notify_phase_completed",
             phase=phase_name,
@@ -871,7 +1130,7 @@ def execute_phase(phase_name, state):
      subagent_type="polymorphic-agent",
      description="Local review for {ticket_id}",
      prompt="You are executing local-review for {ticket_id}.
-       Invoke: Skill(skill=\"onex:local-review\", args=\"--max-iterations {max_iterations}\")
+       Invoke: Skill(skill=\"onex:local-review\", args=\"--max-iterations {max_iterations} --checkpoint {ticket_id}:{run_id}\")
 
        Branch: {branch_name}
        Repo: {repo_path}

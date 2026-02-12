@@ -28,6 +28,9 @@ args:
   - name: --no-commit
     description: Fix but don't commit (stage only)
     required: false
+  - name: --checkpoint
+    description: "Write checkpoint after each iteration (format: ticket_id:run_id)"
+    required: false
 ---
 
 # Local Review

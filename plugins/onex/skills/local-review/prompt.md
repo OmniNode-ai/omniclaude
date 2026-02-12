@@ -16,6 +16,7 @@ Parse arguments from `$ARGUMENTS`:
 | `--files <glob>` | all | Glob pattern to limit scope |
 | `--no-fix` | false | Report only, don't attempt fixes |
 | `--no-commit` | false | Fix but don't commit (stage only) |
+| `--checkpoint <ticket:run>` | none | Write checkpoint after each iteration (format: `ticket_id:run_id`) |
 
 **Examples**:
 ```bash
@@ -422,6 +423,56 @@ Note: `total_issues_fixed` was already incremented in the "Track issues fixed" s
 
 This prevents re-reviewing the same changes and gives the user clear next steps.
 
+### Step 2.5b: Write Checkpoint (OMN-2144)
+
+After a successful commit (or stage in `--no-commit` mode), write a checkpoint if
+`--checkpoint` was provided.  Checkpoint write failure is **non-blocking**.
+
+```python
+if checkpoint_arg and checkpoint_ticket_id and checkpoint_run_id:
+    try:
+        import subprocess as _sp
+        _CHECKPOINT_MANAGER = os.path.join(
+            os.environ.get("CLAUDE_PLUGIN_ROOT", ""),
+            "hooks", "lib", "checkpoint_manager.py"
+        )
+        # Get current HEAD SHA for the checkpoint
+        try:
+            _head_sha = _sp.check_output(
+                ["git", "rev-parse", "--short=7", "HEAD"], text=True
+            ).strip()
+        except Exception:
+            _head_sha = "0000000"
+
+        _cp_payload = json.dumps({
+            "iteration_count": iteration + 1,  # 1-based (iteration hasn't been incremented yet)
+            "issue_fingerprints": [
+                f"{issue['file']}:{issue['line']}"
+                for severity in ["critical", "major", "minor"]
+                for issue in issues.get(severity, [])
+            ],
+            "last_clean_sha": _head_sha,
+        })
+        _cp_cmd = [
+            sys.executable, _CHECKPOINT_MANAGER, "write",
+            "--ticket-id", checkpoint_ticket_id,
+            "--run-id", checkpoint_run_id,
+            "--phase", "local_review",
+            "--attempt", str(iteration + 1),
+            "--repo-commit-map", json.dumps({get_current_repo(): _head_sha}),
+            "--artifact-paths", json.dumps([c["hash"] for c in commits_made[-3:]]),  # recent commits
+            "--payload", _cp_payload,
+        ]
+        _cp_proc = _sp.run(_cp_cmd, capture_output=True, text=True, timeout=30)
+        if _cp_proc.returncode == 0:
+            print(f"Checkpoint written for local_review iteration {iteration + 1}")
+        else:
+            print(f"Warning: Checkpoint write failed: {_cp_proc.stdout or _cp_proc.stderr}")
+    except Exception as _cp_err:
+        print(f"Warning: Checkpoint write failed: {_cp_err}")
+        # Non-blocking: continue pipeline
+```
+
 ### Step 2.6: Check Loop Condition
 
 **Note**: This step is ONLY reached in the normal flow (issues found -> fixed -> committed successfully).
@@ -549,6 +600,22 @@ if "--files" in args:
         files_glob = None
     else:
         files_glob = args[idx + 1]
+
+# Extract --checkpoint value (OMN-2144)
+checkpoint_arg = None
+checkpoint_ticket_id = None
+checkpoint_run_id = None
+if "--checkpoint" in args:
+    idx = args.index("--checkpoint")
+    if idx + 1 < len(args) and not args[idx + 1].startswith("--"):
+        checkpoint_arg = args[idx + 1]
+        parts = checkpoint_arg.split(":", 1)
+        if len(parts) == 2:
+            checkpoint_ticket_id = parts[0]
+            checkpoint_run_id = parts[1]
+        else:
+            print(f"Warning: --checkpoint requires format 'ticket_id:run_id', got '{checkpoint_arg}'. Ignoring.")
+            checkpoint_arg = None
 ```
 
 ### Base Branch Detection
