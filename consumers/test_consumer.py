@@ -32,9 +32,10 @@ SCRIPT_DIR = Path(__file__).parent
 SHARED_DIR = SCRIPT_DIR.parent / "skills" / "_shared"
 sys.path.insert(0, str(SHARED_DIR))
 
-# Database configuration — single source of truth via settings DSN.
-# No hardcoded fallbacks; let it fail fast if not configured.
-DB_DSN = settings.get_omniclaude_dsn()
+
+def _get_db_dsn() -> str:
+    """Get DB DSN from settings -- deferred to first use for fail-fast."""
+    return settings.get_omniclaude_dsn()
 
 
 def create_test_event(agent_name: str, action_type: str = "tool_call") -> dict:
@@ -100,7 +101,7 @@ def verify_database_records(correlation_ids: list[str], timeout: int = 30):
     """
     print(f"🔍 Verifying {len(correlation_ids)} records in database...")
 
-    conn = psycopg2.connect(DB_DSN)
+    conn = psycopg2.connect(_get_db_dsn())
     cursor = conn.cursor()
 
     start_time = time.time()
@@ -189,7 +190,7 @@ def query_recent_sessions():
     """Query recent session snapshots with prompt and tool counts."""
     print("📋 Querying recent session snapshots...")
 
-    conn = psycopg2.connect(DB_DSN)
+    conn = psycopg2.connect(_get_db_dsn())
     cursor = conn.cursor()
 
     cursor.execute(

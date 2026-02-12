@@ -451,6 +451,8 @@ class Settings(BaseSettings):
             dsn = raw_url
             if async_driver and dsn.startswith("postgresql://"):
                 dsn = "postgresql+asyncpg://" + dsn[len("postgresql://") :]
+            elif async_driver and dsn.startswith("postgres://"):
+                dsn = "postgresql+asyncpg://" + dsn[len("postgres://") :]
             return dsn
         return self.get_postgres_dsn(async_driver=async_driver)
 

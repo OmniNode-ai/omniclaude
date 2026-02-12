@@ -24,7 +24,7 @@ POSTGRES_HOST="${POSTGRES_HOST:-localhost}"
 POSTGRES_DB="${POSTGRES_DB:-${POSTGRES_DATABASE:-omniclaude}}"
 
 # Create extensions and schema, then run migrations
-psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --host="$POSTGRES_HOST" <<-EOSQL
+psql -v ON_ERROR_STOP=1 -v db_user="${POSTGRES_USER}" --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --host="$POSTGRES_HOST" <<-EOSQL
     -- Enable UUID extensions for generating UUIDs
     -- uuid-ossp: provides uuid_generate_v4() (legacy, retained for compatibility)
     -- pgcrypto: provides gen_random_uuid() (modern, used by migrations)
@@ -40,14 +40,14 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --ho
     -- Create application schema
     CREATE SCHEMA IF NOT EXISTS omniclaude;
 
-    -- Grant privileges
-    GRANT ALL PRIVILEGES ON SCHEMA omniclaude TO "${POSTGRES_USER}";
-    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA omniclaude TO "${POSTGRES_USER}";
-    GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA omniclaude TO "${POSTGRES_USER}";
+    -- Grant privileges (using psql variable binding via -v db_user)
+    GRANT ALL PRIVILEGES ON SCHEMA omniclaude TO :"db_user";
+    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA omniclaude TO :"db_user";
+    GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA omniclaude TO :"db_user";
 
     -- Set default privileges for future tables
-    ALTER DEFAULT PRIVILEGES IN SCHEMA omniclaude GRANT ALL ON TABLES TO "${POSTGRES_USER}";
-    ALTER DEFAULT PRIVILEGES IN SCHEMA omniclaude GRANT ALL ON SEQUENCES TO "${POSTGRES_USER}";
+    ALTER DEFAULT PRIVILEGES IN SCHEMA omniclaude GRANT ALL ON TABLES TO :"db_user";
+    ALTER DEFAULT PRIVILEGES IN SCHEMA omniclaude GRANT ALL ON SEQUENCES TO :"db_user";
 
 EOSQL
 

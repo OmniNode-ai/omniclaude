@@ -95,6 +95,7 @@ def _get_db_config() -> dict[str, Any]:
 
 # Connection pool (lazy initialization)
 _connection_pool: SimpleConnectionPool | None = None
+_pool_lock = threading.Lock()
 
 
 def get_connection_pool() -> SimpleConnectionPool:
@@ -102,16 +103,22 @@ def get_connection_pool() -> SimpleConnectionPool:
     Get or create connection pool.
 
     Uses fixed pool sizes appropriate for skill helper usage.
+
+    Thread-safe: uses double-checked locking to prevent two threads from
+    both creating a pool when they see ``_connection_pool is None``.
     """
     global _connection_pool
     if _connection_pool is None:
-        # Hardcoded defaults — pool config fields (postgres_pool_min_size,
-        # postgres_pool_max_size) were removed from Settings in DB-SPLIT-07.
-        _connection_pool = SimpleConnectionPool(
-            minconn=1,
-            maxconn=5,
-            **_get_db_config(),
-        )
+        with _pool_lock:
+            # Re-check after acquiring lock (double-checked locking)
+            if _connection_pool is None:
+                # Hardcoded defaults — pool config fields (postgres_pool_min_size,
+                # postgres_pool_max_size) were removed from Settings in DB-SPLIT-07.
+                _connection_pool = SimpleConnectionPool(
+                    minconn=1,
+                    maxconn=5,
+                    **_get_db_config(),
+                )
     return _connection_pool
 
 
