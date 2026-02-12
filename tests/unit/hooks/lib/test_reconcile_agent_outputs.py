@@ -80,6 +80,14 @@ class TestFlattenToPathsHelper:
         flat = {"a": 1, "b": 2}
         assert flatten_to_paths(flat) == {"a": 1, "b": 2}
 
+    def test_flatten_drops_empty_dicts(self) -> None:
+        """Empty dicts have no leaf children and are dropped during flattening.
+
+        This means ``unflatten_paths(flatten_to_paths(d))`` may differ from
+        ``d`` when ``d`` contains empty dict values.
+        """
+        assert flatten_to_paths({"config": {}}) == {}
+
 
 class TestUnflattenPathsHelper:
     """Tests for unflatten_paths."""

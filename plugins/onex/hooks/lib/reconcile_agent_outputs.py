@@ -108,7 +108,9 @@ class ReconciliationResult(BaseModel):
     """Dot-paths needing human approval."""
 
     optional_review_fields: list[str]
-    """Dot-paths worth reviewing (CONFLICTING)."""
+    """Dot-paths worth reviewing — includes LOW_CONFLICT (auto-resolved but
+    non-trivial) and CONFLICTING (needs human review).  Check the per-field
+    FieldDecision.conflict_type to distinguish severity."""
 
     auto_resolved_fields: list[str]
     """Dot-paths safely merged."""
@@ -130,6 +132,12 @@ def flatten_to_paths(d: dict, prefix: str = "") -> dict[str, Any]:
         {"db": {"pool": {"max_size": 10}}} -> {"db.pool.max_size": 10}
 
     Non-dict values at any level become leaf entries.
+
+    .. note::
+
+        Empty dicts are dropped during flattening (no leaf children to
+        emit).  ``unflatten_paths(flatten_to_paths(d))`` may differ from
+        ``d`` when ``d`` contains empty dict values.
 
     .. note::
 
@@ -448,6 +456,9 @@ def reconcile_outputs(
         elif conflict_type == ORTHOGONAL:
             # Dict-merge non-overlapping subkeys when all values are dicts
             vals = list(agent_values.values())
+            # Defensive: unreachable via reconcile_outputs (flatten produces
+            # leaf values only), but guards against direct _classify callers
+            # passing dict values.
             if all(isinstance(v, dict) for v in vals):
                 merged: dict[str, Any] = {}
                 for v in vals:
