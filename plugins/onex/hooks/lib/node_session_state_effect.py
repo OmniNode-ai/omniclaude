@@ -21,6 +21,7 @@ import enum
 import fcntl
 import json
 import os
+import re
 import threading
 import time
 from collections.abc import Callable
@@ -107,8 +108,34 @@ def _session_index_path() -> Path:
     return _state_dir() / "session.json"
 
 
+_SAFE_RUN_ID_RE = re.compile(r"^[a-zA-Z0-9\-]+$")
+
+
+def _validate_run_id(run_id: str) -> None:
+    """Validate run_id to prevent path traversal.
+
+    Accepts only alphanumeric characters and hyphens (covers uuid4 format).
+    Raises ValueError for any run_id containing path separators, parent
+    directory references, or other unsafe characters.
+    """
+    if not run_id:
+        raise ValueError("run_id must not be empty")
+    if not _SAFE_RUN_ID_RE.match(run_id):
+        raise ValueError(
+            f"Invalid run_id: {run_id!r}. "
+            "Only alphanumeric characters and hyphens are allowed."
+        )
+
+
 def _run_context_path(run_id: str) -> Path:
-    """Return the path to a run context file."""
+    """Return the path to a run context file.
+
+    Validates run_id to prevent path traversal attacks.
+
+    Raises:
+        ValueError: If run_id contains unsafe characters.
+    """
+    _validate_run_id(run_id)
     return _runs_dir() / f"{run_id}.json"
 
 
@@ -216,7 +243,11 @@ def write_session_index(index: ContractSessionIndex) -> LockResult:
     path = _session_index_path()
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    lock_path = path  # lock on session.json itself
+    # Lock on a dedicated lock file, NOT session.json itself.
+    # _atomic_write replaces session.json via rename (new inode), so locking
+    # on session.json would let concurrent processes each lock different inodes.
+    # A stable lock file that is never renamed provides true mutual exclusion.
+    lock_path = path.parent / "session.json.lock"
     result, fd = _acquire_lock(lock_path, CLAUDE_STATE_LOCK_TIMEOUT_MS)
     if result != LockResult.ACQUIRED:
         return result
@@ -293,6 +324,9 @@ def gc_stale_runs() -> int:
     now = time.time()
     cutoff = now - CLAUDE_STATE_GC_TTL_SECONDS
 
+    # Import here (not at module level) since datetime is only needed for GC
+    from datetime import datetime
+
     try:
         for path in runs_dir.iterdir():
             if not path.name.endswith(".json"):
@@ -303,8 +337,6 @@ def gc_stale_runs() -> int:
                 ctx = ContractRunContext(**data)
                 if ctx.state == "run_ended" and ctx.updated_at:
                     # Parse ISO timestamp to epoch for comparison
-                    from datetime import datetime
-
                     updated = datetime.fromisoformat(ctx.updated_at)
                     if updated.tzinfo is None:
                         updated = updated.replace(tzinfo=UTC)

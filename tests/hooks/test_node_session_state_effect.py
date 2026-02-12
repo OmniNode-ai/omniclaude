@@ -227,8 +227,9 @@ class TestFlock:
         path = _session_index_path()
         path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Hold the lock externally
-        fd = os.open(str(path), os.O_CREAT | os.O_RDWR)
+        # Hold the lock externally on the dedicated lock file
+        lock_path = path.parent / "session.json.lock"
+        fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR)
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
         try:

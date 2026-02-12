@@ -310,8 +310,7 @@ _init_session_state() {
     # Async: background the adapter call
     if [[ -f "${HOOKS_LIB}/node_session_state_adapter.py" ]]; then
         (
-            echo "$guard_file" > /dev/null  # capture in subshell scope
-            echo "$$" > "$guard_file" 2>/dev/null || true
+            echo "$BASHPID" > "$guard_file" 2>/dev/null || true
             echo "$INPUT" | "$PYTHON_CMD" "${HOOKS_LIB}/node_session_state_adapter.py" init \
                 >> "$LOG_FILE" 2>&1
             rm -f "$guard_file" 2>/dev/null || true

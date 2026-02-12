@@ -4,9 +4,12 @@
 G3 node: Declarative command registry. Fail-open on all errors.
 
 CLI Usage:
-    echo '{"session_id": "..."}' | python3 node_session_state_adapter.py init
+    echo '{"sessionId": "..."}' | python3 node_session_state_adapter.py init
     echo '{"run_id": "..."}' | python3 node_session_state_adapter.py end
     echo '{"run_id": "..."}' | python3 node_session_state_adapter.py set-active-run
+
+Note: stdin keys accept both camelCase (Claude Code native) and snake_case forms.
+    sessionId / session_id, runId / run_id are all recognized.
 
 All commands:
     - Read JSON from stdin
@@ -53,6 +56,15 @@ def _output(data: dict) -> None:
     print(json.dumps(data))
 
 
+def _get_key(data: dict, snake: str, camel: str, default: str = "") -> str:
+    """Get a value by snake_case or camelCase key.
+
+    Claude Code pipes raw JSON with camelCase keys (sessionId, projectPath),
+    but internal callers may use snake_case. Accept both forms defensively.
+    """
+    return data.get(snake) or data.get(camel) or default
+
+
 # =============================================================================
 # Command Handlers
 # =============================================================================
@@ -78,9 +90,9 @@ def cmd_init(stdin_data: dict) -> dict:
         write_session_index,
     )
 
-    session_id = stdin_data.get("session_id", "")
+    session_id = _get_key(stdin_data, "session_id", "sessionId")
     if not session_id:
-        print("WARNING: No session_id provided in stdin", file=sys.stderr)
+        print("WARNING: No session_id/sessionId provided in stdin", file=sys.stderr)
         return {}
 
     run_id = str(uuid.uuid4())
@@ -134,12 +146,17 @@ def cmd_end(stdin_data: dict) -> dict:
     Returns:
         {"run_id": "...", "state": "run_ended"} on success, {} on failure.
     """
-    from node_session_lifecycle_reducer import Event, State, reduce
+    from node_session_lifecycle_reducer import (
+        Event,
+        InvalidTransitionError,
+        State,
+        reduce,
+    )
     from node_session_state_effect import read_run_context, write_run_context
 
-    run_id = stdin_data.get("run_id", "")
+    run_id = _get_key(stdin_data, "run_id", "runId")
     if not run_id:
-        print("WARNING: No run_id provided in stdin", file=sys.stderr)
+        print("WARNING: No run_id/runId provided in stdin", file=sys.stderr)
         return {}
 
     ctx = read_run_context(run_id)
@@ -155,7 +172,11 @@ def cmd_end(stdin_data: dict) -> dict:
         return {}
 
     # Transition: RUN_ACTIVE -> RUN_ENDED
-    next_state = reduce(current_state, Event.END_RUN)
+    try:
+        next_state = reduce(current_state, Event.END_RUN)
+    except InvalidTransitionError as e:
+        print(f"Warning: {e}", file=sys.stderr)
+        return {}
 
     ctx.state = next_state.value
     ctx.updated_at = _now_iso()
@@ -174,14 +195,23 @@ def cmd_set_active_run(stdin_data: dict) -> dict:
     """
     from node_session_state_effect import (
         LockResult,
+        read_run_context,
         read_session_index,
         write_session_index,
     )
 
-    run_id = stdin_data.get("run_id", "")
+    run_id = _get_key(stdin_data, "run_id", "runId")
     if not run_id:
-        print("WARNING: No run_id provided in stdin", file=sys.stderr)
+        print("WARNING: No run_id/runId provided in stdin", file=sys.stderr)
         return {}
+
+    # Validate that run_id corresponds to an existing run context (fail-open)
+    existing = read_run_context(run_id)
+    if not existing:
+        print(
+            f"Warning: run context for {run_id} not found, setting active anyway",
+            file=sys.stderr,
+        )
 
     index = read_session_index()
     index.active_run_id = run_id
