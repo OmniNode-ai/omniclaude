@@ -18,13 +18,9 @@ Transitive dependency note:
 from __future__ import annotations
 
 import sys
-from enum import StrEnum
-from typing import Literal
 from unittest.mock import patch
-from uuid import UUID
 
 import pytest
-from pydantic import BaseModel, ConfigDict, Field
 
 # All tests in this module are unit tests
 pytestmark = pytest.mark.unit
@@ -43,6 +39,11 @@ try:
     )
 except Exception:
     from datetime import datetime
+    from enum import StrEnum
+    from typing import Literal
+    from uuid import UUID
+
+    from pydantic import BaseModel, ConfigDict, Field
 
     class EnumAgentState(StrEnum):  # type: ignore[no-redef]
         IDLE = "idle"
@@ -261,13 +262,18 @@ class TestCLIParsing:
         mock_emit.assert_not_called()
 
     def test_progress_out_of_range_emitter_raises_exits_zero(self) -> None:
-        """If emitter rejects out-of-range progress with an exception, CLI still exits 0."""
+        """If emitter raises ValueError for a valid-looking progress, CLI still exits 0.
+
+        Uses a progress value (0.5) that passes argparse validation so the
+        emitter is actually called.  The mock raises ValueError to simulate
+        an emitter-side rejection.  The fail-open handler catches it.
+        """
         with patch(
             "plugins.onex.hooks.lib.agent_status_emitter.emit_agent_status",
             side_effect=ValueError("progress must be between 0.0 and 1.0"),
         ):
             # Should not raise -- fail-open catches the ValueError
-            main(["--state", "working", "--message", "test", "--progress", "1.5"])
+            main(["--state", "working", "--message", "test", "--progress", "0.5"])
 
 
 # =============================================================================

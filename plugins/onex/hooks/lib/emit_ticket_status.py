@@ -117,7 +117,7 @@ def main(argv: list[str] | None = None) -> None:
         metadata: dict[str, str] | None = None
         if args.metadata is not None:
             try:
-                metadata = json.loads(args.metadata)
+                parsed = json.loads(args.metadata)
             except (json.JSONDecodeError, TypeError):
                 print(
                     f"Warning: --metadata is not valid JSON: {args.metadata!r}, ignoring",
@@ -125,9 +125,11 @@ def main(argv: list[str] | None = None) -> None:
                 )
                 metadata = {}
             else:
-                if not isinstance(metadata, dict):
+                if isinstance(parsed, dict):
+                    metadata = parsed
+                else:
                     print(
-                        f"Warning: --metadata must be a JSON object, got {type(metadata).__name__}, ignoring",
+                        f"Warning: --metadata must be a JSON object, got {type(parsed).__name__}, ignoring",
                         file=sys.stderr,
                     )
                     metadata = {}

@@ -169,7 +169,7 @@ Emit a status event when entering each phase.
 | research | working | 0.15 | `"Researching codebase"` | `--task "Researching codebase"` |
 | questions | awaiting_input | 0.30 | `"Waiting for clarification"` | `--task "Waiting for clarification"` `--blocking-reason "Waiting for answers to clarifying questions"` |
 | spec | working | 0.45 | `"Generating specification"` | `--task "Generating specification"` |
-| spec gate | blocked | 0.45 | `"Awaiting spec approval"` | `--blocking-reason "Awaiting spec approval"` |
+| spec gate | blocked | 0.45 | `"Awaiting spec approval"` | `--task "Awaiting spec approval"` `--blocking-reason "Awaiting spec approval"` |
 | implementation | working | 0.70 | `"Implementing requirements"` | `--task "Implementing requirements"` |
 | review | working | 0.90 | `"Running verification"` | `--task "Running verification"` |
 | done | finished | 1.00 | `"Ticket complete"` | `--task "Ticket complete"` |
