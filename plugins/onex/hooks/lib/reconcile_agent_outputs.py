@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 import types
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, field_serializer
@@ -240,7 +240,7 @@ def flatten_to_paths(d: dict, prefix: str = "") -> dict[str, Any]:
     return result
 
 
-def unflatten_paths(d: dict[str, Any]) -> dict:
+def unflatten_paths(d: Mapping[str, Any]) -> dict:
     """Reconstruct nested dict from dot-path keys.
 
     Example::
