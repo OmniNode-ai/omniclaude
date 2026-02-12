@@ -2927,13 +2927,12 @@ class ManifestInjector:
         schemas = []
 
         try:
-            # Get PostgreSQL connection details from environment
-            # Default to localhost - production values should be set via .env
-            pg_host = os.environ.get("POSTGRES_HOST", "localhost")
-            pg_port = int(os.environ.get("POSTGRES_PORT", "5436"))
-            pg_user = os.environ.get("POSTGRES_USER", "postgres")
-            pg_password = os.environ.get("POSTGRES_PASSWORD", "")
-            pg_database = os.environ.get("POSTGRES_DATABASE", "omniclaude")
+            # Get PostgreSQL connection details from settings (no localhost fallback)
+            pg_host = settings.postgres_host or ""
+            pg_port = settings.postgres_port or 5436
+            pg_user = settings.postgres_user or ""
+            pg_password = settings.postgres_password or ""
+            pg_database = settings.postgres_database or ""
 
             if not pg_password:
                 self.logger.warning(
@@ -4459,9 +4458,9 @@ class ManifestInjector:
             "infrastructure": {
                 "remote_services": {
                     "postgresql": {
-                        "host": os.environ.get("POSTGRES_HOST", "localhost"),
-                        "port": int(os.environ.get("POSTGRES_PORT", "5436")),
-                        "database": os.environ.get("POSTGRES_DATABASE", "omniclaude"),
+                        "host": settings.postgres_host or "",
+                        "port": settings.postgres_port or 5436,
+                        "database": settings.postgres_database or "",
                         "note": "Connection details only - schemas unavailable",
                     },
                     "kafka": {
