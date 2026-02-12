@@ -92,7 +92,15 @@ def _get_db_config() -> dict[str, Any]:
             }
             for _key in _int_params:
                 if _key in DB_CONFIG and isinstance(DB_CONFIG[_key], str):
-                    DB_CONFIG[_key] = int(DB_CONFIG[_key])
+                    try:
+                        DB_CONFIG[_key] = int(DB_CONFIG[_key])
+                    except ValueError:
+                        logger.warning(
+                            "Non-numeric value %r for parameter %r; "
+                            "keeping as string (psycopg2 will validate)",
+                            DB_CONFIG[_key],
+                            _key,
+                        )
         else:
             # Fallback to individual POSTGRES_* settings
             DB_CONFIG = {

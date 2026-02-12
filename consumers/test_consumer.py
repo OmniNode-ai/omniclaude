@@ -15,7 +15,6 @@ Usage:
 import json
 import os
 import sys
-import time
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
@@ -103,9 +102,6 @@ def verify_database_records(correlation_ids: list[str], timeout: int = 30):
 
     conn = psycopg2.connect(_get_db_dsn())
     cursor = conn.cursor()
-
-    start_time = time.time()
-    found_count = 0
 
     # TODO(OMN-2058): This test consumer was written for the old agent_actions
     # table which no longer exists. The test events produced by create_test_event()

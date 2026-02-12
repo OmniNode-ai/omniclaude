@@ -55,11 +55,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path as _Path
 from types import TracebackType
 from typing import (
     TYPE_CHECKING,
@@ -85,7 +83,7 @@ except ImportError:
 from omniclaude.lib.errors import EnumCoreErrorCode, OnexError
 from omniclaude.lib.intelligence_usage_tracker import IntelligenceUsageTracker
 from omniclaude.lib.pattern_quality_scorer import PatternQualityScorer
-from omniclaude.lib.task_classifier import TaskClassifier, TaskContext, TaskIntent
+from omniclaude.lib.task_classifier import TaskClassifier, TaskContext
 
 from .intelligence_cache import IntelligenceCache
 from .intelligence_event_client import IntelligenceEventClient
@@ -451,7 +449,9 @@ class ManifestInjectionStorage:
         """
         # Resolve DSN: explicit param > settings.omniclaude_db_url > individual fields
         settings_dsn = settings.omniclaude_db_url.get_secret_value().strip()
-        self._db_url: str | None = (db_url.strip() if db_url else None) or settings_dsn or None
+        self._db_url: str | None = (
+            (db_url.strip() if db_url else None) or settings_dsn or None
+        )
 
         if self._db_url:
             # DSN mode: individual fields are unused for connections but stored
@@ -554,7 +554,7 @@ class ManifestInjectionStorage:
             }
 
         # Handle lists recursively
-        if isinstance(obj, (list, tuple)):
+        if isinstance(obj, list | tuple):
             return [ManifestInjectionStorage._serialize_for_json(item) for item in obj]
 
         # Handle other types (str, int, bool, etc.)
@@ -2933,7 +2933,14 @@ class ManifestInjector:
             if dsn:
                 # asyncpg requires postgresql:// scheme (not postgres://).
                 if dsn.startswith("postgres://"):
-                    dsn = "postgresql://" + dsn[len("postgres://"):]
+                    dsn = "postgresql://" + dsn[len("postgres://") :]
+                elif not dsn.startswith("postgresql://"):
+                    self.logger.warning(
+                        "[%s] Unrecognized DSN scheme in %r; "
+                        "asyncpg expects postgresql:// — passing through as-is",
+                        correlation_id,
+                        dsn[:20] + "..." if len(dsn) > 20 else dsn,
+                    )
                 conn = await asyncpg.connect(dsn, timeout=5)
             else:
                 # Fallback: individual POSTGRES_* fields
