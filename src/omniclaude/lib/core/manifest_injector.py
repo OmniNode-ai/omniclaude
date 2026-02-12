@@ -462,32 +462,14 @@ class ManifestInjectionStorage:
             self.db_user = ""
             self.db_password = ""
         else:
-            # Individual-field mode: use params > settings > legacy env fallback
-            self.db_host = (
-                db_host
-                or settings.postgres_host
-                or os.environ.get("POSTGRES_HOST", "localhost")
-            )
-            self.db_port = (
-                db_port
-                or settings.postgres_port
-                or int(os.environ.get("POSTGRES_PORT", "5436"))
-            )
-            self.db_name = (
-                db_name
-                or settings.postgres_database
-                or os.environ.get("POSTGRES_DATABASE", "omniclaude")
-            )
-            self.db_user = (
-                db_user
-                or settings.postgres_user
-                or os.environ.get("POSTGRES_USER", "postgres")
-            )
-            self.db_password = (
-                db_password
-                or settings.postgres_password
-                or os.environ.get("POSTGRES_PASSWORD", "")
-            )
+            # Individual-field mode: use params > settings (no legacy env fallback)
+            # OMN-2058: Removed os.environ.get() fallbacks. Settings handles env
+            # loading; hardcoded defaults like "localhost" violate fail-fast design.
+            self.db_host = db_host or settings.postgres_host or ""
+            self.db_port = db_port or settings.postgres_port or 0
+            self.db_name = db_name or settings.postgres_database or ""
+            self.db_user = db_user or settings.postgres_user or ""
+            self.db_password = db_password or settings.postgres_password or ""
             if not self.db_password:
                 raise ValueError(
                     "Database password not configured. Set OMNICLAUDE_DB_URL or "
@@ -603,121 +585,13 @@ class ManifestInjectionStorage:
         Returns:
             True if successful, False otherwise
         """
-        try:
-            import psycopg2
-            import psycopg2.extras
-
-            # Serialize manifest_data to handle HttpUrl and other Pydantic types
-            manifest_data = self._serialize_for_json(manifest_data)
-
-            # Extract metadata
-            metadata = manifest_data.get("manifest_metadata", {})
-            manifest_version = metadata.get("version", "unknown")
-            generation_source = metadata.get("source", "unknown")
-            is_fallback = generation_source == "fallback"
-
-            # Serialize query_times to handle any Pydantic types
-            query_times = self._serialize_for_json(query_times)
-
-            # Calculate totals
-            total_query_time_ms = sum(query_times.values())
-            manifest_size_bytes = len(formatted_text.encode("utf-8"))
-
-            # Extract section counts
-            patterns_count = kwargs.get("patterns_count", 0)
-            infrastructure_services = kwargs.get("infrastructure_services", 0)
-            models_count = kwargs.get("models_count", 0)
-            database_schemas_count = kwargs.get("database_schemas_count", 0)
-            debug_intelligence_successes = kwargs.get("debug_intelligence_successes", 0)
-            debug_intelligence_failures = kwargs.get("debug_intelligence_failures", 0)
-
-            # Collections queried (serialize for JSON)
-            collections_queried = self._serialize_for_json(
-                kwargs.get("collections_queried", {})
-            )
-
-            # Query failures (serialize for JSON)
-            query_failures = self._serialize_for_json(kwargs.get("query_failures", {}))
-
-            # Warnings
-            warnings = kwargs.get("warnings", [])
-
-            # Connect to database with context manager for automatic cleanup
-            with (
-                self._connect() as conn,
-                conn.cursor() as cursor,
-            ):
-                # Insert record
-                cursor.execute(
-                    """
-                    INSERT INTO agent_manifest_injections (
-                        correlation_id,
-                        agent_name,
-                        manifest_version,
-                        generation_source,
-                        is_fallback,
-                        sections_included,
-                        patterns_count,
-                        infrastructure_services,
-                        models_count,
-                        database_schemas_count,
-                        debug_intelligence_successes,
-                        debug_intelligence_failures,
-                        collections_queried,
-                        query_times,
-                        total_query_time_ms,
-                        full_manifest_snapshot,
-                        formatted_manifest_text,
-                        manifest_size_bytes,
-                        intelligence_available,
-                        query_failures,
-                        warnings,
-                        created_at
-                    ) VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW()
-                    )
-                    """,
-                    (
-                        str(correlation_id),
-                        agent_name,
-                        manifest_version,
-                        generation_source,
-                        is_fallback,
-                        sections_included,
-                        patterns_count,
-                        infrastructure_services,
-                        models_count,
-                        database_schemas_count,
-                        debug_intelligence_successes,
-                        debug_intelligence_failures,
-                        psycopg2.extras.Json(collections_queried),
-                        psycopg2.extras.Json(query_times),
-                        total_query_time_ms,
-                        psycopg2.extras.Json(manifest_data),
-                        formatted_text,
-                        manifest_size_bytes,
-                        not is_fallback,
-                        psycopg2.extras.Json(query_failures),
-                        warnings,
-                    ),
-                )
-
-                conn.commit()
-
-            logger.info(
-                f"Stored manifest injection record: correlation_id={correlation_id}, "
-                f"agent={agent_name}, patterns={patterns_count}, "
-                f"query_time={total_query_time_ms}ms"
-            )
-
-            return True
-
-        except Exception as e:
-            logger.error(
-                f"Failed to store manifest injection record: {e}", exc_info=True
-            )
-            return False
+        # OMN-2058: agent_manifest_injections table ownership transferred to omninode_bridge.
+        # TODO(OMN-2058): Re-enable when omniclaude owns its own manifest_injections table.
+        logger.info(
+            "Manifest injection storage disabled during DB-SPLIT (OMN-2058). "
+            f"Record not persisted: correlation_id={correlation_id}, agent={agent_name}"
+        )
+        return True
 
     def mark_agent_completed(
         self,
@@ -744,52 +618,13 @@ class ManifestInjectionStorage:
             >>> storage.mark_agent_completed(correlation_id, success=True)
             True
         """
-        try:
-            # Connect to database with context manager for automatic cleanup
-            with (
-                self._connect() as conn,
-                conn.cursor() as cursor,
-            ):
-                # Update lifecycle fields
-                cursor.execute(
-                    """
-                    UPDATE agent_manifest_injections
-                    SET
-                        completed_at = NOW(),
-                        executed_at = NOW(),
-                        agent_execution_success = %s,
-                        warnings = CASE
-                            WHEN %s IS NOT NULL THEN array_append(COALESCE(warnings, ARRAY[]::text[]), %s)
-                            ELSE warnings
-                        END
-                    WHERE correlation_id = %s
-                    """,
-                    (
-                        success,
-                        error_message,
-                        error_message,
-                        str(correlation_id),
-                    ),
-                )
-
-                rows_updated = cursor.rowcount
-                conn.commit()
-
-            if rows_updated > 0:
-                logger.info(
-                    f"Marked agent as completed: correlation_id={correlation_id}, "
-                    f"success={success}, rows_updated={rows_updated}"
-                )
-                return True
-            else:
-                logger.warning(
-                    f"No manifest injection record found for correlation_id={correlation_id}"
-                )
-                return False
-
-        except Exception as e:
-            logger.error(f"Failed to mark agent as completed: {e}", exc_info=True)
-            return False
+        # OMN-2058: agent_manifest_injections table ownership transferred to omninode_bridge.
+        # TODO(OMN-2058): Re-enable when omniclaude owns its own manifest_injections table.
+        logger.info(
+            "Agent completion tracking disabled during DB-SPLIT (OMN-2058). "
+            f"Not updated: correlation_id={correlation_id}"
+        )
+        return True
 
 
 class ManifestInjector:
@@ -1087,45 +922,13 @@ class ManifestInjector:
         if not settings.enable_postgres:
             return []
 
-        def _blocking_query() -> list[DisabledPattern]:
-            # Check that we have *some* viable credential path.  When
-            # OMNICLAUDE_DB_URL is set the individual fields may be empty,
-            # so we only gate on password when there is no DSN.
-            dsn = settings.omniclaude_db_url.get_secret_value()
-            if not dsn:
-                try:
-                    password = settings.get_effective_postgres_password()  # nosec
-                except ValueError:
-                    return []
-                if not password:
-                    return []
-
-            conn = _connect_postgres(connect_timeout=1)
-            try:
-                with conn.cursor() as cursor:
-                    cursor.execute(
-                        "SELECT pattern_id, pattern_class, reason, event_at, actor "
-                        "FROM disabled_patterns_current"
-                    )
-                    rows = cursor.fetchall()
-                return [
-                    DisabledPattern(
-                        pattern_id=str(row[0]) if row[0] else None,
-                        pattern_class=row[1],
-                        reason=row[2] or "",
-                        event_at=row[3],
-                        actor=row[4] or "",
-                    )
-                    for row in rows
-                ]
-            finally:
-                conn.close()
-
-        try:
-            return await asyncio.to_thread(_blocking_query)
-        except Exception as e:
-            self.logger.warning(f"Failed to query disabled patterns: {e}")
-            return []
+        # OMN-2058: disabled_patterns_current materialized view not available in
+        # omniclaude database. Table ownership transferred to omninode_bridge.
+        # TODO(OMN-2058): Re-enable when omniclaude owns its own disabled_patterns view.
+        self.logger.info(
+            "Disabled patterns kill switch not available during DB-SPLIT (OMN-2058)"
+        )
+        return []
 
     async def _filter_disabled_patterns(
         self, patterns: list[dict[str, Any]]
