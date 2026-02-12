@@ -33,9 +33,8 @@ if "--skip-to" in args:
         print("Error: --skip-to requires a phase argument (implement|local_review|create_pr|pr_release_ready|ready_for_merge)")
         exit(1)
     skip_to = args[idx + 1]
-    valid_phases = ["implement", "local_review", "create_pr", "pr_release_ready", "ready_for_merge"]
-    if skip_to not in valid_phases:
-        print(f"Error: Invalid phase '{skip_to}'. Valid: {valid_phases}")
+    if skip_to not in PHASE_ORDER:
+        print(f"Error: Invalid phase '{skip_to}'. Valid: {PHASE_ORDER}")
         exit(1)
 ```
 
@@ -120,6 +119,8 @@ When `/ticket-pipeline {ticket_id}` is invoked:
 import os, json, time, uuid, yaml
 from pathlib import Path
 from datetime import datetime, timezone
+
+PHASE_ORDER = ["implement", "local_review", "create_pr", "pr_release_ready", "ready_for_merge"]
 
 # NOTE: Helper functions (notify_blocked, etc.) are defined in the
 # "Helper Functions" section below. They are referenced before their
@@ -251,7 +252,7 @@ else:
                 "last_error": None,
                 "last_error_at": None,
             }
-            for phase_name in ["implement", "local_review", "create_pr", "pr_release_ready", "ready_for_merge"]
+            for phase_name in PHASE_ORDER
         }
     }
 ```
@@ -264,10 +265,9 @@ that prior work actually completed.
 
 ```python
 if skip_to:
-    phase_order = ["implement", "local_review", "create_pr", "pr_release_ready", "ready_for_merge"]
-    skip_idx = phase_order.index(skip_to)
+    skip_idx = PHASE_ORDER.index(skip_to)
 
-    for phase_name in phase_order[:skip_idx]:
+    for phase_name in PHASE_ORDER[:skip_idx]:
         phase_data = state["phases"][phase_name]
 
         # If phase is already completed in state, trust it (resume case)
@@ -313,8 +313,9 @@ if skip_to:
         cp = checkpoint["checkpoint"]
         timestamp_utc = cp.get("timestamp_utc")
         if not timestamp_utc:
-            print(f"Warning: Checkpoint for '{phase_name}' is missing 'timestamp_utc'. Using sentinel value.")
-            timestamp_utc = "unknown"
+            # Fallback: use current time when checkpoint has no timestamp (avoid non-ISO sentinel strings)
+            print(f"Warning: Checkpoint for '{phase_name}' is missing 'timestamp_utc'. Using current time as fallback.")
+            timestamp_utc = datetime.now(timezone.utc).isoformat()
         phase_data["completed_at"] = timestamp_utc
         phase_data["artifacts"] = extract_artifacts_from_checkpoint(cp)
         save_state(state, state_path)
@@ -362,8 +363,7 @@ def save_state(state, state_path):
 ```python
 def get_current_phase(state):
     """Return the first phase without completed_at."""
-    phase_order = ["implement", "local_review", "create_pr", "pr_release_ready", "ready_for_merge"]
-    for phase_name in phase_order:
+    for phase_name in PHASE_ORDER:
         if not state["phases"][phase_name].get("completed_at"):
             return phase_name
     return "done"  # All phases completed
@@ -511,8 +511,12 @@ else:
 def write_checkpoint(ticket_id, run_id, phase_name, attempt_number, repo_commit_map, artifact_paths, phase_payload):
     """Write a checkpoint after a phase completes.  Non-blocking on failure.
 
-    artifact_paths: relative paths of file-level outputs (e.g., generated reports, diffs).
-    phase_payload: structured metadata for the phase (e.g., pr_url, branch_name, commit_sha).
+    artifact_paths: relative file paths of generated outputs (reports, diffs, etc.).
+        These are file-system artifacts -- NOT commit hashes or code-state references.
+    repo_commit_map: dict mapping repository names to commit SHAs (e.g., {"omniclaude": "abc1234"}).
+        Tracks the code state at checkpoint time.  Distinct from artifact_paths.
+    phase_payload: structured metadata about the phase execution (e.g., pr_url, branch_name,
+        iteration_count).  Schema varies per phase -- see build_phase_payload().
     """
     try:
         cmd = [
@@ -589,6 +593,7 @@ def build_phase_payload(phase_name, state, result):
     dict based on the phase name and available data.
     """
     artifacts = result.get("artifacts", {})
+    head_sha = get_head_sha()
 
     if phase_name == "implement":
         try:
@@ -599,7 +604,7 @@ def build_phase_payload(phase_name, state, result):
             branch = "unknown"
         return {
             "branch_name": artifacts.get("branch_name", branch),
-            "commit_sha": get_head_sha(),
+            "commit_sha": head_sha,
             "files_changed": list(artifacts.get("files_changed", [])),
         }
 
@@ -607,19 +612,19 @@ def build_phase_payload(phase_name, state, result):
         return {
             "iteration_count": artifacts.get("iterations", 1),
             "issue_fingerprints": list(artifacts.get("issue_fingerprints", [])),
-            "last_clean_sha": get_head_sha(),
+            "last_clean_sha": head_sha,
         }
 
     elif phase_name == "create_pr":
         return {
             "pr_url": artifacts.get("pr_url", ""),
             "pr_number": artifacts.get("pr_number", 0),
-            "head_sha": get_head_sha(),
+            "head_sha": head_sha,
         }
 
     elif phase_name == "pr_release_ready":
         return {
-            "last_review_sha": get_head_sha(),
+            "last_review_sha": head_sha,
             "issue_fingerprints": list(artifacts.get("issue_fingerprints", [])),
         }
 
@@ -862,9 +867,7 @@ def parse_phase_output(raw_output, phase_name):
 After initialization, execute phases in order:
 
 ```python
-phase_order = ["implement", "local_review", "create_pr", "pr_release_ready", "ready_for_merge"]
-
-for phase_name in phase_order:
+for phase_name in PHASE_ORDER:
     phase_data = state["phases"][phase_name]
 
     # Skip completed phases (resume semantics)

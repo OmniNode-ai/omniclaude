@@ -467,8 +467,12 @@ if checkpoint_arg and checkpoint_ticket_id and checkpoint_run_id:
             "--run-id", checkpoint_run_id,
             "--phase", "local_review",
             "--attempt", str(iteration + 1),
+            # Inline repo detection (self-contained; no cross-skill dependency on get_current_repo)
             "--repo-commit-map", json.dumps({os.path.basename(os.getcwd()): _head_sha}),
-            "--artifact-paths", json.dumps([]),  # artifact_paths tracks new file outputs; local-review modifies existing files via commits, so none
+            # artifact_paths: file-level outputs (e.g. generated reports, saved files).
+            # Distinct from repo_commit_map which tracks commit SHAs per repo.
+            # local-review modifies existing files via commits, so no artifact paths are produced.
+            "--artifact-paths", json.dumps([]),
             "--payload", _cp_payload,
         ]
         _cp_proc = _sp.run(_cp_cmd, capture_output=True, text=True, timeout=30)

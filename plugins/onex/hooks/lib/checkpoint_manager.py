@@ -95,6 +95,7 @@ except ImportError as exc:
 
 
 class _ContainerStub:
+    # TODO(OMN-2144): Replace with proper DI container when checkpoint_manager runs within service context
     """Minimal stub satisfying the ``ModelONEXContainer`` TYPE_CHECKING guard.
 
     The checkpoint handlers store the container but never call methods on it
