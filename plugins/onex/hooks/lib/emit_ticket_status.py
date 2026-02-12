@@ -19,13 +19,14 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from typing import Any
 
 try:
     from omniclaude.hooks.schemas import EnumAgentState as _EnumAgentState
 
     _VALID_STATES = [s.value for s in _EnumAgentState]
-except Exception:
-    # Fallback: hardcoded list when schemas are unavailable (e.g., standalone execution)
+except (ImportError, ModuleNotFoundError):
+    # Fallback: must match EnumAgentState values in schemas.py
     _VALID_STATES = [
         "idle",
         "working",
@@ -113,8 +114,10 @@ def main(argv: list[str] | None = None) -> None:
 
         args = parser.parse_args(argv)
 
-        # Build metadata dict: parse JSON string, then inject ticket_id
-        metadata: dict[str, str] | None = None
+        # Build metadata dict: parse JSON string, then inject ticket_id.
+        # json.loads can return dict[str, Any]; Pydantic coerces values at
+        # the model layer so we keep the annotation honest here.
+        metadata: dict[str, Any] | None = None
         if args.metadata is not None:
             try:
                 parsed = json.loads(args.metadata)
