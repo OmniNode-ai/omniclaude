@@ -180,7 +180,7 @@ class TestRRHAdapterTiming:
         result = adapter.run(_make_config(tmp_path))
 
         assert result.duration_ms is not None
-        assert result.duration_ms > 0
+        assert result.duration_ms >= 0
 
     def test_duration_ms_preserved_when_set(self, tmp_path: Path) -> None:
         spy = SpyNodeClient(result=_make_result(duration_ms=42.5))

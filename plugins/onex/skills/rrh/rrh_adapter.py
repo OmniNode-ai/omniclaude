@@ -118,7 +118,10 @@ class FallbackNodeClient:
         )
 
     def store_result(self, result: ContractRRHResult, output_dir: Path) -> Path:
-        return output_dir / "rrh_fallback.json"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        artifact_path = output_dir / "rrh_fallback.json"
+        artifact_path.write_text(result.model_dump_json(indent=2))
+        return artifact_path
 
 
 # ---------------------------------------------------------------------------
