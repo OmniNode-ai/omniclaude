@@ -165,7 +165,7 @@ def _connect_postgres(**extra_kwargs: Any) -> Any:
     """
     import psycopg2
 
-    dsn = settings.omniclaude_db_url.get_secret_value()
+    dsn = settings.omniclaude_db_url.get_secret_value().strip()
     if dsn:
         return psycopg2.connect(dsn, **extra_kwargs)
     return psycopg2.connect(
@@ -450,7 +450,7 @@ class ManifestInjectionStorage:
             db_url: Full PostgreSQL DSN. When provided, individual fields are ignored.
         """
         # Resolve DSN: explicit param > settings.omniclaude_db_url > individual fields
-        settings_dsn = settings.omniclaude_db_url.get_secret_value()
+        settings_dsn = settings.omniclaude_db_url.get_secret_value().strip()
         self._db_url: str | None = db_url or settings_dsn or None
 
         if self._db_url:
@@ -2310,7 +2310,7 @@ class ManifestInjector:
         def _blocking_query() -> dict[str, Any]:
             """Blocking PostgreSQL operations."""
             # Derive display info for the response regardless of DSN vs fields
-            dsn = settings.omniclaude_db_url.get_secret_value()
+            dsn = settings.omniclaude_db_url.get_secret_value().strip()
             host = settings.postgres_host or ("(via DSN)" if dsn else "")
             port = settings.postgres_port or (0 if dsn else 0)
             database = settings.postgres_database or ("(via DSN)" if dsn else "")
@@ -2927,27 +2927,35 @@ class ManifestInjector:
         schemas = []
 
         try:
-            # Get PostgreSQL connection details from settings (no localhost fallback)
-            pg_host = settings.postgres_host or ""
-            pg_port = settings.postgres_port or 5436
-            pg_user = settings.postgres_user or ""
-            pg_password = settings.postgres_password or ""
-            pg_database = settings.postgres_database or ""
+            # Respect OMNICLAUDE_DB_URL precedence (same as every other DB method).
+            # asyncpg.connect() accepts a DSN string as its first positional arg.
+            dsn = settings.omniclaude_db_url.get_secret_value().strip()
+            if dsn:
+                # asyncpg requires postgresql:// scheme (not postgres://).
+                if dsn.startswith("postgres://"):
+                    dsn = "postgresql://" + dsn[len("postgres://"):]
+                conn = await asyncpg.connect(dsn, timeout=5)
+            else:
+                # Fallback: individual POSTGRES_* fields
+                pg_host = settings.postgres_host or ""
+                pg_port = settings.postgres_port or 5436
+                pg_user = settings.postgres_user or ""
+                pg_password = settings.postgres_password or ""
+                pg_database = settings.postgres_database or ""
 
-            if not pg_password:
-                self.logger.warning(
-                    f"[{correlation_id}] POSTGRES_PASSWORD not set, direct query may fail"
+                if not pg_password:
+                    self.logger.warning(
+                        f"[{correlation_id}] POSTGRES_PASSWORD not set, direct query may fail"
+                    )
+
+                conn = await asyncpg.connect(
+                    host=pg_host,
+                    port=pg_port,
+                    user=pg_user,
+                    password=pg_password,
+                    database=pg_database,
+                    timeout=5,
                 )
-
-            # Connect to PostgreSQL
-            conn = await asyncpg.connect(
-                host=pg_host,
-                port=pg_port,
-                user=pg_user,
-                password=pg_password,
-                database=pg_database,
-                timeout=5,
-            )
 
             try:
                 # First, get table descriptions from pg_description

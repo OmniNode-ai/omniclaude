@@ -78,9 +78,12 @@ EOSQL
                 continue
             fi
             echo "  Applying ${migration_name}..."
-            psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --host="$POSTGRES_HOST" -f "$migration"
-            # Record successful migration
-            psql -v ON_ERROR_STOP=1 -v migration_name="${migration_name}" --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --host="$POSTGRES_HOST" -c "INSERT INTO schema_migrations (filename) VALUES (:'migration_name');"
+            # Run the migration SQL and record it in schema_migrations within
+            # a single psql invocation so both succeed or fail atomically.
+            {
+                cat "$migration"
+                printf "\nINSERT INTO schema_migrations (filename) VALUES ('%s');\n" "${migration_name//\'/\'\'}"
+            } | psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --host="$POSTGRES_HOST" --single-transaction
         fi
     done
 else
