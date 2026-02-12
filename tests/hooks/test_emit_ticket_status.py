@@ -174,6 +174,84 @@ class TestCLIParsing:
         assert isinstance(metadata, dict)
         assert metadata["key"] == "val"
 
+    def test_metadata_non_dict_json(self) -> None:
+        """--metadata '[1,2,3]' is valid JSON but not a dict; falls back to empty dict."""
+        with patch(
+            "plugins.onex.hooks.lib.agent_status_emitter.emit_agent_status",
+            return_value=True,
+        ) as mock_emit:
+            main(
+                [
+                    "--state",
+                    "working",
+                    "--message",
+                    "test",
+                    "--metadata",
+                    "[1, 2, 3]",
+                    "--ticket-id",
+                    "OMN-1850",
+                ]
+            )
+
+        # Non-dict JSON falls back to {}, then ticket_id is injected
+        metadata = mock_emit.call_args.kwargs["metadata"]
+        assert metadata == {"ticket_id": "OMN-1850"}
+
+    def test_metadata_non_dict_json_without_ticket_id(self) -> None:
+        """--metadata '"just a string"' (valid JSON, not dict) without --ticket-id."""
+        with patch(
+            "plugins.onex.hooks.lib.agent_status_emitter.emit_agent_status",
+            return_value=True,
+        ) as mock_emit:
+            main(
+                [
+                    "--state",
+                    "working",
+                    "--message",
+                    "test",
+                    "--metadata",
+                    '"just a string"',
+                ]
+            )
+
+        # Non-dict JSON falls back to empty dict; no ticket_id to inject
+        metadata = mock_emit.call_args.kwargs["metadata"]
+        assert metadata == {}
+
+    def test_progress_out_of_range_exits_zero(self) -> None:
+        """Out-of-range --progress values (e.g., 1.5, -0.1) still exit 0 (fail-open).
+
+        The CLI now validates --progress is in [0.0, 1.0] via a custom argparse
+        type callback. Invalid values cause argparse to call sys.exit(2), which
+        the SystemExit handler catches (fail-open). The emitter is never called.
+        """
+        with patch(
+            "plugins.onex.hooks.lib.agent_status_emitter.emit_agent_status",
+            return_value=True,
+        ) as mock_emit:
+            # Progress > 1.0 -- rejected by argparse, emitter never called
+            main(["--state", "working", "--message", "test", "--progress", "1.5"])
+
+        mock_emit.assert_not_called()
+
+        with patch(
+            "plugins.onex.hooks.lib.agent_status_emitter.emit_agent_status",
+            return_value=True,
+        ) as mock_emit:
+            # Progress < 0.0 -- rejected by argparse, emitter never called
+            main(["--state", "working", "--message", "test", "--progress", "-0.1"])
+
+        mock_emit.assert_not_called()
+
+    def test_progress_out_of_range_emitter_raises_exits_zero(self) -> None:
+        """If emitter rejects out-of-range progress with an exception, CLI still exits 0."""
+        with patch(
+            "plugins.onex.hooks.lib.agent_status_emitter.emit_agent_status",
+            side_effect=ValueError("progress must be between 0.0 and 1.0"),
+        ):
+            # Should not raise -- fail-open catches the ValueError
+            main(["--state", "working", "--message", "test", "--progress", "1.5"])
+
 
 # =============================================================================
 # Ticket ID Injection Tests

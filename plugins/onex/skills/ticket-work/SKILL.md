@@ -150,7 +150,7 @@ Emit agent status events at key workflow points so external systems (dashboards,
 **CLI invocation pattern:**
 
 ```bash
-python3 plugins/onex/hooks/lib/emit_ticket_status.py \
+python3 "${CLAUDE_PLUGIN_ROOT}/hooks/lib/emit_ticket_status.py" \
   --state STATE --message "MESSAGE" \
   --phase PHASE --ticket-id {ticket_id} [--progress N] [--blocking-reason REASON]
 ```
@@ -170,7 +170,7 @@ Emit a status event when entering each phase:
 | spec gate | blocked | 0.45 | `--blocking-reason "Awaiting spec approval"` |
 | implementation | working | 0.70 | `--task "Implementing requirements"` |
 | review | working | 0.90 | `--task "Running verification"` |
-| done | finished | 1.00 | |
+| done | finished | 1.00 | `--task "Ticket complete"` |
 
 ### Implementation Sub-Progress
 
@@ -183,7 +183,7 @@ progress = 0.70 + 0.20 * (completed_requirements / total_requirements)
 Example: 3 of 5 requirements done yields progress = 0.82.
 
 ```bash
-python3 plugins/onex/hooks/lib/emit_ticket_status.py \
+python3 "${CLAUDE_PLUGIN_ROOT}/hooks/lib/emit_ticket_status.py" \
   --state working --message "Implemented 3/5 requirements" \
   --phase implementation --ticket-id {ticket_id} --progress 0.82 \
   --metadata '{"requirements_completed": "3", "requirements_total": "5"}'
@@ -194,7 +194,7 @@ python3 plugins/onex/hooks/lib/emit_ticket_status.py \
 When a phase encounters an error (e.g., verification failure), emit an error status:
 
 ```bash
-python3 plugins/onex/hooks/lib/emit_ticket_status.py \
+python3 "${CLAUDE_PLUGIN_ROOT}/hooks/lib/emit_ticket_status.py" \
   --state error --message "Verification failed: tests" \
   --phase review --ticket-id {ticket_id} \
   --metadata '{"error": "pytest exit code 1"}'

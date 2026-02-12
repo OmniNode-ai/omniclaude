@@ -20,6 +20,18 @@ import argparse
 import json
 import sys
 
+_VALID_STATES = ["idle", "working", "blocked", "awaiting_input", "finished", "error"]
+
+
+def _progress_in_range(raw: str) -> float:
+    """Argparse *type* callback: parse a float and enforce [0.0, 1.0]."""
+    value = float(raw)
+    if value < 0.0 or value > 1.0:
+        raise argparse.ArgumentTypeError(
+            f"progress must be between 0.0 and 1.0, got {value}"
+        )
+    return value
+
 
 def main(argv: list[str] | None = None) -> None:
     """Parse CLI args and delegate to emit_agent_status().
@@ -36,6 +48,7 @@ def main(argv: list[str] | None = None) -> None:
         parser.add_argument(
             "--state",
             required=True,
+            choices=_VALID_STATES,
             help="Agent state (idle, working, blocked, awaiting_input, finished, error)",
         )
         parser.add_argument(
@@ -55,7 +68,7 @@ def main(argv: list[str] | None = None) -> None:
         )
         parser.add_argument(
             "--progress",
-            type=float,
+            type=_progress_in_range,
             default=None,
             help="Progress 0.0-1.0",
         )
