@@ -311,23 +311,19 @@ class TestEmissionDelegation:
 
     def test_exit_code_zero_on_import_error(self) -> None:
         """main() does not raise when the emitter import fails."""
-        with patch(
-            "plugins.onex.hooks.lib.emit_ticket_status.main",
-            wraps=main,
-        ):
-            # Simulate import failure by patching the import target
-            import builtins
+        # Simulate import failure by patching the import target
+        import builtins
 
-            _real_import = builtins.__import__
+        _real_import = builtins.__import__
 
-            def _fake_import(name: str, *args, **kwargs):  # type: ignore[no-untyped-def]
-                if "agent_status_emitter" in name:
-                    raise ImportError("Simulated import failure")
-                return _real_import(name, *args, **kwargs)
+        def _fake_import(name: str, *args, **kwargs):  # type: ignore[no-untyped-def]
+            if "agent_status_emitter" in name:
+                raise ImportError("Simulated import failure")
+            return _real_import(name, *args, **kwargs)
 
-            with patch.object(builtins, "__import__", side_effect=_fake_import):
-                # Should not raise
-                main(["--state", "working", "--message", "Import failure"])
+        with patch.object(builtins, "__import__", side_effect=_fake_import):
+            # Should not raise
+            main(["--state", "working", "--message", "Import failure"])
 
     def test_invalid_metadata_json_still_exits_zero(self) -> None:
         """Invalid JSON in --metadata prints warning but does not crash."""
@@ -351,3 +347,35 @@ class TestEmissionDelegation:
         # Should still call emit with ticket_id in metadata (invalid JSON -> empty dict)
         metadata = mock_emit.call_args.kwargs["metadata"]
         assert metadata == {"ticket_id": "OMN-1850"}
+
+    def test_dunder_main_guard_invokes_main(self) -> None:
+        """The ``if __name__ == '__main__': main()`` guard works end-to-end."""
+        import runpy
+
+        with (
+            patch(
+                "plugins.onex.hooks.lib.agent_status_emitter.emit_agent_status",
+                return_value=True,
+            ) as mock_emit,
+            patch(
+                "sys.argv",
+                [
+                    "emit_ticket_status",
+                    "--state",
+                    "working",
+                    "--message",
+                    "main guard test",
+                    "--ticket-id",
+                    "OMN-9999",
+                ],
+            ),
+        ):
+            runpy.run_module(
+                "plugins.onex.hooks.lib.emit_ticket_status",
+                run_name="__main__",
+            )
+
+        mock_emit.assert_called_once()
+        assert mock_emit.call_args.kwargs["state"] == "working"
+        assert mock_emit.call_args.kwargs["message"] == "main guard test"
+        assert mock_emit.call_args.kwargs["metadata"] == {"ticket_id": "OMN-9999"}

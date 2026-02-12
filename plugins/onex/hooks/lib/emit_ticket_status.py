@@ -88,14 +88,28 @@ def main(argv: list[str] | None = None) -> None:
                     file=sys.stderr,
                 )
                 metadata = {}
+            else:
+                if not isinstance(metadata, dict):
+                    print(
+                        f"Warning: --metadata must be a JSON object, got {type(metadata).__name__}, ignoring",
+                        file=sys.stderr,
+                    )
+                    metadata = {}
 
         if args.ticket_id is not None:
             if metadata is None:
                 metadata = {}
             metadata["ticket_id"] = args.ticket_id
 
-        # Delegate to the real emitter
-        from .agent_status_emitter import emit_agent_status
+        # Delegate to the real emitter.
+        # Uses __package__ check for proper import resolution: when run
+        # as ``python3 emit_ticket_status.py`` there is no parent package,
+        # so the relative import would fail.  This matches the pattern
+        # established in route_via_events_wrapper.py.
+        if __package__:
+            from .agent_status_emitter import emit_agent_status
+        else:
+            from agent_status_emitter import emit_agent_status  # type: ignore[no-redef]
 
         result = emit_agent_status(
             state=args.state,

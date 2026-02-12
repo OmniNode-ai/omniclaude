@@ -155,6 +155,8 @@ python3 plugins/onex/hooks/lib/emit_ticket_status.py \
   --phase PHASE --ticket-id {ticket_id} [--progress N] [--blocking-reason REASON]
 ```
 
+**Note:** Always include `--progress` when transitioning phases, using the values from the table below to ensure dashboards and alerting accurately reflect workflow position.
+
 ### Phase Transition Emissions
 
 Emit a status event when entering each phase:
