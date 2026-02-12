@@ -12,6 +12,13 @@ from pathlib import Path
 
 # Ensure plugin lib is on sys.path (conftest.py also does this, but make the
 # test file self-sufficient for direct invocation).
+#
+# This sys.path manipulation is intentional: plugin lib modules live under
+# plugins/onex/hooks/lib/ which is not a proper Python package (no __init__.py
+# chain from the project root).  Package-path imports like
+# ``from plugins.onex.hooks.lib.reconcile_agent_outputs import ...`` are not
+# tested because the plugin lib directory is not on the standard Python path
+# and is not structured as an installable package.
 _plugin_lib = str(
     Path(__file__).parent.parent.parent.parent.parent
     / "plugins"
@@ -199,7 +206,7 @@ class TestLowConflictValues:
         dec = FieldDecision(
             field="retry.delay",
             conflict_type=LOW_CONFLICT,
-            sources=["agent-a", "agent-b"],
+            sources=("agent-a", "agent-b"),
             chosen_value=100,
             rationale="Minor difference.",
             needs_approval=False,
@@ -247,7 +254,7 @@ class TestConflictingValues:
         dec = FieldDecision(
             field="auth.strategy",
             conflict_type=CONFLICTING,
-            sources=["agent-a", "agent-b"],
+            sources=("agent-a", "agent-b"),
             chosen_value="jwt",
             rationale="Significant difference. Review recommended.",
             needs_approval=False,
@@ -457,7 +464,7 @@ class TestSingleAgentField:
         assert result.merged_values["y"] == 2
         dec = result.field_decisions["y"]
         assert dec.conflict_type == UNCONTESTED
-        assert dec.sources == ["agent-a"]
+        assert dec.sources == ("agent-a",)
         assert dec.needs_approval is False
 
 
@@ -576,7 +583,7 @@ class TestModelImmutability:
         dec = FieldDecision(
             field="x",
             conflict_type=IDENTICAL,
-            sources=["a"],
+            sources=("a",),
             chosen_value=1,
             rationale="test",
             needs_approval=False,
@@ -626,7 +633,11 @@ class TestThreeAgentDisagreement:
         assert "feature.enabled" not in result.merged_values
         assert "feature.enabled" in result.approval_fields
         assert result.requires_approval is True
-        assert sorted(dec.sources) == ["agent-alpha", "agent-beta", "agent-gamma"]
+        assert tuple(sorted(dec.sources)) == (
+            "agent-alpha",
+            "agent-beta",
+            "agent-gamma",
+        )
 
 
 # =============================================================================

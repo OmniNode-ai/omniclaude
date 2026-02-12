@@ -64,7 +64,20 @@ ConflictType = Literal[
 
 
 class FieldDecision(BaseModel):
-    """Per-field reconciliation decision."""
+    """Per-field reconciliation decision.
+
+    Resolution status contract:
+        Callers MUST check ``needs_approval`` to determine whether a field was
+        resolved.  Do NOT use ``chosen_value is None`` as a proxy for
+        "unresolved" -- ``chosen_value`` can legitimately be ``None`` when all
+        agents agree on a ``None`` value (e.g. an IDENTICAL classification
+        where every agent produced ``None``).
+
+        - ``needs_approval is True``  -> field is unresolved, ``chosen_value``
+          is meaningless (set to ``None`` by convention).
+        - ``needs_approval is False`` -> field is resolved, ``chosen_value``
+          holds the merged result (which may itself be ``None``).
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -74,11 +87,14 @@ class FieldDecision(BaseModel):
     conflict_type: ConflictType
     """One of: IDENTICAL, UNCONTESTED, ORTHOGONAL, LOW_CONFLICT, CONFLICTING, OPPOSITE, AMBIGUOUS."""
 
-    sources: list[str]
+    sources: tuple[str, ...]
     """Agent names that touched this field."""
 
     chosen_value: Any | None = None
-    """``None`` when ``needs_approval`` is ``True`` (GI-3 enforcement)."""
+    """The auto-resolved value, or ``None`` when ``needs_approval`` is ``True``
+    (GI-3 enforcement).  Note: a resolved field may also have ``None`` as its
+    legitimate value -- always check ``needs_approval``, not this field, to
+    determine resolution status."""
 
     rationale: str
     """Deterministic, short explanation."""
@@ -104,15 +120,15 @@ class ReconciliationResult(BaseModel):
     requires_approval: bool
     """``True`` if ANY field is OPPOSITE / AMBIGUOUS."""
 
-    approval_fields: list[str]
+    approval_fields: tuple[str, ...]
     """Dot-paths needing human approval."""
 
-    optional_review_fields: list[str]
+    optional_review_fields: tuple[str, ...]
     """Dot-paths worth reviewing — includes LOW_CONFLICT (auto-resolved but
     non-trivial) and CONFLICTING (needs human review).  Check the per-field
     FieldDecision.conflict_type to distinguish severity."""
 
-    auto_resolved_fields: list[str]
+    auto_resolved_fields: tuple[str, ...]
     """Dot-paths safely merged."""
 
     summary: str
@@ -141,6 +157,12 @@ def flatten_to_paths(d: dict, prefix: str = "") -> dict[str, Any]:
 
     .. note::
 
+        List values (including lists of dicts) are treated as atomic leaf
+        values and are not recursed into.  Only ``dict`` values trigger
+        recursive descent.
+
+    .. note::
+
         Keys containing literal dots (e.g. ``{"a.b": 1}``) are
         indistinguishable from nested paths after flattening.  For example,
         ``{"a.b": 1}`` and ``{"a": {"b": 1}}`` both flatten to
@@ -164,6 +186,12 @@ def unflatten_paths(d: dict[str, Any]) -> dict:
     Example::
 
         {"db.pool.max_size": 10} -> {"db": {"pool": {"max_size": 10}}}
+
+    This function assumes all paths represent leaf values (as produced by
+    :func:`flatten_to_paths`).  Same-depth sibling overwrites of
+    intermediate dicts are not detected; callers must ensure that the
+    input does not contain paths that would silently overwrite previously
+    set intermediate dicts at the same depth.
 
     Raises:
         ValueError: If paths conflict (e.g. ``{"a.b": 5, "a.b.c": 10}``
@@ -227,7 +255,20 @@ def _fallback_classify(base_value: Any, agent_values: dict[str, Any]) -> Conflic
         2. Contradictory booleans or known antonym pairs -> OPPOSITE
         3. All values are dicts with non-overlapping keys -> ORTHOGONAL
         4. Otherwise -> AMBIGUOUS
+
+    Raises:
+        ValueError: If fewer than 2 agent values are provided.
+            Classification requires at least 2 agents to compare.
     """
+    # Guard: classification is meaningless with fewer than 2 values.
+    # Without this, a single-element list would pass the `all(... vals[1:])`
+    # check vacuously and be misclassified as IDENTICAL.
+    if len(agent_values) < 2:
+        raise ValueError(
+            f"_fallback_classify requires at least 2 agent values, "
+            f"got {len(agent_values)}"
+        )
+
     vals = list(agent_values.values())
 
     # 1. All identical
@@ -404,7 +445,7 @@ def reconcile_outputs(
             field_decisions[field] = FieldDecision(
                 field=field,
                 conflict_type=UNCONTESTED,
-                sources=[agent],
+                sources=(agent,),
                 chosen_value=value,
                 rationale=f"Only agent {agent} modified this field.",
                 needs_approval=False,
@@ -422,7 +463,8 @@ def reconcile_outputs(
             continue
 
         # 2-3. Overlapping field -- classify
-        agent_values = {a: flat_agents[a][field] for a in sorted(agents)}
+        sorted_agents = sorted(agents)
+        agent_values = {a: flat_agents[a][field] for a in sorted_agents}
         base_val = flat_base.get(field)
         conflict_type = _classify(base_val, agent_values, classifier=classifier)
 
@@ -432,12 +474,12 @@ def reconcile_outputs(
                     "event": "field_classified",
                     "field": field,
                     "conflict_type": conflict_type,
-                    "sources": sorted(agents),
+                    "sources": sorted_agents,
                 }
             )
 
         # 4. Route based on conflict_type
-        first_agent = sorted(agents)[0]
+        first_agent = sorted_agents[0]
 
         if conflict_type == IDENTICAL:
             value = agent_values[first_agent]
@@ -446,7 +488,7 @@ def reconcile_outputs(
             field_decisions[field] = FieldDecision(
                 field=field,
                 conflict_type=IDENTICAL,
-                sources=sorted(agents),
+                sources=tuple(sorted_agents),
                 chosen_value=value,
                 rationale="All agents produced the same value.",
                 needs_approval=False,
@@ -472,11 +514,11 @@ def reconcile_outputs(
             field_decisions[field] = FieldDecision(
                 field=field,
                 conflict_type=ORTHOGONAL,
-                sources=sorted(agents),
+                sources=tuple(sorted_agents),
                 chosen_value=value,
                 rationale=(
                     f"Agents modified non-overlapping aspects. "
-                    f"Merged from: {', '.join(sorted(agents))}."
+                    f"Merged from: {', '.join(sorted_agents)}."
                 ),
                 needs_approval=False,
                 needs_review=False,
@@ -490,7 +532,7 @@ def reconcile_outputs(
             field_decisions[field] = FieldDecision(
                 field=field,
                 conflict_type=LOW_CONFLICT,
-                sources=sorted(agents),
+                sources=tuple(sorted_agents),
                 chosen_value=value,
                 rationale=(
                     f"Minor difference. Chose value from lexically-first "
@@ -508,7 +550,7 @@ def reconcile_outputs(
             field_decisions[field] = FieldDecision(
                 field=field,
                 conflict_type=CONFLICTING,
-                sources=sorted(agents),
+                sources=tuple(sorted_agents),
                 chosen_value=value,
                 rationale=(
                     f"Significant difference. Chose value from lexically-first "
@@ -521,13 +563,13 @@ def reconcile_outputs(
         elif conflict_type in (OPPOSITE, AMBIGUOUS):
             # GI-3 enforcement: chosen_value=None, excluded from merged_values
             value_descriptions = ", ".join(
-                f"{a}={agent_values[a]!r}" for a in sorted(agents)
+                f"{a}={agent_values[a]!r}" for a in sorted_agents
             )
             approval_fields.append(field)
             field_decisions[field] = FieldDecision(
                 field=field,
                 conflict_type=conflict_type,
-                sources=sorted(agents),
+                sources=tuple(sorted_agents),
                 chosen_value=None,
                 rationale=(
                     f"Cannot auto-resolve. Candidate values: {value_descriptions}."
@@ -539,13 +581,13 @@ def reconcile_outputs(
         else:
             # Unknown conflict type -- treat as AMBIGUOUS
             value_descriptions = ", ".join(
-                f"{a}={agent_values[a]!r}" for a in sorted(agents)
+                f"{a}={agent_values[a]!r}" for a in sorted_agents
             )
             approval_fields.append(field)
             field_decisions[field] = FieldDecision(
                 field=field,
                 conflict_type=AMBIGUOUS,
-                sources=sorted(agents),
+                sources=tuple(sorted_agents),
                 chosen_value=None,
                 rationale=(
                     f"Unknown conflict type {conflict_type!r}. "
@@ -563,9 +605,9 @@ def reconcile_outputs(
         merged_values=merged_values,
         field_decisions=field_decisions,
         requires_approval=len(approval_fields) > 0,
-        approval_fields=approval_fields,
-        optional_review_fields=review_fields,
-        auto_resolved_fields=auto_resolved,
+        approval_fields=tuple(approval_fields),
+        optional_review_fields=tuple(review_fields),
+        auto_resolved_fields=tuple(auto_resolved),
         summary=summary,
     )
 
