@@ -86,22 +86,24 @@ EOSQL
             # but migrations with an explicit COMMIT (like 001) terminate the outer
             # transaction early, leaving the tracking INSERT in autocommit mode.
             # By injecting before the migration's COMMIT, both DDL and tracking run
-            # in the same transaction. If the migration has no COMMIT, we append
-            # the INSERT at the end (it will run in autocommit, which is acceptable
-            # for migrations that manage their own transaction boundaries).
+            # in the same transaction. If the migration has no line-anchored COMMIT,
+            # we append the INSERT at the end (it will run in autocommit, which is
+            # acceptable for migrations that manage their own transaction boundaries).
+            #
+            # Pattern matching uses ^COMMIT; (start-of-line anchor) via grep/awk
+            # to avoid false matches on COMMIT; inside SQL comments or strings.
             migration_content=$(cat "$migration")
             escaped_name="${migration_name//\'/\'\'}"
             tracking_sql="INSERT INTO schema_migrations (filename) VALUES ('${escaped_name}');"
-            if [[ "$migration_content" == *"COMMIT;"* ]]; then
-                # Inject tracking INSERT before the last COMMIT;
-                # ${var%PATTERN} removes the shortest suffix match, so
-                # ${migration_content%COMMIT;*} gives everything before the last COMMIT;
-                before_last_commit="${migration_content%COMMIT;*}"
-                after_last_commit="${migration_content##*COMMIT;}"
-                modified_content="${before_last_commit}${tracking_sql}
-COMMIT;${after_last_commit}"
+            # Find the LAST line where COMMIT; starts at column 1.
+            # Anchoring to ^COMMIT; avoids false matches inside SQL comments
+            # (e.g., "-- See COMMIT; behavior") or string literals.
+            last_commit_line=$(echo "$migration_content" | grep -n '^COMMIT;' | tail -1 | cut -d: -f1)
+            if [ -n "$last_commit_line" ]; then
+                # Inject tracking INSERT on the line before the last ^COMMIT;
+                modified_content=$(echo "$migration_content" | awk -v line="$last_commit_line" -v sql="$tracking_sql" 'NR==line{print sql} {print}')
             else
-                # No explicit COMMIT — append tracking INSERT at the end
+                # No line-anchored COMMIT — append tracking INSERT at the end
                 modified_content="${migration_content}
 ${tracking_sql}"
             fi
