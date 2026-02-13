@@ -6,7 +6,7 @@ schema_version: "1.0.0"
 agent_type: "ui_testing"
 
 agent_identity:
-  name: "ui-testing"
+  name: "agent-ui-testing"
   title: "UI Testing Specialist"
   description: "Comprehensive UI testing specialist with Playwright automation, MCP integration, and visual regression capabilities"
   color: "purple"

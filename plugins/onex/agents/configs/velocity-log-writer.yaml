@@ -5,7 +5,7 @@ schema_version: "1.0.0"
 agent_type: "velocity_log_writer"
 
 agent_identity:
-  name: "velocity-log-writer"
+  name: "agent-velocity-log-writer"
   title: "Velocity Log Writer Agent"
   description: "Direct-to-database velocity tracking writer that bypasses repository for instant productivity metrics"
   version: "1.0.0"

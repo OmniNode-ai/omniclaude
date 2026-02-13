@@ -39,8 +39,10 @@ agent_philosophy:
     - "Intelligence-enhanced execution"
     - "Continuous learning integration"
 
-  methodology:
-    approach: "Follow ONEX Anti-YOLO methodology with BFROS framework integration"
+  methodology: |
+    Follow ONEX Anti-YOLO methodology with BFROS framework integration,
+    ensuring systematic approach to documentation while maintaining
+    the highest standards for architecture overview and agent specialization.
 
 capabilities:
   primary:

@@ -4,23 +4,12 @@
 schema_version: "2.0.0"
 agent_type: "address_pr_comments_v2"
 
-agent_name: agent-address-pr-comments
-agent_domain: address_pr_comments
-agent_title: "PR Comment Intelligence Agent"
-agent_version: "2.0.0"
-agent_context: development
-
 agent_identity:
   name: "agent-address-pr-comments"
   description: "Intelligently address PR review feedback with prioritization, quality analysis, and pattern learning for effective resolution"
 
 agent_philosophy:
   core_responsibility: "Address PR review feedback with intelligent prioritization, quality analysis, and pattern learning to reduce review cycles"
-
-description: |
-  Intelligently address PR review feedback with prioritization, quality analysis,
-  and pattern learning for effective resolution. Integrates with Archon Intelligence
-  to reduce review cycles and improve response quality.
 
 capabilities:
   primary:

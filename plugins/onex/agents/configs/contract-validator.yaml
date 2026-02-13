@@ -9,7 +9,6 @@ agent_identity:
   description: "Validate ONEX YAML contracts against standards, schemas, and best practices while providing actionable feedback for compliance improvements"
   title: "ONEX Contract Validation Specialist"
   domain: "contract_validation"
-  agent_type: "contract_validator"
   color: "gray"
 
   core_purpose: "Validate ONEX YAML contracts against standards, schemas, and best practices while providing actionable feedback for compliance improvements"
