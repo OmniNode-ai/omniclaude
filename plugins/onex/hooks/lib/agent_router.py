@@ -41,45 +41,42 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
-# Path Resolution (adapted from simple_agent_loader.py)
+# Path Resolution
 # =============================================================================
 
 
-# Import canonical sensitive path blocklist from simple_agent_loader (single source of truth)
-try:
-    from simple_agent_loader import _SENSITIVE_PATH_PATTERNS as _SENSITIVE_PREFIXES
-except ImportError:
-    # Fallback if simple_agent_loader not importable (e.g., standalone CLI usage)
-    _SENSITIVE_PREFIXES = frozenset(
-        {
-            "/etc",
-            "/var/log",
-            "/var/run",
-            "/var/lib",
-            "/var/cache",
-            "/var/spool",
-            "/usr/bin",
-            "/usr/sbin",
-            "/usr/lib",
-            "/usr/local/bin",
-            "/usr/local/sbin",
-            "/bin",
-            "/sbin",
-            "/lib",
-            "/lib64",
-            "/root",
-            "/proc",
-            "/sys",
-            "/dev",
-            "/boot",
-            "/private/etc",
-            "/private/var/log",
-            "/private/var/run",
-            "/System",
-            "/Library/LaunchDaemons",
-            "/Library/LaunchAgents",
-        }
-    )
+# Sensitive system directories that must never be used as agent config paths.
+# Safety invariant — changes require code review.
+_SENSITIVE_PREFIXES = frozenset(
+    {
+        "/etc",
+        "/var/log",
+        "/var/run",
+        "/var/lib",
+        "/var/cache",
+        "/var/spool",
+        "/usr/bin",
+        "/usr/sbin",
+        "/usr/lib",
+        "/usr/local/bin",
+        "/usr/local/sbin",
+        "/bin",
+        "/sbin",
+        "/lib",
+        "/lib64",
+        "/root",
+        "/proc",
+        "/sys",
+        "/dev",
+        "/boot",
+        "/private/etc",
+        "/private/var/log",
+        "/private/var/run",
+        "/System",
+        "/Library/LaunchDaemons",
+        "/Library/LaunchAgents",
+    }
+)
 
 
 # Safety invariant for candidate filtering. Not agent- or registry-configurable.
