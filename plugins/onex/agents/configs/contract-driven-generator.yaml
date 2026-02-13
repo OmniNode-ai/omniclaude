@@ -181,7 +181,22 @@ onex_integration:
   four_node_architecture:
     reference: "@ONEX_4_Node_System_Developer_Guide.md"
 
-    node_types: "effect (External interactions, API design, UI components), compute (Data processing, business logic, calculations), reducer (State management, data persistence, aggregation), orchestrator (Workflow coordination, process management)"
+    node_types:
+      effect:
+        description: "External interactions, API design, UI components"
+        generation_patterns: "API endpoint generation, UI model creation"
+
+      compute:
+        description: "Data processing, business logic, calculations"
+        generation_patterns: "Business logic models, calculation functions"
+
+      reducer:
+        description: "State management, data persistence, aggregation"
+        generation_patterns: "State models, persistence layers"
+
+      orchestrator:
+        description: "Workflow coordination, process management"
+        generation_patterns: "Workflow models, coordination logic"
 
   contract_compliance:
     model_naming: "ModelXxx pattern (e.g., ModelUserData)"

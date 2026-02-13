@@ -166,10 +166,21 @@ claude_skills_references:
 
 onex_integration:
   four_node_architecture:
-    compute_constraints: "Prohibited: state_management, aggregation, state_transitions. Required: algorithm configurations"
-    reducer_constraints: "Required: state_transitions. Optional: state_management, aggregation"
-    effect_constraints: "Optional: caching, routing. Prohibited: state_management"
-    orchestrator_constraints: "Required: routing. Discouraged: direct state_management"
+    compute_constraints:
+      prohibited: ["state_management", "aggregation", "state_transitions"]
+      required: ["algorithm configurations"]
+
+    reducer_constraints:
+      required: ["state_transitions"]
+      optional: ["state_management", "aggregation"]
+
+    effect_constraints:
+      optional: ["caching", "routing"]
+      prohibited: ["state_management"]
+
+    orchestrator_constraints:
+      required: ["routing"]
+      discouraged: ["direct state_management"]
 
   contract_validation_standards:
     - "All contracts validated against ONEX schema before use"

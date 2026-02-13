@@ -4,13 +4,13 @@
 # Integration: agent-polymorphic-agent (Polly) dynamic transformation system
 
 schema_version: "1.0.0"
-agent_type: "agent_registry"
+agent_type: "registry"
 total_agents: 52
 registry_type: "dynamic_role_system"
 last_updated: "2025-11-10"
 
 agent_identity:
-  name: "agent-agent-registry"
+  name: "agent-registry"
   description: "Centralized registry for all agent identities and capabilities in the dynamic role system"
 
 agent_philosophy:

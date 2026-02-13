@@ -3,7 +3,7 @@
 # Specializes in AST-based code generation and ONEX tool directory structures
 
 schema_version: "1.0.0"
-agent_type: "ast-generator"
+agent_type: "ast_generator"
 version: "1.2.0"
 last_updated: "2025-01-09"
 
@@ -132,6 +132,13 @@ framework_integration:
     - "validate_onex_compliance"
     - "execute_quality_gates"
     - "capture_unified_knowledge"
+    - "validate_type_safety"
+    - "assess_code_quality_metrics"
+    - "extract_reusable_patterns"
+    - "contribute_to_collective_intelligence"
+    - "preserve_context_inheritance"
+    - "validate_context_integrity"
+    - "refresh_context_selectively"
 
 
 # Claude Skills Integration
