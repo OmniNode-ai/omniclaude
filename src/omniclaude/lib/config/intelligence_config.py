@@ -140,7 +140,7 @@ class IntelligenceConfig(BaseModel):
     # =========================================================================
 
     kafka_environment: str = Field(
-        default="dev",
+        default="",
         description="Environment label for config metadata (not used for topic prefixing per OMN-1972)",
     )
 

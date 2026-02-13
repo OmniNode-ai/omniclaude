@@ -1,7 +1,8 @@
 """Topic base names and helper for OmniClaude events.
 
-Topic names do NOT include environment prefix.
-Final topic = f"{prefix}.{base_name}" or just base_name if prefix is empty.
+Per OMN-1972, TopicBase values ARE the canonical wire topic names. No environment
+prefix is applied. The build_topic() helper still accepts a prefix argument for
+validation purposes, but callers should always pass an empty string.
 """
 
 from __future__ import annotations
