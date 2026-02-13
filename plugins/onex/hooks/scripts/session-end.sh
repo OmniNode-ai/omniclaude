@@ -327,16 +327,39 @@ if [[ -f "${HOOKS_LIB}/session_marker.py" ]] && [[ -n "${SESSION_ID}" ]]; then
     log "Cleared session injection marker"
 fi
 
+# Output response immediately so Claude Code can proceed with shutdown.
+# Worktree cleanup (below) is backgrounded to preserve <50ms SessionEnd budget.
+echo "$INPUT"
+
 # -----------------------------
 # Worktree Cleanup (OMN-1856)
 # -----------------------------
 # Clean up agent-created worktrees from this session.
 # Only targets ~/.claude/worktrees/ with valid .claude-session.json markers.
 # Uses git worktree remove (never rm -rf). Idempotent.
+#
+# Runs in a backgrounded subshell so find/jq/git subprocess invocations
+# do not block Claude Code (performance budget: <50ms sync path).
 
 WORKTREE_BASE="${HOME}/.claude/worktrees"
 
 if [[ -d "$WORKTREE_BASE" ]]; then
+    (
+    # Guard: refuse to run cleanup without a session ID — an empty SESSION_ID
+    # would match markers whose session_id field is also empty/missing, leading
+    # to unintended removal of worktrees belonging to other sessions.
+    if [[ -z "$SESSION_ID" ]]; then
+        log "WORKTREE: No session ID — skipping worktree cleanup"
+        exit 0
+    fi
+
+    # Canonicalize WORKTREE_BASE to its physical path so symlink-based
+    # path traversal cannot bypass the case-prefix guard below.
+    WORKTREE_BASE=$(cd "$WORKTREE_BASE" 2>/dev/null && pwd -P) || {
+        log "WARNING: Cannot canonicalize WORKTREE_BASE, skipping worktree cleanup"
+        exit 0
+    }
+
     _wt_candidates=0
     _wt_removed=0
     _wt_skipped=0
@@ -370,6 +393,14 @@ if [[ -d "$WORKTREE_BASE" ]]; then
             continue
         fi
 
+        # Canonicalize _wt_dir to its physical path so symlinks pointing
+        # outside WORKTREE_BASE are caught by the case-prefix guard.
+        _wt_dir=$(cd "$_wt_dir" 2>/dev/null && pwd -P) || {
+            log "STALE: ${_wt_dir} - cannot canonicalize path"
+            _wt_skipped=$((_wt_skipped + 1))
+            continue
+        }
+
         # Validate worktree path is under WORKTREE_BASE (path traversal guard)
         case "$_wt_dir" in
             "${WORKTREE_BASE}"/*) ;;
@@ -396,18 +427,24 @@ if [[ -d "$WORKTREE_BASE" ]]; then
 
         # G5: No unpushed commits
         _wt_upstream=$(git -C "$_wt_dir" rev-parse --abbrev-ref '@{u}' 2>/dev/null) || _wt_upstream=""
-        if [[ -n "$_wt_upstream" ]]; then
-            _wt_local=$(git -C "$_wt_dir" rev-parse HEAD 2>/dev/null) || _wt_local=""
-            _wt_remote=$(git -C "$_wt_dir" rev-parse '@{u}' 2>/dev/null) || _wt_remote=""
-            if [[ -n "$_wt_local" && -n "$_wt_remote" && "$_wt_local" != "$_wt_remote" ]]; then
-                log "STALE: ${_wt_dir} - has unpushed commits (local=${_wt_local:0:8} remote=${_wt_remote:0:8})"
-                _wt_skipped=$((_wt_skipped + 1))
-                continue
-            fi
+        if [[ -z "$_wt_upstream" ]]; then
+            # No tracking upstream configured — local commits have no remote
+            # backup. Treat as unpushed to avoid silent data loss.
+            log "STALE: ${_wt_dir} - no upstream configured, local commits may not be backed up"
+            _wt_skipped=$((_wt_skipped + 1))
+            continue
+        fi
+        _wt_local=$(git -C "$_wt_dir" rev-parse HEAD 2>/dev/null) || _wt_local=""
+        _wt_remote=$(git -C "$_wt_dir" rev-parse '@{u}' 2>/dev/null) || _wt_remote=""
+        if [[ -n "$_wt_local" && -n "$_wt_remote" && "$_wt_local" != "$_wt_remote" ]]; then
+            log "STALE: ${_wt_dir} - has unpushed commits (local=${_wt_local:0:8} remote=${_wt_remote:0:8})"
+            _wt_skipped=$((_wt_skipped + 1))
+            continue
         fi
 
-        # G6: Safe removal via git worktree remove from parent repo
-        if git -C "$_wt_parent_repo" worktree remove --force "$_wt_dir" 2>>"$LOG_FILE"; then
+        # G6: Safe removal via git worktree remove from parent repo.
+        # No --force: let git refuse if state changed between guards and removal (TOCTOU safety).
+        if git -C "$_wt_parent_repo" worktree remove "$_wt_dir" 2>>"$LOG_FILE"; then
             git -C "$_wt_parent_repo" worktree prune 2>>"$LOG_FILE" || true
             log "REMOVED: ${_wt_dir}"
             _wt_removed=$((_wt_removed + 1))
@@ -421,10 +458,9 @@ if [[ -d "$WORKTREE_BASE" ]]; then
     if [[ $_wt_candidates -gt 0 ]]; then
         log "Worktree cleanup: ${_wt_candidates} candidates, ${_wt_removed} removed, ${_wt_skipped} skipped"
     fi
+    ) &
+    EMIT_PIDS+=($!)
 fi
-
-# Output response immediately so Claude Code can proceed with shutdown
-echo "$INPUT"
 
 # Drain emit subshells, then stop publisher (OMN-1944)
 # SessionEnd has no downstream UI action — waiting is safe here.

@@ -170,6 +170,9 @@ When creating a worktree at `~/.claude/worktrees/`, write a `.claude-session.jso
 
 ```bash
 # After git worktree add
+# NOTE: Run this from the parent repo directory, NOT from within the new worktree.
+# git rev-parse --show-toplevel returns the worktree root if run inside one,
+# which would set parent_repo_path incorrectly and break SessionEnd cleanup.
 cat > "${worktree_path}/.claude-session.json" <<MARKER
 {
   "session_id": "${SESSION_ID}",
