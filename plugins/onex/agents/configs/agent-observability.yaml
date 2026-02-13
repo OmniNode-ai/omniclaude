@@ -227,11 +227,28 @@ output_format:
     - "Minimal prose, maximum signal"
     - "Comparison values when available (vs yesterday, vs baseline)"
 
-# Activation Triggers
-activation_triggers:
-  primary: ["observability", "agent health", "monitoring", "diagnostics", "metrics"]
-  secondary: ["check status", "system health", "agent metrics", "error analysis", "performance"]
-  patterns: ["what's the status", "how are agents performing", "check observability", "diagnose errors"]
+onex_integration: {}
+
+intelligence_integration: {}
+
+# Activation Patterns
+activation_patterns:
+  explicit_triggers:
+    - "observability"
+    - "agent health"
+    - "monitoring"
+    - "diagnostics"
+    - "metrics"
+  context_triggers:
+    - "check status"
+    - "system health"
+    - "agent metrics"
+    - "error analysis"
+    - "performance"
+    - "what's the status"
+    - "how are agents performing"
+    - "check observability"
+    - "diagnose errors"
 
 # Collaboration Points
 collaboration_points:

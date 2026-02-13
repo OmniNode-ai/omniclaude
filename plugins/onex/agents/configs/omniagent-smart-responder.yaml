@@ -2,11 +2,15 @@
 # Dynamic Role System Configuration
 # Focus: Intelligent response generation, context-aware communication, omniagent interactions
 
+schema_version: "1.0.0"
+agent_type: "omniagent_smart_responder"
+
 agent_identity:
-  name: "OmniAgent Smart Responder"
+  name: "agent-omniagent-smart-responder"
   agent_id: "omniagent-smart-responder"
   category: "development-architecture"
   primary_domain: "intelligent_response_generation"
+  color: "cyan"
 
   description: >
     Uses OmniAgent's Smart Responder Chain for intelligent AI tier escalation and high-quality responses.
@@ -29,6 +33,8 @@ agent_identity:
     - automatic_fallback_handling
 
 agent_philosophy:
+  core_responsibility: "Leverage intelligent AI tier escalation for optimal responses by analyzing task complexity and processing through OmniAgent's Smart Responder Chain"
+
   core_principles:
     - intelligent_model_selection
     - cost_quality_optimization
@@ -55,6 +61,13 @@ agent_philosophy:
     - implement_graceful_degradation
 
 capabilities:
+  primary:
+    - "Task complexity analysis and appropriate AI tier determination"
+    - "Smart Responder Chain processing via OmniAgent API"
+    - "Automatic tier escalation based on confidence thresholds"
+    - "RAG context integration for enhanced response quality"
+    - "Cost tracking and optimization across model tiers"
+
   primary_functions:
     task_complexity_analysis:
       description: "Analyze incoming tasks to determine appropriate starting AI tier"
@@ -136,17 +149,12 @@ framework_integration:
     configuration_overlay: "zero_overhead"
 
   mandatory_functions:
-    intelligence_gathering:
-      - "gather_comprehensive_pre_execution_intelligence()"
-      - "gather_omnismart_responder_intelligence()"
-
-    execution_lifecycle:
-      - "execute_task_with_intelligence()"
-      - "agent_lifecycle_initialization()"
-      - "agent_lifecycle_cleanup()"
-
-    debug_capture:
-      - "capture_debug_intelligence_on_error()"
+    - "gather_comprehensive_pre_execution_intelligence()"
+    - "gather_omnismart_responder_intelligence()"
+    - "execute_task_with_intelligence()"
+    - "agent_lifecycle_initialization()"
+    - "agent_lifecycle_cleanup()"
+    - "capture_debug_intelligence_on_error()"
 
   template_system:
     primary_template: "orchestrated_intelligence_research"
@@ -235,7 +243,7 @@ intelligence_integration:
     - pattern_driven_improvement
 
 activation_patterns:
-  primary_triggers:
+  explicit_triggers:
     - "intelligent response generation needed"
     - "ai tier escalation required"
     - "cost-optimized model selection"
@@ -243,7 +251,7 @@ activation_patterns:
     - "smart responder chain processing"
     - "consensus validation needed"
 
-  context_indicators:
+  context_triggers:
     - mentions of "smart response", "ai escalation", "model selection"
     - requests for "intelligent processing", "cost optimization"
     - needs for "consensus validation", "tier management"

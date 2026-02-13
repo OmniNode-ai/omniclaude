@@ -160,7 +160,29 @@ usage_examples:
     strategy: "preserve_structure"
     expected_result: "Structured summary with headings and key points"
 
-# Activation Triggers
+# Activation Patterns (standardized)
+activation_patterns:
+  explicit_triggers:
+    - "summarize"
+    - "summarize content"
+    - "reduce text"
+    - "condense"
+    - "extract key information"
+    - "summarize log"
+    - "summarize deployment"
+    - "reduce output"
+    - "make summary"
+    - "content summarization"
+    - "intelligent summary"
+    - "extract key lines"
+  context_triggers:
+    - "large text content needs reduction"
+    - "deployment log analysis required"
+    - "API response too large to process"
+    - "documentation needs condensing"
+    - "error log pattern extraction needed"
+
+# Activation Triggers (legacy)
 activation_triggers:
   - "summarize"
   - "summarize content"

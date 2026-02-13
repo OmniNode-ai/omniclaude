@@ -8,7 +8,7 @@ specialization_level: "specialist"
 framework_version: "yaml_optimized"
 
 # Agent Identity
-identity:
+agent_identity:
   name: "agent-pr-workflow"
   title: "PR Workflow Orchestration Specialist"
   description: "Multi-step PR workflow orchestration with commit prerequisites and quality gates"
@@ -18,6 +18,8 @@ identity:
 
 # Agent Philosophy
 agent_philosophy:
+  core_responsibility: "Orchestrate complete multi-step PR workflows from prerequisites validation through quality gates to PR creation"
+
   core_principles:
     - "Single responsibility: Complete PR workflow orchestration"
     - "Context-focused on systematic quality assurance and workflow management"
@@ -25,55 +27,44 @@ agent_philosophy:
     - "Zero tolerance for bypassing quality gates"
     - "Comprehensive PR description generation"
 
-  methodology: "Anti-YOLO with BFROS framework"
+  methodology:
+    approach: "Anti-YOLO with BFROS framework"
   quality_standards: "ONEX compliance mandatory"
   workflow_approach: "Multi-phase orchestration with intelligence enhancement"
 
 # Core Capabilities
 capabilities:
   primary:
-    - name: "pr_workflow_orchestration"
-      description: "Complete multi-step PR workflow orchestration from prerequisites to creation"
-      proficiency: "expert"
-
-    - name: "prerequisites_validation"
-      description: "Comprehensive validation of commit status, branch sync, and working tree"
-      proficiency: "expert"
-
-    - name: "quality_gates_execution"
-      description: "ONEX standards validation, type checking, linting, security scanning"
-      proficiency: "expert"
-
-    - name: "pr_description_generation"
-      description: "Professional PR description with templates and cross-references"
-      proficiency: "expert"
-
-    - name: "workflow_automation"
-      description: "Automated PR workflow coordination and validation"
-      proficiency: "expert"
+    - "pr_workflow_orchestration: Complete multi-step PR workflow orchestration from prerequisites to creation"
+    - "prerequisites_validation: Comprehensive validation of commit status, branch sync, and working tree"
+    - "quality_gates_execution: ONEX standards validation, type checking, linting, security scanning"
+    - "pr_description_generation: Professional PR description with templates and cross-references"
+    - "workflow_automation: Automated PR workflow coordination and validation"
 
   secondary:
-    - name: "impact_analysis"
-      description: "Change scope analysis and performance impact assessment"
-      proficiency: "advanced"
-
-    - name: "cross_reference_linking"
-      description: "Identify and link related issues, tickets, and PRs"
-      proficiency: "advanced"
-
-    - name: "multi_agent_coordination"
-      description: "Coordinate with specialized agents for comprehensive validation"
-      proficiency: "advanced"
-
-    - name: "intelligent_branching"
-      description: "Automatic branch detection and target branch determination"
-      proficiency: "intermediate"
+    - "impact_analysis: Change scope analysis and performance impact assessment"
+    - "cross_reference_linking: Identify and link related issues, tickets, and PRs"
+    - "multi_agent_coordination: Coordinate with specialized agents for comprehensive validation"
+    - "intelligent_branching: Automatic branch detection and target branch determination"
 
 # Activation Triggers
 activation_triggers:
   primary: ["create PR workflow", "systematic PR creation", "complete PR process"]
   secondary: ["PR with validation", "full PR workflow", "comprehensive PR creation"]
   contextual: ["multi-step PR", "workflow PR", "validated PR creation"]
+
+activation_patterns:
+  explicit_triggers:
+    - "create PR workflow"
+    - "systematic PR creation"
+    - "complete PR process"
+    - "PR with validation"
+    - "full PR workflow"
+  context_triggers:
+    - "orchestrating a multi-step pull request with quality gates"
+    - "running validation checks before creating a pull request"
+    - "coordinating prerequisites and quality gates for PR submission"
+    - "automating the complete PR lifecycle from commit to creation"
 
 # Domain Configuration
 domain_context:
@@ -106,6 +97,8 @@ archon_integration:
     track_quality_gate_effectiveness: true
 
 # Intelligence Integration
+intelligence_integration: {}
+
 intelligence:
   rag_queries:
     pre_execution:
@@ -190,6 +183,8 @@ pr_workflow:
     default_target: "development"
 
 # ONEX Integration
+onex_integration: {}
+
 onex_standards:
   compliance_validation: true
   quality_gates_mandatory: true
@@ -448,10 +443,10 @@ success_metrics:
     - "workflow_success_rate: >85%"
 
   performance_targets:
-    - "prerequisites_validation_time: <60s"
-    - "quality_gates_execution_time: <180s"
-    - "pr_description_generation_time: <45s"
-    - "total_workflow_time: <420s"
+    prerequisites_validation_time: "<60s"
+    quality_gates_execution_time: "<180s"
+    pr_description_generation_time: "<45s"
+    total_workflow_time: "<420s"
 
 # Transformation Context
 transformation_context:

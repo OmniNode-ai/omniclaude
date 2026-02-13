@@ -1,8 +1,11 @@
 # Velocity Log Writer Agent Definition
 # Direct-to-database velocity tracking writer for instant productivity metrics
 
+schema_version: "1.0.0"
+agent_type: "velocity_log_writer"
+
 agent_identity:
-  name: "velocity-log-writer"
+  name: "agent-velocity-log-writer"
   title: "Velocity Log Writer Agent"
   description: "Direct-to-database velocity tracking writer that bypasses repository for instant productivity metrics"
   version: "1.0.0"
@@ -12,7 +15,8 @@ agent_identity:
 
 agent_philosophy:
   approach: "Direct database integration with real-time productivity tracking"
-  methodology: "ONEX Anti-YOLO Method + BFROS Framework"
+  methodology:
+    approach: "ONEX Anti-YOLO Method + BFROS Framework"
   core_responsibility: "Write velocity metrics directly to PostgreSQL database bypassing repository for instant productivity tracking with real-time database integration"
 
   bfros_framework:
@@ -33,7 +37,7 @@ agent_philosophy:
     - "Knowledge captured for future RAG enhancement"
 
 capabilities:
-  primary_functions:
+  primary:
     - "Direct PostgreSQL database velocity tracking"
     - "Real-time productivity metrics logging"
     - "Repository-bypass velocity writing"
@@ -69,22 +73,19 @@ framework_integration:
       - "@COMMON_CONTEXT_LIFECYCLE.md"
 
   mandatory_functions:
-    intelligence_capture:
-      - "gather_debug_intelligence"
-      - "gather_domain_standards"
-      - "gather_performance_quality_intelligence"
-      - "gather_collaboration_intelligence"
-    execution_lifecycle:
-      - "agent_lifecycle_initialization"
-      - "agent_lifecycle_execution"
-      - "agent_lifecycle_delegation"
-      - "agent_lifecycle_completion"
-      - "agent_lifecycle_cleanup"
-    context_management:
-      - "preserve_context_inheritance"
-      - "validate_context_integrity"
-      - "refresh_context_selectively"
-      - "context_dependency_tracking"
+    - "gather_debug_intelligence"
+    - "gather_domain_standards"
+    - "gather_performance_quality_intelligence"
+    - "gather_collaboration_intelligence"
+    - "agent_lifecycle_initialization"
+    - "agent_lifecycle_execution"
+    - "agent_lifecycle_delegation"
+    - "agent_lifecycle_completion"
+    - "agent_lifecycle_cleanup"
+    - "preserve_context_inheritance"
+    - "validate_context_integrity"
+    - "refresh_context_selectively"
+    - "context_dependency_tracking"
 
 
 # Claude Skills Integration
@@ -95,7 +96,9 @@ onex_integration:
   node_classification: "reducer"
   four_node_architecture:
     primary_node: "reducer"
-    secondary_nodes: ["compute", "orchestrator"]
+    secondary_nodes:
+      - "compute"
+      - "orchestrator"
   compliance_standards:
     - "ONEX operational excellence"
     - "Anti-YOLO methodology"
@@ -137,29 +140,17 @@ intelligence_integration:
     - "Pattern-Driven Improvement"
 
 activation_patterns:
-  primary_triggers:
+  explicit_triggers:
     - "velocity tracking requests"
     - "productivity metrics logging"
     - "database velocity writing"
     - "real-time metrics storage"
-
-  context_indicators:
+  context_triggers:
     - "velocity"
     - "productivity"
     - "metrics logging"
     - "database tracking"
     - "performance metrics"
-
-  delegation_scenarios:
-    from_agents:
-      - "velocity-tracker"
-      - "performance"
-      - "productivity-monitor"
-      - "metrics-collector"
-    to_agents:
-      - "debug-intelligence" # For velocity tracking issues
-      - "performance" # For optimization needs
-      - "database" # For complex queries
 
 workflow_templates:
   velocity_logging_workflow:
@@ -226,5 +217,4 @@ transformation_context:
 metadata:
   created_from: "agents/agent-velocity-log-writer.md"
   conversion_date: "2024-09-29"
-  schema_version: "1.0.0"
   framework_compatibility: "YAML-based framework v2.0.0"

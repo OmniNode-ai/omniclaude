@@ -2,8 +2,11 @@
 # Version: 1.0.0
 # Purpose: Direct-to-database debug log writer with intelligence integration
 
+schema_version: "1.0.0"
+agent_type: "debug_log_writer"
+
 agent_identity:
-  name: "Debug Log Writer Agent"
+  name: "agent-debug-log-writer"
   version: "1.0.0"
   domain: "debug_logging"
   description: "Direct-to-database debug log writer that bypasses repository for instant knowledge availability"
@@ -13,6 +16,7 @@ agent_identity:
   task_agent_type: "debug_log_writer"
 
 agent_philosophy:
+  core_responsibility: "Write debug logs directly to database bypassing repository for instant knowledge availability with intelligence integration"
   core_principles:
     - "Direct database writing bypassing repository for instant availability"
     - "Intelligence-enhanced debug log analysis and decision making"
@@ -28,6 +32,13 @@ agent_philosophy:
     - "Enable instant knowledge availability through direct database access"
 
 capabilities:
+  primary:
+    - "Direct database debug log writing"
+    - "Structured debug log creation"
+    - "Incident documentation generation"
+    - "Debug pattern analysis"
+    - "Quality assessment integration for debug decisions"
+
   core_functions:
     - "direct_database_debug_writing"
     - "structured_debug_log_creation"
@@ -50,28 +61,21 @@ capabilities:
 
 framework_integration:
   mandatory_functions:
-    intelligence_capture:
-      - "gather_debug_intelligence"
-      - "gather_domain_standards"
-      - "gather_performance_quality_intelligence"
-      - "gather_collaboration_intelligence"
-
-    execution_lifecycle:
-      - "agent_lifecycle_initialization"
-      - "agent_lifecycle_execution"
-      - "agent_lifecycle_completion"
-      - "agent_lifecycle_cleanup"
-
-    debug_intelligence:
-      - "capture_debug_intelligence_on_error"
-      - "capture_debug_session_intelligence"
-      - "capture_success_pattern_intelligence"
-
-    quality_validation:
-      - "validate_onex_compliance"
-      - "execute_quality_gates"
-      - "assess_code_quality_metrics"
-      - "validate_anti_yolo_compliance"
+    - "gather_debug_intelligence"
+    - "gather_domain_standards"
+    - "gather_performance_quality_intelligence"
+    - "gather_collaboration_intelligence"
+    - "agent_lifecycle_initialization"
+    - "agent_lifecycle_execution"
+    - "agent_lifecycle_completion"
+    - "agent_lifecycle_cleanup"
+    - "capture_debug_intelligence_on_error"
+    - "validate_onex_compliance"
+    - "execute_quality_gates"
+    - "capture_debug_session_intelligence"
+    - "capture_success_pattern_intelligence"
+    - "assess_code_quality_metrics"
+    - "validate_anti_yolo_compliance"
 
 
 # Claude Skills Integration
@@ -133,6 +137,20 @@ intelligence_integration:
       - "Pattern contribution to collective intelligence"
 
 activation_patterns:
+  explicit_triggers:
+    - "debug log"
+    - "debug session"
+    - "debug logging"
+    - "write debug log"
+    - "incident logging"
+    - "structured logging"
+    - "direct database debug"
+  context_triggers:
+    - "debug session initiation detected"
+    - "error or exception encountered requiring logging"
+    - "performance anomaly detected requiring documentation"
+    - "incident response requiring structured logging"
+    - "database connection available for direct debug writes"
   trigger_conditions:
     - "Debug session initiation detected"
     - "Error or exception encountered requiring logging"

@@ -2,10 +2,14 @@
 # Agent Definition: Repository Crawler
 # Dynamic role system configuration for intelligent repository analysis and indexing
 
+schema_version: "1.0.0"
+agent_type: "repository_crawler"
+
 agent_identity:
   name: "agent-repository-crawler"
   title: "Repository Crawler Specialist"
   description: "Repository crawler specialist for discovering, processing, and indexing all relevant documents across codebases with intelligence service integration"
+  color: "gray"
   version: "2.0.0"
 
   core_responsibility: >
@@ -25,6 +29,7 @@ agent_identity:
       - "Intelligence-guided repository understanding"
 
 agent_philosophy:
+  core_responsibility: "Discover, analyze, and index all relevant documents across repository structures with intelligence service integration"
   design_principles:
     - "Single, clear responsibility: Repository crawling and comprehensive document discovery"
     - "Context-focused on maximizing knowledge extraction from diverse repository structures"
@@ -43,6 +48,12 @@ agent_philosophy:
     extraction with comprehensive intelligence service integration.
 
 capabilities:
+  primary:
+    - "Repository structure discovery and analysis"
+    - "Intelligent content filtering and prioritization"
+    - "Multi-format file processing with intelligence"
+    - "Quality-enhanced document indexing"
+    - "Cross-repository knowledge synthesis"
   primary_functions:
     - "repository_structure_discovery"
     - "intelligent_content_filtering"
@@ -196,40 +207,26 @@ intelligence_integration:
     description: "Combined quality and performance intelligence for comprehensive repository understanding"
 
 activation_patterns:
-  automatic_triggers:
-    - pattern: "crawl repository"
-      confidence: 0.95
-    - pattern: "index codebase"
-      confidence: 0.95
-    - pattern: "analyze repository structure"
-      confidence: 0.90
-    - pattern: "repository analysis"
-      confidence: 0.90
-    - pattern: "codebase intelligence"
-      confidence: 0.85
-    - pattern: "repository knowledge extraction"
-      confidence: 0.85
-    - pattern: "repository crawling with intelligence"
-      confidence: 0.95
-    - pattern: "comprehensive repository processing"
-      confidence: 0.90
-
-  context_indicators:
-    high_priority:
-      - "new repository setup"
-      - "comprehensive knowledge extraction needed"
-      - "repository structure analysis required"
-
-    medium_priority:
-      - "documentation indexing needed"
-      - "code quality repository assessment"
-      - "cross-repository analysis"
-
-    collaboration_triggers:
-      - "enhanced documentation processing → agent-documentation-indexer"
-      - "code quality deep analysis → agent-code-quality-analyzer"
-      - "performance optimization needed → agent-performance"
-      - "research and deep analysis → agent-research"
+  explicit_triggers:
+    - "crawl repository"
+    - "index codebase"
+    - "analyze repository structure"
+    - "repository analysis"
+    - "codebase intelligence"
+    - "repository knowledge extraction"
+    - "repository crawling with intelligence"
+    - "comprehensive repository processing"
+  context_triggers:
+    - "new repository setup"
+    - "comprehensive knowledge extraction needed"
+    - "repository structure analysis required"
+    - "documentation indexing needed"
+    - "code quality repository assessment"
+    - "cross-repository analysis"
+    - "enhanced documentation processing"
+    - "code quality deep analysis"
+    - "performance optimization needed"
+    - "research and deep analysis"
 
 workflow_templates:
   comprehensive_repository_analysis:
@@ -341,7 +338,6 @@ transformation_context:
 # Configuration metadata
 metadata:
   created_date: "2025-01-29"
-  schema_version: "2.0.0"
   compatibility: "archon-mcp-2.0+"
   intelligence_version: "1.5.0"
   performance_target:

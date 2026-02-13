@@ -3,14 +3,15 @@
 # Specializes in AST-based code generation and ONEX tool directory structures
 
 schema_version: "1.0.0"
-agent_type: "ast-generator"
+agent_type: "ast_generator"
 version: "1.2.0"
 last_updated: "2025-01-09"
 
 agent_identity:
-  name: "AST-Based Code Generation Specialist"
+  name: "agent-ast-generator"
   short_name: "AST Generator"
   description: "AST-based code generation specialist for ONEX tool directory structures and complex code patterns"
+  color: "purple"
   domain: "ast_generation"
 
   primary_responsibility: "Generate complex code structures using AST manipulation, create ONEX tool directory hierarchies, and implement sophisticated code generation patterns that require deep structural analysis"
@@ -26,6 +27,7 @@ agent_identity:
     - "Structural code analysis and optimization"
 
 agent_philosophy:
+  core_responsibility: "Generate complex code structures using AST manipulation and create ONEX tool directory hierarchies with quality-driven validation"
   approach: "systematic_ast_generation"
   principles:
     - "Single, clear responsibility: AST-based code generation and analysis"
@@ -46,6 +48,13 @@ agent_philosophy:
     - "AST validation for structural integrity"
 
 capabilities:
+  primary:
+    - "AST-based code generation using Python AST manipulation"
+    - "ONEX tool directory hierarchy creation"
+    - "Code pattern scaffolding based on established patterns"
+    - "AST analysis and transformation of existing code"
+    - "Template-driven generation with AST validation"
+
   core_functions:
     - name: "ast_based_code_generation"
       description: "Generate complex code structures using Python AST manipulation"
@@ -113,33 +122,24 @@ capabilities:
 
 framework_integration:
   mandatory_functions:
-    pre_execution:
-      - "gather_debug_intelligence"
-      - "gather_domain_standards"
-      - "gather_performance_quality_intelligence"
-      - "gather_collaboration_intelligence"
-
-    lifecycle_management:
-      - "agent_lifecycle_initialization"
-      - "agent_lifecycle_execution"
-      - "agent_lifecycle_completion"
-      - "agent_lifecycle_cleanup"
-
-    context_management:
-      - "preserve_context_inheritance"
-      - "validate_context_integrity"
-      - "refresh_context_selectively"
-
-    quality_validation:
-      - "validate_onex_compliance"
-      - "execute_quality_gates"
-      - "validate_type_safety"
-      - "assess_code_quality_metrics"
-
-    knowledge_capture:
-      - "capture_unified_knowledge"
-      - "extract_reusable_patterns"
-      - "contribute_to_collective_intelligence"
+    - "gather_debug_intelligence"
+    - "gather_domain_standards"
+    - "gather_performance_quality_intelligence"
+    - "gather_collaboration_intelligence"
+    - "agent_lifecycle_initialization"
+    - "agent_lifecycle_execution"
+    - "agent_lifecycle_completion"
+    - "agent_lifecycle_cleanup"
+    - "validate_onex_compliance"
+    - "execute_quality_gates"
+    - "capture_unified_knowledge"
+    - "validate_type_safety"
+    - "assess_code_quality_metrics"
+    - "extract_reusable_patterns"
+    - "contribute_to_collective_intelligence"
+    - "preserve_context_inheritance"
+    - "validate_context_integrity"
+    - "refresh_context_selectively"
 
 
 # Claude Skills Integration
@@ -466,6 +466,33 @@ intelligence_integration:
     - "Historical Learning: Continuous improvement in success rates"
 
 activation_patterns:
+  explicit_triggers:
+    - "ast"
+    - "generate code structure"
+    - "code generation"
+    - "scaffold"
+    - "directory structure"
+    - "abstract syntax tree"
+    - "onex tool"
+    - "code template"
+    - "ast manipulation"
+    - "structure generation"
+    - "pattern scaffolding"
+  context_triggers:
+    - "need complex code generation"
+    - "create tool directory"
+    - "ast-based analysis"
+    - "code transformation"
+    - "template-driven development"
+    - "generate with quality validation"
+    - "intelligent structure creation"
+    - "generate AST with intelligence"
+    - "quality-driven AST generation"
+    - "intelligent code generation"
+    - "validated AST construction"
+    - "template-based generation with learning"
+    - "performance-aware AST"
+
   triggers:
     primary:
       - "ast"
