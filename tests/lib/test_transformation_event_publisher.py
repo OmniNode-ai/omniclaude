@@ -414,8 +414,8 @@ class TestPublishTransformationEvent:
 
                 call_args = mock_publish.call_args
                 actual_topic = call_args[0][0]
-                # Topic should be env-prefixed (e.g., "dev.onex.evt...")
-                expected_topic = f"dev.{expected_base_topic}"
+                # Topic should be wire-ready (no env prefix per OMN-1972)
+                expected_topic = expected_base_topic
                 assert actual_topic == expected_topic, (
                     f"Event type {event_type} should route to {expected_topic}, "
                     f"got {actual_topic}"
@@ -582,11 +582,11 @@ class TestIntegrationScenarios:
         # publish_to_kafka(topic, envelope, partition_key)
         # Verify first event is STARTED (with env prefix)
         first_call = mock_publish.call_args_list[0]
-        assert first_call[0][0] == f"dev.{TopicBase.TRANSFORMATION_STARTED.value}"
+        assert first_call[0][0] == TopicBase.TRANSFORMATION_STARTED.value
 
         # Verify second event is COMPLETED (with env prefix)
         second_call = mock_publish.call_args_list[1]
-        assert second_call[0][0] == f"dev.{TopicBase.TRANSFORMATION_COMPLETED.value}"
+        assert second_call[0][0] == TopicBase.TRANSFORMATION_COMPLETED.value
 
     @pytest.mark.asyncio
     async def test_transformation_failure_scenario(self) -> None:
@@ -627,7 +627,7 @@ class TestIntegrationScenarios:
         # publish_to_kafka(topic, envelope, partition_key)
         # Second event should be FAILED (with env prefix)
         second_call = mock_publish.call_args_list[1]
-        assert second_call[0][0] == f"dev.{TopicBase.TRANSFORMATION_FAILED.value}"
+        assert second_call[0][0] == TopicBase.TRANSFORMATION_FAILED.value
 
         # Verify error details in payload
         envelope = second_call[0][1]

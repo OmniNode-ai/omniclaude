@@ -196,7 +196,7 @@ def _validate_topic_name(topic: str) -> None:
             consecutive dots, empty segments, or invalid characters).
 
     Example:
-        >>> _validate_topic_name("dev.omniclaude.session.started.v1")  # Valid, no error
+        >>> _validate_topic_name("onex.evt.omniclaude.session-started.v1")  # Valid, no error
 
         >>> _validate_topic_name(".invalid")  # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
@@ -254,29 +254,25 @@ def build_topic(prefix: str, base: str) -> str:
             Must be a valid dotted topic name.
 
     Returns:
-        Full topic name (e.g., "dev.omniclaude.session.started.v1"), or just the
-        base topic name if prefix is empty.
+        Full topic name. If prefix is empty, returns just the base topic name.
 
     Raises:
         ModelOnexError: If prefix is None, not a string, or contains dots.
         ModelOnexError: If base is empty, None, whitespace-only, or malformed.
 
     Examples:
-        >>> build_topic("dev", TopicBase.SESSION_STARTED)
-        'dev.omniclaude.session.started.v1'
-
         >>> build_topic("", TopicBase.SESSION_STARTED)
-        'omniclaude.session.started.v1'
+        'onex.evt.omniclaude.session-started.v1'
 
         >>> build_topic("  ", TopicBase.SESSION_STARTED)
-        'omniclaude.session.started.v1'
+        'onex.evt.omniclaude.session-started.v1'
 
         >>> build_topic(None, TopicBase.SESSION_STARTED)  # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
             ...
         ModelOnexError: ...
 
-        >>> build_topic("dev.staging", TopicBase.SESSION_STARTED)  # doctest: +IGNORE_EXCEPTION_DETAIL
+        >>> build_topic("x.y", TopicBase.SESSION_STARTED)  # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
             ...
         ModelOnexError: ...

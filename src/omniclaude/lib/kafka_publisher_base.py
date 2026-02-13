@@ -96,15 +96,13 @@ def get_kafka_bootstrap_servers() -> str:
 
 
 def get_kafka_topic_prefix() -> str:
-    """Get Kafka topic prefix (environment) from environment variables.
+    """Get Kafka topic prefix from environment variables.
 
     Returns:
-        Topic prefix (e.g., "dev", "staging", "prod"). Defaults to "dev".
+        Empty string. Topics are realm-agnostic per ONEX convention (OMN-1972):
+        TopicBase values ARE the wire topic names, no environment prefix.
     """
-    env_prefix = os.environ.get("KAFKA_TOPIC_PREFIX") or os.environ.get(
-        "KAFKA_ENVIRONMENT"
-    )
-    return env_prefix if env_prefix else "dev"
+    return ""
 
 
 def create_event_envelope(

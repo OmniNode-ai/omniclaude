@@ -37,7 +37,7 @@ class ModelEventPublishResult(BaseModel):
     Example:
         >>> result = ModelEventPublishResult(
         ...     success=True,
-        ...     topic="dev.omniclaude.session.started.v1",
+        ...     topic="onex.evt.omniclaude.session-started.v1",
         ...     partition=0,
         ...     offset=12345,
         ... )

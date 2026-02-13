@@ -40,15 +40,14 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from omniclaude.config import settings
 
-# Topic base names (without environment prefix)
-# These are combined with kafka_environment to create full topic names
-TOPIC_BASE_CODE_ANALYSIS_REQUESTED = (
+# Topic names (wire-ready, no environment prefix per OMN-1972)
+TOPIC_CODE_ANALYSIS_REQUESTED = (
     "onex-intelligence.intelligence.code-analysis-requested.v1"
 )
-TOPIC_BASE_CODE_ANALYSIS_COMPLETED = (
+TOPIC_CODE_ANALYSIS_COMPLETED = (
     "onex-intelligence.intelligence.code-analysis-completed.v1"
 )
-TOPIC_BASE_CODE_ANALYSIS_FAILED = (
+TOPIC_CODE_ANALYSIS_FAILED = (
     "onex-intelligence.intelligence.code-analysis-failed.v1"
 )
 
@@ -68,13 +67,13 @@ class IntelligenceConfig(BaseModel):
         kafka_pattern_discovery_timeout_ms: Pattern discovery timeout
         kafka_code_analysis_timeout_ms: Code analysis timeout
         kafka_consumer_group_prefix: Consumer group prefix for isolation
-        kafka_environment: Environment prefix for topic names (dev, staging, prod)
+        kafka_environment: Environment label for config metadata (not used for topic prefixing per OMN-1972)
         enable_event_based_discovery: Enable event-based pattern discovery
         enable_filesystem_fallback: Enable fallback to built-in patterns
         prefer_event_patterns: Prefer event-based patterns (higher confidence)
-        topic_code_analysis_requested: Request topic name (built from kafka_environment)
-        topic_code_analysis_completed: Success response topic name (built from kafka_environment)
-        topic_code_analysis_failed: Error response topic name (built from kafka_environment)
+        topic_code_analysis_requested: Request topic name (wire-ready, no prefix)
+        topic_code_analysis_completed: Success response topic name (wire-ready, no prefix)
+        topic_code_analysis_failed: Error response topic name (wire-ready, no prefix)
     """
 
     # =========================================================================
@@ -142,29 +141,27 @@ class IntelligenceConfig(BaseModel):
 
     kafka_environment: str = Field(
         default="dev",
-        description="Kafka topic environment prefix (dev, staging, prod)",
+        description="Environment label for config metadata (not used for topic prefixing per OMN-1972)",
     )
 
     # =========================================================================
     # Topic Configuration
     # =========================================================================
-    # Topic names are constructed dynamically by combining kafka_environment
-    # with the base topic name. If not explicitly provided, they are built
-    # automatically via the model validator.
+    # Topic names are wire-ready per OMN-1972. No environment prefix is applied.
 
     topic_code_analysis_requested: str = Field(
         default="",
-        description="Topic for code analysis requests (built from kafka_environment if empty)",
+        description="Topic for code analysis requests (wire-ready, no prefix)",
     )
 
     topic_code_analysis_completed: str = Field(
         default="",
-        description="Topic for successful analysis responses (built from kafka_environment if empty)",
+        description="Topic for successful analysis responses (wire-ready, no prefix)",
     )
 
     topic_code_analysis_failed: str = Field(
         default="",
-        description="Topic for failed analysis responses (built from kafka_environment if empty)",
+        description="Topic for failed analysis responses (wire-ready, no prefix)",
     )
 
     # =========================================================================
@@ -174,14 +171,9 @@ class IntelligenceConfig(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def build_dynamic_topic_names(cls, data: Any) -> Any:
-        """Build topic names dynamically based on kafka_environment.
+        """Populate topic names from constants if not explicitly provided.
 
-        This validator ensures topic names are consistently constructed
-        using the kafka_environment prefix, whether the config is created
-        via from_env() or direct instantiation.
-
-        If topic names are explicitly provided, they are preserved.
-        Otherwise, they are built from kafka_environment + base topic name.
+        Topic names are wire-ready per OMN-1972 — no environment prefix.
 
         Args:
             data: Input data (dict when creating from kwargs, may be other types
@@ -189,40 +181,17 @@ class IntelligenceConfig(BaseModel):
 
         Returns:
             The data with topic names populated if not already set
-
-        Raises:
-            ValueError: If kafka_environment is empty (would cause malformed topic names)
         """
         if not isinstance(data, dict):
             return data
 
-        env: str = data.get("kafka_environment", "dev")
-
-        # Validate kafka_environment is not empty to prevent malformed topic names
-        # (e.g., '.omniclaude.session.started.v1' with a leading dot)
-        if not env or not env.strip():
-            raise ValueError(
-                "kafka_environment cannot be empty. "
-                "This field is REQUIRED to prevent malformed topic names. "
-                "Set KAFKA_ENVIRONMENT in your .env file to 'dev', 'staging', or 'prod'. "
-                "Example: KAFKA_ENVIRONMENT=dev"
-            )
-
-        env = env.strip()
-
-        # Build topic names if not explicitly provided
+        # Build topic names if not explicitly provided (no env prefix per OMN-1972)
         if not data.get("topic_code_analysis_requested"):
-            data["topic_code_analysis_requested"] = (
-                f"{env}.{TOPIC_BASE_CODE_ANALYSIS_REQUESTED}"
-            )
+            data["topic_code_analysis_requested"] = TOPIC_CODE_ANALYSIS_REQUESTED
         if not data.get("topic_code_analysis_completed"):
-            data["topic_code_analysis_completed"] = (
-                f"{env}.{TOPIC_BASE_CODE_ANALYSIS_COMPLETED}"
-            )
+            data["topic_code_analysis_completed"] = TOPIC_CODE_ANALYSIS_COMPLETED
         if not data.get("topic_code_analysis_failed"):
-            data["topic_code_analysis_failed"] = (
-                f"{env}.{TOPIC_BASE_CODE_ANALYSIS_FAILED}"
-            )
+            data["topic_code_analysis_failed"] = TOPIC_CODE_ANALYSIS_FAILED
 
         return data
 
@@ -267,41 +236,13 @@ class IntelligenceConfig(BaseModel):
     @field_validator("kafka_environment")
     @classmethod
     def validate_kafka_environment(cls, v: str) -> str:
-        """Validate kafka_environment is properly configured.
+        """Validate kafka_environment label.
 
-        The kafka_environment is used as a prefix for Kafka topic names.
-        An empty or invalid value would result in malformed topic names
-        (e.g., '.omniclaude.session.started.v1' with a leading dot).
-
-        Valid values are: dev, staging, prod (or custom environment names
-        that follow the pattern of lowercase alphanumeric with optional hyphens).
-
-        Raises:
-            ValueError: If kafka_environment is empty or contains invalid characters
+        This field is used as config metadata only (not for topic prefixing
+        per OMN-1972). An empty value is allowed — it simply means no
+        environment label was provided.
         """
-        if not v or not v.strip():
-            raise ValueError(
-                "kafka_environment cannot be empty. "
-                "This field is REQUIRED to prevent malformed topic names. "
-                "Set KAFKA_ENVIRONMENT in your .env file to 'dev', 'staging', or 'prod'. "
-                "Example: KAFKA_ENVIRONMENT=dev"
-            )
-
-        v = v.strip().lower()
-
-        # Validate format: lowercase alphanumeric with optional hyphens
-        # Must start and end with alphanumeric
-        import re
-
-        if not re.match(r"^[a-z][a-z0-9-]*[a-z0-9]$|^[a-z]$", v):
-            raise ValueError(
-                f"kafka_environment '{v}' has invalid format. "
-                "Must be lowercase alphanumeric, may contain hyphens, "
-                "and must start/end with a letter or number. "
-                "Valid examples: 'dev', 'staging', 'prod', 'test-env'"
-            )
-
-        return v
+        return v.strip().lower() if v else v
 
     @model_validator(mode="after")
     def validate_configuration_complete(self) -> "IntelligenceConfig":
@@ -345,15 +286,12 @@ class IntelligenceConfig(BaseModel):
 
         Raises:
             ValueError: If KAFKA_BOOTSTRAP_SERVERS is not configured in environment
-            ValueError: If KAFKA_ENVIRONMENT is empty (would cause malformed topic names)
 
         Example:
-            >>> # Ensure KAFKA_BOOTSTRAP_SERVERS and KAFKA_ENVIRONMENT are set in .env
+            >>> # Ensure KAFKA_BOOTSTRAP_SERVERS is set in .env
             >>> config = IntelligenceConfig.from_env()
             >>> print(config.kafka_bootstrap_servers)
             kafka.example.com:9092
-            >>> print(config.kafka_environment)
-            dev
         """
         # Get bootstrap servers from settings (fail-fast if not configured)
         bootstrap_servers = settings.get_effective_kafka_bootstrap_servers()
@@ -365,18 +303,8 @@ class IntelligenceConfig(BaseModel):
                 "Example: KAFKA_BOOTSTRAP_SERVERS=kafka.example.com:9092"
             )
 
-        # Validate kafka_environment (fail-fast if empty to prevent malformed topic names)
-        kafka_env = settings.kafka_environment
-        if not kafka_env or not kafka_env.strip():
-            raise ValueError(
-                "KAFKA_ENVIRONMENT is not configured. "
-                "This field is REQUIRED to prevent malformed topic names "
-                "(e.g., '.omniclaude.session.started.v1' with a leading dot). "
-                "Set KAFKA_ENVIRONMENT in your .env file to 'dev', 'staging', or 'prod'. "
-                "Example: KAFKA_ENVIRONMENT=dev"
-            )
-
-        # Topic names are built dynamically by model validator using kafka_environment
+        # kafka_environment is metadata only (not used for topic prefixing per OMN-1972)
+        # Topic names are populated by model validator from constants (no prefix)
         return cls(
             kafka_bootstrap_servers=bootstrap_servers,
             kafka_enable_intelligence=settings.use_event_routing,
