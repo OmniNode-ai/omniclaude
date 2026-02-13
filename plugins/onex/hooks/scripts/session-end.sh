@@ -113,17 +113,14 @@ if [[ -n "$SESSION_DURATION" && "$SESSION_DURATION" != "0" ]]; then
     DURATION_SECONDS=$(awk -v ms="$SESSION_DURATION" 'BEGIN{v=ms/1000; printf "%.3f", (v<0?0:v)}' 2>/dev/null || echo "0")
 fi
 
-# Read correlation_id from registry BEFORE backgrounded subshells (OMN-2190)
+# Read correlation_id from state file BEFORE backgrounded subshells (OMN-2190)
 # Must happen in main shell to avoid race with cleanup at end.
+# Uses jq instead of Python to avoid ~30-50ms interpreter startup on the
+# synchronous path (preserves <50ms SessionEnd budget).
 CORRELATION_ID=""
-if [[ -f "${HOOKS_LIB}/correlation_manager.py" ]]; then
-    CORRELATION_ID=$(HOOKS_LIB="$HOOKS_LIB" "$PYTHON_CMD" -c "
-import os, sys
-sys.path.insert(0, os.environ['HOOKS_LIB'])
-from correlation_manager import get_correlation_id
-cid = get_correlation_id()
-print(cid if cid else '')
-" 2>/dev/null) || CORRELATION_ID=""
+CORRELATION_STATE_FILE="${HOME}/.claude/hooks/.state/correlation_id.json"
+if [[ -f "$CORRELATION_STATE_FILE" ]]; then
+    CORRELATION_ID=$(jq -r '.correlation_id // empty' "$CORRELATION_STATE_FILE" 2>/dev/null) || CORRELATION_ID=""
 fi
 
 # Emit session.ended event to Kafka (backgrounded for parallelism)
@@ -225,7 +222,7 @@ print(result.outcome)
 
         # --- Emit session.outcome event ---
         # Wire payload must match ModelClaudeCodeSessionOutcome (extra="forbid"):
-        #   session_id, outcome, error, correlation_id
+        #   session_id, outcome, correlation_id
         # Stripped: emitted_at, active_ticket (OMN-2190)
 
         if ! OUTCOME_PAYLOAD=$(jq -n \

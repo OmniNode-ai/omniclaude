@@ -18,6 +18,7 @@ import json
 from uuid import uuid4
 
 import pytest
+from omnibase_core.models.core.model_error_details import ModelErrorDetails
 from omnibase_core.models.hooks.claude_code.model_claude_code_session_outcome import (
     ModelClaudeCodeSessionOutcome,
 )
@@ -1190,3 +1191,71 @@ class TestWireFormatCompatibility:
         assert str(model.session_id) == session_id
         assert model.outcome.value == "abandoned"
         assert model.correlation_id is None
+
+    def test_payload_with_error_none_accepted(self) -> None:
+        """Wire payload with error=None (explicit) deserializes successfully."""
+        wire_payload = {
+            "session_id": str(uuid4()),
+            "outcome": "success",
+            "error": None,
+        }
+
+        model = ModelClaudeCodeSessionOutcome(**wire_payload)
+        assert model.error is None
+
+    def test_payload_without_error_field_accepted(self) -> None:
+        """Wire payload with error field omitted deserializes (defaults to None)."""
+        wire_payload = {
+            "session_id": str(uuid4()),
+            "outcome": "abandoned",
+        }
+
+        model = ModelClaudeCodeSessionOutcome(**wire_payload)
+        assert model.error is None
+
+    def test_payload_with_error_details_accepted(self) -> None:
+        """Wire payload with a valid ModelErrorDetails error is accepted."""
+        error = ModelErrorDetails(
+            error_code="TOOL_EXECUTION_FAILED",
+            error_type="runtime",
+            error_message="File not found during edit operation",
+            component="Edit",
+        )
+        wire_payload = {
+            "session_id": str(uuid4()),
+            "outcome": "failed",
+            "error": error.model_dump(),
+            "correlation_id": str(uuid4()),
+        }
+
+        model = ModelClaudeCodeSessionOutcome(**wire_payload)
+        assert model.error is not None
+        assert model.error.error_code == "TOOL_EXECUTION_FAILED"
+        assert model.error.error_type == "runtime"
+        assert model.error.error_message == "File not found during edit operation"
+        assert model.error.component == "Edit"
+
+    def test_json_roundtrip_with_error_details(self) -> None:
+        """Wire payload with error details survives JSON serialization roundtrip."""
+        session_id = str(uuid4())
+        error = ModelErrorDetails(
+            error_code="SESSION_TIMEOUT",
+            error_type="system",
+            error_message="Session timed out after 300s",
+        )
+
+        jq_output = json.dumps(
+            {
+                "session_id": session_id,
+                "outcome": "failed",
+                "error": error.model_dump(mode="json"),
+            }
+        )
+
+        wire_data = json.loads(jq_output)
+        model = ModelClaudeCodeSessionOutcome(**wire_data)
+
+        assert str(model.session_id) == session_id
+        assert model.outcome.value == "failed"
+        assert model.error is not None
+        assert model.error.error_code == "SESSION_TIMEOUT"
