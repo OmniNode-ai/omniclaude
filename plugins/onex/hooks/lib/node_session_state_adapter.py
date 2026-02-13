@@ -168,7 +168,11 @@ def cmd_end(stdin_data: dict) -> dict:
         State,
         reduce,
     )
-    from node_session_state_effect import read_run_context, write_run_context
+    from node_session_state_effect import (
+        read_run_context,
+        update_session_index,
+        write_run_context,
+    )
 
     run_id = _get_key(stdin_data, "run_id", "runId")
     if not run_id:
@@ -199,6 +203,25 @@ def cmd_end(stdin_data: dict) -> dict:
     ctx.state = next_state.value
     ctx.updated_at = _now_iso()
     write_run_context(ctx)
+
+    # Best-effort: clear active_run_id if it references the ended run.
+    # Uses atomic read-modify-write to avoid TOCTOU races. Lock timeout
+    # is acceptable — the run doc is already in run_ended state and GC
+    # will eventually clean up the stale active_run_id reference.
+    try:
+        now = _now_iso()
+
+        def _mutate_clear_active(index):
+            if index.active_run_id == run_id:
+                index.active_run_id = None
+                index.updated_at = now
+            return index
+
+        update_session_index(_mutate_clear_active)
+    except Exception as e:
+        print(
+            f"WARNING: Failed to clear active_run_id for {run_id}: {e}", file=sys.stderr
+        )
 
     return {"run_id": run_id, "state": next_state.value}
 

@@ -482,9 +482,9 @@ class TestGarbageCollection:
         removed = gc_stale_runs()
         assert removed == 1
 
-        # active_run_id should be cleared (empty string, not the deleted run)
+        # active_run_id should be cleared to None (consistent with contract default)
         loaded = read_session_index()
-        assert loaded.active_run_id == ""
+        assert loaded.active_run_id is None
         assert loaded.recent_run_ids == []
 
 

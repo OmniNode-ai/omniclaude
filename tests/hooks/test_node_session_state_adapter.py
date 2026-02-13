@@ -168,6 +168,48 @@ class TestEndCommand:
         assert ctx is not None
         assert ctx.state == "run_ended"
 
+    def test_end_clears_active_run_id_when_active(self) -> None:
+        """end command clears active_run_id in session.json when ended run is active."""
+        from node_session_state_effect import read_session_index
+
+        init_result = _run_adapter("init", {"session_id": "sess-end-active"})
+        run_id = init_result["run_id"]
+
+        # Verify the run is the active one
+        index = read_session_index()
+        assert index.active_run_id == run_id
+
+        # End the run
+        end_result = _run_adapter("end", {"run_id": run_id})
+        assert end_result["state"] == "run_ended"
+
+        # active_run_id should now be None
+        index = read_session_index()
+        assert index.active_run_id is None
+
+    def test_end_preserves_active_run_id_when_different(self) -> None:
+        """end command does not clear active_run_id if it references a different run."""
+        from node_session_state_effect import read_session_index
+
+        # Create two runs — the second becomes active
+        init1 = _run_adapter("init", {"session_id": "sess-end-other"})
+        run_id_1 = init1["run_id"]
+
+        init2 = _run_adapter("init", {"session_id": "sess-end-other"})
+        run_id_2 = init2["run_id"]
+
+        # Verify run_id_2 is now active
+        index = read_session_index()
+        assert index.active_run_id == run_id_2
+
+        # End run_id_1 (not the active run)
+        end_result = _run_adapter("end", {"run_id": run_id_1})
+        assert end_result["state"] == "run_ended"
+
+        # active_run_id should still be run_id_2
+        index = read_session_index()
+        assert index.active_run_id == run_id_2
+
     def test_end_without_run_id_returns_empty(self) -> None:
         """end command with missing run_id returns empty dict."""
         result = _run_adapter("end", {})

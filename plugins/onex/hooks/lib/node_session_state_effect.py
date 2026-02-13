@@ -435,7 +435,7 @@ def gc_stale_runs() -> int:
                 rid for rid in index.recent_run_ids if rid not in gc_set
             ]
             if index.active_run_id and index.active_run_id in gc_set:
-                index.active_run_id = ""
+                index.active_run_id = None
             index.updated_at = datetime.now(UTC).isoformat()
             return index
 
