@@ -5,7 +5,7 @@
 # branch protection settings (Settings → Branches → main).
 #
 # Added: OMN-1876
-# Last verified: 2026-02-12 (PR #136)
+# Last verified: 2026-02-13 (PR #137 base checks, gate jobs added in OMN-1841)
 
 required_checks:
   # ── ci-cd.yml (primary pipeline) ──────────────────────────────────────────

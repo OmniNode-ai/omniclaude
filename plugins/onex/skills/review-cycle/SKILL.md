@@ -300,6 +300,14 @@ Display a summary table:
 
 **If `--auto`**: skip to Step 4 automatically (auto-selects Critical+Major).
 
+> **Design decision**: `--auto` intentionally skips MINOR issues despite their BLOCKING
+> classification in interactive mode. MINOR issues (edge cases, missing documentation,
+> incomplete handling) frequently require human judgment about intent, acceptable tradeoffs,
+> and project-specific context. Auto-fixing them risks introducing incorrect behavior or
+> unnecessary churn. Critical and Major issues have unambiguous fixes (security holes,
+> bugs, crashes) that are safe to auto-apply. MINOR issues are surfaced in the final
+> summary for the user to address in a subsequent interactive pass.
+
 **If no blocking issues**: report summary, skip to Step 8 (final summary).
 
 ### Step 4: Fix Selection
@@ -353,8 +361,10 @@ AskUserQuestion with options:
 1. **"Commit"** -- default message: `fix(review-cycle): fix {n} {severity} issues`
 2. **"Commit with custom message"** -- prompt for message
 3. **"Stage only (don't commit)"** -- leave files staged, proceed
-4. **"Discard current batch"** -- `git restore --staged --worktree .`
-5. **"Discard all changes"** -- `git stash pop` (restores pre-review state)
+4. **"Discard current batch"** -- `git restore --staged --worktree {batch_modified_files}`
+5. **"Discard all changes"** -- `git checkout -- . && git stash apply {restore_sha}` (restores pre-review state).
+
+   > **WARNING**: `git checkout -- .` discards ALL uncommitted changes in the working tree, not just changes from this review cycle. If you used `--files` to scope the review to specific files, this option still destroys changes in ALL files. If you have unrelated uncommitted work, use the restore point approach ("Discard current batch" with per-batch `git restore`) or commit unrelated changes before starting the review cycle. The restore point only covers changes that were stashable at review start.
 
 ### Step 7: Continue Loop
 
