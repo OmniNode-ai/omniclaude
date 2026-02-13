@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import enum
 import fcntl
+import itertools
 import json
 import os
 import re
@@ -27,6 +28,7 @@ import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -46,6 +48,10 @@ CLAUDE_STATE_GC_TTL_SECONDS = int(
 
 # GC runs at most once per this interval
 _GC_INTERVAL_SECONDS = 600  # 10 minutes
+
+# Monotonic counter for unique tmp filenames in _atomic_write.
+# Prevents collision when same PID+thread performs concurrent writes.
+_atomic_write_counter = itertools.count()
 
 
 # =============================================================================
@@ -198,7 +204,8 @@ def _atomic_write(target: Path, data: str) -> None:
         data: String content to write.
     """
     target.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = target.parent / f".tmp.{os.getpid()}.{threading.get_ident()}"
+    seq = next(_atomic_write_counter)
+    tmp_path = target.parent / f".tmp.{os.getpid()}.{threading.get_ident()}.{seq}"
     fd = os.open(str(tmp_path), os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o644)
     try:
         os.write(fd, data.encode("utf-8"))
@@ -206,6 +213,15 @@ def _atomic_write(target: Path, data: str) -> None:
     finally:
         os.close(fd)
     tmp_path.rename(target)
+    # Best-effort: ensure rename is durable
+    try:
+        dir_fd = os.open(str(target.parent), os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    except OSError:
+        pass
 
 
 # =============================================================================
@@ -315,8 +331,8 @@ def read_run_context(run_id: str) -> ContractRunContext | None:
     Returns:
         ContractRunContext if found and valid, None otherwise.
     """
-    path = _run_context_path(run_id)
     try:
+        path = _run_context_path(run_id)
         if not path.exists():
             return None
         raw = path.read_text(encoding="utf-8")
@@ -341,6 +357,10 @@ def gc_stale_runs() -> int:
 
     Removes run docs where state == "run_ended" AND older than GC TTL.
     Time-gated via stamp file to run at most once per 10 minutes.
+
+    After deleting stale run files, atomically updates the session index
+    to remove GC'd run_ids from ``recent_run_ids`` and clears
+    ``active_run_id`` if it references a deleted run.
 
     Returns:
         Number of run documents removed.
@@ -368,6 +388,7 @@ def gc_stale_runs() -> int:
         return 0
 
     removed = 0
+    removed_run_ids: list[str] = []
     now = time.time()
     cutoff = now - CLAUDE_STATE_GC_TTL_SECONDS
 
@@ -398,10 +419,29 @@ def gc_stale_runs() -> int:
                 ):
                     path.unlink()
                     removed += 1
+                    removed_run_ids.append(ctx.run_id)
             except Exception:
                 continue
     except OSError:
         pass
+
+    # Clean up session index references to GC'd runs.
+    # Without this, session.json would reference non-existent run files.
+    if removed_run_ids:
+        gc_set = set(removed_run_ids)
+
+        def _mutate_gc(index: ContractSessionIndex) -> ContractSessionIndex:
+            index.recent_run_ids = [
+                rid for rid in index.recent_run_ids if rid not in gc_set
+            ]
+            if index.active_run_id and index.active_run_id in gc_set:
+                index.active_run_id = ""
+            index.updated_at = datetime.now(UTC).isoformat()
+            return index
+
+        # Best-effort: if the lock times out, the index will have stale
+        # references but no data corruption. Next GC cycle will retry.
+        update_session_index(_mutate_gc)
 
     return removed
 
@@ -410,7 +450,9 @@ def gc_stale_runs() -> int:
 # Handler Registry
 # =============================================================================
 
-HANDLERS: dict[str, Callable] = {
+# Handlers have heterogeneous signatures (varying arity and return types),
+# so the registry uses Callable[..., Any] rather than a single concrete type.
+HANDLERS: dict[str, Callable[..., Any]] = {
     "read_session_index": read_session_index,
     "write_session_index": write_session_index,
     "update_session_index": update_session_index,

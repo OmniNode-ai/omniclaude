@@ -123,9 +123,25 @@ def cmd_init(stdin_data: dict) -> dict:
         return index
 
     lock_result = update_session_index(_mutate_init)
-    if lock_result == LockResult.TIMEOUT:
-        print("WARNING: Lock timeout writing session index", file=sys.stderr)
-        # Run doc was already written; index update failed. Fail-open.
+    if lock_result != LockResult.ACQUIRED:
+        print(
+            f"WARNING: Lock {lock_result.value} writing session index", file=sys.stderr
+        )
+        # Run doc was already written; index update failed — orphan run doc.
+        # Best-effort cleanup: delete the orphan run doc so it doesn't sit on
+        # disk until GC catches it (~28 hours at 7x orphan TTL).
+        print(f"WARNING: Orphan run doc {run_id}, attempting cleanup", file=sys.stderr)
+        try:
+            from node_session_state_effect import _run_context_path
+
+            orphan_path = _run_context_path(run_id)
+            if orphan_path.exists():
+                orphan_path.unlink()
+        except Exception as cleanup_err:
+            print(
+                f"WARNING: Failed to clean orphan run doc {run_id}: {cleanup_err}",
+                file=sys.stderr,
+            )
         return {}
 
     # Time-gated GC check (only on init)
@@ -159,6 +175,8 @@ def cmd_end(stdin_data: dict) -> dict:
         print("WARNING: No run_id/runId provided in stdin", file=sys.stderr)
         return {}
 
+    # Note: concurrent cmd_end on same run_id is benign (both write
+    # run_ended, last-writer-wins on updated_at).
     ctx = read_run_context(run_id)
     if ctx is None:
         print(f"WARNING: Run context not found for {run_id}", file=sys.stderr)
@@ -221,8 +239,10 @@ def cmd_set_active_run(stdin_data: dict) -> dict:
         return index
 
     lock_result = update_session_index(_mutate_set_active)
-    if lock_result == LockResult.TIMEOUT:
-        print("WARNING: Lock timeout writing session index", file=sys.stderr)
+    if lock_result != LockResult.ACQUIRED:
+        print(
+            f"WARNING: Lock {lock_result.value} writing session index", file=sys.stderr
+        )
         return {}
 
     return {"active_run_id": run_id}

@@ -120,6 +120,10 @@ class TestRunContext:
         """Reading non-existent run context returns None."""
         assert read_run_context("nonexistent-run") is None
 
+    def test_read_path_traversal_returns_none(self) -> None:
+        """Reading with a path-traversal run_id returns None instead of raising."""
+        assert read_run_context("../etc/passwd") is None
+
     def test_write_read_roundtrip(self) -> None:
         """Write then read run context preserves all fields."""
         now = datetime.now(UTC).isoformat()
@@ -171,6 +175,39 @@ class TestAtomicWrite:
         target = tmp_path / "sub" / "dir" / "file.json"
         _atomic_write(target, '{"nested": true}')
         assert target.exists()
+
+    def test_fsyncs_parent_directory_after_rename(self, tmp_path, monkeypatch) -> None:
+        """Atomic write fsyncs the parent directory after rename for crash safety."""
+        target = tmp_path / "durable.json"
+
+        # Track os.open, os.fsync, and os.close calls to detect dir fsync
+        real_open = os.open
+        real_fsync = os.fsync
+        real_close = os.close
+
+        dir_fd_opened: list[int] = []
+        dir_fd_fsynced: list[int] = []
+
+        def patched_open(path, flags, *args, **kwargs):
+            fd = real_open(path, flags, *args, **kwargs)
+            # Detect O_RDONLY opens on the parent directory (the dir fsync pattern)
+            if flags == os.O_RDONLY and path == str(target.parent):
+                dir_fd_opened.append(fd)
+            return fd
+
+        def patched_fsync(fd):
+            if fd in dir_fd_opened:
+                dir_fd_fsynced.append(fd)
+            return real_fsync(fd)
+
+        monkeypatch.setattr(os, "open", patched_open)
+        monkeypatch.setattr(os, "fsync", patched_fsync)
+
+        _atomic_write(target, '{"durable": true}')
+
+        assert target.exists()
+        assert len(dir_fd_opened) == 1, "Expected os.open on parent dir with O_RDONLY"
+        assert len(dir_fd_fsynced) == 1, "Expected os.fsync called on parent dir fd"
 
 
 # =============================================================================
@@ -346,6 +383,109 @@ class TestGarbageCollection:
 
         removed = gc_stale_runs()
         assert removed == 1
+
+    def test_gc_cleans_session_index_recent_run_ids(self, monkeypatch) -> None:
+        """GC removes deleted run_ids from session.json recent_run_ids."""
+        from node_session_state_effect import _gc_stamp_path, update_session_index
+
+        # Use 1-hour TTL so ended runs 5h old are GC'd, but active runs
+        # within orphan cutoff (7h) survive.
+        monkeypatch.setattr(
+            "node_session_state_effect.CLAUDE_STATE_GC_TTL_SECONDS", 3600
+        )
+        monkeypatch.setattr("node_session_state_effect._GC_INTERVAL_SECONDS", 0)
+
+        old_time = (datetime.now(UTC) - timedelta(hours=5)).isoformat()
+
+        # Create two stale ended runs (5h old, past the 1h TTL)
+        for rid in ("stale-run-1", "stale-run-2"):
+            write_run_context(
+                ContractRunContext(
+                    run_id=rid,
+                    session_id="sess-gc",
+                    state="run_ended",
+                    created_at=old_time,
+                    updated_at=old_time,
+                )
+            )
+
+        # Create one active run that should survive (5h old but within 7h orphan cutoff)
+        write_run_context(
+            ContractRunContext(
+                run_id="alive-run",
+                session_id="sess-gc",
+                state="run_active",
+                created_at=old_time,
+                updated_at=old_time,
+            )
+        )
+
+        # Set up session index referencing all three runs
+        now = datetime.now(UTC).isoformat()
+
+        def _setup(index):
+            index.active_run_id = "stale-run-1"
+            index.recent_run_ids = ["stale-run-1", "stale-run-2", "alive-run"]
+            index.updated_at = now
+            return index
+
+        update_session_index(_setup)
+
+        # Remove stamp to allow GC to run
+        stamp = _gc_stamp_path()
+        if stamp.exists():
+            stamp.unlink()
+
+        removed = gc_stale_runs()
+        assert removed == 2
+
+        # Verify session index was cleaned
+        loaded = read_session_index()
+        assert "stale-run-1" not in loaded.recent_run_ids
+        assert "stale-run-2" not in loaded.recent_run_ids
+        assert "alive-run" in loaded.recent_run_ids
+
+    def test_gc_clears_active_run_id_if_gcd(self, monkeypatch) -> None:
+        """GC clears active_run_id when it references a deleted run."""
+        from node_session_state_effect import _gc_stamp_path, update_session_index
+
+        monkeypatch.setattr("node_session_state_effect.CLAUDE_STATE_GC_TTL_SECONDS", 0)
+        monkeypatch.setattr("node_session_state_effect._GC_INTERVAL_SECONDS", 0)
+
+        old_time = (datetime.now(UTC) - timedelta(hours=5)).isoformat()
+
+        # Create a stale run that is also the active run
+        write_run_context(
+            ContractRunContext(
+                run_id="active-but-stale",
+                session_id="sess-gc2",
+                state="run_ended",
+                created_at=old_time,
+                updated_at=old_time,
+            )
+        )
+
+        now = datetime.now(UTC).isoformat()
+
+        def _setup(index):
+            index.active_run_id = "active-but-stale"
+            index.recent_run_ids = ["active-but-stale"]
+            index.updated_at = now
+            return index
+
+        update_session_index(_setup)
+
+        stamp = _gc_stamp_path()
+        if stamp.exists():
+            stamp.unlink()
+
+        removed = gc_stale_runs()
+        assert removed == 1
+
+        # active_run_id should be cleared (empty string, not the deleted run)
+        loaded = read_session_index()
+        assert loaded.active_run_id == ""
+        assert loaded.recent_run_ids == []
 
 
 # =============================================================================

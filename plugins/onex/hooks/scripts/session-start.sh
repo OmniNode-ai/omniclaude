@@ -294,28 +294,66 @@ start_emit_daemon_if_needed
 # -----------------------------
 # Sync path: mkdir only (O(1), <5ms).
 # Async path: adapter creates run + updates index (backgrounded).
-# Duplicate spawn guard: PID file with fail-open.
+# Idempotency: stamp file (.done) prevents re-init on reconnect.
+# Concurrency: PID file (.pid) prevents duplicate concurrent spawns.
 
 _init_session_state() {
     # Sync: ensure state directory exists (O(1))
     mkdir -p "${HOME}/.claude/state/runs" 2>/dev/null || true
 
-    # Guard: prevent duplicate background spawns for same session
+    # Sanitize SESSION_ID for safe use in filenames
     local safe_id
     safe_id=$(echo "$SESSION_ID" | tr -cd 'a-zA-Z0-9-')
-    local guard_file="/tmp/omniclaude-state-init-${safe_id}.pid"
-    if [[ -f "$guard_file" ]] && kill -0 "$(cat "$guard_file" 2>/dev/null)" 2>/dev/null; then
-        log "Session state init already running (PID $(cat "$guard_file")), skipping"
-        return 0
+
+    # Empty SESSION_ID safety: skip idempotency AND PID guards entirely.
+    # When safe_id is empty, both the stamp file (.done) and PID guard file (.pid)
+    # would collapse to a shared path for ALL empty-ID sessions, causing
+    # cross-session interference. Idempotency for empty sessions isn't critical
+    # since the data will be overwritten anyway.
+    if [[ -z "$safe_id" ]]; then
+        log "WARNING: Empty SESSION_ID, skipping idempotency and PID guards"
+    else
+        # Idempotency guard: prevent duplicate init on reconnect.
+        # SessionStart may fire multiple times for the same session (reconnects).
+        # The stamp file persists after the adapter completes, so subsequent calls
+        # for the same session return immediately (O(1) file existence check).
+        # Cleanup: /tmp is cleared on reboot (both Linux and macOS), so stamp
+        # files do not accumulate across reboots. No active cleanup needed.
+        local stamp_file="/tmp/omniclaude-state-init-${safe_id}.done"
+        if [[ -f "$stamp_file" ]]; then
+            log "Session state already initialized (stamp: $stamp_file), skipping"
+            return 0
+        fi
+
+        # PID guard: prevent duplicate concurrent spawns for same session.
+        # This protects against rapid-fire SessionStart events before the first
+        # background adapter call has finished and written the stamp file.
+        local guard_file="/tmp/omniclaude-state-init-${safe_id}.pid"
+        if [[ -f "$guard_file" ]] && kill -0 "$(cat "$guard_file" 2>/dev/null)" 2>/dev/null; then
+            log "Session state init already running (PID $(cat "$guard_file")), skipping"
+            return 0
+        fi
     fi
 
     # Async: background the adapter call
     if [[ -f "${HOOKS_LIB}/node_session_state_adapter.py" ]]; then
         (
-            echo "$BASHPID" > "$guard_file" 2>/dev/null || true
+            # Write PID guard only when safe_id is non-empty (guard_file is defined)
+            if [[ -n "$safe_id" ]]; then
+                echo "$BASHPID" > "/tmp/omniclaude-state-init-${safe_id}.pid" 2>/dev/null || true
+            fi
             echo "$INPUT" | "$PYTHON_CMD" "${HOOKS_LIB}/node_session_state_adapter.py" init \
                 >> "$LOG_FILE" 2>&1
-            rm -f "$guard_file" 2>/dev/null || true
+            local adapter_exit=$?
+            # Clean up PID guard and write stamp only when safe_id is non-empty
+            if [[ -n "$safe_id" ]]; then
+                rm -f "/tmp/omniclaude-state-init-${safe_id}.pid" 2>/dev/null || true
+                # Write stamp file ONLY on successful adapter completion.
+                # This ensures a failed init will be retried on next reconnect.
+                if [[ $adapter_exit -eq 0 ]]; then
+                    echo "$$" > "/tmp/omniclaude-state-init-${safe_id}.done" 2>/dev/null || true
+                fi
+            fi
         ) &
         log "Session state init started in background (PID: $!)"
     fi

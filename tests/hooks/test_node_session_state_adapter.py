@@ -353,6 +353,47 @@ class TestErrorHandling:
             fcntl.flock(fd, fcntl.LOCK_UN)
             os.close(fd)
 
+    def test_lock_error_init_returns_empty(self, monkeypatch) -> None:
+        """LockResult.ERROR during init returns {} without crashing."""
+        from node_session_state_effect import LockResult
+
+        monkeypatch.setattr(
+            "node_session_state_effect.update_session_index",
+            lambda _mutate_fn: LockResult.ERROR,
+        )
+        result = _run_adapter("init", {"session_id": "sess-lock-err"})
+        assert result == {}
+
+    def test_lock_error_init_cleans_orphan_run_doc(self, monkeypatch) -> None:
+        """LockResult.ERROR during init cleans up the orphan run doc."""
+        from node_session_state_effect import LockResult, _runs_dir
+
+        monkeypatch.setattr(
+            "node_session_state_effect.update_session_index",
+            lambda _mutate_fn: LockResult.ERROR,
+        )
+        result = _run_adapter("init", {"session_id": "sess-orphan"})
+        assert result == {}
+
+        # Verify no run doc files remain (orphan was cleaned up)
+        runs = _runs_dir()
+        if runs.exists():
+            json_files = list(runs.glob("*.json"))
+            assert len(json_files) == 0, (
+                f"Orphan run doc not cleaned up: {[f.name for f in json_files]}"
+            )
+
+    def test_lock_error_set_active_run_returns_empty(self, monkeypatch) -> None:
+        """LockResult.ERROR during set-active-run returns {} without crashing."""
+        from node_session_state_effect import LockResult
+
+        monkeypatch.setattr(
+            "node_session_state_effect.update_session_index",
+            lambda _mutate_fn: LockResult.ERROR,
+        )
+        result = _run_adapter("set-active-run", {"run_id": "run-lock-err"})
+        assert result == {}
+
 
 # =============================================================================
 # Command Registry Tests
