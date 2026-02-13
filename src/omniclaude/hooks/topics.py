@@ -247,9 +247,11 @@ def build_topic(prefix: str, base: str) -> str:
     """Build full topic name from prefix and base.
 
     Args:
-        prefix: Environment prefix (e.g., "dev", "staging", "prod").
-            Must be a string without dots. If empty or whitespace-only,
-            returns just the base topic name.
+        prefix: Topic prefix string. Must be a string without dots.
+            If empty or whitespace-only, returns just the base topic name.
+            Per OMN-1972, callers should always pass empty string ("") since
+            TopicBase values are the canonical wire topic names with no
+            environment prefix.
         base: Base topic name from TopicBase (e.g., "omniclaude.session.started.v1").
             Must be a valid dotted topic name.
 

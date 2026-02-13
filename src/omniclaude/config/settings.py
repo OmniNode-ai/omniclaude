@@ -19,7 +19,7 @@ Required environment variables when services are enabled:
 
     # Kafka (required when USE_EVENT_ROUTING=true)
     KAFKA_BOOTSTRAP_SERVERS=localhost:9092
-    KAFKA_ENVIRONMENT=dev  # or staging, prod - MUST be explicit
+    KAFKA_ENVIRONMENT=dev  # optional, used for logging/observability only
 
     # PostgreSQL (required when ENABLE_POSTGRES=true)
     # Option A: Full DSN (preferred, takes precedence)
@@ -98,9 +98,9 @@ class Settings(BaseSettings):
     kafka_environment: str = Field(
         default="",
         description=(
-            "Kafka topic environment prefix (dev, staging, prod). "
-            "REQUIRED when USE_EVENT_ROUTING=true. No default to prevent "
-            "accidental cross-environment event routing."
+            "Environment label (dev, staging, prod) for logging and observability. "
+            "Not used for topic prefixing (OMN-1972). Optional even when "
+            "USE_EVENT_ROUTING=true."
         ),
     )
     kafka_group_id: str = Field(
@@ -283,7 +283,7 @@ class Settings(BaseSettings):
         default=False,
         description=(
             "Enable event-based agent routing via Kafka. When True, "
-            "KAFKA_BOOTSTRAP_SERVERS and KAFKA_ENVIRONMENT must be configured. "
+            "KAFKA_BOOTSTRAP_SERVERS must be configured. "
             "Defaults to False for safety."
         ),
     )
@@ -476,20 +476,15 @@ class Settings(BaseSettings):
 
         # =====================================================================
         # KAFKA VALIDATION
-        # When event routing is enabled, both bootstrap servers AND environment
-        # must be explicitly configured. No defaults to prevent cross-env routing.
+        # When event routing is enabled, bootstrap servers must be configured.
+        # KAFKA_ENVIRONMENT is optional (used for logging/observability only,
+        # not for topic prefixing per OMN-1972).
         # =====================================================================
         if self.use_event_routing:
             if not self.get_effective_kafka_bootstrap_servers():
                 errors.append(
                     "KAFKA_BOOTSTRAP_SERVERS is required when USE_EVENT_ROUTING=true. "
                     "Set KAFKA_BOOTSTRAP_SERVERS in .env or set USE_EVENT_ROUTING=false."
-                )
-            if not self.kafka_environment:
-                errors.append(
-                    "KAFKA_ENVIRONMENT is required when USE_EVENT_ROUTING=true. "
-                    "Must be explicitly set to 'dev', 'staging', or 'prod' to prevent "
-                    "accidental cross-environment event routing."
                 )
 
         # =====================================================================

@@ -13,7 +13,6 @@ Usage:
         close_shared_producer,
         create_event_envelope,
         get_kafka_bootstrap_servers,
-        get_kafka_topic_prefix,
         publish_to_kafka,
         publish_to_kafka_sync,
         KAFKA_PUBLISH_TIMEOUT_SECONDS,
@@ -93,16 +92,6 @@ def get_kafka_bootstrap_servers() -> str:
         default_servers,
     )
     return default_servers
-
-
-def get_kafka_topic_prefix() -> str:
-    """Get Kafka topic prefix from environment variables.
-
-    Returns:
-        Empty string. Topics are realm-agnostic per ONEX convention (OMN-1972):
-        TopicBase values ARE the wire topic names, no environment prefix.
-    """
-    return ""
 
 
 def create_event_envelope(
