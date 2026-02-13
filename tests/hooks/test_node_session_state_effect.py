@@ -46,7 +46,7 @@ pytestmark = pytest.mark.unit
 def _state_dir(tmp_path, monkeypatch):
     """Configure CLAUDE_STATE_DIR to use tmp_path for all tests."""
     state_dir = str(tmp_path / "state")
-    monkeypatch.setattr("node_session_state_effect.CLAUDE_STATE_DIR", state_dir)
+    monkeypatch.setenv("CLAUDE_STATE_DIR", state_dir)
     return state_dir
 
 
@@ -64,6 +64,7 @@ from node_session_state_effect import (
     gc_stale_runs,
     read_run_context,
     read_session_index,
+    update_session_index,
     write_run_context,
     write_session_index,
 )
@@ -271,11 +272,38 @@ class TestFlock:
 
         try:
             # Set a very short timeout
-            monkeypatch.setattr(
-                "node_session_state_effect.CLAUDE_STATE_LOCK_TIMEOUT_MS", 20
-            )
+            monkeypatch.setenv("CLAUDE_STATE_LOCK_TIMEOUT_MS", "20")
             index = ContractSessionIndex(active_run_id="blocked")
             result = write_session_index(index)
+            assert result == LockResult.TIMEOUT
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
+
+    def test_update_session_index_returns_timeout_on_held_lock(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        """update_session_index returns TIMEOUT if the lock is held."""
+        from node_session_state_effect import _session_index_path
+
+        path = _session_index_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}")
+
+        # Hold the lock externally on the dedicated lock file
+        lock_path = path.parent / "session.json.lock"
+        fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR)
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+        try:
+            # Set a very short timeout
+            monkeypatch.setenv("CLAUDE_STATE_LOCK_TIMEOUT_MS", "20")
+            result = update_session_index(
+                lambda idx: ContractSessionIndex(
+                    active_run_id="blocked",
+                    updated_at="2026-01-01T00:00:00+00:00",
+                )
+            )
             assert result == LockResult.TIMEOUT
         finally:
             fcntl.flock(fd, fcntl.LOCK_UN)
@@ -293,7 +321,7 @@ class TestGarbageCollection:
     def test_gc_removes_old_ended_runs(self, monkeypatch) -> None:
         """GC removes run docs where state=run_ended and older than TTL."""
         # Set TTL to 0 so everything is "old"
-        monkeypatch.setattr("node_session_state_effect.CLAUDE_STATE_GC_TTL_SECONDS", 0)
+        monkeypatch.setenv("CLAUDE_STATE_GC_TTL_SECONDS", "0")
 
         old_time = (datetime.now(UTC) - timedelta(hours=5)).isoformat()
         ctx = ContractRunContext(
@@ -319,9 +347,7 @@ class TestGarbageCollection:
     def test_gc_preserves_active_runs(self, monkeypatch) -> None:
         """GC does not remove active runs within orphan TTL (7x normal TTL)."""
         # Use 1 hour TTL — orphan cutoff is 7 hours. A 5-hour-old active run survives.
-        monkeypatch.setattr(
-            "node_session_state_effect.CLAUDE_STATE_GC_TTL_SECONDS", 3600
-        )
+        monkeypatch.setenv("CLAUDE_STATE_GC_TTL_SECONDS", "3600")
 
         old_time = (datetime.now(UTC) - timedelta(hours=5)).isoformat()
         ctx = ContractRunContext(
@@ -350,8 +376,8 @@ class TestGarbageCollection:
         stamp = _gc_stamp_path()
         stamp.parent.mkdir(parents=True, exist_ok=True)
 
-        # Write a recent stamp
-        stamp.write_text(str(time.time()))
+        # Create a recent stamp (mtime = now)
+        stamp.touch()
 
         # GC should return 0 immediately (time-gated)
         removed = gc_stale_runs()
@@ -359,7 +385,7 @@ class TestGarbageCollection:
 
     def test_gc_runs_when_stamp_is_old(self, monkeypatch) -> None:
         """GC runs when stamp file is older than the interval."""
-        monkeypatch.setattr("node_session_state_effect.CLAUDE_STATE_GC_TTL_SECONDS", 0)
+        monkeypatch.setenv("CLAUDE_STATE_GC_TTL_SECONDS", "0")
         monkeypatch.setattr("node_session_state_effect._GC_INTERVAL_SECONDS", 0)
 
         old_time = (datetime.now(UTC) - timedelta(hours=5)).isoformat()
@@ -376,9 +402,9 @@ class TestGarbageCollection:
 
         stamp = _gc_stamp_path()
         stamp.parent.mkdir(parents=True, exist_ok=True)
-        # Set stamp to old time
+        # Set stamp mtime to old time
         old_epoch = time.time() - 700
-        stamp.write_text(str(old_epoch))
+        stamp.touch()
         os.utime(str(stamp), (old_epoch, old_epoch))
 
         removed = gc_stale_runs()
@@ -390,9 +416,7 @@ class TestGarbageCollection:
 
         # Use 1-hour TTL so ended runs 5h old are GC'd, but active runs
         # within orphan cutoff (7h) survive.
-        monkeypatch.setattr(
-            "node_session_state_effect.CLAUDE_STATE_GC_TTL_SECONDS", 3600
-        )
+        monkeypatch.setenv("CLAUDE_STATE_GC_TTL_SECONDS", "3600")
         monkeypatch.setattr("node_session_state_effect._GC_INTERVAL_SECONDS", 0)
 
         old_time = (datetime.now(UTC) - timedelta(hours=5)).isoformat()
@@ -449,7 +473,7 @@ class TestGarbageCollection:
         """GC clears active_run_id when it references a deleted run."""
         from node_session_state_effect import _gc_stamp_path, update_session_index
 
-        monkeypatch.setattr("node_session_state_effect.CLAUDE_STATE_GC_TTL_SECONDS", 0)
+        monkeypatch.setenv("CLAUDE_STATE_GC_TTL_SECONDS", "0")
         monkeypatch.setattr("node_session_state_effect._GC_INTERVAL_SECONDS", 0)
 
         old_time = (datetime.now(UTC) - timedelta(hours=5)).isoformat()
@@ -548,6 +572,7 @@ class TestHandlerRegistry:
             "update_session_index",
             "read_run_context",
             "write_run_context",
+            "delete_run_context",
             "gc_stale_runs",
         }
         assert set(HANDLERS.keys()) == expected

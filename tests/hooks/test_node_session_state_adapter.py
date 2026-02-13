@@ -46,7 +46,7 @@ pytestmark = pytest.mark.unit
 def _state_dir(tmp_path, monkeypatch):
     """Configure CLAUDE_STATE_DIR to use tmp_path for all tests."""
     state_dir = str(tmp_path / "state")
-    monkeypatch.setattr("node_session_state_effect.CLAUDE_STATE_DIR", state_dir)
+    monkeypatch.setenv("CLAUDE_STATE_DIR", state_dir)
     return state_dir
 
 
@@ -262,7 +262,6 @@ class TestConcurrency:
 
     def test_two_concurrent_inits_create_separate_runs(self, monkeypatch) -> None:
         """Two concurrent init calls create distinct run documents."""
-        import node_session_state_effect
         from node_session_state_effect import _runs_dir, _state_dir
 
         # Pre-create directories so threads don't race on mkdir
@@ -270,9 +269,7 @@ class TestConcurrency:
         _runs_dir().mkdir(parents=True, exist_ok=True)
 
         # Give threads enough time to acquire lock sequentially
-        monkeypatch.setattr(
-            node_session_state_effect, "CLAUDE_STATE_LOCK_TIMEOUT_MS", 2000
-        )
+        monkeypatch.setenv("CLAUDE_STATE_LOCK_TIMEOUT_MS", "2000")
 
         results: list[dict] = []
         errors: list[Exception] = []
@@ -385,9 +382,7 @@ class TestErrorHandling:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
         try:
-            monkeypatch.setattr(
-                "node_session_state_effect.CLAUDE_STATE_LOCK_TIMEOUT_MS", 10
-            )
+            monkeypatch.setenv("CLAUDE_STATE_LOCK_TIMEOUT_MS", "10")
             result = _run_adapter("init", {"session_id": "sess-lock"})
             # Should return {} due to lock timeout (fail-open)
             assert result == {}
@@ -424,6 +419,28 @@ class TestErrorHandling:
             assert len(json_files) == 0, (
                 f"Orphan run doc not cleaned up: {[f.name for f in json_files]}"
             )
+
+    def test_cmd_end_succeeds_when_update_session_index_raises(
+        self, monkeypatch
+    ) -> None:
+        """cmd_end still succeeds when update_session_index raises (best-effort)."""
+        # First, create a run to end
+        init_result = _run_adapter("init", {"session_id": "sess-end-lock"})
+        assert "run_id" in init_result
+        run_id = init_result["run_id"]
+
+        # Patch update_session_index to raise during the end command's
+        # best-effort active_run_id clearing
+        def _raise(*args, **kwargs):
+            raise OSError("simulated lock contention")
+
+        monkeypatch.setattr("node_session_state_effect.update_session_index", _raise)
+
+        # cmd_end should still succeed (the update_session_index call is
+        # wrapped in try/except for best-effort behavior)
+        result = _run_adapter("end", {"run_id": run_id})
+        assert result["run_id"] == run_id
+        assert result["state"] == "run_ended"
 
     def test_lock_error_set_active_run_returns_empty(self, monkeypatch) -> None:
         """LockResult.ERROR during set-active-run returns {} without crashing."""

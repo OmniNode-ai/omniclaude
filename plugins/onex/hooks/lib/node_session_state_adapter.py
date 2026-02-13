@@ -132,11 +132,14 @@ def cmd_init(stdin_data: dict) -> dict:
         # disk until GC catches it (~28 hours at 7x orphan TTL).
         print(f"WARNING: Orphan run doc {run_id}, attempting cleanup", file=sys.stderr)
         try:
-            from node_session_state_effect import _run_context_path
+            from node_session_state_effect import delete_run_context
 
-            orphan_path = _run_context_path(run_id)
-            if orphan_path.exists():
-                orphan_path.unlink()
+            deleted = delete_run_context(run_id)
+            if not deleted:
+                print(
+                    f"WARNING: Orphan run doc {run_id} not found or already removed",
+                    file=sys.stderr,
+                )
         except Exception as cleanup_err:
             print(
                 f"WARNING: Failed to clean orphan run doc {run_id}: {cleanup_err}",

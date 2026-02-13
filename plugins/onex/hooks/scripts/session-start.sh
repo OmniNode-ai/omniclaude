@@ -329,8 +329,10 @@ _init_session_state() {
         # This protects against rapid-fire SessionStart events before the first
         # background adapter call has finished and written the stamp file.
         local guard_file="/tmp/omniclaude-state-init-${safe_id}.pid"
-        if [[ -f "$guard_file" ]] && kill -0 "$(cat "$guard_file" 2>/dev/null)" 2>/dev/null; then
-            log "Session state init already running (PID $(cat "$guard_file")), skipping"
+        local guard_pid
+        guard_pid=$(cat "$guard_file" 2>/dev/null)
+        if [[ "$guard_pid" =~ ^[0-9]+$ ]] && kill -0 "$guard_pid" 2>/dev/null; then
+            log "Session state init already running (PID $guard_pid), skipping"
             return 0
         fi
     fi

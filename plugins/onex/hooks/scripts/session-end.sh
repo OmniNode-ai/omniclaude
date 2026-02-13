@@ -327,6 +327,34 @@ if [[ -f "${HOOKS_LIB}/session_marker.py" ]] && [[ -n "${SESSION_ID}" ]]; then
     log "Cleared session injection marker"
 fi
 
+# -----------------------------
+# Session State Teardown (OMN-2119)
+# -----------------------------
+# Transition the active run to run_ended via cmd_end.
+# Mirrors the cmd_init call in session-start.sh. Reads active_run_id from
+# the session index (session.json), then pipes it to the adapter's "end"
+# command. Runs in background to stay within the <50ms budget.
+# If no active run exists (e.g., init failed), this is a no-op.
+if [[ -f "${HOOKS_LIB}/node_session_state_adapter.py" ]]; then
+    (
+        # Read active_run_id from session index
+        SESSION_STATE_DIR="${HOME}/.claude/state"
+        SESSION_INDEX="${SESSION_STATE_DIR}/session.json"
+        ACTIVE_RUN_ID=""
+        if [[ -f "$SESSION_INDEX" ]]; then
+            ACTIVE_RUN_ID=$(jq -r '.active_run_id // ""' "$SESSION_INDEX" 2>/dev/null) || ACTIVE_RUN_ID=""
+        fi
+
+        if [[ -n "$ACTIVE_RUN_ID" ]] && [[ "$ACTIVE_RUN_ID" != "null" ]]; then
+            adapter_stdout=$(echo "{\"run_id\": \"${ACTIVE_RUN_ID}\"}" | "$PYTHON_CMD" "${HOOKS_LIB}/node_session_state_adapter.py" end 2>>"$LOG_FILE")
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] [session-state] cmd_end stdout: ${adapter_stdout:-<empty>}" >> "$LOG_FILE"
+        else
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] [session-state] No active run to end (active_run_id empty or absent)" >> "$LOG_FILE"
+        fi
+    ) &
+    log "Session state teardown started in background (PID: $!)"
+fi
+
 # Output response immediately so Claude Code can proceed with shutdown
 echo "$INPUT"
 

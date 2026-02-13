@@ -36,15 +36,21 @@ from pydantic import BaseModel, ConfigDict, Field
 # Contract-style Configuration (via env vars)
 # =============================================================================
 
-CLAUDE_STATE_DIR = os.environ.get(
-    "CLAUDE_STATE_DIR", str(Path.home() / ".claude" / "state")
-)
-CLAUDE_STATE_LOCK_TIMEOUT_MS = int(
-    os.environ.get("CLAUDE_STATE_LOCK_TIMEOUT_MS", "100")
-)
-CLAUDE_STATE_GC_TTL_SECONDS = int(
-    os.environ.get("CLAUDE_STATE_GC_TTL_SECONDS", "14400")
-)
+
+def _claude_state_dir() -> str:
+    """Return the configured state directory path string (reads env at call time)."""
+    return os.environ.get("CLAUDE_STATE_DIR", str(Path.home() / ".claude" / "state"))
+
+
+def _lock_timeout_ms() -> int:
+    """Return the lock timeout in milliseconds (reads env at call time)."""
+    return int(os.environ.get("CLAUDE_STATE_LOCK_TIMEOUT_MS", "100"))
+
+
+def _gc_ttl_seconds() -> int:
+    """Return the GC TTL in seconds (reads env at call time)."""
+    return int(os.environ.get("CLAUDE_STATE_GC_TTL_SECONDS", "14400"))
+
 
 # GC runs at most once per this interval
 _GC_INTERVAL_SECONDS = 600  # 10 minutes
@@ -101,7 +107,7 @@ class LockResult(enum.Enum):
 
 def _state_dir() -> Path:
     """Return the configured state directory."""
-    return Path(CLAUDE_STATE_DIR)
+    return Path(_claude_state_dir())
 
 
 def _runs_dir() -> Path:
@@ -112,6 +118,11 @@ def _runs_dir() -> Path:
 def _session_index_path() -> Path:
     """Return the path to session.json."""
     return _state_dir() / "session.json"
+
+
+def _now_iso() -> str:
+    """Return current UTC time as ISO 8601 string."""
+    return datetime.now(UTC).isoformat()
 
 
 _SAFE_RUN_ID_RE = re.compile(r"^[a-zA-Z0-9\-]+$")
@@ -264,7 +275,7 @@ def write_session_index(index: ContractSessionIndex) -> LockResult:
     # on session.json would let concurrent processes each lock different inodes.
     # A stable lock file that is never renamed provides true mutual exclusion.
     lock_path = path.parent / "session.json.lock"
-    result, fd = _acquire_lock(lock_path, CLAUDE_STATE_LOCK_TIMEOUT_MS)
+    result, fd = _acquire_lock(lock_path, _lock_timeout_ms())
     if result != LockResult.ACQUIRED:
         return result
 
@@ -296,7 +307,7 @@ def update_session_index(
     path.parent.mkdir(parents=True, exist_ok=True)
 
     lock_path = path.parent / "session.json.lock"
-    result, fd = _acquire_lock(lock_path, CLAUDE_STATE_LOCK_TIMEOUT_MS)
+    result, fd = _acquire_lock(lock_path, _lock_timeout_ms())
     if result != LockResult.ACQUIRED:
         return result
 
@@ -352,6 +363,29 @@ def write_run_context(ctx: ContractRunContext) -> None:
     _atomic_write(path, ctx.model_dump_json(indent=2))
 
 
+def delete_run_context(run_id: str) -> bool:
+    """Delete a run context document by run_id.
+
+    Public wrapper around the private ``_run_context_path`` helper so that
+    callers (e.g. the adapter's orphan cleanup) do not need to import private
+    symbols.
+
+    Args:
+        run_id: The run identifier.
+
+    Returns:
+        True if the file existed and was deleted, False otherwise.
+    """
+    try:
+        path = _run_context_path(run_id)
+        if path.exists():
+            path.unlink()
+            return True
+        return False
+    except Exception:
+        return False
+
+
 def gc_stale_runs() -> int:
     """Garbage-collect stale run documents.
 
@@ -376,10 +410,10 @@ def gc_stale_runs() -> int:
     except OSError:
         pass
 
-    # Update stamp file (even if GC finds nothing)
+    # Update stamp file mtime (even if GC finds nothing)
     try:
         stamp.parent.mkdir(parents=True, exist_ok=True)
-        stamp.write_text(str(time.time()))
+        stamp.touch()
     except OSError:
         pass
 
@@ -390,10 +424,11 @@ def gc_stale_runs() -> int:
     removed = 0
     removed_run_ids: list[str] = []
     now = time.time()
-    cutoff = now - CLAUDE_STATE_GC_TTL_SECONDS
+    gc_ttl = _gc_ttl_seconds()
+    cutoff = now - gc_ttl
 
     # Also define a longer cutoff for orphaned runs (not in "run_ended" state)
-    orphan_cutoff = now - (CLAUDE_STATE_GC_TTL_SECONDS * 7)  # 7x normal TTL
+    orphan_cutoff = now - (gc_ttl * 7)  # 7x normal TTL
 
     try:
         for path in runs_dir.iterdir():
@@ -436,7 +471,7 @@ def gc_stale_runs() -> int:
             ]
             if index.active_run_id and index.active_run_id in gc_set:
                 index.active_run_id = None
-            index.updated_at = datetime.now(UTC).isoformat()
+            index.updated_at = _now_iso()
             return index
 
         # Best-effort: if the lock times out, the index will have stale
@@ -458,5 +493,6 @@ HANDLERS: dict[str, Callable[..., Any]] = {
     "update_session_index": update_session_index,
     "read_run_context": read_run_context,
     "write_run_context": write_run_context,
+    "delete_run_context": delete_run_context,
     "gc_stale_runs": gc_stale_runs,
 }
