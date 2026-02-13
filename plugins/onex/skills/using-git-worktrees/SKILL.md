@@ -209,12 +209,13 @@ MARKER
 When a Claude Code session ends, the SessionEnd hook scans `~/.claude/worktrees/` for worktrees with `.claude-session.json` markers matching the current session ID.
 
 **A worktree is removed if ALL conditions are met:**
-1. Has a valid `.claude-session.json` marker
+1. Has a valid `.claude-session.json` marker with `cleanup_policy: "session-end"`
 2. Marker `session_id` matches the ending session
-3. No uncommitted changes (`git diff --quiet`)
-4. No staged changes (`git diff --cached --quiet`)
-5. No unpushed commits (local HEAD matches upstream)
-6. Path is under `~/.claude/worktrees/` (traversal guard)
+3. `parent_repo_path` from marker exists and is a valid directory
+4. No uncommitted changes (`git diff --quiet`)
+5. No staged changes (`git diff --cached --quiet`)
+6. No unpushed commits (upstream configured, remote ref resolvable, local HEAD matches upstream)
+7. Path is under `~/.claude/worktrees/` (traversal guard)
 
 **If ANY condition fails, the worktree is logged as STALE but NOT deleted.**
 

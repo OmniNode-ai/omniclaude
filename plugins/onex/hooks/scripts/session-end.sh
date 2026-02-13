@@ -407,6 +407,18 @@ if [[ -d "$WORKTREE_BASE" ]]; then
             continue
         fi
 
+        # G2b: parent_repo must differ from worktree dir (misconfigured marker guard)
+        # If an agent writes the marker from inside the worktree itself (violating
+        # SKILL.md), parent_repo_path would equal the worktree path, causing
+        # git-worktree-remove to try to remove the parent repo.
+        _wt_parent_canon=$(cd "$_wt_parent_repo" 2>/dev/null && pwd -P) || _wt_parent_canon=""
+        _wt_dir_canon=$(cd "$_wt_dir" 2>/dev/null && pwd -P) || _wt_dir_canon=""
+        if [[ -n "$_wt_parent_canon" && "$_wt_parent_canon" == "$_wt_dir_canon" ]]; then
+            log "SKIP: parent_repo == worktree_dir (misconfigured marker): ${_wt_dir}"
+            _wt_skipped=$((_wt_skipped + 1))
+            continue
+        fi
+
         # Canonicalize _wt_dir to its physical path so symlinks pointing
         # outside WORKTREE_BASE are caught by the case-prefix guard.
         _wt_dir=$(cd "$_wt_dir" 2>/dev/null && pwd -P) || {
@@ -439,7 +451,15 @@ if [[ -d "$WORKTREE_BASE" ]]; then
             continue
         fi
 
-        # G5: No unpushed commits
+        # G5: No untracked files (datasets, generated files not yet git-added)
+        _wt_untracked=$(git -C "$_wt_dir" ls-files --others --exclude-standard --directory 2>/dev/null) || _wt_untracked=""
+        if [[ -n "$_wt_untracked" ]]; then
+            log "SKIP: ${_wt_dir} - untracked files in worktree"
+            _wt_skipped=$((_wt_skipped + 1))
+            continue
+        fi
+
+        # G6: No unpushed commits
         _wt_upstream=$(git -C "$_wt_dir" rev-parse --abbrev-ref '@{u}' 2>/dev/null) || _wt_upstream=""
         if [[ -z "$_wt_upstream" ]]; then
             # No tracking upstream configured — local commits have no remote
@@ -449,14 +469,24 @@ if [[ -d "$WORKTREE_BASE" ]]; then
             continue
         fi
         _wt_local=$(git -C "$_wt_dir" rev-parse HEAD 2>/dev/null) || _wt_local=""
+        if [[ -z "$_wt_local" ]]; then
+            log "STALE: ${_wt_dir} - cannot resolve HEAD"
+            _wt_skipped=$((_wt_skipped + 1))
+            continue
+        fi
         _wt_remote=$(git -C "$_wt_dir" rev-parse '@{u}' 2>/dev/null) || _wt_remote=""
-        if [[ -n "$_wt_local" && -n "$_wt_remote" && "$_wt_local" != "$_wt_remote" ]]; then
+        if [[ -z "$_wt_remote" ]]; then
+            log "STALE: ${_wt_dir} - upstream configured but remote ref unavailable"
+            _wt_skipped=$((_wt_skipped + 1))
+            continue
+        fi
+        if [[ "$_wt_local" != "$_wt_remote" ]]; then
             log "STALE: ${_wt_dir} - has unpushed commits (local=${_wt_local:0:8} remote=${_wt_remote:0:8})"
             _wt_skipped=$((_wt_skipped + 1))
             continue
         fi
 
-        # G6: Safe removal via git worktree remove from parent repo.
+        # G7: Safe removal via git worktree remove from parent repo.
         # No --force: let git refuse if state changed between guards and removal (TOCTOU safety).
         if git -C "$_wt_parent_repo" worktree remove "$_wt_dir" 2>>"$LOG_FILE"; then
             git -C "$_wt_parent_repo" worktree prune 2>>"$LOG_FILE" || true
@@ -467,13 +497,14 @@ if [[ -d "$WORKTREE_BASE" ]]; then
             _wt_skipped=$((_wt_skipped + 1))
         fi
 
-    done < <(find "$WORKTREE_BASE" -mindepth 2 -maxdepth 10 -name '.claude-session.json' -print0 2>/dev/null)
+    done < <(timeout 30 find "$WORKTREE_BASE" -mindepth 2 -maxdepth 10 -name '.claude-session.json' -print0 2>/dev/null)
 
     if [[ $_wt_candidates -gt 0 ]]; then
         log "Worktree cleanup: ${_wt_candidates} candidates, ${_wt_removed} removed, ${_wt_skipped} skipped"
     fi
     ) &
-    EMIT_PIDS+=($!)
+    # Worktree cleanup is fire-and-forget — not tracked in EMIT_PIDS.
+    # Drain logic (below) is for event emission subshells only.
 fi
 
 # Drain emit subshells, then stop publisher (OMN-1944)
@@ -498,4 +529,8 @@ fi
 log "Publisher stop signal sent"
 
 log "SessionEnd hook completed"
+# No explicit `wait` needed before exit: emit subshells are already drained
+# above (line "wait ${EMIT_PIDS[@]}"), and the worktree cleanup subshell is
+# fire-and-forget (reparented to init on exit). Bash does not send SIGHUP
+# to backgrounded jobs on non-interactive shell exit.
 exit 0
