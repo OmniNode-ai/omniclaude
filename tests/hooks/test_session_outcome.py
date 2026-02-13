@@ -9,11 +9,19 @@ Tests verify the deterministic decision tree:
     4. UNKNOWN: none of the above criteria met
 
 Part of OMN-1892: Add feedback loop with guardrails.
+Wire format compatibility tests added for OMN-2190.
 """
 
 from __future__ import annotations
 
+import json
+from uuid import uuid4
+
 import pytest
+from omnibase_core.models.hooks.claude_code.model_claude_code_session_outcome import (
+    ModelClaudeCodeSessionOutcome,
+)
+from pydantic import ValidationError
 
 from plugins.onex.hooks.lib.session_outcome import (
     ABANDON_THRESHOLD_SECONDS,
@@ -1034,3 +1042,151 @@ class TestDeterminism:
             first = derive_session_outcome(**kwargs)
             second = derive_session_outcome(**kwargs)
             assert first == second
+
+
+# =============================================================================
+# Wire Format Compatibility (OMN-2190)
+# =============================================================================
+
+
+class TestWireFormatCompatibility:
+    """Verify session.outcome wire payload is accepted by consumer model.
+
+    The consumer model ModelClaudeCodeSessionOutcome has extra="forbid",
+    meaning any unexpected fields (emitted_at, active_ticket) cause
+    ValidationError. These tests ensure the wire format produced by
+    session-end.sh matches what the consumer expects.
+
+    Part of OMN-2190: Fix session.outcome wire format for consumer compatibility.
+    """
+
+    def test_minimal_payload_accepted(self) -> None:
+        """Minimal wire payload (session_id + outcome) deserializes successfully."""
+        session_id = str(uuid4())
+        wire_payload = {"session_id": session_id, "outcome": "success"}
+
+        model = ModelClaudeCodeSessionOutcome(**wire_payload)
+        assert str(model.session_id) == session_id
+        assert model.outcome.value == "success"
+        assert model.correlation_id is None
+        assert model.error is None
+
+    def test_payload_with_correlation_id_accepted(self) -> None:
+        """Wire payload with correlation_id deserializes successfully."""
+        session_id = str(uuid4())
+        correlation_id = str(uuid4())
+        wire_payload = {
+            "session_id": session_id,
+            "outcome": "unknown",
+            "correlation_id": correlation_id,
+        }
+
+        model = ModelClaudeCodeSessionOutcome(**wire_payload)
+        assert str(model.session_id) == session_id
+        assert model.outcome.value == "unknown"
+        assert str(model.correlation_id) == correlation_id
+
+    def test_payload_with_null_correlation_id_accepted(self) -> None:
+        """Wire payload with null correlation_id deserializes successfully."""
+        wire_payload = {
+            "session_id": str(uuid4()),
+            "outcome": "abandoned",
+            "correlation_id": None,
+        }
+
+        model = ModelClaudeCodeSessionOutcome(**wire_payload)
+        assert model.correlation_id is None
+
+    def test_all_outcome_values_accepted(self) -> None:
+        """All four outcome values are accepted by the consumer model."""
+        for outcome_value in ("success", "failed", "abandoned", "unknown"):
+            wire_payload = {
+                "session_id": str(uuid4()),
+                "outcome": outcome_value,
+            }
+            model = ModelClaudeCodeSessionOutcome(**wire_payload)
+            assert model.outcome.value == outcome_value
+
+    def test_extra_field_emitted_at_rejected(self) -> None:
+        """Wire payload with emitted_at is REJECTED by consumer (extra=forbid)."""
+        wire_payload = {
+            "session_id": str(uuid4()),
+            "outcome": "success",
+            "emitted_at": "2026-02-12T14:30:00Z",
+        }
+
+        with pytest.raises(ValidationError, match="emitted_at"):
+            ModelClaudeCodeSessionOutcome(**wire_payload)
+
+    def test_extra_field_active_ticket_rejected(self) -> None:
+        """Wire payload with active_ticket is REJECTED by consumer (extra=forbid)."""
+        wire_payload = {
+            "session_id": str(uuid4()),
+            "outcome": "success",
+            "active_ticket": "OMN-1234",
+        }
+
+        with pytest.raises(ValidationError, match="active_ticket"):
+            ModelClaudeCodeSessionOutcome(**wire_payload)
+
+    def test_old_wire_format_rejected(self) -> None:
+        """The OLD wire format (pre-OMN-2190) is rejected by consumer model.
+
+        This test documents the bug that OMN-2190 fixes: the old payload
+        included emitted_at and active_ticket which cause ValidationError.
+        """
+        old_wire_payload = {
+            "session_id": str(uuid4()),
+            "outcome": "success",
+            "emitted_at": "2026-02-12T14:30:00Z",
+            "active_ticket": None,
+        }
+
+        with pytest.raises(ValidationError):
+            ModelClaudeCodeSessionOutcome(**old_wire_payload)
+
+    def test_json_roundtrip_compatibility(self) -> None:
+        """Wire payload survives JSON serialization roundtrip (simulates Kafka).
+
+        session-end.sh produces JSON via jq, which is published to Kafka.
+        The consumer deserializes from JSON. This test verifies the full path.
+        """
+        session_id = str(uuid4())
+        correlation_id = str(uuid4())
+
+        # Simulate jq output from session-end.sh
+        jq_output = json.dumps(
+            {
+                "session_id": session_id,
+                "outcome": "success",
+                "correlation_id": correlation_id,
+            }
+        )
+
+        # Simulate consumer deserializing from Kafka message
+        wire_data = json.loads(jq_output)
+        model = ModelClaudeCodeSessionOutcome(**wire_data)
+
+        assert str(model.session_id) == session_id
+        assert model.outcome.value == "success"
+        assert str(model.correlation_id) == correlation_id
+
+    def test_json_roundtrip_null_correlation(self) -> None:
+        """Wire payload with null correlation_id survives JSON roundtrip."""
+        session_id = str(uuid4())
+
+        # Simulate jq output when CORRELATION_ID is empty
+        jq_output = json.dumps(
+            {
+                "session_id": session_id,
+                "outcome": "abandoned",
+                "correlation_id": None,
+            }
+        )
+
+        wire_data = json.loads(jq_output)
+        model = ModelClaudeCodeSessionOutcome(**wire_data)
+
+        assert str(model.session_id) == session_id
+        assert model.outcome.value == "abandoned"
+        assert model.correlation_id is None
