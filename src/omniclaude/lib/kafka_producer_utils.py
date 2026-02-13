@@ -28,16 +28,6 @@ logger = logging.getLogger(__name__)
 KAFKA_PUBLISH_TIMEOUT_SECONDS = 10.0
 
 
-def get_kafka_topic_prefix() -> str:
-    """Get Kafka topic prefix from environment.
-
-    Returns:
-        Empty string. Topics are realm-agnostic per ONEX convention (OMN-1972):
-        TopicBase values ARE the wire topic names, no environment prefix.
-    """
-    return ""
-
-
 def get_kafka_bootstrap_servers() -> str | None:
     """
     Get Kafka bootstrap servers from environment.
@@ -113,8 +103,7 @@ def build_kafka_topic(topic_base_value: str) -> str:
     Returns:
         Topic name (same as input since prefix is empty)
     """
-    prefix = get_kafka_topic_prefix()
-    return build_topic(prefix, topic_base_value)
+    return build_topic("", topic_base_value)
 
 
 class KafkaProducerManager:

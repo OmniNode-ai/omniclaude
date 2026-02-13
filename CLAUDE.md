@@ -56,17 +56,17 @@ Targets for **synchronous path only** (excludes backgrounded processes):
 |------|--------|-------------|---------------------|
 | SessionStart | <50ms | Daemon check, stdin read | Kafka emit, Postgres log |
 | SessionEnd | <50ms | stdin read | Kafka emit, Postgres log |
-| UserPromptSubmit | <500ms typical (~7s worst-case) | Routing, agent load, context injection | Kafka emit, intelligence requests |
+| UserPromptSubmit | <500ms typical (~6s worst-case) | Routing, candidate formatting, context injection | Kafka emit, intelligence requests |
 | PostToolUse | <100ms | stdin read, quality check | Kafka emit, content capture |
 
 > **Note**: UserPromptSubmit's 500ms target is for typical runs. Worst-case with all timeout
-> paths (routing 5s + loader 1s + injection 1s) is ~7s. These timeouts are safety nets;
-> normal execution stays well under 500ms.
+> paths (routing 5s + injection 1s) is ~6s. Agent YAML loading was removed from the sync
+> path in OMN-1980 — Claude loads the selected agent's YAML on-demand. These timeouts are
+> safety nets; normal execution stays well under 500ms.
 
 If hooks exceed budget, check:
 1. Network latency to routing service
-2. Agent YAML file I/O
-3. Context injection database queries
+2. Context injection database queries
 
 ---
 
@@ -92,7 +92,6 @@ These modules are intended for external use:
 | `emit_client_wrapper.py` | Event emission via daemon |
 | `context_injection_wrapper.py` | Inject learned patterns |
 | `route_via_events_wrapper.py` | Agent routing |
-| `simple_agent_loader.py` | Load agent YAML |
 | `correlation_manager.py` | Correlation ID persistence |
 
 **All other modules in `plugins/onex/hooks/lib/` are internal implementation details.**
@@ -106,7 +105,7 @@ These modules are intended for external use:
 | Variable | Purpose | Required |
 |----------|---------|----------|
 | `KAFKA_BOOTSTRAP_SERVERS` | Kafka connection string | Yes (for events) |
-| `KAFKA_ENVIRONMENT` | Topic prefix (`dev`, `staging`, `prod`) | Yes |
+| `KAFKA_ENVIRONMENT` | Environment label for logging/observability (not used for topic prefixing) | No |
 | `POSTGRES_HOST/PORT/DATABASE/USER/PASSWORD` | Database connection | No |
 | `ENABLE_POSTGRES` | Enable database logging | No (default: false) |
 | `USE_EVENT_ROUTING` | Enable agent routing via Kafka | No (default: false) |
@@ -175,16 +174,17 @@ stdin JSON
 agent_detector.py → detect automated workflow
     │
     ▼
-route_via_events_wrapper.py → get agent selection
+route_via_events_wrapper.py → get agent candidates + fuzzy best
     │
-    ▼
-simple_agent_loader.py → load agent YAML
+    ▼ (OMN-1980: agent YAML loading removed from sync path)
+    │  Claude loads the selected agent's YAML on-demand after seeing candidates
     │
     ▼
 context_injection_wrapper.py → load learned patterns
     │
     ▼
 Output: JSON with hookSpecificOutput.additionalContext
+        (includes candidate list for Claude to select from)
 ```
 
 ### Emit Daemon Architecture

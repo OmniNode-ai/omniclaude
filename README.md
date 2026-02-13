@@ -110,8 +110,8 @@ event = ModelSessionStarted(
 )
 
 # Get Kafka topic
-topic = build_topic("dev", TopicBase.SESSION_STARTED)
-# → "dev.omniclaude.session.started.v1"
+topic = build_topic("", TopicBase.SESSION_STARTED)
+# → "onex.evt.omniclaude.session-started.v1"
 ```
 
 ## Privacy Considerations
@@ -216,36 +216,6 @@ dependencies = [
     "pydantic>=2.9.0",
     "pydantic-settings>=2.6.0",
 ]
-```
-
-## Demos
-
-### VERTICAL-001: Pattern Pipeline Demo
-
-Validate the end-to-end pattern extraction pipeline:
-
-```
-Claude Hook → Kafka → Consumer → PostgreSQL → Query
-```
-
-**[📖 View Demo Runbook](plugins/onex/docs/RUNBOOK_VERTICAL_DEMO.md)**
-
-Quick start:
-```bash
-# Terminal 1: Start consumer
-source .env && python plugins/onex/scripts/demo_consume_store.py
-
-# Terminal 2: Emit test event
-source .env && python plugins/onex/scripts/demo_emit_hook.py
-
-# Terminal 3: Query patterns
-source .env && python plugins/onex/scripts/demo_query_patterns.py --demo-only
-```
-
-Run integration tests:
-```bash
-KAFKA_INTEGRATION_TESTS=1 POSTGRES_INTEGRATION_TESTS=1 \
-    pytest tests/hooks/test_integration_demo_pipeline.py -v
 ```
 
 ## Documentation

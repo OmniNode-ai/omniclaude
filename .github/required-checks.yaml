@@ -1,0 +1,105 @@
+# Required Status Checks for `main` Branch Protection
+#
+# This manifest documents the canonical list of required checks.
+# If you rename a CI job, you MUST update both this file and the
+# branch protection settings (Settings → Branches → main).
+#
+# Added: OMN-1876
+# Last verified: 2026-02-13 (PR #137 base checks, gate jobs added in OMN-1841)
+
+required_checks:
+  # ── ci-cd.yml (primary pipeline) ──────────────────────────────────────────
+  - name: "Code Quality Checks"
+    workflow: ci-cd.yml
+    job_id: quality
+    rationale: "Ruff format, lint, and mypy type checking"
+
+  - name: "Pyright Type Checking"
+    workflow: ci-cd.yml
+    job_id: pyright
+    rationale: "Strict pyright type checking"
+
+  - name: "Verify Architecture Handshake"
+    workflow: ci-cd.yml
+    job_id: check-handshake
+    rationale: "Cross-repo architecture handshake is current"
+    note: "Skipped on fork PRs (acceptable — no fork PRs accepted)"
+
+  - name: "ONEX Enum Governance"
+    workflow: ci-cd.yml
+    job_id: enum-governance
+    rationale: "Enum naming conventions (UPPER_SNAKE_CASE)"
+
+  - name: "Exports Validation"
+    workflow: ci-cd.yml
+    job_id: exports-validation
+    rationale: "__all__ exports reference real symbols"
+
+  - name: "Kafka Import Guard"
+    workflow: ci-cd.yml
+    job_id: cross-repo-validation
+    rationale: "ARCH-002: no direct Kafka imports in nodes/handlers"
+
+  - name: "Migration Freeze Check"
+    workflow: ci-cd.yml
+    job_id: migration-freeze
+    rationale: "Blocks new migrations during DB-SPLIT (OMN-2055)"
+
+  - name: "Python Security Scan"
+    workflow: ci-cd.yml
+    job_id: security-python
+    rationale: "Bandit security linter (medium+ severity)"
+
+  - name: "CI Tests Gate"
+    workflow: ci-cd.yml
+    job_id: tests-gate
+    rationale: "Aggregator for 5-shard test matrix — shard count can change without updating branch protection"
+
+  # ── enhanced-ci.yml (comprehensive validation) ────────────────────────────
+  - name: "ONEX Architecture Compliance"
+    workflow: enhanced-ci.yml
+    job_id: onex-validation
+    rationale: "ONEX architecture rules validation"
+
+  - name: "Hooks System Tests"
+    workflow: enhanced-ci.yml
+    job_id: hooks-tests
+    rationale: "Hook scripts and handler modules"
+
+  - name: "Agent Framework Tests"
+    workflow: enhanced-ci.yml
+    job_id: agent-framework-tests
+    rationale: "Agent YAML loading and framework validation"
+
+  - name: "Database Schema Validation"
+    workflow: enhanced-ci.yml
+    job_id: database-validation
+    rationale: "DB schema consistency checks"
+
+  - name: "Enhanced Unit Tests Gate"
+    workflow: enhanced-ci.yml
+    job_id: unit-tests-gate
+    rationale: "Aggregator for 10-split unit test matrix — split count can change without updating branch protection"
+
+# ── Explicitly excluded ───────────────────────────────────────────────────
+excluded_checks:
+  - name: "Performance Benchmarks"
+    reason: "Informational metrics — should not block merges"
+
+  - name: "Docker Compose Stack Validation"
+    reason: "Infrastructure validation — not code correctness"
+
+  - name: "Integration Tests"
+    reason: "Depends on PostgreSQL/Redis service containers — not hermetic. Will revisit when tests use testcontainers (P0-4)"
+
+  - name: "Code Quality (Strict Mode)"
+    reason: "Redundant with Code Quality Checks from ci-cd.yml"
+
+  - name: "Build Docker Image"
+    reason: "Downstream of all checks — redundant if individual checks are required"
+
+  - name: "Merge Test Coverage / Merge Unit Test Coverage"
+    reason: "Coverage reporting — not correctness checks"
+
+  - name: "Test Summary Report"
+    reason: "Reporting aggregator — not a correctness gate"

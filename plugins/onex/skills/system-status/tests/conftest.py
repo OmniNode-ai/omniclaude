@@ -58,7 +58,7 @@ def sample_db_result():
         "rows": [{"count": 10, "avg_query_time_ms": 150.5, "avg_patterns_count": 25.0}],
         "host": "192.168.86.200",
         "port": "5436",
-        "database": "omninode_bridge",
+        "database": "omniclaude",
     }
 
 
@@ -81,7 +81,7 @@ def _reset_env_vars():
     # Set test defaults
     os.environ.setdefault("POSTGRES_HOST", "192.168.86.200")
     os.environ.setdefault("POSTGRES_PORT", "5436")
-    os.environ.setdefault("POSTGRES_DATABASE", "omninode_bridge")
+    os.environ.setdefault("POSTGRES_DATABASE", "omniclaude")
     os.environ.setdefault("KAFKA_BOOTSTRAP_SERVERS", "192.168.86.200:29092")
     os.environ.setdefault("QDRANT_URL", "http://localhost:6333")
 

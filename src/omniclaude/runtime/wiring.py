@@ -71,9 +71,11 @@ async def publish_handler_contracts(
     Args:
         container: The ONEX container with event bus publisher.
         config: Configuration specifying contract source (filesystem, package, composite).
-        environment: Environment prefix for Kafka topics (e.g., "dev").
-            Defaults to ONEX_ENV environment variable or "dev".
-            If provided, overrides the config's environment setting.
+        environment: Environment label passed through to omnibase_infra's
+            ServiceContractPublisher for contract registration metadata.
+            Per OMN-1972, this is no longer used as a Kafka topic prefix by
+            omniclaude. Defaults to ONEX_ENV environment variable or "dev"
+            within the infra layer.
 
     Returns:
         ModelPublishResult with published handler IDs, contract_errors, infra_errors,

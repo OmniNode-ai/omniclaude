@@ -173,62 +173,17 @@ CANDIDATES_JSON="$(echo "$ROUTING_RESULT" | jq -r '.candidates // "[]"')"
 echo "[$_TS] [UserPromptSubmit] ROUTING agent=$AGENT_NAME confidence=$CONFIDENCE method=$SELECTION_METHOD latency_ms=$LATENCY_MS" >> "$TRACE_LOG"
 
 # -----------------------------
-# Agent YAML Loading via simple_agent_loader.py
-# -----------------------------
-AGENT_YAML_CONTENT=""
-LOADER_DURATION_MS=0
-if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]] && [[ -f "${HOOKS_LIB}/simple_agent_loader.py" ]]; then
-    log "Loading agent YAML via simple_agent_loader.py for ${AGENT_NAME}..."
-    LOADER_INPUT="$(jq -n --arg agent "$AGENT_NAME" '{agent_name: $agent}')"
-    # Budget note: perl alarm() only supports integer seconds (min 1s).
-    # 1s is the minimum viable timeout — perl alarm() truncates to integer,
-    # so sub-second values become 0 (cancels the alarm entirely).
-    # Combined worst-case: routing(5s) + loader(1s) + injection(1s) = 7s.
-    # In practice, loader reads a local YAML (~5ms). The 1s cap is a safety net
-    # for Python startup, not expected latency. Documented budget (500ms) is a
-    # target for typical runs, not a hard cap on worst-case.
-    _LOADER_T0="$(get_time_ms)"
-    LOADER_RESULT="$(echo "$LOADER_INPUT" | run_with_timeout 1 $PYTHON_CMD "${HOOKS_LIB}/simple_agent_loader.py" 2>>"$LOG_FILE" || echo '{}')"
-    _LOADER_T1="$(get_time_ms)"
-    LOADER_DURATION_MS=$(( _LOADER_T1 - _LOADER_T0 ))
-    LOADER_SUCCESS="$(echo "$LOADER_RESULT" | jq -r '.success // false' 2>/dev/null || echo 'false')"
-    if [[ "$LOADER_SUCCESS" == "true" ]]; then
-        AGENT_YAML_CONTENT="$(echo "$LOADER_RESULT" | jq -r '.context_injection // ""' 2>/dev/null || echo '')"
-        if [[ -n "$AGENT_YAML_CONTENT" ]]; then
-            log "Agent YAML loaded successfully for ${AGENT_NAME} (${#AGENT_YAML_CONTENT} chars, ${LOADER_DURATION_MS}ms)"
-        else
-            log "WARNING: Agent loader succeeded but returned empty content for ${AGENT_NAME}"
-        fi
-    else
-        LOADER_ERROR="$(echo "$LOADER_RESULT" | jq -r '.error // "unknown"' 2>/dev/null || echo 'unknown')"
-        log "WARNING: Agent loader failed for ${AGENT_NAME}: ${LOADER_ERROR} (${LOADER_DURATION_MS}ms)"
-    fi
-else
-    if [[ ! -f "${HOOKS_LIB}/simple_agent_loader.py" ]]; then
-        log "WARNING: simple_agent_loader.py not found at ${HOOKS_LIB}"
-    fi
-fi
-
-_TS2="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-echo "[$_TS2] [UserPromptSubmit] AGENT_YAML agent=$AGENT_NAME loaded=${#AGENT_YAML_CONTENT}chars duration_ms=${LOADER_DURATION_MS}" >> "$TRACE_LOG"
-
-# -----------------------------
 # Candidate List Injection & Pattern Injection
 # -----------------------------
-# Build AGENT_YAML_INJECTION: agent YAML content first, then candidate list
+# OMN-1980: Agent YAML loading removed from sync hook path.
+# The hook injects a candidate list; Claude loads the selected agent's YAML on-demand.
+# This saves ~100ms+ from the sync path and lets the LLM make the final selection
+# using semantic understanding (better precision than fuzzy matching alone).
+
+_TS2="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+echo "[$_TS2] [UserPromptSubmit] CANDIDATE_LIST agent=$AGENT_NAME candidates=${CANDIDATES_JSON}" >> "$TRACE_LOG"
+
 AGENT_YAML_INJECTION=""
-
-# Inject the loaded agent YAML content (behavioral directive) first
-if [[ -n "$AGENT_YAML_CONTENT" ]]; then
-    AGENT_YAML_INJECTION="========================================================================
-AGENT DEFINITION - ${AGENT_NAME}
-========================================================================
-${AGENT_YAML_CONTENT}
-========================================================================
-
-"
-fi
-
 CANDIDATE_COUNT="$(echo "$CANDIDATES_JSON" | jq 'if type == "array" then length else 0 end' 2>/dev/null || echo "0")"
 
 if [[ "$CANDIDATE_COUNT" -gt 0 ]]; then
@@ -239,15 +194,19 @@ if [[ "$CANDIDATE_COUNT" -gt 0 ]]; then
     FUZZY_BEST="$(echo "$CANDIDATES_JSON" | jq -r '.[0].name // "polymorphic-agent"' 2>/dev/null || echo "polymorphic-agent")"
     FUZZY_BEST_SCORE="$(echo "$CANDIDATES_JSON" | jq -r '.[0].score // "0.5"' 2>/dev/null || echo "0.5")"
 
-    AGENT_YAML_INJECTION="${AGENT_YAML_INJECTION}========================================================================
-AGENT ROUTING - CANDIDATES
+    AGENT_YAML_INJECTION="========================================================================
+AGENT ROUTING - SELECT AND ACT
 ========================================================================
-The following agents also matched your request (ranked by score):
+The following agents matched your request. Pick the best match,
+read its YAML from plugins/onex/agents/configs/{name}.yaml,
+and follow its behavioral directives.
 
+CANDIDATES (ranked by fuzzy score):
 ${CANDIDATE_LIST}
 
 FUZZY BEST: ${FUZZY_BEST} (${FUZZY_BEST_SCORE})
 YOUR DECISION: Pick the agent that best matches the user's actual intent.
+
 If no agent fits, default to polymorphic-agent.
 ========================================================================
 "

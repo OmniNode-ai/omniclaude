@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Test script for Agent Actions Kafka Consumer
+Test script for Claude Session Events Kafka Consumer
 
 This script:
-1. Publishes test events to the agent-actions topic
+1. Publishes test events to the Kafka topic (see _TEST_TOPIC)
 2. Verifies the consumer processes them correctly
 3. Checks database for inserted records
 4. Tests health check endpoint
@@ -14,52 +14,51 @@ Usage:
 
 import json
 import sys
-import time
 import uuid
 from datetime import UTC, datetime
-from pathlib import Path
 
 import psycopg2
 import requests
 from kafka import KafkaProducer
 
-# Add config for type-safe settings
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from config import settings
+# Import type-safe settings from omniclaude package
+from omniclaude.config.settings import settings
 
-# Add src to path for omniclaude.hooks.topics
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+# Use canonical topic enum instead of hardcoded string
 from omniclaude.hooks.topics import TopicBase
 
-# Add _shared to path
-SCRIPT_DIR = Path(__file__).parent
-SHARED_DIR = SCRIPT_DIR.parent / "skills" / "_shared"
-sys.path.insert(0, str(SHARED_DIR))
 
-# Database configuration
-DB_CONFIG = {
-    "host": "localhost",
-    "port": 5436,
-    "database": "omninode_bridge",
-    "user": "postgres",
-    "password": settings.get_effective_postgres_password(),
-}
+def _get_db_dsn() -> str:
+    """Get DB DSN from settings -- deferred to first use for fail-fast."""
+    return settings.get_omniclaude_dsn()
 
 
-def create_test_event(agent_name: str, action_type: str = "tool_call") -> dict:
-    """Create a test agent action event."""
+def create_test_event(agent_name: str) -> dict:
+    """Create a test event compatible with the claude_session_snapshots schema.
+
+    TODO(OMN-2058): This function was updated to produce session-compatible events
+    as part of DB-SPLIT-07.  The old agent_actions schema (correlation_id, agent_name,
+    action_type, action_name, action_details) no longer has a backing table.  The
+    fields below match claude_session_snapshots columns from migration 001.  Once a
+    real Kafka consumer for session events is implemented, align this further with the
+    actual event envelope used in production.
+    """
+    session_id = str(uuid.uuid4())
+    now = datetime.now(UTC)
     return {
+        "session_id": session_id,
         "correlation_id": str(uuid.uuid4()),
-        "agent_name": agent_name,
-        "action_type": action_type,
-        "action_name": f"Test{action_type.title()}",
-        "action_details": {
-            "test": True,
-            "timestamp": datetime.now(UTC).isoformat(),
-        },
-        "debug_mode": True,
-        "duration_ms": 42,
-        "timestamp": datetime.now(UTC).isoformat(),
+        "status": "active",
+        "started_at": now.isoformat(),
+        "working_directory": f"/test/{agent_name}",
+        "git_branch": "test-branch",
+        "hook_source": "test_consumer",
+        "prompt_count": 0,
+        "tool_count": 0,
+        "tools_used_count": 0,
+        "event_count": 1,
+        "last_event_at": now.isoformat(),
+        "schema_version": "1.0.0",
     }
 
 
@@ -72,8 +71,13 @@ def publish_test_events(count: int = 10) -> list[str]:
     """
     print(f"📤 Publishing {count} test events to Kafka...")
 
+    kafka_servers = settings.get_effective_kafka_bootstrap_servers()
+    if not kafka_servers:
+        print("  ✗ KAFKA_BOOTSTRAP_SERVERS not configured. Set it in .env.")
+        sys.exit(1)
+
     producer = KafkaProducer(
-        bootstrap_servers=["localhost:9092"],
+        bootstrap_servers=kafka_servers.split(","),
         value_serializer=lambda v: json.dumps(v).encode("utf-8"),
     )
 
@@ -82,7 +86,6 @@ def publish_test_events(count: int = 10) -> list[str]:
     for i in range(count):
         event = create_test_event(
             agent_name=f"test-agent-{i % 3}",
-            action_type=["tool_call", "decision", "success"][i % 3],
         )
 
         correlation_ids.append(event["correlation_id"])
@@ -107,39 +110,21 @@ def verify_database_records(correlation_ids: list[str], timeout: int = 30):
     """
     print(f"🔍 Verifying {len(correlation_ids)} records in database...")
 
-    conn = psycopg2.connect(**DB_CONFIG)
+    conn = psycopg2.connect(_get_db_dsn())
     cursor = conn.cursor()
 
-    start_time = time.time()
-    found_count = 0
-
-    while time.time() - start_time < timeout:
-        cursor.execute(
-            """
-            SELECT COUNT(*)
-            FROM agent_actions
-            WHERE correlation_id = ANY(%s)
-            """,
-            (correlation_ids,),
-        )
-
-        found_count = cursor.fetchone()[0]
-
-        if found_count == len(correlation_ids):
-            print(f"✅ All {found_count} records found in database!\n")
-            cursor.close()
-            conn.close()
-            return True
-
-        print(f"  ⏳ Found {found_count}/{len(correlation_ids)}, waiting...")
-        time.sleep(2)
-
+    # TODO(OMN-2058): This test consumer was written for the old agent_actions
+    # table which no longer exists. The test events produced by create_test_event()
+    # are 'agent_actions' type events that are NOT written to claude_session_snapshots.
+    # This verification will always find 0 records and time out.
+    # Update this function to match the new schema (claude_sessions /
+    # claude_session_snapshots) once a consumer for the new schema is implemented.
+    print(
+        "  [SKIP] verify_database_records queries the wrong table (see TODO OMN-2058). "
+        "Skipping 30s polling loop until schema is updated.\n"
+    )
     cursor.close()
     conn.close()
-
-    print(
-        f"❌ Only found {found_count}/{len(correlation_ids)} records after {timeout}s\n"
-    )
     return False
 
 
@@ -192,23 +177,25 @@ def check_metrics_endpoint():
         return False
 
 
-def query_recent_traces():
-    """Query recent debug traces view."""
-    print("📋 Querying recent debug traces...")
+def query_recent_sessions():
+    """Query recent session snapshots with prompt and tool counts."""
+    print("📋 Querying recent session snapshots...")
 
-    conn = psycopg2.connect(**DB_CONFIG)
+    conn = psycopg2.connect(_get_db_dsn())
     cursor = conn.cursor()
 
     cursor.execute(
         """
         SELECT
-            correlation_id,
-            agent_name,
-            action_count,
-            error_count,
-            success_count,
-            total_duration_ms
-        FROM recent_debug_traces
+            session_id,
+            status,
+            prompt_count,
+            tool_count,
+            event_count,
+            duration_seconds,
+            last_event_at
+        FROM claude_session_snapshots
+        ORDER BY last_event_at DESC
         LIMIT 5
         """
     )
@@ -216,15 +203,16 @@ def query_recent_traces():
     rows = cursor.fetchall()
 
     if rows:
-        print("✅ Recent traces:")
+        print("✅ Recent sessions:")
         for row in rows:
-            _corr_id, agent, actions, errors, successes, duration = row
+            session_id, status, prompts, tools, events, duration, _last_event = row
+            duration_str = f"{duration}s" if duration is not None else "ongoing"
             print(
-                f"  - {agent}: {actions} actions, {errors} errors, {successes} successes ({duration:.1f}ms)"
+                f"  - {session_id[:12]}... [{status}]: {prompts} prompts, {tools} tools, {events} events ({duration_str})"
             )
         print()
     else:
-        print("  No traces found\n")
+        print("  No sessions found\n")
 
     cursor.close()
     conn.close()
@@ -233,7 +221,7 @@ def query_recent_traces():
 def run_tests():
     """Run all tests."""
     print("=" * 70)
-    print("Agent Actions Kafka Consumer - Test Suite")
+    print("Claude Session Events Kafka Consumer - Test Suite")
     print("=" * 70)
     print()
 
@@ -263,10 +251,10 @@ def run_tests():
     print("-" * 70)
     metrics_ok = check_metrics_endpoint()
 
-    # Step 5: Query recent traces
-    print("Step 5: Query recent traces")
+    # Step 5: Query recent sessions
+    print("Step 5: Query recent sessions")
     print("-" * 70)
-    query_recent_traces()
+    query_recent_sessions()
 
     # Summary
     print("=" * 70)

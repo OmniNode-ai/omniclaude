@@ -113,6 +113,16 @@ if [[ -n "$SESSION_DURATION" && "$SESSION_DURATION" != "0" ]]; then
     DURATION_SECONDS=$(awk -v ms="$SESSION_DURATION" 'BEGIN{v=ms/1000; printf "%.3f", (v<0?0:v)}' 2>/dev/null || echo "0")
 fi
 
+# Read correlation_id from state file BEFORE backgrounded subshells (OMN-2190)
+# Must happen in main shell to avoid race with cleanup at end.
+# Uses jq instead of Python to avoid ~30-50ms interpreter startup on the
+# synchronous path (preserves <50ms SessionEnd budget).
+CORRELATION_ID=""
+CORRELATION_STATE_FILE="${HOME}/.claude/hooks/.state/correlation_id.json"
+if [[ -f "$CORRELATION_STATE_FILE" ]]; then
+    CORRELATION_ID=$(jq -r '.correlation_id // empty' "$CORRELATION_STATE_FILE" 2>/dev/null) || CORRELATION_ID=""
+fi
+
 # Emit session.ended event to Kafka (backgrounded for parallelism)
 # Uses emit_client_wrapper with daemon fan-out (OMN-1632)
 # PIDs tracked for drain-then-stop at end (no fixed sleep needed at SessionEnd).
@@ -211,18 +221,18 @@ print(result.outcome)
         fi
 
         # --- Emit session.outcome event ---
-        EMITTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+        # Wire payload must match ModelClaudeCodeSessionOutcome (extra="forbid"):
+        #   session_id, outcome, correlation_id
+        # Stripped: emitted_at, active_ticket (OMN-2190)
 
         if ! OUTCOME_PAYLOAD=$(jq -n \
             --arg session_id "$SESSION_ID" \
             --arg outcome "$DERIVED_OUTCOME" \
-            --arg emitted_at "$EMITTED_AT" \
-            --arg active_ticket "$ACTIVE_TICKET" \
+            --arg correlation_id "$CORRELATION_ID" \
             '{
                 session_id: $session_id,
                 outcome: $outcome,
-                emitted_at: $emitted_at,
-                active_ticket: (if $active_ticket == "" then null else $active_ticket end)
+                correlation_id: (if $correlation_id == "" then null else $correlation_id end)
             }' 2>>"$LOG_FILE"); then
             log "WARNING: Failed to construct outcome payload (jq failed), skipping emission"
         elif [[ -z "$OUTCOME_PAYLOAD" || "$OUTCOME_PAYLOAD" == "null" ]]; then
