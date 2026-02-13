@@ -44,12 +44,18 @@ def _claude_state_dir() -> str:
 
 def _lock_timeout_ms() -> int:
     """Return the lock timeout in milliseconds (reads env at call time)."""
-    return int(os.environ.get("CLAUDE_STATE_LOCK_TIMEOUT_MS", "100"))
+    try:
+        return int(os.environ.get("CLAUDE_STATE_LOCK_TIMEOUT_MS", "100"))
+    except ValueError:
+        return 100
 
 
 def _gc_ttl_seconds() -> int:
     """Return the GC TTL in seconds (reads env at call time)."""
-    return int(os.environ.get("CLAUDE_STATE_GC_TTL_SECONDS", "14400"))
+    try:
+        return int(os.environ.get("CLAUDE_STATE_GC_TTL_SECONDS", "14400"))
+    except ValueError:
+        return 14400
 
 
 # GC runs at most once per this interval

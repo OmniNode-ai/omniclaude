@@ -338,7 +338,7 @@ fi
 if [[ -f "${HOOKS_LIB}/node_session_state_adapter.py" ]]; then
     (
         # Read active_run_id from session index
-        SESSION_STATE_DIR="${HOME}/.claude/state"
+        SESSION_STATE_DIR="${CLAUDE_STATE_DIR:-${HOME}/.claude/state}"
         SESSION_INDEX="${SESSION_STATE_DIR}/session.json"
         ACTIVE_RUN_ID=""
         if [[ -f "$SESSION_INDEX" ]]; then
