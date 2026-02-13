@@ -339,21 +339,22 @@ class TestConsumerGroupPrefixValidation:
 class TestDynamicTopicNameBuilding:
     """Tests for build_dynamic_topic_names model validator."""
 
-    def test_topic_names_built_from_default_environment(self) -> None:
-        """Test that topic names are built using default 'dev' environment."""
+    def test_topic_names_built_without_prefix(self) -> None:
+        """Test that topic names are wire-ready without environment prefix (OMN-1972)."""
         from omniclaude.lib.config.intelligence_config import IntelligenceConfig
 
         config = IntelligenceConfig(kafka_bootstrap_servers="localhost:9092")
 
-        assert config.topic_code_analysis_requested.startswith("dev.")
+        # Topics should NOT have any environment prefix
+        assert not config.topic_code_analysis_requested.startswith("dev.")
         assert "code-analysis-requested" in config.topic_code_analysis_requested
-        assert config.topic_code_analysis_completed.startswith("dev.")
+        assert not config.topic_code_analysis_completed.startswith("dev.")
         assert "code-analysis-completed" in config.topic_code_analysis_completed
-        assert config.topic_code_analysis_failed.startswith("dev.")
+        assert not config.topic_code_analysis_failed.startswith("dev.")
         assert "code-analysis-failed" in config.topic_code_analysis_failed
 
-    def test_topic_names_built_from_custom_environment(self) -> None:
-        """Test that topic names are built using custom environment prefix."""
+    def test_topic_names_ignore_environment(self) -> None:
+        """Test that kafka_environment does not affect topic names (OMN-1972)."""
         from omniclaude.lib.config.intelligence_config import IntelligenceConfig
 
         config = IntelligenceConfig(
@@ -361,22 +362,36 @@ class TestDynamicTopicNameBuilding:
             kafka_environment="staging",
         )
 
-        assert config.topic_code_analysis_requested.startswith("staging.")
-        assert config.topic_code_analysis_completed.startswith("staging.")
-        assert config.topic_code_analysis_failed.startswith("staging.")
+        # Topics should NOT have staging prefix
+        assert not config.topic_code_analysis_requested.startswith("staging.")
+        assert not config.topic_code_analysis_completed.startswith("staging.")
+        assert not config.topic_code_analysis_failed.startswith("staging.")
 
-    def test_topic_names_built_for_production(self) -> None:
-        """Test that topic names are built correctly for production environment."""
+    def test_topic_names_consistent_across_environments(self) -> None:
+        """Test that topic names are the same regardless of environment."""
         from omniclaude.lib.config.intelligence_config import IntelligenceConfig
 
-        config = IntelligenceConfig(
+        config_dev = IntelligenceConfig(
+            kafka_bootstrap_servers="localhost:9092",
+            kafka_environment="dev",
+        )
+        config_prod = IntelligenceConfig(
             kafka_bootstrap_servers="localhost:9092",
             kafka_environment="prod",
         )
 
-        assert config.topic_code_analysis_requested.startswith("prod.")
-        assert config.topic_code_analysis_completed.startswith("prod.")
-        assert config.topic_code_analysis_failed.startswith("prod.")
+        assert (
+            config_dev.topic_code_analysis_requested
+            == config_prod.topic_code_analysis_requested
+        )
+        assert (
+            config_dev.topic_code_analysis_completed
+            == config_prod.topic_code_analysis_completed
+        )
+        assert (
+            config_dev.topic_code_analysis_failed
+            == config_prod.topic_code_analysis_failed
+        )
 
     def test_explicit_topic_names_preserved(self) -> None:
         """Test that explicitly provided topic names are not overwritten."""
@@ -385,14 +400,13 @@ class TestDynamicTopicNameBuilding:
         custom_topic = "custom.my-topic.v1"
         config = IntelligenceConfig(
             kafka_bootstrap_servers="localhost:9092",
-            kafka_environment="dev",
             topic_code_analysis_requested=custom_topic,
         )
 
         # Custom topic should be preserved
         assert config.topic_code_analysis_requested == custom_topic
-        # Other topics should still be built dynamically
-        assert config.topic_code_analysis_completed.startswith("dev.")
+        # Other topics should still be built from constants
+        assert "code-analysis-completed" in config.topic_code_analysis_completed
 
     def test_all_explicit_topics_preserved(self) -> None:
         """Test that all explicitly provided topics are preserved."""
@@ -693,8 +707,8 @@ class TestFieldConstraints:
 class TestFromEnvTopicConstruction:
     """Tests for from_env() topic name construction."""
 
-    def test_from_env_builds_topic_names_from_environment(self) -> None:
-        """Test that from_env() builds topic names using kafka_environment from settings."""
+    def test_from_env_builds_topic_names_without_prefix(self) -> None:
+        """Test that from_env() builds topic names without environment prefix (OMN-1972)."""
         mock_settings = MagicMock()
         mock_settings.get_effective_kafka_bootstrap_servers.return_value = (
             "localhost:9092"
@@ -709,9 +723,11 @@ class TestFromEnvTopicConstruction:
 
             config = IntelligenceConfig.from_env()
 
-            assert config.topic_code_analysis_requested.startswith("staging.")
-            assert config.topic_code_analysis_completed.startswith("staging.")
-            assert config.topic_code_analysis_failed.startswith("staging.")
+            # Topics should NOT have environment prefix
+            assert not config.topic_code_analysis_requested.startswith("staging.")
+            assert "code-analysis-requested" in config.topic_code_analysis_requested
+            assert "code-analysis-completed" in config.topic_code_analysis_completed
+            assert "code-analysis-failed" in config.topic_code_analysis_failed
 
     def test_from_env_uses_settings_values(self) -> None:
         """Test that from_env() correctly maps all settings values."""
@@ -742,11 +758,10 @@ class TestFromEnvTopicConstruction:
 class TestKafkaEnvironmentValidation:
     """Tests for kafka_environment validation to prevent malformed topic names."""
 
-    def test_from_env_raises_when_kafka_environment_empty(self) -> None:
-        """Test that from_env() raises ValueError when KAFKA_ENVIRONMENT is empty.
+    def test_from_env_accepts_empty_kafka_environment(self) -> None:
+        """Test that from_env() accepts empty KAFKA_ENVIRONMENT (OMN-1972).
 
-        An empty kafka_environment would result in malformed topic names like
-        '.omniclaude.session.started.v1' with a leading dot.
+        kafka_environment is metadata only — not used for topic prefixing.
         """
         mock_settings = MagicMock()
         mock_settings.get_effective_kafka_bootstrap_servers.return_value = (
@@ -755,75 +770,25 @@ class TestKafkaEnvironmentValidation:
         mock_settings.use_event_routing = True
         mock_settings.request_timeout_ms = 5000
         mock_settings.kafka_group_id = "test-group"
-        mock_settings.kafka_environment = ""  # Empty!
+        mock_settings.kafka_environment = ""
 
         with patch("omniclaude.lib.config.intelligence_config.settings", mock_settings):
             from omniclaude.lib.config.intelligence_config import IntelligenceConfig
 
-            with pytest.raises(ValueError) as exc_info:
-                IntelligenceConfig.from_env()
+            config = IntelligenceConfig.from_env()
+            # Topics should still be populated from constants
+            assert "code-analysis-requested" in config.topic_code_analysis_requested
 
-            error_message = str(exc_info.value)
-            assert "KAFKA_ENVIRONMENT" in error_message
-            assert "malformed topic names" in error_message.lower()
+    def test_direct_instantiation_accepts_empty_environment(self) -> None:
+        """Test that direct instantiation accepts empty kafka_environment (OMN-1972)."""
+        from omniclaude.lib.config.intelligence_config import IntelligenceConfig
 
-    def test_from_env_raises_when_kafka_environment_whitespace(self) -> None:
-        """Test that from_env() raises ValueError when KAFKA_ENVIRONMENT is whitespace."""
-        mock_settings = MagicMock()
-        mock_settings.get_effective_kafka_bootstrap_servers.return_value = (
-            "localhost:9092"
+        config = IntelligenceConfig(
+            kafka_bootstrap_servers="localhost:9092",
+            kafka_environment="",
         )
-        mock_settings.use_event_routing = True
-        mock_settings.request_timeout_ms = 5000
-        mock_settings.kafka_group_id = "test-group"
-        mock_settings.kafka_environment = "   "  # Whitespace only!
-
-        with patch("omniclaude.lib.config.intelligence_config.settings", mock_settings):
-            from omniclaude.lib.config.intelligence_config import IntelligenceConfig
-
-            with pytest.raises(ValueError) as exc_info:
-                IntelligenceConfig.from_env()
-
-            assert "KAFKA_ENVIRONMENT" in str(exc_info.value)
-
-    def test_direct_instantiation_rejects_empty_environment(self) -> None:
-        """Test that direct instantiation rejects empty kafka_environment."""
-        from omniclaude.lib.config.intelligence_config import IntelligenceConfig
-
-        with pytest.raises(ValueError) as exc_info:
-            IntelligenceConfig(
-                kafka_bootstrap_servers="localhost:9092",
-                kafka_environment="",
-            )
-
-        error_message = str(exc_info.value)
-        assert "cannot be empty" in error_message.lower()
-
-    def test_kafka_environment_rejects_invalid_format_starting_with_hyphen(
-        self,
-    ) -> None:
-        """Test that kafka_environment rejects values starting with hyphen."""
-        from omniclaude.lib.config.intelligence_config import IntelligenceConfig
-
-        with pytest.raises(ValueError) as exc_info:
-            IntelligenceConfig(
-                kafka_bootstrap_servers="localhost:9092",
-                kafka_environment="-invalid",
-            )
-
-        assert "invalid format" in str(exc_info.value).lower()
-
-    def test_kafka_environment_rejects_invalid_format_with_special_chars(self) -> None:
-        """Test that kafka_environment rejects values with special characters."""
-        from omniclaude.lib.config.intelligence_config import IntelligenceConfig
-
-        with pytest.raises(ValueError) as exc_info:
-            IntelligenceConfig(
-                kafka_bootstrap_servers="localhost:9092",
-                kafka_environment="dev.test",  # Dots not allowed
-            )
-
-        assert "invalid format" in str(exc_info.value).lower()
+        # Topics should still be populated
+        assert "code-analysis-requested" in config.topic_code_analysis_requested
 
     def test_kafka_environment_normalizes_uppercase(self) -> None:
         """Test that kafka_environment normalizes to lowercase."""
@@ -858,8 +823,8 @@ class TestKafkaEnvironmentValidation:
         )
         assert config.kafka_environment == "dev-us-east-1"
 
-    def test_topic_names_built_correctly_with_valid_environment(self) -> None:
-        """Test that topic names are built correctly with valid kafka_environment."""
+    def test_topic_names_have_no_environment_prefix(self) -> None:
+        """Test that topic names have no environment prefix regardless of kafka_environment."""
         from omniclaude.lib.config.intelligence_config import IntelligenceConfig
 
         config = IntelligenceConfig(
@@ -867,32 +832,6 @@ class TestKafkaEnvironmentValidation:
             kafka_environment="staging",
         )
 
-        # Verify topic names don't have leading dots
-        assert config.topic_code_analysis_requested.startswith("staging.")
+        # Topics should NOT start with environment prefix
+        assert not config.topic_code_analysis_requested.startswith("staging.")
         assert not config.topic_code_analysis_requested.startswith(".")
-
-    def test_from_env_error_message_includes_guidance(self) -> None:
-        """Test that the error message includes helpful guidance for fixing."""
-        mock_settings = MagicMock()
-        mock_settings.get_effective_kafka_bootstrap_servers.return_value = (
-            "localhost:9092"
-        )
-        mock_settings.kafka_environment = ""
-
-        with patch("omniclaude.lib.config.intelligence_config.settings", mock_settings):
-            from omniclaude.lib.config.intelligence_config import IntelligenceConfig
-
-            with pytest.raises(ValueError) as exc_info:
-                IntelligenceConfig.from_env()
-
-            error_message = str(exc_info.value)
-            # Should mention .env file
-            assert ".env" in error_message
-            # Should provide example values
-            assert (
-                "dev" in error_message
-                or "staging" in error_message
-                or "prod" in error_message
-            )
-            # Should have example syntax
-            assert "KAFKA_ENVIRONMENT=" in error_message

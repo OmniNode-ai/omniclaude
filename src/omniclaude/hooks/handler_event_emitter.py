@@ -87,7 +87,7 @@ class ModelEventTracingConfig:
         correlation_id: Correlation ID for distributed tracing.
         causation_id: ID of the event/trigger that caused this event.
         emitted_at: Event timestamp (defaults to now UTC if not provided).
-        environment: Metadata label for config objects (not used for topic prefixing per OMN-1972).
+        environment: Environment label for config metadata (not used for topic prefixing).
     """
 
     correlation_id: UUID | None = None
@@ -210,7 +210,7 @@ class ModelClaudeHookEventConfig:
         prompt: The full prompt text (for UserPromptSubmit events).
         correlation_id: Optional correlation ID for distributed tracing.
         timestamp_utc: Event timestamp (defaults to now UTC if not provided).
-        environment: Metadata label for config origin (not used for topic prefixing per OMN-1972).
+        environment: Environment label for config metadata (not used for topic prefixing).
     """
 
     event_type: EnumClaudeCodeHookEventType
@@ -641,7 +641,7 @@ async def emit_session_started(
         correlation_id: Correlation ID for tracing (defaults to session_id).
         causation_id: Causation ID for event chain (generated if not provided).
         emitted_at: Event timestamp (defaults to now UTC).
-        environment: Kafka environment prefix.
+        environment: Environment label for config metadata (not used for topic prefixing).
 
     Returns:
         ModelEventPublishResult indicating success or failure.
@@ -733,7 +733,7 @@ async def emit_session_ended(
         correlation_id: Correlation ID for tracing (defaults to session_id).
         causation_id: Causation ID for event chain (generated if not provided).
         emitted_at: Event timestamp (defaults to now UTC).
-        environment: Kafka environment prefix.
+        environment: Environment label for config metadata (not used for topic prefixing).
 
     Returns:
         ModelEventPublishResult indicating success or failure.
@@ -828,7 +828,7 @@ async def emit_prompt_submitted(
         correlation_id: Correlation ID for tracing (defaults to session_id).
         causation_id: Causation ID for event chain (generated if not provided).
         emitted_at: Event timestamp (defaults to now UTC).
-        environment: Kafka environment prefix.
+        environment: Environment label for config metadata (not used for topic prefixing).
 
     Returns:
         ModelEventPublishResult indicating success or failure.
@@ -927,7 +927,7 @@ async def emit_tool_executed(
         correlation_id: Correlation ID for tracing (defaults to session_id).
         causation_id: Causation ID for event chain (generated if not provided).
         emitted_at: Event timestamp (defaults to now UTC).
-        environment: Kafka environment prefix.
+        environment: Environment label for config metadata (not used for topic prefixing).
 
     Returns:
         ModelEventPublishResult indicating success or failure.

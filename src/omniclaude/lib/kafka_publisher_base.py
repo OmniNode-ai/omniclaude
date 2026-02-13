@@ -13,7 +13,6 @@ Usage:
         close_shared_producer,
         create_event_envelope,
         get_kafka_bootstrap_servers,
-        get_kafka_topic_prefix,
         publish_to_kafka,
         publish_to_kafka_sync,
         KAFKA_PUBLISH_TIMEOUT_SECONDS,
@@ -93,18 +92,6 @@ def get_kafka_bootstrap_servers() -> str:
         default_servers,
     )
     return default_servers
-
-
-def get_kafka_topic_prefix() -> str:
-    """Get Kafka topic prefix (environment) from environment variables.
-
-    Returns:
-        Topic prefix (e.g., "dev", "staging", "prod"). Defaults to "dev".
-    """
-    env_prefix = os.environ.get("KAFKA_TOPIC_PREFIX") or os.environ.get(
-        "KAFKA_ENVIRONMENT"
-    )
-    return env_prefix if env_prefix else "dev"
 
 
 def create_event_envelope(

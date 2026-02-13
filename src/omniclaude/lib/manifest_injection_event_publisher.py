@@ -40,7 +40,6 @@ from omniclaude.lib.kafka_publisher_base import (
     KAFKA_PUBLISH_TIMEOUT_SECONDS,
     close_shared_producer,
     create_event_envelope,
-    get_kafka_topic_prefix,
     publish_to_kafka,
     publish_to_kafka_sync,
 )
@@ -176,11 +175,11 @@ async def publish_manifest_injection_event(
         )
 
         # Build ONEX-compliant topic name using TopicBase
-        topic_prefix = get_kafka_topic_prefix()
+        # No environment prefix per OMN-1972
         topic_base = _EVENT_TYPE_TO_TOPIC.get(
             injection_type, TopicBase.INJECTION_RECORDED
         )
-        topic = build_topic(topic_prefix, topic_base)
+        topic = build_topic("", topic_base)
 
         # Publish to Kafka
         result = await publish_to_kafka(topic, envelope, correlation_id)

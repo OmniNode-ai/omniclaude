@@ -34,7 +34,7 @@ Example:
     ...     working_directory="/workspace/project",
     ...     hook_source="startup",
     ... )
-    >>> topic = build_topic("dev", TopicBase.SESSION_STARTED)
+    >>> topic = build_topic("", TopicBase.SESSION_STARTED)
     >>> # Publish event.model_dump_json() to topic
 """
 

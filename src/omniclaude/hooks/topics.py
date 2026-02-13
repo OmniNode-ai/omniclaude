@@ -1,7 +1,8 @@
 """Topic base names and helper for OmniClaude events.
 
-Topic names do NOT include environment prefix.
-Final topic = f"{prefix}.{base_name}" or just base_name if prefix is empty.
+Per OMN-1972, TopicBase values ARE the canonical wire topic names. No environment
+prefix is applied. The build_topic() helper still accepts a prefix argument for
+validation purposes, but callers should always pass an empty string.
 """
 
 from __future__ import annotations
@@ -196,7 +197,7 @@ def _validate_topic_name(topic: str) -> None:
             consecutive dots, empty segments, or invalid characters).
 
     Example:
-        >>> _validate_topic_name("dev.omniclaude.session.started.v1")  # Valid, no error
+        >>> _validate_topic_name("onex.evt.omniclaude.session-started.v1")  # Valid, no error
 
         >>> _validate_topic_name(".invalid")  # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
@@ -247,36 +248,34 @@ def build_topic(prefix: str, base: str) -> str:
     """Build full topic name from prefix and base.
 
     Args:
-        prefix: Environment prefix (e.g., "dev", "staging", "prod").
-            Must be a string without dots. If empty or whitespace-only,
-            returns just the base topic name.
+        prefix: Topic prefix string. Must be a string without dots.
+            If empty or whitespace-only, returns just the base topic name.
+            Per OMN-1972, callers should always pass empty string ("") since
+            TopicBase values are the canonical wire topic names with no
+            environment prefix.
         base: Base topic name from TopicBase (e.g., "omniclaude.session.started.v1").
             Must be a valid dotted topic name.
 
     Returns:
-        Full topic name (e.g., "dev.omniclaude.session.started.v1"), or just the
-        base topic name if prefix is empty.
+        Full topic name. If prefix is empty, returns just the base topic name.
 
     Raises:
         ModelOnexError: If prefix is None, not a string, or contains dots.
         ModelOnexError: If base is empty, None, whitespace-only, or malformed.
 
     Examples:
-        >>> build_topic("dev", TopicBase.SESSION_STARTED)
-        'dev.omniclaude.session.started.v1'
-
         >>> build_topic("", TopicBase.SESSION_STARTED)
-        'omniclaude.session.started.v1'
+        'onex.evt.omniclaude.session-started.v1'
 
         >>> build_topic("  ", TopicBase.SESSION_STARTED)
-        'omniclaude.session.started.v1'
+        'onex.evt.omniclaude.session-started.v1'
 
         >>> build_topic(None, TopicBase.SESSION_STARTED)  # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
             ...
         ModelOnexError: ...
 
-        >>> build_topic("dev.staging", TopicBase.SESSION_STARTED)  # doctest: +IGNORE_EXCEPTION_DETAIL
+        >>> build_topic("x.y", TopicBase.SESSION_STARTED)  # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
             ...
         ModelOnexError: ...

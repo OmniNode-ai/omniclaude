@@ -178,8 +178,7 @@ class FanOutRule:
 
     Attributes:
         topic_base: The base topic name from TopicBase enum.
-            The daemon will resolve this to the full topic name with
-            environment prefix (e.g., "dev.onex.evt.omniclaude.prompt-submitted.v1").
+            TopicBase values ARE the wire topic names (no environment prefix per OMN-1972).
         transform: Optional function to transform the payload before publishing.
             If None, the payload is passed through unchanged.
             Transform signature: (dict[str, object]) -> dict[str, object]

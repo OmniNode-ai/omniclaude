@@ -303,7 +303,7 @@ Then start a new Claude Code session to restart the daemon.
    ```bash
    ls -la ~/.claude/plugins/cache/*/hooks/logs/hook-*.log
    ```
-3. Verify `KAFKA_ENVIRONMENT` is set (used as topic prefix):
+3. Verify `KAFKA_ENVIRONMENT` is set (metadata label, not used for topic prefixing per OMN-1972):
    ```bash
    source .env && echo "$KAFKA_ENVIRONMENT"
    ```

@@ -194,16 +194,6 @@ def _get_kafka_bootstrap_servers() -> str | None:
     return None
 
 
-def _get_kafka_topic_prefix() -> str:
-    """Get Kafka topic prefix.
-
-    Returns:
-        Empty string. Topics are realm-agnostic per ONEX convention (OMN-1972):
-        TopicBase values ARE the wire topic names, no environment prefix.
-    """
-    return ""
-
-
 async def _get_kafka_producer() -> Any:
     """
     Get or create Kafka producer (async singleton pattern).
@@ -347,8 +337,7 @@ async def publish_action_event(
         event = {k: v for k, v in event.items() if v is not None}
 
         # Build ONEX-compliant topic name
-        topic_prefix = _get_kafka_topic_prefix()
-        topic = build_topic(topic_prefix, TopicBase.AGENT_ACTION)
+        topic = build_topic("", TopicBase.AGENT_ACTION)
 
         # Get producer
         producer = await _get_kafka_producer()
@@ -393,7 +382,7 @@ async def publish_action_event(
         # Handle timeout specifically for better observability
         # Build topic name for error reporting (may fail if topic construction failed earlier)
         try:
-            error_topic = build_topic(_get_kafka_topic_prefix(), TopicBase.AGENT_ACTION)
+            error_topic = build_topic("", TopicBase.AGENT_ACTION)
         except Exception:
             error_topic = TopicBase.AGENT_ACTION  # Fall back to base name
 
@@ -417,7 +406,7 @@ async def publish_action_event(
         # Log error but don't fail - observability shouldn't break execution
         # Build topic name for error reporting (may fail if topic construction failed earlier)
         try:
-            error_topic = build_topic(_get_kafka_topic_prefix(), TopicBase.AGENT_ACTION)
+            error_topic = build_topic("", TopicBase.AGENT_ACTION)
         except Exception:
             error_topic = TopicBase.AGENT_ACTION  # Fall back to base name
 
