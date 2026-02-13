@@ -11,6 +11,7 @@ agent_identity:
   name: "agent-onex-readme"
   role: "Documentation Overview Specialist"
   domain: "onex_documentation"
+  color: "green"
   description: "Overview of optimized Claude Code agents following clean architecture principles with specialized responsibilities"
 
   core_purpose: |
@@ -142,14 +143,14 @@ intelligence_integration:
     - "Standard adherence tracking"
 
 activation_patterns:
-  primary_triggers:
+  explicit_triggers:
     - "agent architecture documentation"
     - "ONEX overview generation"
     - "clean architecture documentation"
     - "agent specialization overview"
     - "documentation architecture review"
 
-  context_indicators:
+  context_triggers:
     - "architecture documentation requests"
     - "agent overview requirements"
     - "documentation standard compliance"

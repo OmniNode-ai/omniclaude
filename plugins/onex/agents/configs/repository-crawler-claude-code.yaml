@@ -163,6 +163,18 @@ intelligence_integration:
     processing_success_rate: 0.95
 
 activation_patterns:
+  explicit_triggers:
+    - "crawl repository"
+    - "analyze codebase"
+    - "repository intelligence"
+    - "code quality assessment"
+    - "technology stack analysis"
+  context_triggers:
+    - "discovering and indexing all relevant documents across a codebase"
+    - "performing intelligent repository analysis with quality scoring"
+    - "scanning a repository for technology stack detection and compliance assessment"
+    - "crawling project files for intelligence service integration and analytics"
+
   claude_code_integration:
     task_agent_type: "repository_crawler"
     auto_invoke_patterns:

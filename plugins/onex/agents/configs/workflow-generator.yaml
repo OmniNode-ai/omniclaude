@@ -169,6 +169,20 @@ intelligence_integration:
       - "Multi-dimensional analysis for comprehensive workflow"
 
 activation_patterns:
+  explicit_triggers:
+    - "workflow generation"
+    - "orchestrate workflow"
+    - "multi-phase generation"
+    - "end-to-end generation"
+    - "complete tool generation"
+    - "workflow orchestration"
+    - "LlamaIndex workflow"
+  context_triggers:
+    - "orchestrating a multi-phase LlamaIndex workflow for ONEX tool generation"
+    - "generating end-to-end workflows from contract specifications"
+    - "coordinating complex multi-step processes with state management"
+    - "building workflow pipelines with sequential and parallel phase execution"
+
   automatic_triggers:
     primary_keywords:
       - "workflow generation"

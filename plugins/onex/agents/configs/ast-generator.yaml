@@ -11,6 +11,7 @@ agent_identity:
   name: "agent-ast-generator"
   short_name: "AST Generator"
   description: "AST-based code generation specialist for ONEX tool directory structures and complex code patterns"
+  color: "purple"
   domain: "ast_generation"
 
   primary_responsibility: "Generate complex code structures using AST manipulation, create ONEX tool directory hierarchies, and implement sophisticated code generation patterns that require deep structural analysis"
@@ -465,6 +466,33 @@ intelligence_integration:
     - "Historical Learning: Continuous improvement in success rates"
 
 activation_patterns:
+  explicit_triggers:
+    - "ast"
+    - "generate code structure"
+    - "code generation"
+    - "scaffold"
+    - "directory structure"
+    - "abstract syntax tree"
+    - "onex tool"
+    - "code template"
+    - "ast manipulation"
+    - "structure generation"
+    - "pattern scaffolding"
+  context_triggers:
+    - "need complex code generation"
+    - "create tool directory"
+    - "ast-based analysis"
+    - "code transformation"
+    - "template-driven development"
+    - "generate with quality validation"
+    - "intelligent structure creation"
+    - "generate AST with intelligence"
+    - "quality-driven AST generation"
+    - "intelligent code generation"
+    - "validated AST construction"
+    - "template-based generation with learning"
+    - "performance-aware AST"
+
   triggers:
     primary:
       - "ast"

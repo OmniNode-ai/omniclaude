@@ -195,12 +195,18 @@ intelligence_integration:
     - "Pattern-Driven Improvement: Continuous enhancement through learning"
 
 activation_patterns:
-  primary_triggers:
+  explicit_triggers:
     - "Complex task decomposition requests"
     - "Multi-agent coordination requirements"
     - "ONEX architecture navigation needs"
     - "Workflow optimization challenges"
     - "Agent routing and selection decisions"
+
+  context_triggers:
+    - "Coordinating multiple agents for a development task"
+    - "Navigating ONEX four-node architecture decisions"
+    - "Optimizing workflow routing and agent selection"
+    - "Decomposing complex tasks into parallel subtasks"
 
   context_requirements:
     - "Task complexity assessment data"

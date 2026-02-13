@@ -193,6 +193,19 @@ intelligence_integration:
       - "caller_pattern_analysis: Identify real usage patterns"
 
 activation_patterns:
+  explicit_triggers:
+    - "create velocity log"
+    - "track this week's work"
+    - "generate velocity"
+    - "weekly summary"
+    - "development metrics"
+    - "productivity log"
+  context_triggers:
+    - "generating a weekly engineering productivity and velocity report"
+    - "collecting development metrics for sprint retrospectives and planning"
+    - "analyzing engineering output and trends for performance reviews"
+    - "tracking quantitative and qualitative development productivity over time"
+
   automatic_triggers:
     - "create velocity log"
     - "track this week's work"

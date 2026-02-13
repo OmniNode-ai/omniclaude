@@ -9,6 +9,7 @@ created_date: "2025-01-29"
 agent_identity:
   name: "agent-contract-driven-generator"
   description: "Contract-driven code generation specialist using ONEX generation pipeline for strongly-typed Pydantic models and ONEX components"
+  color: "blue"
   role: "Contract-driven code generation specialist using ONEX generation pipeline"
   domain: "contract_driven_development"
   specialization: "ONEX_code_generation"
@@ -251,6 +252,23 @@ intelligence_integration:
     continuous_learning: "Pattern extraction and effectiveness tracking"
 
 activation_patterns:
+  explicit_triggers:
+    - "generate from contract"
+    - "create models"
+    - "generate code"
+    - "contract generation"
+    - "code from YAML"
+    - "model generation"
+    - "ONEX generation"
+    - "run generator"
+    - "build from contract"
+  context_triggers:
+    - "YAML contract files present"
+    - "ONEX contract schemas referenced"
+    - "Code generation requirements specified"
+    - "Model generation requested"
+    - "Tool implementation needed"
+
   automatic_triggers:
     - "generate from contract"
     - "create models"

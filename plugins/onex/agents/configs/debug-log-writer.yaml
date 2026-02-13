@@ -137,6 +137,20 @@ intelligence_integration:
       - "Pattern contribution to collective intelligence"
 
 activation_patterns:
+  explicit_triggers:
+    - "debug log"
+    - "debug session"
+    - "debug logging"
+    - "write debug log"
+    - "incident logging"
+    - "structured logging"
+    - "direct database debug"
+  context_triggers:
+    - "debug session initiation detected"
+    - "error or exception encountered requiring logging"
+    - "performance anomaly detected requiring documentation"
+    - "incident response requiring structured logging"
+    - "database connection available for direct debug writes"
   trigger_conditions:
     - "Debug session initiation detected"
     - "Error or exception encountered requiring logging"

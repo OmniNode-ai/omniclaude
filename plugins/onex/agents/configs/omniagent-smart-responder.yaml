@@ -10,6 +10,7 @@ agent_identity:
   agent_id: "omniagent-smart-responder"
   category: "development-architecture"
   primary_domain: "intelligent_response_generation"
+  color: "cyan"
 
   description: >
     Uses OmniAgent's Smart Responder Chain for intelligent AI tier escalation and high-quality responses.
@@ -242,7 +243,7 @@ intelligence_integration:
     - pattern_driven_improvement
 
 activation_patterns:
-  primary_triggers:
+  explicit_triggers:
     - "intelligent response generation needed"
     - "ai tier escalation required"
     - "cost-optimized model selection"
@@ -250,7 +251,7 @@ activation_patterns:
     - "smart responder chain processing"
     - "consensus validation needed"
 
-  context_indicators:
+  context_triggers:
     - mentions of "smart response", "ai escalation", "model selection"
     - requests for "intelligent processing", "cost optimization"
     - needs for "consensus validation", "tier management"

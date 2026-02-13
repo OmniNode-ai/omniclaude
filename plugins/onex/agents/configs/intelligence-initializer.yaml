@@ -197,7 +197,7 @@ intelligence_integration:
     documentation: "agent-documentation-architect"
 
 activation_patterns:
-  auto_activation_triggers:
+  explicit_triggers:
     - "initialize intelligence system"
     - "onboard repository"
     - "setup intelligence"

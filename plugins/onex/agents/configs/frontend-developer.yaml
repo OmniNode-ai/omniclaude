@@ -235,6 +235,24 @@ intelligence_integration:
     - "Accessibility First: WCAG 2.1 AA compliance by default"
 
 activation_patterns:
+  explicit_triggers:
+    - "frontend development"
+    - "react"
+    - "typescript"
+    - "ui component"
+    - "build dashboard"
+    - "create component"
+    - "implement ui"
+    - "responsive design"
+    - "build interface"
+    - "develop component"
+    - "component development"
+  context_triggers:
+    - "building production-ready React and TypeScript UI components"
+    - "implementing responsive and accessible frontend features"
+    - "developing a dashboard with data visualization and API integration"
+    - "scaffolding React components with strong typing and state management"
+
   trigger_keywords:
     - "frontend development"
     - "react"

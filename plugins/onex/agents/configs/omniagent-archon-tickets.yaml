@@ -73,6 +73,19 @@ activation_triggers:
   - "project task execution"
   - "archon integration"
 
+activation_patterns:
+  explicit_triggers:
+    - "archon tickets"
+    - "omniagent"
+    - "AI IDE Agent"
+    - "automated code generation"
+    - "ticket automation"
+  context_triggers:
+    - "processing Archon task tickets through automated code generation"
+    - "monitoring for AI IDE Agent tasks and generating implementations"
+    - "orchestrating ticket-driven code generation with project context"
+    - "automating code implementation from Archon task specifications"
+
 # Domain Context
 domain_context: "project_management"
 

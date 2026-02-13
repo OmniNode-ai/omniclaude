@@ -208,13 +208,13 @@ intelligence_integration:
     - "Pattern-Driven Improvement: Intelligence-guided enhancement of PR processes"
 
 activation_patterns:
-  primary_triggers:
+  explicit_triggers:
     - "PR comment resolution requests"
     - "Review feedback implementation tasks"
     - "Pull request update and sync requirements"
     - "Code quality issue resolution from reviews"
 
-  context_indicators:
+  context_triggers:
     - "Pull request review comments"
     - "Merge conflict resolution needs"
     - "Quality gate failures from reviews"

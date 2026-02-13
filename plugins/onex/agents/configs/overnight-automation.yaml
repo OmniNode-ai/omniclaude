@@ -181,14 +181,14 @@ intelligence_integration:
     - "Pattern-Driven Improvement"
 
 activation_patterns:
-  primary_triggers:
+  explicit_triggers:
     - "overnight automation"
     - "scheduled tasks"
     - "batch processing"
     - "automation orchestration"
     - "24/7 operations"
 
-  context_indicators:
+  context_triggers:
     - "automation scheduling needs"
     - "overnight process coordination"
     - "batch operation requirements"

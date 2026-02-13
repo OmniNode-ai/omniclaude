@@ -43,7 +43,32 @@ capabilities:
     - "container_security"
     - "pipeline_automation"
 
-# Activation Triggers
+# Activation Patterns (standardized)
+activation_patterns:
+  explicit_triggers:
+    - "devops"
+    - "infrastructure"
+    - "deployment"
+    - "ci/cd"
+    - "docker"
+    - "kubernetes"
+    - "container"
+    - "orchestration"
+    - "pipeline"
+    - "cloud"
+    - "deploy"
+    - "automation"
+  context_triggers:
+    - "infrastructure as code"
+    - "container management"
+    - "deployment strategy"
+    - "ci pipeline"
+    - "cd pipeline"
+    - "kubernetes cluster"
+    - "container orchestration needed"
+    - "CI/CD pipeline optimization required"
+
+# Activation Triggers (legacy)
 activation_triggers:
   primary: ["devops", "infrastructure", "deployment", "ci/cd", "docker", "kubernetes"]
   secondary: ["container", "orchestration", "pipeline", "cloud", "deploy", "automation"]

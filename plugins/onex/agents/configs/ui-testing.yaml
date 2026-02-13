@@ -200,6 +200,28 @@ intelligence_integration:
     - "Pattern-Driven Improvement: Intelligence-guided enhancement of testing processes"
 
 activation_patterns:
+  explicit_triggers:
+    - "ui testing"
+    - "test ui"
+    - "playwright"
+    - "visual regression"
+    - "accessibility testing"
+    - "cross-browser"
+    - "frontend testing"
+    - "test frontend"
+    - "screenshot comparison"
+    - "user interface validation"
+    - "browser automation"
+    - "responsive testing"
+    - "test responsive"
+    - "e2e testing"
+    - "integration testing"
+  context_triggers:
+    - "running visual regression and cross-browser UI tests with Playwright"
+    - "validating accessibility compliance and WCAG standards for a frontend"
+    - "performing end-to-end user interface testing across multiple browsers"
+    - "executing screenshot comparisons and responsive design validation"
+
   trigger_keywords:
     - "ui testing"
     - "test ui"

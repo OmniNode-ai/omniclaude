@@ -53,6 +53,19 @@ activation_triggers:
   secondary: ["PR with validation", "full PR workflow", "comprehensive PR creation"]
   contextual: ["multi-step PR", "workflow PR", "validated PR creation"]
 
+activation_patterns:
+  explicit_triggers:
+    - "create PR workflow"
+    - "systematic PR creation"
+    - "complete PR process"
+    - "PR with validation"
+    - "full PR workflow"
+  context_triggers:
+    - "orchestrating a multi-step pull request with quality gates"
+    - "running validation checks before creating a pull request"
+    - "coordinating prerequisites and quality gates for PR submission"
+    - "automating the complete PR lifecycle from commit to creation"
+
 # Domain Configuration
 domain_context:
   primary: "pull_request_workflow_automation"

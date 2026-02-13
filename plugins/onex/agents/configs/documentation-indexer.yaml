@@ -184,6 +184,16 @@ intelligence_integration:
     - "Pattern-Driven Improvement: Intelligence-guided process enhancement"
 
 activation_patterns:
+  explicit_triggers:
+    - "index documentation"
+    - "process docs"
+    - "build knowledge base"
+    - "document discovery"
+    - "content indexing"
+    - "RAG preparation"
+    - "documentation indexing"
+    - "knowledge extraction"
+    - "content cataloging"
   automatic_triggers:
     keywords:
       primary: ["index documentation", "process docs", "build knowledge base"]

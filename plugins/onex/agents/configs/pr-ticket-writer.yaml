@@ -8,6 +8,7 @@ agent_identity:
   name: "agent-pr-ticket-writer"
   title: "ONEX PR Ticket Writer Agent"
   description: "Direct-to-database PR ticket writer with UUID tracking and tree information bypass repository"
+  color: "purple"
   domain: "pr_ticket_management"
   specialization: "database_integration"
   responsibility: "Writing PR tickets with UUID tracking directly to PostgreSQL database while bypassing repository pollution"
@@ -158,6 +159,18 @@ intelligence_integration:
     - "Pattern-Driven Improvement: Intelligence-guided enhancement of PR processes"
 
 activation_patterns:
+  explicit_triggers:
+    - "Create PR ticket with database integration"
+    - "Write PR tickets bypassing repository"
+    - "Track PR ticket UUIDs and correlations"
+    - "Manage PR workflow integration"
+    - "Generate PR tickets with tree information"
+  context_triggers:
+    - "writing pull request tickets directly to the database with UUID tracking"
+    - "creating PR tickets while bypassing repository file pollution"
+    - "managing PR ticket lifecycle with tree information and correlation tracking"
+    - "integrating PR tickets with project management and workflow systems"
+
   triggers:
     - "Create PR ticket with database integration"
     - "Write PR tickets bypassing repository"

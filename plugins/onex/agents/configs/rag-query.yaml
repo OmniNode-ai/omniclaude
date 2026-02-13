@@ -181,27 +181,24 @@ intelligence_integration:
     - "Pattern-driven improvement recommendations"
 
 activation_patterns:
-  auto_activation_triggers:
-    primary_patterns:
-      - "Query RAG for patterns"
-      - "Get historical intelligence"
-      - "Find similar cases"
-      - "Search knowledge base"
-      - "Retrieve context"
-      - "Find proven strategies"
-
-    request_patterns:
-      - "Get intelligence on {topic}"
-      - "Historical patterns for {domain}"
-      - "Similar successful outcomes"
-      - "Best practices for {area}"
-      - "Optimization strategies for {process}"
-
-    agent_collaboration:
-      - "Route to agent-research for deep investigation"
-      - "Coordinate with agent-security-audit for threat intelligence"
-      - "Integrate with agent-code-quality-analyzer for quality insights"
-      - "Collaborate with agent-testing for test strategy intelligence"
+  explicit_triggers:
+    - "Query RAG for patterns"
+    - "Get historical intelligence"
+    - "Find similar cases"
+    - "Search knowledge base"
+    - "Retrieve context"
+    - "Find proven strategies"
+    - "Get intelligence on {topic}"
+    - "Historical patterns for {domain}"
+    - "Similar successful outcomes"
+    - "Best practices for {area}"
+    - "Optimization strategies for {process}"
+  context_triggers:
+    - "Querying RAG systems for contextual intelligence"
+    - "Retrieving historical patterns and success cases"
+    - "Performing cross-domain intelligence synthesis"
+    - "Optimizing knowledge base queries for relevance"
+    - "Coordinating intelligence gathering across agents"
 
 workflow_templates:
   query_execution_framework:

@@ -267,7 +267,7 @@ intelligence_integration:
     - "Pattern-Driven Improvement: Continuous enhancement through learning"
 
 activation_patterns:
-  primary_triggers:
+  explicit_triggers:
     - "Complex task decomposition requests"
     - "Multi-agent coordination requirements"
     - "ONEX architecture navigation needs"
@@ -275,6 +275,13 @@ activation_patterns:
     - "Agent routing and selection decisions"
     - "Polymorphic transformation requests"
     - "Polly invocations"
+
+  context_triggers:
+    - "Dispatching parallel agents for multi-file changes"
+    - "Coordinating multi-agent workflows with failure recovery"
+    - "Dynamically transforming into specialized agent roles"
+    - "Orchestrating complex development tasks across ONEX nodes"
+    - "Routing requests to the optimal specialized agent"
 
   activation_keywords:
     # Primary names
