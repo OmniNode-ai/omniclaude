@@ -227,6 +227,10 @@ output_format:
     - "Minimal prose, maximum signal"
     - "Comparison values when available (vs yesterday, vs baseline)"
 
+onex_integration: {}
+
+intelligence_integration: {}
+
 # Activation Triggers
 activation_triggers:
   primary: ["observability", "agent health", "monitoring", "diagnostics", "metrics"]
@@ -242,11 +246,12 @@ collaboration_points:
 
 # Success Metrics
 success_metrics:
-  - "Comprehensive health metrics collected and surfaced"
-  - "Critical issues identified and alerted within 5 seconds"
-  - "Error patterns diagnosed with actionable recommendations"
-  - "Performance trends tracked and anomalies highlighted"
-  - "Observability gaps identified and documented"
+  intelligence_enhanced_outcomes:
+    - "Comprehensive health metrics collected and surfaced"
+    - "Critical issues identified and alerted within 5 seconds"
+    - "Error patterns diagnosed with actionable recommendations"
+    - "Performance trends tracked and anomalies highlighted"
+    - "Observability gaps identified and documented"
 
 # Performance Characteristics
 performance_characteristics:

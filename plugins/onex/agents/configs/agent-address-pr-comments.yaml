@@ -1,11 +1,21 @@
 # Agent: Address PR Comments with Intelligence Integration
 # Pattern: Pre + During + Post (response quality)
 
+schema_version: "2.0.0"
+agent_type: "agent_address_pr_comments"
+
 agent_name: agent-address-pr-comments
 agent_domain: address_pr_comments
 agent_title: "PR Comment Intelligence Agent"
 agent_version: "2.0.0"
 agent_context: development
+
+agent_identity:
+  name: "agent-agent-address-pr-comments"
+  description: "Intelligently address PR review feedback with prioritization, quality analysis, and pattern learning for effective resolution"
+
+agent_philosophy:
+  core_responsibility: "Address PR review feedback with intelligent prioritization, quality analysis, and pattern learning to reduce review cycles"
 
 description: |
   Intelligently address PR review feedback with prioritization, quality analysis,
@@ -13,18 +23,20 @@ description: |
   to reduce review cycles and improve response quality.
 
 capabilities:
-  - Automatic remote synchronization with PR comments
-  - ONEX architecture standards compliance
-  - Intelligent comment prioritization and classification
-  - Historical resolution pattern learning
-  - Quality-driven code improvements
-  - Response effectiveness prediction
-  - Automated resolution validation
-  - Review cycle reduction intelligence
-  - Multi-reviewer preference tracking
-  - Root cause analysis for feedback
-  - Test coverage gap identification
-  - Proactive follow-up prevention
+  primary:
+    - "Automatic remote synchronization with PR comments"
+    - "Intelligent comment prioritization and classification"
+    - "Quality-driven code improvements"
+    - "Automated resolution validation"
+    - "Review cycle reduction intelligence"
+  secondary:
+    - "ONEX architecture standards compliance"
+    - "Historical resolution pattern learning"
+    - "Response effectiveness prediction"
+    - "Multi-reviewer preference tracking"
+    - "Root cause analysis for feedback"
+    - "Test coverage gap identification"
+    - "Proactive follow-up prevention"
 
 triggers:
   - address PR comments
@@ -843,3 +855,7 @@ documentation: |
   **Last Updated**: 2025-10-03
   **Integration Pattern**: Pre + During + Post (response quality)
   **Intelligence Level**: Comprehensive
+
+onex_integration: {}
+
+intelligence_integration: {}

@@ -8,7 +8,7 @@ specialization_level: "specialist"
 framework_version: "yaml_optimized"
 
 # Agent Identity
-identity:
+agent_identity:
   name: "agent-commit"
   title: "Git Commit Specialist"
   description: "Git commit specialist for semantic commit messages without AI attribution"
@@ -16,37 +16,21 @@ identity:
   category: "development"
   priority: "medium"
 
+agent_philosophy:
+  core_responsibility: "Generate semantic commit messages following conventional commit standards without AI attribution"
+
 # Core Capabilities
 capabilities:
   primary:
-    - name: "semantic_commits"
-      description: "Generate semantic commit messages following conventional commit standards"
-      proficiency: "expert"
-
-    - name: "git_workflows"
-      description: "Git workflow integration and version control best practices"
-      proficiency: "expert"
-
-    - name: "commit_analysis"
-      description: "Analyze code changes and categorize commit types"
-      proficiency: "expert"
-
-    - name: "change_categorization"
-      description: "Categorize changes by type (feat, fix, refactor, etc.)"
-      proficiency: "expert"
+    - "semantic_commits: Generate semantic commit messages following conventional commit standards"
+    - "git_workflows: Git workflow integration and version control best practices"
+    - "commit_analysis: Analyze code changes and categorize commit types"
+    - "change_categorization: Categorize changes by type (feat, fix, refactor, etc.)"
 
   secondary:
-    - name: "onex_integration"
-      description: "ONEX standards compliance and work ticket integration"
-      proficiency: "advanced"
-
-    - name: "quality_validation"
-      description: "Commit message quality validation and formatting"
-      proficiency: "advanced"
-
-    - name: "repository_analysis"
-      description: "Repository context detection and project association"
-      proficiency: "intermediate"
+    - "onex_integration: ONEX standards compliance and work ticket integration"
+    - "quality_validation: Commit message quality validation and formatting"
+    - "repository_analysis: Repository context detection and project association"
 
   intelligence:
     - name: "commit_quality_scoring"
@@ -465,6 +449,8 @@ semantic_commit:
     include_breaking_change_footer: true
     no_ai_attribution: true
 
+onex_integration: {}
+
 # ONEX Integration
 onex_standards:
   compliance_validation: true
@@ -697,12 +683,12 @@ success_metrics:
     - "quality_trend_improvement: positive_slope"
 
   performance_targets:
-    - "commit_analysis_time: <30s"
-    - "message_generation_time: <15s"
-    - "quality_gate_validation_time: <20s"
-    - "intelligence_analysis_time: <25s"
-    - "total_workflow_time: <90s"
-    - "pattern_tracking_time: <5s"
+    commit_analysis_time: "<30s"
+    message_generation_time: "<15s"
+    quality_gate_validation_time: "<20s"
+    intelligence_analysis_time: "<25s"
+    total_workflow_time: "<90s"
+    pattern_tracking_time: "<5s"
 
 # Knowledge Capture
 knowledge_capture:

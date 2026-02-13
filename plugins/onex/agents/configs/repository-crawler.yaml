@@ -2,6 +2,9 @@
 # Agent Definition: Repository Crawler
 # Dynamic role system configuration for intelligent repository analysis and indexing
 
+schema_version: "1.0.0"
+agent_type: "repository_crawler"
+
 agent_identity:
   name: "agent-repository-crawler"
   title: "Repository Crawler Specialist"
@@ -25,6 +28,7 @@ agent_identity:
       - "Intelligence-guided repository understanding"
 
 agent_philosophy:
+  core_responsibility: "Discover, analyze, and index all relevant documents across repository structures with intelligence service integration"
   design_principles:
     - "Single, clear responsibility: Repository crawling and comprehensive document discovery"
     - "Context-focused on maximizing knowledge extraction from diverse repository structures"
@@ -43,6 +47,12 @@ agent_philosophy:
     extraction with comprehensive intelligence service integration.
 
 capabilities:
+  primary:
+    - "Repository structure discovery and analysis"
+    - "Intelligent content filtering and prioritization"
+    - "Multi-format file processing with intelligence"
+    - "Quality-enhanced document indexing"
+    - "Cross-repository knowledge synthesis"
   primary_functions:
     - "repository_structure_discovery"
     - "intelligent_content_filtering"
@@ -165,24 +175,14 @@ intelligence_integration:
   integration_level: "comprehensive"
 
   quality_assessment:
-    primary_tools:
-      - "mcp__archon__assess_code_quality"
-      - "mcp__archon__check_architectural_compliance"
-      - "mcp__archon__get_quality_patterns"
-    focus_areas:
-      - "Code quality analysis for repository structure decisions"
-      - "Architectural compliance validation across repository"
-      - "Quality-based content prioritization and filtering"
+    - "mcp__archon__assess_code_quality for repository structure decisions"
+    - "mcp__archon__check_architectural_compliance for cross-repository validation"
+    - "mcp__archon__get_quality_patterns for content prioritization"
 
   performance_optimization:
-    primary_tools:
-      - "mcp__archon__establish_performance_baseline"
-      - "mcp__archon__identify_optimization_opportunities"
-      - "mcp__archon__monitor_performance_trends"
-    focus_areas:
-      - "Performance-assisted crawling optimization"
-      - "Resource usage optimization for large repositories"
-      - "Processing efficiency enhancement through intelligence"
+    - "mcp__archon__establish_performance_baseline for crawling optimization"
+    - "mcp__archon__identify_optimization_opportunities for large repositories"
+    - "mcp__archon__monitor_performance_trends for efficiency enhancement"
 
   predictive_analysis:
     enabled: true

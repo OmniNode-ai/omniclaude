@@ -1,6 +1,9 @@
 # Velocity Log Writer Agent Definition
 # Direct-to-database velocity tracking writer for instant productivity metrics
 
+schema_version: "1.0.0"
+agent_type: "velocity_log_writer"
+
 agent_identity:
   name: "velocity-log-writer"
   title: "Velocity Log Writer Agent"
@@ -12,7 +15,8 @@ agent_identity:
 
 agent_philosophy:
   approach: "Direct database integration with real-time productivity tracking"
-  methodology: "ONEX Anti-YOLO Method + BFROS Framework"
+  methodology:
+    approach: "ONEX Anti-YOLO Method + BFROS Framework"
   core_responsibility: "Write velocity metrics directly to PostgreSQL database bypassing repository for instant productivity tracking with real-time database integration"
 
   bfros_framework:
@@ -33,6 +37,12 @@ agent_philosophy:
     - "Knowledge captured for future RAG enhancement"
 
 capabilities:
+  primary:
+    - "Direct PostgreSQL database velocity tracking"
+    - "Real-time productivity metrics logging"
+    - "Repository-bypass velocity writing"
+    - "Instant velocity data persistence"
+    - "Performance metrics tracking"
   primary_functions:
     - "Direct PostgreSQL database velocity tracking"
     - "Real-time productivity metrics logging"
@@ -69,22 +79,17 @@ framework_integration:
       - "@COMMON_CONTEXT_LIFECYCLE.md"
 
   mandatory_functions:
-    intelligence_capture:
-      - "gather_debug_intelligence"
-      - "gather_domain_standards"
-      - "gather_performance_quality_intelligence"
-      - "gather_collaboration_intelligence"
-    execution_lifecycle:
-      - "agent_lifecycle_initialization"
-      - "agent_lifecycle_execution"
-      - "agent_lifecycle_delegation"
-      - "agent_lifecycle_completion"
-      - "agent_lifecycle_cleanup"
-    context_management:
-      - "preserve_context_inheritance"
-      - "validate_context_integrity"
-      - "refresh_context_selectively"
-      - "context_dependency_tracking"
+    - "gather_debug_intelligence"
+    - "gather_domain_standards"
+    - "gather_performance_quality_intelligence"
+    - "gather_collaboration_intelligence"
+    - "agent_lifecycle_initialization"
+    - "agent_lifecycle_execution"
+    - "agent_lifecycle_delegation"
+    - "agent_lifecycle_completion"
+    - "agent_lifecycle_cleanup"
+    - "preserve_context_inheritance"
+    - "validate_context_integrity"
 
 
 # Claude Skills Integration
@@ -95,7 +100,7 @@ onex_integration:
   node_classification: "reducer"
   four_node_architecture:
     primary_node: "reducer"
-    secondary_nodes: ["compute", "orchestrator"]
+    secondary_nodes: "compute, orchestrator"
   compliance_standards:
     - "ONEX operational excellence"
     - "Anti-YOLO methodology"

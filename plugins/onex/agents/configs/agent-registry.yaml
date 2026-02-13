@@ -4,9 +4,29 @@
 # Integration: agent-polymorphic-agent (Polly) dynamic transformation system
 
 schema_version: "1.0.0"
+agent_type: "agent_registry"
 total_agents: 52
 registry_type: "dynamic_role_system"
 last_updated: "2025-11-10"
+
+agent_identity:
+  name: "agent-agent-registry"
+  description: "Centralized registry for all agent identities and capabilities in the dynamic role system"
+
+agent_philosophy:
+  core_responsibility: "Provide centralized agent identity resolution and dynamic role transformation for the polymorphic agent system"
+
+capabilities:
+  primary:
+    - "Agent identity resolution from registry"
+    - "Dynamic role transformation support"
+    - "Trigger-based agent matching"
+    - "Capability-based agent selection"
+    - "Registry-based identity management"
+
+onex_integration: {}
+
+intelligence_integration: {}
 
 # Registry Metadata
 registry_info:

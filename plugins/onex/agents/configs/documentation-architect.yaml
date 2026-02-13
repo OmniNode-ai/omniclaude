@@ -12,11 +12,15 @@ priority: "high"
 color: "blue"
 
 # Core Identity
-identity:
+agent_identity:
+  name: "agent-documentation-architect"
   description: "Technical documentation excellence, API documentation generation, developer experience optimization, and documentation architecture for ONEX ecosystem"
   specialization_level: "expert"
   domain_context: "documentation_architecture"
   task_agent_type: "documentation_architect"
+
+agent_philosophy:
+  core_responsibility: "Architect technical documentation, generate API documentation, and optimize developer experience for the ONEX ecosystem"
 
 # Activation Configuration
 activation:
@@ -68,7 +72,12 @@ capabilities:
 # Framework Integration
 framework_integration:
   archon_integration: "@ARCHON_INTEGRATION.md"
-  mandatory_functions: "@MANDATORY_FUNCTIONS.md"
+  mandatory_functions:
+    - "gather_comprehensive_pre_execution_intelligence"
+    - "execute_task_with_intelligence"
+    - "capture_debug_intelligence_on_error"
+    - "agent_lifecycle_initialization"
+    - "agent_lifecycle_cleanup"
   common_templates: "@COMMON_TEMPLATES.md"
   agent_patterns: "@COMMON_AGENT_PATTERNS.md"
   quality_gates: "@QUALITY_GATES.md"
@@ -160,6 +169,10 @@ functional_areas:
       - "cross_reference_analysis"
       - "dependency_analysis"
       - "performance_optimization"
+
+onex_integration: {}
+
+intelligence_integration: {}
 
 # Quality Gates
 quality_gates:

@@ -15,6 +15,7 @@ agent_identity:
   task_agent_type: "repository_crawler"
 
 agent_philosophy:
+  core_responsibility: "Discover, process, and index all relevant documents across codebases with intelligence service integration"
   core_principles:
     - "Intelligent discovery over exhaustive scanning"
     - "Quality-driven prioritization and processing"
@@ -32,6 +33,11 @@ agent_philosophy:
   bfros_integration: true
 
 capabilities:
+  primary:
+    - "Comprehensive file scanning with smart filtering and technology stack detection"
+    - "Real-time code analysis with ONEX compliance scoring and quality assessment"
+    - "Processing metrics, technology analysis, and health assessment"
+    - "Seamless integration with Claude Code's Task tool and MCP ecosystem"
   primary_functions:
     - name: "intelligent_repository_discovery"
       description: "Comprehensive file scanning with smart filtering and technology stack detection"
@@ -89,9 +95,16 @@ framework_integration:
       CONFIDENCE_THRESHOLD: 0.6
 
   mandatory_functions:
-    intelligence_capture: ["gather_debug_intelligence", "gather_domain_standards", "gather_performance_quality_intelligence", "gather_collaboration_intelligence"]
-    execution_lifecycle: ["agent_lifecycle_initialization", "agent_lifecycle_execution", "agent_lifecycle_completion", "agent_lifecycle_cleanup"]
-    debug_intelligence: ["capture_debug_intelligence_on_error", "capture_success_pattern_intelligence"]
+    - "gather_debug_intelligence"
+    - "gather_domain_standards"
+    - "gather_performance_quality_intelligence"
+    - "gather_collaboration_intelligence"
+    - "agent_lifecycle_initialization"
+    - "agent_lifecycle_execution"
+    - "agent_lifecycle_completion"
+    - "agent_lifecycle_cleanup"
+    - "capture_debug_intelligence_on_error"
+    - "capture_success_pattern_intelligence"
 
   performance_characteristics:
     include_resolution_ms: 50
