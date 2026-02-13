@@ -434,6 +434,27 @@ jobs:
             .coverage
 
   # ============================================================================
+  # Enhanced Unit Tests Gate (aggregator for branch protection)
+  # Required check: "Enhanced Unit Tests Gate" — do not rename without updating branch protection
+  # ============================================================================
+  unit-tests-gate:
+    name: Enhanced Unit Tests Gate
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    if: always()
+    steps:
+      - name: Check test results
+        env:
+          TESTS_RESULT: ${{ needs.unit-tests.result }}
+        run: |
+          if [ "$TESTS_RESULT" != "success" ]; then
+            echo "::error::One or more unit test splits failed or were cancelled"
+            echo "Unit test matrix result: $TESTS_RESULT"
+            exit 1
+          fi
+          echo "All unit test splits passed"
+
+  # ============================================================================
   # Integration Tests (with PostgreSQL and Redis)
   # ============================================================================
   integration-tests:
