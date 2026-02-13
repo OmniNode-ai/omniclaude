@@ -9,6 +9,7 @@ agent_identity:
   name: "agent-repository-crawler"
   title: "Repository Crawler Specialist"
   description: "Repository crawler specialist for discovering, processing, and indexing all relevant documents across codebases with intelligence service integration"
+  color: "gray"
   version: "2.0.0"
 
   core_responsibility: >
@@ -206,40 +207,26 @@ intelligence_integration:
     description: "Combined quality and performance intelligence for comprehensive repository understanding"
 
 activation_patterns:
-  automatic_triggers:
-    - pattern: "crawl repository"
-      confidence: 0.95
-    - pattern: "index codebase"
-      confidence: 0.95
-    - pattern: "analyze repository structure"
-      confidence: 0.90
-    - pattern: "repository analysis"
-      confidence: 0.90
-    - pattern: "codebase intelligence"
-      confidence: 0.85
-    - pattern: "repository knowledge extraction"
-      confidence: 0.85
-    - pattern: "repository crawling with intelligence"
-      confidence: 0.95
-    - pattern: "comprehensive repository processing"
-      confidence: 0.90
-
-  context_indicators:
-    high_priority:
-      - "new repository setup"
-      - "comprehensive knowledge extraction needed"
-      - "repository structure analysis required"
-
-    medium_priority:
-      - "documentation indexing needed"
-      - "code quality repository assessment"
-      - "cross-repository analysis"
-
-    collaboration_triggers:
-      - "enhanced documentation processing → agent-documentation-indexer"
-      - "code quality deep analysis → agent-code-quality-analyzer"
-      - "performance optimization needed → agent-performance"
-      - "research and deep analysis → agent-research"
+  explicit_triggers:
+    - "crawl repository"
+    - "index codebase"
+    - "analyze repository structure"
+    - "repository analysis"
+    - "codebase intelligence"
+    - "repository knowledge extraction"
+    - "repository crawling with intelligence"
+    - "comprehensive repository processing"
+  context_triggers:
+    - "new repository setup"
+    - "comprehensive knowledge extraction needed"
+    - "repository structure analysis required"
+    - "documentation indexing needed"
+    - "code quality repository assessment"
+    - "cross-repository analysis"
+    - "enhanced documentation processing"
+    - "code quality deep analysis"
+    - "performance optimization needed"
+    - "research and deep analysis"
 
 workflow_templates:
   comprehensive_repository_analysis:

@@ -116,13 +116,6 @@ capabilities:
 
 onex_integration: {}
 
-intelligence_integration:
-  performance_assessment_focus:
-    - "establish_performance_baseline: Systematic performance measurement using intelligence tools"
-    - "identify_optimization_opportunities: AI-powered bottleneck and optimization identification"
-    - "apply_performance_optimization: Intelligent optimization implementation with impact measurement"
-    - "monitor_performance_trends: Predictive performance analysis with trend analysis"
-
 # Claude Skills Integration
 claude_skills_references:
   - "@async-python-patterns - Python Asyncio Mastery"
@@ -335,18 +328,25 @@ quality_gates:
     - optimization_roadmap_prioritized: true
     - performance_improvements_validated: true
 
-# Activation Triggers
-activation_triggers:
-  - "performance"
-  - "optimization"
-  - "bottleneck"
-  - "efficiency"
-  - "benchmark"
-  - "slow performance"
-  - "performance issues"
-  - "system optimization"
-  - "profiling"
-  - "performance review"
+# Activation Patterns
+activation_patterns:
+  explicit_triggers:
+    - "performance"
+    - "optimization"
+    - "bottleneck"
+    - "efficiency"
+    - "benchmark"
+    - "slow performance"
+    - "performance issues"
+    - "system optimization"
+    - "profiling"
+    - "performance review"
+  context_triggers:
+    - "application is running slowly"
+    - "need to optimize resource usage"
+    - "analyzing system bottlenecks"
+    - "profiling code execution"
+    - "improving response times"
 
 # Domain Context
 domain_context: "performance_optimization"

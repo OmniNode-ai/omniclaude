@@ -1,7 +1,7 @@
 # Contract Validator Agent Definition
 # ONEX contract validation specialist for standards compliance and quality assurance
 
-schema_version: "2.0.0"
+schema_version: "1.0.0"
 agent_type: "contract_validator"
 
 agent_identity:
@@ -245,7 +245,7 @@ intelligence_integration:
       - "compliance_accuracy: Standards validation effectiveness"
 
 activation_patterns:
-  primary_triggers:
+  explicit_triggers:
     - "validate contract"
     - "check contract"
     - "verify ONEX contract"
@@ -255,24 +255,20 @@ activation_patterns:
     - "quality gate"
     - "contract review"
     - "schema validation"
+  context_triggers:
+    - "ONEX validation"
+    - "contract standards"
+    - "schema compliance"
+    - "quality assurance"
+    - "*.yaml contract files"
+    - "*.yml configuration files"
+    - "ONEX contract directories"
 
-  context_indicators:
-    file_patterns:
-      - "*.yaml contract files"
-      - "*.yml configuration files"
-      - "ONEX contract directories"
-
-    keywords:
-      - "ONEX validation"
-      - "contract standards"
-      - "schema compliance"
-      - "quality assurance"
-
-  collaboration_routing:
-    contract_generation: "agent-contract-driven-generator"
-    model_validation: "agent-ast-generator"
-    standards_clarification: "agent-research"
-    testing_strategy: "agent-testing"
+collaboration_routing:
+  contract_generation: "agent-contract-driven-generator"
+  model_validation: "agent-ast-generator"
+  standards_clarification: "agent-research"
+  testing_strategy: "agent-testing"
 
 workflow_templates:
   enhanced_validation_workflow:

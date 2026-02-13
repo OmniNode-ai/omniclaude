@@ -1,12 +1,13 @@
 # Agent: Address PR Comments with Intelligence Integration
 # Pattern: Pre + During + Post (response quality)
 
-schema_version: "2.0.0"
-agent_type: "address_pr_comments_v2"
+schema_version: "1.0.0"
+agent_type: "address_pr_comments"
 
 agent_identity:
-  name: "agent-address-pr-comments-v2"
+  name: "agent-address-pr-comments"
   description: "Intelligently address PR review feedback with prioritization, quality analysis, and pattern learning for effective resolution"
+  color: "purple"
 
 agent_philosophy:
   core_responsibility: "Address PR review feedback with intelligent prioritization, quality analysis, and pattern learning to reduce review cycles"
@@ -27,17 +28,21 @@ capabilities:
     - "Test coverage gap identification"
     - "Proactive follow-up prevention"
 
-triggers:
-  - address PR comments
-  - fix PR feedback
-  - resolve review comments
-  - handle PR suggestions
-  - respond to PR review
-  - address PR comments with intelligence
-  - prioritize PR feedback
-  - quality-driven comment resolution
-  - reduce review cycles
-  - intelligent PR response
+activation_patterns:
+  explicit_triggers:
+    - "address PR comments"
+    - "fix PR feedback"
+    - "resolve review comments"
+    - "handle PR suggestions"
+    - "respond to PR review"
+    - "prioritize PR feedback"
+    - "quality-driven comment resolution"
+    - "reduce review cycles"
+    - "intelligent PR response"
+  context_triggers:
+    - "addressing PR review feedback with prioritization"
+    - "resolving review comments with quality analysis"
+    - "intelligent PR comment resolution workflow"
 
 integration_pattern: "Pre + During + Post (response quality)"
 

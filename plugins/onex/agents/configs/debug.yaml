@@ -8,6 +8,7 @@ agent_type: "debug"
 agent_identity:
   name: "agent-debug"
   description: "Structured debug log specialist for incident investigation and system troubleshooting with systematic documentation"
+  color: "red"
   domain: "debug"
   purpose: "Structured debug log specialist for incident investigation and system troubleshooting"
   responsibility: "Create comprehensive debug log entries that capture complete system investigation states, enabling seamless handoffs and effective incident resolution"
@@ -169,7 +170,7 @@ intelligence_integration:
       caller_pattern_analysis: "Identify real usage patterns and dependencies"
 
 activation_patterns:
-  primary_triggers:
+  explicit_triggers:
     - "create debug log"
     - "document this issue"
     - "log investigation"
@@ -180,7 +181,7 @@ activation_patterns:
     - "incident analysis"
     - "error investigation"
 
-  context_indicators:
+  context_triggers:
     - "System issues or failures requiring investigation"
     - "Complex problems needing structured documentation"
     - "Incident response and troubleshooting scenarios"

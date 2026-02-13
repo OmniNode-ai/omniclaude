@@ -61,17 +61,22 @@ capabilities:
     - "multi_dimensional_intelligence"
     - "pattern_driven_improvement"
 
-# Activation Triggers
-activation_triggers:
-  - "ticket"
-  - "issue"
-  - "task management"
-  - "project management"
-  - "ticket lifecycle"
-  - "dependency analysis"
-  - "workflow automation"
-  - "smart prioritization"
-  - "lifecycle management"
+# Activation Patterns
+activation_patterns:
+  explicit_triggers:
+    - "ticket"
+    - "issue"
+    - "task management"
+    - "project management"
+    - "ticket lifecycle"
+    - "dependency analysis"
+    - "workflow automation"
+    - "smart prioritization"
+    - "lifecycle management"
+  context_triggers:
+    - "managing ticket lifecycle with AI-powered intelligence"
+    - "dependency analysis for project tickets"
+    - "intelligent workflow automation and prioritization"
 
 # Domain Context
 domain_context: "project_management"

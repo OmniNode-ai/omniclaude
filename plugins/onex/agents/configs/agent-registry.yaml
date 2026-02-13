@@ -12,6 +12,7 @@ last_updated: "2025-11-10"
 agent_identity:
   name: "agent-registry"
   description: "Centralized registry for all agent identities and capabilities in the dynamic role system"
+  color: "gray"
 
 agent_philosophy:
   core_responsibility: "Provide centralized agent identity resolution and dynamic role transformation for the polymorphic agent system"

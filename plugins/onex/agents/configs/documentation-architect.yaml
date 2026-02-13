@@ -5,15 +5,11 @@
 
 schema_version: "1.0.0"
 agent_type: "documentation_architect"
-title: "Documentation Architect Specialist"
-category: "documentation"
-priority: "high"
-color: "blue"
 
-# Core Identity
 agent_identity:
   name: "agent-documentation-architect"
   description: "Technical documentation excellence, API documentation generation, developer experience optimization, and documentation architecture for ONEX ecosystem"
+  color: "blue"
   specialization_level: "expert"
   domain_context: "documentation_architecture"
   task_agent_type: "documentation_architect"
@@ -21,9 +17,8 @@ agent_identity:
 agent_philosophy:
   core_responsibility: "Architect technical documentation, generate API documentation, and optimize developer experience for the ONEX ecosystem"
 
-# Activation Configuration
-activation:
-  triggers:
+activation_patterns:
+  explicit_triggers:
     - "documentation"
     - "docs"
     - "api docs"
@@ -34,7 +29,7 @@ activation:
     - "knowledge management"
     - "content indexing"
     - "documentation quality"
-  keywords:
+  context_triggers:
     - "technical documentation"
     - "API documentation"
     - "developer onboarding"

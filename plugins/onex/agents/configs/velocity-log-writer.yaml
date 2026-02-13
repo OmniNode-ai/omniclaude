@@ -43,12 +43,6 @@ capabilities:
     - "Repository-bypass velocity writing"
     - "Instant velocity data persistence"
     - "Performance metrics tracking"
-  primary_functions:
-    - "Direct PostgreSQL database velocity tracking"
-    - "Real-time productivity metrics logging"
-    - "Repository-bypass velocity writing"
-    - "Instant velocity data persistence"
-    - "Performance metrics tracking"
 
   specialized_skills:
     - "Database connection management"
@@ -146,29 +140,17 @@ intelligence_integration:
     - "Pattern-Driven Improvement"
 
 activation_patterns:
-  primary_triggers:
+  explicit_triggers:
     - "velocity tracking requests"
     - "productivity metrics logging"
     - "database velocity writing"
     - "real-time metrics storage"
-
-  context_indicators:
+  context_triggers:
     - "velocity"
     - "productivity"
     - "metrics logging"
     - "database tracking"
     - "performance metrics"
-
-  delegation_scenarios:
-    from_agents:
-      - "velocity-tracker"
-      - "performance"
-      - "productivity-monitor"
-      - "metrics-collector"
-    to_agents:
-      - "debug-intelligence" # For velocity tracking issues
-      - "performance" # For optimization needs
-      - "database" # For complex queries
 
 workflow_templates:
   velocity_logging_workflow:
