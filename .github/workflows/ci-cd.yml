@@ -599,6 +599,27 @@ jobs:
           if-no-files-found: ignore
 
   # ============================================================================
+  # CI Tests Gate (aggregator for branch protection)
+  # Required check: "CI Tests Gate" — do not rename without updating branch protection
+  # ============================================================================
+  tests-gate:
+    name: CI Tests Gate
+    runs-on: ubuntu-latest
+    needs: test
+    if: always()
+    steps:
+      - name: Check test results
+        env:
+          TEST_RESULT: ${{ needs.test.result }}
+        run: |
+          if [ "$TEST_RESULT" != "success" ]; then
+            echo "::error::One or more test shards failed or were cancelled"
+            echo "Test matrix result: $TEST_RESULT"
+            exit 1
+          fi
+          echo "All test shards passed"
+
+  # ============================================================================
   # Build Docker Image
   # ============================================================================
   build:
