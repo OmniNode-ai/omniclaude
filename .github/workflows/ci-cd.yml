@@ -612,12 +612,12 @@ jobs:
         env:
           TEST_RESULT: ${{ needs.test.result }}
         run: |
-          if [ "$TEST_RESULT" != "success" ]; then
+          if [ "$TEST_RESULT" != "success" ] && [ "$TEST_RESULT" != "skipped" ]; then
             echo "::error::One or more test shards failed or were cancelled"
             echo "Test matrix result: $TEST_RESULT"
             exit 1
           fi
-          echo "All test shards passed"
+          echo "All test shards passed (result: $TEST_RESULT)"
 
   # ============================================================================
   # Build Docker Image

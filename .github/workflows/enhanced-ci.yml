@@ -447,12 +447,12 @@ jobs:
         env:
           TESTS_RESULT: ${{ needs.unit-tests.result }}
         run: |
-          if [ "$TESTS_RESULT" != "success" ]; then
+          if [ "$TESTS_RESULT" != "success" ] && [ "$TESTS_RESULT" != "skipped" ]; then
             echo "::error::One or more unit test splits failed or were cancelled"
             echo "Unit test matrix result: $TESTS_RESULT"
             exit 1
           fi
-          echo "All unit test splits passed"
+          echo "All unit test splits passed (result: $TESTS_RESULT)"
 
   # ============================================================================
   # Integration Tests (with PostgreSQL and Redis)

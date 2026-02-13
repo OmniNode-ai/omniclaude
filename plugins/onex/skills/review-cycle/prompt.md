@@ -503,14 +503,14 @@ Minor issues are NOT fixed in `--auto` mode. Only Critical and Major.
 ### Commit message format
 
 ```
-fix(review-cycle): auto-fix {n} critical and {m} major issues
+fix(review-cycle): auto-fix {n} critical and {m} major issue(s)
 ```
 
 If only one severity has issues:
 
 ```
-fix(review-cycle): auto-fix {n} critical issues
-fix(review-cycle): auto-fix {m} major issues
+fix(review-cycle): auto-fix {n} critical issue(s)
+fix(review-cycle): auto-fix {m} major issue(s)
 ```
 
 If no issues found:
