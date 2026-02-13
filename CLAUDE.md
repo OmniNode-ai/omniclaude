@@ -105,7 +105,7 @@ These modules are intended for external use:
 | Variable | Purpose | Required |
 |----------|---------|----------|
 | `KAFKA_BOOTSTRAP_SERVERS` | Kafka connection string | Yes (for events) |
-| `KAFKA_ENVIRONMENT` | Topic prefix (`dev`, `staging`, `prod`) | Yes |
+| `KAFKA_ENVIRONMENT` | Environment label for logging/observability (not used for topic prefixing) | No |
 | `POSTGRES_HOST/PORT/DATABASE/USER/PASSWORD` | Database connection | No |
 | `ENABLE_POSTGRES` | Enable database logging | No (default: false) |
 | `USE_EVENT_ROUTING` | Enable agent routing via Kafka | No (default: false) |
