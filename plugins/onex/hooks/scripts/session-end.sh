@@ -327,6 +327,102 @@ if [[ -f "${HOOKS_LIB}/session_marker.py" ]] && [[ -n "${SESSION_ID}" ]]; then
     log "Cleared session injection marker"
 fi
 
+# -----------------------------
+# Worktree Cleanup (OMN-1856)
+# -----------------------------
+# Clean up agent-created worktrees from this session.
+# Only targets ~/.claude/worktrees/ with valid .claude-session.json markers.
+# Uses git worktree remove (never rm -rf). Idempotent.
+
+WORKTREE_BASE="${HOME}/.claude/worktrees"
+
+if [[ -d "$WORKTREE_BASE" ]]; then
+    _wt_candidates=0
+    _wt_removed=0
+    _wt_skipped=0
+
+    # Scan two levels deep: ~/.claude/worktrees/{repo}/{branch}/
+    while IFS= read -r -d '' _wt_marker; do
+        _wt_dir="$(dirname "$_wt_marker")"
+        _wt_candidates=$((_wt_candidates + 1))
+
+        # G1: Read and validate marker
+        if ! _wt_data=$(jq -e '.' "$_wt_marker" 2>/dev/null); then
+            log "STALE: ${_wt_dir} - malformed .claude-session.json"
+            _wt_skipped=$((_wt_skipped + 1))
+            continue
+        fi
+
+        _wt_marker_session=$(echo "$_wt_data" | jq -r '.session_id // empty' 2>/dev/null)
+        _wt_parent_repo=$(echo "$_wt_data" | jq -r '.parent_repo_path // empty' 2>/dev/null)
+
+        # G2: Session ID must match current session
+        if [[ "$_wt_marker_session" != "$SESSION_ID" ]]; then
+            log "SKIP: ${_wt_dir} - session mismatch (marker=${_wt_marker_session}, current=${SESSION_ID})"
+            _wt_skipped=$((_wt_skipped + 1))
+            continue
+        fi
+
+        # Validate parent repo path exists
+        if [[ -z "$_wt_parent_repo" || ! -d "$_wt_parent_repo" ]]; then
+            log "STALE: ${_wt_dir} - parent_repo_path missing or invalid: ${_wt_parent_repo}"
+            _wt_skipped=$((_wt_skipped + 1))
+            continue
+        fi
+
+        # Validate worktree path is under WORKTREE_BASE (path traversal guard)
+        case "$_wt_dir" in
+            "${WORKTREE_BASE}"/*) ;;
+            *)
+                log "STALE: ${_wt_dir} - path not under ${WORKTREE_BASE}"
+                _wt_skipped=$((_wt_skipped + 1))
+                continue
+                ;;
+        esac
+
+        # G3: No uncommitted changes
+        if ! git -C "$_wt_dir" diff --quiet 2>/dev/null; then
+            log "STALE: ${_wt_dir} - has uncommitted changes"
+            _wt_skipped=$((_wt_skipped + 1))
+            continue
+        fi
+
+        # G4: No staged changes
+        if ! git -C "$_wt_dir" diff --cached --quiet 2>/dev/null; then
+            log "STALE: ${_wt_dir} - has staged changes"
+            _wt_skipped=$((_wt_skipped + 1))
+            continue
+        fi
+
+        # G5: No unpushed commits
+        _wt_upstream=$(git -C "$_wt_dir" rev-parse --abbrev-ref '@{u}' 2>/dev/null) || _wt_upstream=""
+        if [[ -n "$_wt_upstream" ]]; then
+            _wt_local=$(git -C "$_wt_dir" rev-parse HEAD 2>/dev/null) || _wt_local=""
+            _wt_remote=$(git -C "$_wt_dir" rev-parse '@{u}' 2>/dev/null) || _wt_remote=""
+            if [[ -n "$_wt_local" && -n "$_wt_remote" && "$_wt_local" != "$_wt_remote" ]]; then
+                log "STALE: ${_wt_dir} - has unpushed commits (local=${_wt_local:0:8} remote=${_wt_remote:0:8})"
+                _wt_skipped=$((_wt_skipped + 1))
+                continue
+            fi
+        fi
+
+        # G6: Safe removal via git worktree remove from parent repo
+        if git -C "$_wt_parent_repo" worktree remove --force "$_wt_dir" 2>>"$LOG_FILE"; then
+            git -C "$_wt_parent_repo" worktree prune 2>>"$LOG_FILE" || true
+            log "REMOVED: ${_wt_dir}"
+            _wt_removed=$((_wt_removed + 1))
+        else
+            log "STALE: ${_wt_dir} - git worktree remove failed (see log)"
+            _wt_skipped=$((_wt_skipped + 1))
+        fi
+
+    done < <(find "$WORKTREE_BASE" -mindepth 3 -maxdepth 3 -name '.claude-session.json' -print0 2>/dev/null)
+
+    if [[ $_wt_candidates -gt 0 ]]; then
+        log "Worktree cleanup: ${_wt_candidates} candidates, ${_wt_removed} removed, ${_wt_skipped} skipped"
+    fi
+fi
+
 # Output response immediately so Claude Code can proceed with shutdown
 echo "$INPUT"
 

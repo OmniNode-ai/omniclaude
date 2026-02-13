@@ -56,6 +56,21 @@ No worktree directory found. Where should I create worktrees?
 Which would you prefer?
 ```
 
+### 4. Agent-Created Worktrees
+
+When agents (subagents, polymorphic agents, automated workflows) create worktrees, they MUST use the canonical location:
+
+```
+~/.claude/worktrees/{repo}/{branch}
+```
+
+This location:
+- Is outside any project repo (no .gitignore needed)
+- Has deterministic cleanup via SessionEnd hook
+- Is scoped per-repo and per-branch for isolation
+
+**Do NOT use project-local directories for agent worktrees.** Project-local `.worktrees/` is for human-driven workflows only.
+
 ## Safety Verification
 
 ### For Project-Local Directories (.worktrees or worktrees)
@@ -149,6 +164,81 @@ Tests passing (<N> tests, 0 failures)
 Ready to implement <feature-name>
 ```
 
+## Session Marker
+
+When creating a worktree at `~/.claude/worktrees/`, write a `.claude-session.json` marker file in the worktree root immediately after creation:
+
+```bash
+# After git worktree add
+cat > "${worktree_path}/.claude-session.json" <<MARKER
+{
+  "session_id": "${SESSION_ID}",
+  "created_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "repo": "${project}",
+  "branch": "${BRANCH_NAME}",
+  "worktree_path": "${worktree_path}",
+  "parent_repo_path": "$(git rev-parse --show-toplevel)",
+  "creator": "using-git-worktrees/1.0.0",
+  "cleanup_policy": "session-end"
+}
+MARKER
+```
+
+### Marker Fields
+
+| Field | Required | Purpose |
+|-------|----------|---------|
+| `session_id` | Yes | Links worktree to creating session for cleanup scoping |
+| `created_at` | Yes | ISO-8601 timestamp of creation |
+| `repo` | Yes | Repository name (basename of repo root) |
+| `branch` | Yes | Branch name used for the worktree |
+| `worktree_path` | Yes | Absolute path to the worktree directory |
+| `parent_repo_path` | Yes | Absolute path to the main repository |
+| `creator` | Yes | Skill name and version that created this worktree |
+| `cleanup_policy` | Yes | Must be `"session-end"` -- signals automatic cleanup |
+
+**Without this marker, the worktree will NOT be cleaned up automatically.**
+
+## Lifecycle Management
+
+### Automatic Cleanup (SessionEnd)
+
+When a Claude Code session ends, the SessionEnd hook scans `~/.claude/worktrees/` for worktrees with `.claude-session.json` markers matching the current session ID.
+
+**A worktree is removed if ALL conditions are met:**
+1. Has a valid `.claude-session.json` marker
+2. Marker `session_id` matches the ending session
+3. No uncommitted changes (`git diff --quiet`)
+4. No staged changes (`git diff --cached --quiet`)
+5. No unpushed commits (local HEAD matches upstream)
+6. Path is under `~/.claude/worktrees/` (traversal guard)
+
+**If ANY condition fails, the worktree is logged as STALE but NOT deleted.**
+
+### What Gets Cleaned Up
+
+| Scenario | Action |
+|----------|--------|
+| Clean worktree, matching session | Removed via `git worktree remove` |
+| Clean worktree, different session | Skipped (belongs to another session) |
+| Dirty worktree, any session | Skipped + logged as STALE |
+| No `.claude-session.json` | Skipped entirely |
+| Malformed marker | Skipped + logged as STALE |
+
+### Manual Cleanup
+
+For stale worktrees that weren't auto-cleaned:
+
+```bash
+# List all worktrees under ~/.claude/worktrees
+find ~/.claude/worktrees -name '.claude-session.json' -exec jq -r '.repo + "/" + .branch + " (session: " + .session_id + ")"' {} \;
+
+# Remove a specific stale worktree (from parent repo)
+cd /path/to/parent/repo
+git worktree remove ~/.claude/worktrees/repo/branch
+git worktree prune
+```
+
 ## Quick Reference
 
 | Situation | Action |
@@ -160,6 +250,10 @@ Ready to implement <feature-name>
 | Directory not in .gitignore | Add it immediately + commit |
 | Tests fail during baseline | Report failures + ask |
 | No package.json/Cargo.toml | Skip dependency install |
+| Agent creating worktree | Use `~/.claude/worktrees/{repo}/{branch}` |
+| Worktree created at `~/.claude/worktrees/` | Write `.claude-session.json` marker |
+| Session ending | Auto-cleanup matching clean worktrees |
+| Stale worktree logged | Manual cleanup required |
 
 ## Common Mistakes
 
@@ -203,12 +297,16 @@ Ready to implement auth feature
 - Proceed with failing tests without asking
 - Assume directory location when ambiguous
 - Skip CLAUDE.md check
+- Use `rm -rf` to clean up worktrees (use `git worktree remove` instead)
+- Create agent worktrees without `.claude-session.json` marker
 
 **Always:**
 - Follow directory priority: existing > CLAUDE.md > ask
 - Verify .gitignore for project-local
 - Auto-detect and run project setup
 - Verify clean test baseline
+- Write `.claude-session.json` when creating agent worktrees
+- Use `git worktree remove` + `git worktree prune` for cleanup
 
 ## Integration
 
