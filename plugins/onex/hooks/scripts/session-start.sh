@@ -289,6 +289,103 @@ log "CWD: $CWD"
 # This ensures daemon is ready for downstream hooks (UserPromptSubmit, PostToolUse)
 start_emit_daemon_if_needed
 
+# -----------------------------
+# Session State Initialization (OMN-2119)
+# -----------------------------
+# Sync path: mkdir only (O(1), <5ms).
+# Async path: adapter creates run + updates index (backgrounded).
+# Idempotency: stamp file (.done) prevents re-init on reconnect.
+# Concurrency: PID file (.pid) prevents duplicate concurrent spawns.
+
+_init_session_state() {
+    # Sync: ensure state directory exists (O(1))
+    mkdir -p "${HOME}/.claude/state/runs" 2>/dev/null || true
+
+    # Sanitize SESSION_ID for safe use in filenames
+    local safe_id
+    safe_id=$(echo "$SESSION_ID" | tr -cd 'a-zA-Z0-9-')
+
+    # Empty SESSION_ID safety: skip idempotency AND PID guards entirely.
+    # When safe_id is empty, both the stamp file (.done) and PID guard file (.pid)
+    # would collapse to a shared path for ALL empty-ID sessions, causing
+    # cross-session interference. Idempotency for empty sessions isn't critical
+    # since the data will be overwritten anyway.
+    if [[ -z "$safe_id" ]]; then
+        log "WARNING: Empty SESSION_ID, skipping idempotency and PID guards"
+    else
+        # Idempotency guard: prevent duplicate init on reconnect.
+        # SessionStart may fire multiple times for the same session (reconnects).
+        # The stamp file persists after the adapter completes, so subsequent calls
+        # for the same session return immediately (O(1) file existence check).
+        # Cleanup: /tmp is cleared on reboot (both Linux and macOS), so stamp
+        # files do not accumulate across reboots. No active cleanup needed.
+        local stamp_file="/tmp/omniclaude-state-init-${safe_id}.done"
+        if [[ -f "$stamp_file" ]]; then
+            log "Session state already initialized (stamp: $stamp_file), skipping"
+            return 0
+        fi
+
+        # PID guard: prevent duplicate concurrent spawns for same session.
+        # This protects against rapid-fire SessionStart events before the first
+        # background adapter call has finished and written the stamp file.
+        local guard_file="/tmp/omniclaude-state-init-${safe_id}.pid"
+        local guard_pid
+        guard_pid=$(cat "$guard_file" 2>/dev/null)
+        if [[ "$guard_pid" =~ ^[0-9]+$ ]] && kill -0 "$guard_pid" 2>/dev/null; then
+            log "Session state init already running (PID $guard_pid), skipping"
+            return 0
+        fi
+    fi
+
+    # Async: background the adapter call
+    if [[ -f "${HOOKS_LIB}/node_session_state_adapter.py" ]]; then
+        (
+            # Write PID guard only when safe_id is non-empty (guard_file is defined)
+            if [[ -n "$safe_id" ]]; then
+                echo "$BASHPID" > "/tmp/omniclaude-state-init-${safe_id}.pid" 2>/dev/null || true
+            fi
+            # Capture adapter stdout separately from stderr so we can parse the
+            # JSON result. stderr goes to $LOG_FILE for diagnostics; stdout is
+            # captured into adapter_stdout for run_id extraction.
+            adapter_stdout=$(echo "$INPUT" | "$PYTHON_CMD" "${HOOKS_LIB}/node_session_state_adapter.py" init 2>>"$LOG_FILE")
+            local adapter_exit=$?
+            # Log the adapter output for diagnostics
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] [session-state] adapter stdout: ${adapter_stdout:-<empty>}" >> "$LOG_FILE"
+            # Extract run_id from adapter JSON output.
+            # The adapter outputs {"run_id": "...", "state": "..."} on success
+            # and {} on logical failure (missing session_id, lock timeout, etc.).
+            # Since the adapter always exits 0 (fail-open design), we must check
+            # for a non-empty run_id to distinguish success from logical failure.
+            local adapter_run_id=""
+            if [[ "$JQ_AVAILABLE" -eq 1 ]]; then
+                adapter_run_id=$(echo "$adapter_stdout" | jq -r '.run_id // ""' 2>/dev/null) || adapter_run_id=""
+            else
+                # Fallback: grep for run_id value (handles {"run_id": "uuid-here", ...})
+                adapter_run_id=$(echo "$adapter_stdout" | grep -o '"run_id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"run_id"[[:space:]]*:[[:space:]]*"//;s/"$//' 2>/dev/null) || adapter_run_id=""
+            fi
+            # Clean up PID guard and write stamp only when safe_id is non-empty
+            if [[ -n "$safe_id" ]]; then
+                rm -f "/tmp/omniclaude-state-init-${safe_id}.pid" 2>/dev/null || true
+                # Write stamp file ONLY when adapter returned a valid run_id.
+                # The adapter always exits 0 (fail-open), so exit code alone
+                # cannot distinguish success from logical failure. A non-empty
+                # run_id confirms the init actually completed (run doc written,
+                # session index updated). Without this check, a failed init
+                # (e.g., lock timeout, missing session_id) would write the stamp
+                # and permanently prevent retry on reconnect.
+                if [[ $adapter_exit -eq 0 ]] && [[ -n "$adapter_run_id" ]]; then
+                    echo "$$" > "/tmp/omniclaude-state-init-${safe_id}.done" 2>/dev/null || true
+                elif [[ $adapter_exit -eq 0 ]] && [[ -z "$adapter_run_id" ]]; then
+                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [session-state] WARNING: adapter exited 0 but run_id is empty — logical init failure, stamp NOT written (retry allowed on reconnect)" >> "$LOG_FILE"
+                fi
+            fi
+        ) &
+        log "Session state init started in background (PID: $!)"
+    fi
+}
+
+_init_session_state
+
 # Log session start to database (async, non-blocking)
 if [[ -f "${HOOKS_LIB}/session_intelligence.py" ]]; then
     (
