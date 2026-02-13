@@ -364,7 +364,13 @@ if [[ -d "$WORKTREE_BASE" ]]; then
     _wt_removed=0
     _wt_skipped=0
 
-    # Scan two levels deep: ~/.claude/worktrees/{repo}/{branch}/
+    # Scan for markers under ~/.claude/worktrees/{repo}/{branch}/.
+    # Use -mindepth 2 (at least {repo}/{file}) and -maxdepth 10 to handle
+    # branch names containing slashes (e.g., "feature/auth",
+    # "jonahgabriel/omn-1856") — git creates nested subdirectories for
+    # each path component, so the marker can appear at depth 4+.
+    # Safety scoping is provided by the path-prefix guard, session-id
+    # matching, and git-state checks below.
     while IFS= read -r -d '' _wt_marker; do
         _wt_dir="$(dirname "$_wt_marker")"
         _wt_candidates=$((_wt_candidates + 1))
@@ -378,6 +384,14 @@ if [[ -d "$WORKTREE_BASE" ]]; then
 
         _wt_marker_session=$(echo "$_wt_data" | jq -r '.session_id // empty' 2>/dev/null)
         _wt_parent_repo=$(echo "$_wt_data" | jq -r '.parent_repo_path // empty' 2>/dev/null)
+        _wt_cleanup_policy=$(echo "$_wt_data" | jq -r '.cleanup_policy // empty' 2>/dev/null)
+
+        # G1b: cleanup_policy must be "session-end" (per SKILL.md contract)
+        if [[ "$_wt_cleanup_policy" != "session-end" ]]; then
+            log "WORKTREE: SKIP ${_wt_dir} — cleanup_policy is '${_wt_cleanup_policy}', not session-end"
+            _wt_skipped=$((_wt_skipped + 1))
+            continue
+        fi
 
         # G2: Session ID must match current session
         if [[ "$_wt_marker_session" != "$SESSION_ID" ]]; then
@@ -453,7 +467,7 @@ if [[ -d "$WORKTREE_BASE" ]]; then
             _wt_skipped=$((_wt_skipped + 1))
         fi
 
-    done < <(find "$WORKTREE_BASE" -mindepth 3 -maxdepth 3 -name '.claude-session.json' -print0 2>/dev/null)
+    done < <(find "$WORKTREE_BASE" -mindepth 2 -maxdepth 10 -name '.claude-session.json' -print0 2>/dev/null)
 
     if [[ $_wt_candidates -gt 0 ]]; then
         log "Worktree cleanup: ${_wt_candidates} candidates, ${_wt_removed} removed, ${_wt_skipped} skipped"
