@@ -13,7 +13,7 @@ Environment variables use the OMNICLAUDE_CONTEXT_ prefix:
     OMNICLAUDE_CONTEXT_DB_ENABLED: Enable database as pattern source (default: true)
     OMNICLAUDE_CONTEXT_DB_HOST: PostgreSQL host (default: 192.168.86.200)
     OMNICLAUDE_CONTEXT_DB_PORT: PostgreSQL port (default: 5436)
-    OMNICLAUDE_CONTEXT_DB_NAME: Database name (default: omninode_bridge)
+    OMNICLAUDE_CONTEXT_DB_NAME: Database name (default: omniclaude)
     OMNICLAUDE_CONTEXT_DB_USER: Database user (default: postgres)
     OMNICLAUDE_CONTEXT_DB_PASSWORD: Database password (required, no default)
     OMNICLAUDE_CONTEXT_DB_POOL_MIN_SIZE: Minimum pool connections (default: 1)
@@ -293,7 +293,7 @@ class ContextInjectionConfig(BaseSettings):
     )
 
     db_name: str = Field(
-        default="omninode_bridge",
+        default="omniclaude",
         description="Database name",
     )
 

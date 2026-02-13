@@ -22,6 +22,9 @@ Required environment variables when services are enabled:
     KAFKA_ENVIRONMENT=dev  # or staging, prod - MUST be explicit
 
     # PostgreSQL (required when ENABLE_POSTGRES=true)
+    # Option A: Full DSN (preferred, takes precedence)
+    OMNICLAUDE_DB_URL=postgresql://user:password@host:port/dbname
+    # Option B: Individual fields (used when OMNICLAUDE_DB_URL is not set)
     POSTGRES_HOST=localhost
     POSTGRES_PORT=5432
     POSTGRES_DATABASE=mydb
@@ -50,7 +53,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import quote
 
-from pydantic import Field, HttpUrl, PrivateAttr
+from pydantic import Field, HttpUrl, PrivateAttr, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -152,11 +155,20 @@ class Settings(BaseSettings):
         default="",
         description="PostgreSQL password. REQUIRED when ENABLE_POSTGRES=true.",
     )
+    omniclaude_db_url: SecretStr = Field(
+        default=SecretStr(""),
+        description=(
+            "Full PostgreSQL connection URL for omniclaude database. "
+            "When set, takes precedence over individual POSTGRES_* fields. "
+            "Format: postgresql://user:password@host:port/dbname"
+        ),
+    )
     enable_postgres: bool = Field(
         default=False,
         description=(
-            "Enable PostgreSQL database connection. When True, all POSTGRES_* "
-            "fields must be configured. Defaults to False for safety."
+            "Enable PostgreSQL database connection. When True, either "
+            "OMNICLAUDE_DB_URL must be set (takes precedence) or all individual "
+            "POSTGRES_* fields must be configured. Defaults to False for safety."
         ),
     )
 
@@ -376,7 +388,12 @@ class Settings(BaseSettings):
         return self.postgres_password
 
     def get_postgres_dsn(self, async_driver: bool = False) -> str:
-        """Build PostgreSQL connection string.
+        """Build PostgreSQL connection string from individual POSTGRES_* fields.
+
+        NOTE: Prefer ``get_omniclaude_dsn()`` which respects OMNICLAUDE_DB_URL
+        precedence. This method only uses individual POSTGRES_* fields and will
+        produce an invalid DSN if those fields are empty (e.g., when only
+        OMNICLAUDE_DB_URL is configured).
 
         Args:
             async_driver: If True, use asyncpg driver prefix; otherwise psycopg2.
@@ -384,6 +401,14 @@ class Settings(BaseSettings):
         Returns:
             Full PostgreSQL DSN connection string.
         """
+        # Guard: warn if individual fields are empty but OMNICLAUDE_DB_URL is set.
+        # Callers should use get_omniclaude_dsn() instead.
+        if not self.postgres_host and self.omniclaude_db_url.get_secret_value():
+            logger.warning(
+                "get_postgres_dsn() called but individual POSTGRES_* fields are empty. "
+                "OMNICLAUDE_DB_URL is set — use get_omniclaude_dsn() instead."
+            )
+
         driver = "postgresql+asyncpg" if async_driver else "postgresql"
         password = self.get_effective_postgres_password()  # nosec
 
@@ -402,6 +427,34 @@ class Settings(BaseSettings):
             f"{driver}://{encoded_user}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_database}"
         )
+
+    def get_omniclaude_dsn(self, async_driver: bool = False) -> str:
+        """Build omniclaude database connection string.
+
+        Precedence:
+            1. OMNICLAUDE_DB_URL (if set)
+            2. Individual POSTGRES_* fields (fallback)
+
+        Args:
+            async_driver: If True, replace postgresql:// with postgresql+asyncpg://.
+
+        Returns:
+            PostgreSQL DSN connection string.
+        """
+        raw_url = self.omniclaude_db_url.get_secret_value().strip()
+        if raw_url:
+            if not raw_url.startswith(("postgresql://", "postgres://")):
+                raise ValueError(
+                    f"OMNICLAUDE_DB_URL must start with 'postgresql://' or 'postgres://', "
+                    f"got: {raw_url[:30]}..."
+                )
+            dsn = raw_url
+            if async_driver and dsn.startswith("postgresql://"):
+                dsn = "postgresql+asyncpg://" + dsn[len("postgresql://") :]
+            elif async_driver and dsn.startswith("postgres://"):
+                dsn = "postgresql+asyncpg://" + dsn[len("postgres://") :]
+            return dsn
+        return self.get_postgres_dsn(async_driver=async_driver)
 
     def validate_required_services(self) -> list[str]:
         """Validate that required services are configured.
@@ -441,35 +494,38 @@ class Settings(BaseSettings):
 
         # =====================================================================
         # POSTGRESQL VALIDATION
-        # When enabled, ALL connection parameters must be explicitly configured.
+        # When enabled, either OMNICLAUDE_DB_URL (full DSN) must be set, or
+        # ALL individual POSTGRES_* connection parameters must be configured.
         # No localhost defaults to prevent silent local connections in production.
         # =====================================================================
         if self.enable_postgres:
-            if not self.postgres_host:
-                errors.append(
-                    "POSTGRES_HOST is required when ENABLE_POSTGRES=true. "
-                    "Set POSTGRES_HOST in .env or set ENABLE_POSTGRES=false."
-                )
-            if self.postgres_port == 0:
-                errors.append(
-                    "POSTGRES_PORT is required when ENABLE_POSTGRES=true. "
-                    "Standard port is 5432. Set POSTGRES_PORT in .env or set ENABLE_POSTGRES=false."
-                )
-            if not self.postgres_database:
-                errors.append(
-                    "POSTGRES_DATABASE is required when ENABLE_POSTGRES=true. "
-                    "Set POSTGRES_DATABASE in .env or set ENABLE_POSTGRES=false."
-                )
-            if not self.postgres_user:
-                errors.append(
-                    "POSTGRES_USER is required when ENABLE_POSTGRES=true. "
-                    "Set POSTGRES_USER in .env or set ENABLE_POSTGRES=false."
-                )
-            if not self.postgres_password:
-                errors.append(
-                    "POSTGRES_PASSWORD is required when ENABLE_POSTGRES=true. "
-                    "Set POSTGRES_PASSWORD in .env or set ENABLE_POSTGRES=false."
-                )
+            if not self.omniclaude_db_url.get_secret_value():
+                # Only require individual fields when no full DSN is provided
+                if not self.postgres_host:
+                    errors.append(
+                        "POSTGRES_HOST is required when ENABLE_POSTGRES=true and OMNICLAUDE_DB_URL is not set. "
+                        "Set POSTGRES_HOST or OMNICLAUDE_DB_URL in .env, or set ENABLE_POSTGRES=false."
+                    )
+                if self.postgres_port == 0:
+                    errors.append(
+                        "POSTGRES_PORT is required when ENABLE_POSTGRES=true and OMNICLAUDE_DB_URL is not set. "
+                        "Standard port is 5432. Set POSTGRES_PORT or OMNICLAUDE_DB_URL in .env, or set ENABLE_POSTGRES=false."
+                    )
+                if not self.postgres_database:
+                    errors.append(
+                        "POSTGRES_DATABASE is required when ENABLE_POSTGRES=true and OMNICLAUDE_DB_URL is not set. "
+                        "Set POSTGRES_DATABASE or OMNICLAUDE_DB_URL in .env, or set ENABLE_POSTGRES=false."
+                    )
+                if not self.postgres_user:
+                    errors.append(
+                        "POSTGRES_USER is required when ENABLE_POSTGRES=true and OMNICLAUDE_DB_URL is not set. "
+                        "Set POSTGRES_USER or OMNICLAUDE_DB_URL in .env, or set ENABLE_POSTGRES=false."
+                    )
+                if not self.postgres_password:
+                    errors.append(
+                        "POSTGRES_PASSWORD is required when ENABLE_POSTGRES=true and OMNICLAUDE_DB_URL is not set. "
+                        "Set POSTGRES_PASSWORD or OMNICLAUDE_DB_URL in .env, or set ENABLE_POSTGRES=false."
+                    )
 
         # =====================================================================
         # QDRANT VALIDATION
@@ -510,7 +566,8 @@ class Settings(BaseSettings):
         if not self.enable_postgres:
             logger.info(
                 "PostgreSQL is disabled (ENABLE_POSTGRES=false). "
-                "Set ENABLE_POSTGRES=true and configure POSTGRES_* variables to enable."
+                "Set ENABLE_POSTGRES=true and configure OMNICLAUDE_DB_URL (or individual "
+                "POSTGRES_* variables) to enable."
             )
 
         if not self.use_event_routing:

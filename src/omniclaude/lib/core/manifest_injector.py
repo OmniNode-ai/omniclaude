@@ -55,11 +55,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from pathlib import Path as _Path
 from types import TracebackType
 from typing import (
     TYPE_CHECKING,
@@ -86,7 +84,7 @@ from omniclaude.hooks.topics import TopicBase
 from omniclaude.lib.errors import EnumCoreErrorCode, OnexError
 from omniclaude.lib.intelligence_usage_tracker import IntelligenceUsageTracker
 from omniclaude.lib.pattern_quality_scorer import PatternQualityScorer
-from omniclaude.lib.task_classifier import TaskClassifier, TaskContext, TaskIntent
+from omniclaude.lib.task_classifier import TaskClassifier, TaskContext
 
 from .intelligence_cache import IntelligenceCache
 from .intelligence_event_client import IntelligenceEventClient
@@ -144,6 +142,39 @@ sanitize_dict, sanitize_string = _load_sanitizers()
 
 
 logger = logging.getLogger(__name__)
+
+
+def _connect_postgres(**extra_kwargs: Any) -> Any:
+    """Create a psycopg2 connection respecting ``OMNICLAUDE_DB_URL`` precedence.
+
+    This is the module-level equivalent of
+    :meth:`ManifestInjectionStorage._connect` for code that lives outside that
+    class but still needs a database connection.
+
+    Precedence:
+        1. ``OMNICLAUDE_DB_URL`` via settings (full DSN)
+        2. Individual ``POSTGRES_*`` fields from settings
+
+    Args:
+        **extra_kwargs: Forwarded to ``psycopg2.connect()``
+            (e.g. ``connect_timeout``).
+
+    Returns:
+        A ``psycopg2`` connection object.
+    """
+    import psycopg2
+
+    dsn = settings.omniclaude_db_url.get_secret_value().strip()
+    if dsn:
+        return psycopg2.connect(dsn, **extra_kwargs)
+    return psycopg2.connect(
+        host=settings.postgres_host,
+        port=settings.postgres_port,
+        database=settings.postgres_database,
+        user=settings.postgres_user,
+        password=settings.get_effective_postgres_password(),
+        **extra_kwargs,
+    )
 
 
 @dataclass
@@ -218,9 +249,13 @@ class CacheMetrics:
             "hit_rate_percent": round(self.hit_rate, 2),
             "average_query_time_ms": round(self.average_query_time_ms, 2),
             "average_cache_query_time_ms": round(self.average_cache_query_time_ms, 2),
-            "last_hit": (self.last_hit_timestamp.isoformat() if self.last_hit_timestamp else None),
+            "last_hit": (
+                self.last_hit_timestamp.isoformat() if self.last_hit_timestamp else None
+            ),
             "last_miss": (
-                self.last_miss_timestamp.isoformat() if self.last_miss_timestamp else None
+                self.last_miss_timestamp.isoformat()
+                if self.last_miss_timestamp
+                else None
             ),
         }
 
@@ -394,24 +429,81 @@ class ManifestInjectionStorage:
         db_name: str | None = None,
         db_user: str | None = None,
         db_password: str | None = None,
+        db_url: str | None = None,
     ):
         """
         Initialize storage handler.
 
+        Connection precedence:
+            1. Explicit ``db_url`` parameter
+            2. ``OMNICLAUDE_DB_URL`` via settings (if non-empty)
+            3. Explicit ``db_host/port/name/user/password`` parameters
+            4. Individual ``POSTGRES_*`` fields from settings
+
         Args:
-            db_host: PostgreSQL host (default: env POSTGRES_HOST or localhost)
-            db_port: PostgreSQL port (default: env POSTGRES_PORT or 5436)
-            db_name: Database name (default: env POSTGRES_DATABASE or omninode_bridge)
-            db_user: Database user (default: env POSTGRES_USER or postgres)
-            db_password: Database password (default: env POSTGRES_PASSWORD)
+            db_host: PostgreSQL host override.
+            db_port: PostgreSQL port override.
+            db_name: Database name override.
+            db_user: Database user override.
+            db_password: Database password override.
+            db_url: Full PostgreSQL DSN. When provided, individual fields are ignored.
         """
-        self.db_host = db_host or os.environ.get("POSTGRES_HOST", "localhost")
-        self.db_port = db_port or int(os.environ.get("POSTGRES_PORT", "5436"))
-        self.db_name = db_name or os.environ.get("POSTGRES_DATABASE", "omninode_bridge")
-        self.db_user = db_user or os.environ.get("POSTGRES_USER", "postgres")
-        self.db_password = db_password or os.environ.get("POSTGRES_PASSWORD")
-        if not self.db_password:
-            raise ValueError("POSTGRES_PASSWORD environment variable not set. Run: source .env")
+        # Resolve DSN: explicit param > settings.omniclaude_db_url > individual fields
+        settings_dsn = settings.omniclaude_db_url.get_secret_value().strip()
+        self._db_url: str | None = (
+            (db_url.strip() if db_url else None) or settings_dsn or None
+        )
+
+        if self._db_url:
+            # DSN mode: individual fields are unused for connections but stored
+            # for diagnostics only.
+            self.db_host = ""
+            self.db_port = 0
+            self.db_name = ""
+            self.db_user = ""
+            self.db_password = ""
+        else:
+            # Individual-field mode: use params > settings (no legacy env fallback)
+            # OMN-2058: Removed os.environ.get() fallbacks. Settings handles env
+            # loading; hardcoded defaults like "localhost" violate fail-fast design.
+            self.db_host = db_host or settings.postgres_host or ""
+            self.db_port = db_port or settings.postgres_port or 0
+            self.db_name = db_name or settings.postgres_database or ""
+            self.db_user = db_user or settings.postgres_user or ""
+            self.db_password = db_password or settings.postgres_password or ""
+            if not self.db_password:
+                raise ValueError(
+                    "Database password not configured. Set OMNICLAUDE_DB_URL or "
+                    "POSTGRES_PASSWORD in your .env file."
+                )
+
+    def _connect(self, **extra_kwargs: Any) -> Any:
+        """Create a psycopg2 connection using the resolved configuration.
+
+        When ``_db_url`` is set (via ``OMNICLAUDE_DB_URL`` or the ``db_url``
+        constructor parameter), the full DSN string is passed directly to
+        ``psycopg2.connect()``.  Otherwise individual host/port/dbname/user/
+        password fields are used.
+
+        Args:
+            **extra_kwargs: Additional keyword arguments forwarded to
+                ``psycopg2.connect()`` (e.g. ``connect_timeout``).
+
+        Returns:
+            A ``psycopg2`` connection object.
+        """
+        import psycopg2
+
+        if self._db_url:
+            return psycopg2.connect(self._db_url, **extra_kwargs)
+        return psycopg2.connect(
+            host=self.db_host,
+            port=self.db_port,
+            dbname=self.db_name,
+            user=self.db_user,
+            password=self.db_password,
+            **extra_kwargs,
+        )
 
     @staticmethod
     def _serialize_for_json(obj: Any) -> Any:
@@ -457,10 +549,13 @@ class ManifestInjectionStorage:
 
         # Handle dicts recursively
         if isinstance(obj, dict):
-            return {k: ManifestInjectionStorage._serialize_for_json(v) for k, v in obj.items()}
+            return {
+                k: ManifestInjectionStorage._serialize_for_json(v)
+                for k, v in obj.items()
+            }
 
         # Handle lists recursively
-        if isinstance(obj, (list, tuple)):
+        if isinstance(obj, list | tuple):
             return [ManifestInjectionStorage._serialize_for_json(item) for item in obj]
 
         # Handle other types (str, int, bool, etc.)
@@ -491,123 +586,13 @@ class ManifestInjectionStorage:
         Returns:
             True if successful, False otherwise
         """
-        try:
-            import psycopg2
-            import psycopg2.extras
-
-            # Serialize manifest_data to handle HttpUrl and other Pydantic types
-            manifest_data = self._serialize_for_json(manifest_data)
-
-            # Extract metadata
-            metadata = manifest_data.get("manifest_metadata", {})
-            manifest_version = metadata.get("version", "unknown")
-            generation_source = metadata.get("source", "unknown")
-            is_fallback = generation_source == "fallback"
-
-            # Serialize query_times to handle any Pydantic types
-            query_times = self._serialize_for_json(query_times)
-
-            # Calculate totals
-            total_query_time_ms = sum(query_times.values())
-            manifest_size_bytes = len(formatted_text.encode("utf-8"))
-
-            # Extract section counts
-            patterns_count = kwargs.get("patterns_count", 0)
-            infrastructure_services = kwargs.get("infrastructure_services", 0)
-            models_count = kwargs.get("models_count", 0)
-            database_schemas_count = kwargs.get("database_schemas_count", 0)
-            debug_intelligence_successes = kwargs.get("debug_intelligence_successes", 0)
-            debug_intelligence_failures = kwargs.get("debug_intelligence_failures", 0)
-
-            # Collections queried (serialize for JSON)
-            collections_queried = self._serialize_for_json(kwargs.get("collections_queried", {}))
-
-            # Query failures (serialize for JSON)
-            query_failures = self._serialize_for_json(kwargs.get("query_failures", {}))
-
-            # Warnings
-            warnings = kwargs.get("warnings", [])
-
-            # Connect to database with context manager for automatic cleanup
-            with (
-                psycopg2.connect(
-                    host=self.db_host,
-                    port=self.db_port,
-                    dbname=self.db_name,
-                    user=self.db_user,
-                    password=self.db_password,
-                ) as conn,
-                conn.cursor() as cursor,
-            ):
-                # Insert record
-                cursor.execute(
-                    """
-                    INSERT INTO agent_manifest_injections (
-                        correlation_id,
-                        agent_name,
-                        manifest_version,
-                        generation_source,
-                        is_fallback,
-                        sections_included,
-                        patterns_count,
-                        infrastructure_services,
-                        models_count,
-                        database_schemas_count,
-                        debug_intelligence_successes,
-                        debug_intelligence_failures,
-                        collections_queried,
-                        query_times,
-                        total_query_time_ms,
-                        full_manifest_snapshot,
-                        formatted_manifest_text,
-                        manifest_size_bytes,
-                        intelligence_available,
-                        query_failures,
-                        warnings,
-                        created_at
-                    ) VALUES (
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                        %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW()
-                    )
-                    """,
-                    (
-                        str(correlation_id),
-                        agent_name,
-                        manifest_version,
-                        generation_source,
-                        is_fallback,
-                        sections_included,
-                        patterns_count,
-                        infrastructure_services,
-                        models_count,
-                        database_schemas_count,
-                        debug_intelligence_successes,
-                        debug_intelligence_failures,
-                        psycopg2.extras.Json(collections_queried),
-                        psycopg2.extras.Json(query_times),
-                        total_query_time_ms,
-                        psycopg2.extras.Json(manifest_data),
-                        formatted_text,
-                        manifest_size_bytes,
-                        not is_fallback,
-                        psycopg2.extras.Json(query_failures),
-                        warnings,
-                    ),
-                )
-
-                conn.commit()
-
-            logger.info(
-                f"Stored manifest injection record: correlation_id={correlation_id}, "
-                f"agent={agent_name}, patterns={patterns_count}, "
-                f"query_time={total_query_time_ms}ms"
-            )
-
-            return True
-
-        except Exception as e:
-            logger.error(f"Failed to store manifest injection record: {e}", exc_info=True)
-            return False
+        # OMN-2058: agent_manifest_injections table ownership transferred to omninode_bridge.
+        # TODO(OMN-2058): Re-enable when omniclaude owns its own manifest_injections table.
+        logger.info(
+            "Manifest injection storage disabled during DB-SPLIT (OMN-2058). "
+            f"Record not persisted: correlation_id={correlation_id}, agent={agent_name}"
+        )
+        return True
 
     def mark_agent_completed(
         self,
@@ -634,60 +619,13 @@ class ManifestInjectionStorage:
             >>> storage.mark_agent_completed(correlation_id, success=True)
             True
         """
-        try:
-            import psycopg2
-
-            # Connect to database with context manager for automatic cleanup
-            with (
-                psycopg2.connect(
-                    host=self.db_host,
-                    port=self.db_port,
-                    dbname=self.db_name,
-                    user=self.db_user,
-                    password=self.db_password,
-                ) as conn,
-                conn.cursor() as cursor,
-            ):
-                # Update lifecycle fields
-                cursor.execute(
-                    """
-                    UPDATE agent_manifest_injections
-                    SET
-                        completed_at = NOW(),
-                        executed_at = NOW(),
-                        agent_execution_success = %s,
-                        warnings = CASE
-                            WHEN %s IS NOT NULL THEN array_append(COALESCE(warnings, ARRAY[]::text[]), %s)
-                            ELSE warnings
-                        END
-                    WHERE correlation_id = %s
-                    """,
-                    (
-                        success,
-                        error_message,
-                        error_message,
-                        str(correlation_id),
-                    ),
-                )
-
-                rows_updated = cursor.rowcount
-                conn.commit()
-
-            if rows_updated > 0:
-                logger.info(
-                    f"Marked agent as completed: correlation_id={correlation_id}, "
-                    f"success={success}, rows_updated={rows_updated}"
-                )
-                return True
-            else:
-                logger.warning(
-                    f"No manifest injection record found for correlation_id={correlation_id}"
-                )
-                return False
-
-        except Exception as e:
-            logger.error(f"Failed to mark agent as completed: {e}", exc_info=True)
-            return False
+        # OMN-2058: agent_manifest_injections table ownership transferred to omninode_bridge.
+        # TODO(OMN-2058): Re-enable when omniclaude owns its own manifest_injections table.
+        logger.info(
+            "Agent completion tracking disabled during DB-SPLIT (OMN-2058). "
+            f"Not updated: correlation_id={correlation_id}"
+        )
+        return True
 
 
 class ManifestInjector:
@@ -800,7 +738,9 @@ class ManifestInjector:
             try:
                 self._usage_tracker = IntelligenceUsageTracker()
             except Exception as e:
-                self.logger.warning(f"Failed to initialize intelligence usage tracker: {e}")
+                self.logger.warning(
+                    f"Failed to initialize intelligence usage tracker: {e}"
+                )
 
         # Quality scoring configuration
         self.quality_scorer = PatternQualityScorer()
@@ -889,12 +829,16 @@ class ManifestInjector:
             self.logger.debug("ManifestInjector context manager exited cleanly")
 
         except Exception as e:
-            self.logger.error(f"Error during ManifestInjector cleanup: {e}", exc_info=True)
+            self.logger.error(
+                f"Error during ManifestInjector cleanup: {e}", exc_info=True
+            )
 
         # Return False to propagate any exceptions
         return False
 
-    async def _filter_by_quality(self, patterns: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    async def _filter_by_quality(
+        self, patterns: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """
         Filter patterns by quality score.
 
@@ -917,7 +861,9 @@ class ManifestInjector:
                 score = self.quality_scorer.score_pattern(pattern)
 
                 # Store metrics asynchronously (collect tasks to await later)
-                task = asyncio.create_task(self.quality_scorer.store_quality_metrics(score))
+                task = asyncio.create_task(
+                    self.quality_scorer.store_quality_metrics(score)
+                )
                 metric_tasks.append(task)
                 scores_recorded += 1
 
@@ -941,7 +887,9 @@ class ManifestInjector:
             for idx, result in enumerate(results):
                 if isinstance(result, Exception):
                     failed_tasks += 1
-                    self.logger.warning(f"Metric storage task {idx + 1} failed: {result}")
+                    self.logger.warning(
+                        f"Metric storage task {idx + 1} failed: {result}"
+                    )
 
             if failed_tasks > 0:
                 self.logger.warning(
@@ -975,55 +923,13 @@ class ManifestInjector:
         if not settings.enable_postgres:
             return []
 
-        def _blocking_query() -> list[DisabledPattern]:
-            import psycopg2
-
-            host = settings.postgres_host
-            port = settings.postgres_port
-            database = settings.postgres_database
-            user = settings.postgres_user
-
-            try:
-                password = settings.get_effective_postgres_password()  # nosec
-            except ValueError:
-                return []
-
-            if not password:
-                return []
-
-            conn = psycopg2.connect(
-                host=host,
-                port=port,
-                database=database,
-                user=user,
-                password=password,  # nosec
-                connect_timeout=1,
-            )
-            try:
-                with conn.cursor() as cursor:
-                    cursor.execute(
-                        "SELECT pattern_id, pattern_class, reason, event_at, actor "
-                        "FROM disabled_patterns_current"
-                    )
-                    rows = cursor.fetchall()
-                return [
-                    DisabledPattern(
-                        pattern_id=str(row[0]) if row[0] else None,
-                        pattern_class=row[1],
-                        reason=row[2] or "",
-                        event_at=row[3],
-                        actor=row[4] or "",
-                    )
-                    for row in rows
-                ]
-            finally:
-                conn.close()
-
-        try:
-            return await asyncio.to_thread(_blocking_query)
-        except Exception as e:
-            self.logger.warning(f"Failed to query disabled patterns: {e}")
-            return []
+        # OMN-2058: disabled_patterns_current materialized view not available in
+        # omniclaude database. Table ownership transferred to omninode_bridge.
+        # TODO(OMN-2058): Re-enable when omniclaude owns its own disabled_patterns view.
+        self.logger.info(
+            "Disabled patterns kill switch not available during DB-SPLIT (OMN-2058)"
+        )
+        return []
 
     async def _filter_disabled_patterns(
         self, patterns: list[dict[str, Any]]
@@ -1131,7 +1037,9 @@ class ManifestInjector:
             loop = asyncio.get_event_loop()
             # With nest_asyncio.apply(), we can run_until_complete even in running loop
             return loop.run_until_complete(
-                self.generate_dynamic_manifest_async(correlation_id, force_refresh=force_refresh)
+                self.generate_dynamic_manifest_async(
+                    correlation_id, force_refresh=force_refresh
+                )
             )
         except RuntimeError as e:
             if "no running event loop" in str(e).lower():
@@ -1148,10 +1056,14 @@ class ManifestInjector:
                 finally:
                     loop.close()
             else:
-                self.logger.error(f"Failed to generate dynamic manifest: {e}", exc_info=True)
+                self.logger.error(
+                    f"Failed to generate dynamic manifest: {e}", exc_info=True
+                )
                 return self._get_minimal_manifest()
         except Exception as e:
-            self.logger.error(f"Failed to generate dynamic manifest: {e}", exc_info=True)
+            self.logger.error(
+                f"Failed to generate dynamic manifest: {e}", exc_info=True
+            )
             return self._get_minimal_manifest()
 
     def _get_action_logger(self, correlation_id: str) -> _ActionLoggerType | None:
@@ -1238,7 +1150,9 @@ class ManifestInjector:
 
         # Check cache first
         if not force_refresh and self._is_cache_valid():
-            self.logger.debug(f"Using cached manifest data (correlation_id: {correlation_id})")
+            self.logger.debug(
+                f"Using cached manifest data (correlation_id: {correlation_id})"
+            )
             # Still log cache hit
             self._store_manifest_if_enabled(from_cache=True)
 
@@ -1252,14 +1166,18 @@ class ManifestInjector:
                                 "total_time_ms": 0,  # Cache hit is instant
                                 "cache_used": True,
                                 "sections_included": (
-                                    list(self._manifest_data.keys()) if self._manifest_data else []
+                                    list(self._manifest_data.keys())
+                                    if self._manifest_data
+                                    else []
                                 ),
                             }
                         ),
                         duration_ms=0,
                     )
                 except Exception as log_err:
-                    self.logger.debug(f"ActionLogger cache hit logging failed: {log_err}")
+                    self.logger.debug(
+                        f"ActionLogger cache hit logging failed: {log_err}"
+                    )
 
             if self._manifest_data is None:
                 # Cache consistency error - should not happen but handle gracefully
@@ -1322,7 +1240,9 @@ class ManifestInjector:
             # Add debug loop context (always query, even when intelligence disabled)
             try:
                 debug_loop_result = await self._query_debug_loop_context(correlation_id)
-                manifest["debug_loop"] = self._format_debug_loop_result(debug_loop_result)
+                manifest["debug_loop"] = self._format_debug_loop_result(
+                    debug_loop_result
+                )
             except Exception as e:
                 self.logger.warning(f"[{correlation_id}] Debug loop query failed: {e}")
                 manifest["debug_loop"] = {
@@ -1334,7 +1254,9 @@ class ManifestInjector:
                 }
 
             self._manifest_data = manifest
-            self._cached_formatted = None  # Invalidate formatted cache for fresh manifest
+            self._cached_formatted = (
+                None  # Invalidate formatted cache for fresh manifest
+            )
             self._last_update = datetime.now(UTC)
             return manifest
 
@@ -1354,7 +1276,9 @@ class ManifestInjector:
 
             # Select sections based on task context
             sections_to_query = self._select_sections_for_task(task_context)
-            self.logger.info(f"[{correlation_id}] Selected sections: {sections_to_query}")
+            self.logger.info(
+                f"[{correlation_id}] Selected sections: {sections_to_query}"
+            )
 
             # Build query_tasks based on selected sections
             query_tasks = {}
@@ -1365,7 +1289,9 @@ class ManifestInjector:
                 )
 
             if "infrastructure" in sections_to_query:
-                query_tasks["infrastructure"] = self._query_infrastructure(correlation_id)
+                query_tasks["infrastructure"] = self._query_infrastructure(
+                    correlation_id
+                )
 
             if "models" in sections_to_query:
                 query_tasks["models"] = self._query_models(correlation_id)
@@ -1405,7 +1331,9 @@ class ManifestInjector:
 
             # Cache manifest
             self._manifest_data = manifest
-            self._cached_formatted = None  # Invalidate formatted cache for fresh manifest
+            self._cached_formatted = (
+                None  # Invalidate formatted cache for fresh manifest
+            )
             self._last_update = datetime.now(UTC)
 
             # Calculate total generation time
@@ -1413,8 +1341,12 @@ class ManifestInjector:
 
             # Extract pattern metrics
             pattern_count = len(manifest.get("patterns", {}).get("available", []))
-            debug_successes = manifest.get("debug_intelligence", {}).get("total_successes", 0)
-            debug_failures = manifest.get("debug_intelligence", {}).get("total_failures", 0)
+            debug_successes = manifest.get("debug_intelligence", {}).get(
+                "total_successes", 0
+            )
+            debug_failures = manifest.get("debug_intelligence", {}).get(
+                "total_failures", 0
+            )
 
             # Log pattern discovery performance
             if action_logger:
@@ -1596,7 +1528,9 @@ class ManifestInjector:
         query_vector = None
         if user_prompt:
             try:
-                self.logger.info(f"[{correlation_id}] Embedding user prompt for semantic search")
+                self.logger.info(
+                    f"[{correlation_id}] Embedding user prompt for semantic search"
+                )
                 query_vector = await self._embed_text(user_prompt)
                 self.logger.info(
                     f"[{correlation_id}] Generated embedding vector (dim={len(query_vector)})"
@@ -1614,7 +1548,9 @@ class ManifestInjector:
 
         try:
             # Get Qdrant URL and strip trailing slashes to avoid double-slash in URL
-            qdrant_url = os.environ.get("QDRANT_URL", str(settings.qdrant_url)).rstrip("/")
+            qdrant_url = os.environ.get("QDRANT_URL", str(settings.qdrant_url)).rstrip(
+                "/"
+            )
 
             async with aiohttp.ClientSession() as session:
                 for collection_name in collections:
@@ -1663,26 +1599,34 @@ class ManifestInjector:
                                         # Handle different collection structures
                                         # archon_vectors: has quality_score, pattern_confidence at top level
                                         # code_generation_patterns: has source_context.quality_score
-                                        source_context = point_payload.get("source_context", {})
+                                        source_context = point_payload.get(
+                                            "source_context", {}
+                                        )
                                         metadata = point_payload.get("metadata", {})
 
                                         # Extract node_types - check multiple locations
                                         node_types = point_payload.get("node_types", [])
-                                        if not node_types and isinstance(metadata, dict):
+                                        if not node_types and isinstance(
+                                            metadata, dict
+                                        ):
                                             node_types = metadata.get("node_types", [])
                                         if (
                                             not node_types
                                             and isinstance(source_context, dict)
                                             and source_context.get("node_type")
                                         ):
-                                            node_types = [source_context.get("node_type")]
+                                            node_types = [
+                                                source_context.get("node_type")
+                                            ]
 
                                         # Extract use_cases - check multiple locations
                                         use_cases = point_payload.get("use_cases", [])
                                         if not use_cases and isinstance(metadata, dict):
                                             use_cases = metadata.get("use_cases", [])
                                         if not use_cases:
-                                            reuse_conds = point_payload.get("reuse_conditions", [])
+                                            reuse_conds = point_payload.get(
+                                                "reuse_conditions", []
+                                            )
                                             if isinstance(reuse_conds, list):
                                                 use_cases = reuse_conds
 
@@ -1720,22 +1664,34 @@ class ManifestInjector:
                                             isinstance(source_context, dict)
                                             and "quality_score" in source_context
                                         ):
-                                            quality_score = source_context.get("quality_score", 0.5)
+                                            quality_score = source_context.get(
+                                                "quality_score", 0.5
+                                            )
                                         else:
-                                            quality_score = point_payload.get("quality_score", 0.5)
+                                            quality_score = point_payload.get(
+                                                "quality_score", 0.5
+                                            )
 
                                         # Extract confidence - use pattern_confidence or confidence_score
-                                        confidence = point_payload.get("pattern_confidence", 0.0)
+                                        confidence = point_payload.get(
+                                            "pattern_confidence", 0.0
+                                        )
                                         if confidence == 0.0:
-                                            confidence = point_payload.get("confidence_score", 0.0)
-                                        if confidence == 0.0 and isinstance(metadata, dict):
+                                            confidence = point_payload.get(
+                                                "confidence_score", 0.0
+                                            )
+                                        if confidence == 0.0 and isinstance(
+                                            metadata, dict
+                                        ):
                                             confidence = metadata.get("confidence", 0.0)
                                         if confidence == 0.0:
                                             # If using vector search, semantic_score is meaningful
                                             confidence = semantic_score
 
                                         # Extract keywords - from reuse_conditions, concepts, or themes
-                                        keywords = point_payload.get("reuse_conditions", [])
+                                        keywords = point_payload.get(
+                                            "reuse_conditions", []
+                                        )
                                         if not keywords:
                                             keywords = point_payload.get("concepts", [])
                                         if not keywords:
@@ -1748,25 +1704,35 @@ class ManifestInjector:
                                                 "pattern_name",
                                                 point_payload.get(
                                                     "title",
-                                                    point_payload.get("name", "Unknown Pattern"),
+                                                    point_payload.get(
+                                                        "name", "Unknown Pattern"
+                                                    ),
                                                 ),
                                             ),
                                             "description": point_payload.get(
                                                 "pattern_description",
                                                 point_payload.get(
                                                     "content",
-                                                    point_payload.get("description", ""),
-                                                )[:500],  # Limit description length for display
+                                                    point_payload.get(
+                                                        "description", ""
+                                                    ),
+                                                )[
+                                                    :500
+                                                ],  # Limit description length for display
                                             ),
                                             "file_path": file_path,
                                             "content": full_content,  # Preserve full content for code snippets
                                             "language": language,  # Language for syntax highlighting
                                             "node_types": (
-                                                node_types if isinstance(node_types, list) else []
+                                                node_types
+                                                if isinstance(node_types, list)
+                                                else []
                                             ),
                                             "confidence": confidence,
                                             "use_cases": (
-                                                use_cases if isinstance(use_cases, list) else []
+                                                use_cases
+                                                if isinstance(use_cases, list)
+                                                else []
                                             ),
                                             "pattern_id": point_payload.get(
                                                 "pattern_id",
@@ -1778,10 +1744,16 @@ class ManifestInjector:
                                             ),
                                             "confidence_score": point_payload.get(
                                                 "confidence_score",
-                                                point_payload.get("pattern_confidence", 0.0),
+                                                point_payload.get(
+                                                    "pattern_confidence", 0.0
+                                                ),
                                             ),
-                                            "usage_count": point_payload.get("usage_count", 0),
-                                            "success_rate": point_payload.get("success_rate", 0.0),
+                                            "usage_count": point_payload.get(
+                                                "usage_count", 0
+                                            ),
+                                            "success_rate": point_payload.get(
+                                                "success_rate", 0.0
+                                            ),
                                             "source_context": (
                                                 source_context
                                                 if isinstance(source_context, dict)
@@ -1805,22 +1777,30 @@ class ManifestInjector:
                                                 "quality_score": quality_score,
                                                 "confidence_score": point_payload.get(
                                                     "confidence_score",
-                                                    point_payload.get("pattern_confidence", 0.5),
+                                                    point_payload.get(
+                                                        "pattern_confidence", 0.5
+                                                    ),
                                                 ),
                                                 "success_rate": point_payload.get(
                                                     "success_rate", 0.5
                                                 ),
-                                                "usage_count": point_payload.get("usage_count", 0),
+                                                "usage_count": point_payload.get(
+                                                    "usage_count", 0
+                                                ),
                                                 "pattern_type": point_payload.get(
                                                     "pattern_type",
-                                                    point_payload.get("entity_type", ""),
+                                                    point_payload.get(
+                                                        "entity_type", ""
+                                                    ),
                                                 ),
                                                 "node_type": (
                                                     source_context.get("node_type", "")
                                                     if isinstance(source_context, dict)
                                                     else ""
                                                 ),
-                                                "onex_type": point_payload.get("onex_type", ""),
+                                                "onex_type": point_payload.get(
+                                                    "onex_type", ""
+                                                ),
                                                 "onex_compliance": point_payload.get(
                                                     "onex_compliance", 0.0
                                                 ),
@@ -1875,19 +1855,23 @@ class ManifestInjector:
 
                 # Filter by semantic score threshold
                 filtered_patterns = [
-                    p for p in all_patterns if p.get("hybrid_score", 0.0) > relevance_threshold
+                    p
+                    for p in all_patterns
+                    if p.get("hybrid_score", 0.0) > relevance_threshold
                 ]
 
                 # Sort by score descending
-                filtered_patterns.sort(key=lambda p: p.get("hybrid_score", 0.0), reverse=True)
+                filtered_patterns.sort(
+                    key=lambda p: p.get("hybrid_score", 0.0), reverse=True
+                )
 
                 # Limit to configured maximum
                 all_patterns = filtered_patterns[:limit_per_collection]
 
                 if filtered_patterns:
-                    avg_score = sum(p.get("hybrid_score", 0.0) for p in filtered_patterns) / len(
-                        filtered_patterns
-                    )
+                    avg_score = sum(
+                        p.get("hybrid_score", 0.0) for p in filtered_patterns
+                    ) / len(filtered_patterns)
                     self.logger.info(
                         f"[{correlation_id}] Filtered patterns by Qdrant semantic score: "
                         f"{len(all_patterns)} relevant (from {original_count} total), "
@@ -1955,7 +1939,9 @@ class ManifestInjector:
                 "limits": {"archon_vectors": 50, "code_generation_patterns": 100},
             }
             try:
-                cached_result = await self._valkey_cache.get("pattern_discovery", cache_params)
+                cached_result = await self._valkey_cache.get(
+                    "pattern_discovery", cache_params
+                )
                 if cached_result is not None:
                     elapsed_ms = int((time.time() - start_time) * 1000)
                     self._current_query_times["patterns"] = elapsed_ms
@@ -2012,8 +1998,12 @@ class ManifestInjector:
             )
 
             # Wait for both queries to complete in parallel
-            self.logger.debug("Waiting for both pattern queries to complete in parallel...")
-            results = await asyncio.gather(templates_task, codegen_task, return_exceptions=True)
+            self.logger.debug(
+                "Waiting for both pattern queries to complete in parallel..."
+            )
+            results = await asyncio.gather(
+                templates_task, codegen_task, return_exceptions=True
+            )
             templates_result, codegen_result = results
 
             # Handle exceptions from gather
@@ -2027,7 +2017,9 @@ class ManifestInjector:
                 templates_dict = templates_result
 
             if isinstance(codegen_result, Exception):
-                self.logger.warning(f"code_generation_patterns query failed: {codegen_result}")
+                self.logger.warning(
+                    f"code_generation_patterns query failed: {codegen_result}"
+                )
                 codegen_dict = {"patterns": [], "query_time_ms": 0}
             elif isinstance(codegen_result, dict):
                 codegen_dict = codegen_result
@@ -2160,7 +2152,9 @@ class ManifestInjector:
                     # Alert if systematic tracking failures
                     if tracking_failures > 0:
                         failure_rate = (
-                            (tracking_failures / total_patterns) * 100 if total_patterns > 0 else 0
+                            (tracking_failures / total_patterns) * 100
+                            if total_patterns > 0
+                            else 0
                         )
                         self.logger.warning(
                             f"[{correlation_id}] Intelligence tracking failures: {tracking_failures}/{total_patterns} "
@@ -2180,8 +2174,12 @@ class ManifestInjector:
                     "limits": {"archon_vectors": 50, "code_generation_patterns": 100},
                 }
                 try:
-                    await self._valkey_cache.set("pattern_discovery", cache_params, result)
-                    self.logger.debug(f"[{correlation_id}] Stored patterns in Valkey cache")
+                    await self._valkey_cache.set(
+                        "pattern_discovery", cache_params, result
+                    )
+                    self.logger.debug(
+                        f"[{correlation_id}] Stored patterns in Valkey cache"
+                    )
                 except Exception as e:
                     self.logger.warning(f"Failed to store in Valkey cache: {e}")
 
@@ -2195,7 +2193,9 @@ class ManifestInjector:
             elapsed_ms = int((time.time() - start_time) * 1000)
             self._current_query_times["patterns"] = elapsed_ms
             self._current_query_failures["patterns"] = str(e)
-            self.logger.error(f"[{correlation_id}] Pattern query via direct HTTP failed: {e}")
+            self.logger.error(
+                f"[{correlation_id}] Pattern query via direct HTTP failed: {e}"
+            )
 
             return {"patterns": [], "error": str(e)}
 
@@ -2282,7 +2282,9 @@ class ManifestInjector:
 
             elapsed_ms = int((time.time() - start_time) * 1000)
             self._current_query_times["infrastructure"] = elapsed_ms
-            self.logger.info(f"[{correlation_id}] Infrastructure query completed in {elapsed_ms}ms")
+            self.logger.info(
+                f"[{correlation_id}] Infrastructure query completed in {elapsed_ms}ms"
+            )
 
             return result
 
@@ -2308,37 +2310,30 @@ class ManifestInjector:
 
         def _blocking_query() -> dict[str, Any]:
             """Blocking PostgreSQL operations."""
-            import psycopg2
+            # Derive display info for the response regardless of DSN vs fields
+            dsn = settings.omniclaude_db_url.get_secret_value().strip()
+            host = settings.postgres_host or ("(via DSN)" if dsn else "")
+            port = settings.postgres_port or (0 if dsn else 0)
+            database = settings.postgres_database or ("(via DSN)" if dsn else "")
 
-            # Get connection details from centralized settings (NO hardcoded defaults)
-            host = settings.postgres_host
-            port = settings.postgres_port
-            database = settings.postgres_database
-            user = settings.postgres_user
+            # Check credentials availability
+            if not dsn:
+                try:
+                    password = settings.get_effective_postgres_password()  # nosec
+                except ValueError:
+                    password = ""  # nosec
 
-            try:
-                password = settings.get_effective_postgres_password()  # nosec
-            except ValueError:
-                password = ""  # nosec
-
-            if not password:
-                return {
-                    "host": host,
-                    "port": port,
-                    "database": database,
-                    "status": "unavailable",
-                    "error": "POSTGRES_PASSWORD not set in environment",
-                }
+                if not password:
+                    return {
+                        "host": host,
+                        "port": port,
+                        "database": database,
+                        "status": "unavailable",
+                        "error": "POSTGRES_PASSWORD not set in environment",
+                    }
 
             # Try to connect and query table count
-            conn = psycopg2.connect(
-                host=host,
-                port=port,
-                database=database,
-                user=user,
-                password=password,
-                connect_timeout=2,
-            )
+            conn = _connect_postgres(connect_timeout=2)
 
             cursor = conn.cursor()
             cursor.execute(
@@ -2601,7 +2596,9 @@ class ManifestInjector:
                         """
                     )
                     pattern_count = pattern_files_result.single()
-                    pattern_files = pattern_count["pattern_file_count"] if pattern_count else 0
+                    pattern_files = (
+                        pattern_count["pattern_file_count"] if pattern_count else 0
+                    )
 
                     return {
                         "url": memgraph_url,
@@ -2726,7 +2723,9 @@ class ManifestInjector:
             }
         except TimeoutError:
             query_time_ms = (time.time() - start_time) * 1000
-            self.logger.warning(f"semantic-search query timed out after {query_time_ms:.0f}ms")
+            self.logger.warning(
+                f"semantic-search query timed out after {query_time_ms:.0f}ms"
+            )
             return {
                 "status": "unavailable",
                 "error": f"Query timed out after {query_time_ms:.0f}ms",
@@ -2781,14 +2780,18 @@ class ManifestInjector:
             }
 
             # 2. Try to load claude-providers.json for provider configuration
-            providers_file = Path(__file__).parent.parent.parent / "claude-providers.json"
+            providers_file = (
+                Path(__file__).parent.parent.parent / "claude-providers.json"
+            )
             provider_config = {}
             if providers_file.exists():
                 try:
                     with open(providers_file) as f:
                         provider_config = json.load(f).get("providers", {})
                 except Exception as e:
-                    self.logger.warning(f"[{correlation_id}] Failed to load provider config: {e}")
+                    self.logger.warning(
+                        f"[{correlation_id}] Failed to load provider config: {e}"
+                    )
 
             # 3. Build AI models section
             # Check Anthropic provider
@@ -2925,28 +2928,42 @@ class ManifestInjector:
         schemas = []
 
         try:
-            # Get PostgreSQL connection details from environment
-            # Default to localhost - production values should be set via .env
-            pg_host = os.environ.get("POSTGRES_HOST", "localhost")
-            pg_port = int(os.environ.get("POSTGRES_PORT", "5436"))
-            pg_user = os.environ.get("POSTGRES_USER", "postgres")
-            pg_password = os.environ.get("POSTGRES_PASSWORD", "")
-            pg_database = os.environ.get("POSTGRES_DATABASE", "omninode_bridge")
+            # Respect OMNICLAUDE_DB_URL precedence (same as every other DB method).
+            # asyncpg.connect() accepts a DSN string as its first positional arg.
+            dsn = settings.omniclaude_db_url.get_secret_value().strip()
+            if dsn:
+                # asyncpg requires postgresql:// scheme (not postgres://).
+                if dsn.startswith("postgres://"):
+                    dsn = "postgresql://" + dsn[len("postgres://") :]
+                elif not dsn.startswith("postgresql://"):
+                    self.logger.warning(
+                        "[%s] Unrecognized DSN scheme in %r; "
+                        "asyncpg expects postgresql:// — passing through as-is",
+                        correlation_id,
+                        dsn[:20] + "..." if len(dsn) > 20 else dsn,
+                    )
+                conn = await asyncpg.connect(dsn, timeout=5)
+            else:
+                # Fallback: individual POSTGRES_* fields
+                pg_host = settings.postgres_host or ""
+                pg_port = settings.postgres_port or 5436
+                pg_user = settings.postgres_user or ""
+                pg_password = settings.postgres_password or ""
+                pg_database = settings.postgres_database or ""
 
-            if not pg_password:
-                self.logger.warning(
-                    f"[{correlation_id}] POSTGRES_PASSWORD not set, direct query may fail"
+                if not pg_password:
+                    self.logger.warning(
+                        f"[{correlation_id}] POSTGRES_PASSWORD not set, direct query may fail"
+                    )
+
+                conn = await asyncpg.connect(
+                    host=pg_host,
+                    port=pg_port,
+                    user=pg_user,
+                    password=pg_password,
+                    database=pg_database,
+                    timeout=5,
                 )
-
-            # Connect to PostgreSQL
-            conn = await asyncpg.connect(
-                host=pg_host,
-                port=pg_port,
-                user=pg_user,
-                password=pg_password,
-                database=pg_database,
-                timeout=5,
-            )
 
             try:
                 # First, get table descriptions from pg_description
@@ -2963,7 +2980,8 @@ class ManifestInjector:
 
                 table_desc_rows = await conn.fetch(table_descriptions_query)
                 table_descriptions = {
-                    row["table_name"]: row["table_description"] or "No description available"
+                    row["table_name"]: row["table_description"]
+                    or "No description available"
                     for row in table_desc_rows
                 }
 
@@ -3026,7 +3044,9 @@ class ManifestInjector:
 
         except Exception as e:
             elapsed_ms = int((time.time() - start_time) * 1000)
-            self.logger.error(f"[{correlation_id}] Direct PostgreSQL fallback failed: {e}")
+            self.logger.error(
+                f"[{correlation_id}] Direct PostgreSQL fallback failed: {e}"
+            )
             return {"schemas": [], "error": str(e), "query_time_ms": elapsed_ms}
 
     async def _query_database_schemas(
@@ -3081,19 +3101,25 @@ class ManifestInjector:
             result_dict: dict[str, Any] = result if isinstance(result, dict) else {}
 
             # Check if result has actual schemas, trigger fallback if empty
-            schemas = result_dict.get("schemas", result_dict.get("database_schemas", []))
+            schemas = result_dict.get(
+                "schemas", result_dict.get("database_schemas", [])
+            )
             if not schemas or len(schemas) == 0:
                 self.logger.warning(
                     f"[{correlation_id}] Event-based schema query returned 0 schemas, trying direct PostgreSQL fallback..."
                 )
                 try:
-                    fallback_result = await self._query_database_schemas_direct_postgres(
-                        correlation_id=correlation_id
+                    fallback_result = (
+                        await self._query_database_schemas_direct_postgres(
+                            correlation_id=correlation_id
+                        )
                     )
 
                     if fallback_result.get("schemas") or fallback_result.get("tables"):
                         table_count = len(
-                            fallback_result.get("tables", fallback_result.get("schemas", []))
+                            fallback_result.get(
+                                "tables", fallback_result.get("schemas", [])
+                            )
                         )
                         self.logger.info(
                             f"[{correlation_id}] Direct PostgreSQL fallback succeeded: {table_count} tables"
@@ -3269,7 +3295,9 @@ class ManifestInjector:
             elapsed_ms = int((time.time() - start_time) * 1000)
             self._current_query_times["debug_intelligence"] = elapsed_ms
             self._current_query_failures["debug_intelligence"] = str(e)
-            self.logger.warning(f"[{correlation_id}] Debug intelligence query failed: {e}")
+            self.logger.warning(
+                f"[{correlation_id}] Debug intelligence query failed: {e}"
+            )
             # Not critical - return empty result
             return {
                 "similar_workflows": [],
@@ -3328,14 +3356,18 @@ class ManifestInjector:
                             "user_prompt": row["user_prompt"],
                             "status": row["status"],
                             "quality_score": (
-                                float(row["quality_score"]) if row["quality_score"] else None
+                                float(row["quality_score"])
+                                if row["quality_score"]
+                                else None
                             ),
                             "error_message": row["error_message"],
                             "error_type": row["error_type"],
                             "duration_ms": row["duration_ms"],
                             "metadata": metadata,
                             "timestamp": (
-                                row["created_at"].isoformat() if row["created_at"] else None
+                                row["created_at"].isoformat()
+                                if row["created_at"]
+                                else None
                             ),
                             "success": row["status"] == "success",
                         }
@@ -3392,7 +3424,9 @@ class ManifestInjector:
                                 else None
                             ),
                             "timestamp": (
-                                row["created_at"].isoformat() if row["created_at"] else None
+                                row["created_at"].isoformat()
+                                if row["created_at"]
+                                else None
                             ),
                             "success": row["feedback_type"]
                             in (
@@ -3451,7 +3485,9 @@ class ManifestInjector:
                         }
                     )
                 except Exception as file_error:
-                    self.logger.debug(f"Failed to parse log file {log_file}: {file_error}")
+                    self.logger.debug(
+                        f"Failed to parse log file {log_file}: {file_error}"
+                    )
                     continue
 
             return workflows
@@ -3460,7 +3496,9 @@ class ManifestInjector:
             self.logger.debug(f"Local execution logs query failed: {e}")
             return []
 
-    def _format_execution_workflows(self, workflows: list[dict[str, Any]]) -> dict[str, Any]:
+    def _format_execution_workflows(
+        self, workflows: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """
         Format agent execution log results for debug intelligence.
 
@@ -3533,7 +3571,9 @@ class ManifestInjector:
         for workflow in workflows[:20]:  # Top 20 workflows
             confidence_info = ""
             if workflow.get("detected_confidence"):
-                confidence_info = f" (confidence: {workflow['detected_confidence']:.2f})"
+                confidence_info = (
+                    f" (confidence: {workflow['detected_confidence']:.2f})"
+                )
 
             actual_pattern = workflow.get("actual_pattern")
             actual_info = f" -> {actual_pattern}" if actual_pattern else ""
@@ -3750,7 +3790,9 @@ class ManifestInjector:
                                 # Format modified time
                                 from datetime import UTC, datetime
 
-                                modified_time = datetime.fromtimestamp(stat.st_mtime, tz=UTC)
+                                modified_time = datetime.fromtimestamp(
+                                    stat.st_mtime, tz=UTC
+                                )
                                 time_diff = datetime.now(UTC) - modified_time
                                 if time_diff.days > 0:
                                     modified_str = f"{time_diff.days}d ago"
@@ -3965,7 +4007,9 @@ class ManifestInjector:
             elapsed_ms = int((time.time() - start_time) * 1000)
             self._current_query_times["debug_loop"] = elapsed_ms
             self._current_query_failures["debug_loop"] = str(e)
-            self.logger.warning(f"[{correlation_id}] Debug loop context query failed: {e}")
+            self.logger.warning(
+                f"[{correlation_id}] Debug loop context query failed: {e}"
+            )
             # Not critical - return graceful fallback
             return {
                 "available": False,
@@ -4003,7 +4047,9 @@ class ManifestInjector:
             "semantic_search",  # Semantic search capability
         ]
 
-        self.logger.info(f"Including all {len(sections)} core sections for complete context")
+        self.logger.info(
+            f"Including all {len(sections)} core sections for complete context"
+        )
         return sections
 
     def _build_manifest_from_results(
@@ -4047,7 +4093,9 @@ class ManifestInjector:
             self.logger.warning(f"Infrastructure query failed: {infra_result}")
             manifest["infrastructure"] = {"error": str(infra_result)}
         else:
-            manifest["infrastructure"] = self._format_infrastructure_result(infra_result)
+            manifest["infrastructure"] = self._format_infrastructure_result(
+                infra_result
+            )
 
         # Extract models
         models_result = results.get("models", {})
@@ -4071,7 +4119,9 @@ class ManifestInjector:
             self.logger.warning(f"Debug intelligence query failed: {debug_result}")
             manifest["debug_intelligence"] = {"error": str(debug_result)}
         else:
-            manifest["debug_intelligence"] = self._format_debug_intelligence_result(debug_result)
+            manifest["debug_intelligence"] = self._format_debug_intelligence_result(
+                debug_result
+            )
 
         # Extract filesystem
         filesystem_result = results.get("filesystem", {})
@@ -4095,7 +4145,9 @@ class ManifestInjector:
         # Extract semantic_search results
         semantic_search_result = results.get("semantic_search", {})
         if isinstance(semantic_search_result, Exception):
-            self.logger.warning(f"Semantic search query failed: {semantic_search_result}")
+            self.logger.warning(
+                f"Semantic search query failed: {semantic_search_result}"
+            )
             manifest["semantic_search"] = {"error": str(semantic_search_result)}
         else:
             manifest["semantic_search"] = self._format_semantic_search_result(
@@ -4110,9 +4162,7 @@ class ManifestInjector:
             "kafka_integration": {
                 "enabled": True,
                 "topic": TopicBase.AGENT_ACTIONS,
-                "bootstrap_servers": os.environ.get(
-                    "KAFKA_BOOTSTRAP_SERVERS", ""
-                ),
+                "bootstrap_servers": os.environ.get("KAFKA_BOOTSTRAP_SERVERS", ""),
             },
             "correlation_tracking": True,
             "performance_overhead": "<5ms per action",
@@ -4302,7 +4352,9 @@ class ManifestInjector:
             "total_tables": len(normalized_tables),
         }
 
-    def _format_debug_intelligence_result(self, result: dict[str, Any]) -> dict[str, Any]:
+    def _format_debug_intelligence_result(
+        self, result: dict[str, Any]
+    ) -> dict[str, Any]:
         """Format debug intelligence query result into manifest structure."""
         similar_workflows = result.get("similar_workflows", [])
 
@@ -4422,9 +4474,9 @@ class ManifestInjector:
             "infrastructure": {
                 "remote_services": {
                     "postgresql": {
-                        "host": os.environ.get("POSTGRES_HOST", "localhost"),
-                        "port": int(os.environ.get("POSTGRES_PORT", "5436")),
-                        "database": os.environ.get("POSTGRES_DATABASE", "omninode_bridge"),
+                        "host": settings.postgres_host or "",
+                        "port": settings.postgres_port or 5436,
+                        "database": settings.postgres_database or "",
                         "note": "Connection details only - schemas unavailable",
                     },
                     "kafka": {
@@ -4484,7 +4536,9 @@ class ManifestInjector:
 
         # Get manifest data
         if self._manifest_data is None:
-            self.logger.warning("Manifest data not loaded - call generate_dynamic_manifest() first")
+            self.logger.warning(
+                "Manifest data not loaded - call generate_dynamic_manifest() first"
+            )
             self._manifest_data = self._get_minimal_manifest()
 
         manifest = self._manifest_data
@@ -4529,7 +4583,9 @@ class ManifestInjector:
         # Add note about minimal manifest
         if metadata.get("source") == "fallback":
             output.append("⚠️  NOTE: This is a minimal fallback manifest.")
-            output.append("Full system context requires onex-intelligence-adapter service.")
+            output.append(
+                "Full system context requires onex-intelligence-adapter service."
+            )
             output.append("")
 
         output.append("=" * 70)
@@ -4544,7 +4600,9 @@ class ManifestInjector:
 
         return formatted
 
-    def _extract_code_snippet(self, content: str, language: str = "", max_lines: int = 15) -> str:
+    def _extract_code_snippet(
+        self, content: str, language: str = "", max_lines: int = 15
+    ) -> str:
         """
         Extract a meaningful code snippet from file content.
 
@@ -4589,7 +4647,9 @@ class ManifestInjector:
                         # Stop after docstring ends or max lines reached
                         if '"""' in lines[j] and j > i:
                             # Count quotes
-                            quote_count = sum(1 for k in range(i, j + 1) if '"""' in lines[k])
+                            quote_count = sum(
+                                1 for k in range(i, j + 1) if '"""' in lines[k]
+                            )
                             if quote_count >= 2:  # Docstring complete
                                 break
                         j += 1
@@ -4649,9 +4709,7 @@ class ManifestInjector:
             confidence_str = f"{confidence:.0%}" if confidence is not None else "N/A"
 
             if instance_count > 1:
-                pattern_header = (
-                    f"  • {pattern_name} ({confidence_str} confidence) [{instance_count} instances]"
-                )
+                pattern_header = f"  • {pattern_name} ({confidence_str} confidence) [{instance_count} instances]"
             else:
                 pattern_header = f"  • {pattern_name} ({confidence_str} confidence)"
 
@@ -4668,7 +4726,9 @@ class ManifestInjector:
                 output.append(f"    Language: {language}")
 
             # Show aggregated node types (from all instances)
-            all_node_types = pattern.get("all_node_types", pattern.get("node_types", []))
+            all_node_types = pattern.get(
+                "all_node_types", pattern.get("node_types", [])
+            )
             if all_node_types:
                 output.append(f"    Node Types: {', '.join(all_node_types)}")
 
@@ -4763,7 +4823,9 @@ class ManifestInjector:
                     model_id = model.get("model", "unknown")
                     weight = model.get("weight", 0)
                     use_case = model.get("use_case", "")
-                    output.append(f"    • {name} ({model_id}): weight={weight} - {use_case}")
+                    output.append(
+                        f"    • {name} ({model_id}): weight={weight} - {use_case}"
+                    )
                 if len(intelligence_models) > 3:
                     output.append(
                         f"    ... and {len(intelligence_models) - 3} more (total weight: {total_weight})"
@@ -4877,7 +4939,9 @@ class ManifestInjector:
             output.append("  (Schema information unavailable)")
             return "\n".join(output)
 
-        output.append(f"  Total Tables: {schemas_data.get('total_tables', len(tables))}")
+        output.append(
+            f"  Total Tables: {schemas_data.get('total_tables', len(tables))}"
+        )
 
         for table in tables[:5]:  # Limit to top 5
             table_name = table.get("name", "unknown")
@@ -4897,7 +4961,9 @@ class ManifestInjector:
         failures = workflows.get("failures", [])
 
         if not successes and not failures:
-            output.append("  (No similar workflows found - first time seeing this pattern)")
+            output.append(
+                "  (No similar workflows found - first time seeing this pattern)"
+            )
             return "\n".join(output)
 
         output.append(
@@ -4982,7 +5048,9 @@ class ManifestInjector:
             output.append(f"     Project: {project_name}")
             output.append(f"     Type: {entity_type}")
             output.append(f"     Path: {entity_id}")
-            output.append(f"     Relevance: {relevance_score:.2%} | Semantic: {semantic_score:.2%}")
+            output.append(
+                f"     Relevance: {relevance_score:.2%} | Semantic: {semantic_score:.2%}"
+            )
 
             # Show content preview if available (first 200 chars)
             if content_preview:
@@ -5023,13 +5091,17 @@ class ManifestInjector:
         output.append(f"  Total STFs: {stf_count}")
 
         if categories:
-            output.append(f"  Categories: {', '.join([c['category'] for c in categories[:5]])}")
+            output.append(
+                f"  Categories: {', '.join([c['category'] for c in categories[:5]])}"
+            )
             output.append("")
 
         if top_stfs:
             output.append("  Top Quality STFs:")
             for stf in top_stfs[:5]:  # Show top 5
-                output.append(f"    • {stf['stf_name']} (quality: {stf['quality_score']:.2f})")
+                output.append(
+                    f"    • {stf['stf_name']} (quality: {stf['quality_score']:.2f})"
+                )
                 output.append(f"      Category: {stf['category']}")
                 output.append(f"      Success Rate: {stf['success_rate']:.1f}%")
                 output.append(f"      Usage: {stf['usage_count']} times")
@@ -5057,7 +5129,9 @@ class ManifestInjector:
 
         # Get correlation ID and agent name from current context
         correlation_id = (
-            str(self._current_correlation_id) if self._current_correlation_id else "auto-generated"
+            str(self._current_correlation_id)
+            if self._current_correlation_id
+            else "auto-generated"
         )
         agent_name = self.agent_name or "your-agent-name"
         project_name = action_logging_data.get("project_name", "omniclaude")
@@ -5081,7 +5155,9 @@ class ManifestInjector:
         # Tool call example with context manager
         output.append("  Log tool calls (automatic timing):")
         output.append("  ```python")
-        output.append('  async with logger.tool_call("Read", {"file_path": "..."}) as action:')
+        output.append(
+            '  async with logger.tool_call("Read", {"file_path": "..."}) as action:'
+        )
         output.append("      result = await read_file(...)")
         output.append('      action.set_result({"line_count": len(result)})')
         output.append("  ```")
@@ -5091,7 +5167,9 @@ class ManifestInjector:
         output.append("  Log decisions:")
         output.append("  ```python")
         output.append('  await logger.log_decision("select_strategy",')
-        output.append('      decision_result={"chosen": "approach_a", "confidence": 0.92})')
+        output.append(
+            '      decision_result={"chosen": "approach_a", "confidence": 0.92})'
+        )
         output.append("  ```")
         output.append("")
 
@@ -5116,7 +5194,9 @@ class ManifestInjector:
         # Performance and infrastructure note
         output.append("  Performance: <5ms overhead per action, non-blocking")
         output.append("  Kafka Topic: onex.evt.omniclaude.agent-actions.v1")
-        output.append("  Benefits: Complete traceability, debug intelligence, performance metrics")
+        output.append(
+            "  Benefits: Complete traceability, debug intelligence, performance metrics"
+        )
 
         return "\n".join(output)
 
@@ -5433,7 +5513,9 @@ def inject_manifest(
     # With nest_asyncio, we can always use run_until_complete
     try:
         loop = asyncio.get_event_loop()
-        return loop.run_until_complete(inject_manifest_async(correlation_id, sections, agent_name))
+        return loop.run_until_complete(
+            inject_manifest_async(correlation_id, sections, agent_name)
+        )
     except RuntimeError as e:
         if "no running event loop" in str(e).lower():
             # Create new event loop if none exists

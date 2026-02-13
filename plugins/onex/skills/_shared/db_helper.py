@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import sys
+import threading
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -27,34 +28,120 @@ logger = logging.getLogger(__name__)
 # Add config for type-safe settings (Pydantic Settings framework)
 from omniclaude.config import settings
 
-# Database configuration - all values from type-safe Pydantic Settings
-DB_CONFIG = {
-    "host": settings.postgres_host,
-    "port": settings.postgres_port,
-    "database": settings.postgres_database,
-    "user": settings.postgres_user,
-    "password": settings.get_effective_postgres_password(),
-}
+# Database configuration (lazy initialization)
+# Resolved on first access via _get_db_config() rather than at import time,
+# so that importing this module never fails due to missing env vars.
+DB_CONFIG: dict[str, Any] | None = None
+_db_config_lock = threading.Lock()
+
+
+def _get_db_config() -> dict[str, Any]:
+    """Build DB_CONFIG lazily on first use.
+
+    Uses Pydantic Settings as the single source of truth for OMNICLAUDE_DB_URL.
+    The settings object reads from environment variables automatically, so this
+    stays consistent with the rest of the codebase rather than diverging via
+    a separate os.environ.get() code path.
+
+    Thread-safe: uses a lock to prevent partial initialization when two threads
+    call simultaneously during first access.
+    """
+    global DB_CONFIG
+    if DB_CONFIG is not None:
+        return DB_CONFIG
+
+    with _db_config_lock:
+        # Re-check after acquiring lock (double-checked locking)
+        if DB_CONFIG is not None:
+            return DB_CONFIG
+
+        # Whitespace-only values (e.g., OMNICLAUDE_DB_URL='  ') become empty
+        # after strip() and intentionally fall through to POSTGRES_* fallback.
+        _omniclaude_db_url = settings.omniclaude_db_url.get_secret_value().strip()
+
+        if _omniclaude_db_url:
+            # Parse URL into components for explicit parameter passing to SimpleConnectionPool.
+            # This gives us visibility into individual connection parameters (host, port, etc.)
+            # for error reporting and DB_CONFIG introspection.
+            from urllib.parse import parse_qs, unquote, urlparse
+
+            _parsed = urlparse(_omniclaude_db_url)
+            DB_CONFIG = {
+                "host": _parsed.hostname or "",
+                "port": _parsed.port or 5432,
+                "database": _parsed.path.lstrip("/") if _parsed.path else "",
+                "user": unquote(_parsed.username) if _parsed.username else "",
+                "password": unquote(_parsed.password) if _parsed.password else "",
+            }
+
+            # Preserve query parameters from the URL (e.g., sslmode=require, connect_timeout=10).
+            # These are passed as keyword arguments to psycopg2.connect() via the pool constructor.
+            if _parsed.query:
+                _query_params = parse_qs(_parsed.query, keep_blank_values=False)
+                for _key, _values in _query_params.items():
+                    # parse_qs returns lists; take the last value for each key
+                    # (matching standard URL semantics where last value wins).
+                    DB_CONFIG[_key] = _values[-1]
+
+            # Coerce known numeric parameters from URL query strings.
+            # parse_qs always returns strings, but psycopg2 expects int for these.
+            _int_params = {
+                "connect_timeout",
+                "keepalives",
+                "keepalives_idle",
+                "keepalives_interval",
+                "keepalives_count",
+            }
+            for _key in _int_params:
+                if _key in DB_CONFIG and isinstance(DB_CONFIG[_key], str):
+                    try:
+                        DB_CONFIG[_key] = int(DB_CONFIG[_key])
+                    except ValueError:
+                        logger.warning(
+                            "Non-numeric value %r for parameter %r; "
+                            "keeping as string (psycopg2 will validate)",
+                            DB_CONFIG[_key],
+                            _key,
+                        )
+        else:
+            # Fallback to individual POSTGRES_* settings
+            DB_CONFIG = {
+                "host": settings.postgres_host,
+                "port": settings.postgres_port,
+                "database": settings.postgres_database,
+                "user": settings.postgres_user,
+                "password": settings.get_effective_postgres_password(),
+            }
+
+        return DB_CONFIG
+
 
 # Connection pool (lazy initialization)
 _connection_pool: SimpleConnectionPool | None = None
+_pool_lock = threading.Lock()
 
 
 def get_connection_pool() -> SimpleConnectionPool:
     """
     Get or create connection pool.
 
-    Pool sizes are configurable via environment variables:
-    - POSTGRES_POOL_MIN_SIZE (default: 1)
-    - POSTGRES_POOL_MAX_SIZE (default: 5)
+    Uses fixed pool sizes appropriate for skill helper usage.
+
+    Thread-safe: uses double-checked locking to prevent two threads from
+    both creating a pool when they see ``_connection_pool is None``.
     """
     global _connection_pool
     if _connection_pool is None:
-        _connection_pool = SimpleConnectionPool(
-            minconn=settings.postgres_pool_min_size,
-            maxconn=settings.postgres_pool_max_size,
-            **DB_CONFIG,
-        )
+        with _pool_lock:
+            # Re-check after acquiring lock (double-checked locking)
+            if _connection_pool is None:
+                # Hardcoded defaults — pool config fields (postgres_pool_min_size,
+                # postgres_pool_max_size) were removed from Settings in DB-SPLIT-07.
+                _connection_pool = SimpleConnectionPool(
+                    minconn=1,
+                    maxconn=5,
+                    **_get_db_config(),
+                )
     return _connection_pool
 
 
@@ -148,9 +235,9 @@ def execute_query(
                 "success": False,
                 "rows": None,
                 "error": "Failed to get database connection",
-                "host": DB_CONFIG.get("host", "unknown"),
-                "port": DB_CONFIG.get("port", "unknown"),
-                "database": DB_CONFIG.get("database", "unknown"),
+                "host": _get_db_config().get("host", "unknown"),
+                "port": _get_db_config().get("port", "unknown"),
+                "database": _get_db_config().get("database", "unknown"),
             }
 
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
@@ -163,9 +250,9 @@ def execute_query(
                 "success": True,
                 "rows": rows,
                 "error": None,
-                "host": DB_CONFIG.get("host", "unknown"),
-                "port": DB_CONFIG.get("port", "unknown"),
-                "database": DB_CONFIG.get("database", "unknown"),
+                "host": _get_db_config().get("host", "unknown"),
+                "port": _get_db_config().get("port", "unknown"),
+                "database": _get_db_config().get("database", "unknown"),
             }
 
     except psycopg2.Error as e:
@@ -179,9 +266,9 @@ def execute_query(
             "success": False,
             "rows": None,
             "error": str(e),
-            "host": DB_CONFIG.get("host", "unknown"),
-            "port": DB_CONFIG.get("port", "unknown"),
-            "database": DB_CONFIG.get("database", "unknown"),
+            "host": _get_db_config().get("host", "unknown"),
+            "port": _get_db_config().get("port", "unknown"),
+            "database": _get_db_config().get("database", "unknown"),
         }
     except (TypeError, ValueError) as e:
         # TypeError/ValueError: parameter type mismatches, data conversion errors
@@ -194,9 +281,9 @@ def execute_query(
             "success": False,
             "rows": None,
             "error": f"Parameter error: {str(e)}",
-            "host": DB_CONFIG.get("host", "unknown"),
-            "port": DB_CONFIG.get("port", "unknown"),
-            "database": DB_CONFIG.get("database", "unknown"),
+            "host": _get_db_config().get("host", "unknown"),
+            "port": _get_db_config().get("port", "unknown"),
+            "database": _get_db_config().get("database", "unknown"),
         }
     finally:
         if conn:
