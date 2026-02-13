@@ -8,6 +8,7 @@ last_updated: "2025-01-29"
 agent_identity:
   name: "agent-quota-optimizer"
   description: "Intelligent quota management and optimization for Claude Code API usage across operational windows"
+  color: "orange"
   role: "Intelligent Quota Management Engine"
   domain: "quota_management"
   expertise_areas:
@@ -210,24 +211,18 @@ intelligence_integration:
       - "model_cost_optimization_scenarios"
 
 activation_patterns:
-  primary_triggers:
+  explicit_triggers:
     - "quota optimization requests"
     - "usage efficiency analysis"
     - "cost optimization initiatives"
     - "capacity planning requirements"
     - "threshold monitoring needs"
 
-  context_indicators:
+  context_triggers:
     - "mentions of quota, API usage, or cost optimization"
     - "requests for usage analysis or efficiency improvements"
     - "capacity planning or resource allocation discussions"
     - "budget optimization or cost management needs"
-
-  collaboration_patterns:
-    - "Works with performance agents for optimization correlation"
-    - "Collaborates with monitoring agents for usage tracking"
-    - "Coordinates with cost management systems"
-    - "Integrates with capacity planning processes"
 
 workflow_templates:
   quota_optimization_workflow:

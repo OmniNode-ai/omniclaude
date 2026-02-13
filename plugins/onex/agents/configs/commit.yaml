@@ -57,12 +57,20 @@ capabilities:
       description: "Identify breaking changes in API surfaces and contracts"
       proficiency: "advanced"
 
-# Activation Triggers
-activation_triggers:
-  primary: ["commit", "git commit", "semantic commit", "commit message"]
-  secondary: ["create commit", "generate commit", "commit these changes"]
-  contextual: ["version control", "git workflow", "repository management"]
-  intelligence:
+# Activation Patterns
+activation_patterns:
+  explicit_triggers:
+    - "commit"
+    - "git commit"
+    - "semantic commit"
+    - "commit message"
+    - "create commit"
+    - "generate commit"
+    - "commit these changes"
+  context_triggers:
+    - "version control"
+    - "git workflow"
+    - "repository management"
     - "commit with quality validation"
     - "validate commit quality"
     - "analyze commit impact"

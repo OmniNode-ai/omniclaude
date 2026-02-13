@@ -217,5 +217,4 @@ transformation_context:
 metadata:
   created_from: "agents/agent-velocity-log-writer.md"
   conversion_date: "2024-09-29"
-  schema_version: "1.0.0"
   framework_compatibility: "YAML-based framework v2.0.0"

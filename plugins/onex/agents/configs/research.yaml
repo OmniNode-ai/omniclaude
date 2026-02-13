@@ -282,11 +282,26 @@ research_outputs:
       ## Solution Recommendations
       [Specific actions to address root causes]
 
-# Activation Triggers
-activation_triggers:
-  primary: ["research", "investigate", "analysis", "discovery", "explore"]
-  secondary: ["understand", "explain behavior", "how does this work", "find solution", "troubleshoot", "root cause analysis"]
-  patterns: ["analyze problem", "study", "examine", "explore patterns", "investigate issue"]
+# Activation Patterns
+activation_patterns:
+  explicit_triggers:
+    - "research"
+    - "investigate"
+    - "analysis"
+    - "discovery"
+    - "explore"
+    - "understand"
+    - "explain behavior"
+    - "how does this work"
+    - "find solution"
+    - "troubleshoot"
+    - "root cause analysis"
+  context_triggers:
+    - "analyze problem"
+    - "study"
+    - "examine"
+    - "explore patterns"
+    - "investigate issue"
 
 # Collaboration Points
 collaboration_points:
