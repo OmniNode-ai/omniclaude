@@ -140,6 +140,8 @@ echo "  agents/configs: $(count_agents) files"
 echo "  hooks/:         $(count_hooks) items"
 echo "  .claude-plugin: plugin.json + metadata"
 echo ""
+echo -e "${BLUE}Note: Commands are discovered via installPath, not synced to cache.${NC}"
+echo ""
 
 # Check if target exists
 if [[ -d "$TARGET" ]]; then
@@ -183,20 +185,29 @@ if [[ "$EXECUTE" == "true" ]]; then
     #   1. pip install (needs pyproject.toml)
     #   2. known_marketplaces.json installLocation (needs marketplace.json)
     #   3. git SHA in venv manifest
+    #
+    # Use `git rev-parse --show-toplevel` instead of relative traversal
+    # (../../) so this works regardless of where CLAUDE_PLUGIN_ROOT points.
     # =========================================================================
-    PROJECT_ROOT="$(cd "${SOURCE_ROOT}/../.." && pwd)"
+    if ! PROJECT_ROOT="$(git -C "${SOURCE_ROOT}" rev-parse --show-toplevel 2>/dev/null)"; then
+        echo -e "${RED}Error: Could not determine repo root via 'git rev-parse --show-toplevel'.${NC}"
+        echo -e "${RED}SOURCE_ROOT (${SOURCE_ROOT}) does not appear to be inside a git repository.${NC}"
+        echo -e "${RED}Ensure CLAUDE_PLUGIN_ROOT points to a directory within the omniclaude repo.${NC}"
+        exit 1
+    fi
 
-    # Validate PROJECT_ROOT has the required files
+    # Validate PROJECT_ROOT has the required files (safety net in case the
+    # git root is correct but the repo layout is unexpected)
     if [[ ! -f "${PROJECT_ROOT}/.claude-plugin/marketplace.json" ]]; then
         echo -e "${RED}Error: marketplace.json not found at ${PROJECT_ROOT}/.claude-plugin/${NC}"
         echo -e "${RED}PROJECT_ROOT resolved to: ${PROJECT_ROOT}${NC}"
-        echo -e "${RED}Set CLAUDE_PLUGIN_ROOT to your repo's plugins/onex/ directory.${NC}"
+        echo -e "${RED}Ensure this is the omniclaude repo root containing .claude-plugin/.${NC}"
         exit 1
     fi
     if [[ ! -f "${PROJECT_ROOT}/pyproject.toml" ]]; then
         echo -e "${RED}Error: pyproject.toml not found at ${PROJECT_ROOT}${NC}"
         echo -e "${RED}PROJECT_ROOT resolved to: ${PROJECT_ROOT}${NC}"
-        echo -e "${RED}Set CLAUDE_PLUGIN_ROOT to your repo's plugins/onex/ directory.${NC}"
+        echo -e "${RED}Ensure this is the omniclaude repo root containing pyproject.toml.${NC}"
         exit 1
     fi
     echo -e "${GREEN}  Project root: ${PROJECT_ROOT}${NC}"
@@ -395,6 +406,7 @@ if [[ "$EXECUTE" == "true" ]]; then
     for component in commands skills agents; do
         LEGACY="$CLAUDE_DIR/$component/onex"
         if [[ -d "$LEGACY" || -L "$LEGACY" ]]; then
+            echo -e "  Removing legacy directory: ${LEGACY}"
             rm -rf "$LEGACY"
             echo -e "${GREEN}  Removed legacy ${LEGACY}${NC}"
         fi
