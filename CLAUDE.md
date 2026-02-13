@@ -1,6 +1,19 @@
 # CLAUDE.md
 
-This file provides operational guidance for working with code in this repository.
+> **Python**: 3.12+ | **Plugin**: Claude Code hooks/agents | **Shared Standards**: See **`~/.claude/CLAUDE.md`** for shared development standards (Python, uv, Git, testing, architecture principles) and infrastructure configuration (PostgreSQL, Kafka/Redpanda, Docker networking, environment variables).
+
+---
+
+## Repo Boundaries
+
+| This repo owns | Another repo owns |
+|----------------|-------------------|
+| Claude Code hooks (SessionStart, UserPromptSubmit, PostToolUse, SessionEnd) | **omniintelligence** -- intelligence processing, code analysis |
+| Agent YAML definitions (`plugins/onex/agents/configs/`) | **omniarchon** -- search service, bridge services |
+| Slash commands and skills (`plugins/onex/commands/`, `plugins/onex/skills/`) | **omnibase_core** -- ONEX runtime, node framework, contracts |
+| Event emission via Unix socket daemon | **omnibase_infra** -- Kubernetes, deployment |
+| Context injection (learned patterns into prompts) | |
+| Agent routing (prompt-to-agent matching) | |
 
 ---
 
@@ -67,6 +80,124 @@ Targets for **synchronous path only** (excludes backgrounded processes):
 If hooks exceed budget, check:
 1. Network latency to routing service
 2. Context injection database queries
+
+---
+
+## Git/CI Standards
+
+### Branch Naming
+
+Linear generates branch names: `jonahgabriel/omn-XXXX-description`
+
+### Commit Format
+
+```
+type(scope): description [OMN-XXXX]
+```
+
+Types: `feat`, `fix`, `chore`, `refactor`, `docs`
+
+### CI Pipeline
+
+13 jobs in `.github/workflows/ci-cd.yml`:
+
+| Job | What it does | Blocking? |
+|-----|-------------|-----------|
+| **quality** | ruff format + ruff lint + mypy | Yes (mypy is non-blocking Phase 1) |
+| **pyright** | Pyright type checking on `src/omniclaude/` | Yes |
+| **check-handshake** | Architecture handshake vs omnibase_core | Yes |
+| **enum-governance** | ONEX enum casing, literal-vs-enum, duplicates | Yes |
+| **exports-validation** | `__all__` exports match actual definitions | Yes |
+| **cross-repo-validation** | Kafka import guard (ARCH-002) | Yes |
+| **migration-freeze** | Blocks new migrations when `.migration_freeze` exists | Yes |
+| **security-python** | Bandit security linter (Medium+ severity) | Yes |
+| **test** | pytest with 5-way parallel split (`pytest-split`) | Yes |
+| **merge-coverage** | Combines coverage from 5 test shards, uploads to Codecov | After test |
+| **tests-gate** | Branch protection aggregator for test matrix | Yes |
+| **build** | Docker image build + Trivy vulnerability scan | After all quality jobs |
+| **deploy** | Staging (develop) / Production (main) | After build |
+
+### Branch Protection
+
+Required check: **"CI Tests Gate"** -- do not rename without updating branch protection rules.
+
+---
+
+## Code Quality
+
+Principles specific to this repo (see **Repository Invariants** for the complete list):
+
+- **Frozen event schemas**: All Pydantic event models use `frozen=True`, `extra="ignore"`, `from_attributes=True`
+- **Explicit timestamp injection**: No `datetime.now()` defaults -- timestamps are injected by callers for deterministic testing
+- **Automatic secret redaction**: `prompt_preview` redacts API keys (OpenAI, AWS, GitHub, Slack), PEM keys, Bearer tokens, passwords in URLs
+- **Privacy-aware dual emission**: Preview-safe data (100 chars) goes to `onex.evt.*` topics; full prompts go only to `onex.cmd.omniintelligence.*`
+
+---
+
+## Workflow Principles
+
+### Hook Development
+
+Hook changes deploy via the plugin cache (`~/.claude/plugins/cache/`). Test locally before deploying:
+
+1. Edit code in this repo
+2. Run unit tests (`pytest tests/ -m unit -v`)
+3. Deploy plugin to cache
+4. Verify hooks work in a live Claude Code session
+
+### Automated Workflows (`/parallel-solve`)
+
+Prefer dispatching to `polymorphic-agent`:
+
+```python
+Task(
+    subagent_type="polymorphic-agent",
+    description="Review PR #30",
+    prompt="..."
+)
+```
+
+This ensures ONEX capabilities, intelligence integration, and observability.
+
+### Human Developers
+
+Run tools directly. The polymorphic-agent pattern is for automated workflows, not a repository invariant.
+
+```bash
+# These are fine for humans
+pytest tests/ -v
+ruff check src/
+mypy src/omniclaude/
+```
+
+### Fail-Fast Design
+
+Hooks exit 0 on infrastructure failure. Data loss is acceptable; UI freeze is not. See **Failure Modes** for the complete table of degraded behaviors.
+
+---
+
+## Debugging
+
+### Log Files
+
+- **Hook logs**: `~/.claude/hooks.log` (when `LOG_FILE` is set)
+
+### Diagnostic Commands
+
+```bash
+python plugins/onex/hooks/lib/emit_client_wrapper.py status --json  # Daemon status
+jq . plugins/onex/hooks/hooks.json                                  # Validate hook config
+ls -la plugins/onex/hooks/scripts/*.sh                              # Check script permissions
+```
+
+### Common Issues
+
+| Symptom | Likely Cause | Fix |
+|---------|-------------|-----|
+| Events not emitting | Daemon not started | SessionStart hook must run first to start the daemon |
+| Hook fails with exit 1 | Wrong Python interpreter | Check `find_python()` logic; set `OMNICLAUDE_PROJECT_ROOT` or `PLUGIN_PYTHON_BIN` |
+| Routing returns `polymorphic-agent` for everything | Routing service timeout | Check network connectivity to routing service (5s timeout) |
+| Context injection empty | Database unreachable | Check `POSTGRES_HOST`/`POSTGRES_PORT` in `.env`; injection has 1s timeout |
 
 ---
 
@@ -297,35 +428,6 @@ Reusable methodologies and executable scripts. Referenced by agents and commands
 
 ---
 
-## Workflow Guidance
-
-### For Automated Workflows (`/parallel-solve`)
-
-Prefer dispatching to `polymorphic-agent`:
-
-```python
-Task(
-    subagent_type="polymorphic-agent",
-    description="Review PR #30",
-    prompt="..."
-)
-```
-
-This ensures ONEX capabilities, intelligence integration, and observability.
-
-### For Human Developers
-
-Run tools directly. The polymorphic-agent pattern is for automated workflows, not a repository invariant.
-
-```bash
-# These are fine for humans
-pytest tests/ -v
-ruff check src/
-mypy src/omniclaude/
-```
-
----
-
 ## Dependencies
 
 **File**: `pyproject.toml`
@@ -353,17 +455,7 @@ KAFKA_INTEGRATION_TESTS=1 pytest -m integration     # Integration (needs Kafka)
 
 ---
 
-## Quick Reference
-
-### Validation Commands
-
-```bash
-jq . plugins/onex/hooks/hooks.json          # Validate hook config
-ls -la plugins/onex/hooks/scripts/*.sh      # Check script permissions
-python plugins/onex/hooks/lib/emit_client_wrapper.py status --json  # Daemon status
-```
-
-### Linting
+## Python/Linting
 
 ```bash
 ruff check src/ tests/
@@ -374,5 +466,18 @@ bandit -r src/omniclaude/
 
 ---
 
-**Last Updated**: 2026-02-10
-**Version**: 0.2.1
+## Completion Criteria
+
+What "done" means for changes to this repo:
+
+- All unit tests pass (`pytest tests/ -m unit -v`)
+- Hooks don't block Claude Code (respect performance budgets)
+- CI pipeline passes (all 13 jobs green)
+- Events emit correctly (if touching event schemas or emission)
+- No secrets in `evt.*` topics
+- Hook scripts exit 0 on infrastructure failure
+
+---
+
+**Last Updated**: 2026-02-13
+**Version**: 0.3.0
