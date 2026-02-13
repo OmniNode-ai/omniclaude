@@ -2,12 +2,12 @@
 # deploy-local-plugin: Sync local plugin to Claude Code cache
 #
 # Usage:
-#   ./deploy.sh [--execute] [--no-version-bump] [--force]
+#   ./deploy.sh [--execute] [--no-version-bump]
 #
 # Default: Dry run (preview only)
 # --execute: Actually perform deployment
 # --no-version-bump: Skip patch version increment
-# --force / -f: Skip confirmation when overwriting ~/.claude dirs
+# Deploys to plugin cache ONLY. Skills/commands/agents discovered via plugin installPath.
 
 set -euo pipefail
 
@@ -29,7 +29,6 @@ NC='\033[0m' # No Color
 # Parse arguments
 EXECUTE=false
 NO_VERSION_BUMP=false
-FORCE=false
 
 for arg in "$@"; do
     case $arg in
@@ -39,16 +38,12 @@ for arg in "$@"; do
         --no-version-bump)
             NO_VERSION_BUMP=true
             ;;
-        --force|-f)
-            FORCE=true
-            ;;
         --help|-h)
-            echo "Usage: deploy.sh [--execute] [--no-version-bump] [--force]"
+            echo "Usage: deploy.sh [--execute] [--no-version-bump]"
             echo ""
             echo "Options:"
             echo "  --execute         Actually perform deployment (default: dry run)"
             echo "  --no-version-bump Skip auto-incrementing patch version"
-            echo "  --force, -f       Skip confirmation prompt when overwriting ~/.claude dirs"
             echo "  --help            Show this help message"
             exit 0
             ;;
@@ -104,10 +99,6 @@ fi
 TARGET="${CACHE_BASE}/${NEW_VERSION}"
 
 # Count files in each component
-count_commands() {
-    ls -1 "${SOURCE_ROOT}/commands/"*.md 2>/dev/null | wc -l | tr -d ' '
-}
-
 count_skills() {
     ls -1d "${SOURCE_ROOT}/skills"/*/ 2>/dev/null | wc -l | tr -d ' '
 }
@@ -144,7 +135,6 @@ echo ""
 
 # Print component counts
 echo "Components to sync:"
-echo "  commands/:      $(count_commands) files"
 echo "  skills/:        $(count_skills) directories"
 echo "  agents/configs: $(count_agents) files"
 echo "  hooks/:         $(count_hooks) items"
@@ -158,7 +148,7 @@ if [[ -d "$TARGET" ]]; then
 fi
 
 # Validate required source directories exist
-REQUIRED_DIRS=("commands" "skills" "agents" "hooks" ".claude-plugin")
+REQUIRED_DIRS=("skills" "agents" "hooks" ".claude-plugin")
 MISSING_DIRS=()
 
 for dir in "${REQUIRED_DIRS[@]}"; do
@@ -180,21 +170,43 @@ if [[ "$EXECUTE" == "true" ]]; then
     echo "Deploying..."
     echo ""
 
-    # Update version in source plugin.json first (if bumping)
-    if [[ "$NO_VERSION_BUMP" != "true" ]]; then
-        jq --arg v "$NEW_VERSION" '.version = $v' "$PLUGIN_JSON" > "${PLUGIN_JSON}.tmp"
-        mv "${PLUGIN_JSON}.tmp" "$PLUGIN_JSON"
-        echo -e "${GREEN}  Updated plugin.json version to ${NEW_VERSION}${NC}"
-    fi
+    # =========================================================================
+    # Resolve PROJECT_ROOT — the repo root containing .claude-plugin/marketplace.json.
+    #
+    # Claude Code's plugin loader (IEA → bz7 → MQR) reads marketplace.json
+    # from known_marketplaces.json:installLocation. If installLocation points
+    # to the cache instead of the repo root, MQR fails with
+    # "missing .claude-plugin/marketplace.json" and the ENTIRE plugin is skipped
+    # (zero skills, zero commands, zero agents).
+    #
+    # This path is used for:
+    #   1. pip install (needs pyproject.toml)
+    #   2. known_marketplaces.json installLocation (needs marketplace.json)
+    #   3. git SHA in venv manifest
+    # =========================================================================
+    PROJECT_ROOT="$(cd "${SOURCE_ROOT}/../.." && pwd)"
 
-    # Create target directory
+    # Validate PROJECT_ROOT has the required files
+    if [[ ! -f "${PROJECT_ROOT}/.claude-plugin/marketplace.json" ]]; then
+        echo -e "${RED}Error: marketplace.json not found at ${PROJECT_ROOT}/.claude-plugin/${NC}"
+        echo -e "${RED}PROJECT_ROOT resolved to: ${PROJECT_ROOT}${NC}"
+        echo -e "${RED}Set CLAUDE_PLUGIN_ROOT to your repo's plugins/onex/ directory.${NC}"
+        exit 1
+    fi
+    if [[ ! -f "${PROJECT_ROOT}/pyproject.toml" ]]; then
+        echo -e "${RED}Error: pyproject.toml not found at ${PROJECT_ROOT}${NC}"
+        echo -e "${RED}PROJECT_ROOT resolved to: ${PROJECT_ROOT}${NC}"
+        echo -e "${RED}Set CLAUDE_PLUGIN_ROOT to your repo's plugins/onex/ directory.${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}  Project root: ${PROJECT_ROOT}${NC}"
+
+    # Create target directory FIRST, then write bumped version to target only.
+    # Never mutate SOURCE plugin.json — that caused corruption when deploys fail midway.
     mkdir -p "$TARGET"
     echo -e "${GREEN}  Created target directory${NC}"
 
     # Sync components
-    echo "  Syncing commands..."
-    rsync -a --delete "${SOURCE_ROOT}/commands/" "${TARGET}/commands/"
-
     echo "  Syncing skills..."
     rsync -a --delete "${SOURCE_ROOT}/skills/" "${TARGET}/skills/"
 
@@ -206,6 +218,14 @@ if [[ "$EXECUTE" == "true" ]]; then
 
     echo "  Syncing .claude-plugin..."
     rsync -a --delete "${SOURCE_ROOT}/.claude-plugin/" "${TARGET}/.claude-plugin/"
+
+    # Write bumped version to TARGET plugin.json only (source is never mutated)
+    if [[ "$NO_VERSION_BUMP" != "true" ]]; then
+        TARGET_PLUGIN_JSON="${TARGET}/.claude-plugin/plugin.json"
+        jq --arg v "$NEW_VERSION" '.version = $v' "$TARGET_PLUGIN_JSON" > "${TARGET_PLUGIN_JSON}.tmp"
+        mv "${TARGET_PLUGIN_JSON}.tmp" "$TARGET_PLUGIN_JSON"
+        echo -e "${GREEN}  Set target plugin.json version to ${NEW_VERSION}${NC}"
+    fi
 
     # Copy additional files (ignore errors if not present)
     [[ -f "${SOURCE_ROOT}/.env.example" ]] && cp "${SOURCE_ROOT}/.env.example" "${TARGET}/"
@@ -227,8 +247,7 @@ if [[ "$EXECUTE" == "true" ]]; then
 
     echo "Creating bundled Python venv..."
 
-    # The project root is two levels up from SOURCE_ROOT (which points to plugins/onex)
-    PROJECT_ROOT_FOR_INSTALL="$(cd "${SOURCE_ROOT}/../.." && pwd)"
+    # PROJECT_ROOT already resolved and validated at top of execute block
 
     # --- Validate Python >= 3.12 ---
     PYTHON_BIN="python3"
@@ -261,9 +280,9 @@ if [[ "$EXECUTE" == "true" ]]; then
     echo -e "${GREEN}  pip toolchain bootstrapped${NC}"
 
     # --- Install project (non-editable, no cache) ---
-    echo "  Installing project from ${PROJECT_ROOT_FOR_INSTALL}..."
-    if ! "$VENV_DIR/bin/pip" install --no-cache-dir "${PROJECT_ROOT_FOR_INSTALL}" --quiet; then
-        echo -e "${RED}Error: pip install failed for ${PROJECT_ROOT_FOR_INSTALL}. Deploy aborted.${NC}"
+    echo "  Installing project from ${PROJECT_ROOT}..."
+    if ! "$VENV_DIR/bin/pip" install --no-cache-dir "${PROJECT_ROOT}" --quiet; then
+        echo -e "${RED}Error: pip install failed for ${PROJECT_ROOT}. Deploy aborted.${NC}"
         rm -rf "$VENV_DIR"
         exit 1
     fi
@@ -278,8 +297,8 @@ if [[ "$EXECUTE" == "true" ]]; then
         echo ""
         echo "python_version: $("$VENV_DIR/bin/python3" --version 2>&1)"
         echo "pip_version: $("$VENV_DIR/bin/pip" --version 2>&1)"
-        echo "source_root: ${PROJECT_ROOT_FOR_INSTALL}"
-        echo "git_sha: $(cd "${PROJECT_ROOT_FOR_INSTALL}" && git rev-parse HEAD 2>/dev/null || echo 'unknown')"
+        echo "source_root: ${PROJECT_ROOT}"
+        echo "git_sha: $(cd "${PROJECT_ROOT}" && git rev-parse HEAD 2>/dev/null || echo 'unknown')"
         echo ""
         echo "# Installed packages:"
         "$VENV_DIR/bin/pip" freeze 2>/dev/null
@@ -330,7 +349,7 @@ if [[ "$EXECUTE" == "true" ]]; then
         if jq -e '.["omninode-tools"]' "$KNOWN_MARKETPLACES" >/dev/null 2>&1; then
             TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")
 
-            jq --arg p "$PROJECT_ROOT_FOR_INSTALL" --arg ts "$TIMESTAMP" '
+            jq --arg p "$PROJECT_ROOT" --arg ts "$TIMESTAMP" '
                 .["omninode-tools"].source.source = "directory" |
                 .["omninode-tools"].source.path = $p |
                 del(.["omninode-tools"].source.repo) |
@@ -339,7 +358,7 @@ if [[ "$EXECUTE" == "true" ]]; then
                 .["omninode-tools"].lastUpdated = $ts
             ' "$KNOWN_MARKETPLACES" > "${KNOWN_MARKETPLACES}.tmp" && mv "${KNOWN_MARKETPLACES}.tmp" "$KNOWN_MARKETPLACES"
 
-            echo -e "${GREEN}  Updated known_marketplaces.json (installLocation: $PROJECT_ROOT_FOR_INSTALL)${NC}"
+            echo -e "${GREEN}  Updated known_marketplaces.json (installLocation: $PROJECT_ROOT)${NC}"
         else
             echo -e "${YELLOW}  Warning: omninode-tools not found in known_marketplaces.json${NC}"
         fi
@@ -370,50 +389,16 @@ if [[ "$EXECUTE" == "true" ]]; then
         fi
     fi
 
-    # Copy plugin components to ~/.claude namespace directories (real copies, not symlinks)
+    # Clean up legacy ~/.claude/{commands,skills,agents}/onex/ directories.
+    # Skills/commands/agents are now discovered via the plugin installPath only.
     CLAUDE_DIR="$HOME/.claude"
-    mkdir -p "$CLAUDE_DIR/commands" "$CLAUDE_DIR/skills" "$CLAUDE_DIR/agents"
-
-    # Check whether any target directories already exist (non-symlink).
-    # If so, rsync --delete will destroy local customizations.
-    EXISTING_DIRS=()
     for component in commands skills agents; do
-        DEST="$CLAUDE_DIR/$component/onex"
-        if [[ -d "$DEST" && ! -L "$DEST" ]]; then
-            EXISTING_DIRS+=("$DEST")
+        LEGACY="$CLAUDE_DIR/$component/onex"
+        if [[ -d "$LEGACY" || -L "$LEGACY" ]]; then
+            rm -rf "$LEGACY"
+            echo -e "${GREEN}  Removed legacy ${LEGACY}${NC}"
         fi
     done
-
-    if [[ ${#EXISTING_DIRS[@]} -gt 0 && "$FORCE" != "true" ]]; then
-        echo -e "${YELLOW}  The following directories already exist and will be overwritten:${NC}"
-        for d in "${EXISTING_DIRS[@]}"; do
-            echo -e "${YELLOW}    - $d${NC}"
-        done
-        echo ""
-        if [[ -t 0 ]]; then
-            echo -n "  Overwrite these directories? Local customizations will be lost. [y/N] "
-            read -r CONFIRM
-            if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
-                echo -e "${RED}  Aborted by user. No files were overwritten.${NC}"
-                echo "  Re-run with --force to skip this prompt."
-                exit 1
-            fi
-        else
-            echo -e "${YELLOW}  Non-interactive mode detected. Use --force to suppress this warning.${NC}"
-            echo -e "${RED}  Aborting to protect existing directories.${NC}"
-            exit 1
-        fi
-    fi
-
-    # Remove stale symlinks, then rsync fresh copies (overwrite in place).
-    for component in commands skills agents; do
-        DEST="$CLAUDE_DIR/$component/onex"
-        [[ -L "$DEST" ]] && rm -f "$DEST"
-        mkdir -p "$DEST"
-        rsync -a --delete "$TARGET/$component/" "$DEST/"
-    done
-
-    echo -e "${GREEN}  Copied commands/skills/agents to ~/.claude/ (no symlinks)${NC}"
 
     echo ""
     echo -e "${GREEN}Deployment complete!${NC}"
