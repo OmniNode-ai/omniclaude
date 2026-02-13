@@ -4,7 +4,6 @@
 
 schema_version: "2.0.0"
 agent_type: "contract_driven_generator"
-agent_version: "1.0.0"
 created_date: "2025-01-29"
 
 agent_identity:

@@ -3,7 +3,6 @@
 
 schema_version: "1.0.0"
 agent_type: "quota_optimizer"
-agent_version: "1.0.0"
 last_updated: "2025-01-29"
 
 agent_identity:

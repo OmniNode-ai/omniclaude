@@ -9,7 +9,6 @@ agent_identity:
   display_name: "Overnight Automation Controller"
   description: "Orchestrates 24/7 overnight automation for Claude Code agents with intelligent scheduling and quota optimization"
   version: "2.0.0"
-  agent_type: "overnight_automation"
   color: "gray"
 
   focus_areas:

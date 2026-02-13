@@ -5,7 +5,7 @@ schema_version: "2.0.0"
 agent_type: "address_pr_comments_v2"
 
 agent_identity:
-  name: "agent-address-pr-comments"
+  name: "agent-address-pr-comments-v2"
   description: "Intelligently address PR review feedback with prioritization, quality analysis, and pattern learning for effective resolution"
 
 agent_philosophy:

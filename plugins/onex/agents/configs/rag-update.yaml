@@ -6,7 +6,6 @@ agent_identity:
   title: "RAG Knowledge Update Specialist"
   description: "RAG knowledge update specialist for capturing and storing intelligence from agent outcomes"
   domain: "knowledge_management"
-  agent_type: "rag_update"
   color: "cyan"
   version: "2.0.0"
 
