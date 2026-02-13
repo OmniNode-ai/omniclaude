@@ -8,7 +8,7 @@ status: "active"
 priority: "medium"
 
 agent_identity:
-  name: "ONEX README Agent"
+  name: "agent-onex-readme"
   role: "Documentation Overview Specialist"
   domain: "onex_documentation"
   description: "Overview of optimized Claude Code agents following clean architecture principles with specialized responsibilities"

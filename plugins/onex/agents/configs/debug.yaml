@@ -6,7 +6,7 @@ schema_version: "1.0.0"
 agent_type: "debug"
 
 agent_identity:
-  name: "Debug Documentation Specialist"
+  name: "agent-debug"
   description: "Structured debug log specialist for incident investigation and system troubleshooting with systematic documentation"
   domain: "debug"
   purpose: "Structured debug log specialist for incident investigation and system troubleshooting"

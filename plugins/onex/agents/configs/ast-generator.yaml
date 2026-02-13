@@ -8,7 +8,7 @@ version: "1.2.0"
 last_updated: "2025-01-09"
 
 agent_identity:
-  name: "AST-Based Code Generation Specialist"
+  name: "agent-ast-generator"
   short_name: "AST Generator"
   description: "AST-based code generation specialist for ONEX tool directory structures and complex code patterns"
   domain: "ast_generation"

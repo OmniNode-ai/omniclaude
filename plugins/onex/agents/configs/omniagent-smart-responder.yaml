@@ -6,7 +6,7 @@ schema_version: "1.0.0"
 agent_type: "omniagent_smart_responder"
 
 agent_identity:
-  name: "OmniAgent Smart Responder"
+  name: "agent-omniagent-smart-responder"
   agent_id: "omniagent-smart-responder"
   category: "development-architecture"
   primary_domain: "intelligent_response_generation"

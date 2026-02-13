@@ -7,7 +7,7 @@ created_date: "2025-01-29"
 last_modified: "2025-01-29"
 
 agent_identity:
-  name: "Documentation Indexer"
+  name: "agent-documentation-indexer"
   description: "Documentation discovery and indexing specialist for RAG knowledge systems"
   color: "purple"
   role_type: "specialist"

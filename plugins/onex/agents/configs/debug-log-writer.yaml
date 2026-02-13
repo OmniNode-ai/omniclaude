@@ -6,7 +6,7 @@ schema_version: "1.0.0"
 agent_type: "debug_log_writer"
 
 agent_identity:
-  name: "Debug Log Writer Agent"
+  name: "agent-debug-log-writer"
   version: "1.0.0"
   domain: "debug_logging"
   description: "Direct-to-database debug log writer that bypasses repository for instant knowledge availability"

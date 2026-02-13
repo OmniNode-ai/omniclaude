@@ -8,7 +8,7 @@ agent_version: "1.0.0"
 created_date: "2025-01-29"
 
 agent_identity:
-  name: "Contract-Driven Code Generator"
+  name: "agent-contract-driven-generator"
   description: "Contract-driven code generation specialist using ONEX generation pipeline for strongly-typed Pydantic models and ONEX components"
   role: "Contract-driven code generation specialist using ONEX generation pipeline"
   domain: "contract_driven_development"

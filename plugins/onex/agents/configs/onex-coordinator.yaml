@@ -8,7 +8,7 @@ priority: "high"
 specialization: "onex_development_coordination"
 
 agent_identity:
-  name: "ONEX Development Coordinator"
+  name: "agent-onex-coordinator"
   short_name: "onex-coordinator"
   description: "Intelligent coordinator for ONEX development workflows and agent routing with advanced multi-agent orchestration capabilities"
   domain: "onex_coordination"

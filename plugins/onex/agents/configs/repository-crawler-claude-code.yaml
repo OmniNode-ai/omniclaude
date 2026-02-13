@@ -5,7 +5,7 @@ agent_type: "repository_crawler_claude_code"
 last_updated: "2024-01-15"
 
 agent_identity:
-  name: "Repository Crawler (Claude Code Edition)"
+  name: "agent-repository-crawler-claude-code"
   short_name: "repository-crawler-claude-code"
   description: "Repository crawler specialist for discovering, processing, and indexing all relevant documents across codebases with intelligence service integration"
   version: "1.0.0"

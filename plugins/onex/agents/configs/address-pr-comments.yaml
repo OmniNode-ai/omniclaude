@@ -7,7 +7,7 @@ agent_type: "address_pr_comments"
 status: "active"
 
 agent_identity:
-  name: "Address PR Comments Agent"
+  name: "agent-address-pr-comments"
   description: "Address PR review feedback with automatic remote sync and ONEX standards compliance"
   color: "green"
   primary_role: "PR Comment Resolution Specialist"
