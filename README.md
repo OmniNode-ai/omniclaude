@@ -110,8 +110,8 @@ event = ModelSessionStarted(
 )
 
 # Get Kafka topic
-topic = build_topic("dev", TopicBase.SESSION_STARTED)
-# → "dev.omniclaude.session.started.v1"
+topic = build_topic("", TopicBase.SESSION_STARTED)
+# → "onex.evt.omniclaude.session-started.v1"
 ```
 
 ## Privacy Considerations
