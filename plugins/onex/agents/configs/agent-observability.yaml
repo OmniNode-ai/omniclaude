@@ -246,12 +246,11 @@ collaboration_points:
 
 # Success Metrics
 success_metrics:
-  intelligence_enhanced_outcomes:
-    - "Comprehensive health metrics collected and surfaced"
-    - "Critical issues identified and alerted within 5 seconds"
-    - "Error patterns diagnosed with actionable recommendations"
-    - "Performance trends tracked and anomalies highlighted"
-    - "Observability gaps identified and documented"
+  - "Comprehensive health metrics collected and surfaced"
+  - "Critical issues identified and alerted within 5 seconds"
+  - "Error patterns diagnosed with actionable recommendations"
+  - "Performance trends tracked and anomalies highlighted"
+  - "Observability gaps identified and documented"
 
 # Performance Characteristics
 performance_characteristics:

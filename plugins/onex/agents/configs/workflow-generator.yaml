@@ -103,6 +103,9 @@ framework_integration:
     - "agent_lifecycle_cleanup"
     - "establish_coordination_protocols"
     - "coordination_checkpoint_management"
+    - "agent_communication_interface"
+    - "delegation_handoff_protocol"
+    - "coordination_result_aggregation"
 
 
 # Claude Skills Integration

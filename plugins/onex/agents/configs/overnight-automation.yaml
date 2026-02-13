@@ -128,7 +128,9 @@ onex_integration:
   compliance_level: "full"
   four_node_architecture:
     primary_node: "orchestrator"
-    secondary_nodes: "reducer, compute"
+    secondary_nodes:
+      - "reducer"
+      - "compute"
 
   anti_yolo_methodology: true
   quality_gates:

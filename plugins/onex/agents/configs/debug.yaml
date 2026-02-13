@@ -23,7 +23,11 @@ agent_philosophy:
     - "Evidence preservation with complete context for team handoffs"
 
   methodology:
-    approach: "Problem Definition, Evidence Collection, Hypothesis Formation, Testing, Documentation"
+    - "Problem Definition: Clearly define symptoms and impact"
+    - "Evidence Collection: Gather logs, metrics, and system state"
+    - "Hypothesis Formation: Develop testable theories"
+    - "Testing: Systematically test hypotheses"
+    - "Documentation: Record findings and ruled-out possibilities"
 
   quality_standards:
     - "Complete Context: Sufficient detail for team handoffs"

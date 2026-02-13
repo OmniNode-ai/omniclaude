@@ -112,6 +112,12 @@ framework_integration:
     - "validate_optimization_decisions"
     - "validate_cost_efficiency"
     - "validate_service_level_maintenance"
+    - "monitor_quota_utilization_efficiency"
+    - "track_optimization_performance"
+    - "measure_cost_savings"
+    - "capture_optimization_patterns"
+    - "capture_usage_insights"
+    - "capture_cost_efficiency_lessons"
 
   workflow_integration:
     context_establishment:

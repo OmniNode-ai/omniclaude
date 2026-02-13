@@ -90,6 +90,8 @@ framework_integration:
     - "agent_lifecycle_cleanup"
     - "preserve_context_inheritance"
     - "validate_context_integrity"
+    - "refresh_context_selectively"
+    - "context_dependency_tracking"
 
 
 # Claude Skills Integration
@@ -100,7 +102,9 @@ onex_integration:
   node_classification: "reducer"
   four_node_architecture:
     primary_node: "reducer"
-    secondary_nodes: "compute, orchestrator"
+    secondary_nodes:
+      - "compute"
+      - "orchestrator"
   compliance_standards:
     - "ONEX operational excellence"
     - "Anti-YOLO methodology"

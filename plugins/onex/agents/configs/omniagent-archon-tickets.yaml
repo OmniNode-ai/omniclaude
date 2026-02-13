@@ -16,12 +16,6 @@ agent_identity:
   priority: "high"
   specialization_level: "expert"
 
-# Core Identity
-identity:
-  domain: "omniarchon_tickets"
-  purpose: "Automated code generation from Archon task specifications with intelligent project context integration"
-  scope: "Archon ticket processing through OmniAgent's automated code generation system with task orchestration capabilities"
-
 # Agent Philosophy
 agent_philosophy:
   core_responsibility: "Process Archon tickets through OmniAgent's automated code generation system with intelligent project context integration"

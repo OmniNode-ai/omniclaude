@@ -72,6 +72,10 @@ framework_integration:
     - "capture_debug_intelligence_on_error"
     - "validate_onex_compliance"
     - "execute_quality_gates"
+    - "capture_debug_session_intelligence"
+    - "capture_success_pattern_intelligence"
+    - "assess_code_quality_metrics"
+    - "validate_anti_yolo_compliance"
 
 
 # Claude Skills Integration
