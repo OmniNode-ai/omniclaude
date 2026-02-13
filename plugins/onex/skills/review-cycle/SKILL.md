@@ -333,7 +333,7 @@ For each selected severity (critical first, then major, then minor):
 
 **c.** Display batch summary:
 ```
-Fixed {n} {severity} issues in {m} files (+{insertions}/-{deletions})
+Fixed {n} {severity} issue(s) in {m} file(s) (+{insertions}/-{deletions})
 ```
 
 **d.** If `--auto`: auto-approve, skip to staging (step f).
@@ -354,11 +354,11 @@ git add {approved_files}
 
 ### Step 6: Commit Checkpoint
 
-**If `--auto`**: auto-commit with message `fix(review-cycle): auto-fix {n} issues` and skip to Step 8.
+**If `--auto`**: auto-commit with message `fix(review-cycle): auto-fix {n} critical and {m} major issue(s)` and skip to Step 8.
 
 AskUserQuestion with options:
 
-1. **"Commit"** -- default message: `fix(review-cycle): fix {n} {severity} issues`
+1. **"Commit"** -- default message: `fix(review-cycle): fix {n} {severity} issue(s)`
 2. **"Commit with custom message"** -- prompt for message
 3. **"Stage only (don't commit)"** -- leave files staged, proceed
 4. **"Discard current batch"** -- `git restore --staged --worktree {batch_modified_files}`
@@ -387,7 +387,7 @@ AskUserQuestion with options:
 **Remaining issues**: {remaining_count}
 
 ### Commits
-1. abc1234 - fix(review-cycle): fix 1 critical issues
+1. abc1234 - fix(review-cycle): fix 1 critical issue
 2. def5678 - fix(review-cycle): fix 2 major issues
 
 ### Remaining Issues (if any)
