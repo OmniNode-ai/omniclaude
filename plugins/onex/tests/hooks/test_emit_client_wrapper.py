@@ -66,12 +66,15 @@ class TestModuleImport:
         assert expected_types == SUPPORTED_EVENT_TYPES
 
     def test_default_socket_path_defined(self) -> None:
-        """Verify DEFAULT_SOCKET_PATH constant is defined."""
+        """Verify DEFAULT_SOCKET_PATH uses tempfile.gettempdir() for cross-platform compat."""
+        import tempfile
+
         from plugins.onex.hooks.lib.emit_client_wrapper import DEFAULT_SOCKET_PATH
 
         assert DEFAULT_SOCKET_PATH is not None
         assert isinstance(DEFAULT_SOCKET_PATH, Path)
-        assert str(DEFAULT_SOCKET_PATH) == "/tmp/omniclaude-emit.sock"  # noqa: S108
+        expected = Path(tempfile.gettempdir()) / "omniclaude-emit.sock"
+        assert expected == DEFAULT_SOCKET_PATH
 
     def test_default_timeout_ms_defined(self) -> None:
         """Verify DEFAULT_TIMEOUT_MS constant is defined."""

@@ -63,6 +63,7 @@ import logging
 import os
 import socket
 import sys
+import tempfile
 import threading
 from collections.abc import Callable
 from pathlib import Path
@@ -74,9 +75,11 @@ logger = logging.getLogger(__name__)
 # Constants
 # =============================================================================
 
-# Default socket path (matches daemon default)
-# NOTE: /tmp is standard for Unix domain sockets - not a security issue
-DEFAULT_SOCKET_PATH = Path("/tmp/omniclaude-emit.sock")  # noqa: S108
+# Default socket path - must use tempfile.gettempdir() to match the daemon
+# (publisher_config.py) and session-start.sh which both resolve via $TMPDIR.
+# On macOS, $TMPDIR is /var/folders/.../, NOT /tmp/, so hardcoding /tmp/ causes
+# the client to miss the daemon socket entirely.
+DEFAULT_SOCKET_PATH = Path(tempfile.gettempdir()) / "omniclaude-emit.sock"
 
 # Default timeout for emit operations (milliseconds) - used by CLI interface
 DEFAULT_TIMEOUT_MS = 50
