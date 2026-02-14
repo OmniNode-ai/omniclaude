@@ -549,12 +549,20 @@ if [[ ${#EMIT_PIDS[@]} -gt 0 ]]; then
     log "Emit subshells drained (${#EMIT_PIDS[@]} tracked)"
 fi
 
-# Stop publisher after all events are enqueued (or timed out)
-"$PYTHON_CMD" -m omniclaude.publisher stop >> "$LOG_FILE" 2>&1 || {
-    # Fallback: try legacy daemon stop
-    "$PYTHON_CMD" -m omnibase_infra.runtime.emit_daemon.cli stop >> "$LOG_FILE" 2>&1 || true
-}
-log "Publisher stop signal sent"
+# Stop publisher ONLY if no other Claude Code sessions are still running.
+# The publisher is a shared singleton — killing it when other sessions are
+# active causes "EVENT EMISSION DEGRADED" failures for every other session.
+_other_claude_sessions=$(pgrep -f "claude" 2>/dev/null | wc -l | tr -d ' ')
+if [[ "$_other_claude_sessions" -le 2 ]]; then
+    # 2 or fewer = this session + possibly the pgrep itself; safe to stop
+    "$PYTHON_CMD" -m omniclaude.publisher stop >> "$LOG_FILE" 2>&1 || {
+        # Fallback: try legacy daemon stop
+        "$PYTHON_CMD" -m omnibase_infra.runtime.emit_daemon.cli stop >> "$LOG_FILE" 2>&1 || true
+    }
+    log "Publisher stop signal sent (last session)"
+else
+    log "Publisher kept alive (${_other_claude_sessions} Claude processes still running)"
+fi
 
 log "SessionEnd hook completed"
 # No explicit `wait` needed before exit: emit subshells are already drained
