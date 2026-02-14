@@ -359,9 +359,8 @@ def emit_event(
     Note:
         **Error Classification**: Errors are logged at different levels:
 
-        - DEBUG: Connection errors (daemon not running) - expected during startup
+        - WARNING: Connection errors (daemon not running, timeout) - visible for diagnostics
         - ERROR: Serialization/type errors - indicates bugs in caller code
-        - WARNING: Other unexpected errors - unknown issues
 
     Example:
         >>> success = emit_event(
@@ -398,13 +397,21 @@ def emit_event(
         return True
 
     except TimeoutError as e:
-        # Socket timeout is a subclass of OSError, but deserves its own message
-        logger.debug(f"Event emission failed (daemon timeout): {e}")
+        logger.warning(
+            "Event emission failed (daemon timeout): event_type=%s socket=%s err=%r",
+            event_type,
+            client._socket_path,
+            e,
+        )
         return False
 
     except (ConnectionRefusedError, FileNotFoundError, BrokenPipeError, OSError) as e:
-        # Expected during startup or when daemon is not running
-        logger.debug(f"Event emission failed (daemon unavailable): {e}")
+        logger.warning(
+            "Event emission failed (daemon unavailable): event_type=%s socket=%s err=%r",
+            event_type,
+            client._socket_path,
+            e,
+        )
         return False
 
     except (json.JSONDecodeError, TypeError, ValueError) as e:

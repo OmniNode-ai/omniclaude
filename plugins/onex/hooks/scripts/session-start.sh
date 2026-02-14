@@ -109,36 +109,21 @@ _TMPDIR="${TMPDIR:-/tmp}"
 _TMPDIR="${_TMPDIR%/}"  # Remove trailing slash (macOS TMPDIR often ends with /)
 EMIT_DAEMON_SOCKET="${OMNICLAUDE_EMIT_SOCKET:-${_TMPDIR}/omniclaude-emit.sock}"
 
-# Check if socket file exists and is writable.
+# Check if daemon is responsive via real protocol ping.
 #
-# IMPORTANT LIMITATION: This performs file-based checks only (-S for socket type,
-# -w for writable). It does NOT verify the daemon is accepting connections.
-#
-# Race window: The socket file is created by the daemon before it calls accept().
-# This means there's a brief window where:
-#   1. Socket file exists (this check passes)
-#   2. But daemon hasn't called accept() yet (connection would fail)
-#
-# Mitigation: After socket appears, we retry this check multiple times with small
-# gaps (up to 5 attempts x 10ms = 50ms max). This adapts to system load rather than
-# using a fixed sleep, succeeding quickly on fast systems while allowing more time
-# on heavily-loaded systems.
-#
-# Design tradeoff: We prioritize speed over correctness here. A true protocol
-# ping would add ~5-10ms latency per check. Since real connection errors are
-# handled gracefully at emission time (emit_client_wrapper.py falls back to
-# direct Kafka), this optimistic check is acceptable.
+# Uses emit_client_wrapper.py's ping command with explicit socket path
+# passed via OMNICLAUDE_EMIT_SOCKET env var. This ensures we ping the
+# ACTUAL daemon at the expected socket path, not whatever DEFAULT_SOCKET_PATH
+# resolves to (which caused the silent mismatch bug on macOS).
 check_socket_responsive() {
     local socket_path="$1"
-    # Parameter kept for API stability - callers pass timeout value but current
-    # implementation uses simple file existence check. Reserved for potential
-    # future protocol-based checks that would use actual socket timeout.
-    # shellcheck disable=SC2034
-    local timeout_sec="${2:-0.1}"
-
-    # File-based checks only: socket exists (-S) and is writable (-w)
-    # Does NOT verify daemon is listening or accepting connections
-    [[ -S "$socket_path" ]] && [[ -w "$socket_path" ]]
+    local timeout_sec="${2:-0.5}"
+    # Real protocol ping — passes socket path explicitly via env var
+    # so we ping the ACTUAL daemon, not whatever DEFAULT_SOCKET_PATH resolves to.
+    # Each invocation is a fresh process, so OMNICLAUDE_EMIT_SOCKET is read fresh.
+    OMNICLAUDE_EMIT_SOCKET="$socket_path" \
+    OMNICLAUDE_EMIT_TIMEOUT="$timeout_sec" \
+        "$PYTHON_CMD" "${HOOKS_LIB}/emit_client_wrapper.py" ping >/dev/null 2>&1
 }
 
 start_emit_daemon_if_needed() {
@@ -203,9 +188,11 @@ start_emit_daemon_if_needed() {
         local max_verify_attempts=5  # 5 attempts x 10ms gap = 50ms max additional wait
 
         while [[ $verify_attempt -lt $max_verify_attempts ]]; do
-            if check_socket_responsive "$EMIT_DAEMON_SOCKET" 0.1; then
+            if check_socket_responsive "$EMIT_DAEMON_SOCKET" 0.5; then
                 log "Publisher ready (verified on attempt $((verify_attempt + 1)))"
                 write_daemon_status "running"
+                mkdir -p "${HOOKS_DIR}/logs/emit-health" 2>/dev/null || true
+                rm -f "${HOOKS_DIR}/logs/emit-health/warning" 2>/dev/null || true
                 return 0
             fi
             ((verify_attempt++))
@@ -217,7 +204,13 @@ start_emit_daemon_if_needed() {
         log "WARNING: Publisher startup timed out after ${max_wait}x20ms, continuing without publisher"
     fi
 
-    # Publisher failed to start properly - continue without it
+    # Publisher failed to start properly - write warning file and continue
+    mkdir -p "${HOOKS_DIR}/logs/emit-health" 2>/dev/null || true
+    local _tmp="${HOOKS_DIR}/logs/emit-health/warning.tmp.$$"
+    cat > "$_tmp" <<WARN
+EVENT EMISSION UNHEALTHY: The emit daemon is not responding to health checks. Intelligence gathering and observability events are NOT being captured. Socket: ${EMIT_DAEMON_SOCKET}. Check: ${HOOKS_DIR}/logs/emit-daemon.log
+WARN
+    mv -f "$_tmp" "${HOOKS_DIR}/logs/emit-health/warning" 2>/dev/null || rm -f "$_tmp"
     log "Continuing without publisher (session startup not blocked)"
     return 0
 }
@@ -689,13 +682,27 @@ fi
 # Architecture handshake and ticket context are sync, so they ARE available immediately.
 # Combined format: handshake first, then ticket context (separated by ---)
 if [[ "$JQ_AVAILABLE" -eq 1 ]]; then
-    # Combine handshake and ticket context if both present
+    # Check for emit health warning
     COMBINED_CONTEXT=""
+    if [[ -f "${HOOKS_DIR}/logs/emit-health/warning" ]]; then
+        _EMIT_WARN=$(cat "${HOOKS_DIR}/logs/emit-health/warning" 2>/dev/null || true)
+        if [[ -n "$_EMIT_WARN" ]]; then
+            COMBINED_CONTEXT="$_EMIT_WARN"
+        fi
+    fi
+
+    # Combine handshake and ticket context if both present
     HAS_HANDSHAKE="false"
     HAS_TICKET="false"
 
     if [[ -n "$HANDSHAKE_CONTEXT" ]]; then
-        COMBINED_CONTEXT="$HANDSHAKE_CONTEXT"
+        if [[ -n "$COMBINED_CONTEXT" ]]; then
+            COMBINED_CONTEXT="${COMBINED_CONTEXT}
+
+${HANDSHAKE_CONTEXT}"
+        else
+            COMBINED_CONTEXT="$HANDSHAKE_CONTEXT"
+        fi
         HAS_HANDSHAKE="true"
     fi
 
