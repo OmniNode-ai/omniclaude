@@ -552,9 +552,12 @@ fi
 # Stop publisher ONLY if no other Claude Code sessions are still running.
 # The publisher is a shared singleton — killing it when other sessions are
 # active causes "EVENT EMISSION DEGRADED" failures for every other session.
-_other_claude_sessions=$(pgrep -fi "claude" 2>/dev/null | wc -l | tr -d ' ' || echo '0')
-if [[ "$_other_claude_sessions" -le 2 ]]; then
-    # 2 or fewer = this session + possibly the pgrep itself; safe to stop
+# Uses pgrep -x for exact process name matching ("claude" only), avoiding
+# false positives from Claude Desktop, Cursor, child shells, and pgrep itself.
+# Note: -i (case-insensitive) is omitted — it is Linux-only and errors on macOS.
+_other_claude_sessions=$(pgrep -x "claude" 2>/dev/null | wc -l | tr -d ' ' || echo '0')
+if [[ "$_other_claude_sessions" -le 1 ]]; then
+    # 1 or fewer = only this session (pgrep -x never matches itself); safe to stop
     "$PYTHON_CMD" -m omniclaude.publisher stop >> "$LOG_FILE" 2>&1 || {
         # Fallback: try legacy daemon stop
         "$PYTHON_CMD" -m omnibase_infra.runtime.emit_daemon.cli stop >> "$LOG_FILE" 2>&1 || true
