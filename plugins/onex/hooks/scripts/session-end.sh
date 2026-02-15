@@ -555,6 +555,16 @@ fi
 # Uses pgrep -x for exact process name matching ("claude" only), avoiding
 # false positives from Claude Desktop, Cursor, child shells, and pgrep itself.
 # Note: -i (case-insensitive) is omitted — it is Linux-only and errors on macOS.
+#
+# TOCTOU note: there is an inherent race between the pgrep count and the
+# publisher stop — another session could start or stop in the gap. This is
+# acceptable: premature kill is recovered by SessionStart (idempotent restart),
+# and leaving the publisher running is harmless (next SessionEnd cleans it up).
+#
+# Binary name assumption: pgrep -x "claude" assumes the CLI binary is named
+# exactly "claude". If renamed (e.g. "claude-code"), the count will always be 0,
+# causing publisher stop on every SessionEnd — safe (SessionStart restarts) but
+# suboptimal.
 _other_claude_sessions=$(pgrep -x "claude" 2>/dev/null | wc -l | tr -d ' ' || echo '0')
 if [[ "$_other_claude_sessions" -le 1 ]]; then
     # 1 or fewer = only this session (pgrep -x never matches itself); safe to stop

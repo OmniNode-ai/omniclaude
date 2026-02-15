@@ -203,10 +203,13 @@ emit_via_daemon() {
     else
         echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Emit daemon failed for ${event_type}" >> "$LOG_FILE"
         # Increment failure count, preserve last_success_ts
+        # Single read splits all fields from the status file in one shot (no TOCTOU)
+        # Format: <fail_count> <fail_timestamp> <success_timestamp> <event_type>
         local _prev_failures=0 _prev_success_ts=0
         if [[ -f "$status_file" ]]; then
-            _prev_failures=$(awk '{print $1}' "$status_file" 2>/dev/null || echo 0)
-            _prev_success_ts=$(awk '{print $3}' "$status_file" 2>/dev/null || echo 0)
+            local _prev_fail_ts=0 _prev_evt=""
+            read -r _prev_failures _prev_fail_ts _prev_success_ts _prev_evt < "$status_file" 2>/dev/null \
+                || { _prev_failures=0; _prev_success_ts=0; }
             [[ "$_prev_failures" =~ ^[0-9]+$ ]] || _prev_failures=0
             [[ "$_prev_success_ts" =~ ^[0-9]+$ ]] || _prev_success_ts=0
         fi

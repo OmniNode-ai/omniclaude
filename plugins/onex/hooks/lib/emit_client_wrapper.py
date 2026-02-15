@@ -75,13 +75,26 @@ logger = logging.getLogger(__name__)
 # Constants
 # =============================================================================
 
-# Default socket path - must use tempfile.gettempdir() to match the daemon
-# (publisher_config.py) and session-start.sh which both resolve via $TMPDIR.
-# On macOS, $TMPDIR is /var/folders/.../, NOT /tmp/, so hardcoding /tmp/ causes
-# the client to miss the daemon socket entirely.
-# NOTE: Cached at import time. If $TMPDIR changes after import (e.g. in test
-# fixtures), set OMNICLAUDE_EMIT_SOCKET env var to override in _get_client().
-DEFAULT_SOCKET_PATH = Path(tempfile.gettempdir()) / "omniclaude-emit.sock"
+
+def get_default_socket_path() -> Path:
+    """Compute the default socket path on each call.
+
+    Uses tempfile.gettempdir() to match the daemon (publisher_config.py) and
+    session-start.sh which both resolve via $TMPDIR. On macOS, $TMPDIR is
+    /var/folders/.../, NOT /tmp/, so hardcoding /tmp/ would cause the client
+    to miss the daemon socket entirely.
+
+    Computed per-call (not cached at import time) so that tests which set
+    TMPDIR after import get the correct path, and reset_client() actually
+    picks up environment changes.
+    """
+    return Path(tempfile.gettempdir()) / "omniclaude-emit.sock"
+
+
+# Backwards-compatible alias -- existing callers that read the module-level
+# constant will get the value as of import time (same as before). New code
+# should prefer get_default_socket_path() for a fresh value.
+DEFAULT_SOCKET_PATH = get_default_socket_path()
 
 # Default timeout for emit operations (milliseconds) - used by CLI interface
 DEFAULT_TIMEOUT_MS = 50
@@ -266,7 +279,7 @@ def _get_client() -> _SocketEmitClient | None:
 
         try:
             socket_path = os.environ.get(
-                "OMNICLAUDE_EMIT_SOCKET", str(DEFAULT_SOCKET_PATH)
+                "OMNICLAUDE_EMIT_SOCKET", str(get_default_socket_path())
             )
             timeout_seconds = float(
                 os.environ.get(
@@ -472,7 +485,9 @@ def get_status() -> dict[str, object]:
         >>> status = get_status()
         >>> print(f"Client available: {status['client_available']}")
     """
-    socket_path = os.environ.get("OMNICLAUDE_EMIT_SOCKET", str(DEFAULT_SOCKET_PATH))
+    socket_path = os.environ.get(
+        "OMNICLAUDE_EMIT_SOCKET", str(get_default_socket_path())
+    )
     client = _get_client()
 
     return {
@@ -637,6 +652,8 @@ __all__ = [
     "SUPPORTED_EVENT_TYPES",
     "DEFAULT_SOCKET_PATH",
     "DEFAULT_TIMEOUT_MS",
+    # Functions
+    "get_default_socket_path",
     # CLI
     "main",
 ]

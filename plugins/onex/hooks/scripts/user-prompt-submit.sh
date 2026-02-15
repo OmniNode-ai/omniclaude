@@ -306,7 +306,7 @@ if [[ -f "$_EMIT_STATUS" ]]; then
         log "WARNING: Emit daemon degraded (${_FAIL_COUNT} consecutive failures, last_event=${_FAIL_EVT})"
     fi
 
-    # Sustained failure tier: 10+ failures
+    # Escalation: overrides the degraded warning above for sustained failures
     if [[ $_FAIL_COUNT -ge 10 && $_AGE -le 600 && $_FAIL_TS -gt $_SUCCESS_TS ]]; then
         EMIT_HEALTH_WARNING="EVENT EMISSION DOWN: ${_FAIL_COUNT} consecutive failures over ${_AGE}s. Daemon likely crashed. Run: pkill -f 'omniclaude.publisher' and start a new session."
     fi

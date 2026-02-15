@@ -185,8 +185,11 @@ start_emit_daemon_if_needed() {
     # Retry-based socket verification after file appears.
     if [[ -S "$EMIT_DAEMON_SOCKET" ]]; then
         local verify_attempt=0
-        # 5 attempts x 0.2s timeout + 10ms gap = ~1.05s worst-case on sync path
-        local max_verify_attempts=5
+        # 2 attempts x 0.2s timeout + 10ms gap = ~0.41s worst-case on sync path.
+        # The daemon should be responsive almost immediately after creating the
+        # socket file; 2 retries is sufficient. Previously 5 (~1.05s worst-case)
+        # which violated the <50ms SessionStart budget even in the async portion.
+        local max_verify_attempts=2
 
         while [[ $verify_attempt -lt $max_verify_attempts ]]; do
             if check_socket_responsive "$EMIT_DAEMON_SOCKET" 0.2; then
@@ -208,7 +211,7 @@ start_emit_daemon_if_needed() {
     # Publisher failed to start properly - write warning file and continue
     mkdir -p "${HOOKS_DIR}/logs/emit-health" 2>/dev/null || true
     local _tmp="${HOOKS_DIR}/logs/emit-health/warning.tmp.$$"
-    cat > "$_tmp" <<WARN
+    cat > "$_tmp" <<WARN  # Note: unquoted delimiter -- variable expansion is intentional
 EVENT EMISSION UNHEALTHY: The emit daemon is not responding to health checks. Intelligence gathering and observability events are NOT being captured. Socket: ${EMIT_DAEMON_SOCKET}. Check: ${HOOKS_DIR}/logs/emit-daemon.log
 WARN
     mv -f "$_tmp" "${HOOKS_DIR}/logs/emit-health/warning" 2>/dev/null || rm -f "$_tmp"

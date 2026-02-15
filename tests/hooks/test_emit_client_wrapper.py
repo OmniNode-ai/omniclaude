@@ -124,16 +124,24 @@ class TestModuleImport:
                 f"Event type '{event_type}' contains hyphen (Kafka topic style)"
             )
 
-    def test_default_socket_path_defined(self) -> None:
-        """Verify DEFAULT_SOCKET_PATH uses tempfile.gettempdir() for cross-platform compat."""
+    def test_get_default_socket_path_returns_fresh_value(self) -> None:
+        """Verify get_default_socket_path() computes path per-call via tempfile.gettempdir()."""
         import tempfile
 
+        from plugins.onex.hooks.lib.emit_client_wrapper import get_default_socket_path
+
+        result = get_default_socket_path()
+        assert result is not None
+        assert isinstance(result, Path)
+        expected = Path(tempfile.gettempdir()) / "omniclaude-emit.sock"
+        assert expected == result
+
+    def test_default_socket_path_backwards_compat(self) -> None:
+        """Verify DEFAULT_SOCKET_PATH constant still exists for backwards compatibility."""
         from plugins.onex.hooks.lib.emit_client_wrapper import DEFAULT_SOCKET_PATH
 
         assert DEFAULT_SOCKET_PATH is not None
         assert isinstance(DEFAULT_SOCKET_PATH, Path)
-        expected = Path(tempfile.gettempdir()) / "omniclaude-emit.sock"
-        assert expected == DEFAULT_SOCKET_PATH
 
     def test_default_timeout_ms_defined(self) -> None:
         """Verify DEFAULT_TIMEOUT_MS constant is defined."""
@@ -155,6 +163,8 @@ class TestModuleImport:
             "SUPPORTED_EVENT_TYPES",
             "DEFAULT_SOCKET_PATH",
             "DEFAULT_TIMEOUT_MS",
+            # Functions
+            "get_default_socket_path",
             # CLI
             "main",
         }
