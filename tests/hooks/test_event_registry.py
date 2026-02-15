@@ -728,14 +728,35 @@ class TestEventRegistryIntegration:
         """Verify registry contains all expected event types."""
         from omniclaude.hooks.event_registry import EVENT_REGISTRY
 
-        expected_types = [
+        expected_types = {
+            # Session events
             "session.started",
             "session.ended",
+            "session.outcome",
+            # Prompt events
             "prompt.submitted",
+            # Tool events
             "tool.executed",
-        ]
-        for event_type in expected_types:
-            assert event_type in EVENT_REGISTRY
+            # Routing feedback events (OMN-1892)
+            "routing.feedback",
+            "routing.skipped",
+            # Injection tracking events (OMN-1673 INJECT-004)
+            "injection.recorded",
+            # Metrics events (OMN-1889)
+            "context.utilization",
+            "agent.match",
+            "latency.breakdown",
+            # Routing decision (PR-92)
+            "routing.decision",
+            # Notification events (OMN-1831)
+            "notification.blocked",
+            "notification.completed",
+            # Phase metrics (OMN-2027)
+            "phase.metrics",
+            # Agent status (OMN-1848)
+            "agent.status",
+        }
+        assert set(EVENT_REGISTRY.keys()) == expected_types
 
     def test_prompt_submitted_fan_out_topics(self) -> None:
         """Verify prompt.submitted fans out to correct topics."""

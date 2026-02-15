@@ -565,7 +565,28 @@ fi
 # exactly "claude". If renamed (e.g. "claude-code"), the count will always be 0,
 # causing publisher stop on every SessionEnd — safe (SessionStart restarts) but
 # suboptimal.
-_other_claude_sessions=$(pgrep -x "claude" 2>/dev/null | wc -l | tr -d ' ' || echo '0')
+#
+# Fail-safe semantics: if pgrep itself errors (exit >=2: permission denied,
+# syntax error, /proc unavailable), we default to 9999 so the publisher stays
+# alive. Rationale: a missed stop is harmless (next SessionEnd retries or the
+# daemon idles out), but a false stop disrupts every other active session.
+#
+# pgrep exit codes: 0 = matched, 1 = no matches (normal), 2+ = real error.
+# With pipefail, we must capture pgrep's exit code separately — otherwise
+# exit 1 (no matches) and exit 2 (error) are both treated as pipeline failure.
+_pgrep_rc=0
+_pgrep_output=$(pgrep -x "claude" 2>/dev/null) || _pgrep_rc=$?
+if [[ $_pgrep_rc -ge 2 ]]; then
+    # Real pgrep failure — cannot determine session count; keep publisher alive
+    _other_claude_sessions=9999
+    log "WARNING: pgrep failed (exit=$_pgrep_rc), assuming other sessions exist (fail-safe)"
+elif [[ $_pgrep_rc -eq 1 ]]; then
+    # No matches — zero claude processes running
+    _other_claude_sessions=0
+else
+    # Success — count matched PIDs (one per line)
+    _other_claude_sessions=$(echo "$_pgrep_output" | wc -l | tr -d ' ')
+fi
 if [[ "$_other_claude_sessions" -le 1 ]]; then
     # 1 or fewer = only this session (pgrep -x never matches itself); safe to stop
     "$PYTHON_CMD" -m omniclaude.publisher stop >> "$LOG_FILE" 2>&1 || {
