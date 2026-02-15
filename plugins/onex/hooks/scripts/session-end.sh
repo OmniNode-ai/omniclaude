@@ -552,7 +552,7 @@ fi
 # Stop publisher ONLY if no other Claude Code sessions are still running.
 # The publisher is a shared singleton — killing it when other sessions are
 # active causes "EVENT EMISSION DEGRADED" failures for every other session.
-_other_claude_sessions=$(pgrep -f "claude" 2>/dev/null | wc -l | tr -d ' ')
+_other_claude_sessions=$(pgrep -fi "claude" 2>/dev/null | wc -l | tr -d ' ' || echo '0')
 if [[ "$_other_claude_sessions" -le 2 ]]; then
     # 2 or fewer = this session + possibly the pgrep itself; safe to stop
     "$PYTHON_CMD" -m omniclaude.publisher stop >> "$LOG_FILE" 2>&1 || {
