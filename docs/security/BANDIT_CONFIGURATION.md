@@ -29,7 +29,7 @@ Secondary configuration for Poetry projects.
 ### 3. CI Workflow Configuration
 Command-line arguments in GitHub Actions.
 
-**Location**: `.github/workflows/ci-cd.yml`
+**Location**: `.github/workflows/ci.yml`
 
 **Purpose**:
 - Control severity and confidence thresholds
@@ -310,7 +310,7 @@ The configuration filters out **false positives** while maintaining detection of
 - **Bandit Documentation**: https://bandit.readthedocs.io/
 - **Bandit GitHub**: https://github.com/PyCQA/bandit
 - **Skip Codes Reference**: https://bandit.readthedocs.io/en/latest/plugins/index.html
-- **CI Workflow**: `.github/workflows/ci-cd.yml`
+- **CI Workflow**: `.github/workflows/ci.yml`
 
 ## Maintenance
 
