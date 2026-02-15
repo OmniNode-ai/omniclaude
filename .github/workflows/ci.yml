@@ -31,7 +31,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v4
         with:
-          version: "latest"
+          version: "0.6.1"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -57,6 +57,7 @@ jobs:
         run: |
           # Phase 1: Non-blocking (report errors but don't fail CI)
           # Phase 2: Fix errors and make blocking (TODO: remove || true)
+          # TODO(OMN-XXXX): Make mypy blocking in Phase 2
           uv run mypy src/ --config-file mypy.ini 2>&1 | tee mypy-output.txt || true
           ERROR_COUNT=$(grep -c "error:" mypy-output.txt 2>/dev/null || echo "0")
           echo "MyPy Summary: $ERROR_COUNT type errors found"
@@ -75,7 +76,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v4
         with:
-          version: "latest"
+          version: "0.6.1"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -121,7 +122,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v4
         with:
-          version: "latest"
+          version: "0.6.1"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -150,7 +151,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v4
         with:
-          version: "latest"
+          version: "0.6.1"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -180,7 +181,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v4
         with:
-          version: "latest"
+          version: "0.6.1"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -225,7 +226,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v4
         with:
-          version: "latest"
+          version: "0.6.1"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -309,7 +310,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v4
         with:
-          version: "latest"
+          version: "0.6.1"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -369,11 +370,14 @@ jobs:
             echo "::warning::detect-secrets found $SECRETS potential secrets"
             python3 -c "
           import json
-          data = json.load(open('.secrets-results.json'))
-          for f, findings in data.get('results', {}).items():
-              for finding in findings:
-                  print(f'  {f}:{finding[\"line_number\"]} - {finding[\"type\"]}')
+          with open('.secrets-results.json') as f:
+              results = json.load(f)
+          for filename, secrets in results.get('results', {}).items():
+              for secret in secrets:
+                  print(f'  {filename}:{secret[\"line_number\"]}: {secret[\"type\"]}')
           "
+            echo "::error::Secret detection failed - $SECRETS potential secrets found"
+            exit 1
           fi
           echo "Secret detection completed"
 
@@ -421,7 +425,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v4
         with:
-          version: "latest"
+          version: "0.6.1"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -512,7 +516,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v4
         with:
-          version: "latest"
+          version: "0.6.1"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -530,6 +534,9 @@ jobs:
 
       - name: Initialize hooks database
         env:
+          POSTGRES_USER: hooks_test
+          POSTGRES_PASSWORD: hooks_test
+          POSTGRES_DB: hooks_test_db
           PGPASSWORD: hooks_test
         run: |
           until psql -h localhost -U hooks_test -d hooks_test_db -c '\q' 2>/dev/null; do
@@ -572,7 +579,7 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v4
         with:
-          version: "latest"
+          version: "0.6.1"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -638,6 +645,8 @@ jobs:
       - name: Validate database schema
         env:
           PGPASSWORD: schema_test
+          POSTGRES_USER: schema_test
+          POSTGRES_DB: schema_test_db
         run: |
           until psql -h localhost -U schema_test -d schema_test_db -c '\q' 2>/dev/null; do
             echo "Waiting for PostgreSQL..."
@@ -917,7 +926,7 @@ jobs:
           cache-from: type=gha
 
       - name: Trivy vulnerability scanner (SARIF)
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.34.0
         with:
           image-ref: ${{ steps.image-name.outputs.name }}:scan
           format: 'sarif'
@@ -931,7 +940,7 @@ jobs:
           sarif_file: 'trivy-results.sarif'
 
       - name: Trivy vulnerability scanner (table)
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.34.0
         with:
           image-ref: ${{ steps.image-name.outputs.name }}:scan
           format: 'table'
