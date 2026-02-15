@@ -185,10 +185,11 @@ start_emit_daemon_if_needed() {
     # Retry-based socket verification after file appears.
     if [[ -S "$EMIT_DAEMON_SOCKET" ]]; then
         local verify_attempt=0
-        local max_verify_attempts=5  # 5 attempts x 10ms gap = 50ms max additional wait
+        # 5 attempts x 0.2s timeout + 10ms gap = ~1.05s worst-case on sync path
+        local max_verify_attempts=5
 
         while [[ $verify_attempt -lt $max_verify_attempts ]]; do
-            if check_socket_responsive "$EMIT_DAEMON_SOCKET" 0.5; then
+            if check_socket_responsive "$EMIT_DAEMON_SOCKET" 0.2; then
                 log "Publisher ready (verified on attempt $((verify_attempt + 1)))"
                 write_daemon_status "running"
                 mkdir -p "${HOOKS_DIR}/logs/emit-health" 2>/dev/null || true

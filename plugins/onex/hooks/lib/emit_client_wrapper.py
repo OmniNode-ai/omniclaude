@@ -79,6 +79,8 @@ logger = logging.getLogger(__name__)
 # (publisher_config.py) and session-start.sh which both resolve via $TMPDIR.
 # On macOS, $TMPDIR is /var/folders/.../, NOT /tmp/, so hardcoding /tmp/ causes
 # the client to miss the daemon socket entirely.
+# NOTE: Cached at import time. If $TMPDIR changes after import (e.g. in test
+# fixtures), set OMNICLAUDE_EMIT_SOCKET env var to override in _get_client().
 DEFAULT_SOCKET_PATH = Path(tempfile.gettempdir()) / "omniclaude-emit.sock"
 
 # Default timeout for emit operations (milliseconds) - used by CLI interface

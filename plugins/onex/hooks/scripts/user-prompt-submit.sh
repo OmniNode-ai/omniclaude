@@ -283,10 +283,10 @@ fi
 EMIT_HEALTH_WARNING=""
 _EMIT_STATUS="${HOOKS_DIR}/logs/emit-health/status"
 if [[ -f "$_EMIT_STATUS" ]]; then
-    _FAIL_COUNT=$(awk '{print $1}' "$_EMIT_STATUS" 2>/dev/null || echo 0)
-    _FAIL_TS=$(awk '{print $2}' "$_EMIT_STATUS" 2>/dev/null || echo 0)
-    _SUCCESS_TS=$(awk '{print $3}' "$_EMIT_STATUS" 2>/dev/null || echo 0)
-    _FAIL_EVT=$(awk '{print $4}' "$_EMIT_STATUS" 2>/dev/null || echo "unknown")
+    # Single read splits all 4 whitespace-delimited fields from the status file
+    # Format: <fail_count> <fail_timestamp> <success_timestamp> <event_type>
+    read -r _FAIL_COUNT _FAIL_TS _SUCCESS_TS _FAIL_EVT < "$_EMIT_STATUS" 2>/dev/null \
+        || { _FAIL_COUNT=0; _FAIL_TS=0; _SUCCESS_TS=0; _FAIL_EVT="unknown"; }
     [[ "$_FAIL_COUNT" =~ ^[0-9]+$ ]] || _FAIL_COUNT=0
     [[ "$_FAIL_TS" =~ ^[0-9]+$ ]] || _FAIL_TS=0
     [[ "$_SUCCESS_TS" =~ ^[0-9]+$ ]] || _SUCCESS_TS=0
@@ -295,6 +295,12 @@ if [[ -f "$_EMIT_STATUS" ]]; then
     # Guard: negative age = clock skew, treat as stale
     [[ $_AGE -lt 0 ]] && _AGE=999
 
+    # Guard invariants when fields default to 0:
+    #   _FAIL_COUNT=0 → fails the -ge 3 check, so no warning fires.
+    #   _FAIL_TS=0    → _AGE becomes ~epoch-seconds (~1.7B), fails -le 60.
+    #   _SUCCESS_TS=0 → _FAIL_TS > 0 would pass, but only matters if both
+    #                    _FAIL_COUNT and _AGE already passed their thresholds.
+    # Result: all three conditions must be true, so any zeroed field is safe.
     if [[ $_FAIL_COUNT -ge 3 && $_AGE -le 60 && $_FAIL_TS -gt $_SUCCESS_TS ]]; then
         EMIT_HEALTH_WARNING="EVENT EMISSION DEGRADED: ${_FAIL_COUNT} consecutive failures (last: ${_FAIL_EVT}, ${_AGE}s ago). Events not reaching Kafka."
         log "WARNING: Emit daemon degraded (${_FAIL_COUNT} consecutive failures, last_event=${_FAIL_EVT})"
