@@ -63,6 +63,7 @@ import logging
 import os
 import socket
 import sys
+import tempfile
 import threading
 from collections.abc import Callable
 from pathlib import Path
@@ -74,9 +75,26 @@ logger = logging.getLogger(__name__)
 # Constants
 # =============================================================================
 
-# Default socket path (matches daemon default)
-# NOTE: /tmp is standard for Unix domain sockets - not a security issue
-DEFAULT_SOCKET_PATH = Path("/tmp/omniclaude-emit.sock")  # noqa: S108
+
+def get_default_socket_path() -> Path:
+    """Compute the default socket path on each call.
+
+    Uses tempfile.gettempdir() to match the daemon (publisher_config.py) and
+    session-start.sh which both resolve via $TMPDIR. On macOS, $TMPDIR is
+    /var/folders/.../, NOT /tmp/, so hardcoding /tmp/ would cause the client
+    to miss the daemon socket entirely.
+
+    Computed per-call (not cached at import time) so that tests which set
+    TMPDIR after import get the correct path, and reset_client() actually
+    picks up environment changes.
+    """
+    return Path(tempfile.gettempdir()) / "omniclaude-emit.sock"
+
+
+# Backwards-compatible alias -- existing callers that read the module-level
+# constant will get the value as of import time (same as before). New code
+# should prefer get_default_socket_path() for a fresh value.
+DEFAULT_SOCKET_PATH = get_default_socket_path()
 
 # Default timeout for emit operations (milliseconds) - used by CLI interface
 DEFAULT_TIMEOUT_MS = 50
@@ -261,7 +279,7 @@ def _get_client() -> _SocketEmitClient | None:
 
         try:
             socket_path = os.environ.get(
-                "OMNICLAUDE_EMIT_SOCKET", str(DEFAULT_SOCKET_PATH)
+                "OMNICLAUDE_EMIT_SOCKET", str(get_default_socket_path())
             )
             timeout_seconds = float(
                 os.environ.get(
@@ -356,9 +374,8 @@ def emit_event(
     Note:
         **Error Classification**: Errors are logged at different levels:
 
-        - DEBUG: Connection errors (daemon not running) - expected during startup
+        - WARNING: Connection errors (daemon not running, timeout) - visible for diagnostics
         - ERROR: Serialization/type errors - indicates bugs in caller code
-        - WARNING: Other unexpected errors - unknown issues
 
     Example:
         >>> success = emit_event(
@@ -395,13 +412,21 @@ def emit_event(
         return True
 
     except TimeoutError as e:
-        # Socket timeout is a subclass of OSError, but deserves its own message
-        logger.debug(f"Event emission failed (daemon timeout): {e}")
+        logger.warning(
+            "Event emission failed (daemon timeout): event_type=%s socket=%s err=%r",
+            event_type,
+            client._socket_path,
+            e,
+        )
         return False
 
     except (ConnectionRefusedError, FileNotFoundError, BrokenPipeError, OSError) as e:
-        # Expected during startup or when daemon is not running
-        logger.debug(f"Event emission failed (daemon unavailable): {e}")
+        logger.warning(
+            "Event emission failed (daemon unavailable): event_type=%s socket=%s err=%r",
+            event_type,
+            client._socket_path,
+            e,
+        )
         return False
 
     except (json.JSONDecodeError, TypeError, ValueError) as e:
@@ -460,7 +485,9 @@ def get_status() -> dict[str, object]:
         >>> status = get_status()
         >>> print(f"Client available: {status['client_available']}")
     """
-    socket_path = os.environ.get("OMNICLAUDE_EMIT_SOCKET", str(DEFAULT_SOCKET_PATH))
+    socket_path = os.environ.get(
+        "OMNICLAUDE_EMIT_SOCKET", str(get_default_socket_path())
+    )
     client = _get_client()
 
     return {
@@ -625,6 +652,8 @@ __all__ = [
     "SUPPORTED_EVENT_TYPES",
     "DEFAULT_SOCKET_PATH",
     "DEFAULT_TIMEOUT_MS",
+    # Functions
+    "get_default_socket_path",
     # CLI
     "main",
 ]

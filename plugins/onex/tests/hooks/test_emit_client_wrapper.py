@@ -60,18 +60,33 @@ class TestModuleImport:
             "agent.match",  # OMN-1889
             "latency.breakdown",  # OMN-1889
             "routing.decision",  # Polly-first routing observability
+            "routing.feedback",  # OMN-1892 - Routing feedback for reinforcement
+            "routing.skipped",  # OMN-1892 - Routing feedback skipped
             "notification.blocked",  # OMN-1831
-            "notification.completed",  # OMN-1831
+            "notification.completed",  # PR-92
+            "phase.metrics",  # OMN-2027 - Phase instrumentation metrics
+            "agent.status",  # OMN-1848 - Agent status reporting
         }
         assert expected_types == SUPPORTED_EVENT_TYPES
 
-    def test_default_socket_path_defined(self) -> None:
-        """Verify DEFAULT_SOCKET_PATH constant is defined."""
+    def test_get_default_socket_path_returns_fresh_value(self) -> None:
+        """Verify get_default_socket_path() computes path per-call via tempfile.gettempdir()."""
+        import tempfile
+
+        from plugins.onex.hooks.lib.emit_client_wrapper import get_default_socket_path
+
+        result = get_default_socket_path()
+        assert result is not None
+        assert isinstance(result, Path)
+        expected = Path(tempfile.gettempdir()) / "omniclaude-emit.sock"
+        assert expected == result
+
+    def test_default_socket_path_backwards_compat(self) -> None:
+        """Verify DEFAULT_SOCKET_PATH constant still exists for backwards compatibility."""
         from plugins.onex.hooks.lib.emit_client_wrapper import DEFAULT_SOCKET_PATH
 
         assert DEFAULT_SOCKET_PATH is not None
         assert isinstance(DEFAULT_SOCKET_PATH, Path)
-        assert str(DEFAULT_SOCKET_PATH) == "/tmp/omniclaude-emit.sock"  # noqa: S108
 
     def test_default_timeout_ms_defined(self) -> None:
         """Verify DEFAULT_TIMEOUT_MS constant is defined."""
@@ -93,6 +108,8 @@ class TestModuleImport:
             "SUPPORTED_EVENT_TYPES",
             "DEFAULT_SOCKET_PATH",
             "DEFAULT_TIMEOUT_MS",
+            # Functions
+            "get_default_socket_path",
             # CLI
             "main",
         }
@@ -696,8 +713,8 @@ class TestMockedIntegration:
 class TestErrorClassification:
     """Tests for error classification in emit_event."""
 
-    def test_connection_refused_logs_at_debug_level(self) -> None:
-        """ConnectionRefusedError logs at DEBUG level (expected error)."""
+    def test_connection_refused_logs_at_warning_level(self) -> None:
+        """ConnectionRefusedError logs at WARNING level for visibility."""
 
         from plugins.onex.hooks.lib import emit_client_wrapper
 
@@ -705,56 +722,48 @@ class TestErrorClassification:
         mock_client.emit_sync.side_effect = ConnectionRefusedError("Connection refused")
 
         with patch.object(emit_client_wrapper, "_get_client", return_value=mock_client):
-            with patch.object(emit_client_wrapper.logger, "debug") as mock_debug:
-                with patch.object(
-                    emit_client_wrapper.logger, "warning"
-                ) as mock_warning:
-                    result = emit_client_wrapper.emit_event(
-                        event_type="session.started",
-                        payload={"session_id": "test"},
-                    )
+            with patch.object(emit_client_wrapper.logger, "warning") as mock_warning:
+                result = emit_client_wrapper.emit_event(
+                    event_type="session.started",
+                    payload={"session_id": "test"},
+                )
 
         assert result is False
-        # Should log at DEBUG, not WARNING
-        mock_debug.assert_called()
-        # The warning mock should not be called for the connection error
-        assert not any(
-            "Connection refused" in str(call) for call in mock_warning.call_args_list
-        )
+        mock_warning.assert_called()
 
-    def test_file_not_found_logs_at_debug_level(self) -> None:
-        """FileNotFoundError logs at DEBUG level (expected error)."""
+    def test_file_not_found_logs_at_warning_level(self) -> None:
+        """FileNotFoundError logs at WARNING level for visibility."""
         from plugins.onex.hooks.lib import emit_client_wrapper
 
         mock_client = MagicMock()
         mock_client.emit_sync.side_effect = FileNotFoundError("Socket not found")
 
         with patch.object(emit_client_wrapper, "_get_client", return_value=mock_client):
-            with patch.object(emit_client_wrapper.logger, "debug") as mock_debug:
+            with patch.object(emit_client_wrapper.logger, "warning") as mock_warning:
                 result = emit_client_wrapper.emit_event(
                     event_type="session.started",
                     payload={"session_id": "test"},
                 )
 
         assert result is False
-        mock_debug.assert_called()
+        mock_warning.assert_called()
 
-    def test_broken_pipe_logs_at_debug_level(self) -> None:
-        """BrokenPipeError logs at DEBUG level (expected error)."""
+    def test_broken_pipe_logs_at_warning_level(self) -> None:
+        """BrokenPipeError logs at WARNING level for visibility."""
         from plugins.onex.hooks.lib import emit_client_wrapper
 
         mock_client = MagicMock()
         mock_client.emit_sync.side_effect = BrokenPipeError("Broken pipe")
 
         with patch.object(emit_client_wrapper, "_get_client", return_value=mock_client):
-            with patch.object(emit_client_wrapper.logger, "debug") as mock_debug:
+            with patch.object(emit_client_wrapper.logger, "warning") as mock_warning:
                 result = emit_client_wrapper.emit_event(
                     event_type="session.started",
                     payload={"session_id": "test"},
                 )
 
         assert result is False
-        mock_debug.assert_called()
+        mock_warning.assert_called()
 
     def test_type_error_logs_at_error_level(self) -> None:
         """TypeError logs at ERROR level (indicates bug)."""

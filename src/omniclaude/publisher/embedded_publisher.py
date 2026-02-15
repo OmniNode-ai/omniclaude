@@ -527,7 +527,7 @@ class EmbeddedEventPublisher:
                 correlation_id = uuid4()
 
             headers = ModelEventHeaders(
-                source="omniclaude-publisher",
+                source="omniclaude",
                 event_type=event.event_type,
                 timestamp=event.queued_at,
                 correlation_id=correlation_id,

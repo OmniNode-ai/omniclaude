@@ -186,15 +186,40 @@ emit_via_daemon() {
     local event_type="$1"
     local payload="$2"
     local timeout_ms="${3:-50}"
+    local health_dir="${HOOKS_DIR}/logs/emit-health"
+    local status_file="${health_dir}/status"
 
-    "$PYTHON_CMD" "${HOOKS_LIB}/emit_client_wrapper.py" emit \
-        --event-type "$event_type" \
-        --payload "$payload" \
-        --timeout "$timeout_ms" \
-        >> "$LOG_FILE" 2>&1 || {
-            echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Emit daemon failed for ${event_type} (non-fatal)" >> "$LOG_FILE"
-            return 1
-        }
+    mkdir -p "$health_dir" 2>/dev/null || true
+
+    if "$PYTHON_CMD" "${HOOKS_LIB}/emit_client_wrapper.py" emit \
+        --event-type "$event_type" --payload "$payload" --timeout "$timeout_ms" \
+        >> "$LOG_FILE" 2>&1; then
+        # Success: reset failure count, record success timestamp
+        local _now
+        _now=$(date -u +%s)
+        local _tmp="${status_file}.tmp.$$"
+        echo "0 0 $_now $event_type" > "$_tmp" && mv -f "$_tmp" "$status_file" 2>/dev/null || rm -f "$_tmp"
+        return 0
+    else
+        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Emit daemon failed for ${event_type}" >> "$LOG_FILE"
+        # Increment failure count, preserve last_success_ts
+        # Single read splits all fields from the status file in one shot (no TOCTOU)
+        # Format: <fail_count> <fail_timestamp> <success_timestamp> <event_type>
+        local _prev_failures=0 _prev_success_ts=0
+        if [[ -f "$status_file" ]]; then
+            local _prev_fail_ts=0 _prev_evt=""
+            read -r _prev_failures _prev_fail_ts _prev_success_ts _prev_evt < "$status_file" 2>/dev/null \
+                || { _prev_failures=0; _prev_success_ts=0; }
+            [[ "$_prev_failures" =~ ^[0-9]+$ ]] || _prev_failures=0
+            [[ "$_prev_success_ts" =~ ^[0-9]+$ ]] || _prev_success_ts=0
+        fi
+        local _now
+        _now=$(date -u +%s)
+        local _tmp="${status_file}.tmp.$$"
+        echo "$((_prev_failures + 1)) $_now $_prev_success_ts $event_type" > "$_tmp" \
+            && mv -f "$_tmp" "$status_file" 2>/dev/null || rm -f "$_tmp"
+        return 1
+    fi
 }
 
 # =============================================================================

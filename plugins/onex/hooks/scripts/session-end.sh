@@ -549,12 +549,54 @@ if [[ ${#EMIT_PIDS[@]} -gt 0 ]]; then
     log "Emit subshells drained (${#EMIT_PIDS[@]} tracked)"
 fi
 
-# Stop publisher after all events are enqueued (or timed out)
-"$PYTHON_CMD" -m omniclaude.publisher stop >> "$LOG_FILE" 2>&1 || {
-    # Fallback: try legacy daemon stop
-    "$PYTHON_CMD" -m omnibase_infra.runtime.emit_daemon.cli stop >> "$LOG_FILE" 2>&1 || true
-}
-log "Publisher stop signal sent"
+# Stop publisher ONLY if no other Claude Code sessions are still running.
+# The publisher is a shared singleton — killing it when other sessions are
+# active causes "EVENT EMISSION DEGRADED" failures for every other session.
+# Uses pgrep -x for exact process name matching ("claude" only), avoiding
+# false positives from Claude Desktop, Cursor, child shells, and pgrep itself.
+# Note: -i (case-insensitive) is omitted — it is Linux-only and errors on macOS.
+#
+# TOCTOU note: there is an inherent race between the pgrep count and the
+# publisher stop — another session could start or stop in the gap. This is
+# acceptable: premature kill is recovered by SessionStart (idempotent restart),
+# and leaving the publisher running is harmless (next SessionEnd cleans it up).
+#
+# Binary name assumption: pgrep -x "claude" assumes the CLI binary is named
+# exactly "claude". If renamed (e.g. "claude-code"), the count will always be 0,
+# causing publisher stop on every SessionEnd — safe (SessionStart restarts) but
+# suboptimal.
+#
+# Fail-safe semantics: if pgrep itself errors (exit >=2: permission denied,
+# syntax error, /proc unavailable), we default to 9999 so the publisher stays
+# alive. Rationale: a missed stop is harmless (next SessionEnd retries or the
+# daemon idles out), but a false stop disrupts every other active session.
+#
+# pgrep exit codes: 0 = matched, 1 = no matches (normal), 2+ = real error.
+# With pipefail, we must capture pgrep's exit code separately — otherwise
+# exit 1 (no matches) and exit 2 (error) are both treated as pipeline failure.
+_pgrep_rc=0
+_pgrep_output=$(pgrep -x "claude" 2>/dev/null) || _pgrep_rc=$?
+if [[ $_pgrep_rc -ge 2 ]]; then
+    # Real pgrep failure — cannot determine session count; keep publisher alive
+    _other_claude_sessions=9999
+    log "WARNING: pgrep failed (exit=$_pgrep_rc), assuming other sessions exist (fail-safe)"
+elif [[ $_pgrep_rc -eq 1 ]]; then
+    # No matches — zero claude processes running
+    _other_claude_sessions=0
+else
+    # Success — count matched PIDs (one per line)
+    _other_claude_sessions=$(echo "$_pgrep_output" | wc -l | tr -d ' ')
+fi
+if [[ "$_other_claude_sessions" -le 1 ]]; then
+    # 1 or fewer = only this session (pgrep -x never matches itself); safe to stop
+    "$PYTHON_CMD" -m omniclaude.publisher stop >> "$LOG_FILE" 2>&1 || {
+        # Fallback: try legacy daemon stop
+        "$PYTHON_CMD" -m omnibase_infra.runtime.emit_daemon.cli stop >> "$LOG_FILE" 2>&1 || true
+    }
+    log "Publisher stop signal sent (last session)"
+else
+    log "Publisher kept alive (${_other_claude_sessions} Claude processes still running)"
+fi
 
 log "SessionEnd hook completed"
 # No explicit `wait` needed before exit: emit subshells are already drained

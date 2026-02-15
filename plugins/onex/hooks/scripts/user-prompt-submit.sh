@@ -278,6 +278,41 @@ elif [[ "$SESSION_ALREADY_INJECTED" == "true" ]]; then
 fi
 
 # -----------------------------
+# Emit Health Check: Surface persistent failures
+# -----------------------------
+EMIT_HEALTH_WARNING=""
+_EMIT_STATUS="${HOOKS_DIR}/logs/emit-health/status"
+if [[ -f "$_EMIT_STATUS" ]]; then
+    # Single read splits all 4 whitespace-delimited fields from the status file
+    # Format: <fail_count> <fail_timestamp> <success_timestamp> <event_type>
+    read -r _FAIL_COUNT _FAIL_TS _SUCCESS_TS _FAIL_EVT < "$_EMIT_STATUS" 2>/dev/null \
+        || { _FAIL_COUNT=0; _FAIL_TS=0; _SUCCESS_TS=0; _FAIL_EVT="unknown"; }
+    [[ "$_FAIL_COUNT" =~ ^[0-9]+$ ]] || _FAIL_COUNT=0
+    [[ "$_FAIL_TS" =~ ^[0-9]+$ ]] || _FAIL_TS=0
+    [[ "$_SUCCESS_TS" =~ ^[0-9]+$ ]] || _SUCCESS_TS=0
+    _NOW=$(date -u +%s)
+    _AGE=$((_NOW - _FAIL_TS))
+    # Guard: negative age = clock skew, treat as stale
+    [[ $_AGE -lt 0 ]] && _AGE=999
+
+    # Guard invariants when fields default to 0:
+    #   _FAIL_COUNT=0 → fails the -ge 3 check, so no warning fires.
+    #   _FAIL_TS=0    → _AGE becomes ~epoch-seconds (~1.7B), fails -le 60.
+    #   _SUCCESS_TS=0 → _FAIL_TS > 0 would pass, but only matters if both
+    #                    _FAIL_COUNT and _AGE already passed their thresholds.
+    # Result: all three conditions must be true, so any zeroed field is safe.
+    if [[ $_FAIL_COUNT -ge 3 && $_AGE -le 60 && $_FAIL_TS -gt $_SUCCESS_TS ]]; then
+        EMIT_HEALTH_WARNING="EVENT EMISSION DEGRADED: ${_FAIL_COUNT} consecutive failures (last: ${_FAIL_EVT}, ${_AGE}s ago). Events not reaching Kafka."
+        log "WARNING: Emit daemon degraded (${_FAIL_COUNT} consecutive failures, last_event=${_FAIL_EVT})"
+    fi
+
+    # Escalation: overrides the degraded warning above for sustained failures
+    if [[ $_FAIL_COUNT -ge 10 && $_AGE -le 600 && $_FAIL_TS -gt $_SUCCESS_TS ]]; then
+        EMIT_HEALTH_WARNING="EVENT EMISSION DOWN: ${_FAIL_COUNT} consecutive failures over ${_AGE}s. Daemon likely crashed. Run: pkill -f 'omniclaude.publisher' and start a new session."
+    fi
+fi
+
+# -----------------------------
 # Agent Context Assembly (FIXED: Safe injection)
 # -----------------------------
 POLLY_DISPATCH_THRESHOLD="${POLLY_DISPATCH_THRESHOLD:-0.7}"
@@ -286,6 +321,7 @@ MEETS_THRESHOLD="$(awk -v conf="$CONFIDENCE" -v thresh="$POLLY_DISPATCH_THRESHOL
 # Construct the core context without expanding internal variables immediately
 # Use jq to safely combine the header/footer with the dynamic data to avoid quote issues
 AGENT_CONTEXT=$(jq -rn \
+    --arg emit_warn "$EMIT_HEALTH_WARNING" \
     --arg yaml "$AGENT_YAML_INJECTION" \
     --arg patterns "$LEARNED_PATTERNS" \
     --arg name "$AGENT_NAME" \
@@ -296,6 +332,7 @@ AGENT_CONTEXT=$(jq -rn \
     --arg thresh "$POLLY_DISPATCH_THRESHOLD" \
     --arg meets "$MEETS_THRESHOLD" \
     '
+    (if $emit_warn != "" then $emit_warn + "\n\n" else "" end) +
     $yaml + "\n" + $patterns + "\n" +
     "========================================================================\n" +
     "AGENT CONTEXT\n" +

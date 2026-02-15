@@ -30,9 +30,11 @@ import math
 import os
 import socket
 import sys
+import tempfile
 import time
 from datetime import UTC, datetime
 from enum import StrEnum
+from pathlib import Path
 from typing import Any
 
 # ---------------------------------------------------------------------------
@@ -568,7 +570,7 @@ def find_unmapped_topics() -> list[str]:
 
 
 def check_daemon_health(
-    socket_path: str = "/tmp/omniclaude-emit.sock",  # noqa: S108
+    socket_path: str = str(Path(tempfile.gettempdir()) / "omniclaude-emit.sock"),
 ) -> dict[str, Any]:
     """Check emit daemon health via Unix socket.
 
