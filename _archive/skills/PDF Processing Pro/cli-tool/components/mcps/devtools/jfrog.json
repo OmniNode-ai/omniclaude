@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "jfrog": {
-      "description":"JFrog MCP Server: providing your agents with direct access to JFrog Platform services.",
-      "url":"https://<​​JFROG_PLATFORM_URL​​>/mcp"
-    }
-  }
-}

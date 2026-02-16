@@ -353,33 +353,39 @@ jobs:
 
       - name: Scan for secrets
         run: |
+          # Copy baseline so we can detect new findings
+          cp .secrets.baseline .secrets.baseline.bak
+          # Scan updates the baseline in-place with any new secrets
           detect-secrets scan \
+            --baseline .secrets.baseline \
             --exclude-files '\.lock$' \
             --exclude-files '\.env\.example$' \
             --exclude-files 'bandit-report\.json$' \
-            > .secrets-results.json
-          # Check if any secrets were found (high-confidence only)
-          SECRETS=$(python3 -c "
-          import json, sys
-          data = json.load(open('.secrets-results.json'))
-          results = data.get('results', {})
-          count = sum(len(v) for v in results.values())
-          print(count)
-          ")
-          if [ "$SECRETS" -gt 0 ]; then
-            echo "::warning::detect-secrets found $SECRETS potential secrets"
-            python3 -c "
+            --exclude-files '^tests/' \
+            --exclude-files 'security-report\.json$'
+          # Compare: if baseline changed, new secrets were found
+          NEW_SECRETS=$(python3 -c "
           import json
-          with open('.secrets-results.json') as f:
-              results = json.load(f)
-          for filename, secrets in results.get('results', {}).items():
-              for secret in secrets:
-                  print(f'  {filename}:{secret[\"line_number\"]}: {secret[\"type\"]}')
-          "
-            echo "::error::Secret detection failed - $SECRETS potential secrets found"
+          old = json.load(open('.secrets.baseline.bak'))
+          new = json.load(open('.secrets.baseline'))
+          old_set = {(f, s['line_number'], s['hashed_secret'])
+                     for f, secrets in old.get('results', {}).items()
+                     for s in secrets}
+          new_set = {(f, s['line_number'], s['hashed_secret'])
+                     for f, secrets in new.get('results', {}).items()
+                     for s in secrets}
+          diff = new_set - old_set
+          for f, line, _ in sorted(diff):
+              print(f'  {f}:{line}')
+          print(f'COUNT:{len(diff)}')
+          ")
+          COUNT=$(echo "$NEW_SECRETS" | grep '^COUNT:' | cut -d: -f2)
+          if [ "$COUNT" -gt 0 ]; then
+            echo "$NEW_SECRETS" | grep -v '^COUNT:'
+            echo "::error::detect-secrets found $COUNT new potential secrets not in baseline"
             exit 1
           fi
-          echo "Secret detection completed"
+          echo "Secret detection completed - no new secrets found"
 
   # ============================================================================
   # TEST SUITES

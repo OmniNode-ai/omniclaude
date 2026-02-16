@@ -278,8 +278,7 @@ omniclaude/
 │   ├── agents/configs/          # Agent YAML definitions
 │   ├── commands/                # Slash command definitions
 │   └── skills/                  # Skill definitions
-├── tests/                       # Test suite
-└── _archive/                    # Archived legacy code
+└── tests/                       # Test suite
 ```
 
 ---
