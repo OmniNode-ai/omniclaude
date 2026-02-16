@@ -572,6 +572,7 @@ jobs:
   agent-framework-tests:
     name: Agent Framework Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -623,6 +624,7 @@ jobs:
   database-validation:
     name: Database Schema Validation
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     services:
       postgres:
         image: postgres:16-alpine
@@ -868,6 +870,7 @@ jobs:
   build:
     name: Build Docker Image
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: [quality-gate, tests-gate, security-gate]
     steps:
       - name: Checkout code
