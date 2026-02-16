@@ -79,7 +79,6 @@ omniclaude/
 │   ├── commands/             # Command definitions
 │   └── skills/               # Skill definitions
 ├── tests/                    # Test suite
-├── _archive/                 # Archived legacy code
 ├── pyproject.toml            # Package config
 └── CLAUDE.md                 # Development guide
 ```
@@ -222,7 +221,6 @@ dependencies = [
 
 - [CLAUDE.md](CLAUDE.md) - Development guide and reference
 - [RUNBOOK_VERTICAL_DEMO.md](plugins/onex/docs/RUNBOOK_VERTICAL_DEMO.md) - Pattern pipeline demo
-- [_archive/README_ARCHIVE.md](_archive/README_ARCHIVE.md) - Archived code documentation
 
 ## Contributing
 

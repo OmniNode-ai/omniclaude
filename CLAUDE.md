@@ -99,27 +99,36 @@ Types: `feat`, `fix`, `chore`, `refactor`, `docs`
 
 ### CI Pipeline
 
-13 jobs in `.github/workflows/ci-cd.yml`:
+Single consolidated workflow in `.github/workflows/ci.yml` (OMN-2228):
 
-| Job | What it does | Blocking? |
-|-----|-------------|-----------|
-| **quality** | ruff format + ruff lint + mypy | Yes (mypy is non-blocking Phase 1) |
-| **pyright** | Pyright type checking on `src/omniclaude/` | Yes |
-| **check-handshake** | Architecture handshake vs omnibase_core | Yes |
-| **enum-governance** | ONEX enum casing, literal-vs-enum, duplicates | Yes |
-| **exports-validation** | `__all__` exports match actual definitions | Yes |
-| **cross-repo-validation** | Kafka import guard (ARCH-002) | Yes |
-| **migration-freeze** | Blocks new migrations when `.migration_freeze` exists | Yes |
-| **security-python** | Bandit security linter (Medium+ severity) | Yes |
-| **test** | pytest with 5-way parallel split (`pytest-split`) | Yes |
-| **merge-coverage** | Combines coverage from 5 test shards, uploads to Codecov | After test |
-| **tests-gate** | Branch protection aggregator for test matrix | Yes |
-| **build** | Docker image build + Trivy vulnerability scan | After all quality jobs |
-| **deploy** | Staging (develop) / Production (main) | After build |
+| Job | What it does | Gate |
+|-----|-------------|------|
+| **quality** | ruff format + ruff lint + mypy | Quality Gate |
+| **pyright** | Pyright type checking on `src/omniclaude/` | Quality Gate |
+| **check-handshake** | Architecture handshake vs omnibase_core | Quality Gate |
+| **enum-governance** | ONEX enum casing, literal-vs-enum, duplicates | Quality Gate |
+| **exports-validation** | `__all__` exports match actual definitions | Quality Gate |
+| **cross-repo-validation** | Kafka import guard (ARCH-002) | Quality Gate |
+| **migration-freeze** | Blocks new migrations when `.migration_freeze` exists | Quality Gate |
+| **onex-validation** | ONEX naming, contracts, method signatures | Quality Gate |
+| **security-python** | Bandit security linter (Medium+ severity) | Security Gate |
+| **detect-secrets** | Secret detection scan | Security Gate |
+| **test** | pytest with 5-way parallel split (`pytest-split`) | Tests Gate |
+| **hooks-tests** | Hook scripts and handler modules | Tests Gate |
+| **agent-framework-tests** | Agent YAML loading and framework validation | Tests Gate |
+| **database-validation** | DB schema consistency checks | Tests Gate |
+| **merge-coverage** | Combines coverage from 5 test shards, uploads to Codecov | (none) |
+| **build** | Docker image build + Trivy vulnerability scan | (downstream) |
+| **deploy** | Staging (develop) / Production (main) | (downstream) |
 
 ### Branch Protection
 
-Required check: **"CI Tests Gate"** -- do not rename without updating branch protection rules.
+Three gate aggregators per CI/CD Standards v2 (`required-checks.yaml`):
+- **"Quality Gate"** -- aggregates all code quality checks
+- **"Tests Gate"** -- aggregates all test suites
+- **"Security Gate"** -- aggregates security scanning
+
+Gate names are API-stable. Do not rename without following the Branch Protection Migration Safety procedure in `CI_CD_STANDARDS.md`.
 
 ---
 
@@ -269,8 +278,7 @@ omniclaude/
 │   ├── agents/configs/          # Agent YAML definitions
 │   ├── commands/                # Slash command definitions
 │   └── skills/                  # Skill definitions
-├── tests/                       # Test suite
-└── _archive/                    # Archived legacy code
+└── tests/                       # Test suite
 ```
 
 ---

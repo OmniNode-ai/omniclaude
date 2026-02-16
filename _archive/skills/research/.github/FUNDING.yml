@@ -1,5 +1,0 @@
-# GitHub Sponsors configuration for PAI (Personal AI Infrastructure)
-# This adds a sponsor button to the repository
-
-github: danielmiessler
-custom: ["https://danielmiessler.com/sponsor"]

@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "webflow": {
-      "description":"Enable AI agents to interact with Webflow APIs.",
-      "command": "npx mcp-remote https://mcp.webflow.com/sse"
-    }
-  }
-}

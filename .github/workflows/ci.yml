@@ -1,0 +1,990 @@
+name: CI
+
+# Consolidated CI pipeline for OmniClaude (OMN-2228)
+# Replaces ci-cd.yml + enhanced-ci.yml into a single workflow
+# with gate aggregators per CI/CD Standards v2
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  # ============================================================================
+  # QUALITY CHECKS
+  # ============================================================================
+
+  quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Load cached venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Install dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Ruff format check
+        run: uv run ruff format --check src/ tests/
+
+      - name: Ruff lint
+        run: uv run ruff check src/ tests/
+
+      - name: Mypy type checking
+        run: |
+          # Phase 1: Non-blocking (report errors but don't fail CI)
+          # Phase 2: Fix errors and make blocking (TODO: remove || true)
+          # TODO(OMN-XXXX): Make mypy blocking in Phase 2
+          uv run mypy src/ --config-file mypy.ini 2>&1 | tee mypy-output.txt || true
+          ERROR_COUNT=$(grep -c "error:" mypy-output.txt 2>/dev/null || echo "0")
+          echo "MyPy Summary: $ERROR_COUNT type errors found"
+          if [ "$ERROR_COUNT" -gt "0" ]; then
+            echo "MyPy found $ERROR_COUNT type errors (non-blocking for now)"
+          fi
+
+  pyright:
+    name: Pyright Type Checking
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Load cached venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Install dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Pyright
+        run: uv run pyright src/omniclaude
+
+  check-handshake:
+    name: Architecture Handshake
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.head.repo.full_name == github.repository || github.event_name != 'pull_request'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Checkout omnibase_core
+        uses: actions/checkout@v4
+        with:
+          repository: OmniNode-ai/omnibase_core
+          path: omnibase_core
+
+      - name: Verify handshake is current
+        run: ./omnibase_core/architecture-handshakes/check-handshake.sh ./omnibase_core
+
+  enum-governance:
+    name: Enum Governance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Load cached venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Install dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Validate enum governance
+        run: uv run python scripts/validation/validate_enum_governance.py
+
+  exports-validation:
+    name: Exports Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Load cached venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Install dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Validate exports
+        run: uv run python scripts/validation/validate_exports.py
+
+  cross-repo-validation:
+    name: Kafka Import Guard
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Load cached venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Install dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Kafka import guard
+        run: uv run python -m omnibase_core.validation.cross_repo --policy .cross-repo-policy.yaml
+
+  migration-freeze:
+    name: Migration Freeze
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check migration freeze
+        run: ./scripts/check_migration_freeze.sh --ci
+        env:
+          MIGRATION_CHECK_BASE: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
+          MIGRATION_FREEZE_BYPASS: ${{ contains(github.event.pull_request.labels.*.name, 'db-split-bypass') && 'true' || '' }}
+
+  onex-validation:
+    name: ONEX Compliance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Validate ONEX naming conventions
+        run: |
+          set -e
+          NODE_FILES=$(find src/omniclaude/ -name "node_*.py" -type f 2>/dev/null || true)
+          if [ -z "$NODE_FILES" ]; then
+            echo "No ONEX node files found -- skipping (expected for schema-only phase)"
+            exit 0
+          fi
+          FAILED=false
+          while read -r file; do
+            if [[ "$file" == *"_effect.py" ]] && ! grep -q "class Node.*Effect" "$file"; then
+              echo "ERROR: $file should define class Node<Name>Effect"
+              FAILED=true
+            fi
+            if [[ "$file" == *"_compute.py" ]] && ! grep -q "class Node.*Compute" "$file"; then
+              echo "ERROR: $file should define class Node<Name>Compute"
+              FAILED=true
+            fi
+            if [[ "$file" == *"_reducer.py" ]] && ! grep -q "class Node.*Reducer" "$file"; then
+              echo "ERROR: $file should define class Node<Name>Reducer"
+              FAILED=true
+            fi
+            if [[ "$file" == *"_orchestrator.py" ]] && ! grep -q "class Node.*Orchestrator" "$file"; then
+              echo "ERROR: $file should define class Node<Name>Orchestrator"
+              FAILED=true
+            fi
+          done <<< "$NODE_FILES"
+          if [ "$FAILED" = "true" ]; then exit 1; fi
+          echo "All ONEX naming conventions validated"
+
+      - name: Validate ONEX contracts
+        run: |
+          set -e
+          NODE_FILES=$(find src/omniclaude/ -name "node_*.py" -type f 2>/dev/null || true)
+          if [ -z "$NODE_FILES" ]; then
+            echo "No ONEX node files found -- skipping"
+            exit 0
+          fi
+          while read -r file; do
+            if ! grep -q "ModelContract" "$file" 2>/dev/null; then
+              echo "WARNING: $file may be missing ModelContract usage"
+            fi
+          done <<< "$NODE_FILES"
+          echo "Contract validation completed"
+
+      - name: Validate ONEX method signatures
+        run: |
+          set -e
+          EFFECT_FILES=$(find src/omniclaude/ -name "*_effect.py" -type f 2>/dev/null || true)
+          if [ -z "$EFFECT_FILES" ]; then
+            echo "No ONEX Effect node files found -- skipping"
+            exit 0
+          fi
+          while read -r file; do
+            if grep -q "class Node.*Effect" "$file" && ! grep -q "async def execute_effect" "$file"; then
+              echo "WARNING: $file Effect node should implement async def execute_effect()"
+            fi
+          done <<< "$EFFECT_FILES"
+          echo "Method signature validation completed"
+
+  # ============================================================================
+  # SECURITY CHECKS
+  # ============================================================================
+
+  security-python:
+    name: Python Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Export requirements
+        run: uv pip compile pyproject.toml -o requirements.txt
+
+      - name: Bandit security scan
+        run: |
+          pip install bandit
+          # JSON report (don't fail -- just collect)
+          bandit -r src/ \
+            --exclude .venv/,__pycache__/ \
+            --confidence-level medium --severity-level medium \
+            -f json -o bandit-report.json || true
+          # Text output determines pass/fail
+          bandit -r src/ \
+            --exclude .venv/,__pycache__/ \
+            --confidence-level medium --severity-level medium \
+            -f txt
+
+      - name: Upload Bandit report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bandit-security-report
+          path: bandit-report.json
+
+  detect-secrets:
+    name: Secret Detection
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install detect-secrets
+        run: pip install detect-secrets
+
+      - name: Scan for secrets
+        run: |
+          # Copy baseline so we can detect new findings
+          cp .secrets.baseline .secrets.baseline.bak
+          # Scan updates the baseline in-place with any new secrets
+          detect-secrets scan \
+            --baseline .secrets.baseline \
+            --exclude-files '\.lock$' \
+            --exclude-files '\.env\.example$' \
+            --exclude-files 'bandit-report\.json$' \
+            --exclude-files '^tests/' \
+            --exclude-files 'security-report\.json$'
+          # Compare: if baseline changed, new secrets were found
+          NEW_SECRETS=$(python3 -c "
+          import json
+          old = json.load(open('.secrets.baseline.bak'))
+          new = json.load(open('.secrets.baseline'))
+          old_set = {(f, s['line_number'], s['hashed_secret'])
+                     for f, secrets in old.get('results', {}).items()
+                     for s in secrets}
+          new_set = {(f, s['line_number'], s['hashed_secret'])
+                     for f, secrets in new.get('results', {}).items()
+                     for s in secrets}
+          diff = new_set - old_set
+          for f, line, _ in sorted(diff):
+              print(f'  {f}:{line}')
+          print(f'COUNT:{len(diff)}')
+          ")
+          COUNT=$(echo "$NEW_SECRETS" | grep '^COUNT:' | cut -d: -f2)
+          if [ "$COUNT" -gt 0 ]; then
+            echo "$NEW_SECRETS" | grep -v '^COUNT:'
+            echo "::error::detect-secrets found $COUNT new potential secrets not in baseline"
+            exit 1
+          fi
+          echo "Secret detection completed - no new secrets found"
+
+  # ============================================================================
+  # TEST SUITES
+  # ============================================================================
+
+  test:
+    name: Tests (Split ${{ matrix.group }}/5)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [1, 2, 3, 4, 5]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Load cached venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Install dependencies
+        run: |
+          uv sync --frozen --group dev
+          uv pip install pytest-split pytest-cov
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/test_db
+          REDIS_URL: redis://localhost:6379/0
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 5432
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DATABASE: test_db
+          TEST_PG_DSN: postgresql://test:test@localhost:5432/test_db
+        run: |
+          # Run all tests across both directories, split into 5 groups
+          # Exit code 5 = no tests collected (expected for some splits)
+          set +e
+          uv run pytest -o addopts="" tests/ \
+            --splits 5 \
+            --group ${{ matrix.group }} \
+            -v -m "not integration" \
+            --cov=src/omniclaude \
+            --cov-report=term-missing \
+            --junitxml=junit-test-${{ matrix.group }}.xml
+          EXIT_CODE=$?
+          set -e
+
+          if [ $EXIT_CODE -ne 0 ] && [ $EXIT_CODE -ne 5 ]; then
+            echo "::error::Tests failed with exit code $EXIT_CODE"
+            exit 1
+          fi
+
+          # Rename coverage file to be unique for this group
+          mv .coverage .coverage.${{ matrix.group }} 2>/dev/null || true
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-test-group-${{ matrix.group }}
+          path: .coverage.${{ matrix.group }}
+          retention-days: 1
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ matrix.group }}
+          path: junit-test-${{ matrix.group }}.xml
+
+  hooks-tests:
+    name: Hooks System Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: hooks_test
+          POSTGRES_PASSWORD: hooks_test
+          POSTGRES_DB: hooks_test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Load cached venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Install dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Initialize hooks database
+        env:
+          POSTGRES_USER: hooks_test
+          POSTGRES_PASSWORD: hooks_test
+          POSTGRES_DB: hooks_test_db
+          PGPASSWORD: hooks_test
+        run: |
+          until psql -h localhost -U hooks_test -d hooks_test_db -c '\q' 2>/dev/null; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+          if [ -f "scripts/init-db.sh" ]; then
+            bash scripts/init-db.sh
+          fi
+
+      - name: Run hooks tests
+        env:
+          DATABASE_URL: postgresql://hooks_test:hooks_test@localhost:5432/hooks_test_db
+          SEMANTIC_SEARCH_URL: http://localhost:8055
+        run: |
+          if [ -d "tests/hooks" ] && [ -n "$(find tests/hooks/ -name 'test_*.py' -type f 2>/dev/null)" ]; then
+            uv run pytest tests/hooks/ -v \
+              --cov=src/omniclaude \
+              --cov-report=term-missing \
+              --junitxml=junit-hooks.xml
+          else
+            echo "No hooks tests found in tests/hooks/ -- skipping"
+            echo '<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="hooks" tests="0" errors="0" failures="0" skipped="0"></testsuite></testsuites>' > junit-hooks.xml
+          fi
+
+      - name: Upload hooks test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: hooks-test-results
+          path: junit-hooks.xml
+
+  agent-framework-tests:
+    name: Agent Framework Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.6.1"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Load cached venv
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+
+      - name: Install dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Run agent framework tests
+        run: |
+          AGENT_TESTS=""
+          for test_file in tests/test_enhanced_router.py tests/test_quality_gates.py tests/test_performance_thresholds.py; do
+            if [ -f "$test_file" ]; then
+              AGENT_TESTS="$AGENT_TESTS $test_file"
+            fi
+          done
+          if [ -n "$AGENT_TESTS" ]; then
+            uv run pytest $AGENT_TESTS -v \
+              --cov=src/omniclaude \
+              --cov-report=term-missing \
+              --junitxml=junit-agent-framework.xml
+          else
+            echo "No agent framework tests found -- skipping"
+            echo '<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="agent-framework" tests="0" errors="0" failures="0" skipped="0"></testsuite></testsuites>' > junit-agent-framework.xml
+          fi
+
+      - name: Upload agent framework test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: agent-framework-test-results
+          path: junit-agent-framework.xml
+
+  database-validation:
+    name: Database Schema Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: schema_test
+          POSTGRES_PASSWORD: schema_test
+          POSTGRES_DB: schema_test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate database schema
+        env:
+          PGPASSWORD: schema_test
+          POSTGRES_USER: schema_test
+          POSTGRES_DB: schema_test_db
+        run: |
+          until psql -h localhost -U schema_test -d schema_test_db -c '\q' 2>/dev/null; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+          bash scripts/init-db.sh
+
+          echo "Validating schema_migrations table..."
+          psql -h localhost -U schema_test -d schema_test_db -c '\d schema_migrations'
+
+          echo "Validating claude_session_snapshots table..."
+          psql -h localhost -U schema_test -d schema_test_db -c '\d claude_session_snapshots'
+
+          echo "Validating claude_session_prompts table..."
+          psql -h localhost -U schema_test -d schema_test_db -c '\d claude_session_prompts'
+
+          echo "Validating claude_session_tools table..."
+          psql -h localhost -U schema_test -d schema_test_db -c '\d claude_session_tools'
+
+          echo "Validating indexes..."
+          psql -h localhost -U schema_test -d schema_test_db -c '\di'
+
+          echo "Database schema validation passed"
+
+  # ============================================================================
+  # COVERAGE (runs after test matrix)
+  # ============================================================================
+
+  merge-coverage:
+    name: Merge Test Coverage
+    runs-on: ubuntu-latest
+    needs: test
+    if: needs.test.result == 'success'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install coverage
+        run: pip install coverage[toml]
+
+      - name: Download all coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: coverage-test-group-*
+          path: coverage-files/
+
+      - name: Combine coverage
+        run: |
+          if [ ! -d "coverage-files" ]; then
+            echo "No coverage files directory found"
+            exit 0
+          fi
+
+          COVERAGE_COUNT=$(find coverage-files/ -name '.coverage.*' 2>/dev/null | wc -l)
+          echo "Found $COVERAGE_COUNT coverage files"
+
+          if [ "$COVERAGE_COUNT" -eq 0 ]; then
+            echo "No coverage files to combine"
+            exit 0
+          fi
+
+          find coverage-files/ -name '.coverage.*' -exec mv {} . \;
+          coverage combine .coverage.*
+          coverage xml -o coverage.xml
+          coverage report
+
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+
+      - name: Upload merged coverage artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-merged
+          path: |
+            coverage.xml
+            .coverage
+          if-no-files-found: ignore
+
+  # ============================================================================
+  # GATE AGGREGATORS
+  # Gate names are API-stable per CI/CD Standards (Invariant 1).
+  # Do NOT rename without following the Branch Protection Migration Safety
+  # procedure in docs/standards/CI_CD_STANDARDS.md.
+  # ============================================================================
+
+  quality-gate:
+    name: Quality Gate
+    runs-on: ubuntu-latest
+    needs:
+      - quality
+      - pyright
+      - check-handshake
+      - enum-governance
+      - exports-validation
+      - cross-repo-validation
+      - migration-freeze
+      - onex-validation
+    if: always()
+    steps:
+      - name: Check quality results
+        run: |
+          echo "=== Quality Gate ==="
+          FAILED=false
+
+          for check in \
+            "quality=${{ needs.quality.result }}" \
+            "pyright=${{ needs.pyright.result }}" \
+            "check-handshake=${{ needs.check-handshake.result }}" \
+            "enum-governance=${{ needs.enum-governance.result }}" \
+            "exports-validation=${{ needs.exports-validation.result }}" \
+            "cross-repo-validation=${{ needs.cross-repo-validation.result }}" \
+            "migration-freeze=${{ needs.migration-freeze.result }}" \
+            "onex-validation=${{ needs.onex-validation.result }}"; do
+            NAME="${check%%=*}"
+            RESULT="${check##*=}"
+            if [ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]; then
+              echo "::error::$NAME failed (result: $RESULT)"
+              FAILED=true
+            else
+              echo "$NAME: $RESULT"
+            fi
+          done
+
+          if [ "$FAILED" = "true" ]; then
+            echo ""
+            echo "Quality Gate FAILED"
+            exit 1
+          fi
+          echo ""
+          echo "Quality Gate PASSED"
+
+  tests-gate:
+    name: Tests Gate
+    runs-on: ubuntu-latest
+    needs:
+      - test
+      - hooks-tests
+      - agent-framework-tests
+      - database-validation
+    if: always()
+    steps:
+      - name: Check test results
+        run: |
+          echo "=== Tests Gate ==="
+          FAILED=false
+
+          for check in \
+            "test=${{ needs.test.result }}" \
+            "hooks-tests=${{ needs.hooks-tests.result }}" \
+            "agent-framework-tests=${{ needs.agent-framework-tests.result }}" \
+            "database-validation=${{ needs.database-validation.result }}"; do
+            NAME="${check%%=*}"
+            RESULT="${check##*=}"
+            if [ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]; then
+              echo "::error::$NAME failed (result: $RESULT)"
+              FAILED=true
+            else
+              echo "$NAME: $RESULT"
+            fi
+          done
+
+          if [ "$FAILED" = "true" ]; then
+            echo ""
+            echo "Tests Gate FAILED"
+            exit 1
+          fi
+          echo ""
+          echo "Tests Gate PASSED"
+
+  security-gate:
+    name: Security Gate
+    runs-on: ubuntu-latest
+    needs:
+      - security-python
+      - detect-secrets
+    if: always()
+    steps:
+      - name: Check security results
+        run: |
+          echo "=== Security Gate ==="
+          FAILED=false
+
+          for check in \
+            "security-python=${{ needs.security-python.result }}" \
+            "detect-secrets=${{ needs.detect-secrets.result }}"; do
+            NAME="${check%%=*}"
+            RESULT="${check##*=}"
+            if [ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]; then
+              echo "::error::$NAME failed (result: $RESULT)"
+              FAILED=true
+            else
+              echo "$NAME: $RESULT"
+            fi
+          done
+
+          if [ "$FAILED" = "true" ]; then
+            echo ""
+            echo "Security Gate FAILED"
+            exit 1
+          fi
+          echo ""
+          echo "Security Gate PASSED"
+
+  # ============================================================================
+  # BUILD (downstream of all gates)
+  # ============================================================================
+
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [quality-gate, tests-gate, security-gate]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./deployment/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILD_DATE=${{ steps.meta.outputs.created }}
+            VCS_REF=${{ github.sha }}
+            VERSION=${{ steps.meta.outputs.version }}
+
+      - name: Set lowercase image name
+        id: image-name
+        run: echo "name=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      - name: Export image for scanning
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./deployment/Dockerfile
+          load: true
+          tags: ${{ steps.image-name.outputs.name }}:scan
+          cache-from: type=gha
+
+      - name: Trivy vulnerability scanner (SARIF)
+        uses: aquasecurity/trivy-action@0.34.0
+        with:
+          image-ref: ${{ steps.image-name.outputs.name }}:scan
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: github.event_name != 'pull_request'
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: Trivy vulnerability scanner (table)
+        uses: aquasecurity/trivy-action@0.34.0
+        with:
+          image-ref: ${{ steps.image-name.outputs.name }}:scan
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+
+  # ============================================================================
+  # DEPLOYMENT
+  # ============================================================================
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    environment:
+      name: staging
+      url: https://staging.omniclaude.example.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to staging
+        run: echo "Deploying to staging environment..."
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment:
+      name: production
+      url: https://omniclaude.example.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to production
+        run: echo "Deploying to production environment..."

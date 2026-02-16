@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "ios-simulator": {
-      "description": "Control iOS Simulator directly from Claude Code. Launch apps, take screenshots, manage device states, and streamline mobile development workflows.",
-      "command": "npx",
-      "args": ["-y", "ios-simulator-mcp"]
-    }
-  }
-}
