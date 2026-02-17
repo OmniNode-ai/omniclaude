@@ -24,6 +24,7 @@ import os
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any, TypedDict
@@ -192,9 +193,9 @@ def query_patterns(
         f"limit={limit}",
     ]
     if language:
-        params.append(f"language={urllib.request.quote(language)}")
+        params.append(f"language={urllib.parse.quote(language)}")
     if domain:
-        params.append(f"domain={urllib.request.quote(domain)}")
+        params.append(f"domain={urllib.parse.quote(domain)}")
 
     url = f"{base_url}/api/v1/patterns?{'&'.join(params)}"
 
