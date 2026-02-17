@@ -169,67 +169,6 @@ fi
 export KAFKA_ENABLED
 
 # =============================================================================
-# Emit Daemon Helper (OMN-1631, OMN-1632)
-# =============================================================================
-# Emit event via emit daemon for fast, non-blocking Kafka emission.
-# Single call - daemon handles fan-out to multiple topics.
-#
-# Requires (must be set before calling):
-#   - PYTHON_CMD: Path to Python interpreter (provided by common.sh)
-#   - HOOKS_LIB: Path to hooks lib directory (set by caller script)
-#   - LOG_FILE: Path to log file (set by caller script)
-#
-# Usage: emit_via_daemon <event_type> <payload_json> [timeout_ms]
-# Returns: 0 on success, 1 on failure (non-fatal)
-
-emit_via_daemon() {
-    local event_type="$1"
-    local payload="$2"
-    local timeout_ms="${3:-50}"
-    local health_dir="${HOOKS_DIR}/logs/emit-health"
-    local status_file="${health_dir}/status"
-
-    mkdir -p "$health_dir" 2>/dev/null || true
-
-    if "$PYTHON_CMD" "${HOOKS_LIB}/emit_client_wrapper.py" emit \
-        --event-type "$event_type" --payload "$payload" --timeout "$timeout_ms" \
-        >> "$LOG_FILE" 2>&1; then
-        # Success: reset failure count, record success timestamp
-        local _now
-        _now=$(date -u +%s)
-        local _tmp="${status_file}.tmp.$$"
-        echo "0 0 $_now $event_type" > "$_tmp" && mv -f "$_tmp" "$status_file" 2>/dev/null || rm -f "$_tmp"
-        return 0
-    else
-        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Emit daemon failed for ${event_type}" >> "$LOG_FILE"
-        # Increment failure count, preserve last_success_ts
-        # Single read splits all fields from the status file in one shot (no TOCTOU)
-        # Format: <fail_count> <fail_timestamp> <success_timestamp> <event_type>
-        local _prev_failures=0 _prev_success_ts=0
-        if [[ -f "$status_file" ]]; then
-            local _prev_fail_ts=0 _prev_evt=""
-            read -r _prev_failures _prev_fail_ts _prev_success_ts _prev_evt < "$status_file" 2>/dev/null \
-                || { _prev_failures=0; _prev_success_ts=0; }
-            [[ "$_prev_failures" =~ ^[0-9]+$ ]] || _prev_failures=0
-            [[ "$_prev_success_ts" =~ ^[0-9]+$ ]] || _prev_success_ts=0
-        fi
-        local _now
-        _now=$(date -u +%s)
-        local _tmp="${status_file}.tmp.$$"
-        echo "$((_prev_failures + 1)) $_now $_prev_success_ts $event_type" > "$_tmp" \
-            && mv -f "$_tmp" "$status_file" 2>/dev/null || rm -f "$_tmp"
-        # Milestone-based Slack alerts for sustained failures (avoid spam)
-        local n=$((_prev_failures + 1))
-        if (( n == 10 || n == 25 || n == 50 || n == 100 )); then
-            local _last_ok
-            _last_ok=$(date -u -r "${_prev_success_ts}" +%H:%M:%S 2>/dev/null || echo "never")
-            ( slack_notify "emit_sustained" "[omniclaude][${_SLACK_HOST}] ${n} consecutive emit failures for '${event_type}'. Last success: ${_last_ok}. Daemon may be unhealthy." ) &
-        fi
-        return 1
-    fi
-}
-
-# =============================================================================
 # Slack Webhook Alerting
 # =============================================================================
 # Send a Slack notification for hook/daemon failures.
@@ -279,16 +218,88 @@ slack_notify() {
         | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' \
         | tr '\n' ' ' | tr '\r' ' ' | tr '\t' ' ')
 
-    # Send with strict timeouts (connect 1s, total 2s)
+    # Send with strict timeouts (connect 1s, total 2s).
+    # Use --url flag instead of positional argument so the webhook URL does not
+    # appear in process list output (ps aux) on multi-user systems.
     if curl -s -S --connect-timeout 1 --max-time 2 \
         -H 'Content-Type: application/json' \
         -d "{\"text\": \"${escaped}\"}" \
-        "$webhook_url" >/dev/null 2>&1; then
+        --url "$webhook_url" >/dev/null 2>&1; then
         # Record send time for rate limiting
         date -u +%s > "$rate_file" 2>/dev/null || true
     fi
 
     return 0
+}
+
+# =============================================================================
+# Emit Daemon Helper (OMN-1631, OMN-1632)
+# =============================================================================
+# Emit event via emit daemon for fast, non-blocking Kafka emission.
+# Single call - daemon handles fan-out to multiple topics.
+#
+# Requires (must be set before calling):
+#   - PYTHON_CMD: Path to Python interpreter (provided by common.sh)
+#   - HOOKS_LIB: Path to hooks lib directory (set by caller script)
+#   - LOG_FILE: Path to log file (set by caller script)
+#
+# Usage: emit_via_daemon <event_type> <payload_json> [timeout_ms]
+# Returns: 0 on success, 1 on failure (non-fatal)
+
+emit_via_daemon() {
+    local event_type="$1"
+    local payload="$2"
+    local timeout_ms="${3:-50}"
+    local health_dir="${HOOKS_DIR}/logs/emit-health"
+    # Status file is keyed per event_type so failure counters are isolated.
+    # A sanitized form of event_type is used to produce a safe filename.
+    local _safe_event_type
+    _safe_event_type=$(printf '%s' "$event_type" | tr -cd 'a-zA-Z0-9_-')
+    [[ -z "$_safe_event_type" ]] && _safe_event_type="unknown"
+    local status_file="${health_dir}/status-${_safe_event_type}"
+
+    mkdir -p "$health_dir" 2>/dev/null || true
+
+    if "$PYTHON_CMD" "${HOOKS_LIB}/emit_client_wrapper.py" emit \
+        --event-type "$event_type" --payload "$payload" --timeout "$timeout_ms" \
+        >> "$LOG_FILE" 2>&1; then
+        # Success: reset failure count, record success timestamp
+        local _now
+        _now=$(date -u +%s)
+        local _tmp="${status_file}.tmp.$$"
+        echo "0 0 $_now $event_type" > "$_tmp" && mv -f "$_tmp" "$status_file" 2>/dev/null || rm -f "$_tmp"
+        return 0
+    else
+        echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Emit daemon failed for ${event_type}" >> "$LOG_FILE"
+        # Increment failure count, preserve last_success_ts
+        # Single read splits all fields from the status file in one shot (no TOCTOU)
+        # Format: <fail_count> <fail_timestamp> <success_timestamp> <event_type>
+        local _prev_failures=0 _prev_success_ts=0
+        if [[ -f "$status_file" ]]; then
+            local _prev_fail_ts=0 _prev_evt=""
+            read -r _prev_failures _prev_fail_ts _prev_success_ts _prev_evt < "$status_file" 2>/dev/null \
+                || { _prev_failures=0; _prev_success_ts=0; }
+            [[ "$_prev_failures" =~ ^[0-9]+$ ]] || _prev_failures=0
+            [[ "$_prev_success_ts" =~ ^[0-9]+$ ]] || _prev_success_ts=0
+        fi
+        local _now
+        _now=$(date -u +%s)
+        local _tmp="${status_file}.tmp.$$"
+        echo "$((_prev_failures + 1)) $_now $_prev_success_ts $event_type" > "$_tmp" \
+            && mv -f "$_tmp" "$status_file" 2>/dev/null || rm -f "$_tmp"
+        # Milestone-based Slack alerts for sustained failures (avoid spam)
+        local n=$((_prev_failures + 1))
+        if (( n == 10 || n == 25 || n == 50 || n == 100 )); then
+            local _last_ok
+            if [[ -z "$_prev_success_ts" || "$_prev_success_ts" -eq 0 ]]; then
+                _last_ok="never"
+            else
+                _last_ok=$(date -u -r "${_prev_success_ts}" +"%Y-%m-%d %H:%M:%S UTC" 2>/dev/null || echo "never")
+            fi
+            ( slack_notify "emit_sustained" "[omniclaude][${_SLACK_HOST}] ${n} consecutive emit failures for '${event_type}'. Last success: ${_last_ok}. Daemon may be unhealthy." ) &
+        fi
+        return 1
+    fi
 }
 
 # =============================================================================

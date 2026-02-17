@@ -339,9 +339,22 @@ _init_session_state() {
     # Async: background the adapter call
     if [[ -f "${HOOKS_LIB}/node_session_state_adapter.py" ]]; then
         (
-            # Write PID guard only when safe_id is non-empty (guard_file is defined)
+            # Write PID guard only when safe_id is non-empty (guard_file is defined).
+            # BASHPID is required for correct PID detection inside subshells.
+            # It is only available in bash 4.0+. On bash 3.x (e.g., macOS system bash
+            # at /bin/bash which is 3.2), BASHPID is unset and $$ reflects the parent
+            # process PID. A subsequent `kill -0 $guard_pid` check would then succeed
+            # (parent is running) and incorrectly conclude init is already in progress.
+            # Guard: skip the PID file entirely on bash < 4 where BASHPID is unreliable.
             if [[ -n "$safe_id" ]]; then
-                echo "${BASHPID:-$$}" > "/tmp/omniclaude-state-init-${safe_id}.pid" 2>/dev/null || true
+                if [[ "${BASH_VERSINFO[0]:-0}" -ge 4 ]]; then
+                    echo "$BASHPID" > "/tmp/omniclaude-state-init-${safe_id}.pid" 2>/dev/null || true
+                else
+                    # bash < 4.0: BASHPID unavailable; PID guard skipped to avoid
+                    # false-positive "already running" detection via parent PID.
+                    # Idempotency is still enforced by the stamp file (.done).
+                    true
+                fi
             fi
             # Capture adapter stdout separately from stderr so we can parse the
             # JSON result. stderr goes to $LOG_FILE for diagnostics; stdout is
