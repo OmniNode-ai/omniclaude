@@ -242,6 +242,10 @@ class LocalLlmEndpointRegistry(BaseSettings):
         Returns:
             List of LlmEndpointConfig for all configured (non-None) endpoints.
         """
+        # NOTE: LlmEndpointPurpose.ROUTING is intentionally unassigned here.
+        # It is reserved for future use when a dedicated routing model is
+        # deployed. Until then, routing decisions are handled outside this
+        # registry (e.g., by the event-based routing service).
         endpoint_specs: list[
             tuple[HttpUrl | None, str, LlmEndpointPurpose, int, int]
         ] = [
@@ -323,7 +327,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
         Returns:
             List of LlmEndpointConfig for every endpoint with a non-None URL.
         """
-        return self._endpoint_configs
+        return list(self._endpoint_configs)
 
     def get_endpoints_by_purpose(
         self, purpose: LlmEndpointPurpose
