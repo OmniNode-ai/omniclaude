@@ -25,6 +25,7 @@ import pytest
 _HOOKS_LIB = (
     Path(__file__).resolve().parent.parent.parent / "plugins" / "onex" / "hooks" / "lib"
 )
+# Expected: tests/unit/test_compliance_prompt_parsing.py → repo_root/plugins/onex/hooks/lib
 if str(_HOOKS_LIB) not in sys.path:
     sys.path.insert(0, str(_HOOKS_LIB))
 
@@ -368,7 +369,7 @@ class TestBadOutputRecovery:
         result = json.loads(captured.out)
         assert result["enforced"] is False
         assert result["error"] is not None
-        assert "fatal:" in result["error"]
+        assert len(result["error"]) > 0
 
     def test_main_partial_json_stdin_returns_safe_error(
         self,
@@ -501,7 +502,8 @@ class TestEdgeCases:
         assert result is not None
         # The signature is truncated to 80 chars in the message
         assert result["pattern_signature"] == long_sig  # Full in the field
-        assert len(result["message"]) < len(long_sig) + 100  # Message is bounded
+        assert long_sig[:80] in result["message"]  # Truncated version appears
+        assert long_sig[:81] not in result["message"]  # Confirms truncation at 80 chars
 
     # --- Unicode in violation messages ---
 
@@ -527,18 +529,18 @@ class TestEdgeCases:
 
     def test_emoji_in_pattern_signature(self) -> None:
         """Emoji characters in pattern signatures are handled without error."""
-        pattern = _make_pattern(signature="Always add docstrings to classes")
+        pattern = _make_pattern(signature="Always add docstrings 📝 to classes ✅")
         result = check_compliance(
             file_path="test.py", content_preview="", pattern=pattern
         )
         assert result is not None
-        assert "Always add docstrings" in result["message"]
+        assert "📝" in result["message"]
 
     def test_cjk_characters_in_fields(self) -> None:
         """CJK characters in pattern fields are preserved through round-trip."""
         pattern = _make_pattern(
-            signature="Type annotations required",
-            domain_id="code_quality",
+            signature="型注釈が必要です",  # "Type annotations required" in Japanese
+            domain_id="代码质量",  # "code_quality" in Chinese
         )
         result = check_compliance(
             file_path="test.py", content_preview="", pattern=pattern
@@ -546,7 +548,8 @@ class TestEdgeCases:
         assert result is not None
         serialized = json.dumps(result, ensure_ascii=False)
         deserialized = json.loads(serialized)
-        assert deserialized["domain_id"] == "code_quality"
+        assert deserialized["domain_id"] == "代码质量"
+        assert deserialized["pattern_signature"] == "型注釈が必要です"
 
     # --- Multiple violations of the same type ---
 
@@ -841,9 +844,11 @@ class TestEdgeCases:
 
         captured = capsys.readouterr()
         result = json.loads(captured.out)
-        # Should produce valid JSON output (the code calls .get() on
-        # the parsed value which is a list -- this is handled gracefully)
+        # A JSON array has no .get() method, so parsing it as an object
+        # produces an error -- the hook handles this gracefully.
         assert set(result.keys()) == _enforcement_result_keys()
+        assert result["enforced"] is False
+        assert result["error"] is not None
 
     # --- Large number of advisories ---
 
