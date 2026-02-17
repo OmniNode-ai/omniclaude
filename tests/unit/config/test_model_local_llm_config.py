@@ -27,6 +27,7 @@ from omniclaude.config.model_local_llm_config import (
 class TestLlmEndpointPurpose:
     """Tests for the LlmEndpointPurpose enum."""
 
+    @pytest.mark.unit
     def test_all_purposes_defined(self) -> None:
         """All required purpose categories exist."""
         expected = {
@@ -41,11 +42,13 @@ class TestLlmEndpointPurpose:
         actual = {member.name for member in LlmEndpointPurpose}
         assert actual == expected
 
+    @pytest.mark.unit
     def test_purpose_values_are_lowercase(self) -> None:
         """Purpose values are lowercase strings for serialization consistency."""
         for purpose in LlmEndpointPurpose:
             assert purpose.value == purpose.value.lower()
 
+    @pytest.mark.unit
     def test_purpose_is_str_enum(self) -> None:
         """Purpose enum members are also strings (StrEnum)."""
         assert isinstance(LlmEndpointPurpose.ROUTING, str)
@@ -55,6 +58,7 @@ class TestLlmEndpointPurpose:
 class TestLlmEndpointConfig:
     """Tests for the LlmEndpointConfig frozen model."""
 
+    @pytest.mark.unit
     def test_valid_construction(self) -> None:
         """Config can be constructed with valid parameters."""
         config = LlmEndpointConfig(
@@ -70,6 +74,7 @@ class TestLlmEndpointConfig:
         assert config.max_latency_ms == 2000
         assert config.priority == 9
 
+    @pytest.mark.unit
     def test_defaults(self) -> None:
         """Default values are applied for max_latency_ms and priority."""
         config = LlmEndpointConfig(
@@ -80,6 +85,7 @@ class TestLlmEndpointConfig:
         assert config.max_latency_ms == 5000
         assert config.priority == 5
 
+    @pytest.mark.unit
     def test_frozen(self) -> None:
         """Config is immutable (frozen=True)."""
         config = LlmEndpointConfig(
@@ -90,6 +96,7 @@ class TestLlmEndpointConfig:
         with pytest.raises(ValidationError):
             config.model_name = "other-model"  # type: ignore[misc]
 
+    @pytest.mark.unit
     def test_invalid_url_rejected(self) -> None:
         """Invalid URLs are rejected at construction."""
         with pytest.raises(ValidationError, match="url"):
@@ -99,6 +106,7 @@ class TestLlmEndpointConfig:
                 purpose=LlmEndpointPurpose.GENERAL,
             )
 
+    @pytest.mark.unit
     def test_latency_below_minimum_rejected(self) -> None:
         """Latency below 100ms is rejected."""
         with pytest.raises(ValidationError, match="max_latency_ms"):
@@ -109,6 +117,7 @@ class TestLlmEndpointConfig:
                 max_latency_ms=50,
             )
 
+    @pytest.mark.unit
     def test_latency_above_maximum_rejected(self) -> None:
         """Latency above 60000ms is rejected."""
         with pytest.raises(ValidationError, match="max_latency_ms"):
@@ -119,6 +128,7 @@ class TestLlmEndpointConfig:
                 max_latency_ms=70000,
             )
 
+    @pytest.mark.unit
     def test_priority_below_minimum_rejected(self) -> None:
         """Priority below 1 is rejected."""
         with pytest.raises(ValidationError, match="priority"):
@@ -129,6 +139,7 @@ class TestLlmEndpointConfig:
                 priority=0,
             )
 
+    @pytest.mark.unit
     def test_priority_above_maximum_rejected(self) -> None:
         """Priority above 10 is rejected."""
         with pytest.raises(ValidationError, match="priority"):
@@ -139,6 +150,7 @@ class TestLlmEndpointConfig:
                 priority=11,
             )
 
+    @pytest.mark.unit
     def test_latency_boundary_values(self) -> None:
         """Boundary values for latency (100 and 60000) are accepted."""
         low = LlmEndpointConfig(
@@ -156,6 +168,7 @@ class TestLlmEndpointConfig:
         assert low.max_latency_ms == 100
         assert high.max_latency_ms == 60000
 
+    @pytest.mark.unit
     def test_priority_boundary_values(self) -> None:
         """Boundary values for priority (1 and 10) are accepted."""
         low = LlmEndpointConfig(
