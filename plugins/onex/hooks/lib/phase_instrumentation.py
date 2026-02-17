@@ -27,7 +27,6 @@ Phase -> SPI Enum Mapping:
     implement (ticket_work) | IMPLEMENT
     local_review            | VERIFY
     create_pr               | RELEASE
-    pr_release_ready        | REVIEW
     ready_for_merge         | RELEASE (terminal)
 
 Related Tickets:
@@ -89,7 +88,6 @@ try:
         "implement": ContractEnumPipelinePhase.IMPLEMENT,
         "local_review": ContractEnumPipelinePhase.VERIFY,
         "create_pr": ContractEnumPipelinePhase.RELEASE,
-        "pr_release_ready": ContractEnumPipelinePhase.REVIEW,
         "ready_for_merge": ContractEnumPipelinePhase.RELEASE,
     }
 except ImportError:
@@ -110,7 +108,6 @@ DURATION_BUDGETS_MS: dict[str, float] = {
     "implement": 1_800_000,  # 30 minutes
     "local_review": 600_000,  # 10 minutes
     "create_pr": 120_000,  # 2 minutes
-    "pr_release_ready": 600_000,  # 10 minutes
     "ready_for_merge": 60_000,  # 1 minute
 }
 
@@ -119,7 +116,6 @@ TOKEN_BUDGETS: dict[str, int] = {
     "implement": 500_000,
     "local_review": 200_000,
     "create_pr": 50_000,
-    "pr_release_ready": 200_000,
     "ready_for_merge": 10_000,
 }
 

@@ -789,6 +789,8 @@ def parse_phase_output(raw_output, phase_name):
     - Error states should include "error", "failed", or "parse failed"
     If no recognized pattern is found, defaults to "failed" status.
     """
+    import re
+
     result = {
         "status": "completed",
         "blocking_issues": 0,
@@ -811,7 +813,6 @@ def parse_phase_output(raw_output, phase_name):
         result["status"] = "blocked"
         result["block_kind"] = "blocked_review_limit"
         # Try to extract issue count
-        import re
         count_match = re.search(r'(\d+)\s+blocking\s+issues?\s+remain', output_lower)
         if count_match:
             result["blocking_issues"] = int(count_match.group(1))
@@ -828,7 +829,6 @@ def parse_phase_output(raw_output, phase_name):
         result["reason"] = "Phase execution failed"
 
     # Extract nit count
-    import re
     nit_match = re.search(r'nits?\s*(?:deferred|remaining)?:?\s*(\d+)', output_lower)
     if nit_match:
         result["nit_count"] = int(nit_match.group(1))
@@ -836,12 +836,14 @@ def parse_phase_output(raw_output, phase_name):
     # Extract status indicators from local-review output
     # OMN-2327: local-review now outputs "Clean - Confirmed (N/N clean runs)" and
     # "Clean with nits - Confirmed (N/N clean runs)" from the deterministic 2-clean-run gate.
-    if "confirmed" in output_lower:
+    if "confirmed (" in output_lower:
         # Covers both "Clean - Confirmed (...)" and "Clean with nits - Confirmed (...)"
+        # The trailing open-paren avoids false positives from casual uses of "confirmed"
+        # (e.g., "user confirmed the spec") by matching only the gate format
+        # "Confirmed (N/N clean runs)".
         result["status"] = "completed"
         result["blocking_issues"] = 0
         # Extract quality_gate info from confirmed status for Phase 4 validation
-        import re
         gate_match = re.search(r'confirmed\s*\((\d+)/(\d+)\s*clean\s*runs?\)', output_lower)
         if gate_match:
             actual_runs = int(gate_match.group(1))
@@ -852,6 +854,12 @@ def parse_phase_output(raw_output, phase_name):
                 "required_clean_runs": required_runs,
             }
 
+    # Backwards-compatibility branch for pre-OMN-2327 output that doesn't include
+    # "Confirmed (N/N clean runs)".  New-format output like
+    # "Clean with nits - Confirmed (2/2 clean runs)" matches "confirmed (" above,
+    # so this branch only triggers for old-format "clean with nits" without a
+    # confirmation suffix.  Intentionally does not populate quality_gate — the
+    # Phase 4 fallback handles that case.
     elif "clean with nits" in output_lower:
         result["status"] = "completed"
         result["blocking_issues"] = 0
@@ -861,7 +869,7 @@ def parse_phase_output(raw_output, phase_name):
     if result["status"] == "completed" and output_lower:
         # Only return "completed" if we found positive confirmation
         if not any(indicator in output_lower for indicator in [
-            "confirmed", "clean with nits",
+            "confirmed (", "clean with nits",
             "report only", "changes staged", "completed", "success", "ready"
         ]):
             result["status"] = "failed"

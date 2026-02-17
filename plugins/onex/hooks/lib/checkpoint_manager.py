@@ -142,7 +142,6 @@ _PHASE_CHOICES: list[str] = (
         "implement",
         "local_review",
         "create_pr",
-        "pr_release_ready",
         "ready_for_merge",
     ]
 )

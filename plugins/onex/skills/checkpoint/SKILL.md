@@ -21,7 +21,7 @@ args:
     description: "Pipeline run UUID (required for write, read, and validate; optional for list)"
     required: false  # conditionally required -- see description
   - name: --phase
-    description: "Pipeline phase: implement | local_review | create_pr | pr_release_ready | ready_for_merge"
+    description: "Pipeline phase: implement | local_review | create_pr | ready_for_merge"
     required: false
   - name: --attempt
     description: "Attempt number (default: 1)"
@@ -63,7 +63,7 @@ Checkpoints are stored as YAML files under the user's home directory:
 Where:
 - `{ticket_id}` -- Linear ticket identifier (e.g., `OMN-2144`)
 - `{run_id}` -- Pipeline run UUID
-- `{N}` -- Phase ordinal (1-5)
+- `{N}` -- Phase ordinal (1-4)
 - `{name}` -- Phase value string
 - `{attempt}` -- Monotonically increasing attempt counter
 
@@ -103,8 +103,7 @@ Each checkpoint YAML file contains these fields:
 | Implement | 1 | `implement` |
 | Local Review | 2 | `local_review` |
 | Create PR | 3 | `create_pr` |
-| PR Release Ready | 4 | `pr_release_ready` |
-| Ready for Merge | 5 | `ready_for_merge` |
+| Ready for Merge | 4 | `ready_for_merge` |
 
 ## Per-Phase Payload Reference
 
@@ -134,14 +133,6 @@ Each checkpoint YAML file contains these fields:
 | `pr_url` | string | Full URL of the created PR |
 | `pr_number` | int (>=1) | PR number on the remote |
 | `head_sha` | string (7-40 hex) | HEAD SHA pushed to the remote |
-
-### pr_release_ready
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `phase` | literal `"pr_release_ready"` | Discriminator |
-| `last_review_sha` | string (7-40 hex) | Commit SHA of the last review pass |
-| `issue_fingerprints` | tuple[str, ...] | Issues found and resolved |
 
 ### ready_for_merge
 
