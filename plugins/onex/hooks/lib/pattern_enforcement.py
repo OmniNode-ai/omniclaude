@@ -22,6 +22,7 @@ import json
 import logging
 import os
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.parse
@@ -38,7 +39,7 @@ logger = logging.getLogger(__name__)
 # Authoritative values. config.yaml mirrors these for documentation but is not read at runtime.
 _TOTAL_BUDGET_MS = 300
 _HTTP_TIMEOUT_S = 0.25  # 250ms for HTTP calls, leaving 50ms for processing
-_COOLDOWN_DIR = Path("/tmp/omniclaude-enforcement")  # noqa: S108
+_COOLDOWN_DIR = Path(f"/tmp/omniclaude-enforcement-{os.getuid()}")  # noqa: S108
 _DEFAULT_MIN_CONFIDENCE = 0.7
 _DEFAULT_PATTERN_LIMIT = 10
 
@@ -64,7 +65,7 @@ class EnforcementResult(TypedDict):
 
     enforced: bool
     advisories: list[PatternAdvisory]
-    patterns_checked: int
+    patterns_queried: int
     patterns_skipped_cooldown: int
     elapsed_ms: float
     error: str | None
@@ -90,6 +91,10 @@ def is_enforcement_enabled() -> bool:
 # ---------------------------------------------------------------------------
 # Session cooldown
 # ---------------------------------------------------------------------------
+
+# Throttle stale-file cleanup to at most once per 5 minutes.
+_last_cleanup: float = 0.0
+_CLEANUP_INTERVAL_S = 300  # 5 minutes
 
 
 def _cooldown_path(session_id: str) -> Path:
@@ -122,11 +127,16 @@ def _cleanup_stale_cooldown_files() -> None:
 def _load_cooldown(session_id: str) -> set[str]:
     """Load the set of pattern IDs already advised in this session.
 
-    Also performs a best-effort cleanup of stale cooldown files (>24h old).
+    Also performs a throttled best-effort cleanup of stale cooldown files
+    (>24h old), running at most once per 5 minutes.
 
     Returns an empty set if the file doesn't exist or is corrupt.
     """
-    _cleanup_stale_cooldown_files()
+    global _last_cleanup  # noqa: PLW0603
+    now = time.time()
+    if now - _last_cleanup > _CLEANUP_INTERVAL_S:
+        _cleanup_stale_cooldown_files()
+        _last_cleanup = now
 
     path = _cooldown_path(session_id)
     try:
@@ -142,12 +152,33 @@ def _load_cooldown(session_id: str) -> set[str]:
 def _save_cooldown(session_id: str, pattern_ids: set[str]) -> None:
     """Persist the set of advised pattern IDs for this session.
 
+    Uses atomic temp-file-and-rename (os.replace) so concurrent subshells
+    cannot corrupt the cooldown file.  Duplicate advisories from TOCTOU
+    between _load_cooldown and _save_cooldown are a benign edge case --
+    a pattern shown twice is harmless compared to file corruption.
+
     Silently ignores write failures.
     """
     path = _cooldown_path(session_id)
     try:
         _COOLDOWN_DIR.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(sorted(pattern_ids)), encoding="utf-8")
+        # Atomic write: write to temp file then rename so readers never
+        # see a partially-written cooldown file.
+        tmp_fd, tmp_path = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
+        try:
+            os.write(tmp_fd, json.dumps(sorted(pattern_ids)).encode())
+            os.close(tmp_fd)
+            Path(tmp_path).replace(path)
+        except Exception:
+            # Clean up temp file on failure; suppress all errors.
+            try:
+                os.close(tmp_fd)
+            except OSError:
+                pass
+            try:
+                Path(tmp_path).unlink()
+            except OSError:
+                pass
     except OSError:
         pass
 
@@ -188,9 +219,12 @@ def query_patterns(
         List of pattern dicts from the API, or empty list on any failure.
     """
     base_url = _get_intelligence_url()
+    # Filter to validated patterns server-side so the limit budget isn't
+    # consumed by provisional patterns that check_compliance() would drop.
     params: list[str] = [
         f"min_confidence={min_confidence}",
         f"limit={limit}",
+        "status=validated",
     ]
     if language:
         params.append(f"language={urllib.parse.quote(language)}")
@@ -204,7 +238,8 @@ def query_patterns(
         req.add_header("Accept", "application/json")
         with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # noqa: S310
             data = json.loads(resp.read().decode("utf-8"))
-            return data.get("patterns", [])
+            patterns: list[dict[str, Any]] = data.get("patterns", [])
+            return patterns
     except (urllib.error.URLError, OSError, json.JSONDecodeError, KeyError):
         return []
     except Exception:
@@ -258,6 +293,8 @@ def check_compliance(
     if status != "validated":
         return None
 
+    # Stub: returns metadata-only advisory without inspecting file content.
+    # OMN-2256 will replace this with content-aware compliance checking.
     return PatternAdvisory(
         pattern_id=pattern_id,
         pattern_signature=signature,
@@ -315,7 +352,7 @@ def enforce_patterns(
             return EnforcementResult(
                 enforced=True,
                 advisories=[],
-                patterns_checked=0,
+                patterns_queried=0,
                 patterns_skipped_cooldown=0,
                 elapsed_ms=_elapsed_ms(),
                 error=None,
@@ -323,6 +360,15 @@ def enforce_patterns(
 
         # Step 2: Load session cooldown
         cooldown_set = _load_cooldown(session_id)
+        if _budget_exceeded():
+            return EnforcementResult(
+                enforced=True,
+                advisories=[],
+                patterns_queried=len(patterns),
+                patterns_skipped_cooldown=0,
+                elapsed_ms=_elapsed_ms(),
+                error=None,
+            )
         skipped = 0
         advisories: list[PatternAdvisory] = []
         new_pattern_ids: set[str] = set()
@@ -351,14 +397,14 @@ def enforce_patterns(
                 advisories.append(advisory)
                 new_pattern_ids.add(pattern_id)
 
-        # Step 5: Update cooldown
-        if new_pattern_ids:
+        # Step 5: Update cooldown (skip if budget is already exhausted)
+        if new_pattern_ids and not _budget_exceeded():
             _save_cooldown(session_id, cooldown_set | new_pattern_ids)
 
         return EnforcementResult(
             enforced=True,
             advisories=advisories,
-            patterns_checked=len(patterns),
+            patterns_queried=len(patterns),
             patterns_skipped_cooldown=skipped,
             elapsed_ms=_elapsed_ms(),
             error=None,
@@ -369,7 +415,7 @@ def enforce_patterns(
         return EnforcementResult(
             enforced=False,
             advisories=[],
-            patterns_checked=0,
+            patterns_queried=0,
             patterns_skipped_cooldown=0,
             elapsed_ms=_elapsed_ms(),
             error=str(exc),
@@ -394,7 +440,7 @@ def main() -> None:
                 EnforcementResult(
                     enforced=False,
                     advisories=[],
-                    patterns_checked=0,
+                    patterns_queried=0,
                     patterns_skipped_cooldown=0,
                     elapsed_ms=0.0,
                     error=None,
@@ -409,7 +455,7 @@ def main() -> None:
                 EnforcementResult(
                     enforced=False,
                     advisories=[],
-                    patterns_checked=0,
+                    patterns_queried=0,
                     patterns_skipped_cooldown=0,
                     elapsed_ms=0.0,
                     error="empty stdin",
@@ -419,9 +465,10 @@ def main() -> None:
             return
 
         params = json.loads(raw)
+        session_id = params.get("session_id", "") or os.urandom(8).hex()
         result = enforce_patterns(
             file_path=params.get("file_path", ""),
-            session_id=params.get("session_id", ""),
+            session_id=session_id,
             language=params.get("language"),
             domain=params.get("domain"),
             content_preview=params.get("content_preview", ""),
@@ -434,7 +481,7 @@ def main() -> None:
             EnforcementResult(
                 enforced=False,
                 advisories=[],
-                patterns_checked=0,
+                patterns_queried=0,
                 patterns_skipped_cooldown=0,
                 elapsed_ms=0.0,
                 error=f"fatal: {exc}",

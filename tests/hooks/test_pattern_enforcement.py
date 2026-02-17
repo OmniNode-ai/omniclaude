@@ -17,6 +17,7 @@ import json
 import os
 import sys
 import time
+import urllib.error
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -29,6 +30,7 @@ _HOOKS_LIB = (
 )
 if str(_HOOKS_LIB) not in sys.path:
     sys.path.insert(0, str(_HOOKS_LIB))
+
 
 from pattern_enforcement import (
     _cleanup_stale_cooldown_files,
@@ -266,8 +268,6 @@ class TestQueryPatterns:
             captured_url.append(req.full_url if hasattr(req, "full_url") else str(req))
             raise urllib.error.URLError("test")
 
-        import urllib.error
-
         with patch(
             "pattern_enforcement.urllib.request.urlopen", side_effect=mock_urlopen
         ):
@@ -287,8 +287,6 @@ class TestQueryPatterns:
         def mock_urlopen(req: Any, timeout: float = 0) -> MagicMock:
             captured_url.append(req.full_url if hasattr(req, "full_url") else str(req))
             raise urllib.error.URLError("test")
-
-        import urllib.error
 
         with patch(
             "pattern_enforcement.urllib.request.urlopen", side_effect=mock_urlopen
@@ -347,6 +345,38 @@ class TestCheckCompliance:
         )
         assert result is None
 
+    def test_returns_none_for_non_validated_status(self) -> None:
+        """Provisional patterns should not produce advisories."""
+        pattern = {
+            "id": "abc-123",
+            "pattern_signature": "Use descriptive variable names",
+            "domain_id": "code_quality",
+            "confidence": 0.85,
+            "status": "provisional",
+        }
+        result = check_compliance(
+            file_path="test.py",
+            content_preview="",
+            pattern=pattern,
+        )
+        assert result is None
+
+    def test_returns_none_for_draft_status(self) -> None:
+        """Draft patterns are filtered out by the status != 'validated' guard."""
+        pattern = {
+            "id": "draft-001",
+            "pattern_signature": "Avoid global mutable state",
+            "domain_id": "code_quality",
+            "confidence": 0.92,
+            "status": "draft",
+        }
+        result = check_compliance(
+            file_path="/test/file.py",
+            content_preview="GLOBAL_LIST = []\n",
+            pattern=pattern,
+        )
+        assert result is None
+
 
 # ---------------------------------------------------------------------------
 # End-to-end enforce_patterns tests
@@ -370,7 +400,7 @@ class TestEnforcePatterns:
             )
         assert result["enforced"] is True
         assert result["advisories"] == []
-        assert result["patterns_checked"] == 0
+        assert result["patterns_queried"] == 0
 
     def test_produces_advisories_for_matching_patterns(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -395,7 +425,7 @@ class TestEnforcePatterns:
         assert result["enforced"] is True
         assert len(result["advisories"]) == 1
         assert result["advisories"][0]["pattern_id"] == "p-001"
-        assert result["patterns_checked"] == 1
+        assert result["patterns_queried"] == 1
 
     def test_session_cooldown_skips_already_advised(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
