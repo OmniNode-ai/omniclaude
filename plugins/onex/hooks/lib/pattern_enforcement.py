@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
+# Authoritative values. config.yaml mirrors these for documentation but is not read at runtime.
 _TOTAL_BUDGET_MS = 300
 _HTTP_TIMEOUT_S = 0.25  # 250ms for HTTP calls, leaving 50ms for processing
 _COOLDOWN_DIR = Path("/tmp/omniclaude-enforcement")  # noqa: S108
@@ -97,11 +98,35 @@ def _cooldown_path(session_id: str) -> Path:
     return _COOLDOWN_DIR / f"{safe_id}.json"
 
 
+def _cleanup_stale_cooldown_files() -> None:
+    """Remove cooldown files older than 24 hours.
+
+    Best-effort sweep — silently ignores any failures.
+    """
+    max_age_s = 86400  # 24 hours
+    try:
+        if not _COOLDOWN_DIR.exists():
+            return
+        now = time.time()
+        for entry in _COOLDOWN_DIR.iterdir():
+            try:
+                if entry.is_file() and (now - entry.stat().st_mtime) > max_age_s:
+                    entry.unlink()
+            except OSError:
+                pass
+    except OSError:
+        pass
+
+
 def _load_cooldown(session_id: str) -> set[str]:
     """Load the set of pattern IDs already advised in this session.
 
+    Also performs a best-effort cleanup of stale cooldown files (>24h old).
+
     Returns an empty set if the file doesn't exist or is corrupt.
     """
+    _cleanup_stale_cooldown_files()
+
     path = _cooldown_path(session_id)
     try:
         if path.exists():
@@ -198,17 +223,21 @@ def check_compliance(
     pattern: dict[str, Any],
     timeout_s: float = _HTTP_TIMEOUT_S,
 ) -> PatternAdvisory | None:
-    """Check file content against a pattern for compliance.
+    """Pass-through compliance stub for OMN-2256.
 
-    Currently returns a basic advisory based on pattern metadata.
-    Will be enhanced to call the compliance compute node when
-    OMN-2256 lands.
+    Currently returns a basic advisory based on pattern metadata without
+    inspecting file_path or content_preview. These parameters are accepted
+    to match the future OMN-2256 interface where actual content-aware
+    compliance checking will be performed against a compute node.
+
+    Only patterns with status == "validated" are included. Patterns with
+    other or missing status values are filtered out.
 
     Args:
-        file_path: Path to the file being checked.
-        content_preview: First N chars of file content.
+        file_path: Path to the file being checked (reserved for OMN-2256).
+        content_preview: First N chars of file content (reserved for OMN-2256).
         pattern: Pattern dict from the store API.
-        timeout_s: HTTP timeout in seconds (reserved for future use).
+        timeout_s: HTTP timeout in seconds (reserved for OMN-2256).
 
     Returns:
         A PatternAdvisory if the pattern is applicable, None otherwise.
@@ -223,9 +252,11 @@ def check_compliance(
     if not pattern_id or not signature:
         return None
 
-    # Basic applicability: pattern is relevant if it's validated/provisional
-    # and has a confidence above threshold. Full compliance checking
-    # will be added when the compliance compute node (OMN-2256) is ready.
+    # Only include validated patterns. Other statuses (draft, unknown, etc.)
+    # are filtered out until OMN-2256 adds content-aware checking.
+    if status != "validated":
+        return None
+
     return PatternAdvisory(
         pattern_id=pattern_id,
         pattern_signature=signature,

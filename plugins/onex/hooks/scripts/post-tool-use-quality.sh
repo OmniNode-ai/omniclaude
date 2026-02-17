@@ -51,6 +51,12 @@ echo "$TOOL_INFO" | jq '.' >> "$LOG_FILE" 2>&1 || echo "$TOOL_INFO" >> "$LOG_FIL
 TOOL_NAME=$(echo "$TOOL_INFO" | jq -r '.tool_name // "unknown"')
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] PostToolUse hook triggered for $TOOL_NAME (plugin mode)" >> "$LOG_FILE"
 
+# Extract session ID early — needed by pattern enforcement (line ~131) and Kafka emission
+SESSION_ID=$(echo "$TOOL_INFO" | jq -r '.sessionId // .session_id // ""' 2>/dev/null || echo "")
+if [[ -z "$SESSION_ID" ]]; then
+    SESSION_ID=$(uuidgen 2>/dev/null | tr '[:upper:]' '[:lower:]' || "$PYTHON_CMD" -c 'import uuid; print(uuid.uuid4())')
+fi
+
 # -----------------------------------------------------------------------
 # Pipeline Trace Logging — unified trace for Skill/Task/routing visibility
 # tail -f ~/.claude/logs/pipeline-trace.log to see the full chain
@@ -225,11 +231,6 @@ fi
 
 # Emit tool.executed event to Kafka (async, non-blocking)
 # Uses omniclaude-emit CLI with 250ms hard timeout
-SESSION_ID=$(echo "$TOOL_INFO" | jq -r '.sessionId // .session_id // ""' 2>/dev/null || echo "")
-# Pre-generate UUID fallback if SESSION_ID not provided (avoid inline Python in async subshell)
-if [[ -z "$SESSION_ID" ]]; then
-    SESSION_ID=$(uuidgen 2>/dev/null | tr '[:upper:]' '[:lower:]' || "$PYTHON_CMD" -c 'import uuid; print(uuid.uuid4())')
-fi
 TOOL_SUCCESS="true"
 if [[ -n "$TOOL_ERROR" ]]; then
     TOOL_SUCCESS="false"
