@@ -165,6 +165,7 @@ class TestSessionCooldown:
     ) -> None:
         """Cooldown accumulates across multiple saves."""
         monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
+        monkeypatch.setattr("pattern_enforcement._last_cleanup", 0.0)
         _save_cooldown("session-inc", {"p1"})
         existing = _load_cooldown("session-inc")
         _save_cooldown("session-inc", existing | {"p2"})
@@ -210,6 +211,44 @@ class TestCleanupStaleCooldownFiles:
         )
         # Should return without error
         _cleanup_stale_cooldown_files()
+
+    def test_cleanup_throttled_in_load_cooldown(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Cleanup is skipped when called within the 5-minute throttle window."""
+        monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
+
+        stale_file = tmp_path / "stale.json"
+        stale_file.write_text('["old"]', encoding="utf-8")
+        stale_mtime = time.time() - (25 * 3600)
+        os.utime(stale_file, (stale_mtime, stale_mtime))
+
+        # Simulate that cleanup ran very recently (within throttle window)
+        monkeypatch.setattr("pattern_enforcement._last_cleanup", time.time())
+
+        _load_cooldown("session-throttle")
+
+        # Stale file should still exist because cleanup was throttled
+        assert stale_file.exists(), "cleanup should have been throttled"
+
+    def test_cleanup_runs_after_throttle_expires(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Cleanup runs when the 5-minute throttle window has elapsed."""
+        monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
+
+        stale_file = tmp_path / "stale.json"
+        stale_file.write_text('["old"]', encoding="utf-8")
+        stale_mtime = time.time() - (25 * 3600)
+        os.utime(stale_file, (stale_mtime, stale_mtime))
+
+        # Simulate that cleanup ran more than 5 minutes ago
+        monkeypatch.setattr("pattern_enforcement._last_cleanup", time.time() - 301)
+
+        _load_cooldown("session-expired-throttle")
+
+        # Stale file should be cleaned up
+        assert not stale_file.exists(), "cleanup should have run after throttle expired"
 
 
 # ---------------------------------------------------------------------------
