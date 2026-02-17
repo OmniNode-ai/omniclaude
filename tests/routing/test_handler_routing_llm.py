@@ -219,7 +219,7 @@ class TestHandlerRoutingLlm:
     @pytest.fixture
     def handler(self) -> HandlerRoutingLlm:
         return HandlerRoutingLlm(
-            llm_url="http://192.168.86.100:8200",
+            llm_url="http://localhost:8200",
             model_name="Qwen2.5-14B",
             timeout=4.0,
         )
@@ -642,4 +642,4 @@ class TestHandlerRoutingLlm:
 
         assert len(captured_urls) == 1
         assert captured_urls[0].endswith("/v1/chat/completions")
-        assert "192.168.86.100:8200" in captured_urls[0]
+        assert "localhost:8200" in captured_urls[0]

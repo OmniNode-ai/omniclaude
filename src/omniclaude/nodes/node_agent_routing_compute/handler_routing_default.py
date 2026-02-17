@@ -38,7 +38,7 @@ from omniclaude.nodes.node_agent_routing_compute.models import (
     ModelRoutingResult,
 )
 
-__all__ = ["HandlerRoutingDefault"]
+__all__ = ["HandlerRoutingDefault", "build_registry_dict"]
 
 logger = logging.getLogger(__name__)
 
@@ -224,37 +224,12 @@ class HandlerRoutingDefault:
     def _build_registry_dict(request: ModelRoutingRequest) -> AgentRegistry:
         """Convert typed ModelAgentDefinition tuple to dict format.
 
-        TriggerMatcher expects::
-
-            {"agents": {
-                "agent-name": {
-                    "activation_triggers": [...],
-                    "title": "...",
-                    "capabilities": [...],
-                    "domain_context": "...",
-                    "definition_path": "...",
-                },
-                ...
-            }}
-
-        The mapping is:
-            ModelAgentDefinition.explicit_triggers + context_triggers -> activation_triggers
-            ModelAgentDefinition.description       -> title
-            ModelAgentDefinition.capabilities      -> capabilities
-            ModelAgentDefinition.domain_context     -> domain_context
-            ModelAgentDefinition.definition_path   -> definition_path
+        Delegates to the module-level ``build_registry_dict`` function, which
+        is the single source of truth for this conversion. Both
+        ``HandlerRoutingDefault`` and ``HandlerRoutingLlm`` use the same
+        module-level function to prevent silent divergence.
         """
-        agents: dict[str, AgentData] = {}
-        for agent_def in request.agent_registry:
-            agents[agent_def.name] = {
-                "activation_triggers": list(agent_def.explicit_triggers)
-                + list(agent_def.context_triggers),
-                "title": agent_def.description or agent_def.name,
-                "capabilities": list(agent_def.capabilities),
-                "domain_context": agent_def.domain_context,
-                "definition_path": agent_def.definition_path or "",
-            }
-        return {"agents": agents}
+        return build_registry_dict(request)
 
     @staticmethod
     def _extract_explicit_agent(text: str, known_agents: set[str]) -> str | None:
@@ -380,6 +355,48 @@ class HandlerRoutingDefault:
             candidates=(candidate,),
             fallback_reason=None,
         )
+
+
+def build_registry_dict(request: ModelRoutingRequest) -> AgentRegistry:
+    """Convert typed ModelAgentDefinition tuple to dict format for TriggerMatcher.
+
+    TriggerMatcher expects::
+
+        {"agents": {
+            "agent-name": {
+                "activation_triggers": [...],
+                "title": "...",
+                "capabilities": [...],
+                "domain_context": "...",
+                "definition_path": "...",
+            },
+            ...
+        }}
+
+    The mapping is:
+        ModelAgentDefinition.explicit_triggers + context_triggers -> activation_triggers
+        ModelAgentDefinition.description       -> title
+        ModelAgentDefinition.capabilities      -> capabilities
+        ModelAgentDefinition.domain_context     -> domain_context
+        ModelAgentDefinition.definition_path   -> definition_path
+
+    Args:
+        request: Routing request containing the agent registry.
+
+    Returns:
+        Dict in the format TriggerMatcher expects.
+    """
+    agents: dict[str, AgentData] = {}
+    for agent_def in request.agent_registry:
+        agents[agent_def.name] = {
+            "activation_triggers": list(agent_def.explicit_triggers)
+            + list(agent_def.context_triggers),
+            "title": agent_def.description or agent_def.name,
+            "capabilities": list(agent_def.capabilities),
+            "domain_context": agent_def.domain_context,
+            "definition_path": agent_def.definition_path or "",
+        }
+    return {"agents": agents}
 
 
 def _clamp(value: float, lo: float = 0.0, hi: float = 1.0) -> float:
