@@ -262,6 +262,7 @@ class TestQueryPatterns:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestCheckCompliance:
     """Tests for compliance checking against individual patterns."""
 
@@ -310,6 +311,7 @@ class TestCheckCompliance:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestEnforcePatterns:
     """Integration tests for the full enforcement pipeline."""
 
@@ -455,6 +457,7 @@ class TestEnforcePatterns:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestMain:
     """Tests for the CLI entry point."""
 
