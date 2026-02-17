@@ -113,6 +113,7 @@ class TestSessionCooldown:
     ) -> None:
         """Loading cooldown for new session returns empty set."""
         monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
+        monkeypatch.setattr("pattern_enforcement._last_cleanup", 0.0)
         result = _load_cooldown("session-abc")
         assert result == set()
 
@@ -121,6 +122,7 @@ class TestSessionCooldown:
     ) -> None:
         """Saved pattern IDs can be loaded back."""
         monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
+        monkeypatch.setattr("pattern_enforcement._last_cleanup", 0.0)
         _save_cooldown("session-abc", {"p1", "p2", "p3"})
         result = _load_cooldown("session-abc")
         assert result == {"p1", "p2", "p3"}
@@ -130,6 +132,7 @@ class TestSessionCooldown:
     ) -> None:
         """Corrupt cooldown file returns empty set instead of crashing."""
         monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
+        monkeypatch.setattr("pattern_enforcement._last_cleanup", 0.0)
         # Write corrupt data
         path = _cooldown_path("session-xyz")
         path.parent.mkdir(parents=True, exist_ok=True)
