@@ -326,6 +326,11 @@ if [[ -f "$ADVISORY_FORMATTER" ]]; then
         set +e
         PATTERN_ADVISORY=$(echo "$ADVISORY_INPUT" | "$PYTHON_CMD" "$ADVISORY_FORMATTER" load 2>>"$LOG_FILE")
         set -e
+        # Guard against partial stdout from a hard-crashed subprocess (e.g. SIGKILL).
+        # Valid advisory output starts with "## " (the markdown header).
+        if [[ -n "$PATTERN_ADVISORY" ]] && [[ "$PATTERN_ADVISORY" != *"## "* ]]; then
+            PATTERN_ADVISORY=""
+        fi
         if [[ -n "$PATTERN_ADVISORY" ]]; then
             log "Pattern advisory loaded for context injection"
             _TS_ADV="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"

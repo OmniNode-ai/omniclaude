@@ -69,6 +69,12 @@ def save_advisories(session_id: str, advisories: list[dict[str, Any]]) -> bool:
     Appends to any existing advisories for this session (multiple tool uses
     between prompts). Uses atomic temp-file-and-rename for safety.
 
+    Race note: save_advisories (PostToolUse, async background) and
+    load_and_clear_advisories (UserPromptSubmit, sync) can race on the same
+    advisory file. An advisory written between load_and_clear's read and
+    unlink may be lost. This is acceptable per design: data loss is
+    tolerable, UI freeze is not. See CLAUDE.md Failure Modes.
+
     Args:
         session_id: Current session ID.
         advisories: List of PatternAdvisory dicts from pattern_enforcement.
@@ -83,7 +89,10 @@ def save_advisories(session_id: str, advisories: list[dict[str, Any]]) -> bool:
         _ADVISORY_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
         path = _advisory_path(session_id)
 
-        # Load existing advisories (if any, from earlier tool uses in same turn)
+        # Load existing advisories (if any, from earlier tool uses in same turn).
+        # Race note: path may have been unlinked by load_and_clear_advisories
+        # between our exists() check and read. This is benign -- we just start
+        # with an empty list and the new advisories are saved normally.
         existing: list[dict[str, Any]] = []
         try:
             if path.exists():
@@ -93,15 +102,22 @@ def save_advisories(session_id: str, advisories: list[dict[str, Any]]) -> bool:
         except (json.JSONDecodeError, OSError, TypeError):
             pass
 
-        # Merge: append new advisories, deduplicate by pattern_id
-        seen_ids: set[str] = {a.get("pattern_id", "") for a in existing}
+        # Merge: append new advisories, deduplicate by pattern_id.
+        # Empty/missing pattern_ids are always kept (can't be deduped meaningfully).
+        seen_ids: set[str] = {
+            a.get("pattern_id", "") for a in existing if a.get("pattern_id")
+        }
         for advisory in advisories:
             pid = advisory.get("pattern_id", "")
-            if pid and pid not in seen_ids:
+            if not pid:
+                existing.append(advisory)
+            elif pid not in seen_ids:
                 existing.append(advisory)
                 seen_ids.add(pid)
 
-        # Cap total advisories to prevent unbounded growth
+        # Cap total advisories to prevent unbounded growth.
+        # Allow 2x on save since multiple PostToolUse calls accumulate between
+        # UserPromptSubmit reads. The load path trims to _MAX_ADVISORIES_PER_TURN.
         capped = existing[: _MAX_ADVISORIES_PER_TURN * 2]
 
         payload = {
@@ -142,6 +158,12 @@ def load_and_clear_advisories(session_id: str) -> list[dict[str, Any]]:
 
     Returns advisories accumulated since the last UserPromptSubmit.
     Discards stale advisories (older than 1 hour).
+
+    Race note: save_advisories (PostToolUse, async background) and this
+    function (UserPromptSubmit, sync) can race on the same advisory file.
+    An advisory written between read and unlink may be lost. This is
+    acceptable per design: data loss is tolerable, UI freeze is not.
+    See CLAUDE.md Failure Modes.
 
     Args:
         session_id: Current session ID.
