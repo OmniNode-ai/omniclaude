@@ -31,6 +31,9 @@ args:
   - name: --checkpoint
     description: "Write checkpoint after each iteration (format: ticket_id:run_id)"
     required: false
+  - name: --required-clean-runs
+    description: "Number of consecutive clean runs required before passing (default 2, min 1)"
+    required: false
 ---
 
 # Local Review
@@ -57,6 +60,7 @@ Review local changes, fix issues, commit fixes, and iterate until clean or max i
 /local-review --files "src/**/*.py"     # Specific files only
 /local-review --no-fix                  # Report only mode
 /local-review --checkpoint OMN-2144:abcd1234  # Write checkpoints per iteration
+/local-review --required-clean-runs 1         # Fast iteration (skip confirmation pass)
 ```
 
 ## Arguments
@@ -72,6 +76,7 @@ Parse arguments from `$ARGUMENTS`:
 | `--no-fix` | false | Report only, don't attempt fixes |
 | `--no-commit` | false | Fix but don't commit (stage only) |
 | `--checkpoint <ticket:run>` | none | Write checkpoint after each iteration (format: `ticket_id:run_id`) |
+| `--required-clean-runs <n>` | 2 | Consecutive clean runs required before passing (min 1) |
 
 ## Dispatch Contracts (Execution-Critical)
 
@@ -178,14 +183,15 @@ The skill runs a 3-phase loop:
 3. **Commit**: Orchestrator stages and commits fixes inline
 
 **Exit conditions**:
-- No blocking issues found (Critical/Major/Minor all empty)
+- N consecutive clean runs with stable run signature (default N=2; set via `--required-clean-runs`)
 - Max iterations reached
 - `--no-fix` mode (report only, exits after first review)
 - Agent failure or parse failure (exits with warning status)
 
 **Status indicators**:
-- `Clean` -- No issues found (or only nits remain)
-- `Clean with nits` -- Blocking issues resolved, optional nits remain
+- `Clean - Confirmed (N/N clean runs)` -- No blocking issues, confirmed by N consecutive clean runs
+- `Clean with nits - Confirmed (N/N clean runs)` -- Blocking issues resolved, nits remain, confirmed by N clean runs
+- `Clean run 1/2 - confirmation pass required` -- First clean run passed, awaiting confirmation
 - `Max iterations reached` -- Hit limit with blocking issues remaining
 - `Report only` -- `--no-fix` mode
 - `Changes staged` -- `--no-commit` mode, fixes applied but not committed

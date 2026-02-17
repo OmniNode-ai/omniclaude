@@ -1,6 +1,6 @@
 ---
 name: ticket-pipeline
-description: Autonomous per-ticket pipeline that chains ticket-work, local-review, PR creation, pr-release-ready, and merge readiness into a single unattended workflow with Slack notifications and policy guardrails
+description: Autonomous per-ticket pipeline that chains ticket-work, local-review, PR creation, and merge readiness into a single unattended workflow with Slack notifications and policy guardrails
 version: 1.0.0
 category: workflow
 tags:
@@ -17,7 +17,7 @@ args:
     description: Linear ticket ID (e.g., OMN-1804)
     required: true
   - name: --skip-to
-    description: Resume from specified phase (implement|local_review|create_pr|pr_release_ready|ready_for_merge)
+    description: Resume from specified phase (implement|local_review|create_pr|ready_for_merge)
     required: false
   - name: --dry-run
     description: Execute phase logic and log decisions without side effects (no commits, pushes, PRs)
@@ -31,7 +31,7 @@ args:
 
 ## Overview
 
-Chain existing skills into an autonomous per-ticket pipeline: implement -> local_review -> create_pr -> pr_release_ready -> ready_for_merge. Slack notifications fire at each phase transition. Policy switches (not agent judgment) control auto-advance.
+Chain existing skills into an autonomous per-ticket pipeline: implement -> local_review -> create_pr -> ready_for_merge. Slack notifications fire at each phase transition. Policy switches (not agent judgment) control auto-advance.
 
 **Announce at start:** "I'm using the ticket-pipeline skill to run the pipeline for {ticket_id}."
 
@@ -50,9 +50,8 @@ Chain existing skills into an autonomous per-ticket pipeline: implement -> local
 stateDiagram-v2
     [*] --> implement
     implement --> local_review : auto (policy)
-    local_review --> create_pr : auto (0 blocking)
-    create_pr --> pr_release_ready : auto (policy)
-    pr_release_ready --> ready_for_merge : auto (0 blocking)
+    local_review --> create_pr : auto (2 confirmed-clean runs)
+    create_pr --> ready_for_merge : auto (policy)
     ready_for_merge --> [*] : manual merge
 ```
 
@@ -68,8 +67,9 @@ stateDiagram-v2
 
 - Dispatches `local-review` to a polymorphic agent via `Task()` (own context window)
 - Autonomous: loops until clean or policy limits hit
-- Stop on: 0 blocking issues, max iterations, repeat issues, new major after iteration 1
-- AUTO-ADVANCE to Phase 3 (only if 0 blocking issues)
+- Requires 2 consecutive confirmed-clean runs with stable run signature before advancing
+- Stop on: 0 blocking issues (confirmed by 2 clean runs), max iterations, repeat issues, new major after iteration 1
+- AUTO-ADVANCE to Phase 3 (only if quality gate passed: 2 confirmed-clean runs)
 
 ### Phase 3: create_pr
 
@@ -79,14 +79,7 @@ stateDiagram-v2
 - Pushes branch, creates PR via `gh`, updates Linear status
 - AUTO-ADVANCE to Phase 4
 
-### Phase 4: pr_release_ready
-
-- Dispatches `pr-release-ready` to a polymorphic agent via `Task()` (own context window)
-- Fixes CodeRabbit and CI issues
-- Same iteration limits as Phase 2
-- AUTO-ADVANCE to Phase 5 (only if 0 blocking issues)
-
-### Phase 5: ready_for_merge
+### Phase 4: ready_for_merge
 
 - Adds `ready-for-merge` label to Linear
 - Slack notification with blocking/nit counts
@@ -191,26 +184,7 @@ Task(
 
 No dispatch needed. The orchestrator runs `git push`, `gh pr create`, and Linear MCP calls directly.
 
-### Phase 4: pr_release_ready — dispatch to polymorphic agent
-
-```
-Task(
-  subagent_type="polymorphic-agent",
-  description="ticket-pipeline: Phase 4 pr-release-ready for {ticket_id}",
-  prompt="You are executing pr-release-ready for {ticket_id}.
-    Invoke: Skill(skill=\"onex:pr-release-ready\")
-
-    PR: #{pr_number} on branch {branch_name}
-    Repo: {repo_path}
-
-    Fix all CodeRabbit and CI issues on the PR.
-    Report back with:
-    - Issues found and fixed
-    - Remaining blocking issues (if any)"
-)
-```
-
-### Phase 5: ready_for_merge — runs inline (Linear label + Slack notification only)
+### Phase 4: ready_for_merge — runs inline (Linear label + Slack notification only)
 
 No dispatch needed. The orchestrator adds labels and sends notifications directly.
 
@@ -229,7 +203,6 @@ edge case handling.
 
 - `ticket-work` skill (Phase 1)
 - `local-review` skill (Phase 2)
-- `pr-release-ready` skill (Phase 4)
 - `emit_client_wrapper` (Kafka event emission)
 - `HandlerSlackWebhook` in omnibase_infra (Slack delivery infrastructure)
 - OMN-2157 (Web API threading support — future dependency)

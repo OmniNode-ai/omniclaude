@@ -30,7 +30,7 @@ skip_to = None
 if "--skip-to" in args:
     idx = args.index("--skip-to")
     if idx + 1 >= len(args) or args[idx + 1].startswith("--"):
-        print("Error: --skip-to requires a phase argument (implement|local_review|create_pr|pr_release_ready|ready_for_merge)")
+        print("Error: --skip-to requires a phase argument (implement|local_review|create_pr|ready_for_merge)")
         exit(1)
     skip_to = args[idx + 1]
     if skip_to not in PHASE_ORDER:
@@ -89,14 +89,6 @@ phases:
     block_kind: null
     last_error: null
     last_error_at: null
-  pr_release_ready:
-    started_at: null
-    completed_at: null
-    artifacts: {}
-    blocked_reason: null
-    block_kind: null
-    last_error: null
-    last_error_at: null
   ready_for_merge:
     started_at: null
     completed_at: null
@@ -120,7 +112,7 @@ import os, json, time, uuid, yaml
 from pathlib import Path
 from datetime import datetime, timezone
 
-PHASE_ORDER = ["implement", "local_review", "create_pr", "pr_release_ready", "ready_for_merge"]
+PHASE_ORDER = ["implement", "local_review", "create_pr", "ready_for_merge"]
 
 # NOTE: Helper functions (notify_blocked, etc.) are defined in the
 # "Helper Functions" section below. They are referenced before their
@@ -634,12 +626,6 @@ def build_phase_payload(phase_name, state, result):
             "head_sha": head_sha,
         }
 
-    elif phase_name == "pr_release_ready":
-        return {
-            "last_review_sha": head_sha,
-            "issue_fingerprints": list(artifacts.get("issue_fingerprints", [])),
-        }
-
     elif phase_name == "ready_for_merge":
         return {
             "label_applied_at": datetime.now(timezone.utc).isoformat(),
@@ -688,8 +674,6 @@ def extract_artifacts_from_checkpoint(checkpoint_data):
     elif phase == "create_pr":
         artifacts["pr_url"] = payload.get("pr_url", "")
         artifacts["pr_number"] = payload.get("pr_number", 0)
-    elif phase == "pr_release_ready":
-        artifacts["last_review_sha"] = payload.get("last_review_sha", "")
     elif phase == "ready_for_merge":
         artifacts["label_applied_at"] = payload.get("label_applied_at", "")
 
@@ -795,7 +779,7 @@ def parse_phase_output(raw_output, phase_name):
         reason: str | None
         block_kind: str | None  (blocked_human_gate | blocked_policy | blocked_review_limit | failed_exception)
 
-    Since upstream skills (ticket-work, local-review, pr-release-ready) don't return
+    Since upstream skills (ticket-work, local-review) don't return
     structured output yet, this adapter infers status from observable signals.
 
     KNOWN LIMITATION: This is fragile string parsing. Expected output format contract:
@@ -1021,7 +1005,6 @@ def execute_phase(phase_name, state):
         "implement": execute_implement,
         "local_review": execute_local_review,
         "create_pr": execute_create_pr,
-        "pr_release_ready": execute_pr_release_ready,
         "ready_for_merge": execute_ready_for_merge,
     }
 
@@ -1367,85 +1350,29 @@ EOF
 
 ---
 
-### Phase 4: PR RELEASE READY
+### Phase 4: READY FOR MERGE
 
 **Invariants:**
 - Phase 3 (create_pr) is completed
-- PR exists on GitHub
+- Quality gate from local_review passed (2 confirmed-clean runs)
 
 **Actions:**
 
-1. **Pre-check: Verify PR exists:**
+1. **Validate quality gate from local_review:**
    ```python
-   # Pre-check: verify PR exists (required if Phase 3 was skipped via --skip-to)
-   try:
-       pr_check = subprocess.check_output(["gh", "pr", "view", "--json", "url,number"], stderr=subprocess.DEVNULL)
-       pr_info = json.loads(pr_check)
-       # Record PR artifacts if not already captured (e.g., Phase 3 was skipped)
-       if not state["phases"]["create_pr"]["artifacts"].get("pr_url"):
-           state["phases"]["create_pr"]["artifacts"]["pr_url"] = pr_info["url"]
-           state["phases"]["create_pr"]["artifacts"]["pr_number"] = pr_info["number"]
-           save_state(state, state_path)
-   except (subprocess.CalledProcessError, json.JSONDecodeError):
-       result = {"status": "blocked", "block_kind": "blocked_policy",
-                 "reason": "No PR found on current branch. Cannot run pr-release-ready without a PR. Create one first or use --skip-to create_pr."}
-       return result
+   lr_artifacts = state["phases"]["local_review"]["artifacts"]
+   qg = lr_artifacts.get("quality_gate", {})
+   if qg.get("status") != "passed":
+       return {"status": "blocked", "block_kind": "blocked_policy",
+               "reason": f"Quality gate not passed: {qg.get('status', 'missing')}"}
+   required = qg.get("required_clean_runs", 2)
+   actual = qg.get("consecutive_clean_runs", 0)
+   if actual < required:
+       return {"status": "blocked", "block_kind": "blocked_policy",
+               "reason": f"Insufficient clean runs: {actual}/{required}"}
    ```
 
-2. **Dispatch pr-release-ready to a separate agent:**
-   ```
-   Task(
-     subagent_type="polymorphic-agent",
-     description="PR release-ready for {ticket_id}",
-     prompt="You are executing pr-release-ready for {ticket_id}.
-       Invoke: Skill(skill=\"onex:pr-release-ready\")
-
-       PR: #{pr_number} on branch {branch_name}
-       Repo: {repo_path}
-
-       Fix all CodeRabbit and CI issues on the PR.
-       Do NOT push changes -- the orchestrator handles git push.
-       Report back with:
-       - Issues found and fixed
-       - Remaining blocking issues (if any)"
-   )
-   ```
-   This spawns a polymorphic agent to fetch CodeRabbit review issues and fix them.
-
-3. **Parse result:**
-   Use `parse_phase_output()` to determine status:
-   - `status`: completed (all issues fixed) or blocked (issues remain)
-   - `blocking_issues`: remaining critical/major/minor
-   - `nit_count`: remaining nits
-
-4. **Push fixes** (if any commits were made):
-   ```bash
-   git push
-   ```
-
-5. **Dry-run behavior:** pr-release-ready runs in report-only mode. No fixes are committed or pushed.
-
-**Mutations:**
-- `phases.pr_release_ready.started_at`
-- `phases.pr_release_ready.completed_at`
-- `phases.pr_release_ready.artifacts` (iterations, blocking_remaining, nit_count)
-
-**Exit conditions:**
-- **Completed:** 0 blocking issues
-- **Blocked:** blocking issues remain after review iterations
-- **Failed:** pr-release-ready errors out
-
----
-
-### Phase 5: READY FOR MERGE
-
-**Invariants:**
-- Phase 4 (pr_release_ready) is completed
-- 0 blocking issues
-
-**Actions:**
-
-1. **Add ready-for-merge label to Linear:**
+2. **Add ready-for-merge label to Linear:**
    ```python
    try:
        # Fetch existing labels to avoid overwriting them
@@ -1459,7 +1386,7 @@ EOF
        # Non-blocking: Linear label update failure is logged but does not stop pipeline
    ```
 
-2. **Send Slack notification:**
+3. **Send Slack notification:**
    ```python
    notify_completed(
        ticket_id=ticket_id,
@@ -1470,9 +1397,9 @@ EOF
    )
    ```
 
-3. **Dry-run behavior:** Linear label update is skipped. Slack notification is sent with `[DRY RUN]` prefix.
+4. **Dry-run behavior:** Linear label update is skipped. Slack notification is sent with `[DRY RUN]` prefix.
 
-4. **Pipeline stops here.** Manual merge is required. This is the only manual pause besides ticket-work human gates.
+5. **Pipeline stops here.** Manual merge is required. This is the only manual pause besides ticket-work human gates.
 
 **Mutations:**
 - `phases.ready_for_merge.started_at`
@@ -1579,7 +1506,6 @@ When `/ticket-pipeline {ticket_id}` is invoked on an existing pipeline:
    - implement: completed (2026-02-06T12:45:00Z)
    - local_review: completed (2026-02-06T13:10:00Z)
    - create_pr: blocked (auto_push=false)
-   - pr_release_ready: pending
    - ready_for_merge: pending
 
    Resuming from: create_pr

@@ -17,6 +17,7 @@ Parse arguments from `$ARGUMENTS`:
 | `--no-fix` | false | Report only, don't attempt fixes |
 | `--no-commit` | false | Fix but don't commit (stage only) |
 | `--checkpoint <ticket:run>` | none | Write checkpoint after each iteration (format: `ticket_id:run_id`) |
+| `--required-clean-runs <n>` | 2 | Consecutive clean runs required before passing (min 1) |
 
 **Examples**:
 ```bash
@@ -26,6 +27,7 @@ Parse arguments from `$ARGUMENTS`:
 /local-review --max-iterations 5        # Limit iterations
 /local-review --files "src/**/*.py"     # Specific files only
 /local-review --no-fix                  # Report only mode
+/local-review --required-clean-runs 1   # Fast iteration (skip confirmation pass)
 ```
 
 ---
@@ -56,6 +58,12 @@ commits_made = []
 total_issues_fixed = 0
 nit_count = 0  # Track deferred nits for final summary
 failed_fixes = []  # Track {file, line, description} of issues that failed to fix (do not retry)
+consecutive_clean_runs = 0
+required_clean_runs = <from args or 2>
+last_clean_signature = None
+quality_gate = {"status": "failed", "required_clean_runs": required_clean_runs,
+                "consecutive_clean_runs": 0, "final_signature": None,
+                "blocking_issue_count": 0, "nit_count": 0}
 ```
 
 **4. Display configuration**:
@@ -65,7 +73,23 @@ failed_fixes = []  # Track {file, line, description} of issues that failed to fi
 **Base**: {base_ref}
 **Scope**: {all changes | uncommitted only | specific files}
 **Max iterations**: {max_iterations}
+**Required clean runs**: {required_clean_runs}
 **Mode**: {fix & commit | fix only | report only}
+```
+
+---
+
+### Helper: compute_run_signature
+
+```python
+def compute_run_signature(base_ref, files):
+    """Deterministic signature of review inputs."""
+    import hashlib
+    head_sha = subprocess.check_output(
+        ["git", "rev-parse", "--short=7", "HEAD"], text=True
+    ).strip()
+    content = f"{head_sha}|{base_ref}|{'|'.join(sorted(files))}"
+    return hashlib.sha256(content.encode()).hexdigest()[:12]
 ```
 
 ---
@@ -267,10 +291,32 @@ This represents nits remaining at the end of the review loop.
 
 **Early Exit Conditions** (each increments counter before exiting):
 
-**If no Critical/Major/Minor issues**:
+**If no Critical/Major/Minor issues** (clean run detected):
 ```
-iteration += 1  # A review iteration completed
-goto Phase 3 (Final Summary)
+current_signature = compute_run_signature(base_ref, changed_files)
+
+if last_clean_signature is not None and current_signature != last_clean_signature:
+    print(f"Run signature changed ({last_clean_signature} -> {current_signature}) -> clean run counter reset to 0")
+    consecutive_clean_runs = 0
+
+consecutive_clean_runs += 1
+last_clean_signature = current_signature
+iteration += 1
+
+if consecutive_clean_runs >= required_clean_runs:
+    # Quality gate passed
+    quality_gate = {
+        "status": "passed",
+        "required_clean_runs": required_clean_runs,
+        "consecutive_clean_runs": consecutive_clean_runs,
+        "final_signature": current_signature,
+        "blocking_issue_count": 0,
+        "nit_count": nit_count,
+    }
+    goto Phase 3  # Confirmed clean
+else:
+    print(f"Clean run {consecutive_clean_runs}/{required_clean_runs} -- running confirmation pass")
+    goto Step 2.1  # Need another clean run to confirm
 ```
 - Nits alone do NOT block - they are optional
 
@@ -293,6 +339,15 @@ goto Phase 3
 ```
 
 ### Step 2.4: Fix Issues
+
+**Reset clean counter** (blocking issues were found):
+```
+# Blocking issues were found -- reset clean counter
+if consecutive_clean_runs > 0:
+    print(f"Blocking issues found -> clean run counter reset to 0 (was {consecutive_clean_runs})")
+consecutive_clean_runs = 0
+last_clean_signature = None
+```
 
 **Pre-filter previously failed issues**:
 ```python
@@ -480,6 +535,7 @@ if checkpoint_arg and checkpoint_ticket_id and checkpoint_run_id:
                 for issue in _original_issues.get(severity, [])
             ],
             "last_clean_sha": _head_sha,
+            "quality_gate": quality_gate,
         })
         # Direct subprocess to checkpoint_manager (not polymorphic-agent dispatch)
         # because checkpoint writes are non-blocking side-effects that don't need
@@ -539,6 +595,8 @@ else:
 **Iterations**: {iteration}
 **Total issues fixed**: {total_issues_fixed}
 **Commits created**: {len(commits_made)}
+**Clean runs**: {consecutive_clean_runs}/{required_clean_runs}
+**Quality gate**: {quality_gate["status"]}
 **Nits deferred**: {nit_count} (optional)
 
 ### Commits
@@ -550,10 +608,8 @@ else:
 ```
 
 **Status indicators** (choose based on total_issues_fixed and mode):
-- `Clean - No issues found` (no Critical/Major/Minor on first review, 0 issues fixed)
-- `Clean - Ready to push` (all issues fixed and committed)
-- `Clean with nits - No changes needed` (only nits found, 0 issues fixed)
-- `Clean with nits - Ready to push` (blocking issues fixed and committed, nits remain)
+- `Clean - Confirmed ({N}/{N} clean runs)` (no Critical/Major/Minor, confirmed by N consecutive clean runs)
+- `Clean with nits - Confirmed ({N}/{N} clean runs)` (only nits remain, confirmed by N clean runs)
 - `Max iterations reached - {n} blocking issues remain` (hit limit with Critical/Major/Minor remaining)
 - `Report only - {n} blocking issues found` (--no-fix mode)
 - `Changes staged - review before commit` (--no-commit mode, issues were fixed but not committed)
@@ -582,16 +638,16 @@ elif blocking_issues_remain:
 elif total_issues_fixed == 0:
     # No blocking issues found to fix (only nits which are optional)
     if nits_remain:
-        "Clean with nits - No changes needed"
+        f"Clean with nits - Confirmed ({consecutive_clean_runs}/{required_clean_runs} clean runs)"
     else:
-        "Clean - No issues found"
+        f"Clean - Confirmed ({consecutive_clean_runs}/{required_clean_runs} clean runs)"
 elif --no-commit:
     # Issues were fixed but not committed (staged only)
     "Changes staged - review before commit"
 elif nits_remain:
-    "Clean with nits - Ready to push"
+    f"Clean with nits - Confirmed ({consecutive_clean_runs}/{required_clean_runs} clean runs)"
 else:
-    "Clean - Ready to push"
+    f"Clean - Confirmed ({consecutive_clean_runs}/{required_clean_runs} clean runs)"
 ```
 
 ---
@@ -639,6 +695,19 @@ if "--files" in args:
         files_glob = None
     else:
         files_glob = args[idx + 1]
+
+# Extract --required-clean-runs value (OMN-2327)
+required_clean_runs = 2  # default
+if "--required-clean-runs" in args:
+    idx = args.index("--required-clean-runs")
+    try:
+        required_clean_runs = int(args[idx + 1]) if idx + 1 < len(args) else 2
+        if required_clean_runs < 1:
+            print("Warning: --required-clean-runs must be >= 1. Using default (2).")
+            required_clean_runs = 2
+    except (ValueError, IndexError):
+        print("Warning: --required-clean-runs requires a numeric value. Using default (2).")
+        required_clean_runs = 2
 
 # Extract --checkpoint value (OMN-2144)
 checkpoint_arg = None
@@ -722,6 +791,7 @@ Review iteration: {current}/{max}
 **Base**: abc1234 (origin/main)
 **Scope**: All changes since base
 **Max iterations**: 3
+**Required clean runs**: 2
 **Mode**: Fix & commit
 
 ---
@@ -763,13 +833,30 @@ Created commit: jkl3456 - fix(review): [minor] Magic number extracted to constan
 
 **Merge Status**: Ready (only optional nits remain)
 
+Clean run 1/2 -- running confirmation pass
+
+---
+
+## Review Iteration 3
+
+### CRITICAL (0)
+### MAJOR (0)
+### MINOR (0)
+### NIT (2) - Optional
+- **src/models.py:56** - Unused import [`style`]
+- **tests/test_api.py:78** - Consider adding assertion message [`suggestion`]
+
+**Merge Status**: Ready (only optional nits remain)
+
 ---
 
 ## Review Complete
 
-**Iterations**: 2
+**Iterations**: 3
 **Total issues fixed**: 4
 **Commits created**: 3
+**Clean runs**: 2/2
+**Quality gate**: passed
 **Nits deferred**: 2 (optional)
 
 ### Commits
@@ -777,5 +864,5 @@ Created commit: jkl3456 - fix(review): [minor] Magic number extracted to constan
 2. ghi9012 - fix(review): [major] Password validation and exception handling
 3. jkl3456 - fix(review): [minor] Magic number extracted to constant
 
-**Status**: Clean with nits - Ready to push
+**Status**: Clean with nits - Confirmed (2/2 clean runs)
 ```
