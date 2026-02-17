@@ -192,6 +192,8 @@ discover_active_repos() {
     # Check each repo for merged PRs in the analysis period — in parallel
     local tmpdir
     tmpdir=$(mktemp -d)
+    # Ensure tmpdir is cleaned up on exit (SIGINT, SIGTERM, or normal exit)
+    trap 'rm -rf "${tmpdir}"' RETURN
     local pids=()
 
     while IFS= read -r repo; do
@@ -223,7 +225,8 @@ discover_active_repos() {
     rm -rf "$tmpdir"
 
     if [[ ${#active_repos[@]} -eq 0 ]]; then
-        # No PRs merged — still return all repos so report can note zero activity
+        # No PRs merged — fall back to hardcoded default list so the report
+        # covers the core repos even on low-activity days.
         echo "omnibase_core,omnibase_spi,omnibase_infra,omniclaude"
         return 0
     fi
