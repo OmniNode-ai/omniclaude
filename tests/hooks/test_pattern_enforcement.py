@@ -35,11 +35,13 @@ if str(_HOOKS_LIB) not in sys.path:
 from pattern_enforcement import (
     _cleanup_stale_cooldown_files,
     _cooldown_path,
+    _get_intelligence_url,
     _load_cooldown,
     _save_cooldown,
     check_compliance,
     enforce_patterns,
     is_enforcement_enabled,
+    main,
     query_patterns,
 )
 
@@ -338,6 +340,18 @@ class TestQueryPatterns:
         assert len(captured_url) == 1
         assert "http://my-host:9999" in captured_url[0]
 
+    def test_trailing_slash_stripped_from_url(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Trailing slashes on INTELLIGENCE_SERVICE_URL are stripped."""
+        monkeypatch.setenv("INTELLIGENCE_SERVICE_URL", "http://test:8053/")
+        result = _get_intelligence_url()
+        assert result == "http://test:8053"
+        # Multiple trailing slashes
+        monkeypatch.setenv("INTELLIGENCE_SERVICE_URL", "http://test:8053///")
+        result = _get_intelligence_url()
+        assert not result.endswith("/")
+
 
 # ---------------------------------------------------------------------------
 # Compliance check tests
@@ -415,6 +429,22 @@ class TestCheckCompliance:
         result = check_compliance(
             file_path="/test/file.py",
             content_preview="GLOBAL_LIST = []\n",
+            pattern=pattern,
+        )
+        assert result is None
+
+    def test_returns_none_for_non_numeric_confidence(self) -> None:
+        """Non-numeric confidence value returns None instead of crashing."""
+        pattern = {
+            "id": "bad-conf-001",
+            "pattern_signature": "Use type hints",
+            "domain_id": "code_quality",
+            "confidence": "not-a-number",
+            "status": "validated",
+        }
+        result = check_compliance(
+            file_path="/test/file.py",
+            content_preview="x = 1\n",
             pattern=pattern,
         )
         assert result is None
@@ -607,6 +637,22 @@ class TestMain:
         assert result["enforced"] is False
         assert result["error"] == "empty stdin"
 
+    def test_outputs_json_on_invalid_stdin_json(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Invalid JSON on stdin produces safe error output, not a crash."""
+        monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
+        monkeypatch.setenv("ENABLE_PATTERN_ENFORCEMENT", "true")
+        monkeypatch.setattr("sys.stdin", MagicMock(read=lambda: "not valid json {{{"))
+
+        main()
+
+        captured = capsys.readouterr()
+        result = json.loads(captured.out)
+        assert result["enforced"] is False
+        assert result["error"] is not None
+        assert "fatal:" in result["error"]
+
     def test_processes_valid_input(
         self,
         monkeypatch: pytest.MonkeyPatch,
@@ -629,8 +675,6 @@ class TestMain:
         monkeypatch.setattr("sys.stdin", MagicMock(read=lambda: input_json))
 
         with patch("pattern_enforcement.query_patterns", return_value=[]):
-            from pattern_enforcement import main
-
             main()
 
         captured = capsys.readouterr()

@@ -39,7 +39,11 @@ logger = logging.getLogger(__name__)
 # Authoritative values. config.yaml mirrors these for documentation but is not read at runtime.
 _TOTAL_BUDGET_MS = 300
 _HTTP_TIMEOUT_S = 0.25  # 250ms for HTTP calls, leaving 50ms for processing
-_COOLDOWN_DIR = Path(f"/tmp/omniclaude-enforcement-{os.getuid()}")  # noqa: S108
+try:
+    _uid = os.getuid()
+except (AttributeError, OSError):
+    _uid = "unknown"
+_COOLDOWN_DIR = Path(f"/tmp/omniclaude-enforcement-{_uid}")  # noqa: S108
 _DEFAULT_MIN_CONFIDENCE = 0.7
 _DEFAULT_PATTERN_LIMIT = 10
 
@@ -93,6 +97,7 @@ def is_enforcement_enabled() -> bool:
 # ---------------------------------------------------------------------------
 
 # Throttle stale-file cleanup to at most once per 5 minutes.
+# Module-level throttle state. Assumes short-lived CLI invocations (one hook call per process).
 _last_cleanup: float = 0.0
 _CLEANUP_INTERVAL_S = 300  # 5 minutes
 
@@ -161,7 +166,7 @@ def _save_cooldown(session_id: str, pattern_ids: set[str]) -> None:
     """
     path = _cooldown_path(session_id)
     try:
-        _COOLDOWN_DIR.mkdir(parents=True, exist_ok=True)
+        _COOLDOWN_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
         # Atomic write: write to temp file then rename so readers never
         # see a partially-written cooldown file.
         tmp_fd, tmp_path = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
@@ -218,6 +223,9 @@ def query_patterns(
     Returns:
         List of pattern dicts from the API, or empty list on any failure.
     """
+    # Clamp to [0.0, 1.0] to guard against inf/nan producing odd query strings.
+    min_confidence = max(0.0, min(1.0, min_confidence))
+
     base_url = _get_intelligence_url()
     # Filter to validated patterns server-side so the limit budget isn't
     # consumed by provisional patterns that check_compliance() would drop.
@@ -278,31 +286,47 @@ def check_compliance(
     Returns:
         A PatternAdvisory if the pattern is applicable, None otherwise.
     """
-    # Extract fields with safe defaults
-    pattern_id = str(pattern.get("id", ""))
-    signature = str(pattern.get("pattern_signature", ""))
-    domain_id = str(pattern.get("domain_id", ""))
-    confidence = float(pattern.get("confidence", 0.0))
-    status = str(pattern.get("status", "unknown"))
+    try:
+        # Extract fields with safe defaults
+        pattern_id = str(pattern.get("id", ""))
+        signature = str(pattern.get("pattern_signature", ""))
+        domain_id = str(pattern.get("domain_id", ""))
+        try:
+            confidence = float(pattern.get("confidence", 0.0))
+        except (ValueError, TypeError):
+            logger.warning(
+                "Non-numeric confidence value %r in pattern %s, skipping",
+                pattern.get("confidence"),
+                pattern.get("id", "<unknown>"),
+            )
+            return None
+        status = str(pattern.get("status", "unknown"))
 
-    if not pattern_id or not signature:
+        if not pattern_id or not signature:
+            return None
+
+        # Only include validated patterns. Other statuses (draft, unknown, etc.)
+        # are filtered out until OMN-2256 adds content-aware checking.
+        if status != "validated":
+            return None
+
+        # Stub: returns metadata-only advisory without inspecting file content.
+        # OMN-2256 will replace this with content-aware compliance checking.
+        return PatternAdvisory(
+            pattern_id=pattern_id,
+            pattern_signature=signature,
+            domain_id=domain_id,
+            confidence=confidence,
+            status=status,
+            message=f"Pattern '{signature[:80]}' (confidence: {confidence:.2f}) may apply to this file.",
+        )
+    except Exception as exc:
+        logger.warning(
+            "Error processing pattern %s, skipping: %s",
+            pattern.get("id", "<unknown>"),
+            exc,
+        )
         return None
-
-    # Only include validated patterns. Other statuses (draft, unknown, etc.)
-    # are filtered out until OMN-2256 adds content-aware checking.
-    if status != "validated":
-        return None
-
-    # Stub: returns metadata-only advisory without inspecting file content.
-    # OMN-2256 will replace this with content-aware compliance checking.
-    return PatternAdvisory(
-        pattern_id=pattern_id,
-        pattern_signature=signature,
-        domain_id=domain_id,
-        confidence=confidence,
-        status=status,
-        message=f"Pattern '{signature[:80]}' (confidence: {confidence:.2f}) may apply to this file.",
-    )
 
 
 # ---------------------------------------------------------------------------
