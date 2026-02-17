@@ -22,12 +22,16 @@ import pytest
 # sys.path setup: plugin lib modules live outside the normal package tree
 # ---------------------------------------------------------------------------
 
-_HOOKS_LIB = (
-    Path(__file__).resolve().parent.parent.parent / "plugins" / "onex" / "hooks" / "lib"
+sys.path.insert(
+    0,
+    str(
+        Path(__file__).parent.parent.parent.parent.parent
+        / "plugins"
+        / "onex"
+        / "hooks"
+        / "lib"
+    ),
 )
-# Expected: tests/unit/test_compliance_prompt_parsing.py → repo_root/plugins/onex/hooks/lib
-if str(_HOOKS_LIB) not in sys.path:
-    sys.path.insert(0, str(_HOOKS_LIB))
 
 from pattern_enforcement import (
     EnforcementResult,
@@ -275,6 +279,8 @@ class TestViolationListParsing:
             file_path="test.py", content_preview="", pattern=pattern
         )
         assert result is not None
+        # This assertion passes because the signature (28 chars) is shorter than
+        # the 80-char truncation threshold applied in check_compliance().
         assert "Always use type annotations" in result["message"]
 
     def test_advisory_message_contains_confidence(self) -> None:
@@ -432,12 +438,16 @@ class TestBadOutputRecovery:
         self,
         monkeypatch: pytest.MonkeyPatch,
         capsys: pytest.CaptureFixture[str],
-        tmp_path: Path,
     ) -> None:
-        """JSON null on stdin produces a safe result (params will be None)."""
+        """JSON null on stdin produces a safe result (params will be None).
+
+        Code path: json.loads("null") returns Python None, then
+        params.get("session_id") raises AttributeError on NoneType,
+        which is caught by main()'s outer exception handler.
+        _COOLDOWN_DIR is never reached.
+        """
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("ENABLE_PATTERN_ENFORCEMENT", "true")
-        monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
         monkeypatch.setattr("sys.stdin", MagicMock(read=lambda: "null"))
 
         main()
@@ -518,8 +528,8 @@ class TestEdgeCases:
         assert result["pattern_signature"] == unicode_sig
         assert unicode_sig[:80] in result["message"]
 
-    def test_unicode_in_domain_id(self) -> None:
-        """Unicode in domain_id is preserved."""
+    def test_domain_id_preserved_in_match(self) -> None:
+        """domain_id is correctly passed through in the pattern matching result."""
         pattern = _make_pattern(domain_id="code_quality")
         result = check_compliance(
             file_path="test.py", content_preview="", pattern=pattern
