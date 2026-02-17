@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from uuid import UUID
 
 from omniclaude.nodes.node_agent_routing_compute._internal import (
@@ -34,6 +33,8 @@ from omniclaude.nodes.node_agent_routing_compute._internal import (
 )
 from omniclaude.nodes.node_agent_routing_compute.handler_routing_default import (
     build_registry_dict,
+    create_explicit_result,
+    extract_explicit_agent,
 )
 from omniclaude.nodes.node_agent_routing_compute.models import (
     ModelConfidenceBreakdown,
@@ -135,126 +136,6 @@ def _parse_agent_from_response(
     return None
 
 
-def _extract_explicit_agent(text: str, known_agents: set[str]) -> str | None:
-    """Extract explicit agent name from a user request.
-
-    Supports patterns:
-    - "use agent-X" - Specific agent request
-    - "@agent-X" - Specific agent request
-    - "agent-X" at start of text - Specific agent request
-    - "use an agent", "spawn an agent", etc. - Generic request -> polymorphic-agent
-
-    Args:
-        text: User's input text.
-        known_agents: Set of agent names present in the registry.
-
-    Returns:
-        Agent name if found and valid, None otherwise.
-    """
-    try:
-        text_lower = text.lower()
-
-        # Patterns for specific agent requests (with agent name)
-        # \b prevents false positives: "reuse agent-X", "misuse agent-X"
-        specific_patterns = [
-            r"\buse\s+(agent-[\w-]+)",  # "use agent-researcher"
-            r"@(agent-[\w-]+)",  # "@agent-researcher"
-            r"^(agent-[\w-]+)",  # "agent-researcher" at start
-        ]
-
-        # Check specific patterns first
-        for pattern in specific_patterns:
-            match = re.search(pattern, text_lower)
-            if match:
-                agent_name = match.group(1)
-                # Verify agent exists in registry
-                if agent_name in known_agents:
-                    logger.debug(
-                        "Extracted explicit agent: %s (pattern=%s)",
-                        agent_name,
-                        pattern,
-                    )
-                    return agent_name
-
-        # Patterns for generic agent requests (no specific agent name)
-        # These should default to polymorphic-agent
-        # Word boundaries (\b) prevent false positives like "misuse an agent"
-        generic_patterns = [
-            r"\buse\s+an?\s+agent\b",  # "use an agent" or "use a agent"
-            r"\bspawn\s+an?\s+agent\b",  # "spawn an agent" or "spawn a agent"
-            r"\bspawn\s+an?\s+poly\b",  # "spawn a poly" or "spawn an poly"
-            r"\bdispatch\s+to\s+an?\s+agent\b",  # "dispatch to an agent"
-            r"\bcall\s+an?\s+agent\b",  # "call an agent" or "call a agent"
-            r"\binvoke\s+an?\s+agent\b",  # "invoke an agent" or "invoke a agent"
-        ]
-
-        # Check generic patterns
-        for pattern in generic_patterns:
-            match = re.search(pattern, text_lower)
-            if match:
-                # Default to polymorphic-agent
-                default_agent = _FALLBACK_AGENT
-                # Verify polymorphic-agent exists in registry
-                if default_agent in known_agents:
-                    logger.debug(
-                        "Generic agent request matched, using default: %s",
-                        default_agent,
-                    )
-                    return default_agent
-                else:
-                    logger.warning(
-                        "Generic agent request matched but %s not in registry",
-                        default_agent,
-                    )
-
-        return None
-
-    except Exception:
-        logger.warning(
-            "Failed to extract explicit agent from: %s",
-            text[:50],
-            exc_info=True,
-        )
-        return None
-
-
-def _create_explicit_result(agent_name: str) -> ModelRoutingResult:
-    """Create a routing result for an explicitly requested agent.
-
-    Explicit requests always have 1.0 confidence across all dimensions.
-
-    Args:
-        agent_name: The explicitly requested agent name.
-
-    Returns:
-        ModelRoutingResult with routing_policy="explicit_request" and
-        confidence=1.0.
-    """
-    breakdown = ModelConfidenceBreakdown(
-        total=1.0,
-        trigger_score=1.0,
-        context_score=1.0,
-        capability_score=1.0,
-        historical_score=1.0,
-        explanation="Explicit agent request",
-    )
-    candidate = ModelRoutingCandidate(
-        agent_name=agent_name,
-        confidence=1.0,
-        confidence_breakdown=breakdown,
-        match_reason="Explicitly requested by user",
-    )
-    return ModelRoutingResult(
-        selected_agent=agent_name,
-        confidence=1.0,
-        confidence_breakdown=breakdown,
-        routing_policy="explicit_request",
-        routing_path="local",
-        candidates=(candidate,),
-        fallback_reason=None,
-    )
-
-
 class HandlerRoutingLlm:
     """LLM-based routing handler that uses Qwen-14B to select agents.
 
@@ -318,14 +199,14 @@ class HandlerRoutingLlm:
         agent_names = set(registry_dict["agents"].keys())
 
         # 2. Check for explicit agent request (@agent-name, "use agent-X")
-        explicit_agent = _extract_explicit_agent(request.prompt, agent_names)
+        explicit_agent = extract_explicit_agent(request.prompt, agent_names)
         if explicit_agent is not None:
             logger.debug(
                 "Explicit agent request detected: %s (correlation_id=%s)",
                 explicit_agent,
                 cid,
             )
-            return _create_explicit_result(explicit_agent)
+            return create_explicit_result(explicit_agent)
 
         # 3. Run TriggerMatcher to generate candidates
         try:

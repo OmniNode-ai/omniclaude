@@ -1512,6 +1512,7 @@ source = { editable = "." }
 dependencies = [
     { name = "cachetools" },
     { name = "click" },
+    { name = "httpx" },
     { name = "omnibase-core" },
     { name = "omnibase-infra" },
     { name = "omnibase-spi" },
@@ -1553,6 +1554,7 @@ requires-dist = [
     { name = "cachetools", specifier = ">=5.0.0" },
     { name = "click", specifier = ">=8.1.0" },
     { name = "confluent-kafka", marker = "extra == 'kafka'", specifier = ">=2.3.0" },
+    { name = "httpx", specifier = ">=0.27.0" },
     { name = "omnibase-core", specifier = ">=0.16.0,<0.17.0" },
     { name = "omnibase-infra", specifier = ">=0.6.0,<0.7.0" },
     { name = "omnibase-spi", specifier = ">=0.7.0,<0.8.0" },
