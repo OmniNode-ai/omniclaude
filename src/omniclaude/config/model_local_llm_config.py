@@ -6,14 +6,14 @@ purpose, latency budget, and priority. The registry loads endpoint URLs from
 environment variables and provides lookup methods by purpose.
 
 Environment variables:
-    LLM_CODER_URL: Qwen2.5-Coder-14B endpoint (expected: http://192.168.86.201:8000)
-    LLM_EMBEDDING_URL: GTE-Qwen2 embedding endpoint (expected: http://192.168.86.201:8002)
-    LLM_FUNCTION_URL: Qwen2.5-7B function-calling endpoint (optional, hot-swap)
-    LLM_DEEPSEEK_LITE_URL: DeepSeek-V2-Lite endpoint (optional, hot-swap)
-    LLM_QWEN_72B_URL: Qwen2.5-72B large model endpoint (expected: http://192.168.86.200:8100)
-    LLM_VISION_URL: Qwen2-VL vision endpoint (expected: http://192.168.86.200:8102)
-    LLM_DEEPSEEK_R1_URL: DeepSeek-R1-Distill reasoning endpoint (optional, hot-swap)
-    LLM_QWEN_14B_URL: Qwen2.5-14B general purpose endpoint (expected: http://192.168.86.100:8200)
+    LLM_CODER_URL: Qwen2.5-Coder-14B endpoint for code generation.
+    LLM_EMBEDDING_URL: GTE-Qwen2 embedding endpoint.
+    LLM_FUNCTION_URL: Qwen2.5-7B function-calling endpoint (optional, hot-swap).
+    LLM_DEEPSEEK_LITE_URL: DeepSeek-V2-Lite endpoint (optional, hot-swap).
+    LLM_QWEN_72B_URL: Qwen2.5-72B large model endpoint.
+    LLM_VISION_URL: Qwen2-VL vision endpoint.
+    LLM_DEEPSEEK_R1_URL: DeepSeek-R1-Distill reasoning endpoint (optional, hot-swap).
+    LLM_QWEN_14B_URL: Qwen2.5-14B general purpose endpoint.
 
 Example:
     >>> from omniclaude.config.model_local_llm_config import (
@@ -231,6 +231,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
 
     # Intentionally a cached_property, not a Pydantic field. This is a private
     # computed cache that will not appear in model_dump() or serialization.
+    # Note: model_copy() will share this cache; no callers use model_copy today.
     @functools.cached_property
     def _endpoint_configs(self) -> list[LlmEndpointConfig]:
         """Build the list of available endpoint configs from loaded settings.
