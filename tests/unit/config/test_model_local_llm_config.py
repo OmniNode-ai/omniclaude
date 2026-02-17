@@ -12,6 +12,7 @@ Tests cover:
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -169,6 +170,16 @@ class TestLlmEndpointConfig:
         assert high.max_latency_ms == 60000
 
     @pytest.mark.unit
+    def test_empty_model_name_rejected(self) -> None:
+        """Empty string model_name is rejected (min_length=1)."""
+        with pytest.raises(ValidationError, match="model_name"):
+            LlmEndpointConfig(
+                url="http://localhost:8000",
+                model_name="",
+                purpose=LlmEndpointPurpose.GENERAL,
+            )
+
+    @pytest.mark.unit
     def test_priority_boundary_values(self) -> None:
         """Boundary values for priority (1 and 10) are accepted."""
         low = LlmEndpointConfig(
@@ -219,7 +230,7 @@ class TestLocalLlmEndpointRegistry:
         monkeypatch.setenv("LLM_QWEN_14B_URL", "http://192.168.86.100:8200")
 
     @pytest.fixture
-    def make_registry(self) -> Any:
+    def make_registry(self) -> Callable[..., LocalLlmEndpointRegistry]:
         """Factory fixture for creating test registries without .env file loading."""
 
         def _make(**kwargs: Any) -> LocalLlmEndpointRegistry:
@@ -230,7 +241,7 @@ class TestLocalLlmEndpointRegistry:
 
     @pytest.mark.unit
     def test_empty_env_returns_empty_registry(
-        self, _clean_env: None, make_registry: Any
+        self, _clean_env: None, make_registry: Callable[..., LocalLlmEndpointRegistry]
     ) -> None:
         """Missing env vars produce an empty registry, not an error."""
         registry = make_registry()
@@ -238,7 +249,7 @@ class TestLocalLlmEndpointRegistry:
 
     @pytest.mark.unit
     def test_full_env_loads_all_endpoints(
-        self, full_env: None, make_registry: Any
+        self, full_env: None, make_registry: Callable[..., LocalLlmEndpointRegistry]
     ) -> None:
         """All 8 endpoints are loaded when all env vars are set."""
         registry = make_registry()
@@ -247,7 +258,7 @@ class TestLocalLlmEndpointRegistry:
 
     @pytest.mark.unit
     def test_partial_env_loads_available_endpoints(
-        self, partial_env: None, make_registry: Any
+        self, partial_env: None, make_registry: Callable[..., LocalLlmEndpointRegistry]
     ) -> None:
         """Only endpoints with set env vars are loaded."""
         registry = make_registry()
@@ -266,7 +277,7 @@ class TestLocalLlmEndpointRegistry:
 
     @pytest.mark.unit
     def test_get_all_endpoints_returns_defensive_copy(
-        self, full_env: None, make_registry: Any
+        self, full_env: None, make_registry: Callable[..., LocalLlmEndpointRegistry]
     ) -> None:
         """get_all_endpoints returns a new list each call (defensive copy)."""
         registry = make_registry()
@@ -277,7 +288,7 @@ class TestLocalLlmEndpointRegistry:
 
     @pytest.mark.unit
     def test_get_endpoint_returns_best_for_purpose(
-        self, full_env: None, make_registry: Any
+        self, full_env: None, make_registry: Callable[..., LocalLlmEndpointRegistry]
     ) -> None:
         """get_endpoint returns the highest-priority endpoint for a purpose."""
         registry = make_registry()
@@ -288,7 +299,7 @@ class TestLocalLlmEndpointRegistry:
 
     @pytest.mark.unit
     def test_get_endpoint_returns_none_for_missing_purpose(
-        self, _clean_env: None, make_registry: Any
+        self, _clean_env: None, make_registry: Callable[..., LocalLlmEndpointRegistry]
     ) -> None:
         """get_endpoint returns None when no endpoint serves the purpose."""
         registry = make_registry()
@@ -296,7 +307,7 @@ class TestLocalLlmEndpointRegistry:
 
     @pytest.mark.unit
     def test_get_endpoint_routing_not_configured(
-        self, full_env: None, make_registry: Any
+        self, full_env: None, make_registry: Callable[..., LocalLlmEndpointRegistry]
     ) -> None:
         """ROUTING purpose has no default endpoint (reserved for future use)."""
         registry = make_registry()
@@ -305,7 +316,7 @@ class TestLocalLlmEndpointRegistry:
 
     @pytest.mark.unit
     def test_get_endpoints_by_purpose_sorted_by_priority(
-        self, full_env: None, make_registry: Any
+        self, full_env: None, make_registry: Callable[..., LocalLlmEndpointRegistry]
     ) -> None:
         """Multiple endpoints for same purpose are sorted by priority descending."""
         registry = make_registry()
@@ -320,7 +331,7 @@ class TestLocalLlmEndpointRegistry:
 
     @pytest.mark.unit
     def test_get_endpoints_by_purpose_general(
-        self, full_env: None, make_registry: Any
+        self, full_env: None, make_registry: Callable[..., LocalLlmEndpointRegistry]
     ) -> None:
         """GENERAL purpose returns DeepSeek-V2-Lite and Qwen2.5-14B."""
         registry = make_registry()
@@ -334,7 +345,7 @@ class TestLocalLlmEndpointRegistry:
 
     @pytest.mark.unit
     def test_get_endpoints_by_purpose_empty(
-        self, _clean_env: None, make_registry: Any
+        self, _clean_env: None, make_registry: Callable[..., LocalLlmEndpointRegistry]
     ) -> None:
         """Empty purpose list when no endpoints configured."""
         registry = make_registry()
@@ -342,7 +353,10 @@ class TestLocalLlmEndpointRegistry:
 
     @pytest.mark.unit
     def test_invalid_url_env_var_rejected(
-        self, monkeypatch: pytest.MonkeyPatch, _clean_env: None, make_registry: Any
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        _clean_env: None,
+        make_registry: Callable[..., LocalLlmEndpointRegistry],
     ) -> None:
         """Invalid URL in env var causes validation error."""
         monkeypatch.setenv("LLM_CODER_URL", "not-a-valid-url")
@@ -351,7 +365,10 @@ class TestLocalLlmEndpointRegistry:
 
     @pytest.mark.unit
     def test_custom_latency_budget_from_env(
-        self, monkeypatch: pytest.MonkeyPatch, _clean_env: None, make_registry: Any
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        _clean_env: None,
+        make_registry: Callable[..., LocalLlmEndpointRegistry],
     ) -> None:
         """Latency budgets can be overridden via environment variables."""
         monkeypatch.setenv("LLM_CODER_URL", "http://192.168.86.201:8000")
@@ -362,7 +379,9 @@ class TestLocalLlmEndpointRegistry:
         assert endpoint.max_latency_ms == 500
 
     @pytest.mark.unit
-    def test_endpoint_urls_preserved(self, full_env: None, make_registry: Any) -> None:
+    def test_endpoint_urls_preserved(
+        self, full_env: None, make_registry: Callable[..., LocalLlmEndpointRegistry]
+    ) -> None:
         """Endpoint URLs match the environment variable values."""
         registry = make_registry()
         endpoint = registry.get_endpoint(LlmEndpointPurpose.EMBEDDING)
@@ -371,7 +390,9 @@ class TestLocalLlmEndpointRegistry:
         assert "8002" in str(endpoint.url)
 
     @pytest.mark.unit
-    def test_vision_endpoint(self, full_env: None, make_registry: Any) -> None:
+    def test_vision_endpoint(
+        self, full_env: None, make_registry: Callable[..., LocalLlmEndpointRegistry]
+    ) -> None:
         """Vision endpoint is correctly mapped."""
         registry = make_registry()
         endpoint = registry.get_endpoint(LlmEndpointPurpose.VISION)
@@ -381,7 +402,7 @@ class TestLocalLlmEndpointRegistry:
 
     @pytest.mark.unit
     def test_function_calling_endpoint(
-        self, full_env: None, make_registry: Any
+        self, full_env: None, make_registry: Callable[..., LocalLlmEndpointRegistry]
     ) -> None:
         """Function calling endpoint is correctly mapped."""
         registry = make_registry()
@@ -391,7 +412,10 @@ class TestLocalLlmEndpointRegistry:
 
     @pytest.mark.unit
     def test_extra_env_vars_ignored(
-        self, monkeypatch: pytest.MonkeyPatch, _clean_env: None, make_registry: Any
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        _clean_env: None,
+        make_registry: Callable[..., LocalLlmEndpointRegistry],
     ) -> None:
         """Unknown env vars are ignored (extra='ignore')."""
         monkeypatch.setenv("LLM_CODER_URL", "http://localhost:8000")
