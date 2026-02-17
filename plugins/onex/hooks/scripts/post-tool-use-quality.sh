@@ -198,6 +198,19 @@ if [ "$TOOL_NAME" = "Write" ] || [ "$TOOL_NAME" = "Edit" ]; then
                             echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Pattern enforcement: $ADVISORY_COUNT advisory(ies)" >> "$LOG_FILE"
                             if [[ "$ADVISORY_COUNT" -gt 0 ]]; then
                                 echo "$ENFORCE_RESULT" | jq -c '.' >> "$LOG_FILE" 2>/dev/null
+
+                                # OMN-2269: Persist advisories for context injection on next turn
+                                ADVISORY_FORMATTER="${HOOKS_LIB}/pattern_advisory_formatter.py"
+                                if [[ -f "$ADVISORY_FORMATTER" ]]; then
+                                    SAVE_INPUT=$(echo "$ENFORCE_RESULT" | jq -c \
+                                        --arg session_id "$SESSION_ID" \
+                                        '{session_id: $session_id, advisories: .advisories}' 2>/dev/null)
+                                    if [[ -n "$SAVE_INPUT" && "$SAVE_INPUT" != "null" ]]; then
+                                        echo "$SAVE_INPUT" | "$PYTHON_CMD" "$ADVISORY_FORMATTER" save 2>>"$LOG_FILE" \
+                                            && echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Advisories persisted for context injection" >> "$LOG_FILE" \
+                                            || echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Advisory persistence failed (non-fatal)" >> "$LOG_FILE"
+                                    fi
+                                fi
                             fi
                         fi
                     fi
