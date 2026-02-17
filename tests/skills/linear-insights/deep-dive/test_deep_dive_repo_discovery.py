@@ -388,3 +388,105 @@ def test_integration_auto_discovery_no_repos_flag() -> None:
     assert len(repos) > 4, (
         f"Auto-discovery should find more than 4 repos for 2026-02-15, got: {repos}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Local Clone Discovery Tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_local_clone_dirs_emitted_in_generate_output(tmp_path: Path) -> None:
+    """With --code-root pointing to a dir with fake clones, --generate output
+    should include per-directory git log commands for each clone."""
+    # Create fake clone dirs with .git subdirs
+    for name in ["omniclaude", "omniclaude2", "omniclaude3", "omnibase_infra"]:
+        clone = tmp_path / name
+        (clone / ".git").mkdir(parents=True)
+
+    result = run_deep_dive(
+        "--date",
+        "2026-02-17",
+        "--generate",
+        "--no-snapshot",
+        "--code-root",
+        str(tmp_path),
+        env={"PATH": SYSTEM_BINS, "HOME": str(tmp_path)},
+    )
+
+    assert result.returncode == 0, f"Script failed: {result.stderr}"
+
+    for clone_name in ["omniclaude", "omniclaude2", "omniclaude3", "omnibase_infra"]:
+        assert str(tmp_path / clone_name) in result.stdout, (
+            f"Expected git log command for {clone_name} in output"
+        )
+    assert "Deduplicate" in result.stdout or "dedup" in result.stdout.lower()
+
+
+@pytest.mark.unit
+def test_non_git_dirs_excluded_from_clone_discovery(tmp_path: Path) -> None:
+    """Directories without a .git folder should not appear in git log commands."""
+    # Only omniclaude has .git; omniclaude2 does not
+    (tmp_path / "omniclaude" / ".git").mkdir(parents=True)
+    (tmp_path / "omniclaude2").mkdir()  # no .git
+
+    result = run_deep_dive(
+        "--date",
+        "2026-02-17",
+        "--generate",
+        "--no-snapshot",
+        "--code-root",
+        str(tmp_path),
+        env={"PATH": SYSTEM_BINS, "HOME": str(tmp_path)},
+    )
+
+    assert result.returncode == 0, f"Script failed: {result.stderr}"
+    assert str(tmp_path / "omniclaude") in result.stdout
+    assert str(tmp_path / "omniclaude2") not in result.stdout
+
+
+@pytest.mark.unit
+def test_code_root_env_var_used_when_no_flag(tmp_path: Path) -> None:
+    """OMNI_CODE_ROOT env var should be used when --code-root flag is absent."""
+    (tmp_path / "omnidash" / ".git").mkdir(parents=True)
+    (tmp_path / "omnidash2" / ".git").mkdir(parents=True)
+
+    result = run_deep_dive(
+        "--date",
+        "2026-02-17",
+        "--generate",
+        "--no-snapshot",
+        env={
+            "PATH": SYSTEM_BINS,
+            "HOME": str(tmp_path),
+            "OMNI_CODE_ROOT": str(tmp_path),
+        },
+    )
+
+    assert result.returncode == 0, f"Script failed: {result.stderr}"
+    assert str(tmp_path / "omnidash") in result.stdout
+    assert str(tmp_path / "omnidash2") in result.stdout
+
+
+@pytest.mark.unit
+def test_fallback_single_git_log_when_no_code_root(tmp_path: Path) -> None:
+    """With no CODE_ROOT and no OMNI_CODE_ROOT, falls back to generic git log."""
+    # Unset OMNI_CODE_ROOT; use a fake HOME so auto-detect finds nothing
+    fake_home = tmp_path / "fakehome"
+    fake_home.mkdir()
+
+    result = run_deep_dive(
+        "--date",
+        "2026-02-17",
+        "--generate",
+        "--no-snapshot",
+        env={
+            "PATH": SYSTEM_BINS,
+            "HOME": str(fake_home),
+            "OMNI_CODE_ROOT": "",  # explicitly empty
+        },
+    )
+
+    assert result.returncode == 0, f"Script failed: {result.stderr}"
+    # Should still emit a git log command, just the generic one
+    assert "git log" in result.stdout

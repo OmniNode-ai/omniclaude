@@ -97,6 +97,7 @@ SNAPSHOT_ONLY=false
 NO_SNAPSHOT=false
 # Default to MVP project from config.yaml
 PROJECT_ID="e44ddbf4-b4c7-40dc-84fa-f402ec27b38e"
+CODE_ROOT="${OMNI_CODE_ROOT:-}"  # Root dir containing all repo clones; auto-detected if empty
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -144,6 +145,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --project-id)
             PROJECT_ID="$2"
+            shift 2
+            ;;
+        --code-root)
+            CODE_ROOT="$2"
             shift 2
             ;;
         -h|--help)
@@ -236,6 +241,45 @@ discover_active_repos() {
     sorted=$(printf '%s\n' "${active_repos[@]}" | sort | tr '\n' ',' | sed 's/,$//')
     echo "$sorted"
 }
+
+# =============================================================================
+# Code Root Detection & Local Clone Discovery
+# =============================================================================
+# Discovers all local repo clone directories (omniclaude, omniclaude2, ...) so
+# git log commands can be emitted for every clone, not just the primary one.
+# =============================================================================
+
+# Auto-detect CODE_ROOT from script's real path if not already set.
+# Script lives at CODE_ROOT/{repo}/plugins/onex/skills/linear-insights/deep-dive
+# so walking up 6 levels gives CODE_ROOT.
+if [[ -z "$CODE_ROOT" ]]; then
+    _script_real="$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")"
+    _candidate="$(dirname "$(dirname "$(dirname "$(dirname "$(dirname "$(dirname "$_script_real")")")")")")"
+    if [[ -d "$_candidate" ]] && ls "$_candidate"/omni* &>/dev/null 2>&1; then
+        CODE_ROOT="$_candidate"
+    fi
+fi
+
+# discover_local_clones: print absolute paths to every git repo under CODE_ROOT
+# whose name starts with "omni" (includes omniclaude, omniclaude2, omnibase_infra6, etc.)
+discover_local_clones() {
+    local code_root="$1"
+    [[ -d "$code_root" ]] || return 0
+    local clone
+    for clone in "$code_root"/omni*/; do
+        clone="${clone%/}"
+        [[ -d "$clone/.git" ]] || continue
+        echo "$clone"
+    done | sort
+}
+
+# Build LOCAL_CLONE_DIRS array for use in git log command generation
+LOCAL_CLONE_DIRS=()
+if [[ -n "$CODE_ROOT" ]]; then
+    while IFS= read -r _dir; do
+        [[ -n "$_dir" ]] && LOCAL_CLONE_DIRS+=("$_dir")
+    done < <(discover_local_clones "$CODE_ROOT")
+fi
 
 # Perform auto-discovery unless --repos was explicitly provided
 if [[ "$REPOS_EXPLICIT" == "false" ]]; then
@@ -377,11 +421,13 @@ DAY_NUM=$(date -j -f "%Y-%m-%d" "$TARGET_DATE" "+%-d" 2>/dev/null || date -d "$T
 YEAR=$(date -j -f "%Y-%m-%d" "$TARGET_DATE" "+%Y" 2>/dev/null || date -d "$TARGET_DATE" "+%Y")
 WEEK_START=$(date -j -v-$(($(date -j -f "%Y-%m-%d" "$TARGET_DATE" "+%u" 2>/dev/null || echo 1)-1))d -f "%Y-%m-%d" "$TARGET_DATE" "+%B %-d" 2>/dev/null || echo "Week")
 
+# Always compute MONTH_UPPER (used in output filenames and --generate output)
+MONTH_UPPER=$(echo "$MONTH_NAME" | tr '[:lower:]' '[:upper:]')
+
 # Generate output filename
 if [[ -n "$OUTPUT_FILE" ]]; then
     OUTFILE="$OUTPUT_FILE"
 elif [[ "$SAVE" == "true" ]]; then
-    MONTH_UPPER=$(echo "$MONTH_NAME" | tr '[:lower:]' '[:upper:]')
     OUTFILE="${OUTPUT_DIR}/${MONTH_UPPER}_${DAY_NUM}_${YEAR}_DEEP_DIVE.md"
 else
     OUTFILE=""
@@ -462,7 +508,7 @@ if [[ "$JSON_OUTPUT" == "true" && "$GENERATE" == "true" ]]; then
     printf '  "day_name": "%s",\n' "$DAY_NAME"
     printf '  "analysis_days": %d,\n' "$DAYS"
     printf '  "repositories": [%s],\n' "$repos_json_array"
-    printf '  "output_file": "%s",\n' "${OUTFILE:-${OUTPUT_DIR}/${MONTH_NAME^^}_${DAY_NUM}_${YEAR}_DEEP_DIVE.md}"
+    printf '  "output_file": "%s",\n' "${OUTFILE:-${OUTPUT_DIR}/${MONTH_UPPER}_${DAY_NUM}_${YEAR}_DEEP_DIVE.md}"
     printf '  "snapshot": %s,\n' "$SNAPSHOT_JSON"
     printf '  "mcp_calls": [\n'
     printf '    {\n'
@@ -485,8 +531,20 @@ if [[ "$JSON_OUTPUT" == "true" && "$GENERATE" == "true" ]]; then
     printf '  ],\n'
     printf '  "gh_commands": [%s\n  ],\n' "$gh_commands_json"
     printf '  "git_commands": [\n'
-    printf '    "git log --oneline --since=\\"%s\\\" --until=\\\"%s 23:59:59\\\" --author=\\\"Jonah\\\""\n' "$TARGET_DATE" "$TARGET_DATE"
+    if [[ ${#LOCAL_CLONE_DIRS[@]} -gt 0 ]]; then
+        local _first=true
+        for _clone_dir in "${LOCAL_CLONE_DIRS[@]}"; do
+            [[ "$_first" == "true" ]] || printf ',\n'
+            printf '    "cd \\"%s\\" && git log --oneline --format=\\"%%H %%s\\" --since=\\"%s\\" --until=\\"%s 23:59:59\\" --author=\\"Jonah\\""' \
+                "$_clone_dir" "$TARGET_DATE" "$TARGET_DATE"
+            _first=false
+        done
+        printf '\n'
+    else
+        printf '    "git log --oneline --since=\\"%s\\\" --until=\\\"%s 23:59:59\\\" --author=\\\"Jonah\\\""\n' "$TARGET_DATE" "$TARGET_DATE"
+    fi
     printf '  ],\n'
+    printf '  "git_dedup_note": "Deduplicate commits by full SHA — same SHA in multiple clones of the same repo counts once",\n'
     printf '  "report_sections": [\n'
     printf '    "Executive Summary (Velocity/Effectiveness scores)",\n'
     printf '    "Repository Activity Overview",\n'
@@ -583,7 +641,7 @@ Categorize by status: Done, In Progress, Backlog
 ### Step 2: Fetch PR Data (for each repo)
 PROMPT_HEADER
 echo "For each of: ${REPOS}"
-cat << 'PROMPT_FOOTER'
+cat << 'PROMPT_PRE_GIT'
 
 ```bash
 gh pr list --repo OmniNode-ai/{repo} --state merged \
@@ -591,9 +649,22 @@ gh pr list --repo OmniNode-ai/{repo} --state merged \
 ```
 
 ### Step 3: Fetch Commit Data
-```bash
-git log --oneline --since="{DATE}" --until="{DATE} 23:59:59" --author="Jonah"
-```
+
+Run in EACH clone directory below. Deduplicate by full commit SHA when the same
+commit appears in multiple clones of the same repo (counts once per SHA).
+
+PROMPT_PRE_GIT
+if [[ ${#LOCAL_CLONE_DIRS[@]} -gt 0 ]]; then
+    for _clone_dir in "${LOCAL_CLONE_DIRS[@]}"; do
+        printf '# %s\n' "$(basename "$_clone_dir")"
+        printf '```bash\ncd "%s" && git log --oneline --format="%%H %%s" --since="%s" --until="%s 23:59:59" --author="Jonah"\n```\n\n' \
+            "$_clone_dir" "$TARGET_DATE" "$TARGET_DATE"
+    done
+else
+    printf '```bash\ngit log --oneline --since="%s" --until="%s 23:59:59" --author="Jonah"\n```\n\n' \
+        "$TARGET_DATE" "$TARGET_DATE"
+fi
+cat << 'PROMPT_FOOTER'
 
 ## Report Format
 
@@ -701,12 +772,23 @@ if [[ "$GENERATE" == "true" ]]; then
     echo "STEP 4: Fetch Git Commit Data"
     echo "============================================================"
     echo ""
-    echo "Execute in each repository directory:"
+    echo "Execute in EACH clone directory below."
+    echo "Deduplicate commits by full SHA — same SHA in multiple clones counts once."
     echo ""
-    echo '```bash'
-    echo "git log --oneline --since=\"${TARGET_DATE}\" --until=\"${TARGET_DATE} 23:59:59\" --author=\"Jonah\""
-    echo '```'
-    echo ""
+    if [[ ${#LOCAL_CLONE_DIRS[@]} -gt 0 ]]; then
+        for _clone_dir in "${LOCAL_CLONE_DIRS[@]}"; do
+            echo "# $(basename "$_clone_dir")"
+            echo '```bash'
+            echo "cd \"${_clone_dir}\" && git log --oneline --format=\"%H %s\" --since=\"${TARGET_DATE}\" --until=\"${TARGET_DATE} 23:59:59\" --author=\"Jonah\""
+            echo '```'
+            echo ""
+        done
+    else
+        echo '```bash'
+        echo "git log --oneline --since=\"${TARGET_DATE}\" --until=\"${TARGET_DATE} 23:59:59\" --author=\"Jonah\""
+        echo '```'
+        echo ""
+    fi
     echo "============================================================"
     echo "STEP 5: Generate Report"
     echo "============================================================"
@@ -729,7 +811,7 @@ if [[ "$GENERATE" == "true" ]]; then
     if [[ -n "$OUTFILE" ]]; then
         echo "Save report to: $OUTFILE"
     else
-        echo "Output file: ${OUTPUT_DIR}/${MONTH_NAME^^}_${DAY_NUM}_${YEAR}_DEEP_DIVE.md"
+        echo "Output file: ${OUTPUT_DIR}/${MONTH_UPPER}_${DAY_NUM}_${YEAR}_DEEP_DIVE.md"
     fi
     echo ""
     echo "============================================================"
