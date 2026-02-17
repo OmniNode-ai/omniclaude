@@ -31,7 +31,7 @@ Options:
   --json              Output as JSON (for programmatic processing)
   --generate          Output MCP tool call instructions for direct execution
   --repos REPOS       Comma-separated list of repos to analyze
-                      (default: omnibase_core,omnibase_spi,omnibase_infra,omniclaude)
+                      (default: auto-discover all OmniNode-ai repos with activity)
   --snapshot-only     Create snapshot without markdown output
   --no-snapshot       Skip snapshot creation (markdown only)
   --project-id ID     Linear project UUID for snapshot (default: MVP project)
@@ -91,7 +91,8 @@ SAVE=false
 OUTPUT_FILE=""
 JSON_OUTPUT=false
 GENERATE=false
-REPOS="omnibase_core,omnibase_spi,omnibase_infra,omniclaude"
+REPOS=""          # Empty = auto-discover active repos
+REPOS_EXPLICIT=false
 SNAPSHOT_ONLY=false
 NO_SNAPSHOT=false
 # Default to MVP project from config.yaml
@@ -126,6 +127,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --repos)
             REPOS="$2"
+            REPOS_EXPLICIT=true
             shift 2
             ;;
         --generate)
@@ -158,6 +160,90 @@ done
 if [[ "$SNAPSHOT_ONLY" == "true" && "$NO_SNAPSHOT" == "true" ]]; then
     echo "Error: Cannot use both --snapshot-only and --no-snapshot"
     exit 1
+fi
+
+# =============================================================================
+# Repo Auto-Discovery
+# =============================================================================
+# When --repos is not provided, discover all OmniNode-ai repos that have
+# merged PRs in the analysis period.  Queries run in parallel for performance.
+# =============================================================================
+discover_active_repos() {
+    local date_str="$1"
+
+    # Require gh CLI
+    if ! command -v gh &>/dev/null; then
+        echo "Warning: gh CLI not found, falling back to default repo list" >&2
+        return 0  # Return 0 so set -e doesn't abort — caller checks empty stdout
+    fi
+
+    # Fetch all repos in the org (up to 100)
+    local all_repos
+    all_repos=$(gh repo list OmniNode-ai --limit 100 --json name --jq '.[].name' 2>/dev/null) || {
+        echo "Warning: gh repo list failed, falling back to default repo list" >&2
+        return 0
+    }
+
+    if [[ -z "$all_repos" ]]; then
+        echo "Warning: No repos returned from gh repo list, using default list" >&2
+        return 0
+    fi
+
+    # Check each repo for merged PRs in the analysis period — in parallel
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    local pids=()
+
+    while IFS= read -r repo; do
+        (
+            count=$(gh pr list \
+                --repo "OmniNode-ai/${repo}" \
+                --state merged \
+                --search "merged:>=${date_str}" \
+                --json number \
+                --jq 'length' 2>/dev/null || echo 0)
+            if [[ "$count" -gt 0 ]]; then
+                echo "$repo" > "${tmpdir}/${repo}.active"
+            fi
+        ) &
+        pids+=($!)
+    done <<< "$all_repos"
+
+    # Wait for all parallel checks to complete
+    for pid in "${pids[@]}"; do
+        wait "$pid" 2>/dev/null || true
+    done
+
+    # Collect active repos and sort for deterministic output
+    local active_repos=()
+    for f in "${tmpdir}"/*.active; do
+        [[ -f "$f" ]] || continue
+        active_repos+=("$(cat "$f")")
+    done
+    rm -rf "$tmpdir"
+
+    if [[ ${#active_repos[@]} -eq 0 ]]; then
+        # No PRs merged — still return all repos so report can note zero activity
+        echo "omnibase_core,omnibase_spi,omnibase_infra,omniclaude"
+        return 0
+    fi
+
+    # Sort and join with commas
+    local sorted
+    sorted=$(printf '%s\n' "${active_repos[@]}" | sort | tr '\n' ',' | sed 's/,$//')
+    echo "$sorted"
+}
+
+# Perform auto-discovery unless --repos was explicitly provided
+if [[ "$REPOS_EXPLICIT" == "false" ]]; then
+    if [[ "$JSON_OUTPUT" != "true" && "$SNAPSHOT_ONLY" != "true" ]]; then
+        echo "Auto-discovering active repos for ${TARGET_DATE}..." >&2
+    fi
+    # Capture stdout (repo list); let stderr (warnings) pass through to terminal
+    REPOS=$(discover_active_repos "$TARGET_DATE")
+    if [[ -z "$REPOS" ]]; then
+        REPOS="omnibase_core,omnibase_spi,omnibase_infra,omniclaude"
+    fi
 fi
 
 # =============================================================================
@@ -475,7 +561,7 @@ echo "============================================================"
 echo ""
 echo "To generate the report, use the polymorphic agent with this prompt:"
 echo ""
-cat << 'PROMPT'
+cat << 'PROMPT_HEADER'
 Task(
   subagent_type="onex:polymorphic-agent",
   description="Generate deep dive report",
@@ -492,7 +578,9 @@ Use mcp__linear-server__list_issues with:
 Categorize by status: Done, In Progress, Backlog
 
 ### Step 2: Fetch PR Data (for each repo)
-For each of: omnibase_core, omnibase_spi, omnibase_infra, omniclaude
+PROMPT_HEADER
+echo "For each of: ${REPOS}"
+cat << 'PROMPT_FOOTER'
 
 ```bash
 gh pr list --repo OmniNode-ai/{repo} --state merged \
@@ -541,7 +629,7 @@ Follow the exact format from ${LINEAR_INSIGHTS_OUTPUT_DIR}/DECEMBER_9_2025_DEEP_
 Save the report to: {OUTPUT_FILE}
 """
 )
-PROMPT
+PROMPT_FOOTER
 
 echo ""
 echo "============================================================"
