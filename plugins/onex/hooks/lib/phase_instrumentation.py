@@ -863,7 +863,7 @@ def run_measurement_checks(
     )
 
     # CHECK-MEAS-003: Tokens within budget
-    token_budget = TOKEN_BUDGETS.get(phase, sys.maxsize)
+    token_budget = TOKEN_BUDGETS.get(phase, sys.maxsize)  # noqa: secrets
     actual_tokens = metrics.cost.llm_total_tokens if metrics.cost else 0
     tokens_ok = actual_tokens <= token_budget
     results.append(
