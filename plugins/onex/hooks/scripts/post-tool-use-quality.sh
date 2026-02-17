@@ -98,6 +98,61 @@ if [ "$TOOL_NAME" = "Write" ] || [ "$TOOL_NAME" = "Edit" ]; then
                 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Auto-fix failed with code $EXIT_CODE" >> "$LOG_FILE"
             fi
         fi
+
+        # -----------------------------------------------------------------------
+        # Pattern Enforcement Advisory (OMN-2263)
+        # -----------------------------------------------------------------------
+        # Queries pattern store for applicable patterns, checks session cooldown,
+        # runs compliance check, outputs advisory JSON. Async, non-blocking.
+        # Gated behind ENABLE_LOCAL_INFERENCE_PIPELINE + ENABLE_PATTERN_ENFORCEMENT.
+        # 300ms budget. All failures silent.
+        # -----------------------------------------------------------------------
+        PATTERN_ENFORCEMENT_ENABLED=$(_normalize_bool "${ENABLE_PATTERN_ENFORCEMENT:-false}")
+        INFERENCE_PIPELINE_ENABLED=$(_normalize_bool "${ENABLE_LOCAL_INFERENCE_PIPELINE:-false}")
+
+        if [[ "$PATTERN_ENFORCEMENT_ENABLED" == "true" && "$INFERENCE_PIPELINE_ENABLED" == "true" ]]; then
+            ENFORCEMENT_SCRIPT="${HOOKS_LIB}/pattern_enforcement.py"
+            if [[ -f "$ENFORCEMENT_SCRIPT" ]]; then
+                (
+                    # Detect language from file extension
+                    ENFORCE_LANGUAGE=""
+                    case "${FILE_PATH##*.}" in
+                        py) ENFORCE_LANGUAGE="python" ;;
+                        js) ENFORCE_LANGUAGE="javascript" ;;
+                        ts|tsx) ENFORCE_LANGUAGE="typescript" ;;
+                        rs) ENFORCE_LANGUAGE="rust" ;;
+                        go) ENFORCE_LANGUAGE="go" ;;
+                        *) ENFORCE_LANGUAGE="" ;;
+                    esac
+
+                    # Build JSON input for enforcement script
+                    ENFORCE_INPUT=$(jq -n \
+                        --arg file_path "$FILE_PATH" \
+                        --arg session_id "$SESSION_ID" \
+                        --arg language "$ENFORCE_LANGUAGE" \
+                        --arg content_preview "" \
+                        '{
+                            file_path: $file_path,
+                            session_id: $session_id,
+                            language: (if $language == "" then null else $language end),
+                            content_preview: $content_preview
+                        }'
+                    )
+
+                    if [[ -n "$ENFORCE_INPUT" && "$ENFORCE_INPUT" != "null" ]]; then
+                        ENFORCE_RESULT=$(echo "$ENFORCE_INPUT" | "$PYTHON_CMD" "$ENFORCEMENT_SCRIPT" 2>>"$LOG_FILE")
+                        if [[ -n "$ENFORCE_RESULT" ]]; then
+                            ADVISORY_COUNT=$(echo "$ENFORCE_RESULT" | jq -r '.advisories | length' 2>/dev/null || echo "0")
+                            echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Pattern enforcement: $ADVISORY_COUNT advisory(ies)" >> "$LOG_FILE"
+                            if [[ "$ADVISORY_COUNT" -gt 0 ]]; then
+                                echo "$ENFORCE_RESULT" | jq -c '.' >> "$LOG_FILE" 2>/dev/null
+                            fi
+                        fi
+                    fi
+                ) &
+                echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Pattern enforcement started (async)" >> "$LOG_FILE"
+            fi
+        fi
     fi
 else
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Tool $TOOL_NAME not applicable for auto-fix" >> "$LOG_FILE"

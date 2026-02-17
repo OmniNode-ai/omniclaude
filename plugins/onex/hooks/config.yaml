@@ -18,3 +18,12 @@ naming_validation:
 # Quorum scoring configuration
 quorum:
   enabled: false  # Disable AI quorum scoring
+
+# Pattern enforcement advisory (OMN-2263)
+# Queries pattern store, checks session cooldown, outputs advisory JSON.
+# Gated behind env vars ENABLE_LOCAL_INFERENCE_PIPELINE + ENABLE_PATTERN_ENFORCEMENT.
+pattern_enforcement:
+  enabled: false  # Also gated by env vars - both must be true
+  budget_ms: 300
+  min_confidence: 0.7
+  max_patterns: 10
