@@ -843,6 +843,8 @@ def parse_phase_output(raw_output, phase_name):
         # "Confirmed (N/N clean runs)".
         result["status"] = "completed"
         result["blocking_issues"] = 0
+        result["block_kind"] = None
+        result["reason"] = None
         # Extract quality_gate info from confirmed status for Phase 4 validation
         gate_match = re.search(r'confirmed\s*\((\d+)/(\d+)\s*clean\s*runs?\)', output_lower)
         if gate_match:
