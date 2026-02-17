@@ -12,7 +12,7 @@ Tests cover:
 from __future__ import annotations
 
 import os
-from unittest.mock import patch
+from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -218,30 +218,39 @@ class TestLocalLlmEndpointRegistry:
         monkeypatch.setenv("LLM_VISION_URL", "http://192.168.86.200:8102")
         monkeypatch.setenv("LLM_QWEN_14B_URL", "http://192.168.86.100:8200")
 
+    @pytest.fixture
+    def make_registry(self) -> Any:
+        """Factory fixture for creating test registries without .env file loading."""
+
+        def _make(**kwargs: Any) -> LocalLlmEndpointRegistry:
+            kwargs.setdefault("_env_file", None)
+            return LocalLlmEndpointRegistry(**kwargs)  # type: ignore[call-arg]
+
+        return _make
+
     @pytest.mark.unit
-    def test_empty_env_returns_empty_registry(self, _clean_env: None) -> None:
+    def test_empty_env_returns_empty_registry(
+        self, _clean_env: None, make_registry: Any
+    ) -> None:
         """Missing env vars produce an empty registry, not an error."""
-        # Bypass .env file loading by passing values directly
-        registry = LocalLlmEndpointRegistry(
-            _env_file=None,  # type: ignore[call-arg]
-        )
+        registry = make_registry()
         assert registry.get_all_endpoints() == []
 
     @pytest.mark.unit
-    def test_full_env_loads_all_endpoints(self, full_env: None) -> None:
+    def test_full_env_loads_all_endpoints(
+        self, full_env: None, make_registry: Any
+    ) -> None:
         """All 8 endpoints are loaded when all env vars are set."""
-        registry = LocalLlmEndpointRegistry(
-            _env_file=None,  # type: ignore[call-arg]
-        )
+        registry = make_registry()
         endpoints = registry.get_all_endpoints()
         assert len(endpoints) == 8
 
     @pytest.mark.unit
-    def test_partial_env_loads_available_endpoints(self, partial_env: None) -> None:
+    def test_partial_env_loads_available_endpoints(
+        self, partial_env: None, make_registry: Any
+    ) -> None:
         """Only endpoints with set env vars are loaded."""
-        registry = LocalLlmEndpointRegistry(
-            _env_file=None,  # type: ignore[call-arg]
-        )
+        registry = make_registry()
         endpoints = registry.get_all_endpoints()
         assert len(endpoints) == 5
         model_names = {ep.model_name for ep in endpoints}
@@ -256,11 +265,11 @@ class TestLocalLlmEndpointRegistry:
         assert "DeepSeek-R1-Distill" not in model_names
 
     @pytest.mark.unit
-    def test_get_endpoint_returns_best_for_purpose(self, full_env: None) -> None:
+    def test_get_endpoint_returns_best_for_purpose(
+        self, full_env: None, make_registry: Any
+    ) -> None:
         """get_endpoint returns the highest-priority endpoint for a purpose."""
-        registry = LocalLlmEndpointRegistry(
-            _env_file=None,  # type: ignore[call-arg]
-        )
+        registry = make_registry()
         endpoint = registry.get_endpoint(LlmEndpointPurpose.CODE_ANALYSIS)
         assert endpoint is not None
         assert endpoint.model_name == "Qwen2.5-Coder-14B"
@@ -268,29 +277,27 @@ class TestLocalLlmEndpointRegistry:
 
     @pytest.mark.unit
     def test_get_endpoint_returns_none_for_missing_purpose(
-        self, _clean_env: None
+        self, _clean_env: None, make_registry: Any
     ) -> None:
         """get_endpoint returns None when no endpoint serves the purpose."""
-        registry = LocalLlmEndpointRegistry(
-            _env_file=None,  # type: ignore[call-arg]
-        )
+        registry = make_registry()
         assert registry.get_endpoint(LlmEndpointPurpose.VISION) is None
 
     @pytest.mark.unit
-    def test_get_endpoint_routing_not_configured(self, full_env: None) -> None:
+    def test_get_endpoint_routing_not_configured(
+        self, full_env: None, make_registry: Any
+    ) -> None:
         """ROUTING purpose has no default endpoint (reserved for future use)."""
-        registry = LocalLlmEndpointRegistry(
-            _env_file=None,  # type: ignore[call-arg]
-        )
+        registry = make_registry()
         # No endpoint is assigned ROUTING purpose by default
         assert registry.get_endpoint(LlmEndpointPurpose.ROUTING) is None
 
     @pytest.mark.unit
-    def test_get_endpoints_by_purpose_sorted_by_priority(self, full_env: None) -> None:
+    def test_get_endpoints_by_purpose_sorted_by_priority(
+        self, full_env: None, make_registry: Any
+    ) -> None:
         """Multiple endpoints for same purpose are sorted by priority descending."""
-        registry = LocalLlmEndpointRegistry(
-            _env_file=None,  # type: ignore[call-arg]
-        )
+        registry = make_registry()
         # REASONING has two endpoints: Qwen2.5-72B (priority 8) and DeepSeek-R1 (priority 7)
         reasoning_endpoints = registry.get_endpoints_by_purpose(
             LlmEndpointPurpose.REASONING
@@ -301,11 +308,11 @@ class TestLocalLlmEndpointRegistry:
         assert reasoning_endpoints[1].model_name == "DeepSeek-R1-Distill"
 
     @pytest.mark.unit
-    def test_get_endpoints_by_purpose_general(self, full_env: None) -> None:
+    def test_get_endpoints_by_purpose_general(
+        self, full_env: None, make_registry: Any
+    ) -> None:
         """GENERAL purpose returns DeepSeek-V2-Lite and Qwen2.5-14B."""
-        registry = LocalLlmEndpointRegistry(
-            _env_file=None,  # type: ignore[call-arg]
-        )
+        registry = make_registry()
         general_endpoints = registry.get_endpoints_by_purpose(
             LlmEndpointPurpose.GENERAL
         )
@@ -315,94 +322,69 @@ class TestLocalLlmEndpointRegistry:
         assert general_endpoints[1].model_name == "DeepSeek-V2-Lite"
 
     @pytest.mark.unit
-    def test_get_endpoints_by_purpose_empty(self, _clean_env: None) -> None:
+    def test_get_endpoints_by_purpose_empty(
+        self, _clean_env: None, make_registry: Any
+    ) -> None:
         """Empty purpose list when no endpoints configured."""
-        registry = LocalLlmEndpointRegistry(
-            _env_file=None,  # type: ignore[call-arg]
-        )
+        registry = make_registry()
         assert registry.get_endpoints_by_purpose(LlmEndpointPurpose.VISION) == []
 
     @pytest.mark.unit
-    def test_from_env_factory(self, full_env: None) -> None:
-        """from_env() factory method creates a functional registry."""
-        # Patch _env_file so .env file doesn't interfere
-        with patch.object(
-            LocalLlmEndpointRegistry,
-            "model_config",
-            {
-                **LocalLlmEndpointRegistry.model_config,
-                "env_file": None,
-            },
-        ):
-            registry = LocalLlmEndpointRegistry.from_env()
-            assert len(registry.get_all_endpoints()) == 8
-
-    @pytest.mark.unit
     def test_invalid_url_env_var_rejected(
-        self, monkeypatch: pytest.MonkeyPatch, _clean_env: None
+        self, monkeypatch: pytest.MonkeyPatch, _clean_env: None, make_registry: Any
     ) -> None:
         """Invalid URL in env var causes validation error."""
         monkeypatch.setenv("LLM_CODER_URL", "not-a-valid-url")
         with pytest.raises(ValidationError):
-            LocalLlmEndpointRegistry(
-                _env_file=None,  # type: ignore[call-arg]
-            )
+            make_registry()
 
     @pytest.mark.unit
     def test_custom_latency_budget_from_env(
-        self, monkeypatch: pytest.MonkeyPatch, _clean_env: None
+        self, monkeypatch: pytest.MonkeyPatch, _clean_env: None, make_registry: Any
     ) -> None:
         """Latency budgets can be overridden via environment variables."""
         monkeypatch.setenv("LLM_CODER_URL", "http://192.168.86.201:8000")
         monkeypatch.setenv("LLM_CODER_MAX_LATENCY_MS", "500")
-        registry = LocalLlmEndpointRegistry(
-            _env_file=None,  # type: ignore[call-arg]
-        )
+        registry = make_registry()
         endpoint = registry.get_endpoint(LlmEndpointPurpose.CODE_ANALYSIS)
         assert endpoint is not None
         assert endpoint.max_latency_ms == 500
 
     @pytest.mark.unit
-    def test_endpoint_urls_preserved(self, full_env: None) -> None:
+    def test_endpoint_urls_preserved(self, full_env: None, make_registry: Any) -> None:
         """Endpoint URLs match the environment variable values."""
-        registry = LocalLlmEndpointRegistry(
-            _env_file=None,  # type: ignore[call-arg]
-        )
+        registry = make_registry()
         endpoint = registry.get_endpoint(LlmEndpointPurpose.EMBEDDING)
         assert endpoint is not None
         assert "192.168.86.201" in str(endpoint.url)
         assert "8002" in str(endpoint.url)
 
     @pytest.mark.unit
-    def test_vision_endpoint(self, full_env: None) -> None:
+    def test_vision_endpoint(self, full_env: None, make_registry: Any) -> None:
         """Vision endpoint is correctly mapped."""
-        registry = LocalLlmEndpointRegistry(
-            _env_file=None,  # type: ignore[call-arg]
-        )
+        registry = make_registry()
         endpoint = registry.get_endpoint(LlmEndpointPurpose.VISION)
         assert endpoint is not None
         assert endpoint.model_name == "Qwen2-VL"
         assert "8102" in str(endpoint.url)
 
     @pytest.mark.unit
-    def test_function_calling_endpoint(self, full_env: None) -> None:
+    def test_function_calling_endpoint(
+        self, full_env: None, make_registry: Any
+    ) -> None:
         """Function calling endpoint is correctly mapped."""
-        registry = LocalLlmEndpointRegistry(
-            _env_file=None,  # type: ignore[call-arg]
-        )
+        registry = make_registry()
         endpoint = registry.get_endpoint(LlmEndpointPurpose.FUNCTION_CALLING)
         assert endpoint is not None
         assert endpoint.model_name == "Qwen2.5-7B"
 
     @pytest.mark.unit
     def test_extra_env_vars_ignored(
-        self, monkeypatch: pytest.MonkeyPatch, _clean_env: None
+        self, monkeypatch: pytest.MonkeyPatch, _clean_env: None, make_registry: Any
     ) -> None:
         """Unknown env vars are ignored (extra='ignore')."""
         monkeypatch.setenv("LLM_CODER_URL", "http://localhost:8000")
         monkeypatch.setenv("LLM_UNKNOWN_THING", "http://localhost:9999")
         # Should not raise
-        registry = LocalLlmEndpointRegistry(
-            _env_file=None,  # type: ignore[call-arg]
-        )
+        registry = make_registry()
         assert len(registry.get_all_endpoints()) == 1

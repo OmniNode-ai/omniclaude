@@ -21,7 +21,7 @@ Example:
     ...     LocalLlmEndpointRegistry,
     ... )
     >>>
-    >>> registry = LocalLlmEndpointRegistry.from_env()
+    >>> registry = LocalLlmEndpointRegistry()
     >>> endpoint = registry.get_endpoint(LlmEndpointPurpose.CODE_ANALYSIS)
     >>> if endpoint:
     ...     print(endpoint.url)
@@ -29,6 +29,7 @@ Example:
 
 from __future__ import annotations
 
+import functools
 import logging
 from enum import StrEnum
 
@@ -127,7 +128,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
     Example:
         >>> import os
         >>> os.environ["LLM_CODER_URL"] = "http://192.168.86.201:8000"
-        >>> registry = LocalLlmEndpointRegistry.from_env()
+        >>> registry = LocalLlmEndpointRegistry()
         >>> endpoint = registry.get_endpoint(LlmEndpointPurpose.CODE_ANALYSIS)
         >>> endpoint is not None
         True
@@ -228,8 +229,12 @@ class LocalLlmEndpointRegistry(BaseSettings):
         description="Max latency for general purpose endpoint",
     )
 
-    def _build_endpoint_configs(self) -> list[LlmEndpointConfig]:
+    @functools.cached_property
+    def _endpoint_configs(self) -> list[LlmEndpointConfig]:
         """Build the list of available endpoint configs from loaded settings.
+
+        Cached after first access since BaseSettings fields are effectively
+        immutable after construction.
 
         Maps each non-None URL field to an LlmEndpointConfig with the
         appropriate model name, purpose, latency budget, and priority.
@@ -318,7 +323,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
         Returns:
             List of LlmEndpointConfig for every endpoint with a non-None URL.
         """
-        return self._build_endpoint_configs()
+        return self._endpoint_configs
 
     def get_endpoints_by_purpose(
         self, purpose: LlmEndpointPurpose
@@ -331,9 +336,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
         Returns:
             List of matching LlmEndpointConfig sorted by priority (highest first).
         """
-        matching = [
-            ep for ep in self._build_endpoint_configs() if ep.purpose == purpose
-        ]
+        matching = [ep for ep in self._endpoint_configs if ep.purpose == purpose]
         return sorted(matching, key=lambda ep: ep.priority, reverse=True)
 
     def get_endpoint(self, purpose: LlmEndpointPurpose) -> LlmEndpointConfig | None:
@@ -354,21 +357,3 @@ class LocalLlmEndpointRegistry(BaseSettings):
             logger.debug("No LLM endpoint configured for purpose=%s", purpose.value)
             return None
         return endpoints[0]
-
-    @classmethod
-    def from_env(cls) -> LocalLlmEndpointRegistry:
-        """Load registry from environment variables.
-
-        Creates a LocalLlmEndpointRegistry by reading LLM_*_URL environment
-        variables. Missing variables result in None endpoint fields (graceful
-        degradation, not errors).
-
-        Returns:
-            LocalLlmEndpointRegistry with endpoints populated from environment.
-
-        Example:
-            >>> registry = LocalLlmEndpointRegistry.from_env()
-            >>> len(registry.get_all_endpoints()) >= 0
-            True
-        """
-        return cls()
