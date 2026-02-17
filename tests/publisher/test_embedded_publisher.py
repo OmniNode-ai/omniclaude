@@ -5,12 +5,16 @@ from __future__ import annotations
 import asyncio
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from omniclaude.publisher.embedded_publisher import EmbeddedEventPublisher
 from omniclaude.publisher.publisher_config import PublisherConfig
+
+if TYPE_CHECKING:
+    from omnibase_infra.event_bus.models.config import ModelKafkaEventBusConfig
 
 
 @pytest.fixture
@@ -432,3 +436,54 @@ class TestEmbeddedEventPublisher:
             await writer.wait_closed()
         finally:
             await publisher.stop()
+
+    @pytest.mark.asyncio
+    async def test_kafka_config_applies_env_overrides(
+        self,
+        publisher_config: PublisherConfig,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Verify that EmbeddedEventPublisher applies env var overrides to Kafka config.
+
+        Regression test: prior to the fix, ModelKafkaEventBusConfig was constructed
+        with explicit parameters but never called .apply_environment_overrides(),
+        silently ignoring env vars like KAFKA_CIRCUIT_BREAKER_RESET_TIMEOUT.
+        """
+        # Set the env vars we want to test
+        monkeypatch.setenv("KAFKA_CIRCUIT_BREAKER_RESET_TIMEOUT", "120")
+        monkeypatch.setenv("KAFKA_CIRCUIT_BREAKER_THRESHOLD", "42")
+
+        # Clear env vars that would override the explicit constructor args,
+        # so we can verify those are still passed through correctly.
+        monkeypatch.delenv("KAFKA_BOOTSTRAP_SERVERS", raising=False)
+        monkeypatch.delenv("KAFKA_ENVIRONMENT", raising=False)
+        monkeypatch.delenv("KAFKA_TIMEOUT_SECONDS", raising=False)
+
+        captured_config: list[ModelKafkaEventBusConfig] = []
+
+        class _CapturingEventBusKafka:
+            """Stand-in for EventBusKafka that captures the config argument."""
+
+            def __init__(self, *, config: ModelKafkaEventBusConfig) -> None:
+                captured_config.append(config)
+                self.start = AsyncMock()
+                self.close = AsyncMock()
+                self.publish = AsyncMock()
+
+        with patch(
+            "omniclaude.publisher.embedded_publisher.EventBusKafka",
+            _CapturingEventBusKafka,
+        ):
+            publisher = EmbeddedEventPublisher(config=publisher_config, event_bus=None)
+            await publisher.start()
+            await publisher.stop()
+
+        assert len(captured_config) == 1, "EventBusKafka should have been created once"
+        kafka_cfg = captured_config[0]
+        # Env var overrides should be applied
+        assert kafka_cfg.circuit_breaker_reset_timeout == 120.0
+        assert kafka_cfg.circuit_breaker_threshold == 42
+        # Explicit parameters from PublisherConfig should still be passed through
+        assert kafka_cfg.bootstrap_servers == publisher_config.kafka_bootstrap_servers
+        assert kafka_cfg.environment == publisher_config.environment
+        assert kafka_cfg.timeout_seconds == int(publisher_config.kafka_timeout_seconds)

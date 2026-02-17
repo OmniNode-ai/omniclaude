@@ -136,7 +136,7 @@ class EmbeddedEventPublisher:
                         bootstrap_servers=self._config.kafka_bootstrap_servers,
                         environment=self._config.environment,
                         timeout_seconds=int(self._config.kafka_timeout_seconds),
-                    )
+                    ).apply_environment_overrides()
                     self._event_bus = EventBusKafka(config=kafka_config)
 
                 if hasattr(self._event_bus, "start"):
