@@ -14,6 +14,7 @@ All tests run without network access or external services.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -31,6 +32,7 @@ if str(_HOOKS_LIB) not in sys.path:
 
 from pattern_advisory_formatter import (
     _ADVISORY_HEADER,
+    _MAX_ADVISORIES_PER_TURN,
     _advisory_path,
     cleanup_stale_files,
     format_advisories_markdown,
@@ -247,7 +249,7 @@ class TestSaveAndLoadAdvisories:
         save_advisories("session-cap", many)
 
         loaded = load_and_clear_advisories("session-cap")
-        assert len(loaded) <= 5  # _MAX_ADVISORIES_PER_TURN = 5
+        assert len(loaded) <= _MAX_ADVISORIES_PER_TURN
 
 
 # ---------------------------------------------------------------------------
@@ -329,7 +331,7 @@ class TestFormatAdvisoriesMarkdown:
 
         # Count bullet points
         bullet_count = result.count("- **")
-        assert bullet_count <= 5
+        assert bullet_count <= _MAX_ADVISORIES_PER_TURN
 
 
 # ---------------------------------------------------------------------------
@@ -398,8 +400,6 @@ class TestCleanupStaleFiles:
         fresh = tmp_path / "fresh.json"
         stale.write_text("{}", encoding="utf-8")
         fresh.write_text("{}", encoding="utf-8")
-
-        import os
 
         stale_mtime = time.time() - (25 * 3600)
         os.utime(stale, (stale_mtime, stale_mtime))
@@ -524,8 +524,6 @@ class TestMain:
 
         stale = tmp_path / "stale.json"
         stale.write_text("{}", encoding="utf-8")
-        import os
-
         stale_mtime = time.time() - (25 * 3600)
         os.utime(stale, (stale_mtime, stale_mtime))
 

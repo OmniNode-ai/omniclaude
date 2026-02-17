@@ -118,7 +118,7 @@ def save_advisories(session_id: str, advisories: list[dict[str, Any]]) -> bool:
         # Cap total advisories to prevent unbounded growth.
         # Allow 2x on save since multiple PostToolUse calls accumulate between
         # UserPromptSubmit reads. The load path trims to _MAX_ADVISORIES_PER_TURN.
-        capped = existing[: _MAX_ADVISORIES_PER_TURN * 2]
+        capped = existing[-_MAX_ADVISORIES_PER_TURN * 2 :]
 
         payload = {
             "advisories": capped,

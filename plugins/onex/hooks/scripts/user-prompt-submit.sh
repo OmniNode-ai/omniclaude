@@ -324,11 +324,11 @@ if [[ -f "$ADVISORY_FORMATTER" ]]; then
     ADVISORY_INPUT=$(jq -n --arg session_id "$SESSION_ID" '{session_id: $session_id}' 2>/dev/null)
     if [[ -n "$ADVISORY_INPUT" ]]; then
         set +e
-        PATTERN_ADVISORY=$(echo "$ADVISORY_INPUT" | "$PYTHON_CMD" "$ADVISORY_FORMATTER" load 2>>"$LOG_FILE")
+        PATTERN_ADVISORY=$(echo "$ADVISORY_INPUT" | run_with_timeout 1 "$PYTHON_CMD" "$ADVISORY_FORMATTER" load 2>>"$LOG_FILE")
         set -e
         # Guard against partial stdout from a hard-crashed subprocess (e.g. SIGKILL).
         # Valid advisory output starts with "## " (the markdown header).
-        if [[ -n "$PATTERN_ADVISORY" ]] && [[ "$PATTERN_ADVISORY" != *"## "* ]]; then
+        if [[ -n "$PATTERN_ADVISORY" ]] && [[ ! $PATTERN_ADVISORY =~ ^##\  ]]; then
             PATTERN_ADVISORY=""
         fi
         if [[ -n "$PATTERN_ADVISORY" ]]; then
