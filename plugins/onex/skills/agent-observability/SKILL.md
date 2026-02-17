@@ -43,7 +43,7 @@ Bash(${CLAUDE_PLUGIN_ROOT}/skills/agent-observability/diagnose-errors --time-ran
 ### ✅ CORRECT - Dispatch to polymorphic-agent:
 ```
 Task(
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   description="Agent system health check",
   prompt="Check the health of the agent observability system.
     Use the agent-observability skill tools:

@@ -223,7 +223,7 @@ status, contract update) then dispatch:
 
 ```
 Task(
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   description="Implement {ticket_id}: {title}",
   prompt="Implement the following requirements for {ticket_id}: {title}.
 

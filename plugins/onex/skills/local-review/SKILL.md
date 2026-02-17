@@ -94,7 +94,7 @@ For each iteration:
 
 ```
 Task(
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   description="Review iteration {iteration+1} changes",
   prompt="**AGENT REQUIREMENT**: You MUST be a polymorphic-agent. Do NOT delegate to feature-dev:code-reviewer.
 
@@ -151,7 +151,7 @@ For each severity with issues (critical first, then major, then minor):
 
 ```
 Task(
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   description="Fix {severity} issues from review",
   prompt="**AGENT REQUIREMENT**: You MUST be a polymorphic-agent.
 

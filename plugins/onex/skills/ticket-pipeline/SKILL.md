@@ -143,7 +143,7 @@ edit, that is the signal to dispatch instead.
 
 ```
 Task(
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   description="ticket-pipeline: Phase 1 implement for {ticket_id}: {title}",
   prompt="You are executing ticket-work for {ticket_id}.
     Invoke: Skill(skill=\"onex:ticket-work\", args=\"{ticket_id}\")
@@ -163,7 +163,7 @@ Task(
 
 ```
 Task(
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   description="ticket-pipeline: Phase 2 local-review for {ticket_id}",
   prompt="You are executing local-review for {ticket_id}.
     Invoke: Skill(skill=\"onex:local-review\", args=\"--max-iterations {max_review_iterations}\")

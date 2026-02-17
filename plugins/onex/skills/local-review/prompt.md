@@ -136,11 +136,11 @@ fi
 
 Dispatch a `polymorphic-agent` with strict keyword-based classification (matching onex pr-review standards):
 
-**IMPORTANT**: Always use `subagent_type="polymorphic-agent"` - do NOT use `feature-dev:code-reviewer` or other specialized review agents. The polymorphic-agent has ONEX capabilities and uses keyword-based classification (not confidence scoring).
+**IMPORTANT**: Always use `subagent_type="onex:polymorphic-agent"` - do NOT use `feature-dev:code-reviewer` or other specialized review agents. The polymorphic-agent has ONEX capabilities and uses keyword-based classification (not confidence scoring).
 
 ```
 Task(
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   description="Review iteration {iteration+1} changes",
   prompt="**AGENT REQUIREMENT**: You MUST be a polymorphic-agent. Do NOT delegate to feature-dev:code-reviewer.
 
@@ -366,11 +366,11 @@ for severity in ["critical", "major", "minor"]:
 
 For each severity level (critical first, then major, then minor), dispatch a `polymorphic-agent`:
 
-**IMPORTANT**: Always use `subagent_type="polymorphic-agent"` for fixes - this ensures ONEX capabilities and proper observability.
+**IMPORTANT**: Always use `subagent_type="onex:polymorphic-agent"` for fixes - this ensures ONEX capabilities and proper observability.
 
 ```
 Task(
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   description="Fix {severity} issues from review",
   prompt="**AGENT REQUIREMENT**: You MUST be a polymorphic-agent.
 

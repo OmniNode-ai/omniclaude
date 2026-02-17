@@ -34,7 +34,7 @@ The skill reads the current conversation context to determine what to work on. N
 You are an orchestrator. You coordinate polymorphic agents. You do NOT implement code yourself.
 
 **Rule: NEVER call Edit(), Write(), or Bash(code-modifying) directly.**
-**Rule: ALL Task() calls MUST use subagent_type="polymorphic-agent". No exceptions.**
+**Rule: ALL Task() calls MUST use subagent_type="onex:polymorphic-agent". No exceptions.**
 **Rule: NO git operations in spawned agents. Git is coordinator-only, user-approved only.**
 
 ### Phase 1: Requirements Gathering -- dispatch to polymorphic agent
@@ -43,7 +43,7 @@ Before execution, analyze scope:
 
 ```
 Task(
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   description="Requirements gathering: analyze task scope",
   prompt="Analyze the task and produce a structured breakdown.
 
@@ -72,7 +72,7 @@ For each independent task from requirements:
 
 ```
 Task(
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   description="{task_type}: {description}",
   prompt="**Task**: {detailed_description}
     **Context**: {context}
@@ -88,7 +88,7 @@ Dispatch ALL independent tasks in a single message. Wait before dispatching depe
 
 ```
 Task(
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   description="Quality validation: verify changes",
   prompt="Validate changes. Run linting, type checking, tests as applicable.
     Files modified: {file_list}
@@ -100,7 +100,7 @@ Task(
 
 ```
 Task(
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   description="Refactor: fix quality issues (attempt {n}/3)",
   prompt="Fix quality issues: {issues}. Do NOT commit."
 )

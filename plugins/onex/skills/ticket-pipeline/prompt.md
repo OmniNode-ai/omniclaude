@@ -1037,7 +1037,7 @@ def execute_phase(phase_name, state):
 1. **Dispatch ticket-work to a separate agent:**
    ```
    Task(
-     subagent_type="polymorphic-agent",
+     subagent_type="onex:polymorphic-agent",
      description="Implement {ticket_id}: {title}",
      prompt="You are executing ticket-work for {ticket_id}.
        Invoke: Skill(skill=\"onex:ticket-work\", args=\"{ticket_id}\")
@@ -1121,7 +1121,7 @@ def execute_phase(phase_name, state):
 1. **Dispatch local-review to a separate agent:**
    ```
    Task(
-     subagent_type="polymorphic-agent",
+     subagent_type="onex:polymorphic-agent",
      description="Local review for {ticket_id}",
      prompt="You are executing local-review for {ticket_id}.
        Invoke: Skill(skill=\"onex:local-review\", args=\"--max-iterations {max_iterations} --checkpoint {ticket_id}:{run_id}\")

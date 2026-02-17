@@ -160,7 +160,7 @@ Prefer dispatching to `polymorphic-agent`:
 
 ```python
 Task(
-    subagent_type="polymorphic-agent",
+    subagent_type="onex:polymorphic-agent",
     description="Review PR #30",
     prompt="..."
 )

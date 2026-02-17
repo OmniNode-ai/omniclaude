@@ -20,7 +20,7 @@ mcp__linear-server__create_issue(...)
 ### ✅ CORRECT - Dispatch to polymorphic-agent:
 ```
 Task(
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   description="Create Linear ticket for bug fix",
   prompt="Create a Linear ticket for the following:
     Title: Fix authentication bug in login flow
