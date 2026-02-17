@@ -218,8 +218,77 @@ emit_via_daemon() {
         local _tmp="${status_file}.tmp.$$"
         echo "$((_prev_failures + 1)) $_now $_prev_success_ts $event_type" > "$_tmp" \
             && mv -f "$_tmp" "$status_file" 2>/dev/null || rm -f "$_tmp"
+        # Milestone-based Slack alerts for sustained failures (avoid spam)
+        local n=$((_prev_failures + 1))
+        if (( n == 10 || n == 25 || n == 50 || n == 100 )); then
+            local _last_ok
+            _last_ok=$(date -u -r "${_prev_success_ts}" +%H:%M:%S 2>/dev/null || echo "never")
+            ( slack_notify "emit_sustained" "[omniclaude][${_SLACK_HOST}] ${n} consecutive emit failures for '${event_type}'. Last success: ${_last_ok}. Daemon may be unhealthy." ) &
+        fi
         return 1
     fi
+}
+
+# =============================================================================
+# Slack Webhook Alerting
+# =============================================================================
+# Send a Slack notification for hook/daemon failures.
+# Self-protecting: curl timeouts guarantee max 2s delay even on DNS hangs.
+# Rate-limited per category (5-min window) to prevent alert spam.
+# Always call from a backgrounded subshell: ( slack_notify "cat" "msg" ) &
+#
+# Requires:
+#   - SLACK_WEBHOOK_URL: Webhook URL (no-op if unset)
+#
+# Usage: ( slack_notify "daemon_startup" "Emit daemon failed to start..." ) &
+
+# Cache hostname once at source time
+_SLACK_HOST="${HOSTNAME:-$(hostname -s 2>/dev/null || echo unknown)}"
+
+slack_notify() {
+    local category="$1"
+    local message="$2"
+    local webhook_url="${SLACK_WEBHOOK_URL:-}"
+
+    # No-op if webhook not configured
+    [[ -z "$webhook_url" ]] && return 0
+
+    # Rate limiting: 5-minute window per category
+    local rate_dir="/tmp/omniclaude-slack-rate"
+    mkdir -p "$rate_dir" 2>/dev/null || true
+    # Sanitize category for safe filename (alphanumeric + dash + underscore only)
+    local safe_cat
+    safe_cat=$(printf '%s' "$category" | tr -cd 'a-zA-Z0-9_-')
+    [[ -z "$safe_cat" ]] && safe_cat="unknown"
+    local rate_file="${rate_dir}/${safe_cat}.last"
+
+    if [[ -f "$rate_file" ]]; then
+        local last_sent
+        last_sent=$(cat "$rate_file" 2>/dev/null) || last_sent=0
+        [[ "$last_sent" =~ ^[0-9]+$ ]] || last_sent=0
+        local now
+        now=$(date -u +%s)
+        if (( now - last_sent < 300 )); then
+            return 0  # Rate limited, skip
+        fi
+    fi
+
+    # JSON-escape the message: backslashes first, then quotes, then control chars
+    local escaped
+    escaped=$(printf '%s' "$message" \
+        | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' \
+        | tr '\n' ' ' | tr '\r' ' ' | tr '\t' ' ')
+
+    # Send with strict timeouts (connect 1s, total 2s)
+    if curl -s -S --connect-timeout 1 --max-time 2 \
+        -H 'Content-Type: application/json' \
+        -d "{\"text\": \"${escaped}\"}" \
+        "$webhook_url" >/dev/null 2>&1; then
+        # Record send time for rate limiting
+        date -u +%s > "$rate_file" 2>/dev/null || true
+    fi
+
+    return 0
 }
 
 # =============================================================================

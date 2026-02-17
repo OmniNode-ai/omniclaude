@@ -215,6 +215,8 @@ start_emit_daemon_if_needed() {
 EVENT EMISSION UNHEALTHY: The emit daemon is not responding to health checks. Intelligence gathering and observability events are NOT being captured. Socket: ${EMIT_DAEMON_SOCKET}. Check: ${HOOKS_DIR}/logs/emit-daemon.log
 WARN
     mv -f "$_tmp" "${HOOKS_DIR}/logs/emit-health/warning" 2>/dev/null || rm -f "$_tmp"
+    # Alert on daemon startup failure (backgrounded, non-blocking)
+    ( slack_notify "daemon_startup" "[omniclaude][${_SLACK_HOST}] Emit daemon failed to start. Intelligence gathering is down. repo=${PROJECT_ROOT:-$PWD} socket=${EMIT_DAEMON_SOCKET} log=${HOOKS_DIR}/logs/emit-daemon.log" ) &
     log "Continuing without publisher (session startup not blocked)"
     return 0
 }
@@ -327,7 +329,7 @@ _init_session_state() {
         # background adapter call has finished and written the stamp file.
         local guard_file="/tmp/omniclaude-state-init-${safe_id}.pid"
         local guard_pid
-        guard_pid=$(cat "$guard_file" 2>/dev/null)
+        guard_pid=$(cat "$guard_file" 2>/dev/null) || true
         if [[ "$guard_pid" =~ ^[0-9]+$ ]] && kill -0 "$guard_pid" 2>/dev/null; then
             log "Session state init already running (PID $guard_pid), skipping"
             return 0
@@ -339,7 +341,7 @@ _init_session_state() {
         (
             # Write PID guard only when safe_id is non-empty (guard_file is defined)
             if [[ -n "$safe_id" ]]; then
-                echo "$BASHPID" > "/tmp/omniclaude-state-init-${safe_id}.pid" 2>/dev/null || true
+                echo "${BASHPID:-$$}" > "/tmp/omniclaude-state-init-${safe_id}.pid" 2>/dev/null || true
             fi
             # Capture adapter stdout separately from stderr so we can parse the
             # JSON result. stderr goes to $LOG_FILE for diagnostics; stdout is
