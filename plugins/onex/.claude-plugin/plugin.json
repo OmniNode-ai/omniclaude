@@ -43,8 +43,5 @@
     "parallel-solve",
     "project-status",
     "velocity"
-  ],
-  "skills": "./skills/",
-  "commands": "./commands/",
-  "agents": "./agents/"
+  ]
 }
