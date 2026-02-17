@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -30,6 +31,7 @@ if str(_HOOKS_LIB) not in sys.path:
     sys.path.insert(0, str(_HOOKS_LIB))
 
 from pattern_enforcement import (
+    _cleanup_stale_cooldown_files,
     _cooldown_path,
     _load_cooldown,
     _save_cooldown,
@@ -163,6 +165,46 @@ class TestSessionCooldown:
         _save_cooldown("session-inc", existing | {"p2"})
         result = _load_cooldown("session-inc")
         assert result == {"p1", "p2"}
+
+
+# ---------------------------------------------------------------------------
+# Stale cooldown file cleanup tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestCleanupStaleCooldownFiles:
+    """Tests for _cleanup_stale_cooldown_files() housekeeping."""
+
+    def test_removes_stale_keeps_fresh(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Files older than 24h are removed; recent files are kept."""
+        monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
+
+        stale_file = tmp_path / "stale.json"
+        fresh_file = tmp_path / "fresh.json"
+        stale_file.write_text('["p-old"]', encoding="utf-8")
+        fresh_file.write_text('["p-new"]', encoding="utf-8")
+
+        # Set stale file mtime to 25 hours ago
+        stale_mtime = time.time() - (25 * 3600)
+        os.utime(stale_file, (stale_mtime, stale_mtime))
+
+        _cleanup_stale_cooldown_files()
+
+        assert not stale_file.exists(), "stale file should have been removed"
+        assert fresh_file.exists(), "fresh file should have been kept"
+
+    def test_nonexistent_directory_does_not_crash(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Calling cleanup when cooldown directory doesn't exist is a no-op."""
+        monkeypatch.setattr(
+            "pattern_enforcement._COOLDOWN_DIR", tmp_path / "does-not-exist"
+        )
+        # Should return without error
+        _cleanup_stale_cooldown_files()
 
 
 # ---------------------------------------------------------------------------
