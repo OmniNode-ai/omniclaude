@@ -23,6 +23,14 @@ fi
 # Ensure log directory exists
 mkdir -p "$(dirname "$LOG_FILE")"
 
+# Guard: jq is required for JSON processing throughout this hook.
+# If unavailable, exit 0 immediately so the hook never blocks the developer.
+if ! command -v jq >/dev/null 2>&1; then
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] SKIP: jq not found, PostToolUse hook cannot process JSON" >> "$LOG_FILE" 2>/dev/null || true
+    cat  # drain stdin so Claude Code doesn't hang
+    exit 0
+fi
+
 # Load environment variables (before common.sh so KAFKA_BOOTSTRAP_SERVERS is available)
 if [[ -f "$PROJECT_ROOT/.env" ]]; then
     set -a
@@ -34,6 +42,39 @@ fi
 source "${HOOKS_DIR}/scripts/common.sh"
 
 export PYTHONPATH="${PROJECT_ROOT}:${PLUGIN_ROOT}/lib:${HOOKS_LIB}:${PYTHONPATH:-}"
+
+# Shared language detection function — single source of truth for both
+# pattern enforcement and content capture sections.
+# Arguments: $1 = file path
+# Returns: language string via stdout ("" if no file path given)
+detect_language() {
+    local fpath="$1"
+    if [[ -z "$fpath" ]]; then
+        echo ""
+        return
+    fi
+    case "${fpath##*.}" in
+        py) echo "python" ;;
+        js) echo "javascript" ;;
+        ts) echo "typescript" ;;
+        tsx) echo "typescript" ;;
+        jsx) echo "javascript" ;;
+        rs) echo "rust" ;;
+        go) echo "go" ;;
+        java) echo "java" ;;
+        rb) echo "ruby" ;;
+        sh|bash) echo "shell" ;;
+        yml|yaml) echo "yaml" ;;
+        json) echo "json" ;;
+        md) echo "markdown" ;;
+        sql) echo "sql" ;;
+        html) echo "html" ;;
+        css) echo "css" ;;
+        c|h) echo "c" ;;
+        cpp|hpp|cc|cxx) echo "cpp" ;;
+        *) echo "unknown" ;;
+    esac
+}
 
 # Get tool info from stdin
 TOOL_INFO=$(cat)
@@ -47,9 +88,24 @@ fi
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] PostToolUse JSON:" >> "$LOG_FILE"
 echo "$TOOL_INFO" | jq '.' >> "$LOG_FILE" 2>&1 || echo "$TOOL_INFO" >> "$LOG_FILE"
 
-# Extract tool name
-TOOL_NAME=$(echo "$TOOL_INFO" | jq -r '.tool_name // "unknown"')
+# Extract tool name (non-critical: fall back to "unknown" on jq failure)
+TOOL_NAME=$(echo "$TOOL_INFO" | jq -r '.tool_name // "unknown"' 2>/dev/null) || TOOL_NAME="unknown"
 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] PostToolUse hook triggered for $TOOL_NAME (plugin mode)" >> "$LOG_FILE"
+
+# Extract session ID early — needed by pattern enforcement and Kafka emission.
+# Wrapped in set +e to ensure the fallback chain never kills the hook.
+set +e
+SESSION_ID=$(echo "$TOOL_INFO" | jq -r '.sessionId // .session_id // ""' 2>/dev/null)
+if [[ -z "$SESSION_ID" ]]; then
+    SESSION_ID=$(uuidgen 2>/dev/null | tr '[:upper:]' '[:lower:]')
+fi
+if [[ -z "$SESSION_ID" ]]; then
+    SESSION_ID=$("$PYTHON_CMD" -c 'import uuid; print(uuid.uuid4())' 2>/dev/null)
+fi
+if [[ -z "$SESSION_ID" ]]; then
+    SESSION_ID="unknown-session"
+fi
+set -e
 
 # -----------------------------------------------------------------------
 # Pipeline Trace Logging — unified trace for Skill/Task/routing visibility
@@ -60,26 +116,26 @@ mkdir -p "$(dirname "$TRACE_LOG")" 2>/dev/null
 TS="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
 if [[ "$TOOL_NAME" == "Skill" ]]; then
-    SKILL_NAME=$(echo "$TOOL_INFO" | jq -r '.tool_input.skill // .tool_input.name // "unknown"' 2>/dev/null)
-    SKILL_ERROR=$(echo "$TOOL_INFO" | jq -r '.tool_response.error // ""' 2>/dev/null)
+    SKILL_NAME=$(echo "$TOOL_INFO" | jq -r '.tool_input.skill // .tool_input.name // "unknown"' 2>/dev/null) || SKILL_NAME="unknown"
+    SKILL_ERROR=$(echo "$TOOL_INFO" | jq -r '.tool_response.error // ""' 2>/dev/null) || SKILL_ERROR=""
     if [[ -n "$SKILL_ERROR" ]]; then
         echo "[$TS] [PostToolUse] SKILL_LOAD_FAILED skill=$SKILL_NAME error=$SKILL_ERROR" >> "$TRACE_LOG"
     else
         echo "[$TS] [PostToolUse] SKILL_LOADED skill=$SKILL_NAME args=[REDACTED]" >> "$TRACE_LOG"
     fi
 elif [[ "$TOOL_NAME" == "Task" ]]; then
-    SUBAGENT_TYPE=$(echo "$TOOL_INFO" | jq -r '.tool_input.subagent_type // "unknown"' 2>/dev/null)
-    TASK_MODEL=$(echo "$TOOL_INFO" | jq -r '.tool_input.model // "default"' 2>/dev/null)
+    SUBAGENT_TYPE=$(echo "$TOOL_INFO" | jq -r '.tool_input.subagent_type // "unknown"' 2>/dev/null) || SUBAGENT_TYPE="unknown"
+    TASK_MODEL=$(echo "$TOOL_INFO" | jq -r '.tool_input.model // "default"' 2>/dev/null) || TASK_MODEL="default"
     echo "[$TS] [PostToolUse] TASK_DISPATCHED subagent_type=$SUBAGENT_TYPE model=$TASK_MODEL description=[REDACTED]" >> "$TRACE_LOG"
 elif [[ "$TOOL_NAME" == "Edit" || "$TOOL_NAME" == "Write" ]]; then
-    EDIT_FILE=$(echo "$TOOL_INFO" | jq -r '.tool_input.file_path // "unknown"' 2>/dev/null)
+    EDIT_FILE=$(echo "$TOOL_INFO" | jq -r '.tool_input.file_path // "unknown"' 2>/dev/null) || EDIT_FILE="unknown"
     EDIT_FILE_SHORT="${EDIT_FILE##*/}"
     echo "[$TS] [PostToolUse] FILE_MODIFIED tool=$TOOL_NAME file=$EDIT_FILE_SHORT path=$EDIT_FILE" >> "$TRACE_LOG"
 fi
 
 # For Write/Edit tools, apply auto-fixes
 if [ "$TOOL_NAME" = "Write" ] || [ "$TOOL_NAME" = "Edit" ]; then
-    FILE_PATH=$(echo "$TOOL_INFO" | jq -r '.tool_input.file_path // .tool_response.filePath // empty')
+    FILE_PATH=$(echo "$TOOL_INFO" | jq -r '.tool_input.file_path // .tool_response.filePath // empty' 2>/dev/null) || FILE_PATH=""
 
     if [ -n "$FILE_PATH" ]; then
         echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] File affected: $FILE_PATH" >> "$LOG_FILE"
@@ -96,6 +152,57 @@ if [ "$TOOL_NAME" = "Write" ] || [ "$TOOL_NAME" = "Edit" ]; then
                 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Auto-fix completed successfully" >> "$LOG_FILE"
             else
                 echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Auto-fix failed with code $EXIT_CODE" >> "$LOG_FILE"
+            fi
+        fi
+
+        # -----------------------------------------------------------------------
+        # Pattern Enforcement Advisory (OMN-2263)
+        # -----------------------------------------------------------------------
+        # Queries pattern store for applicable patterns, checks session cooldown,
+        # runs compliance check, outputs advisory JSON. Async, non-blocking.
+        # Gated behind ENABLE_LOCAL_INFERENCE_PIPELINE + ENABLE_PATTERN_ENFORCEMENT.
+        # 300ms budget. All failures silent.
+        # -----------------------------------------------------------------------
+        PATTERN_ENFORCEMENT_ENABLED=$(_normalize_bool "${ENABLE_PATTERN_ENFORCEMENT:-false}")
+        INFERENCE_PIPELINE_ENABLED=$(_normalize_bool "${ENABLE_LOCAL_INFERENCE_PIPELINE:-false}")
+
+        if [[ "$PATTERN_ENFORCEMENT_ENABLED" == "true" && "$INFERENCE_PIPELINE_ENABLED" == "true" ]]; then
+            ENFORCEMENT_SCRIPT="${HOOKS_LIB}/pattern_enforcement.py"
+            if [[ -f "$ENFORCEMENT_SCRIPT" ]]; then
+                (
+                    # Detect language from file extension (uses shared function)
+                    ENFORCE_LANGUAGE=$(detect_language "$FILE_PATH")
+
+                    # Build JSON input for enforcement script
+                    ENFORCE_INPUT=$(jq -n \
+                        --arg file_path "$FILE_PATH" \
+                        --arg session_id "$SESSION_ID" \
+                        --arg language "$ENFORCE_LANGUAGE" \
+                        --arg content_preview "" \
+                        '{
+                            file_path: $file_path,
+                            session_id: $session_id,
+                            language: (if $language == "" then null else $language end),
+                            content_preview: $content_preview
+                        }'
+                    )
+
+                    if [[ -n "$ENFORCE_INPUT" && "$ENFORCE_INPUT" != "null" ]]; then
+                        ENFORCE_RESULT=$(echo "$ENFORCE_INPUT" | "$PYTHON_CMD" "$ENFORCEMENT_SCRIPT" 2>>"$LOG_FILE")
+                        if [[ -n "$ENFORCE_RESULT" ]]; then
+                            ADVISORY_COUNT=$(echo "$ENFORCE_RESULT" | jq -r '.advisories | length' 2>/dev/null || echo "0")
+                            # Sanitize: ensure ADVISORY_COUNT is a non-negative integer
+                            if ! [[ "$ADVISORY_COUNT" =~ ^[0-9]+$ ]]; then
+                                ADVISORY_COUNT=0
+                            fi
+                            echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Pattern enforcement: $ADVISORY_COUNT advisory(ies)" >> "$LOG_FILE"
+                            if [[ "$ADVISORY_COUNT" -gt 0 ]]; then
+                                echo "$ENFORCE_RESULT" | jq -c '.' >> "$LOG_FILE" 2>/dev/null
+                            fi
+                        fi
+                    fi
+                ) &
+                echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Pattern enforcement started (async)" >> "$LOG_FILE"
             fi
         fi
     fi
@@ -163,18 +270,13 @@ EOF
 fi
 
 # Error detection and logging
-TOOL_ERROR=$(echo "$TOOL_INFO" | jq -r '.tool_response.error // .error // empty' 2>/dev/null)
+TOOL_ERROR=$(echo "$TOOL_INFO" | jq -r '.tool_response.error // .error // empty' 2>/dev/null) || TOOL_ERROR=""
 if [[ -n "$TOOL_ERROR" ]]; then
     echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Tool error detected: $TOOL_ERROR" >> "$LOG_FILE"
 fi
 
 # Emit tool.executed event to Kafka (async, non-blocking)
 # Uses omniclaude-emit CLI with 250ms hard timeout
-SESSION_ID=$(echo "$TOOL_INFO" | jq -r '.sessionId // .session_id // ""' 2>/dev/null || echo "")
-# Pre-generate UUID fallback if SESSION_ID not provided (avoid inline Python in async subshell)
-if [[ -z "$SESSION_ID" ]]; then
-    SESSION_ID=$(uuidgen 2>/dev/null | tr '[:upper:]' '[:lower:]' || "$PYTHON_CMD" -c 'import uuid; print(uuid.uuid4())')
-fi
 TOOL_SUCCESS="true"
 if [[ -n "$TOOL_ERROR" ]]; then
     TOOL_SUCCESS="false"
@@ -259,31 +361,8 @@ if [[ "$KAFKA_ENABLED" == "true" ]] && [[ "$TOOL_NAME" =~ ^(Read|Write|Edit)$ ]]
                 CONTENT_HASH=""
             fi
 
-            # Detect language from file extension
-            LANGUAGE=""
-            if [[ -n "$FILE_PATH" ]]; then
-                case "${FILE_PATH##*.}" in
-                    py) LANGUAGE="python" ;;
-                    js) LANGUAGE="javascript" ;;
-                    ts) LANGUAGE="typescript" ;;
-                    tsx) LANGUAGE="typescript" ;;
-                    jsx) LANGUAGE="javascript" ;;
-                    rs) LANGUAGE="rust" ;;
-                    go) LANGUAGE="go" ;;
-                    java) LANGUAGE="java" ;;
-                    rb) LANGUAGE="ruby" ;;
-                    sh|bash) LANGUAGE="shell" ;;
-                    yml|yaml) LANGUAGE="yaml" ;;
-                    json) LANGUAGE="json" ;;
-                    md) LANGUAGE="markdown" ;;
-                    sql) LANGUAGE="sql" ;;
-                    html) LANGUAGE="html" ;;
-                    css) LANGUAGE="css" ;;
-                    c|h) LANGUAGE="c" ;;
-                    cpp|hpp|cc|cxx) LANGUAGE="cpp" ;;
-                    *) LANGUAGE="unknown" ;;
-                esac
-            fi
+            # Detect language from file extension (uses shared function)
+            LANGUAGE=$(detect_language "${FILE_PATH:-}")
 
             # Get correlation ID from context if available
             CORRELATION_ID_FILE="$PROJECT_ROOT/tmp/correlation_id"
