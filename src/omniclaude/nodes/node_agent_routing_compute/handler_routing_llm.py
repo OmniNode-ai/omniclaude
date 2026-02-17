@@ -33,7 +33,6 @@ from omniclaude.nodes.node_agent_routing_compute._internal import (
     TriggerMatcher,
 )
 from omniclaude.nodes.node_agent_routing_compute.handler_routing_default import (
-    _clamp,
     build_registry_dict,
 )
 from omniclaude.nodes.node_agent_routing_compute.models import (
@@ -46,6 +45,16 @@ from omniclaude.nodes.node_agent_routing_compute.models import (
 __all__ = ["HandlerRoutingLlm"]
 
 logger = logging.getLogger(__name__)
+
+
+def _clamp(value: float, lo: float = 0.0, hi: float = 1.0) -> float:
+    """Clamp a float to [lo, hi] range.
+
+    Protects against floating-point drift that could violate Pydantic
+    field constraints (ge=0.0, le=1.0).
+    """
+    return max(lo, min(hi, value))
+
 
 # Default fallback agent when no matches exceed threshold
 _FALLBACK_AGENT = "polymorphic-agent"
