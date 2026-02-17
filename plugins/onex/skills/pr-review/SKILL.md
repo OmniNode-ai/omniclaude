@@ -20,7 +20,7 @@ Bash(${CLAUDE_PLUGIN_ROOT}/skills/pr-review/pr-quick-review 22)
 ### ✅ CORRECT - Dispatch to polymorphic-agent:
 ```
 Task(
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   description="PR review for #30",
   prompt="Review PR #30. Use the pr-review skill tools:
     1. Run: ${CLAUDE_PLUGIN_ROOT}/skills/pr-review/collate-issues 30

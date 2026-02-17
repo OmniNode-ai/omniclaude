@@ -92,7 +92,7 @@ The review agent returns an OPAQUE WORK ORDER. No patches, no code snippets, no 
 
 ```
 Task(
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   description="Review code changes for review-cycle",
   prompt="**AGENT REQUIREMENT**: You MUST be a polymorphic-agent.
 
@@ -172,7 +172,7 @@ Task(
 
 ```
 Task(
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   description="Fix {severity} issues for review-cycle",
   prompt="**AGENT REQUIREMENT**: You MUST be a polymorphic-agent.
 
@@ -210,7 +210,7 @@ Task(
 
 ```
 Task(
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   description="Explain issue {issue_id} for user",
   prompt="Read {file}:{line_start}-{line_end}.
     Explain the issue titled '{title}' ({severity}).

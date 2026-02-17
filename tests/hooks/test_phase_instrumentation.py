@@ -7,7 +7,7 @@ Covers:
     - Silent omission detection: detect_silent_omission fires correctly
     - MeasurementCheck validation: all 6 checks produce correct results
     - Metrics building: all sub-contracts populated correctly
-    - Phase -> SPI mapping: all 5 phases map correctly
+    - Phase -> SPI mapping: all 4 phases map correctly
 
 .. versionadded:: 0.2.1
 """
@@ -159,19 +159,15 @@ class TestPhaseSpiMapping:
     def test_create_pr_maps_to_release(self):
         assert PHASE_TO_SPI["create_pr"] == ContractEnumPipelinePhase.RELEASE
 
-    def test_pr_release_ready_maps_to_review(self):
-        assert PHASE_TO_SPI["pr_release_ready"] == ContractEnumPipelinePhase.REVIEW
-
     def test_ready_for_merge_maps_to_release(self):
         assert PHASE_TO_SPI["ready_for_merge"] == ContractEnumPipelinePhase.RELEASE
 
     def test_all_pipeline_phases_have_mapping(self):
-        """All 5 pipeline phases must have an SPI mapping."""
+        """All 4 pipeline phases must have an SPI mapping."""
         expected_phases = {
             "implement",
             "local_review",
             "create_pr",
-            "pr_release_ready",
             "ready_for_merge",
         }
         assert expected_phases == set(PHASE_TO_SPI.keys())

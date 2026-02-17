@@ -198,14 +198,12 @@ class HookEventAdapter:
     - Automatic topic routing based on event type
     - JSON serialization
     - Graceful error handling (non-blocking)
-    - Configurable topic prefix for environment isolation
     """
 
     def __init__(
         self,
         bootstrap_servers: str | None = None,
         enable_events: bool = True,
-        topic_prefix: str | None = None,
     ):
         """
         Initialize hook event adapter.
@@ -216,18 +214,9 @@ class HookEventAdapter:
                 - Remote broker: "192.168.86.200:9092" (primary)
                 - Docker internal: "omninode-bridge-redpanda:9092"
             enable_events: Enable event publishing (feature flag)
-            topic_prefix: Optional environment prefix for topics (e.g., "dev", "staging").
-                - Default: KAFKA_TOPIC_PREFIX env var or empty string (no prefix)
-                - When set, topics become "{prefix}.{base}" (e.g., "dev.onex.evt.omniclaude.routing-decision.v1")
         """
         self.bootstrap_servers = bootstrap_servers or os.environ.get(
             "KAFKA_BOOTSTRAP_SERVERS", "omninode-bridge-redpanda:9092"
-        )
-        # Topic prefix for environment isolation
-        self.topic_prefix = (
-            topic_prefix
-            if topic_prefix is not None
-            else os.environ.get("KAFKA_TOPIC_PREFIX", "")
         )
         # Disable events if Kafka is not available
         self.enable_events = enable_events and KAFKA_AVAILABLE
@@ -241,13 +230,16 @@ class HookEventAdapter:
     def _build_topic(self, base: TopicBase) -> str:
         """Build full topic name from TopicBase constant.
 
+        Per OMN-1972, TopicBase values are the canonical wire topic names.
+        No environment prefix is applied.
+
         Args:
             base: TopicBase enum constant (e.g., TopicBase.ROUTING_DECISION)
 
         Returns:
-            Full topic name with optional prefix (e.g., "onex.evt.omniclaude.routing-decision.v1")
+            Full topic name (e.g., "onex.evt.omniclaude.routing-decision.v1")
         """
-        return build_topic(self.topic_prefix, base)
+        return build_topic("", base)
 
     def _get_producer(self) -> object:
         """

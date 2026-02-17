@@ -103,9 +103,8 @@ Execute only if explicitly requested or critical task.
 - Real-time manifest injection with correlation tracking
 
 **Intelligence Topics**:
-- `dev.archon-intelligence.intelligence.code-analysis-requested.v1`
-- `dev.archon-intelligence.intelligence.code-analysis-completed.v1`
-- `dev.archon-intelligence.intelligence.code-analysis-failed.v1`
+- `onex.cmd.omniintelligence.claude-hook-event.v1`
+- `onex.evt.omniintelligence.intent-classified.v1`
 
 Use when task benefits from:
 - Historical pattern lookup (15,689+ patterns)

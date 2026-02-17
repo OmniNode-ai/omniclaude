@@ -33,7 +33,7 @@ Before any execution, dispatch a polymorphic agent to analyze scope:
 
 ```
 Task(
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   description="Requirements gathering: analyze task scope",
   prompt="Analyze the task and produce a structured breakdown.
 
@@ -105,11 +105,11 @@ Create a plan to execute tasks in parallel:
 
 **DO NOT execute tasks yourself** - you MUST dispatch EVERY task to a **polymorphic-agent** using the Task tool.
 
-### MANDATORY: subagent_type="polymorphic-agent"
+### MANDATORY: subagent_type="onex:polymorphic-agent"
 
 **EVERY Task tool call MUST use:**
 ```
-subagent_type="polymorphic-agent"
+subagent_type="onex:polymorphic-agent"
 ```
 
 **NEVER use these subagent_types:**
@@ -149,7 +149,7 @@ not for spawned polymorphic agents.
 ```
 Task(
   description="Fix import errors in reducer node",
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   prompt="**Task**: Fix import errors in node_user_reducer.py
 
   **Context**: [Detailed problem description]
@@ -169,7 +169,7 @@ Task(
 ```
 Task(
   description="Implement Docker optimization feature",
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   prompt="**Task**: Add multi-stage Docker build optimization
 
   **Context**: Reduce Docker image size and build time
@@ -191,7 +191,7 @@ Task(
 ```
 Task(
   description="Enhance caching strategy",
-  subagent_type="polymorphic-agent",
+  subagent_type="onex:polymorphic-agent",
   prompt="**Task**: Improve Valkey caching hit rate
 
   **Context**: Current hit rate is 60%, target 80%
@@ -314,7 +314,7 @@ After all fixes are complete, **ASK the user** if they want to:
 - **Assume user wants changes committed** - always ask first
 
 **DO**:
-- **ALWAYS use subagent_type="polymorphic-agent"** for EVERY Task dispatch
+- **ALWAYS use subagent_type="onex:polymorphic-agent"** for EVERY Task dispatch
 - Dispatch multiple independent pollys in parallel
 - Provide detailed context in each Task prompt
 - Include Intelligence Context from hooks
