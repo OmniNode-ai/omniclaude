@@ -134,6 +134,9 @@ class LocalLlmEndpointRegistry(BaseSettings):
         True
     """
 
+    # .env loading uses default pydantic-settings resolution (CWD lookup), not
+    # the _find_and_load_env() traversal used by Settings. Environment variables
+    # are the primary configuration path; .env is a convenience fallback.
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

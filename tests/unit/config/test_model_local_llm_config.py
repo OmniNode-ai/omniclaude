@@ -265,6 +265,17 @@ class TestLocalLlmEndpointRegistry:
         assert "DeepSeek-R1-Distill" not in model_names
 
     @pytest.mark.unit
+    def test_get_all_endpoints_returns_defensive_copy(
+        self, full_env: None, make_registry: Any
+    ) -> None:
+        """get_all_endpoints returns a new list each call (defensive copy)."""
+        registry = make_registry()
+        first = registry.get_all_endpoints()
+        second = registry.get_all_endpoints()
+        assert first == second
+        assert first is not second
+
+    @pytest.mark.unit
     def test_get_endpoint_returns_best_for_purpose(
         self, full_env: None, make_registry: Any
     ) -> None:
