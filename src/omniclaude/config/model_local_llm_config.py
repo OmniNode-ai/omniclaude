@@ -86,6 +86,7 @@ class LlmEndpointConfig(BaseModel):
         description="HTTP URL of the LLM endpoint",
     )
     model_name: str = Field(
+        min_length=1,
         description="Human-readable model identifier",
     )
     purpose: LlmEndpointPurpose = Field(
@@ -114,6 +115,25 @@ class LocalLlmEndpointRegistry(BaseSettings):
 
     Missing environment variables result in None fields (not errors), since
     some endpoints are hot-swap and may not always be available.
+
+    Warning — .env resolution:
+        This class uses pydantic-settings default .env resolution, which looks
+        for ``.env`` relative to CWD. This differs from the ``Settings`` class
+        in this project, which uses ``_find_and_load_env()`` to traverse up to
+        10 parent directories. If your CWD is not the project root, the ``.env``
+        file may not be found. Callers should either ensure the ``.env`` values
+        are already loaded into ``os.environ`` before instantiation, or import
+        ``Settings`` first (which performs the traversal and populates the
+        process environment).
+
+    Warning — model_copy() and cached_property:
+        This class uses ``functools.cached_property`` for the internal endpoint
+        config cache (``_endpoint_configs``). Pydantic's ``model_copy()`` performs
+        a shallow copy, so the cached property's underlying ``__dict__`` entry is
+        shared between the original and the copy. If ``model_copy(update={...})``
+        is used to change URL fields, the copy will still return stale endpoint
+        configs from the original's cache. Do not use ``model_copy()`` on this
+        class; construct a new instance instead.
 
     Attributes:
         llm_coder_url: Code generation endpoint (Qwen2.5-Coder-14B).
