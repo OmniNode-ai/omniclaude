@@ -357,6 +357,11 @@ def _use_onex_routing_nodes() -> bool:
 
 # Timeout for the LLM health check and routing call (100 ms per ticket spec).
 _LLM_ROUTING_TIMEOUT_S = 0.1
+# Inner httpx timeout for the health check, kept slightly below the outer
+# asyncio.wait_for timeout so the HTTP request can fail/cancel before the
+# outer wait_for fires.  Without this margin the outer cancellation arrives
+# first, leaving the httpx connection in an ambiguous state.
+_LLM_HEALTH_CHECK_TIMEOUT_S = 0.08
 
 
 def _use_llm_routing() -> bool:
@@ -399,7 +404,13 @@ def _get_llm_routing_url() -> str | None:
         if endpoint is None:
             logger.debug("No LLM endpoint configured for routing")
             return None
-        return str(endpoint.url).rstrip("/")
+        url = str(endpoint.url).rstrip("/")
+        logger.debug(
+            "Resolved LLM routing URL: purpose=%s url=%s",
+            endpoint.purpose if hasattr(endpoint, "purpose") else "unknown",
+            url,
+        )
+        return url
     except Exception as exc:
         logger.debug("Failed to load LLM endpoint registry: %s", exc)
         return None
@@ -475,9 +486,12 @@ def _route_via_llm(
         return None
 
     # 2. Health check (100 ms budget per call; combined worst-case with step 4 is ~200 ms)
+    # _LLM_HEALTH_CHECK_TIMEOUT_S (0.08 s) is passed to httpx so the HTTP
+    # request completes or fails before asyncio.wait_for's outer 0.1 s
+    # deadline fires.  This ensures clean cancellation ordering.
     try:
         healthy = _run_async(
-            _check_llm_health(llm_url, _LLM_ROUTING_TIMEOUT_S),
+            _check_llm_health(llm_url, _LLM_HEALTH_CHECK_TIMEOUT_S),
             timeout=_LLM_ROUTING_TIMEOUT_S,
         )
     except Exception as exc:
@@ -494,7 +508,19 @@ def _route_via_llm(
         return None
 
     agent_defs = _build_agent_definitions(router.registry)
-    if not agent_defs:
+    # Robust guard: agent_defs must be a non-empty sequence with at least one
+    # item.  A plain `if not agent_defs` would also catch empty tuples/lists,
+    # but the isinstance check makes the intent explicit and guards against
+    # pathological return values (e.g., None, a non-sequence) that could
+    # otherwise propagate silently into HandlerRoutingLlm.
+    if not isinstance(agent_defs, (list, tuple)) or len(agent_defs) < 1:
+        logger.warning(
+            "LLM routing skipped: _build_agent_definitions returned no valid agents "
+            "(type=%s, len=%s, correlation_id=%s)",
+            type(agent_defs).__name__,
+            len(agent_defs) if isinstance(agent_defs, (list, tuple)) else "n/a",
+            correlation_id,
+        )
         return None
 
     try:
@@ -503,13 +529,24 @@ def _route_via_llm(
         cid = uuid4()
 
     # 4. Call HandlerRoutingLlm within 100 ms (independent budget from step 2; see docstring)
-    # Handler construction is separated from the async call so that
-    # instantiation failures produce a distinct log message.
+    # HandlerRoutingLlm construction and ModelRoutingRequest construction are in
+    # separate try blocks so that a failure in either produces a distinct log
+    # message and the successfully-constructed handler is not silently abandoned
+    # without a clear indication of which step failed.
     try:
         llm_handler = HandlerRoutingLlm(
             llm_url=llm_url,
             timeout=_LLM_ROUTING_TIMEOUT_S,
         )
+    except Exception as exc:
+        logger.debug(
+            "HandlerRoutingLlm construction failed: %s (correlation_id=%s)",
+            exc,
+            correlation_id,
+        )
+        return None
+
+    try:
         request = ModelRoutingRequest(
             prompt=prompt,
             correlation_id=cid,
@@ -518,7 +555,7 @@ def _route_via_llm(
         )
     except Exception as exc:
         logger.debug(
-            "LLM routing handler instantiation failed: %s (correlation_id=%s)",
+            "ModelRoutingRequest construction failed: %s (correlation_id=%s)",
             exc,
             correlation_id,
         )
@@ -579,6 +616,10 @@ def _route_via_llm(
             if result.confidence_breakdown is not None
             else ""
         ),
+        # routing_method is intentionally LOCAL here: LLM routing runs in-process
+        # on the local machine (consistent with the ONEX path that also uses LOCAL).
+        # A dedicated RoutingMethod.LLM value would require new enum governance and
+        # is deferred until a clear product need arises.
         "routing_method": RoutingMethod.LOCAL.value,
         "routing_policy": result.routing_policy,
         "routing_path": onex_routing_path,

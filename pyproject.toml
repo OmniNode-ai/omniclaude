@@ -339,5 +339,6 @@ filterwarnings = [
     # Tests that mock _run_async to intercept calls produce an unawaited-coroutine
     # warning for _check_llm_health.  The warning is benign: the mock consumes the
     # coroutine argument without awaiting it, which is intentional in those tests.
-    "ignore:coroutine '_check_llm_health' was never awaited:RuntimeWarning",
+    # Scoped to the specific test module to avoid masking real warnings elsewhere.
+    "ignore:coroutine '_check_llm_health' was never awaited:RuntimeWarning:tests.lib.core.test_route_via_events_wrapper",
 ]

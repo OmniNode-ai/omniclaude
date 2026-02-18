@@ -737,8 +737,27 @@ class TestConfidenceThreshold:
 
 
 # ---------------------------------------------------------------------------
-# Tests for USE_LLM_ROUTING feature flag
+# Tests for USE_LLM_ROUTING feature flag and _route_via_llm() scenarios
 # ---------------------------------------------------------------------------
+
+
+# Shared helper used by TestRouteViaLlmFallback and TestRouteViaEventsLlmIntegration.
+def _make_llm_result_dict(agent: str = "agent-debugger") -> dict:
+    """Build a minimal routing result dict matching the canonical wrapper format."""
+    return {
+        "selected_agent": agent,
+        "confidence": 0.85,
+        "candidates": [{"name": agent, "score": 0.85, "description": "", "reason": ""}],
+        "reasoning": "LLM selected",
+        "routing_method": RoutingMethod.LOCAL.value,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "method": "trigger_match",
+        "latency_ms": 15,
+        "domain": "debugging",
+        "purpose": "",
+        "event_attempted": False,
+    }
 
 
 class TestUseLlmRouting:
@@ -811,29 +830,6 @@ class TestUseLlmRouting:
             assert _use_llm_routing() is False
 
 
-# ---------------------------------------------------------------------------
-# Tests for _route_via_llm() fallback scenarios
-# ---------------------------------------------------------------------------
-
-
-def _make_llm_result_dict(agent: str = "agent-debugger") -> dict:
-    """Build a minimal routing result dict matching the canonical wrapper format."""
-    return {
-        "selected_agent": agent,
-        "confidence": 0.85,
-        "candidates": [{"name": agent, "score": 0.85, "description": "", "reason": ""}],
-        "reasoning": "LLM selected",
-        "routing_method": RoutingMethod.LOCAL.value,
-        "routing_policy": "trigger_match",
-        "routing_path": "local",
-        "method": "trigger_match",
-        "latency_ms": 15,
-        "domain": "debugging",
-        "purpose": "",
-        "event_attempted": False,
-    }
-
-
 class TestRouteViaLlmFallback:
     """Tests for _route_via_llm() fallback scenarios."""
 
@@ -902,12 +898,13 @@ class TestRouteViaLlmFallback:
             }
         }
 
-        call_count = [0]
+        count = 0
 
         def _run_async_side_effect(coro: object, timeout: float = 5.0) -> object:
             # First call is health check (returns True), second call raises TimeoutError
-            call_count[0] += 1
-            if call_count[0] == 1:
+            nonlocal count
+            count += 1
+            if count == 1:
                 return True
             raise TimeoutError("timed out")
 
@@ -939,11 +936,12 @@ class TestRouteViaLlmFallback:
             }
         }
 
-        call_count = [0]
+        count = 0
 
         def _run_async_side_effect(coro: object, timeout: float = 5.0) -> object:
-            call_count[0] += 1
-            if call_count[0] == 1:
+            nonlocal count
+            count += 1
+            if count == 1:
                 return True
             raise RuntimeError("unexpected error")
 
