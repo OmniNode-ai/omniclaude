@@ -38,12 +38,18 @@ from omniclaude.nodes.node_agent_routing_compute.models import (
     ModelRoutingResult,
 )
 
-__all__ = ["HandlerRoutingDefault"]
+__all__ = [
+    "HandlerRoutingDefault",
+    "FALLBACK_AGENT",
+    "build_registry_dict",
+    "extract_explicit_agent",
+    "create_explicit_result",
+]
 
 logger = logging.getLogger(__name__)
 
 # Default fallback agent when no matches exceed threshold
-_FALLBACK_AGENT = "polymorphic-agent"
+FALLBACK_AGENT = "polymorphic-agent"
 
 # Maximum number of candidates to include in result
 _MAX_CANDIDATES = 5
@@ -92,14 +98,14 @@ class HandlerRoutingDefault:
         agent_names = set(registry_dict["agents"].keys())
 
         # 2. Check for explicit agent request (@agent-name, "use agent-X")
-        explicit_agent = self._extract_explicit_agent(request.prompt, agent_names)
+        explicit_agent = extract_explicit_agent(request.prompt, agent_names)
         if explicit_agent is not None:
             logger.debug(
                 "Explicit agent request detected: %s (correlation_id=%s)",
                 explicit_agent,
                 cid,
             )
-            return self._create_explicit_result(explicit_agent)
+            return create_explicit_result(explicit_agent)
 
         # 3. Run TriggerMatcher.match() to get trigger matches
         # TriggerMatcher is instantiated per-call because the agent registry
@@ -195,12 +201,12 @@ class HandlerRoutingDefault:
         )
         logger.debug(
             "Falling back to %s: %s (correlation_id=%s)",
-            _FALLBACK_AGENT,
+            FALLBACK_AGENT,
             fallback_reason,
             cid,
         )
         return ModelRoutingResult(
-            selected_agent=_FALLBACK_AGENT,
+            selected_agent=FALLBACK_AGENT,
             confidence=0.0,
             confidence_breakdown=ModelConfidenceBreakdown(
                 total=0.0,
@@ -224,162 +230,177 @@ class HandlerRoutingDefault:
     def _build_registry_dict(request: ModelRoutingRequest) -> AgentRegistry:
         """Convert typed ModelAgentDefinition tuple to dict format.
 
-        TriggerMatcher expects::
-
-            {"agents": {
-                "agent-name": {
-                    "activation_triggers": [...],
-                    "title": "...",
-                    "capabilities": [...],
-                    "domain_context": "...",
-                    "definition_path": "...",
-                },
-                ...
-            }}
-
-        The mapping is:
-            ModelAgentDefinition.explicit_triggers + context_triggers -> activation_triggers
-            ModelAgentDefinition.description       -> title
-            ModelAgentDefinition.capabilities      -> capabilities
-            ModelAgentDefinition.domain_context     -> domain_context
-            ModelAgentDefinition.definition_path   -> definition_path
+        Delegates to the module-level ``build_registry_dict`` function, which
+        is the single source of truth for this conversion. Both
+        ``HandlerRoutingDefault`` and ``HandlerRoutingLlm`` use the same
+        module-level function to prevent silent divergence.
         """
-        agents: dict[str, AgentData] = {}
-        for agent_def in request.agent_registry:
-            agents[agent_def.name] = {
-                "activation_triggers": list(agent_def.explicit_triggers)
-                + list(agent_def.context_triggers),
-                "title": agent_def.description or agent_def.name,
-                "capabilities": list(agent_def.capabilities),
-                "domain_context": agent_def.domain_context,
-                "definition_path": agent_def.definition_path or "",
-            }
-        return {"agents": agents}
+        return build_registry_dict(request)
 
-    @staticmethod
-    def _extract_explicit_agent(text: str, known_agents: set[str]) -> str | None:
-        """Extract explicit agent name from request.
 
-        Ported AS-IS from AgentRouter._extract_explicit_agent.
+def build_registry_dict(request: ModelRoutingRequest) -> AgentRegistry:
+    """Convert typed ModelAgentDefinition tuple to dict format for TriggerMatcher.
 
-        Supports patterns:
-        - "use agent-X" - Specific agent request
-        - "@agent-X" - Specific agent request
-        - "agent-X" at start of text - Specific agent request
-        - "use an agent", "spawn an agent", etc. - Generic request -> polymorphic-agent
+    TriggerMatcher expects::
 
-        Args:
-            text: User's input text
-            known_agents: Set of agent names present in the registry
+        {"agents": {
+            "agent-name": {
+                "activation_triggers": [...],
+                "title": "...",
+                "capabilities": [...],
+                "domain_context": "...",
+                "definition_path": "...",
+            },
+            ...
+        }}
 
-        Returns:
-            Agent name if found and valid, None otherwise.
-        """
-        try:
-            text_lower = text.lower()
+    The mapping is:
+        ModelAgentDefinition.explicit_triggers + context_triggers -> activation_triggers
+        ModelAgentDefinition.description       -> title
+        ModelAgentDefinition.capabilities      -> capabilities
+        ModelAgentDefinition.domain_context     -> domain_context
+        ModelAgentDefinition.definition_path   -> definition_path
 
-            # Patterns for specific agent requests (with agent name)
-            # \b prevents false positives: "reuse agent-X", "misuse agent-X"
-            specific_patterns = [
-                r"\buse\s+(agent-[\w-]+)",  # "use agent-researcher"
-                r"@(agent-[\w-]+)",  # "@agent-researcher"
-                r"^(agent-[\w-]+)",  # "agent-researcher" at start
-            ]
+    Args:
+        request: Routing request containing the agent registry.
 
-            # Check specific patterns first
-            for pattern in specific_patterns:
-                match = re.search(pattern, text_lower)
-                if match:
-                    agent_name = match.group(1)
-                    # Verify agent exists in registry
-                    if agent_name in known_agents:
-                        logger.debug(
-                            "Extracted explicit agent: %s (pattern=%s)",
-                            agent_name,
-                            pattern,
-                        )
-                        return agent_name
+    Returns:
+        Dict in the format TriggerMatcher expects.
+    """
+    agents: dict[str, AgentData] = {}
+    for agent_def in request.agent_registry:
+        agents[agent_def.name] = {
+            "activation_triggers": list(agent_def.explicit_triggers)
+            + list(agent_def.context_triggers),
+            "title": agent_def.description or agent_def.name,
+            "capabilities": list(agent_def.capabilities),
+            "domain_context": agent_def.domain_context,
+            "definition_path": agent_def.definition_path or "",
+        }
+    return {"agents": agents}
 
-            # Patterns for generic agent requests (no specific agent name)
-            # These should default to polymorphic-agent
-            # Word boundaries (\b) prevent false positives like "misuse an agent"
-            generic_patterns = [
-                r"\buse\s+an?\s+agent\b",  # "use an agent" or "use a agent"
-                r"\bspawn\s+an?\s+agent\b",  # "spawn an agent" or "spawn a agent"
-                r"\bspawn\s+an?\s+poly\b",  # "spawn a poly" or "spawn an poly"
-                r"\bdispatch\s+to\s+an?\s+agent\b",  # "dispatch to an agent"
-                r"\bcall\s+an?\s+agent\b",  # "call an agent" or "call a agent"
-                r"\binvoke\s+an?\s+agent\b",  # "invoke an agent" or "invoke a agent"
-            ]
 
-            # Check generic patterns
-            for pattern in generic_patterns:
-                match = re.search(pattern, text_lower)
-                if match:
-                    # Default to polymorphic-agent
-                    default_agent = _FALLBACK_AGENT
-                    # Verify polymorphic-agent exists in registry
-                    if default_agent in known_agents:
-                        logger.debug(
-                            "Generic agent request matched, using default: %s",
-                            default_agent,
-                        )
-                        return default_agent
-                    else:
-                        logger.warning(
-                            "Generic agent request matched but %s not in registry",
-                            default_agent,
-                        )
+def extract_explicit_agent(text: str, known_agents: set[str]) -> str | None:
+    """Extract explicit agent name from a user request.
 
-            return None
+    Ported AS-IS from AgentRouter._extract_explicit_agent.
 
-        except Exception:
-            logger.warning(
-                "Failed to extract explicit agent from: %s",
-                text[:50],
-                exc_info=True,
-            )
-            return None
+    Supports patterns:
+    - "use agent-X" - Specific agent request
+    - "@agent-X" - Specific agent request
+    - "agent-X" at start of text - Specific agent request
+    - "use an agent", "spawn an agent", etc. - Generic request -> polymorphic-agent
 
-    @staticmethod
-    def _create_explicit_result(
-        agent_name: str,
-    ) -> ModelRoutingResult:
-        """Create a routing result for an explicitly requested agent.
+    Args:
+        text: User's input text.
+        known_agents: Set of agent names present in the registry.
 
-        Ported from AgentRouter._create_explicit_recommendation.
-        Explicit requests always have 1.0 confidence across all dimensions.
+    Returns:
+        Agent name if found and valid, None otherwise.
+    """
+    try:
+        text_lower = text.lower()
 
-        Args:
-            agent_name: The explicitly requested agent name.
+        # Patterns for specific agent requests (with agent name)
+        # \b prevents false positives: "reuse agent-X", "misuse agent-X"
+        specific_patterns = [
+            r"\buse\s+(agent-[\w-]+)",  # "use agent-researcher"
+            r"@(agent-[\w-]+)",  # "@agent-researcher"
+            r"^(agent-[\w-]+)",  # "agent-researcher" at start
+        ]
 
-        Returns:
-            ModelRoutingResult with routing_policy="explicit_request" and
-            confidence=1.0.
-        """
-        breakdown = ModelConfidenceBreakdown(
-            total=1.0,
-            trigger_score=1.0,
-            context_score=1.0,
-            capability_score=1.0,
-            historical_score=1.0,
-            explanation="Explicit agent request",
+        # Check specific patterns first
+        for pattern in specific_patterns:
+            match = re.search(pattern, text_lower)
+            if match:
+                agent_name = match.group(1)
+                # Verify agent exists in registry
+                if agent_name in known_agents:
+                    logger.debug(
+                        "Extracted explicit agent: %s (pattern=%s)",
+                        agent_name,
+                        pattern,
+                    )
+                    return agent_name
+
+        # Patterns for generic agent requests (no specific agent name)
+        # These should default to polymorphic-agent
+        # Word boundaries (\b) prevent false positives like "misuse an agent"
+        generic_patterns = [
+            r"\buse\s+an?\s+agent\b",  # "use an agent" or "use a agent"
+            r"\bspawn\s+an?\s+agent\b",  # "spawn an agent" or "spawn a agent"
+            r"\bspawn\s+an?\s+poly\b",  # "spawn a poly" or "spawn an poly"
+            r"\bdispatch\s+to\s+an?\s+agent\b",  # "dispatch to an agent"
+            r"\bcall\s+an?\s+agent\b",  # "call an agent" or "call a agent"
+            r"\binvoke\s+an?\s+agent\b",  # "invoke an agent" or "invoke a agent"
+        ]
+
+        # Check generic patterns
+        for pattern in generic_patterns:
+            match = re.search(pattern, text_lower)
+            if match:
+                # Default to polymorphic-agent
+                default_agent = FALLBACK_AGENT
+                # Verify polymorphic-agent exists in registry
+                if default_agent in known_agents:
+                    logger.debug(
+                        "Generic agent request matched, using default: %s",
+                        default_agent,
+                    )
+                    return default_agent
+                else:
+                    logger.warning(
+                        "Generic agent request matched but %s not in registry",
+                        default_agent,
+                    )
+
+        return None
+
+    except Exception:
+        logger.warning(
+            "Failed to extract explicit agent from: %s",
+            text[:50],
+            exc_info=True,
         )
-        candidate = ModelRoutingCandidate(
-            agent_name=agent_name,
-            confidence=1.0,
-            confidence_breakdown=breakdown,
-            match_reason="Explicitly requested by user",
-        )
-        return ModelRoutingResult(
-            selected_agent=agent_name,
-            confidence=1.0,
-            confidence_breakdown=breakdown,
-            routing_policy="explicit_request",
-            routing_path="local",
-            candidates=(candidate,),
-            fallback_reason=None,
-        )
+        return None
+
+
+def create_explicit_result(agent_name: str) -> ModelRoutingResult:
+    """Create a routing result for an explicitly requested agent.
+
+    Ported from AgentRouter._create_explicit_recommendation.
+    Explicit requests always have 1.0 confidence across all dimensions.
+
+    Args:
+        agent_name: The explicitly requested agent name.
+
+    Returns:
+        ModelRoutingResult with routing_policy="explicit_request" and
+        confidence=1.0.
+    """
+    breakdown = ModelConfidenceBreakdown(
+        total=1.0,
+        trigger_score=1.0,
+        context_score=1.0,
+        capability_score=1.0,
+        historical_score=1.0,
+        explanation="Explicit agent request",
+    )
+    candidate = ModelRoutingCandidate(
+        agent_name=agent_name,
+        confidence=1.0,
+        confidence_breakdown=breakdown,
+        match_reason="Explicitly requested by user",
+    )
+    return ModelRoutingResult(
+        selected_agent=agent_name,
+        confidence=1.0,
+        confidence_breakdown=breakdown,
+        routing_policy="explicit_request",
+        routing_path="local",
+        candidates=(candidate,),
+        fallback_reason=None,
+    )
 
 
 def _clamp(value: float, lo: float = 0.0, hi: float = 1.0) -> float:
