@@ -532,10 +532,15 @@ class TestCodeAnalysisOutputSchema:
         )
         assert result.token_count == 100
 
-    def test_latency_ms_is_non_negative(self) -> None:
-        """latency_ms is always >= 0."""
-        result = _make_code_analysis_result(latency_ms=0.0)
-        assert result.latency_ms >= 0.0
+    def test_latency_ms_accepts_near_zero_value(self) -> None:
+        """latency_ms accepts a small positive value just above zero."""
+        result = _make_code_analysis_result(latency_ms=0.001)
+        assert result.latency_ms == pytest.approx(0.001)
+
+    def test_latency_ms_accepts_large_value(self) -> None:
+        """latency_ms accepts a large positive value (no upper bound)."""
+        result = _make_code_analysis_result(latency_ms=9999.9)
+        assert result.latency_ms == pytest.approx(9999.9)
 
     def test_schema_version_is_one_dot_zero(self) -> None:
         """schema_version defaults to '1.0' for code analysis."""
@@ -731,10 +736,15 @@ class TestSummarizationOutputSchema:
         )
         assert result.token_count == 50
 
-    def test_latency_ms_is_non_negative(self) -> None:
-        """latency_ms is always >= 0."""
-        result = _make_summarization_result(latency_ms=0.0)
-        assert result.latency_ms >= 0.0
+    def test_latency_ms_accepts_near_zero_value(self) -> None:
+        """latency_ms accepts a small positive value just above zero."""
+        result = _make_summarization_result(latency_ms=0.001)
+        assert result.latency_ms == pytest.approx(0.001)
+
+    def test_latency_ms_accepts_large_value(self) -> None:
+        """latency_ms accepts a large positive value (no upper bound)."""
+        result = _make_summarization_result(latency_ms=9999.9)
+        assert result.latency_ms == pytest.approx(9999.9)
 
     def test_schema_version_is_one_dot_zero(self) -> None:
         """schema_version defaults to '1.0' for summarization."""
@@ -1018,8 +1028,8 @@ class TestSummarizationBadOutputRecovery:
         )
         assert result.summary_markdown == raw_context.strip()
 
-    def test_net_guard_result_has_one_dot_zero_relevance(self) -> None:
-        """Net-token guard result has relevance_score == 1.0."""
+    def test_result_accepts_one_dot_zero_relevance_score(self) -> None:
+        """Schema accepts relevance_score == 1.0 (upper boundary of the [0.0, 1.0] range)."""
         result = _make_summarization_result(
             relevance_score=1.0,
             model_used=_SUMMARIZATION_DEFAULT_MODEL,
