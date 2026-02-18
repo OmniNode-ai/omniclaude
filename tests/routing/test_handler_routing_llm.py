@@ -280,6 +280,23 @@ class TestHandlerRoutingLlm:
         assert result.routing_policy == "fallback_default"
         assert result.selected_agent == "polymorphic-agent"
 
+    @pytest.mark.unit
+    @pytest.mark.asyncio
+    async def test_empty_registry_returns_fallback_without_llm(
+        self, handler: HandlerRoutingLlm
+    ) -> None:
+        """When the agent registry is genuinely empty, fall back without calling the LLM."""
+        request = _make_request("fix this bug", agents=())
+
+        with patch.object(handler, "_ask_llm", new_callable=AsyncMock) as mock_llm:
+            result = await handler.compute_routing(request)
+
+        mock_llm.assert_not_called()
+        assert result.routing_policy == "fallback_default"
+        assert result.selected_agent == "polymorphic-agent"
+        assert result.confidence == 0.0
+        assert len(result.candidates) == 0
+
     # -- successful LLM call --
 
     @pytest.mark.unit

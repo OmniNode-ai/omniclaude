@@ -34,7 +34,6 @@ from omniclaude.nodes.node_agent_routing_compute._internal import (
     TriggerMatcher,
 )
 from omniclaude.nodes.node_agent_routing_compute.handler_routing_default import (
-    _clamp,
     build_registry_dict,
     create_explicit_result,
     extract_explicit_agent,
@@ -67,6 +66,15 @@ _LLM_MAX_TOKENS = 50
 
 # LLM call timeout in seconds (must stay well within routing budget)
 _LLM_TIMEOUT_SECONDS = 4.0
+
+
+def _clamp(value: float, lo: float = 0.0, hi: float = 1.0) -> float:
+    """Clamp a float to [lo, hi] range.
+
+    Protects against floating-point drift that could violate Pydantic
+    field constraints (ge=0.0, le=1.0).
+    """
+    return max(lo, min(hi, value))
 
 
 def _build_routing_prompt(candidates: list[ModelRoutingCandidate], prompt: str) -> str:
