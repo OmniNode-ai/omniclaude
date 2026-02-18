@@ -249,6 +249,12 @@ class RoutingPath(str, Enum):
 _AgentRouter: type | None = None
 _router_instance: Any = None
 _router_lock = threading.Lock()
+
+# Lock that ensures at most one llm-fuzzy-agreement thread runs at a time.
+# acquire(blocking=False) at spawn time: if already locked, skip spawning.
+# try/finally in the thread body always releases it.
+_agreement_lock = threading.Lock()
+
 try:
     from agent_router import AgentRouter
 
@@ -645,13 +651,18 @@ def _route_via_llm(
 
     # 5. Shape result into canonical wrapper dict
     # latency_ms measures only the LLM HTTP call (start set immediately above).
-    latency_ms = int((time.time() - start) * 1000)
+    # Use float for the guard measurement to preserve sub-millisecond precision
+    # (e.g. 80.9ms must not be truncated to 80.0ms, which would not trip the
+    # P95 SLO circuit that opens at > 80.0ms).  The integer version is kept
+    # for the output dict / logs so the external interface stays the same.
+    latency_ms_float = (time.time() - start) * 1000
+    latency_ms = int(latency_ms_float)
 
     # Record latency with the guard so it can enforce the P95 SLO.
     guard = _get_latency_guard()
     if guard is not None:
         try:
-            guard.record_latency(float(latency_ms))
+            guard.record_latency(latency_ms_float)
         except Exception as exc:
             logger.debug("LatencyGuard.record_latency failed (non-blocking): %s", exc)
 
@@ -999,11 +1010,11 @@ def _record_llm_fuzzy_agreement(llm_selected: str, prompt: str) -> None:
         llm_selected: Agent name selected by LLM routing.
         prompt: The user prompt (passed to fuzzy router for comparison).
     """
-    guard = _get_latency_guard()
-    if guard is None:
-        return
-
     try:
+        guard = _get_latency_guard()
+        if guard is None:
+            return
+
         router = _get_router()
         if router is None:
             # No fuzzy router — cannot compute agreement; skip recording to
@@ -1029,6 +1040,8 @@ def _record_llm_fuzzy_agreement(llm_selected: str, prompt: str) -> None:
         )
     except Exception as exc:
         logger.debug("_record_llm_fuzzy_agreement failed (non-blocking): %s", exc)
+    finally:
+        _agreement_lock.release()
 
 
 def route_via_events(
@@ -1121,14 +1134,24 @@ def route_via_events(
             # does NOT add synchronous latency to the UserPromptSubmit hot path.
             # Hooks must never block the UI (CLAUDE.md performance budget).
             # The thread is a daemon so it does not prevent process exit.
+            #
+            # _agreement_lock ensures at most one agreement-recording thread
+            # runs at a time.  acquire(blocking=False) skips spawning a new
+            # thread when one is already running (prevents unbounded thread
+            # accumulation under concurrent routing calls).
             _llm_selected = llm_result.get("selected_agent", "")
-            _agreement_thread = threading.Thread(
-                target=_record_llm_fuzzy_agreement,
-                args=(_llm_selected, prompt),
-                daemon=True,
-                name="llm-fuzzy-agreement",
-            )
-            _agreement_thread.start()
+            if _agreement_lock.acquire(blocking=False):
+                _agreement_thread = threading.Thread(
+                    target=_record_llm_fuzzy_agreement,
+                    args=(_llm_selected, prompt),
+                    daemon=True,
+                    name="llm-fuzzy-agreement",
+                )
+                _agreement_thread.start()
+            else:
+                logger.debug(
+                    "llm-fuzzy-agreement thread already running, skipping spawn"
+                )
             _emit_routing_decision(
                 result=llm_result, prompt=prompt, correlation_id=correlation_id
             )

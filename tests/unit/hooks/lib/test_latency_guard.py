@@ -18,6 +18,7 @@ from __future__ import annotations
 import sys
 import threading
 import time
+from collections.abc import Generator
 from pathlib import Path
 
 import pytest
@@ -86,7 +87,7 @@ class TestSingleton:
 
 class TestLatencyTracking:
     @pytest.fixture(autouse=True)
-    def fresh(self) -> LatencyGuard:
+    def fresh(self) -> Generator[LatencyGuard, None, None]:
         # This fixture is used for its side-effect of resetting the singleton
         # before each test.  The return value is intentionally unused by
         # individual tests — they call LatencyGuard.get_instance() directly so
@@ -96,7 +97,7 @@ class TestLatencyTracking:
         # the post-test reset ensures subsequent tests start clean regardless
         # of what this test does.
         _make_fresh_guard()
-        yield LatencyGuard.get_instance()  # type: ignore[misc]
+        yield LatencyGuard.get_instance()
         LatencyGuard._reset_instance()
 
     @pytest.mark.unit

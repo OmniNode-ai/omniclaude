@@ -271,6 +271,11 @@ class LatencyGuard:
         """Return a frozen snapshot of the guard's current state.
 
         Safe to call from any thread; never raises.
+
+        Side effect: prunes the agreement observation window (removes entries
+        older than AGREEMENT_WINDOW_SECONDS) to ensure the snapshot reflects
+        only fresh observations.  This mutates _agreement_obs as a necessary
+        part of producing an accurate agreement_rate value.
         """
         try:
             with self._lock:
@@ -299,6 +304,9 @@ class LatencyGuard:
                 # side-effect, which would mutate state beyond what this read
                 # is supposed to do and would produce an inconsistent snapshot
                 # where circuit_open=True but enabled=True for the same instant.
+                # NOTE: does not perform cooldown auto-reset; use is_enabled()
+                # for authoritative check.  This snapshot may lag is_enabled()
+                # by up to COOLDOWN_SECONDS if the cooldown has just elapsed.
                 enabled = (not circuit_open) and (not self._agreement_disabled)
 
                 return LatencyGuardStatus(
