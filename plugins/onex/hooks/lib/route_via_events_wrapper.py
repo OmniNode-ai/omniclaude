@@ -122,7 +122,9 @@ try:
     _onex_nodes_available = True
     _llm_handler_available = True
 except ImportError:
-    logger.debug("ONEX routing nodes not available, USE_ONEX_ROUTING_NODES ignored")
+    logger.debug(
+        "ONEX routing nodes not available, USE_ONEX_ROUTING_NODES and USE_LLM_ROUTING ignored"
+    )
 
 # LLM endpoint registry import (for USE_LLM_ROUTING feature flag)
 _llm_registry_available = False
@@ -427,7 +429,6 @@ async def _check_llm_health(llm_url: str, timeout_s: float) -> bool:
 def _route_via_llm(
     prompt: str,
     correlation_id: str,
-    timeout_ms: int,
 ) -> dict[str, Any] | None:
     """Attempt LLM-based routing and return a result dict, or None to fall through.
 
@@ -444,8 +445,6 @@ def _route_via_llm(
     Args:
         prompt: User prompt to route.
         correlation_id: Correlation ID for tracing.
-        timeout_ms: Outer routing budget in milliseconds (used only for
-            routing_path / latency shaping of the returned dict).
 
     Returns:
         Routing result dict on success, None on any failure.
@@ -903,7 +902,7 @@ def route_via_events(
 
     # LLM routing path (when USE_LLM_ROUTING + ENABLE_LOCAL_INFERENCE_PIPELINE enabled)
     if _use_llm_routing():
-        llm_result = _route_via_llm(prompt, correlation_id, timeout_ms)
+        llm_result = _route_via_llm(prompt, correlation_id)
         if llm_result is not None:
             _emit_routing_decision(
                 result=llm_result, prompt=prompt, correlation_id=correlation_id

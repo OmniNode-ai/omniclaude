@@ -840,7 +840,7 @@ class TestRouteViaLlmFallback:
     def test_returns_none_when_no_llm_url(self):
         """Returns None when no LLM URL is configured."""
         with patch("route_via_events_wrapper._get_llm_routing_url", return_value=None):
-            result = _route_via_llm("debug this", "corr-123", timeout_ms=5000)
+            result = _route_via_llm("debug this", "corr-123")
 
         assert result is None
 
@@ -856,7 +856,7 @@ class TestRouteViaLlmFallback:
                 return_value=False,  # Health check unhealthy
             ),
         ):
-            result = _route_via_llm("debug this", "corr-123", timeout_ms=5000)
+            result = _route_via_llm("debug this", "corr-123")
 
         assert result is None
 
@@ -872,7 +872,7 @@ class TestRouteViaLlmFallback:
                 side_effect=Exception("connection refused"),
             ),
         ):
-            result = _route_via_llm("debug this", "corr-123", timeout_ms=5000)
+            result = _route_via_llm("debug this", "corr-123")
 
         assert result is None
 
@@ -889,7 +889,7 @@ class TestRouteViaLlmFallback:
             ),
             patch("route_via_events_wrapper._get_router", return_value=None),
         ):
-            result = _route_via_llm("debug this", "corr-123", timeout_ms=5000)
+            result = _route_via_llm("debug this", "corr-123")
 
         assert result is None
 
@@ -926,7 +926,7 @@ class TestRouteViaLlmFallback:
                 return_value=(MagicMock(),),
             ),
         ):
-            result = _route_via_llm("debug this", "corr-123", timeout_ms=5000)
+            result = _route_via_llm("debug this", "corr-123")
 
         assert result is None
 
@@ -962,7 +962,7 @@ class TestRouteViaLlmFallback:
                 return_value=(MagicMock(),),
             ),
         ):
-            result = _route_via_llm("debug this", "corr-123", timeout_ms=5000)
+            result = _route_via_llm("debug this", "corr-123")
 
         assert result is None
 
