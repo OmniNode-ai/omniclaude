@@ -201,9 +201,15 @@ class TestParseAgentFromResponse:
 
     @pytest.mark.unit
     def test_deterministic_on_multiple_matches(self) -> None:
-        """When multiple agents appear in the response, sorted() ensures determinism."""
+        """When multiple agents appear in the response, the stable sort ensures determinism.
+
+        Both names are the same length (9 chars), so the primary sort key (-len)
+        is equal. The secondary sort key (alphabetical ascending) breaks the tie:
+        'agent-aaa' < 'agent-zzz', so 'agent-aaa' is iterated first and returned.
+        """
         known = {"agent-aaa", "agent-zzz"}
-        # Both names appear in the response; sorted() picks "agent-aaa" first
+        # Both names appear in the response; length tie-broken alphabetically,
+        # so 'agent-aaa' < 'agent-zzz' and 'agent-aaa' wins.
         result = _parse_agent_from_response("agent-aaa agent-zzz", known)
         assert result == "agent-aaa"
 

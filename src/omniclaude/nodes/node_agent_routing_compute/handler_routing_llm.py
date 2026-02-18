@@ -125,7 +125,7 @@ def _parse_agent_from_response(
     # Try to find any known agent name as a substring.
     # Sort longest-first so more-specific names (e.g. "agent-api-architect")
     # are matched before shorter prefix names (e.g. "agent-api").
-    for agent_name in sorted(known_agents, key=len, reverse=True):
+    for agent_name in sorted(known_agents, key=lambda n: (-len(n), n)):
         if agent_name in text:
             return agent_name
 
