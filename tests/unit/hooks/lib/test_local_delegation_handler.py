@@ -339,6 +339,32 @@ class TestLlmCall:
             result = ldh._call_local_llm("explain this", "http://localhost:8200")
         assert result is None
 
+    def test_null_model_field_uses_default(self) -> None:
+        """Regression test: API returning {"model": null} must not raise AttributeError.
+
+        data.get('model', 'local-model') returns None when the key is present but
+        null; using `or 'local-model'` coerces null to the default instead.
+        """
+        mock_response = MagicMock()
+        mock_response.is_success = True
+        mock_response.json.return_value = {
+            "model": None,
+            "choices": [{"message": {"content": "answer"}}],
+        }
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.post = MagicMock(return_value=mock_response)
+
+        with patch("httpx.Client", return_value=mock_client):
+            result = ldh._call_local_llm("explain this", "http://localhost:8200")
+
+        assert result is not None
+        text, model = result
+        assert text == "answer"
+        assert model == "local-model"
+
     def test_prompt_truncation_applied(self) -> None:
         """Prompts longer than _MAX_PROMPT_CHARS are truncated before sending."""
         long_prompt = "x" * 9000
@@ -363,8 +389,8 @@ class TestLlmCall:
         assert model == "qwen2.5-14b"
 
         # Verify the payload sent to the mock contained the truncation marker
-        call_kwargs = mock_client.post.call_args
-        sent_payload = call_kwargs[1]["json"] if call_kwargs[1] else call_kwargs[0][1]
+        call_args = mock_client.post.call_args
+        sent_payload = call_args.kwargs["json"]
         sent_content = sent_payload["messages"][0]["content"]
         assert "[... prompt truncated at 8000 chars" in sent_content
         assert len(sent_content) < 9000

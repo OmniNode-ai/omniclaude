@@ -233,7 +233,7 @@ def _call_local_llm(
         )
         prompt = (
             prompt[:_MAX_PROMPT_CHARS]
-            + "\n[... prompt truncated at 8000 chars for local delegation ...]"
+            + f"\n[... prompt truncated at {_MAX_PROMPT_CHARS} chars for local delegation ...]"
         )
 
     url = f"{endpoint_url}/v1/chat/completions"
@@ -260,7 +260,7 @@ def _call_local_llm(
             logger.debug("LLM returned empty content")
             return None
 
-        model_name = data.get("model", "local-model")
+        model_name = data.get("model") or "local-model"
         return content, model_name
 
     except httpx.TimeoutException:
@@ -311,7 +311,8 @@ def _format_delegated_response(
     # this requires a misbehaving model AND a user acting on malformed output.
     safe_model_name = model_name.replace("{", "{{").replace("}", "}}")
     header = _ATTRIBUTION_HEADER.format(model=safe_model_name)
-    reasons_summary = "; ".join(delegation_score.reasons)
+    reasons_list = delegation_score.reasons or []
+    reasons_summary = "; ".join(reasons_list)
     savings_str = (
         f"~${delegation_score.estimated_savings_usd:.4f}"
         if delegation_score.estimated_savings_usd > 0

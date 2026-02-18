@@ -359,7 +359,7 @@ LOCAL_DELEGATION_ENABLED=$(_normalize_bool "${ENABLE_LOCAL_DELEGATION:-false}")
 
 if [[ "$INFERENCE_PIPELINE_ENABLED" == "true" ]] && [[ "$LOCAL_DELEGATION_ENABLED" == "true" ]] \
         && [[ "$WORKFLOW_DETECTED" != "true" ]] \
-        && [[ ! "$PROMPT" =~ ^/ ]]; then
+        && [[ ! "$PROMPT" =~ ^/ ]]; then  # Slash commands invoke structured skills/commands — never delegate to local models
     DELEGATION_HANDLER="${HOOKS_LIB}/local_delegation_handler.py"
     if [[ -f "$DELEGATION_HANDLER" ]]; then
         log "Local delegation enabled — classifying prompt (correlation=$CORRELATION_ID)"
