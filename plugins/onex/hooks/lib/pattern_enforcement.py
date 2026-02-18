@@ -74,6 +74,7 @@ class EnforcementResult(TypedDict):
     advisories: list[PatternAdvisory]
     patterns_queried: int
     patterns_skipped_cooldown: int
+    patterns_skipped_ineligible: int
     elapsed_ms: float
     error: str | None
     evaluation_submitted: bool
@@ -430,6 +431,7 @@ def enforce_patterns(
                 advisories=[],
                 patterns_queried=0,
                 patterns_skipped_cooldown=0,
+                patterns_skipped_ineligible=0,
                 elapsed_ms=_elapsed_ms(),
                 error=None,
                 evaluation_submitted=False,
@@ -443,12 +445,14 @@ def enforce_patterns(
                 advisories=[],
                 patterns_queried=len(patterns),
                 patterns_skipped_cooldown=0,
+                patterns_skipped_ineligible=0,
                 elapsed_ms=_elapsed_ms(),
                 error=None,
                 evaluation_submitted=False,
             )
 
         skipped = 0
+        ineligible = 0
         eligible_patterns: list[dict[str, Any]] = []
         seen_ids: set[str] = set()  # deduplicate within this batch
 
@@ -470,6 +474,8 @@ def enforce_patterns(
             if _is_eligible_pattern(pattern) and pattern_id not in seen_ids:
                 eligible_patterns.append(pattern)
                 seen_ids.add(pattern_id)
+            else:
+                ineligible += 1
 
         # Step 4: Emit single compliance.evaluate event with all eligible patterns
         evaluation_submitted = False
@@ -493,6 +499,7 @@ def enforce_patterns(
             advisories=[],  # always empty — results arrive asynchronously
             patterns_queried=len(patterns),
             patterns_skipped_cooldown=skipped,
+            patterns_skipped_ineligible=ineligible,
             elapsed_ms=_elapsed_ms(),
             error=None,
             evaluation_submitted=evaluation_submitted,
@@ -505,6 +512,7 @@ def enforce_patterns(
             advisories=[],
             patterns_queried=0,
             patterns_skipped_cooldown=0,
+            patterns_skipped_ineligible=0,
             elapsed_ms=_elapsed_ms(),
             error=str(exc),
             evaluation_submitted=False,
@@ -530,6 +538,7 @@ def main() -> None:
                     advisories=[],
                     patterns_queried=0,
                     patterns_skipped_cooldown=0,
+                    patterns_skipped_ineligible=0,
                     elapsed_ms=0.0,
                     error=None,
                     evaluation_submitted=False,
@@ -546,6 +555,7 @@ def main() -> None:
                     advisories=[],
                     patterns_queried=0,
                     patterns_skipped_cooldown=0,
+                    patterns_skipped_ineligible=0,
                     elapsed_ms=0.0,
                     error="empty stdin",
                     evaluation_submitted=False,
@@ -574,6 +584,7 @@ def main() -> None:
                 advisories=[],
                 patterns_queried=0,
                 patterns_skipped_cooldown=0,
+                patterns_skipped_ineligible=0,
                 elapsed_ms=0.0,
                 error=f"fatal: {exc}",
                 evaluation_submitted=False,

@@ -616,7 +616,7 @@ if [[ "${STATIC_SNAPSHOT_ENABLED}" == "true" ]] && [[ -f "${HOOKS_LIB}/static_co
         ( _run_static_snapshot ) &
         log "Static context snapshot started in background (PID: $!)"
     else
-        STATIC_SNAPSHOT_STAMP="/tmp/omniclaude-static-snapshot-${SESSION_ID}.done"
+        STATIC_SNAPSHOT_STAMP="/tmp/omniclaude-static-snapshot-$(echo -n "${SESSION_ID}" | shasum -a 256 | cut -c1-16).done"
         if [[ -f "$STATIC_SNAPSHOT_STAMP" ]]; then
             log "Static context snapshot already run for this session, skipping"
         else
