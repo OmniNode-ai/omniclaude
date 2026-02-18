@@ -43,6 +43,7 @@ __all__ = [
     "build_registry_dict",
     "extract_explicit_agent",
     "create_explicit_result",
+    "_clamp",
 ]
 
 logger = logging.getLogger(__name__)

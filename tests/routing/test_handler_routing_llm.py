@@ -370,7 +370,10 @@ class TestHandlerRoutingLlm:
             side_effect=httpx.ConnectError("connection refused")
         )
 
-        with patch("httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "omniclaude.nodes.node_agent_routing_compute.handler_routing_llm.httpx.AsyncClient",
+            return_value=mock_client,
+        ):
             result = await handler._ask_llm(
                 candidates=candidates,
                 prompt="debug this",
@@ -395,7 +398,10 @@ class TestHandlerRoutingLlm:
         mock_client.__aexit__ = AsyncMock(return_value=False)
         mock_client.post = AsyncMock(side_effect=httpx.TimeoutException("timed out"))
 
-        with patch("httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "omniclaude.nodes.node_agent_routing_compute.handler_routing_llm.httpx.AsyncClient",
+            return_value=mock_client,
+        ):
             result = await handler._ask_llm(
                 candidates=candidates,
                 prompt="debug this",
@@ -429,7 +435,10 @@ class TestHandlerRoutingLlm:
         mock_client.__aexit__ = AsyncMock(return_value=False)
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch("httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "omniclaude.nodes.node_agent_routing_compute.handler_routing_llm.httpx.AsyncClient",
+            return_value=mock_client,
+        ):
             result = await handler._ask_llm(
                 candidates=candidates,
                 prompt="debug this",
@@ -460,7 +469,10 @@ class TestHandlerRoutingLlm:
         mock_client.__aexit__ = AsyncMock(return_value=False)
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch("httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "omniclaude.nodes.node_agent_routing_compute.handler_routing_llm.httpx.AsyncClient",
+            return_value=mock_client,
+        ):
             result = await handler._ask_llm(
                 candidates=candidates,
                 prompt="debug this",
@@ -491,7 +503,10 @@ class TestHandlerRoutingLlm:
         mock_client.__aexit__ = AsyncMock(return_value=False)
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch("httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "omniclaude.nodes.node_agent_routing_compute.handler_routing_llm.httpx.AsyncClient",
+            return_value=mock_client,
+        ):
             result = await handler._ask_llm(
                 candidates=candidates,
                 prompt="debug this",
@@ -593,7 +608,10 @@ class TestHandlerRoutingLlm:
         mock_client.__aexit__ = AsyncMock(return_value=False)
         mock_client.post = capture_post
 
-        with patch("httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "omniclaude.nodes.node_agent_routing_compute.handler_routing_llm.httpx.AsyncClient",
+            return_value=mock_client,
+        ):
             await handler._ask_llm(
                 candidates=candidates,
                 prompt="debug this",
@@ -632,7 +650,10 @@ class TestHandlerRoutingLlm:
         mock_client.__aexit__ = AsyncMock(return_value=False)
         mock_client.post = capture_post
 
-        with patch("httpx.AsyncClient", return_value=mock_client):
+        with patch(
+            "omniclaude.nodes.node_agent_routing_compute.handler_routing_llm.httpx.AsyncClient",
+            return_value=mock_client,
+        ):
             await handler._ask_llm(
                 candidates=candidates,
                 prompt="debug this",

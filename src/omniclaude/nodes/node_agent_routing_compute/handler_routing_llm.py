@@ -27,11 +27,14 @@ import json
 import logging
 from uuid import UUID
 
+import httpx
+
 from omniclaude.nodes.node_agent_routing_compute._internal import (
     ConfidenceScorer,
     TriggerMatcher,
 )
 from omniclaude.nodes.node_agent_routing_compute.handler_routing_default import (
+    _clamp,
     build_registry_dict,
     create_explicit_result,
     extract_explicit_agent,
@@ -46,15 +49,6 @@ from omniclaude.nodes.node_agent_routing_compute.models import (
 __all__ = ["HandlerRoutingLlm"]
 
 logger = logging.getLogger(__name__)
-
-
-def _clamp(value: float, lo: float = 0.0, hi: float = 1.0) -> float:
-    """Clamp a float to [lo, hi] range.
-
-    Protects against floating-point drift that could violate Pydantic
-    field constraints (ge=0.0, le=1.0).
-    """
-    return max(lo, min(hi, value))
 
 
 # Default fallback agent when no matches exceed threshold
@@ -128,8 +122,10 @@ def _parse_agent_from_response(
     if text in known_agents:
         return text
 
-    # Try to find any known agent name as a substring
-    for agent_name in sorted(known_agents):  # sorted for determinism
+    # Try to find any known agent name as a substring.
+    # Sort longest-first so more-specific names (e.g. "agent-api-architect")
+    # are matched before shorter prefix names (e.g. "agent-api").
+    for agent_name in sorted(known_agents, key=len, reverse=True):
         if agent_name in text:
             return agent_name
 
@@ -376,17 +372,6 @@ class HandlerRoutingLlm:
         Returns:
             A validated agent name from the LLM, or None on failure.
         """
-        try:
-            import httpx
-        except ImportError:
-            logger.error(
-                "httpx is not installed; LLM-based routing is disabled. "
-                "Install httpx (e.g. `uv add httpx`) to enable this feature. "
-                "(correlation_id=%s)",
-                correlation_id,
-            )
-            return None
-
         routing_prompt = _build_routing_prompt(candidates, prompt)
 
         payload = {
