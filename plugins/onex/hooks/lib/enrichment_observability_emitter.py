@@ -174,9 +174,9 @@ def emit_enrichment_events(
     """Emit one ``context.enrichment`` event per completed enrichment channel.
 
     Iterates over ``results`` (list of ``_EnrichmentResult`` objects from the
-    runner) and emits a single observability event per item.  Only results
-    where ``result.success is True`` or ``result.was_dropped_before_run`` is
-    set produce events; completely failed/timed-out enrichments are skipped.
+    runner) and emits a single observability event per item.  Results with an
+    empty ``name`` are skipped.  Failed enrichments still emit events (with
+    ``result_token_count=0``) for observability into failure rates.
 
     ``was_dropped`` is derived by checking whether the enrichment name is
     absent from ``kept_names`` (the set of names that survived the token cap).

@@ -442,7 +442,9 @@ fi
 # 200ms timeout (outer safety net); asyncio timeouts inside the runner.
 ENRICHMENT_CONTEXT=""
 ENRICHMENT_RUNNER="${HOOKS_LIB}/context_enrichment_runner.py"
-if [[ "${ENABLE_LOCAL_INFERENCE_PIPELINE:-false}" == "true" ]] && [[ "${ENABLE_LOCAL_ENRICHMENT:-false}" == "true" ]] && [[ -f "$ENRICHMENT_RUNNER" ]]; then
+ENRICHMENT_PIPELINE_ENABLED=$(_normalize_bool "${ENABLE_LOCAL_INFERENCE_PIPELINE:-false}")
+ENRICHMENT_FLAG_ENABLED=$(_normalize_bool "${ENABLE_LOCAL_ENRICHMENT:-false}")
+if [[ "$ENRICHMENT_PIPELINE_ENABLED" == "true" ]] && [[ "$ENRICHMENT_FLAG_ENABLED" == "true" ]] && [[ -f "$ENRICHMENT_RUNNER" ]]; then
     ENRICHMENT_INPUT=$(jq -n \
         --arg prompt "$PROMPT" \
         --arg session_id "$SESSION_ID" \

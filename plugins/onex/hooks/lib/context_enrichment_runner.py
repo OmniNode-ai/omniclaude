@@ -163,13 +163,13 @@ async def _run_single_enrichment(
     project_path: str,
 ) -> _EnrichmentResult:
     """Run a single enrichment handler with a per-enrichment timeout."""
-    t0 = asyncio.get_event_loop().time()
+    t0 = asyncio.get_running_loop().time()
     try:
         result = await asyncio.wait_for(
             handler.enrich(prompt=prompt, project_path=project_path),
             timeout=_PER_ENRICHMENT_TIMEOUT_S,
         )
-        latency_ms = (asyncio.get_event_loop().time() - t0) * 1000.0
+        latency_ms = (asyncio.get_running_loop().time() - t0) * 1000.0
         if result.success:
             tokens = _count_tokens(result.markdown)
             return _EnrichmentResult(
@@ -183,12 +183,12 @@ async def _run_single_enrichment(
                 fallback_used=bool(getattr(result, "fallback_used", False)),
                 prompt_version=str(getattr(result, "prompt_version", "") or ""),
             )
-        latency_ms = (asyncio.get_event_loop().time() - t0) * 1000.0
+        latency_ms = (asyncio.get_running_loop().time() - t0) * 1000.0
         return _EnrichmentResult(
             name=name, markdown="", tokens=0, success=False, latency_ms=latency_ms
         )
     except Exception as exc:
-        latency_ms = (asyncio.get_event_loop().time() - t0) * 1000.0
+        latency_ms = (asyncio.get_running_loop().time() - t0) * 1000.0
         logger.debug("Enrichment %r skipped: %s", name, exc)
         return _EnrichmentResult(
             name=name, markdown="", tokens=0, success=False, latency_ms=latency_ms
