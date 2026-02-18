@@ -247,6 +247,10 @@ class TaskClassifier:
             "push",
             "curl",
             "bash",
+            "browse",   # 6 chars: matches "browser", "browsed", etc.
+            "shell",    # 5 chars: matches "seashell", "eggshell", etc.
+            "commit",   # 6 chars: matches "commitment", "committed", etc.
+            "deploy",   # 6 chars: matches "deployed", "deployment", etc.
             # Vision signals that are common substrings of unrelated words
             "ocr",     # 3 chars: matches "score", "discord", etc.
             "graph",   # 5 chars: matches "paragraph", "biography", etc.

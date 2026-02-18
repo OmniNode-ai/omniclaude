@@ -13,8 +13,6 @@ This module contains comprehensive tests for:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 import pytest
 
 from omniclaude.lib.task_classifier import (
@@ -24,17 +22,13 @@ from omniclaude.lib.task_classifier import (
     TaskIntent,
 )
 
-if TYPE_CHECKING:
-    from collections.abc import Generator
-
-
 # =============================================================================
 # Fixtures
 # =============================================================================
 
 
 @pytest.fixture
-def classifier() -> Generator[TaskClassifier, None, None]:
+def classifier() -> TaskClassifier:
     """Provide a TaskClassifier instance for tests.
 
     This fixture ensures consistent classifier instantiation across tests
