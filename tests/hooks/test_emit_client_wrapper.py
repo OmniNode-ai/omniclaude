@@ -67,6 +67,7 @@ class TestModuleImport:
             "phase.metrics",  # OMN-2027 - Phase instrumentation metrics
             "agent.status",  # OMN-1848 - Agent status reporting
             "compliance.evaluate",  # OMN-2256
+            "static.context.edit.detected",  # OMN-2237 - Static context change detection
         }
         assert expected_types == SUPPORTED_EVENT_TYPES
 
@@ -113,9 +114,12 @@ class TestModuleImport:
             assert event_type == event_type.lower(), (
                 f"Event type '{event_type}' should be lowercase"
             )
-            # Should contain exactly one dot (category.action format)
-            assert event_type.count(".") == 1, (
-                f"Event type '{event_type}' should have exactly one dot (category.action)"
+            # Should contain at least one dot (category.action format).
+            # Most events use exactly one dot (e.g. "session.started").
+            # Compound events (e.g. "static.context.edit.detected") may use more dots
+            # but must still not look like Kafka wire topics.
+            assert event_type.count(".") >= 1, (
+                f"Event type '{event_type}' should contain at least one dot"
             )
             # Should not be a Kafka topic (those start with 'onex.' or are hyphenated)
             assert not event_type.startswith("onex."), (

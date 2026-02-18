@@ -594,6 +594,30 @@ else
 fi
 
 # -----------------------------
+# Static Context Snapshot (OMN-2237)
+# -----------------------------
+# Detect changes to CLAUDE.md, memory files, and .local.md since the last session.
+# Runs ASYNCHRONOUSLY (backgrounded) to respect the <50ms hook budget.
+# Emits static.context.edit.detected event when changes are found.
+
+STATIC_SNAPSHOT_ENABLED="${OMNICLAUDE_STATIC_SNAPSHOT_ENABLED:-true}"
+STATIC_SNAPSHOT_ENABLED=$(_normalize_bool "$STATIC_SNAPSHOT_ENABLED")
+
+if [[ "${STATIC_SNAPSHOT_ENABLED}" == "true" ]] && [[ -f "${HOOKS_LIB}/static_context_snapshot.py" ]]; then
+    (
+        "$PYTHON_CMD" "${HOOKS_LIB}/static_context_snapshot.py" scan \
+            --session-id "${SESSION_ID:-unknown}" \
+            --project-path "${PROJECT_PATH:-${CWD}}" \
+            >> "$LOG_FILE" 2>&1
+    ) &
+    log "Static context snapshot started in background (PID: $!)"
+elif [[ "${STATIC_SNAPSHOT_ENABLED}" != "true" ]]; then
+    log "Static context snapshot disabled (STATIC_SNAPSHOT_ENABLED=false)"
+else
+    log "Static context snapshot skipped (static_context_snapshot.py not found)"
+fi
+
+# -----------------------------
 # Ticket Context Injection (OMN-1830)
 # -----------------------------
 # Inject active ticket context for session continuity.
