@@ -587,12 +587,20 @@ class TestCodeAnalysisMarkdownParsing:
         result = _make_code_analysis_result()
         assert _has_heading(result.summary_markdown, "Summary")
 
-    def test_extract_headings_returns_all_four(self) -> None:
-        """_extract_headings() returns exactly the four canonical section names."""
+    def test_extract_headings_returns_no_extra_headings(self) -> None:
+        """_extract_headings() returns exactly the four required headings — no extras.
+
+        Complements test_well_formed_output_has_all_required_headings: while that
+        test checks that each required heading is present, this test checks the
+        inverse — that no unexpected extra headings appear in well-formed output.
+        Both directions together pin the exact heading set.
+        """
         result = _make_code_analysis_result()
         headings = _extract_headings(result.summary_markdown)
-        for expected in _CODE_ANALYSIS_REQUIRED_HEADINGS:
-            assert expected in headings, f"Heading not found: {expected!r}"
+        required = set(_CODE_ANALYSIS_REQUIRED_HEADINGS)
+        extra = [h for h in headings if h not in required]
+        assert extra == [], f"Unexpected extra headings found: {extra!r}"
+        assert len(headings) == len(_CODE_ANALYSIS_REQUIRED_HEADINGS)
 
     def test_affected_functions_section_has_content(self) -> None:
         """The 'Affected Functions / Methods' section has non-empty content."""
@@ -972,6 +980,12 @@ class TestSummarizationBadOutputRecovery:
         raw_context = "x" * ((_TOKEN_THRESHOLD + 1) * _CHARS_PER_TOKEN)
         result = _make_summarization_result(
             summary_markdown=raw_context.strip(),
+            # model_used is the REAL model (not _SUMMARIZATION_PASSTHROUGH_MODEL)
+            # because the LLM *was* called — it just returned empty text.
+            # _SUMMARIZATION_PASSTHROUGH_MODEL ("passthrough") is reserved for the
+            # below-threshold path where no LLM call is made at all.
+            # See adapter_summarization_enrichment.py lines 330-344: the empty-
+            # response branch sets model_used=self._model, not _PASSTHROUGH_MODEL.
             model_used=_SUMMARIZATION_DEFAULT_MODEL,
             relevance_score=_SUMMARIZATION_PASSTHROUGH_RELEVANCE_SCORE,
             token_count=len(raw_context.strip()) // _CHARS_PER_TOKEN,
@@ -1076,10 +1090,22 @@ class TestTokenEstimationSnapshot:
         """The token estimation constant is 4 characters per token."""
         assert _CHARS_PER_TOKEN == 4
 
-    def test_empty_string_gives_zero_tokens(self) -> None:
-        """Empty string => 0 tokens."""
-        text = ""
-        assert len(text) // _CHARS_PER_TOKEN == 0
+    def test_minimum_non_empty_summary_accepts_zero_token_count(self) -> None:
+        """A minimal (1-char) summary_markdown with token_count=0 satisfies the schema.
+
+        Exercises the schema boundary: summary_markdown has min_length=1 (so an
+        empty string is rejected by the contract) and token_count has ge=0 (so
+        zero is the minimum allowed value).  A single-character summary whose
+        len() // _CHARS_PER_TOKEN truncates to 0 is the smallest case where
+        token_count=0 is both correct and accepted by the ContractEnrichmentResult.
+        """
+        # 3 chars => 3 // 4 == 0 tokens; schema must accept token_count=0
+        result = _make_code_analysis_result(
+            summary_markdown="abc",
+            token_count=len("abc") // _CHARS_PER_TOKEN,
+        )
+        assert result.token_count == 0
+        assert isinstance(result.token_count, int)
 
     def test_four_chars_gives_one_token(self) -> None:
         """Exactly 4 characters => 1 token."""
