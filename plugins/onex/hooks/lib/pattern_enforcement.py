@@ -2,17 +2,17 @@
 """PostToolUse pattern enforcement — advisory compliance checking.
 
 Queries the OmniIntelligence pattern store API for applicable patterns,
-checks session-scoped cooldown (one advisory per pattern per session),
-calls the compliance compute node, and outputs advisory JSON.
-
-All failures are silent — enforcement never blocks or degrades UX.
-Total budget: 300ms.
+checks session-scoped cooldown (TTL-based, 30min per pattern per session),
+emits a single compliance.evaluate event to omniintelligence, and returns
+metadata. Advisories arrive asynchronously on the next turn via the
+advisory formatter. All failures are silent — enforcement never blocks
+or degrades UX. Total budget: 300ms.
 
 Feature flags:
     ENABLE_PATTERN_ENFORCEMENT=true  (primary gate)
     ENABLE_LOCAL_INFERENCE_PIPELINE=true  (parent gate)
 
-Ticket: OMN-2263
+Tickets: OMN-2263, OMN-2256
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid as _uuid
 from pathlib import Path
 from typing import Any, TypedDict
 
@@ -46,6 +47,8 @@ except (AttributeError, OSError):
 _COOLDOWN_DIR = Path(f"/tmp/omniclaude-enforcement-{_uid}")  # noqa: S108
 _DEFAULT_MIN_CONFIDENCE = 0.7
 _DEFAULT_PATTERN_LIMIT = 10
+_COOLDOWN_TTL_S = 1800  # 30 minutes: re-eligible if intelligence fails silently
+_CONTENT_MAX_BYTES = 32768  # 32KB cap (defense-in-depth, shell already caps)
 
 
 # ---------------------------------------------------------------------------
@@ -73,6 +76,7 @@ class EnforcementResult(TypedDict):
     patterns_skipped_cooldown: int
     elapsed_ms: float
     error: str | None
+    evaluation_submitted: bool
 
 
 # ---------------------------------------------------------------------------
@@ -93,7 +97,7 @@ def is_enforcement_enabled() -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Session cooldown
+# Session cooldown (TTL-based)
 # ---------------------------------------------------------------------------
 
 # Throttle stale-file cleanup to at most once per 5 minutes.
@@ -129,13 +133,17 @@ def _cleanup_stale_cooldown_files() -> None:
         pass
 
 
-def _load_cooldown(session_id: str) -> set[str]:
-    """Load the set of pattern IDs already advised in this session.
+def _load_cooldown(session_id: str) -> dict[str, float]:
+    """Load the cooldown map {pattern_id -> emit_timestamp_s} for this session.
+
+    Entries older than _COOLDOWN_TTL_S (30 minutes) are expired on load,
+    allowing previously-submitted patterns to re-enter eligibility if
+    omniintelligence failed silently.
 
     Also performs a throttled best-effort cleanup of stale cooldown files
     (>24h old), running at most once per 5 minutes.
 
-    Returns an empty set if the file doesn't exist or is corrupt.
+    Returns an empty dict if the file doesn't exist or is corrupt.
     """
     global _last_cleanup  # noqa: PLW0603
     now = time.time()
@@ -147,20 +155,28 @@ def _load_cooldown(session_id: str) -> set[str]:
     try:
         if path.exists():
             data = json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(data, list):
-                return set(data)
+            if isinstance(data, dict):
+                # Expire entries older than TTL
+                return {
+                    pid: ts
+                    for pid, ts in data.items()
+                    if isinstance(pid, str)
+                    and isinstance(ts, (int, float))
+                    and (now - float(ts)) < _COOLDOWN_TTL_S
+                }
+            # Legacy format (list of pattern IDs from previous version): discard
     except (json.JSONDecodeError, OSError, TypeError):
         pass
-    return set()
+    return {}
 
 
-def _save_cooldown(session_id: str, pattern_ids: set[str]) -> None:
-    """Persist the set of advised pattern IDs for this session.
+def _save_cooldown(session_id: str, cooldown: dict[str, float]) -> None:
+    """Persist the cooldown map {pattern_id -> emit_timestamp_s} for this session.
 
     Uses atomic temp-file-and-rename (os.replace) so concurrent subshells
-    cannot corrupt the cooldown file.  Duplicate advisories from TOCTOU
+    cannot corrupt the cooldown file.  Duplicate submissions from TOCTOU
     between _load_cooldown and _save_cooldown are a benign edge case --
-    a pattern shown twice is harmless compared to file corruption.
+    a pattern re-evaluated is harmless compared to file corruption.
 
     Silently ignores write failures.
     """
@@ -171,7 +187,7 @@ def _save_cooldown(session_id: str, pattern_ids: set[str]) -> None:
         # see a partially-written cooldown file.
         tmp_fd, tmp_path = tempfile.mkstemp(dir=str(path.parent), suffix=".tmp")
         try:
-            os.write(tmp_fd, json.dumps(sorted(pattern_ids)).encode())
+            os.write(tmp_fd, json.dumps(cooldown).encode())
             os.close(tmp_fd)
             Path(tmp_path).replace(path)
         except Exception:
@@ -228,7 +244,7 @@ def query_patterns(
 
     base_url = _get_intelligence_url()
     # Filter to validated patterns server-side so the limit budget isn't
-    # consumed by provisional patterns that check_compliance() would drop.
+    # consumed by provisional patterns that _is_eligible_pattern() would drop.
     params: list[str] = [
         f"min_confidence={min_confidence}",
         f"limit={limit}",
@@ -256,77 +272,108 @@ def query_patterns(
 
 
 # ---------------------------------------------------------------------------
-# Compliance check (stub for OMN-2256)
+# Structural eligibility filter
 # ---------------------------------------------------------------------------
 
 
-def check_compliance(
-    *,
-    file_path: str,
-    content_preview: str,
-    pattern: dict[str, Any],
-    timeout_s: float = _HTTP_TIMEOUT_S,
-) -> PatternAdvisory | None:
-    """Pass-through compliance stub for OMN-2256.
+def _is_eligible_pattern(pattern: dict[str, Any]) -> bool:
+    """Return True if pattern is structurally valid to include in compliance request.
 
-    Currently returns a basic advisory based on pattern metadata without
-    inspecting file_path or content_preview. These parameters are accepted
-    to match the future OMN-2256 interface where actual content-aware
-    compliance checking will be performed against a compute node.
+    Checks structural validity only — semantic decisions (confidence thresholds,
+    domain filtering) belong in omniintelligence. The API already filters by
+    min_confidence and status=validated server-side, so these checks are
+    defense-in-depth for malformed responses.
 
-    Only patterns with status == "validated" are included. Patterns with
-    other or missing status values are filtered out.
-
-    Args:
-        file_path: Path to the file being checked (reserved for OMN-2256).
-        content_preview: First N chars of file content (reserved for OMN-2256).
-        pattern: Pattern dict from the store API.
-        timeout_s: HTTP timeout in seconds (reserved for OMN-2256).
-
-    Returns:
-        A PatternAdvisory if the pattern is applicable, None otherwise.
+    Structural checks:
+    - status == "validated" (filter out drafts/provisional)
+    - Non-empty pattern_id and pattern_signature
+    - confidence is numeric (not NaN/inf)
     """
     try:
-        # Extract fields with safe defaults
         pattern_id = str(pattern.get("id", ""))
         signature = str(pattern.get("pattern_signature", ""))
-        domain_id = str(pattern.get("domain_id", ""))
-        try:
-            confidence = float(pattern.get("confidence", 0.0))
-        except (ValueError, TypeError):
-            logger.warning(
-                "Non-numeric confidence value %r in pattern %s, skipping",
-                pattern.get("confidence"),
-                pattern.get("id", "<unknown>"),
-            )
-            return None
         status = str(pattern.get("status", "unknown"))
 
         if not pattern_id or not signature:
-            return None
+            return False
 
-        # Only include validated patterns. Other statuses (draft, unknown, etc.)
-        # are filtered out until OMN-2256 adds content-aware checking.
         if status != "validated":
-            return None
+            return False
 
-        # Stub: returns metadata-only advisory without inspecting file content.
-        # OMN-2256 will replace this with content-aware compliance checking.
-        return PatternAdvisory(
-            pattern_id=pattern_id,
-            pattern_signature=signature,
-            domain_id=domain_id,
-            confidence=confidence,
-            status=status,
-            message=f"Pattern '{signature[:80]}' (confidence: {confidence:.2f}) may apply to this file.",
-        )
-    except Exception as exc:
-        logger.warning(
-            "Error processing pattern %s, skipping: %s",
-            pattern.get("id", "<unknown>"),
-            exc,
-        )
-        return None
+        try:
+            confidence = float(pattern.get("confidence", 0.0))
+        except (ValueError, TypeError):
+            return False
+
+        # Guard against NaN/inf which would be invalid in JSON payload
+        import math  # noqa: PLC0415
+
+        if not math.isfinite(confidence):
+            return False
+
+        return True
+    except Exception:
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Compliance evaluate emitter
+# ---------------------------------------------------------------------------
+
+
+def _emit_compliance_evaluate(
+    *,
+    file_path: str,
+    content: str,
+    language: str,
+    session_id: str,
+    content_sha256: str,
+    patterns: list[dict[str, Any]],
+) -> bool:
+    """Emit compliance.evaluate event. Returns True if accepted by daemon.
+
+    Correlation ID is unique per request (not session_id) so that multiple
+    compliance evaluations within one session are individually traceable.
+    session_id is passed separately for routing and projection lookups.
+
+    Content safety: non-empty and UTF-8 safe within the 32KB cap.
+    Defense in depth — shell already caps at 32KB but Python layer enforces.
+    """
+    try:
+        from emit_client_wrapper import emit_event  # noqa: PLC0415  # lazy import
+
+        # Empty content: nothing to evaluate
+        if not content.strip():
+            return False
+
+        # Enforce 32KB cap (shell already caps, but defense-in-depth)
+        content_bytes = content.encode("utf-8")
+        if len(content_bytes) > _CONTENT_MAX_BYTES:
+            content = content_bytes[:_CONTENT_MAX_BYTES].decode(
+                "utf-8", errors="ignore"
+            )
+
+        payload: dict[str, Any] = {
+            "correlation_id": str(_uuid.uuid4()),  # unique per request, not session
+            "session_id": session_id,  # separate field for routing/projection
+            "source_path": file_path,
+            "content": content,
+            "content_sha256": content_sha256,  # for idempotency, replay, metrics
+            "language": language,
+            "applicable_patterns": [
+                {
+                    "pattern_id": str(p.get("id", "")),
+                    "pattern_signature": str(p.get("pattern_signature", "")),
+                    "domain_id": str(p.get("domain_id", "")),
+                    "confidence": float(p.get("confidence", 0.0)),
+                }
+                for p in patterns
+            ],
+        }
+        result: bool = emit_event("compliance.evaluate", payload)
+        return result
+    except Exception:
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -341,21 +388,26 @@ def enforce_patterns(
     language: str | None = None,
     domain: str | None = None,
     content_preview: str = "",
+    content_sha256: str = "",
 ) -> EnforcementResult:
     """Run pattern enforcement for a file modification.
 
-    Queries applicable patterns, checks session cooldown, runs compliance
-    checks, and returns advisory results. All within 300ms budget.
+    Queries applicable patterns, checks session cooldown, collects eligible
+    patterns, and emits ONE compliance.evaluate event to omniintelligence.
+    Advisories arrive asynchronously; this function always returns
+    advisories=[]. All within 300ms budget.
 
     Args:
         file_path: Path to the modified file.
         session_id: Current session ID for cooldown scoping.
         language: Programming language of the file.
         domain: Domain filter for patterns.
-        content_preview: First N chars of file content for compliance.
+        content_preview: File content (up to 32KB) for compliance.
+        content_sha256: SHA-256 hash of content_preview for idempotency.
 
     Returns:
-        EnforcementResult with advisories and metadata.
+        EnforcementResult with evaluation_submitted and metadata.
+        advisories is always empty — results arrive asynchronously.
     """
     start = time.monotonic()
 
@@ -380,10 +432,11 @@ def enforce_patterns(
                 patterns_skipped_cooldown=0,
                 elapsed_ms=_elapsed_ms(),
                 error=None,
+                evaluation_submitted=False,
             )
 
-        # Step 2: Load session cooldown
-        cooldown_set = _load_cooldown(session_id)
+        # Step 2: Load session cooldown (TTL-based dict)
+        cooldown = _load_cooldown(session_id)
         if _budget_exceeded():
             return EnforcementResult(
                 enforced=True,
@@ -392,12 +445,14 @@ def enforce_patterns(
                 patterns_skipped_cooldown=0,
                 elapsed_ms=_elapsed_ms(),
                 error=None,
+                evaluation_submitted=False,
             )
-        skipped = 0
-        advisories: list[PatternAdvisory] = []
-        new_pattern_ids: set[str] = set()
 
-        # Step 3: Check each pattern
+        skipped = 0
+        eligible_patterns: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()  # deduplicate within this batch
+
+        # Step 3: Collect eligible patterns
         for pattern in patterns:
             if _budget_exceeded():
                 break
@@ -406,32 +461,41 @@ def enforce_patterns(
             if not pattern_id:
                 continue
 
-            # Session cooldown: skip if already advised
-            if pattern_id in cooldown_set:
+            # Session cooldown: skip if already submitted (and TTL not expired)
+            if pattern_id in cooldown:
                 skipped += 1
                 continue
 
-            # Step 4: Compliance check
-            advisory = check_compliance(
-                file_path=file_path,
-                content_preview=content_preview,
-                pattern=pattern,
-            )
-            if advisory is not None:
-                advisories.append(advisory)
-                new_pattern_ids.add(pattern_id)
+            # Structural eligibility check
+            if _is_eligible_pattern(pattern) and pattern_id not in seen_ids:
+                eligible_patterns.append(pattern)
+                seen_ids.add(pattern_id)
 
-        # Step 5: Update cooldown (skip if budget is already exhausted)
-        if new_pattern_ids and not _budget_exceeded():
-            _save_cooldown(session_id, cooldown_set | new_pattern_ids)
+        # Step 4: Emit single compliance.evaluate event with all eligible patterns
+        evaluation_submitted = False
+        if eligible_patterns and not _budget_exceeded():
+            evaluation_submitted = _emit_compliance_evaluate(
+                file_path=file_path,
+                content=content_preview,
+                language=language or "unknown",
+                session_id=session_id,
+                content_sha256=content_sha256,
+                patterns=eligible_patterns,
+            )
+            if evaluation_submitted:
+                # Update cooldown for all submitted patterns with current timestamp
+                now = time.time()
+                new_cooldown = {str(p.get("id", "")): now for p in eligible_patterns}
+                _save_cooldown(session_id, {**cooldown, **new_cooldown})
 
         return EnforcementResult(
             enforced=True,
-            advisories=advisories,
+            advisories=[],  # always empty — results arrive asynchronously
             patterns_queried=len(patterns),
             patterns_skipped_cooldown=skipped,
             elapsed_ms=_elapsed_ms(),
             error=None,
+            evaluation_submitted=evaluation_submitted,
         )
 
     except Exception as exc:
@@ -443,6 +507,7 @@ def enforce_patterns(
             patterns_skipped_cooldown=0,
             elapsed_ms=_elapsed_ms(),
             error=str(exc),
+            evaluation_submitted=False,
         )
 
 
@@ -454,9 +519,8 @@ def enforce_patterns(
 def main() -> None:
     """CLI entry point for pattern enforcement.
 
-    Reads JSON from stdin with file_path, session_id, language, content_preview.
-    Writes EnforcementResult JSON to stdout.
-    Always exits 0.
+    Reads JSON from stdin with file_path, session_id, language, content_preview,
+    content_sha256. Writes EnforcementResult JSON to stdout. Always exits 0.
     """
     try:
         if not is_enforcement_enabled():
@@ -468,6 +532,7 @@ def main() -> None:
                     patterns_skipped_cooldown=0,
                     elapsed_ms=0.0,
                     error=None,
+                    evaluation_submitted=False,
                 ),
                 sys.stdout,
             )
@@ -483,6 +548,7 @@ def main() -> None:
                     patterns_skipped_cooldown=0,
                     elapsed_ms=0.0,
                     error="empty stdin",
+                    evaluation_submitted=False,
                 ),
                 sys.stdout,
             )
@@ -496,6 +562,7 @@ def main() -> None:
             language=params.get("language"),
             domain=params.get("domain"),
             content_preview=params.get("content_preview", ""),
+            content_sha256=params.get("content_sha256", ""),
         )
         json.dump(result, sys.stdout)
 
@@ -509,6 +576,7 @@ def main() -> None:
                 patterns_skipped_cooldown=0,
                 elapsed_ms=0.0,
                 error=f"fatal: {exc}",
+                evaluation_submitted=False,
             ),
             sys.stdout,
         )

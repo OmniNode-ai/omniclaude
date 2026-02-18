@@ -173,17 +173,33 @@ if [ "$TOOL_NAME" = "Write" ] || [ "$TOOL_NAME" = "Edit" ]; then
                     # Detect language from file extension (uses shared function)
                     ENFORCE_LANGUAGE=$(detect_language "$FILE_PATH")
 
+                    # Read bounded file content for compliance checking (text files only)
+                    ENFORCE_CONTENT=""
+                    ENFORCE_CONTENT_HASH=""
+                    if [[ -f "$FILE_PATH" ]] && [[ -r "$FILE_PATH" ]]; then
+                        if file "$FILE_PATH" 2>/dev/null | grep -qiE 'text|script|source|ascii|empty'; then
+                            ENFORCE_CONTENT=$(head -c 32768 "$FILE_PATH" 2>/dev/null || true)
+                            if command -v shasum >/dev/null 2>&1; then
+                                ENFORCE_CONTENT_HASH=$(echo -n "$ENFORCE_CONTENT" | shasum -a 256 | cut -d' ' -f1)
+                            elif command -v sha256sum >/dev/null 2>&1; then
+                                ENFORCE_CONTENT_HASH=$(echo -n "$ENFORCE_CONTENT" | sha256sum | cut -d' ' -f1)
+                            fi
+                        fi
+                    fi
+
                     # Build JSON input for enforcement script
                     ENFORCE_INPUT=$(jq -n \
                         --arg file_path "$FILE_PATH" \
                         --arg session_id "$SESSION_ID" \
                         --arg language "$ENFORCE_LANGUAGE" \
-                        --arg content_preview "" \
+                        --arg content_preview "$ENFORCE_CONTENT" \
+                        --arg content_sha256 "$ENFORCE_CONTENT_HASH" \
                         '{
                             file_path: $file_path,
                             session_id: $session_id,
                             language: (if $language == "" then null else $language end),
-                            content_preview: $content_preview
+                            content_preview: $content_preview,
+                            content_sha256: $content_sha256
                         }'
                     )
 

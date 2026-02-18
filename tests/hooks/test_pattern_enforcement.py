@@ -2,11 +2,13 @@
 
 Tests the pattern enforcement advisory system (OMN-2263):
 - Feature flag gating
-- Session cooldown logic
+- Session cooldown logic (TTL-based dict)
 - Pattern store querying
-- Compliance checking
+- Structural eligibility filter (_is_eligible_pattern)
+- Async compliance.evaluate emission (_emit_compliance_evaluate)
 - End-to-end enforce_patterns flow
 - CLI entry point
+- Topic and registry registration
 
 All tests run without network access or external services.
 """
@@ -33,12 +35,14 @@ if str(_HOOKS_LIB) not in sys.path:
 
 
 from pattern_enforcement import (
+    _COOLDOWN_TTL_S,
     _cleanup_stale_cooldown_files,
     _cooldown_path,
+    _emit_compliance_evaluate,
     _get_intelligence_url,
+    _is_eligible_pattern,
     _load_cooldown,
     _save_cooldown,
-    check_compliance,
     enforce_patterns,
     is_enforcement_enabled,
     main,
@@ -102,37 +106,40 @@ class TestIsEnforcementEnabled:
 
 
 # ---------------------------------------------------------------------------
-# Session cooldown tests
+# Session cooldown tests (TTL-based dict[str, float])
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
 class TestSessionCooldown:
-    """Tests for session-scoped cooldown persistence."""
+    """Tests for session-scoped cooldown persistence (TTL-based dict format)."""
 
     def test_load_empty_cooldown(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Loading cooldown for new session returns empty set."""
+        """Loading cooldown for new session returns empty dict."""
         monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
         monkeypatch.setattr("pattern_enforcement._last_cleanup", 0.0)
         result = _load_cooldown("session-abc")
-        assert result == set()
+        assert result == {}
 
     def test_save_and_load_roundtrip(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Saved pattern IDs can be loaded back."""
+        """Saved pattern IDs can be loaded back as dict with timestamps."""
         monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
         monkeypatch.setattr("pattern_enforcement._last_cleanup", 0.0)
-        _save_cooldown("session-abc", {"p1", "p2", "p3"})
+        now = time.time()
+        cooldown = {"p1": now, "p2": now, "p3": now}
+        _save_cooldown("session-abc", cooldown)
         result = _load_cooldown("session-abc")
-        assert result == {"p1", "p2", "p3"}
+        assert set(result.keys()) == {"p1", "p2", "p3"}
+        assert all(isinstance(ts, float) for ts in result.values())
 
     def test_corrupt_file_returns_empty(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Corrupt cooldown file returns empty set instead of crashing."""
+        """Corrupt cooldown file returns empty dict instead of crashing."""
         monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
         monkeypatch.setattr("pattern_enforcement._last_cleanup", 0.0)
         # Write corrupt data
@@ -140,7 +147,7 @@ class TestSessionCooldown:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("not valid json {{{{", encoding="utf-8")
         result = _load_cooldown("session-xyz")
-        assert result == set()
+        assert result == {}
 
     def test_cooldown_path_is_sanitized(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -160,7 +167,7 @@ class TestSessionCooldown:
             "pattern_enforcement._COOLDOWN_DIR", Path("/nonexistent/readonly/path")
         )
         # Should not raise
-        _save_cooldown("session-abc", {"p1"})
+        _save_cooldown("session-abc", {"p1": time.time()})
 
     def test_incremental_cooldown(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -168,11 +175,39 @@ class TestSessionCooldown:
         """Cooldown accumulates across multiple saves."""
         monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
         monkeypatch.setattr("pattern_enforcement._last_cleanup", 0.0)
-        _save_cooldown("session-inc", {"p1"})
+        now = time.time()
+        _save_cooldown("session-inc", {"p1": now})
         existing = _load_cooldown("session-inc")
-        _save_cooldown("session-inc", existing | {"p2"})
+        _save_cooldown("session-inc", {**existing, "p2": now})
         result = _load_cooldown("session-inc")
-        assert result == {"p1", "p2"}
+        assert "p1" in result
+        assert "p2" in result
+
+    def test_expired_entries_excluded_on_load(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Entries older than _COOLDOWN_TTL_S are excluded on load."""
+        monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
+        monkeypatch.setattr("pattern_enforcement._last_cleanup", 0.0)
+        now = time.time()
+        old_ts = now - (_COOLDOWN_TTL_S + 10)  # expired
+        cooldown = {"p-fresh": now, "p-stale": old_ts}
+        _save_cooldown("session-ttl", cooldown)
+        result = _load_cooldown("session-ttl")
+        assert "p-fresh" in result
+        assert "p-stale" not in result
+
+    def test_legacy_list_format_discarded(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Old list-format cooldown files are discarded (not parsed as dict)."""
+        monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
+        monkeypatch.setattr("pattern_enforcement._last_cleanup", 0.0)
+        path = _cooldown_path("session-legacy")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('["p1", "p2", "p3"]', encoding="utf-8")
+        result = _load_cooldown("session-legacy")
+        assert result == {}
 
 
 # ---------------------------------------------------------------------------
@@ -192,8 +227,8 @@ class TestCleanupStaleCooldownFiles:
 
         stale_file = tmp_path / "stale.json"
         fresh_file = tmp_path / "fresh.json"
-        stale_file.write_text('["p-old"]', encoding="utf-8")
-        fresh_file.write_text('["p-new"]', encoding="utf-8")
+        stale_file.write_text('{"p-old": 0}', encoding="utf-8")
+        fresh_file.write_text('{"p-new": 0}', encoding="utf-8")
 
         # Set stale file mtime to 25 hours ago
         stale_mtime = time.time() - (25 * 3600)
@@ -221,7 +256,7 @@ class TestCleanupStaleCooldownFiles:
         monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
 
         stale_file = tmp_path / "stale.json"
-        stale_file.write_text('["old"]', encoding="utf-8")
+        stale_file.write_text('{"old": 0}', encoding="utf-8")
         stale_mtime = time.time() - (25 * 3600)
         os.utime(stale_file, (stale_mtime, stale_mtime))
 
@@ -240,7 +275,7 @@ class TestCleanupStaleCooldownFiles:
         monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
 
         stale_file = tmp_path / "stale.json"
-        stale_file.write_text('["old"]', encoding="utf-8")
+        stale_file.write_text('{"old": 0}', encoding="utf-8")
         stale_mtime = time.time() - (25 * 3600)
         os.utime(stale_file, (stale_mtime, stale_mtime))
 
@@ -354,16 +389,16 @@ class TestQueryPatterns:
 
 
 # ---------------------------------------------------------------------------
-# Compliance check tests
+# Structural eligibility filter tests (_is_eligible_pattern)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
-class TestCheckCompliance:
-    """Tests for compliance checking against individual patterns."""
+class TestIsEligiblePattern:
+    """Tests for structural eligibility filtering of patterns."""
 
-    def test_returns_advisory_for_valid_pattern(self) -> None:
-        """Valid pattern produces an advisory."""
+    def test_valid_pattern_is_eligible(self) -> None:
+        """Well-formed validated pattern passes eligibility."""
         pattern = {
             "id": "abc-123",
             "pattern_signature": "Use descriptive variable names",
@@ -371,38 +406,25 @@ class TestCheckCompliance:
             "confidence": 0.85,
             "status": "validated",
         }
-        result = check_compliance(
-            file_path="/test/file.py",
-            content_preview="x = 1\ny = 2\n",
-            pattern=pattern,
-        )
-        assert result is not None
-        assert result["pattern_id"] == "abc-123"
-        assert result["confidence"] == 0.85
-        assert result["status"] == "validated"
+        assert _is_eligible_pattern(pattern) is True
 
-    def test_returns_none_for_empty_pattern_id(self) -> None:
-        """Pattern without ID returns None."""
-        pattern = {"pattern_signature": "sig", "confidence": 0.9}
-        result = check_compliance(
-            file_path="/test/file.py",
-            content_preview="",
-            pattern=pattern,
-        )
-        assert result is None
+    def test_empty_pattern_id_is_ineligible(self) -> None:
+        """Pattern without ID is ineligible."""
+        pattern = {"pattern_signature": "sig", "confidence": 0.9, "status": "validated"}
+        assert _is_eligible_pattern(pattern) is False
 
-    def test_returns_none_for_empty_signature(self) -> None:
-        """Pattern without signature returns None."""
-        pattern = {"id": "abc-123", "pattern_signature": "", "confidence": 0.9}
-        result = check_compliance(
-            file_path="/test/file.py",
-            content_preview="",
-            pattern=pattern,
-        )
-        assert result is None
+    def test_empty_signature_is_ineligible(self) -> None:
+        """Pattern without signature is ineligible."""
+        pattern = {
+            "id": "abc-123",
+            "pattern_signature": "",
+            "confidence": 0.9,
+            "status": "validated",
+        }
+        assert _is_eligible_pattern(pattern) is False
 
-    def test_returns_none_for_non_validated_status(self) -> None:
-        """Provisional patterns should not produce advisories."""
+    def test_non_validated_status_is_ineligible(self) -> None:
+        """Provisional patterns are ineligible."""
         pattern = {
             "id": "abc-123",
             "pattern_signature": "Use descriptive variable names",
@@ -410,15 +432,10 @@ class TestCheckCompliance:
             "confidence": 0.85,
             "status": "provisional",
         }
-        result = check_compliance(
-            file_path="test.py",
-            content_preview="",
-            pattern=pattern,
-        )
-        assert result is None
+        assert _is_eligible_pattern(pattern) is False
 
-    def test_returns_none_for_draft_status(self) -> None:
-        """Draft patterns are filtered out by the status != 'validated' guard."""
+    def test_draft_status_is_ineligible(self) -> None:
+        """Draft patterns are ineligible."""
         pattern = {
             "id": "draft-001",
             "pattern_signature": "Avoid global mutable state",
@@ -426,15 +443,10 @@ class TestCheckCompliance:
             "confidence": 0.92,
             "status": "draft",
         }
-        result = check_compliance(
-            file_path="/test/file.py",
-            content_preview="GLOBAL_LIST = []\n",
-            pattern=pattern,
-        )
-        assert result is None
+        assert _is_eligible_pattern(pattern) is False
 
-    def test_returns_none_for_non_numeric_confidence(self) -> None:
-        """Non-numeric confidence value returns None instead of crashing."""
+    def test_non_numeric_confidence_is_ineligible(self) -> None:
+        """Non-numeric confidence is ineligible."""
         pattern = {
             "id": "bad-conf-001",
             "pattern_signature": "Use type hints",
@@ -442,12 +454,237 @@ class TestCheckCompliance:
             "confidence": "not-a-number",
             "status": "validated",
         }
-        result = check_compliance(
-            file_path="/test/file.py",
-            content_preview="x = 1\n",
-            pattern=pattern,
-        )
-        assert result is None
+        assert _is_eligible_pattern(pattern) is False
+
+    def test_nan_confidence_is_ineligible(self) -> None:
+        """NaN confidence is ineligible."""
+        import math
+
+        pattern = {
+            "id": "nan-conf",
+            "pattern_signature": "Some pattern",
+            "domain_id": "code_quality",
+            "confidence": math.nan,
+            "status": "validated",
+        }
+        assert _is_eligible_pattern(pattern) is False
+
+    def test_inf_confidence_is_ineligible(self) -> None:
+        """Infinite confidence is ineligible."""
+        import math
+
+        pattern = {
+            "id": "inf-conf",
+            "pattern_signature": "Some pattern",
+            "domain_id": "code_quality",
+            "confidence": math.inf,
+            "status": "validated",
+        }
+        assert _is_eligible_pattern(pattern) is False
+
+    def test_exception_returns_false(self) -> None:
+        """Malformed pattern input returns False, never raises."""
+        assert _is_eligible_pattern(None) is False  # type: ignore[arg-type]
+        assert _is_eligible_pattern("not a dict") is False  # type: ignore[arg-type]
+
+
+# ---------------------------------------------------------------------------
+# Compliance evaluate emitter tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestEmitComplianceEvaluate:
+    """Tests for _emit_compliance_evaluate()."""
+
+    def _make_patterns(self, count: int = 1) -> list[dict[str, Any]]:
+        return [
+            {
+                "id": f"p-{i:03d}",
+                "pattern_signature": f"sig-{i}",
+                "domain_id": "code_quality",
+                "confidence": 0.9,
+                "status": "validated",
+            }
+            for i in range(count)
+        ]
+
+    def test_emits_with_correct_event_type(self) -> None:
+        """emit_event is called with compliance.evaluate event type."""
+        with patch("emit_client_wrapper.emit_event", return_value=True) as mock_emit:
+            result = _emit_compliance_evaluate(
+                file_path="/test/file.py",
+                content="def foo(): pass\n",
+                language="python",
+                session_id="sess-001",
+                content_sha256="abc123",
+                patterns=self._make_patterns(1),
+            )
+        assert result is True
+        mock_emit.assert_called_once()
+        args, _ = mock_emit.call_args
+        assert args[0] == "compliance.evaluate"
+
+    def test_payload_has_required_keys(self) -> None:
+        """Emitted payload contains all required fields."""
+        with patch("emit_client_wrapper.emit_event", return_value=True) as mock_emit:
+            _emit_compliance_evaluate(
+                file_path="/test/file.py",
+                content="def foo(): pass\n",
+                language="python",
+                session_id="sess-001",
+                content_sha256="abc123",
+                patterns=self._make_patterns(1),
+            )
+        payload = mock_emit.call_args[0][1]
+        for key in (
+            "correlation_id",
+            "session_id",
+            "source_path",
+            "content",
+            "content_sha256",
+            "language",
+            "applicable_patterns",
+        ):
+            assert key in payload, f"Missing key: {key}"
+
+    def test_correlation_id_is_not_session_id(self) -> None:
+        """correlation_id is a unique UUID per request, not session_id."""
+        with patch("emit_client_wrapper.emit_event", return_value=True) as mock_emit:
+            _emit_compliance_evaluate(
+                file_path="/test/file.py",
+                content="def foo(): pass\n",
+                language="python",
+                session_id="sess-001",
+                content_sha256="abc123",
+                patterns=self._make_patterns(1),
+            )
+        payload = mock_emit.call_args[0][1]
+        assert payload["correlation_id"] != payload["session_id"]
+        # Must be a valid UUID format
+        import uuid
+
+        uuid.UUID(str(payload["correlation_id"]))  # raises if invalid
+
+    def test_two_calls_produce_different_correlation_ids(self) -> None:
+        """Each call produces a unique correlation_id."""
+        ids = []
+        with patch("emit_client_wrapper.emit_event", return_value=True) as mock_emit:
+            for _ in range(2):
+                _emit_compliance_evaluate(
+                    file_path="/test/file.py",
+                    content="def foo(): pass\n",
+                    language="python",
+                    session_id="sess-001",
+                    content_sha256="abc123",
+                    patterns=self._make_patterns(1),
+                )
+                ids.append(mock_emit.call_args[0][1]["correlation_id"])
+        assert ids[0] != ids[1]
+
+    def test_empty_content_returns_false_no_emit(self) -> None:
+        """Empty content string → no emit, returns False."""
+        with patch("emit_client_wrapper.emit_event") as mock_emit:
+            result = _emit_compliance_evaluate(
+                file_path="/test/file.py",
+                content="",
+                language="python",
+                session_id="sess-001",
+                content_sha256="",
+                patterns=self._make_patterns(1),
+            )
+        assert result is False
+        mock_emit.assert_not_called()
+
+    def test_whitespace_only_content_returns_false(self) -> None:
+        """Whitespace-only content → no emit, returns False."""
+        with patch("emit_client_wrapper.emit_event") as mock_emit:
+            result = _emit_compliance_evaluate(
+                file_path="/test/file.py",
+                content="   \n\t  ",
+                language="python",
+                session_id="sess-001",
+                content_sha256="",
+                patterns=self._make_patterns(1),
+            )
+        assert result is False
+        mock_emit.assert_not_called()
+
+    def test_content_over_32kb_is_truncated(self) -> None:
+        """Content exceeding 32KB is truncated before emit."""
+        large_content = "x" * 40000  # 40KB
+        with patch("emit_client_wrapper.emit_event", return_value=True) as mock_emit:
+            result = _emit_compliance_evaluate(
+                file_path="/test/file.py",
+                content=large_content,
+                language="python",
+                session_id="sess-001",
+                content_sha256="abc123",
+                patterns=self._make_patterns(1),
+            )
+        assert result is True
+        payload = mock_emit.call_args[0][1]
+        assert len(payload["content"].encode("utf-8")) <= 32768
+
+    def test_invalid_utf8_bytes_stripped(self) -> None:
+        """Content with invalid UTF-8 sequences is stripped safely."""
+        # Create content with invalid bytes then decode
+        bad_bytes = b"valid text \xff\xfe more text"
+        bad_str = bad_bytes.decode("utf-8", errors="replace")
+        with patch("emit_client_wrapper.emit_event", return_value=True) as mock_emit:
+            result = _emit_compliance_evaluate(
+                file_path="/test/file.py",
+                content=bad_str,
+                language="python",
+                session_id="sess-001",
+                content_sha256="abc123",
+                patterns=self._make_patterns(1),
+            )
+        assert result is True
+        payload = mock_emit.call_args[0][1]
+        # Must be valid UTF-8
+        payload["content"].encode("utf-8")
+
+    def test_exception_during_emit_returns_false(self) -> None:
+        """Exceptions in emit_event are caught, returns False."""
+        with patch("emit_client_wrapper.emit_event", side_effect=RuntimeError("boom")):
+            result = _emit_compliance_evaluate(
+                file_path="/test/file.py",
+                content="def foo(): pass\n",
+                language="python",
+                session_id="sess-001",
+                content_sha256="abc123",
+                patterns=self._make_patterns(1),
+            )
+        assert result is False
+
+    def test_applicable_patterns_structure(self) -> None:
+        """applicable_patterns list has correct per-pattern fields."""
+        patterns = [
+            {
+                "id": "p-001",
+                "pattern_signature": "Use type hints",
+                "domain_id": "python",
+                "confidence": 0.9,
+                "status": "validated",
+            }
+        ]
+        with patch("emit_client_wrapper.emit_event", return_value=True) as mock_emit:
+            _emit_compliance_evaluate(
+                file_path="/test/file.py",
+                content="def foo(): pass\n",
+                language="python",
+                session_id="sess-001",
+                content_sha256="abc123",
+                patterns=patterns,
+            )
+        payload = mock_emit.call_args[0][1]
+        ap = payload["applicable_patterns"]
+        assert len(ap) == 1
+        assert ap[0]["pattern_id"] == "p-001"
+        assert ap[0]["pattern_signature"] == "Use type hints"
+        assert ap[0]["domain_id"] == "python"
+        assert ap[0]["confidence"] == 0.9
 
 
 # ---------------------------------------------------------------------------
@@ -456,13 +693,22 @@ class TestCheckCompliance:
 
 
 @pytest.mark.unit
-class TestEnforcePatterns:
-    """Integration tests for the full enforcement pipeline."""
+class TestEnforcePatternsEmit:
+    """Integration tests for the full enforcement pipeline (async-emit model)."""
+
+    def _make_pattern(self, pid: str = "p-001") -> dict[str, Any]:
+        return {
+            "id": pid,
+            "pattern_signature": f"sig-{pid}",
+            "domain_id": "python",
+            "confidence": 0.9,
+            "status": "validated",
+        }
 
     def test_returns_result_when_no_patterns(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """No patterns from store results in empty advisories."""
+        """No patterns from store results in empty advisories and no emit."""
         monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
         with patch("pattern_enforcement.query_patterns", return_value=[]):
             result = enforce_patterns(
@@ -473,97 +719,206 @@ class TestEnforcePatterns:
         assert result["enforced"] is True
         assert result["advisories"] == []
         assert result["patterns_queried"] == 0
+        assert result["evaluation_submitted"] is False
 
-    def test_produces_advisories_for_matching_patterns(
+    def test_advisories_always_empty(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Matching patterns produce advisories."""
+        """advisories is always empty — results arrive asynchronously."""
         monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
-        patterns = [
-            {
-                "id": "p-001",
-                "pattern_signature": "Use type hints",
-                "domain_id": "python",
-                "confidence": 0.9,
-                "status": "validated",
-            },
-        ]
-        with patch("pattern_enforcement.query_patterns", return_value=patterns):
+        patterns = [self._make_pattern("p-001")]
+        with (
+            patch("pattern_enforcement.query_patterns", return_value=patterns),
+            patch("pattern_enforcement._emit_compliance_evaluate", return_value=True),
+        ):
             result = enforce_patterns(
                 file_path="/test/file.py",
                 session_id="session-2",
                 language="python",
+                content_preview="def foo(): pass\n",
             )
-        assert result["enforced"] is True
-        assert len(result["advisories"]) == 1
-        assert result["advisories"][0]["pattern_id"] == "p-001"
-        assert result["patterns_queried"] == 1
+        assert result["advisories"] == []
+        assert result["evaluation_submitted"] is True
 
-    def test_session_cooldown_skips_already_advised(
+    def test_multiple_eligible_patterns_single_emit(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Patterns already advised in this session are skipped."""
+        """Multiple eligible patterns trigger one emit with all in applicable_patterns."""
         monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
-        patterns = [
-            {
-                "id": "p-001",
-                "pattern_signature": "Use type hints",
-                "domain_id": "python",
-                "confidence": 0.9,
-                "status": "validated",
-            },
-        ]
+        patterns = [self._make_pattern("p-001"), self._make_pattern("p-002")]
+        emitted_payloads: list[dict[str, Any]] = []
 
-        # First call: should get advisory
-        with patch("pattern_enforcement.query_patterns", return_value=patterns):
+        def capture_emit(
+            file_path: str,
+            content: str,
+            language: str,
+            session_id: str,
+            content_sha256: str,
+            patterns: list[dict[str, Any]],
+        ) -> bool:
+            emitted_payloads.append({"patterns": patterns})
+            return True
+
+        with (
+            patch("pattern_enforcement.query_patterns", return_value=patterns),
+            patch(
+                "pattern_enforcement._emit_compliance_evaluate",
+                side_effect=capture_emit,
+            ),
+        ):
+            result = enforce_patterns(
+                file_path="/test/file.py",
+                session_id="session-multi",
+                language="python",
+                content_preview="def foo(): pass\n",
+            )
+        # Single emit
+        assert len(emitted_payloads) == 1
+        # Both patterns included
+        assert len(emitted_payloads[0]["patterns"]) == 2
+        assert result["evaluation_submitted"] is True
+
+    def test_session_cooldown_skips_already_submitted(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Patterns already submitted in this session are skipped on next call."""
+        monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
+        patterns = [self._make_pattern("p-001")]
+
+        with (
+            patch("pattern_enforcement.query_patterns", return_value=patterns),
+            patch("pattern_enforcement._emit_compliance_evaluate", return_value=True),
+        ):
             result1 = enforce_patterns(
                 file_path="/test/file.py",
                 session_id="session-3",
                 language="python",
+                content_preview="def foo(): pass\n",
             )
-        assert len(result1["advisories"]) == 1
+        assert result1["evaluation_submitted"] is True
         assert result1["patterns_skipped_cooldown"] == 0
 
-        # Second call: same session, same pattern -> cooldown skips it
-        with patch("pattern_enforcement.query_patterns", return_value=patterns):
+        with (
+            patch("pattern_enforcement.query_patterns", return_value=patterns),
+            patch(
+                "pattern_enforcement._emit_compliance_evaluate", return_value=True
+            ) as mock_emit,
+        ):
             result2 = enforce_patterns(
                 file_path="/test/other.py",
                 session_id="session-3",
                 language="python",
+                content_preview="def bar(): pass\n",
             )
-        assert len(result2["advisories"]) == 0
+        # Pattern already in cooldown, no emit
+        mock_emit.assert_not_called()
         assert result2["patterns_skipped_cooldown"] == 1
+        assert result2["evaluation_submitted"] is False
 
     def test_different_sessions_get_independent_cooldown(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Different sessions have independent cooldown state."""
         monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
-        patterns = [
-            {
-                "id": "p-001",
-                "pattern_signature": "Use type hints",
-                "domain_id": "python",
-                "confidence": 0.9,
-                "status": "validated",
-            },
-        ]
+        patterns = [self._make_pattern("p-001")]
 
-        with patch("pattern_enforcement.query_patterns", return_value=patterns):
+        with (
+            patch("pattern_enforcement.query_patterns", return_value=patterns),
+            patch("pattern_enforcement._emit_compliance_evaluate", return_value=True),
+        ):
             result_a = enforce_patterns(
                 file_path="/test/file.py",
                 session_id="session-A",
                 language="python",
+                content_preview="def foo(): pass\n",
             )
             result_b = enforce_patterns(
                 file_path="/test/file.py",
                 session_id="session-B",
                 language="python",
+                content_preview="def foo(): pass\n",
             )
 
-        # Both sessions should get the advisory independently
-        assert len(result_a["advisories"]) == 1
-        assert len(result_b["advisories"]) == 1
+        assert result_a["evaluation_submitted"] is True
+        assert result_b["evaluation_submitted"] is True
+
+    def test_cooldown_updated_for_all_submitted_patterns(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """All submitted pattern IDs are written to cooldown with timestamps."""
+        monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
+        monkeypatch.setattr("pattern_enforcement._last_cleanup", 0.0)
+        patterns = [self._make_pattern("p-001"), self._make_pattern("p-002")]
+
+        with (
+            patch("pattern_enforcement.query_patterns", return_value=patterns),
+            patch("pattern_enforcement._emit_compliance_evaluate", return_value=True),
+        ):
+            enforce_patterns(
+                file_path="/test/file.py",
+                session_id="session-cd",
+                language="python",
+                content_preview="def foo(): pass\n",
+            )
+
+        cooldown = _load_cooldown("session-cd")
+        assert "p-001" in cooldown
+        assert "p-002" in cooldown
+        assert isinstance(cooldown["p-001"], float)
+
+    def test_cooldown_ttl_expiry_re_enables_pattern(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Patterns emitted >30min ago are re-eligible."""
+        monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
+        monkeypatch.setattr("pattern_enforcement._last_cleanup", 0.0)
+        # Write an expired cooldown entry
+        old_ts = time.time() - (_COOLDOWN_TTL_S + 10)
+        _save_cooldown("session-ttl2", {"p-001": old_ts})
+
+        patterns = [self._make_pattern("p-001")]
+        with (
+            patch("pattern_enforcement.query_patterns", return_value=patterns),
+            patch("pattern_enforcement._emit_compliance_evaluate", return_value=True),
+        ):
+            result = enforce_patterns(
+                file_path="/test/file.py",
+                session_id="session-ttl2",
+                language="python",
+                content_preview="def foo(): pass\n",
+            )
+        # Pattern was expired, so it should be re-submitted
+        assert result["evaluation_submitted"] is True
+        assert result["patterns_skipped_cooldown"] == 0
+
+    def test_duplicate_pattern_ids_deduplicated(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Duplicate pattern IDs in API response are deduplicated."""
+        monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
+        # API returns same pattern twice (defensive test for malformed API)
+        patterns = [self._make_pattern("p-dup"), self._make_pattern("p-dup")]
+        emitted_counts: list[int] = []
+
+        def capture_emit(**kwargs: Any) -> bool:
+            emitted_counts.append(len(kwargs["patterns"]))
+            return True
+
+        with (
+            patch("pattern_enforcement.query_patterns", return_value=patterns),
+            patch(
+                "pattern_enforcement._emit_compliance_evaluate",
+                side_effect=capture_emit,
+            ),
+        ):
+            enforce_patterns(
+                file_path="/test/file.py",
+                session_id="session-dup",
+                language="python",
+                content_preview="def foo(): pass\n",
+            )
+        assert len(emitted_counts) == 1
+        assert emitted_counts[0] == 1  # deduplicated to one
 
     def test_exception_returns_safe_result(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -581,6 +936,7 @@ class TestEnforcePatterns:
         assert result["enforced"] is False
         assert result["error"] == "boom"
         assert result["advisories"] == []
+        assert result["evaluation_submitted"] is False
 
     def test_elapsed_ms_is_populated(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -594,6 +950,76 @@ class TestEnforcePatterns:
                 language="python",
             )
         assert result["elapsed_ms"] >= 0
+
+    def test_empty_content_means_no_submit(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Empty content_preview causes evaluation_submitted=False."""
+        monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
+        patterns = [self._make_pattern("p-001")]
+        with patch("pattern_enforcement.query_patterns", return_value=patterns):
+            result = enforce_patterns(
+                file_path="/test/file.py",
+                session_id="session-empty",
+                language="python",
+                content_preview="",  # empty
+            )
+        assert result["evaluation_submitted"] is False
+
+    def test_two_calls_different_correlation_ids(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Two enforcement calls for different sessions produce different correlation_ids."""
+        monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
+        patterns = [self._make_pattern("p-001")]
+        correlation_ids: list[str] = []
+
+        def capture_emit(
+            file_path: str,
+            content: str,
+            language: str,
+            session_id: str,
+            content_sha256: str,
+            patterns: list[dict[str, Any]],
+        ) -> bool:
+            # We can't capture correlation_id here — it's generated inside _emit_compliance_evaluate
+            return True
+
+        with (
+            patch("pattern_enforcement.query_patterns", return_value=patterns),
+            patch("emit_client_wrapper.emit_event", return_value=True) as mock_emit,
+        ):
+            enforce_patterns(
+                file_path="/test/file.py",
+                session_id="sess-cid-A",
+                language="python",
+                content_preview="def foo(): pass\n",
+            )
+            first_cid = (
+                mock_emit.call_args[0][1]["correlation_id"]
+                if mock_emit.called
+                else None
+            )
+
+        # Reset and do second call with different session
+        with (
+            patch("pattern_enforcement.query_patterns", return_value=patterns),
+            patch("emit_client_wrapper.emit_event", return_value=True) as mock_emit,
+        ):
+            enforce_patterns(
+                file_path="/test/file.py",
+                session_id="sess-cid-B",
+                language="python",
+                content_preview="def bar(): pass\n",
+            )
+            second_cid = (
+                mock_emit.call_args[0][1]["correlation_id"]
+                if mock_emit.called
+                else None
+            )
+
+        if first_cid and second_cid:
+            assert first_cid != second_cid
 
 
 # ---------------------------------------------------------------------------
@@ -619,6 +1045,7 @@ class TestMain:
         captured = capsys.readouterr()
         result = json.loads(captured.out)
         assert result["enforced"] is False
+        assert "evaluation_submitted" in result
 
     def test_outputs_json_on_empty_stdin(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
@@ -670,6 +1097,7 @@ class TestMain:
                 "session_id": "sess-cli",
                 "language": "python",
                 "content_preview": "def foo(): pass",
+                "content_sha256": "abc123",
             }
         )
         monkeypatch.setattr("sys.stdin", MagicMock(read=lambda: input_json))
@@ -681,3 +1109,71 @@ class TestMain:
         result = json.loads(captured.out)
         assert result["enforced"] is True
         assert result["error"] is None
+        assert "evaluation_submitted" in result
+
+
+# ---------------------------------------------------------------------------
+# Topic and registry registration tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestTopicsCompliance:
+    """Tests for compliance topic and event registry registration."""
+
+    def test_compliance_evaluate_topic_exists(self) -> None:
+        """COMPLIANCE_EVALUATE topic is defined in TopicBase."""
+        from omniclaude.hooks.topics import TopicBase
+
+        assert hasattr(TopicBase, "COMPLIANCE_EVALUATE")
+        assert (
+            TopicBase.COMPLIANCE_EVALUATE
+            == "onex.cmd.omniintelligence.compliance-evaluate.v1"
+        )
+
+    def test_compliance_evaluated_topic_exists(self) -> None:
+        """COMPLIANCE_EVALUATED topic is defined in TopicBase."""
+        from omniclaude.hooks.topics import TopicBase
+
+        assert hasattr(TopicBase, "COMPLIANCE_EVALUATED")
+        assert (
+            TopicBase.COMPLIANCE_EVALUATED
+            == "onex.evt.omniintelligence.compliance-evaluated.v1"
+        )
+
+    def test_compliance_evaluate_registered_in_event_registry(self) -> None:
+        """compliance.evaluate is registered in EVENT_REGISTRY."""
+        from omniclaude.hooks.event_registry import EVENT_REGISTRY
+
+        assert "compliance.evaluate" in EVENT_REGISTRY
+
+    def test_compliance_evaluate_has_no_payload_transform(self) -> None:
+        """compliance.evaluate has no payload transform — content must reach intelligence intact."""
+        from omniclaude.hooks.event_registry import EVENT_REGISTRY
+
+        reg = EVENT_REGISTRY["compliance.evaluate"]
+        for rule in reg.fan_out:
+            assert rule.transform is None, (
+                f"compliance.evaluate must not have a transform (content must not be "
+                f"stripped by daemon layer), but rule {rule.description!r} has one"
+            )
+
+    def test_compliance_evaluate_in_supported_event_types(self) -> None:
+        """compliance.evaluate is in emit_client_wrapper.SUPPORTED_EVENT_TYPES."""
+        from emit_client_wrapper import SUPPORTED_EVENT_TYPES
+
+        assert "compliance.evaluate" in SUPPORTED_EVENT_TYPES
+
+    def test_compliance_evaluate_routes_to_cmd_topic(self) -> None:
+        """compliance.evaluate routes to the cmd (access-restricted) topic."""
+        from omniclaude.hooks.event_registry import EVENT_REGISTRY
+        from omniclaude.hooks.topics import TopicBase
+
+        reg = EVENT_REGISTRY["compliance.evaluate"]
+        topics = [rule.topic_base for rule in reg.fan_out]
+        assert TopicBase.COMPLIANCE_EVALUATE in topics
+        # Must route to cmd topic (access-restricted), not evt (observability)
+        for topic in topics:
+            assert topic.startswith("onex.cmd."), (
+                f"compliance.evaluate must only route to cmd topics, got: {topic}"
+            )

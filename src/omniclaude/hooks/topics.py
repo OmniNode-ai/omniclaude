@@ -131,6 +131,12 @@ class TopicBase(StrEnum):
     EXECUTION_LOGS = "onex.evt.omniclaude.agent-execution-logs.v1"
     AGENT_OBSERVABILITY = "onex.evt.omniclaude.agent-observability.v1"
 
+    # ==========================================================================
+    # Pattern compliance wiring (OMN-2263 → OMN-2256)
+    # ==========================================================================
+    COMPLIANCE_EVALUATE = "onex.cmd.omniintelligence.compliance-evaluate.v1"
+    COMPLIANCE_EVALUATED = "onex.evt.omniintelligence.compliance-evaluated.v1"
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).
