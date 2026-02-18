@@ -1062,11 +1062,10 @@ def _record_llm_fuzzy_agreement(llm_selected: str, prompt: str) -> None:
             agreed,
         )
     except Exception as exc:
-        # Log at debug so failures in guard.record_agreement() or the fuzzy
-        # router are not completely invisible (non-blocking — routing continues).
-        logger.debug(
-            "_record_llm_fuzzy_agreement: guard.record_agreement raised: %s", exc
-        )
+        # Log at debug so failures anywhere in this function (guard lookup, fuzzy
+        # router, or guard.record_agreement) are not completely invisible
+        # (non-blocking — routing continues).
+        logger.debug("_record_llm_fuzzy_agreement failed (non-blocking): %s", exc)
     finally:
         _agreement_lock.release()
 
