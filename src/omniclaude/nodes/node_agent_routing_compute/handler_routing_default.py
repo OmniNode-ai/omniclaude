@@ -40,6 +40,7 @@ from omniclaude.nodes.node_agent_routing_compute.models import (
 
 __all__ = [
     "HandlerRoutingDefault",
+    "FALLBACK_AGENT",
     "build_registry_dict",
     "extract_explicit_agent",
     "create_explicit_result",
@@ -48,7 +49,7 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 # Default fallback agent when no matches exceed threshold
-_FALLBACK_AGENT = "polymorphic-agent"
+FALLBACK_AGENT = "polymorphic-agent"
 
 # Maximum number of candidates to include in result
 _MAX_CANDIDATES = 5
@@ -200,12 +201,12 @@ class HandlerRoutingDefault:
         )
         logger.debug(
             "Falling back to %s: %s (correlation_id=%s)",
-            _FALLBACK_AGENT,
+            FALLBACK_AGENT,
             fallback_reason,
             cid,
         )
         return ModelRoutingResult(
-            selected_agent=_FALLBACK_AGENT,
+            selected_agent=FALLBACK_AGENT,
             confidence=0.0,
             confidence_breakdown=ModelConfidenceBreakdown(
                 total=0.0,
@@ -235,30 +236,6 @@ class HandlerRoutingDefault:
         module-level function to prevent silent divergence.
         """
         return build_registry_dict(request)
-
-    @staticmethod
-    def _extract_explicit_agent(text: str, known_agents: set[str]) -> str | None:
-        """Extract explicit agent name from request.
-
-        Delegates to the module-level ``extract_explicit_agent`` function,
-        which is the single source of truth for this logic. Both
-        ``HandlerRoutingDefault`` and ``HandlerRoutingLlm`` use the same
-        module-level function to prevent silent divergence.
-        """
-        return extract_explicit_agent(text, known_agents)
-
-    @staticmethod
-    def _create_explicit_result(
-        agent_name: str,
-    ) -> ModelRoutingResult:
-        """Create a routing result for an explicitly requested agent.
-
-        Delegates to the module-level ``create_explicit_result`` function,
-        which is the single source of truth for this logic. Both
-        ``HandlerRoutingDefault`` and ``HandlerRoutingLlm`` use the same
-        module-level function to prevent silent divergence.
-        """
-        return create_explicit_result(agent_name)
 
 
 def build_registry_dict(request: ModelRoutingRequest) -> AgentRegistry:
@@ -363,7 +340,7 @@ def extract_explicit_agent(text: str, known_agents: set[str]) -> str | None:
             match = re.search(pattern, text_lower)
             if match:
                 # Default to polymorphic-agent
-                default_agent = _FALLBACK_AGENT
+                default_agent = FALLBACK_AGENT
                 # Verify polymorphic-agent exists in registry
                 if default_agent in known_agents:
                     logger.debug(

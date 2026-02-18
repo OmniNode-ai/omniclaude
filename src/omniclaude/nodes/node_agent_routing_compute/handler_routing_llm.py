@@ -34,6 +34,7 @@ from omniclaude.nodes.node_agent_routing_compute._internal import (
     TriggerMatcher,
 )
 from omniclaude.nodes.node_agent_routing_compute.handler_routing_default import (
+    FALLBACK_AGENT,
     build_registry_dict,
     create_explicit_result,
     extract_explicit_agent,
@@ -49,9 +50,6 @@ __all__ = ["HandlerRoutingLlm"]
 
 logger = logging.getLogger(__name__)
 
-
-# Default fallback agent when no matches exceed threshold
-_FALLBACK_AGENT = "polymorphic-agent"
 
 # Maximum number of candidates to present to the LLM
 _MAX_CANDIDATES = 5
@@ -404,6 +402,13 @@ class HandlerRoutingLlm:
                 correlation_id,
             )
             return None
+        except httpx.NetworkError as exc:
+            logger.warning(
+                "LLM routing connection error: %s (correlation_id=%s)",
+                exc,
+                correlation_id,
+            )
+            return None
         except httpx.HTTPError as exc:
             logger.warning(
                 "LLM routing HTTP error: %s (correlation_id=%s)",
@@ -453,7 +458,7 @@ class HandlerRoutingLlm:
             ModelRoutingResult with routing_policy="fallback_default".
         """
         return ModelRoutingResult(
-            selected_agent=_FALLBACK_AGENT,
+            selected_agent=FALLBACK_AGENT,
             confidence=0.0,
             confidence_breakdown=ModelConfidenceBreakdown(
                 total=0.0,

@@ -261,10 +261,10 @@ class TestHandlerRoutingLlm:
 
     @pytest.mark.unit
     @pytest.mark.asyncio
-    async def test_no_candidates_returns_fallback_without_llm(
+    async def test_below_threshold_returns_fallback_without_llm(
         self, handler: HandlerRoutingLlm
     ) -> None:
-        """When no triggers match, fall back without calling the LLM."""
+        """When all candidates fall below the confidence threshold, fall back without calling the LLM."""
         agents = (
             _make_agent("agent-api-architect", triggers=("api design",)),
             _make_agent("polymorphic-agent", triggers=("poly",)),
