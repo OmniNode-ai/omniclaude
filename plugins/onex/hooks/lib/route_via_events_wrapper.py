@@ -453,7 +453,8 @@ def _route_via_llm(
     Chain:
     1. Resolve LLM URL from endpoint registry.
     2. Health-check the endpoint within _LLM_ROUTING_TIMEOUT_S (100 ms).
-    3. Build a ModelRoutingRequest from the AgentRouter registry.
+    3. Build ModelAgentDefinition list from the AgentRouter registry via
+       _build_agent_definitions(), then construct a ModelRoutingRequest.
     4. Call HandlerRoutingLlm.compute_routing() within _LLM_ROUTING_TIMEOUT_S.
     5. Shape result into the canonical wrapper dict.
 
@@ -583,6 +584,14 @@ def _route_via_llm(
     latency_ms = int((time.time() - start) * 1000)
     agents_reg = router.registry.get("agents", {})
     agent_info = agents_reg.get(result.selected_agent, {})
+    if result.selected_agent not in agents_reg:
+        logger.warning(
+            "LLM routing selected agent '%s' not found in agents registry "
+            "(possible hallucination); domain/purpose will use defaults "
+            "(correlation_id=%s)",
+            result.selected_agent,
+            correlation_id,
+        )
     onex_routing_path = result.routing_path
     if onex_routing_path not in VALID_ROUTING_PATHS:
         logger.warning(
