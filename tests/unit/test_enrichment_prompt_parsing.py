@@ -122,9 +122,20 @@ _CODE_ANALYSIS_PROMPT_VERSION: str = "v1.0"
 _SUMMARIZATION_PROMPT_VERSION: str = "v1.0"
 
 # Required markdown section headings for code analysis output.
-# These are defined in _USER_PROMPT_TEMPLATE in adapter_code_analysis_enrichment.py.
-# SYNC REQUIRED: these must match the headings in adapter_code_analysis_enrichment.py
-# _USER_PROMPT_TEMPLATE — update manually if the template changes.
+#
+# Source: `_USER_PROMPT_TEMPLATE` in
+#   omnibase_infra/src/omnibase_infra/adapters/enrichment/
+#   adapter_code_analysis_enrichment.py
+#   (look for the lines that begin `## Affected Functions / Methods` etc.)
+#
+# SYNC REQUIRED (manual): This tuple is a copied snapshot and has no automated
+# drift detection, because this test file intentionally avoids importing from
+# omnibase_infra.  If the upstream `_USER_PROMPT_TEMPLATE` heading list changes,
+# this tuple MUST be updated to match.  Steps to verify:
+#   1. Open adapter_code_analysis_enrichment.py and locate `_USER_PROMPT_TEMPLATE`.
+#   2. Extract every line that starts with `## ` inside that template.
+#   3. Compare those headings to the tuple below; update as needed.
+#   4. Update the "verified against" date in the module-level docstring.
 _CODE_ANALYSIS_REQUIRED_HEADINGS: tuple[str, ...] = (
     "Affected Functions / Methods",
     "Dependency Changes",
@@ -149,10 +160,31 @@ _SUMMARIZATION_INFLATED_GUARD_RELEVANCE_SCORE: float = 1.0
 # Chars per token for token estimation (shared by both adapters).
 _CHARS_PER_TOKEN: int = 4
 
-# Max diff chars before truncation (from adapter_code_analysis_enrichment.py).
+# Max diff chars before the git diff is truncated before being sent to the LLM.
+#
+# Source: `_MAX_DIFF_CHARS` (module-level constant) in
+#   omnibase_infra/src/omnibase_infra/adapters/enrichment/
+#   adapter_code_analysis_enrichment.py
+#
+# SYNC REQUIRED (manual): This value is a copied snapshot.  If the upstream
+# constant changes, snapshot tests that use this value (e.g.
+# test_truncated_diff_marker_preserved_in_summary_markdown) will silently
+# assert wrong bounds.  To verify: open adapter_code_analysis_enrichment.py
+# and search for `_MAX_DIFF_CHARS =`.
 _MAX_DIFF_CHARS: int = 32_000
 
-# Token threshold for summarization (from adapter_summarization_enrichment.py).
+# Token count threshold below which the summarization adapter skips the LLM
+# call entirely and returns the raw context (passthrough path).
+#
+# Source: `_TOKEN_THRESHOLD` (module-level constant) in
+#   omnibase_infra/src/omnibase_infra/adapters/enrichment/
+#   adapter_summarization_enrichment.py
+#
+# SYNC REQUIRED (manual): This value is a copied snapshot.  If the upstream
+# constant changes, threshold-boundary tests (e.g.
+# test_below_token_threshold_uses_passthrough) will silently assert wrong
+# behaviour.  To verify: open adapter_summarization_enrichment.py and search
+# for `_TOKEN_THRESHOLD =`.
 _TOKEN_THRESHOLD: int = 8_000
 
 
@@ -813,6 +845,17 @@ class TestSummarizationMarkdownParsing:
 
     def test_summary_markdown_preserves_technical_content(self) -> None:
         """Summary markdown preserves technical terms and entity names."""
+        # The URL below (`http://localhost:8100/v1/chat/completions`) is a
+        # placeholder chosen for readability.  It is not asserted against and
+        # the test only checks for substring presence of other terms; it does
+        # NOT validate URL extraction or URL format correctness.
+        #
+        # Production endpoints follow the pattern
+        # `http://<host>:<port>/v1/chat/completions` where host and port come
+        # from `LLM_QWEN_72B_URL` (default: http://192.168.86.200:8100) for
+        # the summarization adapter.  If a future test needs to validate URL
+        # parsing, replace this placeholder with a parametrized fixture that
+        # covers both localhost and production-style host/port combinations.
         summary = (
             "## Summary\n\n"
             "The `HandlerLlmOpenaiCompatible` handler calls `qwen2.5-72b` at "
