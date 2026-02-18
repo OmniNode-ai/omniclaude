@@ -187,6 +187,14 @@ _MAX_DIFF_CHARS: int = 32_000
 # for `_TOKEN_THRESHOLD =`.
 _TOKEN_THRESHOLD: int = 8_000
 
+# Raw context string that exceeds the token threshold by one token.
+#
+# Used by tests that exercise the above-threshold paths (empty-LLM-response
+# fallback and net-token guard) to avoid duplicating the expression inline.
+# Computed once here so future changes to _TOKEN_THRESHOLD or _CHARS_PER_TOKEN
+# propagate automatically to all three tests that depend on it.
+_ABOVE_THRESHOLD_CONTEXT: str = "x" * ((_TOKEN_THRESHOLD + 1) * _CHARS_PER_TOKEN)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -1030,7 +1038,7 @@ class TestSummarizationBadOutputRecovery:
     def test_empty_llm_response_returns_raw_context(self) -> None:
         """When LLM returns empty text, raw context is used as summary_markdown."""
         # The adapter replaces empty generated_text with the stripped raw context
-        raw_context = "x" * ((_TOKEN_THRESHOLD + 1) * _CHARS_PER_TOKEN)
+        raw_context = _ABOVE_THRESHOLD_CONTEXT
         result = _make_summarization_result(
             summary_markdown=raw_context.strip(),
             # model_used is the REAL model (not _SUMMARIZATION_PASSTHROUGH_MODEL)
@@ -1050,7 +1058,7 @@ class TestSummarizationBadOutputRecovery:
 
     def test_empty_llm_response_result_is_valid_contract(self) -> None:
         """Empty LLM response fallback is a valid ContractEnrichmentResult."""
-        raw_context = "x" * ((_TOKEN_THRESHOLD + 1) * _CHARS_PER_TOKEN)
+        raw_context = _ABOVE_THRESHOLD_CONTEXT
         result = _make_summarization_result(
             summary_markdown=raw_context.strip(),
             relevance_score=1.0,
@@ -1061,7 +1069,7 @@ class TestSummarizationBadOutputRecovery:
 
     def test_net_guard_fired_returns_raw_context(self) -> None:
         """When net-token guard fires, raw context is returned as summary_markdown."""
-        raw_context = "x" * ((_TOKEN_THRESHOLD + 1) * _CHARS_PER_TOKEN)
+        raw_context = _ABOVE_THRESHOLD_CONTEXT
         # Guard fires: summary token count >= original token count
         result = _make_summarization_result(
             summary_markdown=raw_context.strip(),
@@ -1182,12 +1190,26 @@ class TestTokenEstimationSnapshot:
         assert len(text) == 4
         assert len(text) // _CHARS_PER_TOKEN == 1
 
-    def test_max_diff_chars_constant_is_correct(self) -> None:
-        """_MAX_DIFF_CHARS is 32,000 as documented in the code analysis adapter."""
+    def test_max_diff_chars_snapshot_value(self) -> None:
+        """Snapshot: _MAX_DIFF_CHARS is pinned to 32,000.
+
+        This is a documentation/snapshot test, not a live assertion against the
+        upstream adapter.  It records the chosen constant value so that any
+        future change to _MAX_DIFF_CHARS in this file is a deliberate, reviewed
+        update.  To verify the upstream value, open
+        adapter_code_analysis_enrichment.py and search for `_MAX_DIFF_CHARS =`.
+        """
         assert _MAX_DIFF_CHARS == 32_000
 
-    def test_token_threshold_constant_is_correct(self) -> None:
-        """_TOKEN_THRESHOLD is 8,000 as documented in the summarization adapter."""
+    def test_token_threshold_snapshot_value(self) -> None:
+        """Snapshot: _TOKEN_THRESHOLD is pinned to 8,000.
+
+        This is a documentation/snapshot test, not a live assertion against the
+        upstream adapter.  It records the chosen constant value so that any
+        future change to _TOKEN_THRESHOLD in this file is a deliberate, reviewed
+        update.  To verify the upstream value, open
+        adapter_summarization_enrichment.py and search for `_TOKEN_THRESHOLD =`.
+        """
         assert _TOKEN_THRESHOLD == 8_000
 
     def test_token_count_matches_schema_field(self) -> None:
