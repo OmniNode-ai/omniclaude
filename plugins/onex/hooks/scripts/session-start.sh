@@ -594,6 +594,46 @@ else
 fi
 
 # -----------------------------
+# Static Context Snapshot (OMN-2237)
+# -----------------------------
+# Detect changes to CLAUDE.md, memory files, and .local.md since the last session.
+# Runs ASYNCHRONOUSLY (backgrounded) to respect the <50ms hook budget.
+# Emits static.context.edit.detected event when changes are found.
+
+STATIC_SNAPSHOT_ENABLED="${OMNICLAUDE_STATIC_SNAPSHOT_ENABLED:-true}"
+STATIC_SNAPSHOT_ENABLED=$(_normalize_bool "$STATIC_SNAPSHOT_ENABLED")
+
+if [[ "${STATIC_SNAPSHOT_ENABLED}" == "true" ]] && [[ -f "${HOOKS_LIB}/static_context_snapshot.py" ]]; then
+    _run_static_snapshot() {
+        local _log="${LOG_FILE:-/dev/null}"
+        "$PYTHON_CMD" "${HOOKS_LIB}/static_context_snapshot.py" scan \
+            --session-id "${SESSION_ID:-unknown}" \
+            --project-path "${PROJECT_PATH:-${CWD}}" \
+            >> "$_log" 2>&1
+    }
+    if [[ -z "${SESSION_ID}" ]]; then
+        log "WARNING: Empty SESSION_ID — skipping static snapshot idempotency guard"
+        ( _run_static_snapshot ) &
+        log "Static context snapshot started in background (PID: $!)"
+    else
+        STATIC_SNAPSHOT_STAMP="/tmp/omniclaude-static-snapshot-${SESSION_ID}.done"
+        if [[ -f "$STATIC_SNAPSHOT_STAMP" ]]; then
+            log "Static context snapshot already run for this session, skipping"
+        else
+            (
+                _run_static_snapshot
+                touch "$STATIC_SNAPSHOT_STAMP" 2>/dev/null || true
+            ) &
+            log "Static context snapshot started in background (PID: $!)"
+        fi
+    fi
+elif [[ "${STATIC_SNAPSHOT_ENABLED}" != "true" ]]; then
+    log "Static context snapshot disabled (STATIC_SNAPSHOT_ENABLED=false)"
+else
+    log "Static context snapshot skipped (static_context_snapshot.py not found)"
+fi
+
+# -----------------------------
 # Ticket Context Injection (OMN-1830)
 # -----------------------------
 # Inject active ticket context for session continuity.

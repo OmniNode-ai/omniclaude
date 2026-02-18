@@ -505,6 +505,21 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         required_fields=["session_id", "source_path", "applicable_patterns"],
     ),
     # =========================================================================
+    # Static Context Edit Detection (OMN-2237)
+    # =========================================================================
+    "static.context.edit.detected": EventRegistration(
+        event_type="static.context.edit.detected",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.STATIC_CONTEXT_EDIT_DETECTED,
+                transform=None,  # Passthrough — no content, only paths and stats
+                description="Static context file change detected between sessions",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "changed_file_count"],
+    ),
+    # =========================================================================
     # Agent Status (OMN-1848 - agent lifecycle reporting)
     # =========================================================================
     # NOTE: agent_name and session_id may carry the sentinel value "unknown".

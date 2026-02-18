@@ -757,6 +757,8 @@ class TestEventRegistryIntegration:
             "agent.status",
             # Pattern compliance (OMN-2263 → OMN-2256)
             "compliance.evaluate",
+            # Static context change detection (OMN-2237)
+            "static.context.edit.detected",
         }
         assert set(EVENT_REGISTRY.keys()) == expected_types
 

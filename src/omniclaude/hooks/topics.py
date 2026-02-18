@@ -137,6 +137,11 @@ class TopicBase(StrEnum):
     COMPLIANCE_EVALUATE = "onex.cmd.omniintelligence.compliance-evaluate.v1"
     COMPLIANCE_EVALUATED = "onex.evt.omniintelligence.compliance-evaluated.v1"
 
+    # ==========================================================================
+    # Static context edit detection topics (OMN-2237)
+    # ==========================================================================
+    STATIC_CONTEXT_EDIT_DETECTED = "onex.evt.omniclaude.static-context-edit-detected.v1"
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).

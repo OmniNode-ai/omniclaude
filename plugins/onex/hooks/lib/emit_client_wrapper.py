@@ -123,6 +123,7 @@ SUPPORTED_EVENT_TYPES = frozenset(
         "phase.metrics",  # OMN-2027 - Phase instrumentation metrics
         "agent.status",  # OMN-1848 - Agent status reporting
         "compliance.evaluate",  # OMN-2263 → OMN-2256 - Pattern compliance evaluation
+        "static.context.edit.detected",  # OMN-2237 - Static context file change detection
     ]
 )
 

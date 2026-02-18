@@ -94,6 +94,7 @@ class HookEventType(StrEnum):
     AGENT_MATCH = "hook.agent.match"
     LATENCY_BREAKDOWN = "hook.latency.breakdown"
     MANIFEST_INJECTED = "hook.manifest.injected"
+    STATIC_CONTEXT_EDIT_DETECTED = "hook.static.context.edit.detected"
 
 
 class HookSource(StrEnum):
@@ -1504,6 +1505,138 @@ class ModelHookManifestInjectedPayload(BaseModel):
 
 
 # =============================================================================
+# Static Context Edit Detection Events (OMN-2237)
+# =============================================================================
+
+
+class ModelChangedFileRecord(BaseModel):
+    """Record describing a single changed static context file.
+
+    Embedded as a list element inside ModelStaticContextEditDetectedPayload.
+
+    Attributes:
+        file_path: Absolute path to the changed file.
+        is_versioned: True if the file is tracked by git.
+        git_diff_stat: One-line ``git diff --stat`` summary for versioned files.
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="ignore",
+        from_attributes=True,
+    )
+
+    file_path: str = Field(
+        ...,
+        min_length=1,
+        description="Absolute path to the changed static context file",
+    )
+    is_versioned: bool = Field(
+        ...,
+        description="True if the file is tracked by git; False for non-versioned files",
+    )
+    git_diff_stat: str | None = Field(
+        default=None,
+        max_length=500,
+        description="One-line git diff --stat summary (versioned files only)",
+    )
+
+
+class ModelStaticContextEditDetectedPayload(BaseModel):
+    """Event payload for static context file change detection.
+
+    Emitted when the SessionStart hook detects that one or more static context
+    files have changed since the previous session.  Static context files include
+    repo CLAUDE.md (versioned), ~/.claude/CLAUDE.md, memory files, and
+    .local.md plugin configs (non-versioned).
+
+    Versioned files use git diff for change detection; non-versioned files use
+    SHA-256 hash comparison.
+
+    Privacy Considerations:
+        - ``changed_files`` contains only file paths and git stat summaries,
+          never file content, to avoid leaking secrets.
+        - The raw content snapshot (for non-versioned files) is stored locally
+          in ~/.claude/snapshots/ and is NOT included in this event.
+
+    Attributes:
+        entity_id: Session identifier as UUID (partition key for ordering).
+        session_id: Session identifier string.
+        correlation_id: Correlation ID for distributed tracing.
+        causation_id: ID of the session.started event that triggered this scan.
+        emitted_at: Timestamp when the hook emitted this event (UTC).
+        changed_file_count: Number of files with detected changes.
+        changed_files: List of changed file records (path + change metadata).
+
+    Example:
+        >>> from datetime import UTC, datetime
+        >>> from uuid import uuid4
+        >>> session_id = uuid4()
+        >>> event = ModelStaticContextEditDetectedPayload(
+        ...     entity_id=session_id,
+        ...     session_id=str(session_id),
+        ...     correlation_id=session_id,
+        ...     causation_id=uuid4(),
+        ...     emitted_at=datetime(2025, 1, 15, 12, 0, 0, tzinfo=UTC),
+        ...     changed_file_count=2,
+        ...     changed_files=[
+        ...         ModelChangedFileRecord(
+        ...             file_path="/home/user/.claude/CLAUDE.md",
+        ...             is_versioned=False,
+        ...         ),
+        ...     ],
+        ... )
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="ignore",
+        from_attributes=True,
+    )
+
+    # Entity identification (partition key)
+    entity_id: UUID = Field(
+        ...,
+        description="Session identifier as UUID (partition key for ordering)",
+    )
+    session_id: str = Field(
+        ...,
+        min_length=1,
+        description="Session identifier string",
+    )
+
+    # Tracing and causation
+    correlation_id: UUID = Field(
+        ...,
+        description="Correlation ID for distributed tracing",
+    )
+    causation_id: UUID = Field(
+        ...,
+        description="ID of the session.started event that triggered this scan",
+    )
+
+    # Timestamps - MUST be explicitly injected (no default_factory for testability)
+    emitted_at: TimezoneAwareDatetime = Field(
+        ...,
+        description="Timestamp when the hook emitted this event (UTC)",
+    )
+
+    # Change detection fields
+    changed_file_count: int = Field(
+        ...,
+        ge=0,
+        description="Number of static context files with detected changes",
+    )
+    changed_files: list[ModelChangedFileRecord] = Field(
+        default_factory=list,
+        description=(
+            "List of changed static context file records. "
+            "Contains only file paths and git stat summaries, never file content."
+        ),
+    )
+
+
+# =============================================================================
 # Discriminated Union (for deserialization)
 # =============================================================================
 
@@ -1563,6 +1696,7 @@ class ModelHookEventEnvelope(BaseModel):
         | ModelAgentMatchPayload
         | ModelLatencyBreakdownPayload
         | ModelHookManifestInjectedPayload
+        | ModelStaticContextEditDetectedPayload
     ) = Field(
         ...,
         description="The event payload",
@@ -1591,6 +1725,7 @@ class ModelHookEventEnvelope(BaseModel):
             HookEventType.AGENT_MATCH: ModelAgentMatchPayload,
             HookEventType.LATENCY_BREAKDOWN: ModelLatencyBreakdownPayload,
             HookEventType.MANIFEST_INJECTED: ModelHookManifestInjectedPayload,
+            HookEventType.STATIC_CONTEXT_EDIT_DETECTED: ModelStaticContextEditDetectedPayload,
         }
         expected = expected_types.get(self.event_type)
         if expected and not isinstance(self.payload, expected):
@@ -1611,7 +1746,8 @@ ModelHookPayload = Annotated[
     | ModelContextUtilizationPayload
     | ModelAgentMatchPayload
     | ModelLatencyBreakdownPayload
-    | ModelHookManifestInjectedPayload,
+    | ModelHookManifestInjectedPayload
+    | ModelStaticContextEditDetectedPayload,
     Field(description="Union of all hook event payload types"),
 ]
 
@@ -1753,6 +1889,9 @@ __all__ = [
     "ModelLatencyBreakdownPayload",
     "ModelHookManifestInjectedPayload",
     "ModelAgentStatusPayload",
+    # Static context edit detection (OMN-2237)
+    "ModelChangedFileRecord",
+    "ModelStaticContextEditDetectedPayload",
     # Envelope and types
     "ModelHookEventEnvelope",
     "ModelHookPayload",
