@@ -439,17 +439,19 @@ fi
 # -----------------------------
 # Run parallel enrichments (code analysis, similarity, summarization) if
 # ENABLE_LOCAL_INFERENCE_PIPELINE and ENABLE_LOCAL_ENRICHMENT are both set.
-# 200ms timeout (outer safety net); asyncio timeouts inside the runner.
+# 1s shell safety net; asyncio handles the 200ms inner budget itself.
+# The shell timeout catches pathological hangs beyond what asyncio can see
+# (e.g. Python startup failures, import freezes).
 ENRICHMENT_CONTEXT=""
 ENRICHMENT_RUNNER="${HOOKS_LIB}/context_enrichment_runner.py"
-ENRICHMENT_PIPELINE_ENABLED=$(_normalize_bool "${ENABLE_LOCAL_INFERENCE_PIPELINE:-false}")
 ENRICHMENT_FLAG_ENABLED=$(_normalize_bool "${ENABLE_LOCAL_ENRICHMENT:-false}")
-if [[ "$ENRICHMENT_PIPELINE_ENABLED" == "true" ]] && [[ "$ENRICHMENT_FLAG_ENABLED" == "true" ]] && [[ -f "$ENRICHMENT_RUNNER" ]]; then
+if [[ "$INFERENCE_PIPELINE_ENABLED" == "true" ]] && [[ "$ENRICHMENT_FLAG_ENABLED" == "true" ]] && [[ -f "$ENRICHMENT_RUNNER" ]]; then
     ENRICHMENT_INPUT=$(jq -n \
         --arg prompt "$PROMPT" \
         --arg session_id "$SESSION_ID" \
+        --arg correlation_id "$CORRELATION_ID" \
         --arg project_path "$PROJECT_ROOT" \
-        '{prompt: $prompt, session_id: $session_id, project_path: $project_path}' 2>/dev/null)
+        '{prompt: $prompt, session_id: $session_id, correlation_id: $correlation_id, project_path: $project_path}' 2>/dev/null)
     if [[ -n "$ENRICHMENT_INPUT" ]]; then
         set +e
         # 1s = Python startup overhead + 200ms inner budget

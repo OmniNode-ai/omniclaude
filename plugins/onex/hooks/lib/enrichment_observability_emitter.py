@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 try:
     from emit_client_wrapper import emit_event
 except ImportError:
-    emit_event = None  # type: ignore[assignment]
+    emit_event = None
 
 # Event type registered in emit_client_wrapper.SUPPORTED_EVENT_TYPES
 _EVENT_TYPE = "context.enrichment"

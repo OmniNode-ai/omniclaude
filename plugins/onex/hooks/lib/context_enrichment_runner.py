@@ -84,7 +84,7 @@ try:
         emit_enrichment_events as _emit_enrichment_events,
     )
 except ImportError:
-    _emit_enrichment_events = None  # type: ignore[assignment]
+    _emit_enrichment_events = None
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -189,7 +189,10 @@ async def _run_single_enrichment(
         )
     except Exception as exc:
         latency_ms = (asyncio.get_running_loop().time() - t0) * 1000.0
-        logger.debug("Enrichment %r skipped: %s", name, exc)
+        if isinstance(exc, TimeoutError):
+            logger.debug("Enrichment %r timed out: %s", name, exc)
+        else:
+            logger.warning("Enrichment %r failed unexpectedly: %s", name, exc)
         return _EnrichmentResult(
             name=name, markdown="", tokens=0, success=False, latency_ms=latency_ms
         )

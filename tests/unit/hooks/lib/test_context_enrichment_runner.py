@@ -324,7 +324,7 @@ class TestPerEnrichmentTimeout:
         # Slow handler that exceeds per-enrichment timeout (excluded)
         mock_slow_cls = MagicMock(
             return_value=_make_handler(
-                markdown="## Code Analysis\n\nSlow result.", tokens=10, delay_s=0.200
+                markdown="## Code Analysis\n\nSlow result.", tokens=10, delay_s=0.170
             )
         )
 
