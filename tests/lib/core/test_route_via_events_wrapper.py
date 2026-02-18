@@ -801,9 +801,13 @@ class TestUseLlmRouting:
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("USE_LLM_ROUTING", "true")
 
+        # Mock the guard to return None so the guard gate is a no-op.
+        # This keeps the test isolated from any LatencyGuard singleton state
+        # that may have been modified by other tests in the same session.
         with (
             patch("route_via_events_wrapper._llm_handler_available", True),
             patch("route_via_events_wrapper._llm_registry_available", True),
+            patch("route_via_events_wrapper._get_latency_guard", return_value=None),
         ):
             assert _use_llm_routing() is True
 

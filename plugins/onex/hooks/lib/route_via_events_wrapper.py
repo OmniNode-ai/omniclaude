@@ -153,6 +153,23 @@ if TYPE_CHECKING:
 # Canonical routing path values for metrics (from OMN-1893)
 VALID_ROUTING_PATHS = frozenset({"event", "local", "hybrid"})
 
+# LatencyGuard import (for USE_LLM_ROUTING latency SLO enforcement).
+# Graceful fallback: if unavailable, LLM routing proceeds without the guard.
+_latency_guard_available = False
+# Any is intentional: the class is imported conditionally at runtime and
+# mypy cannot resolve it.  Callers use duck-typing (get_instance / reset).
+_LatencyGuardClass: Any = None
+try:
+    if __package__:
+        from .latency_guard import LatencyGuard as _LatencyGuardClass  # noqa: I001
+    else:
+        from latency_guard import (  # type: ignore[import-not-found,no-redef]
+            LatencyGuard as _LatencyGuardClass,
+        )
+    _latency_guard_available = True
+except ImportError:
+    logger.debug("latency_guard not available, LLM routing proceeds without SLO guard")
+
 
 def _compute_routing_path(method: str, event_attempted: bool) -> str:
     """
@@ -364,6 +381,21 @@ _LLM_ROUTING_TIMEOUT_S = 0.1
 _LLM_HEALTH_CHECK_TIMEOUT_S = 0.08
 
 
+def _get_latency_guard() -> Any | None:
+    """Return the LatencyGuard singleton, or None if unavailable.
+
+    Returns:
+        LatencyGuard instance or None when the guard module is not importable.
+    """
+    if not _latency_guard_available or _LatencyGuardClass is None:
+        return None
+    try:
+        return _LatencyGuardClass.get_instance()
+    except Exception as exc:
+        logger.debug("LatencyGuard.get_instance() failed (non-blocking): %s", exc)
+        return None
+
+
 def _use_llm_routing() -> bool:
     """Check if LLM routing is enabled.
 
@@ -371,6 +403,7 @@ def _use_llm_routing() -> bool:
     - ENABLE_LOCAL_INFERENCE_PIPELINE=true  (parent gate)
     - USE_LLM_ROUTING=true                  (specific flag)
     - HandlerRoutingLlm and LocalLlmEndpointRegistry importable
+    - LatencyGuard allows it (circuit not open, agreement rate not low)
 
     Returns:
         True only when all conditions are met.
@@ -381,7 +414,14 @@ def _use_llm_routing() -> bool:
     if parent not in _TRUTHY:
         return False
     flag = os.environ.get("USE_LLM_ROUTING", "").lower()
-    return flag in _TRUTHY
+    if flag not in _TRUTHY:
+        return False
+    # LatencyGuard is the final gate: circuit-open or low agreement → False.
+    guard = _get_latency_guard()
+    if guard is not None and not guard.is_enabled():
+        logger.debug("LLM routing suppressed by LatencyGuard (SLO or agreement breach)")
+        return False
+    return True
 
 
 def _get_llm_routing_url() -> str | None:
@@ -582,6 +622,15 @@ def _route_via_llm(
 
     # 5. Shape result into canonical wrapper dict
     latency_ms = int((time.time() - start) * 1000)
+
+    # Record latency with the guard so it can enforce the P95 SLO.
+    guard = _get_latency_guard()
+    if guard is not None:
+        try:
+            guard.record_latency(float(latency_ms))
+        except Exception as exc:
+            logger.debug("LatencyGuard.record_latency failed (non-blocking): %s", exc)
+
     agents_reg = router.registry.get("agents", {})
     agent_info = agents_reg.get(result.selected_agent, {})
     if result.selected_agent not in agents_reg:
@@ -911,6 +960,53 @@ def _route_via_onex_nodes(
         return None
 
 
+def _record_llm_fuzzy_agreement(llm_selected: str, prompt: str) -> None:
+    """Record whether the LLM routing result agrees with fuzzy matching.
+
+    Runs fuzzy matching in shadow mode (result discarded) to compare against
+    the LLM-selected agent, then records the observation with the LatencyGuard.
+    Non-blocking: any failure is suppressed so routing is never affected.
+
+    Agreement is defined as both methods selecting the same top agent name.
+    When fuzzy matching falls back to DEFAULT_AGENT, the LLM must also have
+    selected DEFAULT_AGENT for agreement to be True.
+
+    Args:
+        llm_selected: Agent name selected by LLM routing.
+        prompt: The user prompt (passed to fuzzy router for comparison).
+    """
+    guard = _get_latency_guard()
+    if guard is None:
+        return
+
+    try:
+        router = _get_router()
+        if router is None:
+            # No fuzzy router — cannot compute agreement; skip recording to
+            # avoid artificially deflating the rate.
+            return
+
+        recommendations = router.route(prompt, max_recommendations=1)
+        if (
+            recommendations
+            and recommendations[0].confidence.total >= CONFIDENCE_THRESHOLD
+        ):
+            fuzzy_selected = recommendations[0].agent_name
+        else:
+            fuzzy_selected = DEFAULT_AGENT
+
+        agreed = llm_selected == fuzzy_selected
+        guard.record_agreement(agreed=agreed)
+        logger.debug(
+            "LatencyGuard agreement: llm=%s fuzzy=%s agreed=%s",
+            llm_selected,
+            fuzzy_selected,
+            agreed,
+        )
+    except Exception as exc:
+        logger.debug("_record_llm_fuzzy_agreement failed (non-blocking): %s", exc)
+
+
 def route_via_events(
     prompt: str,
     correlation_id: str,
@@ -993,6 +1089,14 @@ def route_via_events(
     if _use_llm_routing():
         llm_result = _route_via_llm(prompt, correlation_id)
         if llm_result is not None:
+            # Record agreement: compare LLM selection against fuzzy matching.
+            # Run fuzzy in shadow (result discarded) to track the agreement rate
+            # that feeds the LatencyGuard auto-disable gate.  Non-blocking on
+            # any failure — agreement tracking must never break routing.
+            _record_llm_fuzzy_agreement(
+                llm_selected=llm_result.get("selected_agent", ""),
+                prompt=prompt,
+            )
             _emit_routing_decision(
                 result=llm_result, prompt=prompt, correlation_id=correlation_id
             )
