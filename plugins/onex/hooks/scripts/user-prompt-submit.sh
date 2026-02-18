@@ -435,6 +435,40 @@ if [[ "$DELEGATION_ACTIVE" == "true" ]] && [[ -n "$DELEGATED_RESPONSE" ]]; then
 fi
 
 # -----------------------------
+# Local Enrichment (OMN-2267)
+# -----------------------------
+# Run parallel enrichments (code analysis, similarity, summarization) if
+# ENABLE_LOCAL_INFERENCE_PIPELINE and ENABLE_LOCAL_ENRICHMENT are both set.
+# 200ms timeout (outer safety net); asyncio timeouts inside the runner.
+ENRICHMENT_CONTEXT=""
+ENRICHMENT_RUNNER="${HOOKS_LIB}/context_enrichment_runner.py"
+if [[ "${ENABLE_LOCAL_INFERENCE_PIPELINE:-false}" == "true" ]] && [[ "${ENABLE_LOCAL_ENRICHMENT:-false}" == "true" ]] && [[ -f "$ENRICHMENT_RUNNER" ]]; then
+    ENRICHMENT_INPUT=$(jq -n \
+        --arg prompt "$PROMPT" \
+        --arg session_id "$SESSION_ID" \
+        --arg project_path "$PROJECT_ROOT" \
+        '{prompt: $prompt, session_id: $session_id, project_path: $project_path}' 2>/dev/null)
+    if [[ -n "$ENRICHMENT_INPUT" ]]; then
+        set +e
+        ENRICHMENT_RESULT=$(echo "$ENRICHMENT_INPUT" | run_with_timeout 1 "$PYTHON_CMD" "$ENRICHMENT_RUNNER" 2>>"$LOG_FILE")
+        set -e
+        ENRICHMENT_SUCCESS=$(echo "$ENRICHMENT_RESULT" | jq -r '.success // false' 2>/dev/null || echo 'false')
+        if [[ "$ENRICHMENT_SUCCESS" == "true" ]]; then
+            ENRICHMENT_CONTEXT=$(echo "$ENRICHMENT_RESULT" | jq -r '.enrichment_context // ""' 2>/dev/null || echo '')
+            _ENR_COUNT=$(echo "$ENRICHMENT_RESULT" | jq -r '.enrichment_count // 0' 2>/dev/null || echo '0')
+            _ENR_TOKENS=$(echo "$ENRICHMENT_RESULT" | jq -r '.tokens_used // 0' 2>/dev/null || echo '0')
+            if [[ -n "$ENRICHMENT_CONTEXT" ]] && [[ "$_ENR_COUNT" != "0" ]]; then
+                log "Enrichments loaded: ${_ENR_COUNT} enrichments, ${_ENR_TOKENS} tokens"
+                _TS_ENR="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+                echo "[$_TS_ENR] [UserPromptSubmit] ENRICHMENT count=${_ENR_COUNT} tokens=${_ENR_TOKENS}" >> "$TRACE_LOG"
+            fi
+        else
+            log "INFO: No enrichments available (disabled or handlers not installed)"
+        fi
+    fi
+fi
+
+# -----------------------------
 # Agent Context Assembly (FIXED: Safe injection)
 # -----------------------------
 POLLY_DISPATCH_THRESHOLD="${POLLY_DISPATCH_THRESHOLD:-0.7}"
@@ -446,6 +480,7 @@ AGENT_CONTEXT=$(jq -rn \
     --arg emit_warn "$EMIT_HEALTH_WARNING" \
     --arg yaml "$AGENT_YAML_INJECTION" \
     --arg patterns "$LEARNED_PATTERNS" \
+    --arg enrichment "$ENRICHMENT_CONTEXT" \
     --arg advisory "$PATTERN_ADVISORY" \
     --arg name "$AGENT_NAME" \
     --arg conf "$CONFIDENCE" \
@@ -457,6 +492,7 @@ AGENT_CONTEXT=$(jq -rn \
     '
     (if $emit_warn != "" then $emit_warn + "\n\n" else "" end) +
     $yaml + "\n" + $patterns + "\n" +
+    (if $enrichment != "" then $enrichment + "\n" else "" end) +
     (if $advisory != "" then $advisory + "\n" else "" end) +
     "========================================================================\n" +
     "AGENT CONTEXT\n" +
