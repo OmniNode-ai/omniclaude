@@ -435,15 +435,18 @@ def handle_delegation(
 def main() -> None:
     """CLI entry point for user-prompt-submit.sh.
 
-    Preferred usage (avoids exposing the prompt in the process table):
+    Supports two invocation styles:
+
+    Stdin style (preferred — avoids exposing the prompt in the process table):
         printf '%s' "$PROMPT_B64" | python3 local_delegation_handler.py --prompt-stdin <correlation_id>
 
-    Legacy usage (kept for backward-compat with tests; do NOT use in production):
+    Argv style (kept for unit-test callers; not used by the hook script):
         python3 local_delegation_handler.py <prompt_b64> <correlation_id>
 
-    When --prompt-stdin is the first argument, the base64-encoded prompt is read
-    from stdin instead of argv[1], so the full prompt never appears in
-    /proc/PID/cmdline or `ps aux` output.
+    The stdin style reads the base64-encoded prompt from stdin instead of
+    argv[1], so the full prompt never appears in /proc/PID/cmdline or
+    `ps aux` output. The argv style is simpler to invoke in tests where
+    process-table privacy is not a concern.
 
     Always exits 0. Non-zero exit would block the hook.
 
