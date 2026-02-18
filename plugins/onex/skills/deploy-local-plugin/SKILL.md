@@ -93,8 +93,10 @@ Use --execute to apply changes.
 
 ### Versioned Directories
 
-Each deployment creates a new version directory and removes all prior versions.
-Only the current version is kept in cache.
+Creating a new version directory for each deployment:
+- Preserves previous versions for rollback
+- Avoids overwriting production installs
+- Enables A/B testing different versions
 
 ### Atomic Updates
 
@@ -106,7 +108,7 @@ After running `/deploy-local-plugin --execute`:
 
 1. **Restart Claude Code** to pick up changes (plugins load at session start)
 2. Verify with `/help` to see new commands
-3. Old version directories are removed automatically
+3. Old versions remain in cache for rollback if needed
 
 ## Troubleshooting
 
