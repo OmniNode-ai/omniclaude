@@ -87,8 +87,17 @@ class TestSingleton:
 class TestLatencyTracking:
     @pytest.fixture(autouse=True)
     def fresh(self) -> LatencyGuard:
-        guard = _make_fresh_guard()
-        return guard
+        # This fixture is used for its side-effect of resetting the singleton
+        # before each test.  The return value is intentionally unused by
+        # individual tests — they call LatencyGuard.get_instance() directly so
+        # the instance is visible without fixture injection.
+        # Reset before AND after each test for clean isolation: the pre-test
+        # reset ensures a clean state even if a previous test leaked state;
+        # the post-test reset ensures subsequent tests start clean regardless
+        # of what this test does.
+        _make_fresh_guard()
+        yield LatencyGuard.get_instance()  # type: ignore[misc]
+        LatencyGuard._reset_instance()
 
     @pytest.mark.unit
     def test_enabled_by_default(self) -> None:
@@ -218,6 +227,8 @@ class TestLatencyTracking:
 class TestAgreementRateTracking:
     @pytest.fixture(autouse=True)
     def fresh(self) -> LatencyGuard:
+        # Used for its side-effect of resetting singleton state before each test.
+        # The return value is intentionally unused by individual tests.
         return _make_fresh_guard()
 
     @pytest.mark.unit
@@ -328,6 +339,8 @@ class TestAgreementRateTracking:
 class TestCombinedGates:
     @pytest.fixture(autouse=True)
     def fresh(self) -> LatencyGuard:
+        # Used for its side-effect of resetting singleton state before each test.
+        # The return value is intentionally unused by individual tests.
         return _make_fresh_guard()
 
     @pytest.mark.unit
@@ -358,6 +371,50 @@ class TestCombinedGates:
             guard.record_agreement(agreed=False)
         assert not guard.is_enabled()
 
+    @pytest.mark.unit
+    def test_agreement_gate_persists_after_latency_circuit_resets(self) -> None:
+        """Agreement gate must remain active when the latency circuit auto-resets.
+
+        Both gates are independent: a latency-circuit recovery (cooldown expiry)
+        must NOT implicitly clear the agreement gate.  This verifies the note in
+        is_enabled() about gate independence.
+
+        Scenario:
+          1. Trip both the latency circuit and the agreement gate.
+          2. Fast-forward the circuit's open-at timestamp past the cooldown.
+          3. Call is_enabled() — the latency circuit should auto-reset.
+          4. Guard must still return False because the agreement gate is still active.
+        """
+        guard = LatencyGuard.get_instance()
+
+        # Trip the latency circuit breaker.
+        for _ in range(MIN_SAMPLES_FOR_TRIP):
+            guard.record_latency(P95_SLO_MS + 1.0)
+        assert not guard.is_enabled(), "Latency circuit should be open"
+
+        # Trip the agreement gate.
+        for _ in range(MIN_AGREEMENT_OBSERVATIONS):
+            guard.record_agreement(agreed=False)
+        assert not guard.is_enabled(), "Both gates should be active"
+
+        # Fast-forward the circuit open-at timestamp so the cooldown has elapsed.
+        with guard._lock:
+            guard._circuit_open_at = time.monotonic() - (COOLDOWN_SECONDS + 1.0)
+
+        # After this call the latency circuit auto-resets, but the agreement gate
+        # must persist — the guard should still be disabled.
+        result = guard.is_enabled()
+        assert result is False, (
+            "Guard must remain disabled: latency circuit recovered but "
+            "agreement gate is still active"
+        )
+
+        # Confirm the latency circuit did actually reset (samples cleared).
+        status = guard.get_status()
+        assert not status.circuit_open, "Latency circuit should have auto-reset"
+        assert status.agreement_disabled, "Agreement gate must still be active"
+        assert status.sample_count == 0, "Samples should have been cleared on reset"
+
 
 # ---------------------------------------------------------------------------
 # get_status() snapshot
@@ -367,6 +424,8 @@ class TestCombinedGates:
 class TestGetStatus:
     @pytest.fixture(autouse=True)
     def fresh(self) -> LatencyGuard:
+        # Used for its side-effect of resetting singleton state before each test.
+        # The return value is intentionally unused by individual tests.
         return _make_fresh_guard()
 
     @pytest.mark.unit
@@ -429,6 +488,8 @@ class TestGetStatus:
 class TestReset:
     @pytest.fixture(autouse=True)
     def fresh(self) -> LatencyGuard:
+        # Used for its side-effect of resetting singleton state before each test.
+        # The return value is intentionally unused by individual tests.
         return _make_fresh_guard()
 
     @pytest.mark.unit
@@ -475,6 +536,8 @@ class TestReset:
 class TestThreadSafety:
     @pytest.fixture(autouse=True)
     def fresh(self) -> LatencyGuard:
+        # Used for its side-effect of resetting singleton state before each test.
+        # The return value is intentionally unused by individual tests.
         return _make_fresh_guard()
 
     @pytest.mark.unit

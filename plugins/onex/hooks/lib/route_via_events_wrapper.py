@@ -48,7 +48,7 @@ import time
 from collections.abc import Callable
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 # Add script directory to path for sibling imports
 _SCRIPT_DIR = Path(__file__).parent
@@ -153,12 +153,27 @@ if TYPE_CHECKING:
 # Canonical routing path values for metrics (from OMN-1893)
 VALID_ROUTING_PATHS = frozenset({"event", "local", "hybrid"})
 
+
+class _LatencyGuardProtocol(Protocol):
+    """Structural interface for the LatencyGuard singleton.
+
+    Describes only the methods actually called on the guard throughout this
+    module.  The conditional import of LatencyGuard uses this Protocol so
+    that mypy can type-check all call sites without requiring the concrete
+    class to be importable at type-check time.
+    """
+
+    @classmethod
+    def get_instance(cls) -> "_LatencyGuardProtocol": ...
+    def is_enabled(self) -> bool: ...
+    def record_latency(self, latency_ms: float) -> None: ...
+    def record_agreement(self, *, agreed: bool) -> None: ...
+
+
 # LatencyGuard import (for USE_LLM_ROUTING latency SLO enforcement).
 # Graceful fallback: if unavailable, LLM routing proceeds without the guard.
 _latency_guard_available = False
-# Any is intentional: the class is imported conditionally at runtime and
-# mypy cannot resolve it.  Callers use duck-typing (get_instance / reset).
-_LatencyGuardClass: Any = None
+_LatencyGuardClass: type[_LatencyGuardProtocol] | None = None
 try:
     if __package__:
         from .latency_guard import LatencyGuard as _LatencyGuardClass  # noqa: I001
@@ -381,7 +396,7 @@ _LLM_ROUTING_TIMEOUT_S = 0.1
 _LLM_HEALTH_CHECK_TIMEOUT_S = 0.08
 
 
-def _get_latency_guard() -> Any | None:
+def _get_latency_guard() -> _LatencyGuardProtocol | None:
     """Return the LatencyGuard singleton, or None if unavailable.
 
     Returns:
@@ -519,7 +534,12 @@ def _route_via_llm(
     """
     from uuid import UUID, uuid4
 
-    start = time.time()
+    # `start` is set later, immediately before the actual LLM HTTP call (step 4),
+    # so that the LatencyGuard SLO measures only the LLM invocation latency and
+    # not the pre-call overhead (URL resolution, health check, registry building).
+    # Including the health check (up to 80 ms) would cause false circuit trips
+    # even when the LLM itself responds within the 80 ms P95 SLO.
+    start: float | None = None
 
     # 1. Resolve LLM URL
     llm_url = _get_llm_routing_url()
@@ -602,6 +622,9 @@ def _route_via_llm(
         )
         return None
 
+    # Start timing immediately before the HTTP/LLM invocation so the LatencyGuard
+    # SLO only measures the actual LLM call latency (not health check or setup).
+    start = time.time()
     try:
         result = _run_async(
             llm_handler.compute_routing(request, correlation_id=cid),
@@ -621,6 +644,7 @@ def _route_via_llm(
         return None
 
     # 5. Shape result into canonical wrapper dict
+    # latency_ms measures only the LLM HTTP call (start set immediately above).
     latency_ms = int((time.time() - start) * 1000)
 
     # Record latency with the guard so it can enforce the P95 SLO.
@@ -1091,12 +1115,20 @@ def route_via_events(
         if llm_result is not None:
             # Record agreement: compare LLM selection against fuzzy matching.
             # Run fuzzy in shadow (result discarded) to track the agreement rate
-            # that feeds the LatencyGuard auto-disable gate.  Non-blocking on
-            # any failure — agreement tracking must never break routing.
-            _record_llm_fuzzy_agreement(
-                llm_selected=llm_result.get("selected_agent", ""),
-                prompt=prompt,
+            # that feeds the LatencyGuard auto-disable gate.
+            #
+            # Backgrounded in a daemon thread so that fuzzy routing (CPU-bound)
+            # does NOT add synchronous latency to the UserPromptSubmit hot path.
+            # Hooks must never block the UI (CLAUDE.md performance budget).
+            # The thread is a daemon so it does not prevent process exit.
+            _llm_selected = llm_result.get("selected_agent", "")
+            _agreement_thread = threading.Thread(
+                target=_record_llm_fuzzy_agreement,
+                args=(_llm_selected, prompt),
+                daemon=True,
+                name="llm-fuzzy-agreement",
             )
+            _agreement_thread.start()
             _emit_routing_decision(
                 result=llm_result, prompt=prompt, correlation_id=correlation_id
             )

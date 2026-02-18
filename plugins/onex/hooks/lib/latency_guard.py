@@ -36,6 +36,7 @@ Usage::
 from __future__ import annotations
 
 import logging
+import math
 import threading
 import time
 from collections import deque
@@ -141,6 +142,12 @@ class LatencyGuard:
 
     # Singleton — one guard per process.
     _instance: LatencyGuard | None = None
+    # NOTE: _instance_lock is intentionally created at class definition time (import
+    # time), which is a minor exception to the "No side-effects on import" principle
+    # stated in the module docstring.  The lock *must* exist before any instance is
+    # created — lazy initialisation would itself require a lock to be safe, creating
+    # a chicken-and-egg problem.  A threading.Lock() has no external I/O side-effects
+    # and is safe to allocate at import time.
     _instance_lock: threading.Lock = threading.Lock()
 
     @classmethod
@@ -223,6 +230,14 @@ class LatencyGuard:
         - The latency circuit breaker is open (P95 breached within cooldown), OR
         - The agreement gate is active (agreement rate below threshold).
 
+        NOTE: The two disable conditions are fully independent.  When the latency
+        circuit auto-resets after its cooldown expires (see below), the agreement
+        gate's ``_agreement_disabled`` flag is intentionally NOT cleared.  A latency
+        recovery does not imply that agreement rate has recovered — those metrics
+        measure different things and reset on different timescales.  The agreement
+        gate persists until ``_update_agreement_gate()`` clears it when the rate
+        rises back above AGREEMENT_RATE_THRESHOLD.
+
         Returns:
             True → caller may proceed with LLM routing.
             False → caller should fall through to fuzzy matching.
@@ -241,6 +256,8 @@ class LatencyGuard:
                     # Clear samples so we start fresh — prevents immediately
                     # re-tripping on the stale P95.
                     self._latency_samples.clear()
+                    # _agreement_disabled is NOT reset here: agreement-gate state
+                    # is independent and persists through latency circuit resets.
 
             if self._circuit_open_at is not None:
                 return False
@@ -276,8 +293,16 @@ class LatencyGuard:
                 self._prune_agreement_window(now_wall)
                 agreement_rate = self._compute_agreement_rate()
 
+                # Derive enabled from state already captured in this snapshot.
+                # Do NOT call self.is_enabled() here: it performs the cooldown
+                # auto-reset (clears samples, resets _circuit_open_at) as a
+                # side-effect, which would mutate state beyond what this read
+                # is supposed to do and would produce an inconsistent snapshot
+                # where circuit_open=True but enabled=True for the same instant.
+                enabled = (not circuit_open) and (not self._agreement_disabled)
+
                 return LatencyGuardStatus(
-                    enabled=self.is_enabled(),
+                    enabled=enabled,
                     p95_ms=p95,
                     sample_count=len(self._latency_samples),
                     circuit_open=circuit_open,
@@ -302,7 +327,16 @@ class LatencyGuard:
             )
 
     def reset(self) -> None:
-        """Fully reset all state.  Intended for testing and manual recovery."""
+        """Fully reset all state.  Intended for testing and manual recovery.
+
+        WARNING: Do NOT call this method in production code paths.  Calling
+        ``reset()`` discards all accumulated circuit-breaker state — latency
+        samples, the open-circuit timestamp, and agreement-rate observations —
+        which can allow a previously-tripped circuit to re-enable LLM routing
+        immediately, bypassing the SLO and agreement-rate protections entirely.
+        This method exists only for unit tests and one-off manual recovery
+        operations performed by an operator who fully understands the implications.
+        """
         with self._lock:
             self._latency_samples.clear()
             self._circuit_open_at = None
@@ -322,8 +356,13 @@ class LatencyGuard:
         """
         samples = sorted(self._latency_samples)
         n = len(samples)
-        # Index of the 95th percentile using nearest-rank method.
-        idx = max(0, int(0.95 * n) - 1)
+        # Index of the 95th percentile using the nearest-rank method.
+        # math.ceil(0.95 * n) gives the 1-based rank of the P95 value;
+        # subtract 1 for the 0-based list index.
+        # Example: n=10 → ceil(9.5)=10 → idx=9 (correct P95, the max).
+        # The previous int(0.95*n)-1 formula gave idx=8 for n=10, which
+        # is the 90th percentile — one slot too low.
+        idx = math.ceil(0.95 * n) - 1
         return samples[idx]
 
     def _maybe_trip_circuit(self) -> None:
