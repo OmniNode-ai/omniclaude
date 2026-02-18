@@ -23,6 +23,7 @@ regression coverage for the schema and the markdown parsing logic.
 
 from __future__ import annotations
 
+import json
 import re
 from typing import Any, Literal
 
@@ -407,7 +408,7 @@ class TestEnrichmentResultSchemaSnapshot:
         """ContractEnrichmentResult is immutable (frozen=True)."""
         result = _make_code_analysis_result()
         with pytest.raises(ValidationError):
-            result.token_count = 999  # pyright: ignore[reportAttributeAccessIssue]
+            result.token_count = 999  # pyright: ignore[reportAttributeAccessIssue]  # intentional: testing that mutation raises ValidationError on frozen model
 
     def test_extra_fields_are_forbidden(self) -> None:
         """Extra fields beyond the schema raise ValidationError (extra='forbid')."""
@@ -438,8 +439,6 @@ class TestEnrichmentResultSchemaSnapshot:
 
     def test_result_roundtrips_through_json(self) -> None:
         """ContractEnrichmentResult can be serialized and deserialized via JSON."""
-        import json
-
         original = _make_code_analysis_result()
         serialized = original.model_dump_json()
         deserialized = json.loads(serialized)
@@ -866,14 +865,38 @@ class TestCodeAnalysisBadOutputRecovery:
         assert len(missing) == 3
         assert "Summary" not in missing
 
-    def test_truncated_diff_marker_appears_in_output(self) -> None:
-        """Truncated diff outputs contain the '[diff truncated]' marker in context."""
-        # The adapter inserts this marker when the diff exceeds _MAX_DIFF_CHARS
+    def test_truncated_diff_marker_preserved_in_summary_markdown(self) -> None:
+        """summary_markdown containing the truncation marker is preserved as-is.
+
+        The adapter inserts '... [diff truncated]' into the user message sent to
+        the LLM when the diff exceeds _MAX_DIFF_CHARS.  The model may echo the
+        marker back in its response.  This test verifies that a result whose
+        summary_markdown contains the marker is a valid ContractEnrichmentResult
+        and that the marker string is faithfully preserved and detectable.
+        """
         truncation_marker = "... [diff truncated]"
-        # The marker would appear in the user message to the LLM, not in the
-        # summary_markdown output.  We verify the constant is correct.
-        assert truncation_marker == "... [diff truncated]"
-        assert _MAX_DIFF_CHARS == 32_000
+        summary = (
+            "## Affected Functions / Methods\n\n"
+            "- `process()` modified\n\n"
+            "## Dependency Changes\n\nNone.\n\n"
+            "## Potential Issues\n\n"
+            f"Large diff was provided ({truncation_marker}); analysis may be incomplete.\n\n"
+            "## Summary\n\nDiff exceeded size limit and was truncated before analysis.\n"
+        )
+        result = _make_code_analysis_result(summary_markdown=summary)
+
+        # The result is a valid contract.
+        assert result.enrichment_type == "code_analysis"
+        assert result.relevance_score == pytest.approx(_CODE_ANALYSIS_RELEVANCE_SCORE)
+
+        # The marker is preserved verbatim in summary_markdown.
+        assert truncation_marker in result.summary_markdown
+
+        # The required headings are still present (model returned well-formed output).
+        for heading in _CODE_ANALYSIS_REQUIRED_HEADINGS:
+            assert _has_heading(result.summary_markdown, heading), (
+                f"Missing required heading: {heading!r}"
+            )
 
     def test_single_word_response_is_valid_contract(self) -> None:
         """A degenerate single-word LLM response still satisfies the contract."""
