@@ -95,15 +95,14 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# ONEX routing node imports (for USE_ONEX_ROUTING_NODES and USE_LLM_ROUTING feature flags)
+# ONEX routing node imports (for USE_ONEX_ROUTING_NODES feature flag).
+# Split into two independent try blocks so that a failure in HandlerRoutingLlm
+# does not mask _onex_nodes_available (or vice-versa).  Each flag reflects only
+# the availability of the symbols it actually guards.
 _onex_nodes_available = False
-_llm_handler_available = False
 try:
     from omniclaude.nodes.node_agent_routing_compute.handler_routing_default import (
         HandlerRoutingDefault,
-    )
-    from omniclaude.nodes.node_agent_routing_compute.handler_routing_llm import (
-        HandlerRoutingLlm,
     )
     from omniclaude.nodes.node_agent_routing_compute.models import (
         ModelAgentDefinition,
@@ -120,11 +119,21 @@ try:
     )
 
     _onex_nodes_available = True
+except ImportError:
+    logger.debug("ONEX routing nodes not available, USE_ONEX_ROUTING_NODES ignored")
+
+# LLM handler import (for USE_LLM_ROUTING feature flag).
+# Kept separate from the ONEX nodes block so that HandlerRoutingLlm import
+# failures do not affect _onex_nodes_available.
+_llm_handler_available = False
+try:
+    from omniclaude.nodes.node_agent_routing_compute.handler_routing_llm import (
+        HandlerRoutingLlm,
+    )
+
     _llm_handler_available = True
 except ImportError:
-    logger.debug(
-        "ONEX routing nodes not available, USE_ONEX_ROUTING_NODES and USE_LLM_ROUTING ignored"
-    )
+    logger.debug("HandlerRoutingLlm not available, USE_LLM_ROUTING ignored")
 
 # LLM endpoint registry import (for USE_LLM_ROUTING feature flag)
 _llm_registry_available = False
@@ -335,22 +344,16 @@ _STATS_CACHE_TTL_SECONDS = 300  # 5 min; stale stats are acceptable for routing 
 _stats_lock = threading.Lock()
 
 
+# Truthy value set shared by feature flag helpers below.
+_TRUTHY = frozenset(("true", "1", "yes", "on", "y", "t"))
+
+
 def _use_onex_routing_nodes() -> bool:
     """Check if ONEX routing nodes feature flag is enabled."""
     if not _onex_nodes_available:
         return False
-    return os.environ.get("USE_ONEX_ROUTING_NODES", "false").lower() in (
-        "true",
-        "1",
-        "yes",
-        "on",
-        "y",
-        "t",
-    )
+    return os.environ.get("USE_ONEX_ROUTING_NODES", "false").lower() in _TRUTHY
 
-
-# Truthy value set shared by feature flag helpers below.
-_TRUTHY = frozenset(("true", "1", "yes", "on", "y", "t"))
 
 # Timeout for the LLM health check and routing call (100 ms per ticket spec).
 _LLM_ROUTING_TIMEOUT_S = 0.1
@@ -416,6 +419,10 @@ async def _check_llm_health(llm_url: str, timeout_s: float) -> bool:
         True if the endpoint appears healthy, False otherwise.
     """
     try:
+        # httpx is treated as an optional dependency: it is not listed in
+        # pyproject.toml because the LLM routing path is feature-flagged.
+        # ImportError is intentionally caught here as a health check failure
+        # so that the hook degrades gracefully when httpx is not installed.
         import httpx
 
         async with httpx.AsyncClient(timeout=timeout_s) as client:
@@ -442,6 +449,15 @@ def _route_via_llm(
     On any failure (unhealthy endpoint, timeout, exception) returns None so
     the caller falls through to fuzzy matching. "LLM enhances, never blocks."
 
+    Latency budget note:
+        Each of the two async calls (health check and LLM routing) is guarded
+        by _LLM_ROUTING_TIMEOUT_S independently.  In the worst case both calls
+        time out, producing a combined latency of ~200 ms (2 x 100 ms) before
+        this function returns None.  This is documented in .env.example and is
+        intentional — the health check and the routing call are sequential, not
+        parallelised, so callers should budget for ~200 ms worst-case when LLM
+        routing is enabled.
+
     Args:
         prompt: User prompt to route.
         correlation_id: Correlation ID for tracing.
@@ -458,7 +474,7 @@ def _route_via_llm(
     if llm_url is None:
         return None
 
-    # 2. Health check (100 ms budget)
+    # 2. Health check (100 ms budget per call; combined worst-case with step 4 is ~200 ms)
     try:
         healthy = _run_async(
             _check_llm_health(llm_url, _LLM_ROUTING_TIMEOUT_S),
@@ -486,7 +502,9 @@ def _route_via_llm(
     except (ValueError, AttributeError):
         cid = uuid4()
 
-    # 4. Call HandlerRoutingLlm within 100 ms
+    # 4. Call HandlerRoutingLlm within 100 ms (independent budget from step 2; see docstring)
+    # Handler construction is separated from the async call so that
+    # instantiation failures produce a distinct log message.
     try:
         llm_handler = HandlerRoutingLlm(
             llm_url=llm_url,
@@ -498,7 +516,15 @@ def _route_via_llm(
             agent_registry=agent_defs,
             confidence_threshold=CONFIDENCE_THRESHOLD,
         )
+    except Exception as exc:
+        logger.debug(
+            "LLM routing handler instantiation failed: %s (correlation_id=%s)",
+            exc,
+            correlation_id,
+        )
+        return None
 
+    try:
         result = _run_async(
             llm_handler.compute_routing(request, correlation_id=cid),
             timeout=_LLM_ROUTING_TIMEOUT_S,
@@ -547,7 +573,12 @@ def _route_via_llm(
             }
             for c in result.candidates
         ],
-        "reasoning": result.fallback_reason or result.confidence_breakdown.explanation,
+        "reasoning": result.fallback_reason
+        or (
+            result.confidence_breakdown.explanation
+            if result.confidence_breakdown is not None
+            else ""
+        ),
         "routing_method": RoutingMethod.LOCAL.value,
         "routing_policy": result.routing_policy,
         "routing_path": onex_routing_path,
@@ -806,7 +837,11 @@ def _route_via_onex_nodes(
                 for c in result.candidates
             ],
             "reasoning": result.fallback_reason
-            or result.confidence_breakdown.explanation,
+            or (
+                result.confidence_breakdown.explanation
+                if result.confidence_breakdown is not None
+                else ""
+            ),
             "routing_method": RoutingMethod.LOCAL.value,
             "routing_policy": result.routing_policy,
             "routing_path": onex_routing_path,

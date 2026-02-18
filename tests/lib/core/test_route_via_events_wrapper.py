@@ -966,6 +966,68 @@ class TestRouteViaLlmFallback:
 
         assert result is None
 
+    def test_confidence_breakdown_none_does_not_raise(self):
+        """Safe access on confidence_breakdown=None must not raise AttributeError.
+
+        This exercises the guard added for the case where the LLM result has
+        no confidence breakdown object (e.g. the model returned a minimal
+        response). The reasoning field should fall back to an empty string
+        rather than raising AttributeError on .explanation.
+        """
+        mock_router = MagicMock()
+        mock_router.registry = {
+            "agents": {
+                "agent-debugger": {
+                    "description": "Debug agent",
+                    "domain_context": "debugging",
+                },
+            }
+        }
+
+        # Minimal LLM result with confidence_breakdown explicitly set to None
+        mock_result = MagicMock()
+        mock_result.selected_agent = "agent-debugger"
+        mock_result.confidence = 0.75
+        mock_result.candidates = []
+        mock_result.fallback_reason = ""
+        mock_result.confidence_breakdown = None
+        mock_result.routing_path = "local"
+        mock_result.routing_policy = "trigger_match"
+
+        call_count = [0]
+
+        def _run_async_side_effect(coro: object, timeout: float = 5.0) -> object:
+            # First call is the health check (returns True), second returns the
+            # LLM result object with confidence_breakdown=None.
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return True
+            return mock_result
+
+        with (
+            patch(
+                "route_via_events_wrapper._get_llm_routing_url",
+                return_value="http://localhost:8200",
+            ),
+            patch(
+                "route_via_events_wrapper._run_async",
+                side_effect=_run_async_side_effect,
+            ),
+            patch("route_via_events_wrapper._get_router", return_value=mock_router),
+            patch(
+                "route_via_events_wrapper._build_agent_definitions",
+                return_value=(MagicMock(),),
+            ),
+            patch("route_via_events_wrapper.HandlerRoutingLlm"),
+            patch("route_via_events_wrapper.ModelRoutingRequest"),
+        ):
+            result = _route_via_llm("debug this", "corr-123")
+
+        assert result is not None
+        assert result["selected_agent"] == "agent-debugger"
+        # reasoning must be an empty string, not an AttributeError
+        assert result["reasoning"] == ""
+
 
 class TestRouteViaEventsLlmIntegration:
     """Integration tests for LLM routing wired into route_via_events()."""
