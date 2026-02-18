@@ -6,7 +6,7 @@ Used to guide manifest section selection and relevance filtering.
 """
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 
@@ -33,6 +33,38 @@ class TaskContext:
     mentioned_services: list[str]  # Kafka, PostgreSQL, Qdrant, etc.
     mentioned_node_types: list[str]  # Effect, Compute, Reducer, Orchestrator
     confidence: float
+
+
+@dataclass
+class ModelDelegationScore:
+    """Result of delegation-suitability analysis for a prompt.
+
+    Conservative delegation: only delegates when confidence > 0.9 AND
+    the task type is in the allow-list of text-only, lower-risk tasks.
+    Vision and tool-call tasks are always excluded.
+    """
+
+    delegatable: bool
+    """Whether this task is suitable for delegation to a smaller model."""
+
+    delegate_to_model: str
+    """Name/identifier of the suggested model to delegate to.
+
+    Empty string when ``delegatable`` is False.
+    """
+
+    confidence: float
+    """Confidence score (0.0-1.0) that delegation is appropriate."""
+
+    estimated_savings_usd: float
+    """Estimated cost savings in USD versus routing to the primary model.
+
+    Computed as (primary_cost - delegate_cost) for an average prompt of
+    the detected intent type.  Zero when ``delegatable`` is False.
+    """
+
+    reasons: list[str] = field(default_factory=list)
+    """Human-readable explanations for the delegation decision."""
 
 
 class TaskClassifier:
@@ -190,7 +222,20 @@ class TaskClassifier:
     # substring false positives (e.g., "api" matching "capital",
     # "rest" matching "forest", "node" matching "anode")
     _SHORT_KEYWORDS: frozenset[str] = frozenset(
-        {"new", "add", "fix", "bug", "sql", "how", "api", "llm", "rest", "call", "node", "data"}
+        {
+            "new",
+            "add",
+            "fix",
+            "bug",
+            "sql",
+            "how",
+            "api",
+            "llm",
+            "rest",
+            "call",
+            "node",
+            "data",
+        }
     )
 
     # Domain-specific terms for keyword extraction.  Kept as a class attribute
@@ -232,6 +277,100 @@ class TaskClassifier:
         "query",
         "command",
     ]
+
+    # ---------------------------------------------------------------------------
+    # Delegation configuration
+    # ---------------------------------------------------------------------------
+
+    #: Task intents that are candidates for delegation to a smaller model.
+    #: Only text-only tasks with well-understood, bounded scope are allowed.
+    #: Vision and tool-call tasks must NEVER appear here.
+    DELEGATABLE_INTENTS: frozenset[TaskIntent] = frozenset(
+        {
+            TaskIntent.DOCUMENT,  # documentation generation
+            TaskIntent.TEST,  # test boilerplate generation
+            TaskIntent.RESEARCH,  # simple code review / research
+        }
+    )
+
+    #: Minimum confidence required before delegation is approved.
+    #: Conservative: must be certain the task is genuinely text-only.
+    DELEGATION_CONFIDENCE_THRESHOLD: float = 0.9
+
+    #: Vision-related keywords that indicate the prompt involves image/vision
+    #: content.  Tasks containing these signals always route to the primary model.
+    #: Note: Ambiguous common words ("see", "show me") are excluded to avoid
+    #: false positives on legitimate text-only prompts.
+    _VISION_SIGNALS: frozenset[str] = frozenset(
+        {
+            "image",
+            "screenshot",
+            "photo",
+            "diagram",
+            "picture",
+            "figure",
+            "chart",
+            "graph",
+            "visual",
+            "vision",
+            "look at",
+            "ocr",
+            "pixel",
+        }
+    )
+
+    #: Tool-call / agentic keywords that indicate the task requires tool use.
+    #: Such tasks always route to the primary model (never delegated).
+    #: Note: "search" is excluded because it is a core RESEARCH keyword and its
+    #: presence here would make the RESEARCH delegation allow-list entry unreachable.
+    _TOOL_CALL_SIGNALS: frozenset[str] = frozenset(
+        {
+            "run",
+            "execute",
+            "bash",
+            "shell",
+            "command",
+            "terminal",
+            "deploy",
+            "docker",
+            "kubectl",
+            "git",
+            "commit",
+            "push",
+            "pull",
+            "curl",
+            "wget",
+            "file",
+            "read file",
+            "write file",
+            "create file",
+            "delete file",
+            "tool",
+            "browse",
+        }
+    )
+
+    #: Estimated per-1k-token cost (USD) for the primary model (Claude).
+    #: Used to compute savings estimate.  Approximated from public pricing.
+    _PRIMARY_MODEL_COST_PER_1K: float = 0.015
+
+    #: Estimated per-1k-token cost (USD) for the delegated model.
+    #: Approximated for a lightweight open-weight model serving locally.
+    _DELEGATE_MODEL_COST_PER_1K: float = 0.001
+
+    #: Average estimated token count per intent type, used for savings calculation.
+    _INTENT_AVG_TOKENS: dict[TaskIntent, int] = {
+        TaskIntent.DOCUMENT: 800,
+        TaskIntent.TEST: 600,
+        TaskIntent.RESEARCH: 400,
+    }
+
+    #: Name/identifier of the default delegate model.
+    _DELEGATE_MODEL_NAME: str = "qwen2.5-14b"
+
+    # ---------------------------------------------------------------------------
+    # Internal helpers
+    # ---------------------------------------------------------------------------
 
     def _keyword_in_text(self, keyword: str, text: str) -> bool:
         """Check if keyword appears in text, using word boundaries for short keywords."""
@@ -340,11 +479,7 @@ class TaskClassifier:
         }
         words = re.findall(r"\w+", prompt_lower)
         significant_words = [
-            w
-            for w in words
-            if len(w) >= 3
-            and w not in stopwords
-            and w.isalpha()
+            w for w in words if len(w) >= 3 and w not in stopwords and w.isalpha()
         ]
         keywords.extend(significant_words[:10])  # Limit to 10 most significant
 
@@ -392,3 +527,142 @@ class TaskClassifier:
         matches = re.findall(pattern, prompt)
 
         return sorted(set(matches))  # Deterministic order
+
+    # ---------------------------------------------------------------------------
+    # Delegation scoring
+    # ---------------------------------------------------------------------------
+
+    def _has_vision_signals(self, prompt_lower: str) -> bool:
+        """Return True if the prompt contains any vision/image signals."""
+        for signal in self._VISION_SIGNALS:
+            if signal in prompt_lower:
+                return True
+        return False
+
+    def _has_tool_call_signals(self, prompt_lower: str) -> bool:
+        """Return True if the prompt contains any tool-call/agentic signals."""
+        for signal in self._TOOL_CALL_SIGNALS:
+            if signal in prompt_lower:
+                return True
+        return False
+
+    def _compute_savings(self, intent: TaskIntent) -> float:
+        """Estimate USD savings for delegating a task of the given intent type.
+
+        The formula uses per-1k-token pricing and an average token estimate
+        per intent category.  Returns 0.0 for intents not in the allow-list.
+        """
+        avg_tokens = self._INTENT_AVG_TOKENS.get(intent, 0)
+        if avg_tokens == 0:
+            return 0.0
+        cost_delta = self._PRIMARY_MODEL_COST_PER_1K - self._DELEGATE_MODEL_COST_PER_1K
+        return round((avg_tokens / 1000.0) * cost_delta, 6)
+
+    def is_delegatable(
+        self, prompt: str, intent: TaskIntent | None = None
+    ) -> ModelDelegationScore:
+        """Determine whether a task is suitable for delegation to a smaller model.
+
+        Delegation is approved **only** when ALL of the following conditions hold:
+
+        1. The prompt contains no vision/image signals.
+        2. The prompt contains no tool-call/agentic signals.
+        3. The detected (or caller-supplied) intent is in ``DELEGATABLE_INTENTS``.
+        4. Classification confidence exceeds ``DELEGATION_CONFIDENCE_THRESHOLD``
+           (0.9).
+
+        This is deliberately conservative: false negatives (declining to
+        delegate) are preferred over false positives (delegating tasks that
+        require Claude's full capabilities).
+
+        Args:
+            prompt: The raw user prompt string.
+            intent: Optional pre-computed intent.  When ``None``, the prompt is
+                classified internally.
+
+        Returns:
+            :class:`ModelDelegationScore` describing whether and how to delegate.
+        """
+        prompt_lower = prompt.lower()
+        reasons: list[str] = []
+
+        # --- Gate 1: Vision tasks always stay with the primary model ----------
+        if self._has_vision_signals(prompt_lower):
+            return ModelDelegationScore(
+                delegatable=False,
+                delegate_to_model="",
+                confidence=0.0,
+                estimated_savings_usd=0.0,
+                reasons=[
+                    "prompt contains vision/image signals; must use primary model"
+                ],
+            )
+
+        # --- Gate 2: Tool-call / agentic tasks stay with primary model --------
+        if self._has_tool_call_signals(prompt_lower):
+            return ModelDelegationScore(
+                delegatable=False,
+                delegate_to_model="",
+                confidence=0.0,
+                estimated_savings_usd=0.0,
+                reasons=[
+                    "prompt contains tool-call/agentic signals; must use primary model"
+                ],
+            )
+
+        # --- Classify prompt if intent was not supplied -----------------------
+        if intent is None:
+            task_context = self.classify(prompt)
+            resolved_intent = task_context.primary_intent
+            classification_confidence = task_context.confidence
+        else:
+            resolved_intent = intent
+            # Re-classify to get a confidence score for the supplied intent
+            task_context = self.classify(prompt)
+            classification_confidence = task_context.confidence
+
+        # --- Gate 3: Intent must be in the delegation allow-list --------------
+        if resolved_intent not in self.DELEGATABLE_INTENTS:
+            reasons.append(
+                f"intent '{resolved_intent.value}' is not in the delegation allow-list"
+            )
+            return ModelDelegationScore(
+                delegatable=False,
+                delegate_to_model="",
+                confidence=classification_confidence,
+                estimated_savings_usd=0.0,
+                reasons=reasons,
+            )
+
+        reasons.append(
+            f"intent '{resolved_intent.value}' is in the delegation allow-list"
+        )
+
+        # --- Gate 4: Confidence must exceed threshold -------------------------
+        if classification_confidence <= self.DELEGATION_CONFIDENCE_THRESHOLD:
+            reasons.append(
+                f"classification confidence {classification_confidence:.3f} does not "
+                f"exceed threshold {self.DELEGATION_CONFIDENCE_THRESHOLD}"
+            )
+            return ModelDelegationScore(
+                delegatable=False,
+                delegate_to_model="",
+                confidence=classification_confidence,
+                estimated_savings_usd=0.0,
+                reasons=reasons,
+            )
+
+        # --- All gates passed: delegation approved ----------------------------
+        reasons.append(
+            f"confidence {classification_confidence:.3f} exceeds threshold "
+            f"{self.DELEGATION_CONFIDENCE_THRESHOLD}"
+        )
+        savings = self._compute_savings(resolved_intent)
+
+        return ModelDelegationScore(
+            delegatable=True,
+            delegate_to_model=self._DELEGATE_MODEL_NAME,
+            confidence=classification_confidence,
+            estimated_savings_usd=savings,
+            reasons=reasons,
+        )
