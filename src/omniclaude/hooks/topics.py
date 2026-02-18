@@ -96,6 +96,12 @@ class TopicBase(StrEnum):
     ROUTING_DECISION = "onex.evt.omniclaude.routing-decision.v1"
 
     # ==========================================================================
+    # LLM routing observability topics (OMN-2273)
+    # ==========================================================================
+    LLM_ROUTING_DECISION = "onex.evt.omniclaude.llm-routing-decision.v1"
+    LLM_ROUTING_FALLBACK = "onex.evt.omniclaude.llm-routing-fallback.v1"
+
+    # ==========================================================================
     # Notification topics (OMN-1831)
     # ==========================================================================
     NOTIFICATION_BLOCKED = "onex.evt.omniclaude.notification-blocked.v1"

@@ -126,11 +126,15 @@ except ImportError:
 # Kept separate from the ONEX nodes block so that HandlerRoutingLlm import
 # failures do not affect _onex_nodes_available.
 _llm_handler_available = False
+# Routing prompt version sentinel — overwritten on successful import below.
+_llm_routing_prompt_version: str = "unknown"
 try:
     from omniclaude.nodes.node_agent_routing_compute.handler_routing_llm import (
+        _ROUTING_PROMPT_VERSION,  # noqa: PLC2701
         HandlerRoutingLlm,
     )
 
+    _llm_routing_prompt_version = _ROUTING_PROMPT_VERSION
     _llm_handler_available = True
 except ImportError:
     logger.debug("HandlerRoutingLlm not available, USE_LLM_ROUTING ignored")
@@ -371,6 +375,97 @@ def _emit_routing_decision(
         logger.debug("Failed to emit routing decision: %s", e)
 
 
+def _emit_llm_routing_decision(
+    result: dict[str, Any],
+    correlation_id: str,
+    session_id: str | None,
+    *,
+    fuzzy_top_candidate: str | None,
+    llm_selected_candidate: str | None,
+    agreement: bool,
+    routing_prompt_version: str,
+    model_used: str,
+) -> None:
+    """Emit LLM routing decision event (OMN-2273).
+
+    Emitted after a successful LLM routing decision.  Contains the full
+    decision metadata including the determinism-audit fields required to
+    compare LLM vs fuzzy matching agreement.
+
+    Non-blocking: logs at debug level on failure but never raises.
+
+    Args:
+        result: Routing result dict from ``_route_via_llm``.
+        correlation_id: Correlation ID for distributed tracing.
+        session_id: Session identifier for Kafka partition key.
+        fuzzy_top_candidate: Top agent from fuzzy matching (audit).
+        llm_selected_candidate: Raw agent name the LLM returned.
+        agreement: True when LLM and fuzzy top candidates agree.
+        routing_prompt_version: Prompt template version string.
+        model_used: Model identifier used for routing.
+    """
+    if _emit_event_fn is None:
+        logger.debug("emit_event not available, skipping llm routing decision emission")
+        return
+
+    try:
+        payload: dict[str, object] = {
+            "session_id": session_id or "unknown",
+            "correlation_id": correlation_id,
+            "selected_agent": result.get("selected_agent", DEFAULT_AGENT),
+            "llm_confidence": result.get("confidence", 0.0),
+            "llm_latency_ms": result.get("latency_ms", 0),
+            "fallback_used": bool(result.get("fallback_used", False)),
+            "model_used": model_used,
+            "fuzzy_top_candidate": fuzzy_top_candidate,
+            "llm_selected_candidate": llm_selected_candidate,
+            "agreement": agreement,
+            "routing_prompt_version": routing_prompt_version,
+        }
+        _emit_event_fn(event_type="llm.routing.decision", payload=payload)
+    except Exception as exc:
+        logger.debug("Failed to emit llm routing decision: %s", exc)
+
+
+def _emit_llm_routing_fallback(
+    correlation_id: str,
+    session_id: str | None,
+    fallback_reason: str,
+    llm_url: str | None,
+    routing_prompt_version: str,
+) -> None:
+    """Emit LLM routing fallback event (OMN-2273).
+
+    Emitted when ``_route_via_llm`` returns None, causing the pipeline
+    to fall through to fuzzy matching.  Provides observability into why
+    the LLM routing path was not used.
+
+    Non-blocking: logs at debug level on failure but never raises.
+
+    Args:
+        correlation_id: Correlation ID for distributed tracing.
+        session_id: Session identifier for Kafka partition key.
+        fallback_reason: Human-readable reason for the fallback.
+        llm_url: LLM endpoint URL that was attempted, if known.
+        routing_prompt_version: Prompt template version string.
+    """
+    if _emit_event_fn is None:
+        logger.debug("emit_event not available, skipping llm routing fallback emission")
+        return
+
+    try:
+        payload: dict[str, object] = {
+            "session_id": session_id or "unknown",
+            "correlation_id": correlation_id,
+            "fallback_reason": fallback_reason,
+            "llm_url": llm_url,
+            "routing_prompt_version": routing_prompt_version,
+        }
+        _emit_event_fn(event_type="llm.routing.fallback", payload=payload)
+    except Exception as exc:
+        logger.debug("Failed to emit llm routing fallback: %s", exc)
+
+
 # ONEX routing node singletons (USE_ONEX_ROUTING_NODES)
 _compute_handler: Any = None
 _emit_handler: Any = None
@@ -445,14 +540,14 @@ def _use_llm_routing() -> bool:
     return True
 
 
-def _get_llm_routing_url() -> str | None:
-    """Return the LLM URL to use for routing, or None if unconfigured.
+def _get_llm_routing_url() -> tuple[str, str] | None:
+    """Return the (url, model_name) pair to use for routing, or None.
 
     Prefers LlmEndpointPurpose.ROUTING; falls back to GENERAL (Qwen2.5-14B)
     since no dedicated routing model is currently deployed.
 
     Returns:
-        URL string (without trailing slash) or None.
+        ``(url, model_name)`` tuple (url without trailing slash) or None.
     """
     if not _llm_registry_available:
         return None
@@ -466,12 +561,16 @@ def _get_llm_routing_url() -> str | None:
             logger.debug("No LLM endpoint configured for routing")
             return None
         url = str(endpoint.url).rstrip("/")
+        model_name = (
+            endpoint.model_name if hasattr(endpoint, "model_name") else "unknown"
+        )
         logger.debug(
-            "Resolved LLM routing URL: purpose=%s url=%s",
+            "Resolved LLM routing URL: purpose=%s url=%s model=%s",
             endpoint.purpose if hasattr(endpoint, "purpose") else "unknown",
             url,
+            model_name,
         )
-        return url
+        return url, model_name
     except Exception as exc:
         logger.debug("Failed to load LLM endpoint registry: %s", exc)
         return None
@@ -547,10 +646,11 @@ def _route_via_llm(
     # even when the LLM itself responds within the 80 ms P95 SLO.
     start: float | None = None
 
-    # 1. Resolve LLM URL
-    llm_url = _get_llm_routing_url()
-    if llm_url is None:
+    # 1. Resolve LLM URL (now returns (url, model_name) tuple)
+    llm_endpoint = _get_llm_routing_url()
+    if llm_endpoint is None:
         return None
+    llm_url, llm_model_name = llm_endpoint
 
     # 2. Health check (100 ms budget per call; combined worst-case with step 4 is ~200 ms)
     # _LLM_HEALTH_CHECK_TIMEOUT_S (0.08 s) is passed to httpx so the HTTP
@@ -751,6 +851,17 @@ def _route_via_llm(
         "domain": agent_info.get("domain_context", "general"),
         "purpose": agent_info.get("description", agent_info.get("title", "")),
         "event_attempted": False,
+        # OMN-2273: observability fields for LLM routing decision event
+        "model_used": llm_model_name,
+        "llm_url": llm_url,
+        # llm_selected_candidate: raw agent name before fallback validation.
+        # ``result.fallback_reason is not None`` means the LLM selection was
+        # overridden by the fuzzy fallback, so the selected_agent is the
+        # highest-confidence trigger candidate, not what the LLM returned.
+        # We track the post-validation selected_agent here; the raw LLM text
+        # is not retained by HandlerRoutingLlm and is unavailable at this level.
+        "llm_selected_candidate": result.selected_agent,
+        "fallback_used": result.fallback_reason is not None,
     }
 
 
@@ -1194,7 +1305,31 @@ def route_via_events(
             _emit_routing_decision(
                 result=llm_result, prompt=prompt, correlation_id=correlation_id
             )
+            # OMN-2273: emit LLM-specific decision event with determinism audit fields.
+            # agreement is not yet known here (background thread), so we emit without
+            # it and rely on the LatencyGuard's record_agreement for tracking.
+            _emit_llm_routing_decision(
+                result=llm_result,
+                correlation_id=correlation_id,
+                session_id=session_id,
+                fuzzy_top_candidate=None,  # computed async in background thread
+                llm_selected_candidate=llm_result.get(
+                    "llm_selected_candidate", llm_result.get("selected_agent")
+                ),
+                agreement=False,  # populated by LatencyGuard in background
+                routing_prompt_version=_llm_routing_prompt_version,
+                model_used=llm_result.get("model_used", "unknown"),
+            )
             return llm_result
+        # OMN-2273: LLM routing returned None — emit fallback event so consumers can
+        # observe how often the LLM path is skipped and the reason distribution.
+        _emit_llm_routing_fallback(
+            correlation_id=correlation_id,
+            session_id=session_id,
+            fallback_reason="LLM routing returned None",
+            llm_url=None,  # URL is only available inside _route_via_llm
+            routing_prompt_version=_llm_routing_prompt_version,
+        )
         logger.debug("LLM routing returned None, falling through to fuzzy matching")
 
     # Attempt intelligent routing via AgentRouter

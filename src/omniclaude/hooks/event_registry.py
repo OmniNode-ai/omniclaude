@@ -445,6 +445,33 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         required_fields=["session_id"],
     ),
     # =========================================================================
+    # LLM Routing Observability Events (OMN-2273)
+    # =========================================================================
+    "llm.routing.decision": EventRegistration(
+        event_type="llm.routing.decision",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.LLM_ROUTING_DECISION,
+                transform=None,  # Passthrough — no sensitive data in routing metadata
+                description="LLM routing decision with determinism audit fields",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "selected_agent", "routing_prompt_version"],
+    ),
+    "llm.routing.fallback": EventRegistration(
+        event_type="llm.routing.fallback",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.LLM_ROUTING_FALLBACK,
+                transform=None,  # Passthrough
+                description="LLM routing fallback — pipeline fell through to fuzzy matching",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "fallback_reason", "routing_prompt_version"],
+    ),
+    # =========================================================================
     # Notification Events (OMN-1831)
     # =========================================================================
     "notification.blocked": EventRegistration(

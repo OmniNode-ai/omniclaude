@@ -759,6 +759,9 @@ class TestEventRegistryIntegration:
             "compliance.evaluate",
             # Static context change detection (OMN-2237)
             "static.context.edit.detected",
+            # LLM routing observability (OMN-2273)
+            "llm.routing.decision",
+            "llm.routing.fallback",
         }
         assert set(EVENT_REGISTRY.keys()) == expected_types
 
