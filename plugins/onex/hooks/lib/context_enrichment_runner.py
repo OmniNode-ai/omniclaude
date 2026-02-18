@@ -171,7 +171,7 @@ async def _run_single_enrichment(
         )
         latency_ms = (asyncio.get_running_loop().time() - t0) * 1000.0
         if result.success:
-            tokens = _count_tokens(result.markdown)
+            tokens = _count_tokens(result.markdown)  # noqa: secrets
             return _EnrichmentResult(
                 name=name,
                 markdown=result.markdown,
@@ -414,7 +414,7 @@ def main() -> None:
             sys.exit(0)
 
         enrichment_context = _build_enrichment_context(kept_results)
-        tokens_used = sum(r.tokens for r in kept_results)
+        tokens_used = sum(r.tokens for r in kept_results)  # noqa: secrets
 
         output: dict[str, Any] = {
             "success": True,
