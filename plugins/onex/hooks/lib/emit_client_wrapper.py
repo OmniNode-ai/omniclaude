@@ -124,6 +124,8 @@ SUPPORTED_EVENT_TYPES = frozenset(
         "agent.status",  # OMN-1848 - Agent status reporting
         "compliance.evaluate",  # OMN-2263 → OMN-2256 - Pattern compliance evaluation
         "static.context.edit.detected",  # OMN-2237 - Static context file change detection
+        "llm.routing.decision",  # OMN-2273 - LLM routing decision observability
+        "llm.routing.fallback",  # OMN-2273 - LLM routing fallback observability
     ]
 )
 
