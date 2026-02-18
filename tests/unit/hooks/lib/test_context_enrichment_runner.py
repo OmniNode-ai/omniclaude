@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -668,6 +669,7 @@ class TestSubprocessInterface:
             timeout=5,
             check=False,
             env={
+                **os.environ,
                 "ENABLE_LOCAL_INFERENCE_PIPELINE": "false",
                 "ENABLE_LOCAL_ENRICHMENT": "false",
             },
@@ -690,6 +692,7 @@ class TestSubprocessInterface:
             timeout=5,
             check=False,
             env={
+                **os.environ,
                 "ENABLE_LOCAL_INFERENCE_PIPELINE": "true",
                 "ENABLE_LOCAL_ENRICHMENT": "true",
             },
@@ -711,6 +714,7 @@ class TestSubprocessInterface:
             timeout=5,
             check=False,
             env={
+                **os.environ,
                 "ENABLE_LOCAL_INFERENCE_PIPELINE": "true",
                 "ENABLE_LOCAL_ENRICHMENT": "true",
             },
@@ -750,7 +754,7 @@ class TestSubprocessInterface:
                 text=True,
                 timeout=5,
                 check=False,
-                env=extra_env,
+                env={**os.environ, **extra_env},
             )
             assert proc.returncode == 0, f"Non-zero exit for stdin={stdin_data!r}"
             result = json.loads(proc.stdout)
