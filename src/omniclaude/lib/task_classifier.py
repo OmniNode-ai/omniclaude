@@ -380,7 +380,7 @@ class TaskClassifier:
     _DELEGATE_MODEL_COST_PER_1K: float = 0.001
 
     #: Average estimated token count per intent type, used for savings calculation.
-    _INTENT_AVG_TOKENS: ClassVar[MappingProxyType[TaskIntent, int]] = MappingProxyType(
+    _INTENT_AVG_TOKENS: ClassVar[MappingProxyType[TaskIntent, int]] = MappingProxyType(  # noqa: secrets  # pragma: allowlist secret
         {
             TaskIntent.DOCUMENT: 800,
             TaskIntent.TEST: 600,
@@ -587,7 +587,7 @@ class TaskClassifier:
         The formula uses per-1k-token pricing and an average token estimate
         per intent category.  Returns 0.0 for intents not in the allow-list.
         """
-        avg_tokens = self._INTENT_AVG_TOKENS.get(intent, 0)  # pragma: allowlist secret
+        avg_tokens = self._INTENT_AVG_TOKENS.get(intent, 0)  # noqa: secrets  # pragma: allowlist secret
         if avg_tokens == 0:
             return 0.0
         cost_delta = self._PRIMARY_MODEL_COST_PER_1K - self._DELEGATE_MODEL_COST_PER_1K
