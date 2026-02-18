@@ -60,7 +60,13 @@ if _SRC_PATH.exists() and str(_SRC_PATH) not in sys.path:
 
 
 def _ensure_src_on_path() -> None:
-    """Ensure src/ is on sys.path (idempotent, no-op after first call)."""
+    """Ensure src/ is on sys.path (idempotent, no-op after first call).
+
+    Module-level code already runs this on import; this function exists as an
+    explicit re-entry guard for callers that may be imported in environments
+    where the module-level block was skipped (e.g., during pytest with
+    manipulated sys.path).
+    """
     if _SRC_PATH.exists() and str(_SRC_PATH) not in sys.path:
         sys.path.insert(0, str(_SRC_PATH))
 
@@ -113,6 +119,11 @@ _LLM_CALL_TIMEOUT_S = 7.0
 # Delegation targets bounded text-only tasks (documentation, tests, research)
 # where responses rarely exceed this limit.
 _MAX_TOKENS = 2048
+
+# Maximum prompt characters sent to the local LLM endpoint.
+# Very large prompts (e.g., pasted files) can exceed server limits or cause
+# latency spikes past the 7s timeout. ~8000 chars ≈ 2000 tokens.
+_MAX_PROMPT_CHARS: int = 8_000
 
 # Attribution prefix injected into every delegated response.
 _ATTRIBUTION_HEADER = "[Local Model Response - {model}]"
@@ -212,6 +223,19 @@ def _call_local_llm(
         logger.debug("httpx not installed; local delegation call skipped")
         return None
 
+    # Truncate oversized prompts before sending to the local LLM to avoid
+    # exceeding server limits or blowing the 7s timeout budget.
+    if len(prompt) > _MAX_PROMPT_CHARS:
+        logger.debug(
+            "Prompt truncated from %d to %d chars for local delegation",
+            len(prompt),
+            _MAX_PROMPT_CHARS,
+        )
+        prompt = (
+            prompt[:_MAX_PROMPT_CHARS]
+            + "\n[... prompt truncated at 8000 chars for local delegation ...]"
+        )
+
     url = f"{endpoint_url}/v1/chat/completions"
     payload = {
         "model": "local",
@@ -279,6 +303,11 @@ def _format_delegated_response(
     Returns:
         Formatted attribution block ready for injection into Claude's context.
     """
+    # NOTE: response_text and model_name are not sanitized against sentinel
+    # strings; a misbehaving local model could confuse Claude's context parsing
+    # (e.g., by returning text containing the "===...===" delimiter lines used
+    # by the delegation context wrapper). Low-severity: requires a misbehaving
+    # model AND a user acting on malformed output.
     safe_model_name = model_name.replace("{", "{{").replace("}", "}}")
     header = _ATTRIBUTION_HEADER.format(model=safe_model_name)
     reasons_summary = "; ".join(delegation_score.reasons)

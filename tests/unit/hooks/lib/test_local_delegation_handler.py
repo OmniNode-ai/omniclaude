@@ -110,6 +110,8 @@ class TestFeatureFlags:
         [
             ("1", "yes"),
             ("on", "on"),
+            ("true", "true"),
+            ("true", "on"),
         ],
     )
     def test_flags_truthy_variants(
@@ -208,15 +210,15 @@ class TestEndpointResolution:
 
     def test_endpoint_from_env_var(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """LLM_QWEN_14B_URL env var is used as fallback when registry unavailable."""
-        monkeypatch.setenv("LLM_QWEN_14B_URL", "http://192.168.86.100:8200")
-        # Patch registry to fail (import error)
+        test_url = "http://test-host:8999/v1"
+        monkeypatch.setenv("LLM_QWEN_14B_URL", test_url)
+        # Force registry import to fail so the env var fallback path is exercised.
         with patch.dict(
             "sys.modules", {"omniclaude.config.model_local_llm_config": None}
         ):
             url = ldh._get_delegate_endpoint_url()
-        # Either URL comes from env var fallback, or None if registry available
-        # Just verify no exception raised
-        assert url is None or isinstance(url, str)
+        # The fallback strips trailing slashes; test_url has none, so expect exact match.
+        assert url == test_url
 
     def test_endpoint_empty_string_treated_as_none(
         self, monkeypatch: pytest.MonkeyPatch

@@ -342,6 +342,11 @@ fi
 # -----------------------------
 # Local Model Delegation Dispatch (OMN-2271)
 # -----------------------------
+# Delegation runs AFTER routing + injection + advisory because:
+# 1. Routing provides agent context that shapes the delegation decision
+# 2. If delegation succeeds, we short-circuit all final assembly
+# 3. Reordering would bypass agent context that local models need
+#
 # When ENABLE_LOCAL_INFERENCE_PIPELINE=true AND ENABLE_LOCAL_DELEGATION=true,
 # attempt to delegate to a local model via TaskClassifier.is_delegatable().
 # Conservative: any error or failed gate falls through to the normal Claude path.
