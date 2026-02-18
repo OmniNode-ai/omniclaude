@@ -340,6 +340,89 @@ if [[ -f "$ADVISORY_FORMATTER" ]]; then
 fi
 
 # -----------------------------
+# Local Model Delegation Dispatch (OMN-2271)
+# -----------------------------
+# When ENABLE_LOCAL_INFERENCE_PIPELINE=true AND ENABLE_LOCAL_DELEGATION=true,
+# attempt to delegate to a local model via TaskClassifier.is_delegatable().
+# Conservative: any error or failed gate falls through to the normal Claude path.
+# Runs in the sync path (before final context assembly) — local_delegation_handler.py
+# exits 0 on all failures so this block never blocks the hook.
+DELEGATION_RESULT=""
+DELEGATION_ACTIVE="false"
+INFERENCE_PIPELINE_ENABLED=$(_normalize_bool "${ENABLE_LOCAL_INFERENCE_PIPELINE:-false}")
+LOCAL_DELEGATION_ENABLED=$(_normalize_bool "${ENABLE_LOCAL_DELEGATION:-false}")
+
+if [[ "$INFERENCE_PIPELINE_ENABLED" == "true" ]] && [[ "$LOCAL_DELEGATION_ENABLED" == "true" ]]; then
+    DELEGATION_HANDLER="${HOOKS_LIB}/local_delegation_handler.py"
+    if [[ -f "$DELEGATION_HANDLER" ]]; then
+        log "Local delegation enabled — classifying prompt (correlation=$CORRELATION_ID)"
+        set +e
+        DELEGATION_RESULT="$(run_with_timeout 35 $PYTHON_CMD "$DELEGATION_HANDLER" "$PROMPT_B64" "$CORRELATION_ID" 2>>"$LOG_FILE")"
+        set -e
+
+        # Validate output is parseable JSON starting with '{'
+        if [[ -n "$DELEGATION_RESULT" ]] && echo "$DELEGATION_RESULT" | jq -e . >/dev/null 2>/dev/null; then
+            DELEGATION_ACTIVE="$(echo "$DELEGATION_RESULT" | jq -r '.delegated // false' 2>/dev/null || echo 'false')"
+        else
+            log "WARNING: local_delegation_handler.py produced non-JSON output, skipping"
+            DELEGATION_RESULT=""
+            DELEGATION_ACTIVE="false"
+        fi
+
+        if [[ "$DELEGATION_ACTIVE" == "true" ]]; then
+            DELEGATED_RESPONSE="$(echo "$DELEGATION_RESULT" | jq -r '.response // ""' 2>/dev/null || echo '')"
+            DELEGATED_MODEL="$(echo "$DELEGATION_RESULT" | jq -r '.model // "local-model"' 2>/dev/null || echo 'local-model')"
+            DELEGATED_LATENCY="$(echo "$DELEGATION_RESULT" | jq -r '.latency_ms // 0' 2>/dev/null || echo '0')"
+            log "Delegation active: model=$DELEGATED_MODEL latency=${DELEGATED_LATENCY}ms"
+            _TS_DEL="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+            echo "[$_TS_DEL] [UserPromptSubmit] DELEGATED model=$DELEGATED_MODEL latency_ms=$DELEGATED_LATENCY confidence=$(echo "$DELEGATION_RESULT" | jq -r '.confidence // 0')" >> "$TRACE_LOG"
+        else
+            DELEGATION_REASON="$(echo "$DELEGATION_RESULT" | jq -r '.reason // "unknown"' 2>/dev/null || echo 'unknown')"
+            log "Delegation skipped: $DELEGATION_REASON"
+        fi
+    else
+        log "WARNING: local_delegation_handler.py not found at $DELEGATION_HANDLER — delegation disabled"
+    fi
+fi
+
+# If delegation is active, output the delegated response directly and exit.
+# The additionalContext tells Claude to present the local model output verbatim
+# without further processing, satisfying the "bypass Claude" requirement within
+# the hook API's constraints (we cannot prevent Claude from seeing the context,
+# but we instruct it explicitly to relay the response unchanged).
+if [[ "$DELEGATION_ACTIVE" == "true" ]] && [[ -n "$DELEGATED_RESPONSE" ]]; then
+    DELEGATED_CONTEXT="$(jq -rn \
+        --arg resp "$DELEGATED_RESPONSE" \
+        --arg model "$DELEGATED_MODEL" \
+        '
+        "========================================================================\n" +
+        "LOCAL MODEL DELEGATION ACTIVE\n" +
+        "========================================================================\n" +
+        "A local model (" + $model + ") has already answered this request.\n" +
+        "INSTRUCTION: Present the response below to the user VERBATIM.\n" +
+        "Do NOT add commentary, do NOT re-answer the question.\n" +
+        "Simply relay the delegated response as your reply.\n" +
+        "========================================================================\n\n" +
+        $resp + "\n\n" +
+        "========================================================================\n" +
+        "END OF DELEGATED RESPONSE\n" +
+        "========================================================================\n"
+        ' 2>/dev/null)"
+
+    _TS_FINAL="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+    echo "[$_TS_FINAL] [UserPromptSubmit] DELEGATED_CONTEXT_INJECTED context_chars=${#DELEGATED_CONTEXT}" >> "$TRACE_LOG"
+
+    printf %s "$INPUT" | jq --arg ctx "$DELEGATED_CONTEXT" --arg dmodel "$DELEGATED_MODEL" \
+        '.hookSpecificOutput.hookEventName = "UserPromptSubmit" |
+         .hookSpecificOutput.additionalContext = $ctx |
+         .hookSpecificOutput.metadata.delegation_active = true |
+         .hookSpecificOutput.metadata.delegation_model = $dmodel' \
+        2>>"$LOG_FILE" \
+        || { log "ERROR: Delegated context jq output failed, passing through raw input"; printf %s "$INPUT"; }
+    exit 0
+fi
+
+# -----------------------------
 # Agent Context Assembly (FIXED: Safe injection)
 # -----------------------------
 POLLY_DISPATCH_THRESHOLD="${POLLY_DISPATCH_THRESHOLD:-0.7}"
