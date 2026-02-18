@@ -196,9 +196,19 @@ class LatencyGuard:
         Args:
             latency_ms: Measured latency in milliseconds (must be >= 0).
         """
+        if not isinstance(latency_ms, (int, float)):
+            logger.debug(
+                "LatencyGuard.record_latency: ignoring non-numeric value %r", latency_ms
+            )
+            return
         if latency_ms < 0:
             logger.debug(
                 "LatencyGuard.record_latency: ignoring negative value %.1f", latency_ms
+            )
+            return
+        if math.isnan(latency_ms) or math.isinf(latency_ms):
+            logger.debug(
+                "LatencyGuard.record_latency: ignoring non-finite value %r", latency_ms
             )
             return
 

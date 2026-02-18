@@ -672,12 +672,15 @@ def _route_via_llm(
         # start is always set before the LLM call; all early-returns above exit
         # first.  This guard defends against optimised builds where assert is
         # stripped (-O flag) and any future code paths that bypass the assignment.
+        # Return None (not the raw Pydantic object) so the caller falls through
+        # to fuzzy routing — callers consume the return value as a dict via
+        # `.get(...)`, so a Pydantic object would cause silent attribute errors.
         logger.warning(
             "_route_via_llm: start timestamp unexpectedly None after LLM call "
             "(correlation_id=%s); skipping latency recording",
             correlation_id,
         )
-        return result
+        return None
     latency_ms_float = (time.monotonic() - start) * 1000
     latency_ms = int(latency_ms_float)
 
@@ -1173,7 +1176,17 @@ def route_via_events(
                     daemon=True,
                     name="llm-fuzzy-agreement",
                 )
-                _agreement_thread.start()
+                try:
+                    _agreement_thread.start()
+                except Exception as exc:
+                    # Thread failed to start (e.g. RuntimeError: can't start new
+                    # thread).  Release the lock immediately so future routing
+                    # calls can still spawn an agreement thread.
+                    _agreement_lock.release()
+                    logger.debug(
+                        "llm-fuzzy-agreement thread failed to start (non-blocking): %s",
+                        exc,
+                    )
             else:
                 logger.debug(
                     "llm-fuzzy-agreement thread already running, skipping spawn"
