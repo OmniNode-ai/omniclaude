@@ -44,6 +44,11 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 class ContractEnrichmentResult(BaseModel):
     """Inline snapshot of the ContractEnrichmentResult schema (OMN-2252)."""
 
+    # extra="forbid" matches the real contract in
+    # omnibase_spi/contracts/enrichment/contract_enrichment_result.py (line 43).
+    # Verified against the source file on 2026-02-18.  If the real contract
+    # ever relaxes this to extra="ignore", this snapshot and
+    # test_extra_fields_are_forbidden below must be updated together.
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     schema_version: str = Field(
@@ -118,6 +123,8 @@ _SUMMARIZATION_PROMPT_VERSION: str = "v1.0"
 
 # Required markdown section headings for code analysis output.
 # These are defined in _USER_PROMPT_TEMPLATE in adapter_code_analysis_enrichment.py.
+# SYNC REQUIRED: these must match the headings in adapter_code_analysis_enrichment.py
+# _USER_PROMPT_TEMPLATE — update manually if the template changes.
 _CODE_ANALYSIS_REQUIRED_HEADINGS: tuple[str, ...] = (
     "Affected Functions / Methods",
     "Dependency Changes",
@@ -486,7 +493,14 @@ class TestCodeAnalysisOutputSchema:
         assert result.relevance_score == pytest.approx(_CODE_ANALYSIS_RELEVANCE_SCORE)
 
     def test_relevance_score_for_empty_diff_is_zero(self) -> None:
-        """Empty diff yields relevance_score == 0.0."""
+        """Empty diff yields relevance_score == 0.0.
+
+        The real adapter's empty-diff path (AdapterCodeAnalysisEnrichment.enrich)
+        explicitly sets token_count=0 alongside relevance_score=0.0 — it does NOT
+        compute token_count from the fallback summary string.  Passing token_count=0
+        here is intentional and reflects that real adapter behavior.  This keeps
+        this test consistent with test_empty_diff_token_count_is_zero below.
+        """
         result = _make_code_analysis_result(
             summary_markdown="## No Changes Detected\n\nNo git diff found to analyze.",
             relevance_score=_CODE_ANALYSIS_EMPTY_DIFF_RELEVANCE_SCORE,
@@ -497,7 +511,11 @@ class TestCodeAnalysisOutputSchema:
         )
 
     def test_empty_diff_token_count_is_zero(self) -> None:
-        """Empty diff result has token_count == 0."""
+        """Empty diff result has token_count == 0.
+
+        The adapter hard-codes token_count=0 in the early-return path when no diff
+        is found; it does NOT estimate tokens from the fallback summary string.
+        """
         result = _make_code_analysis_result(
             summary_markdown="## No Changes Detected\n\nNo git diff found.",
             relevance_score=0.0,
@@ -675,13 +693,26 @@ class TestSummarizationOutputSchema:
         assert result.model_used == "passthrough"
 
     def test_net_guard_bypass_relevance_is_one(self) -> None:
-        """Net-token guard bypass (inflated summary) has relevance_score == 1.0."""
+        """Net-token guard bypass (inflated summary) has relevance_score == 1.0.
+
+        Both the net-token guard path and the passthrough path share
+        relevance_score=1.0 (_SUMMARIZATION_INFLATED_GUARD_RELEVANCE_SCORE ==
+        _SUMMARIZATION_PASSTHROUGH_RELEVANCE_SCORE == 1.0) because in both
+        cases the original context is returned verbatim and is considered fully
+        relevant.  The key distinction is model_used: the guard path records the
+        real model identifier (the LLM was actually called before the guard
+        fired), whereas the passthrough path uses the 'passthrough' sentinel
+        (the LLM was never called).
+        """
         result = _make_summarization_result(
-            relevance_score=_SUMMARIZATION_INFLATED_GUARD_RELEVANCE_SCORE
+            relevance_score=_SUMMARIZATION_INFLATED_GUARD_RELEVANCE_SCORE,
+            model_used=_SUMMARIZATION_DEFAULT_MODEL,
         )
         assert result.relevance_score == pytest.approx(
             _SUMMARIZATION_INFLATED_GUARD_RELEVANCE_SCORE
         )
+        # Guard path: LLM was called, so model_used must NOT be the passthrough sentinel.
+        assert result.model_used != _SUMMARIZATION_PASSTHROUGH_MODEL
 
     def test_token_count_reflects_summary_length(self) -> None:
         """token_count reflects the summary, not the original context."""
