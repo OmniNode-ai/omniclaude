@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import itertools
 import json
 import logging
 import os
@@ -71,6 +72,9 @@ _LOCAL_GLOB_PATTERNS: list[str] = [
     "**/.local.md",
     "**/CLAUDE.local.md",
 ]
+
+# Maximum number of glob results per pattern to guard against traversing large trees.
+_MAX_LOCAL_GLOB_RESULTS = 100
 
 # CLAUDE.md names that are considered versioned (in git repos)
 _VERSIONED_FILENAMES: frozenset[str] = frozenset(
@@ -359,7 +363,16 @@ def _collect_non_versioned_files(project_path: Path | None = None) -> list[Path]
     if project_path and project_path.is_dir():
         for pattern in _LOCAL_GLOB_PATTERNS:
             try:
-                for local_file in project_path.glob(pattern):
+                glob_iter = project_path.glob(pattern)
+                matches = list(itertools.islice(glob_iter, _MAX_LOCAL_GLOB_RESULTS))
+                if len(matches) >= _MAX_LOCAL_GLOB_RESULTS:
+                    logger.warning(
+                        "Glob %s in %s truncated at %d results (performance guard)",
+                        pattern,
+                        project_path,
+                        _MAX_LOCAL_GLOB_RESULTS,
+                    )
+                for local_file in matches:
                     if local_file.is_file() and not _is_git_tracked(local_file):
                         paths.append(local_file)
             except OSError as exc:
@@ -413,8 +426,6 @@ def _detect_versioned_change(
         # Attempt git diff between current HEAD and last-seen commit
         previous_commit = previous.get("git_commit")
         diff_stat = _git_diff_stat(file_path, since_commit=previous_commit)
-
-    current_commit = _git_commit_for_file(file_path)
 
     return FileSnapshot(
         file_path=key,
@@ -489,18 +500,6 @@ def _update_index_entry(
         "session_id": snapshot.session_id,
         "is_versioned": snapshot.is_versioned,
     }
-
-    if not snapshot.is_versioned and snapshot.changed and snapshot.content_hash:
-        # Store content snapshot for non-versioned files when they change.
-        try:
-            content = Path(snapshot.file_path).read_text(encoding="utf-8")
-            entry["content_snapshot"] = content
-        except OSError as exc:
-            logger.debug(
-                "Cannot read content for snapshot of %s: %s",
-                snapshot.file_path,
-                exc,
-            )
 
     if snapshot.is_versioned:
         current_commit = _git_commit_for_file(Path(snapshot.file_path))
@@ -726,9 +725,17 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
 
+    log_file = os.environ.get("LOG_FILE")
+    handlers: list[logging.Handler] = []
+    if log_file:
+        handlers.append(logging.FileHandler(log_file, mode="a"))
+    else:
+        handlers.append(logging.StreamHandler())
+
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.WARNING,
         format="%(levelname)s: %(message)s",
+        handlers=handlers,
     )
 
     snapshot_dir = Path(args.snapshot_dir) if args.snapshot_dir else None

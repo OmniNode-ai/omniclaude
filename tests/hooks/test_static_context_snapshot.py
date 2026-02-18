@@ -354,7 +354,10 @@ class TestUpdateIndexEntry:
         assert index[str(p)]["git_commit"] == "abc123"
         assert "content_snapshot" not in index[str(p)]
 
-    def test_non_versioned_changed_stores_content(self, tmp_path: Path) -> None:
+    def test_non_versioned_changed_no_content_snapshot(self, tmp_path: Path) -> None:
+        # content_snapshot must NOT be stored — non-versioned files (e.g.
+        # ~/.claude/CLAUDE.md) routinely contain secrets. The index tracks
+        # change state via hashes only.
         p = _make_file(tmp_path, content="secret-free content")
         snap = FileSnapshot(
             file_path=str(p),
@@ -365,7 +368,7 @@ class TestUpdateIndexEntry:
         )
         index: dict[str, Any] = {}
         _update_index_entry(index, snap)
-        assert index[str(p)]["content_snapshot"] == "secret-free content"
+        assert "content_snapshot" not in index[str(p)]
 
     def test_non_versioned_unchanged_no_content(self, tmp_path: Path) -> None:
         p = _make_file(tmp_path, content="same")

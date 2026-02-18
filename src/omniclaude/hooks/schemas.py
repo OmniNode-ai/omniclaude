@@ -1522,7 +1522,7 @@ class ModelChangedFileRecord(BaseModel):
 
     model_config = ConfigDict(
         frozen=True,
-        extra="forbid",
+        extra="ignore",
         from_attributes=True,
     )
 
@@ -1590,7 +1590,7 @@ class ModelStaticContextEditDetectedPayload(BaseModel):
 
     model_config = ConfigDict(
         frozen=True,
-        extra="forbid",
+        extra="ignore",
         from_attributes=True,
     )
 
