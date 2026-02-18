@@ -95,7 +95,10 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# ONEX routing node imports (for USE_ONEX_ROUTING_NODES feature flag)
+# ONEX routing node imports (for USE_ONEX_ROUTING_NODES feature flag).
+# Split into two independent try blocks so that a failure in HandlerRoutingLlm
+# does not mask _onex_nodes_available (or vice-versa).  Each flag reflects only
+# the availability of the symbols it actually guards.
 _onex_nodes_available = False
 try:
     from omniclaude.nodes.node_agent_routing_compute.handler_routing_default import (
@@ -118,6 +121,31 @@ try:
     _onex_nodes_available = True
 except ImportError:
     logger.debug("ONEX routing nodes not available, USE_ONEX_ROUTING_NODES ignored")
+
+# LLM handler import (for USE_LLM_ROUTING feature flag).
+# Kept separate from the ONEX nodes block so that HandlerRoutingLlm import
+# failures do not affect _onex_nodes_available.
+_llm_handler_available = False
+try:
+    from omniclaude.nodes.node_agent_routing_compute.handler_routing_llm import (
+        HandlerRoutingLlm,
+    )
+
+    _llm_handler_available = True
+except ImportError:
+    logger.debug("HandlerRoutingLlm not available, USE_LLM_ROUTING ignored")
+
+# LLM endpoint registry import (for USE_LLM_ROUTING feature flag)
+_llm_registry_available = False
+try:
+    from omniclaude.config.model_local_llm_config import (
+        LlmEndpointPurpose,
+        LocalLlmEndpointRegistry,
+    )
+
+    _llm_registry_available = True
+except ImportError:
+    logger.debug("LLM endpoint registry not available, USE_LLM_ROUTING ignored")
 
 if TYPE_CHECKING:
     from omniclaude.nodes.node_agent_routing_compute._internal import AgentRegistry
@@ -316,18 +344,304 @@ _STATS_CACHE_TTL_SECONDS = 300  # 5 min; stale stats are acceptable for routing 
 _stats_lock = threading.Lock()
 
 
+# Truthy value set shared by feature flag helpers below.
+_TRUTHY = frozenset(("true", "1", "yes", "on", "y", "t"))
+
+
 def _use_onex_routing_nodes() -> bool:
     """Check if ONEX routing nodes feature flag is enabled."""
     if not _onex_nodes_available:
         return False
-    return os.environ.get("USE_ONEX_ROUTING_NODES", "false").lower() in (
-        "true",
-        "1",
-        "yes",
-        "on",
-        "y",
-        "t",
+    return os.environ.get("USE_ONEX_ROUTING_NODES", "false").lower() in _TRUTHY
+
+
+# Timeout for the LLM health check and routing call (100 ms per ticket spec).
+_LLM_ROUTING_TIMEOUT_S = 0.1
+# Inner httpx timeout for the health check, kept slightly below the outer
+# asyncio.wait_for timeout so the HTTP request can fail/cancel before the
+# outer wait_for fires.  Without this margin the outer cancellation arrives
+# first, leaving the httpx connection in an ambiguous state.
+_LLM_HEALTH_CHECK_TIMEOUT_S = 0.08
+
+
+def _use_llm_routing() -> bool:
+    """Check if LLM routing is enabled.
+
+    Requires:
+    - ENABLE_LOCAL_INFERENCE_PIPELINE=true  (parent gate)
+    - USE_LLM_ROUTING=true                  (specific flag)
+    - HandlerRoutingLlm and LocalLlmEndpointRegistry importable
+
+    Returns:
+        True only when all conditions are met.
+    """
+    if not _llm_handler_available or not _llm_registry_available:
+        return False
+    parent = os.environ.get("ENABLE_LOCAL_INFERENCE_PIPELINE", "").lower()
+    if parent not in _TRUTHY:
+        return False
+    flag = os.environ.get("USE_LLM_ROUTING", "").lower()
+    return flag in _TRUTHY
+
+
+def _get_llm_routing_url() -> str | None:
+    """Return the LLM URL to use for routing, or None if unconfigured.
+
+    Prefers LlmEndpointPurpose.ROUTING; falls back to GENERAL (Qwen2.5-14B)
+    since no dedicated routing model is currently deployed.
+
+    Returns:
+        URL string (without trailing slash) or None.
+    """
+    if not _llm_registry_available:
+        return None
+    try:
+        registry = LocalLlmEndpointRegistry()
+        # Try dedicated ROUTING purpose first, fall back to GENERAL
+        endpoint = registry.get_endpoint(LlmEndpointPurpose.ROUTING)
+        if endpoint is None:
+            endpoint = registry.get_endpoint(LlmEndpointPurpose.GENERAL)
+        if endpoint is None:
+            logger.debug("No LLM endpoint configured for routing")
+            return None
+        url = str(endpoint.url).rstrip("/")
+        logger.debug(
+            "Resolved LLM routing URL: purpose=%s url=%s",
+            endpoint.purpose if hasattr(endpoint, "purpose") else "unknown",
+            url,
+        )
+        return url
+    except Exception as exc:
+        logger.debug("Failed to load LLM endpoint registry: %s", exc)
+        return None
+
+
+async def _check_llm_health(llm_url: str, timeout_s: float) -> bool:
+    """Probe the LLM endpoint /health route within *timeout_s* seconds.
+
+    A successful HTTP response (any 2xx) is treated as healthy. Any
+    exception or non-2xx status code is treated as unhealthy. Never raises.
+
+    Args:
+        llm_url: Base URL of the LLM endpoint.
+        timeout_s: Maximum seconds to wait for the health check.
+
+    Returns:
+        True if the endpoint appears healthy, False otherwise.
+    """
+    try:
+        # httpx is treated as an optional dependency: it is not listed in
+        # pyproject.toml because the LLM routing path is feature-flagged.
+        # ImportError is intentionally caught here as a health check failure
+        # so that the hook degrades gracefully when httpx is not installed.
+        import httpx
+
+        async with httpx.AsyncClient(timeout=timeout_s) as client:
+            response = await client.get(f"{llm_url}/health")
+            return response.is_success
+    except Exception as exc:
+        logger.debug("LLM health check failed for %s: %s", llm_url, exc)
+        return False
+
+
+def _route_via_llm(
+    prompt: str,
+    correlation_id: str,
+) -> dict[str, Any] | None:
+    """Attempt LLM-based routing and return a result dict, or None to fall through.
+
+    Chain:
+    1. Resolve LLM URL from endpoint registry.
+    2. Health-check the endpoint within _LLM_ROUTING_TIMEOUT_S (100 ms).
+    3. Build ModelAgentDefinition list from the AgentRouter registry via
+       _build_agent_definitions(), then construct a ModelRoutingRequest.
+    4. Call HandlerRoutingLlm.compute_routing() within _LLM_ROUTING_TIMEOUT_S.
+    5. Shape result into the canonical wrapper dict.
+
+    On any failure (unhealthy endpoint, timeout, exception) returns None so
+    the caller falls through to fuzzy matching. "LLM enhances, never blocks."
+
+    Latency budget note:
+        Each of the two async calls (health check and LLM routing) is guarded
+        by _LLM_ROUTING_TIMEOUT_S independently.  In the worst case both calls
+        time out, producing a combined latency of ~200 ms (2 x 100 ms) before
+        this function returns None.  This is documented in .env.example and is
+        intentional — the health check and the routing call are sequential, not
+        parallelised, so callers should budget for ~200 ms worst-case when LLM
+        routing is enabled.
+
+    Args:
+        prompt: User prompt to route.
+        correlation_id: Correlation ID for tracing.
+
+    Returns:
+        Routing result dict on success, None on any failure.
+    """
+    from uuid import UUID, uuid4
+
+    start = time.time()
+
+    # 1. Resolve LLM URL
+    llm_url = _get_llm_routing_url()
+    if llm_url is None:
+        return None
+
+    # 2. Health check (100 ms budget per call; combined worst-case with step 4 is ~200 ms)
+    # _LLM_HEALTH_CHECK_TIMEOUT_S (0.08 s) is passed to httpx so the HTTP
+    # request completes or fails before asyncio.wait_for's outer 0.1 s
+    # deadline fires.  This ensures clean cancellation ordering.
+    try:
+        healthy = _run_async(
+            _check_llm_health(llm_url, _LLM_HEALTH_CHECK_TIMEOUT_S),
+            timeout=_LLM_ROUTING_TIMEOUT_S,
+        )
+    except Exception as exc:
+        logger.debug("LLM health check raised: %s", exc)
+        healthy = False
+
+    if not healthy:
+        logger.debug("LLM endpoint %s is unhealthy, skipping LLM routing", llm_url)
+        return None
+
+    # 3. Build routing request from AgentRouter registry
+    router = _get_router()
+    if router is None:
+        return None
+
+    agent_defs = _build_agent_definitions(router.registry)
+    # Robust guard: agent_defs must be a non-empty sequence with at least one
+    # item.  A plain `if not agent_defs` would also catch empty tuples/lists,
+    # but the isinstance check makes the intent explicit and guards against
+    # pathological return values (e.g., None, a non-sequence) that could
+    # otherwise propagate silently into HandlerRoutingLlm.
+    if not isinstance(agent_defs, (list, tuple)) or len(agent_defs) < 1:
+        logger.warning(
+            "LLM routing skipped: _build_agent_definitions returned no valid agents "
+            "(type=%s, len=%s, correlation_id=%s)",
+            type(agent_defs).__name__,
+            len(agent_defs) if isinstance(agent_defs, (list, tuple)) else "n/a",
+            correlation_id,
+        )
+        return None
+
+    try:
+        cid = UUID(correlation_id)
+    except (ValueError, AttributeError):
+        cid = uuid4()
+
+    # 4. Call HandlerRoutingLlm within 100 ms (independent budget from step 2; see docstring)
+    # HandlerRoutingLlm construction and ModelRoutingRequest construction are in
+    # separate try blocks so that a failure in either produces a distinct log
+    # message and the successfully-constructed handler is not silently abandoned
+    # without a clear indication of which step failed.
+    try:
+        llm_handler = HandlerRoutingLlm(
+            llm_url=llm_url,
+            timeout=_LLM_ROUTING_TIMEOUT_S,
+        )
+    except Exception as exc:
+        logger.debug(
+            "HandlerRoutingLlm construction failed: %s (correlation_id=%s)",
+            exc,
+            correlation_id,
+        )
+        return None
+
+    try:
+        request = ModelRoutingRequest(
+            prompt=prompt,
+            correlation_id=cid,
+            agent_registry=agent_defs,
+            confidence_threshold=CONFIDENCE_THRESHOLD,
+        )
+    except Exception as exc:
+        logger.debug(
+            "ModelRoutingRequest construction failed: %s (correlation_id=%s)",
+            exc,
+            correlation_id,
+        )
+        return None
+
+    try:
+        result = _run_async(
+            llm_handler.compute_routing(request, correlation_id=cid),
+            timeout=_LLM_ROUTING_TIMEOUT_S,
+        )
+    except TimeoutError:
+        logger.debug(
+            "LLM routing call timed out after %.0fms (correlation_id=%s)",
+            _LLM_ROUTING_TIMEOUT_S * 1000,
+            correlation_id,
+        )
+        return None
+    except Exception as exc:
+        logger.debug(
+            "LLM routing call failed: %s (correlation_id=%s)", exc, correlation_id
+        )
+        return None
+
+    # 5. Shape result into canonical wrapper dict
+    latency_ms = int((time.time() - start) * 1000)
+    agents_reg = router.registry.get("agents", {})
+    agent_info = agents_reg.get(result.selected_agent, {})
+    if result.selected_agent not in agents_reg:
+        logger.warning(
+            "LLM routing selected agent '%s' not found in agents registry "
+            "(possible hallucination); domain/purpose will use defaults "
+            "(correlation_id=%s)",
+            result.selected_agent,
+            correlation_id,
+        )
+    onex_routing_path = result.routing_path
+    if onex_routing_path not in VALID_ROUTING_PATHS:
+        logger.warning(
+            "LLM routing returned invalid routing_path '%s', defaulting to 'local'",
+            onex_routing_path,
+        )
+        onex_routing_path = "local"
+
+    logger.info(
+        "LLM routing selected %s (confidence=%.2f, latency=%dms, correlation_id=%s)",
+        result.selected_agent,
+        result.confidence,
+        latency_ms,
+        correlation_id,
     )
+
+    return {
+        "selected_agent": result.selected_agent,
+        "confidence": result.confidence,
+        "candidates": [
+            {
+                "name": c.agent_name,
+                "score": c.confidence,
+                "description": (ci := agents_reg.get(c.agent_name, {})).get(
+                    "description",
+                    ci.get("title", c.agent_name),
+                ),
+                "reason": c.match_reason,
+            }
+            for c in result.candidates
+        ],
+        "reasoning": result.fallback_reason
+        or (
+            result.confidence_breakdown.explanation
+            if result.confidence_breakdown is not None
+            else ""
+        ),
+        # routing_method is intentionally LOCAL here: LLM routing runs in-process
+        # on the local machine (consistent with the ONEX path that also uses LOCAL).
+        # A dedicated RoutingMethod.LLM value would require new enum governance and
+        # is deferred until a clear product need arises.
+        "routing_method": RoutingMethod.LOCAL.value,
+        "routing_policy": result.routing_policy,
+        "routing_path": onex_routing_path,
+        "method": result.routing_policy,
+        "latency_ms": latency_ms,
+        "domain": agent_info.get("domain_context", "general"),
+        "purpose": agent_info.get("description", agent_info.get("title", "")),
+        "event_attempted": False,
+    }
 
 
 def _get_onex_handlers() -> tuple[Any, Any, Any] | None:
@@ -577,7 +891,11 @@ def _route_via_onex_nodes(
                 for c in result.candidates
             ],
             "reasoning": result.fallback_reason
-            or result.confidence_breakdown.explanation,
+            or (
+                result.confidence_breakdown.explanation
+                if result.confidence_breakdown is not None
+                else ""
+            ),
             "routing_method": RoutingMethod.LOCAL.value,
             "routing_policy": result.routing_policy,
             "routing_path": onex_routing_path,
@@ -670,6 +988,16 @@ def route_via_events(
         if onex_result is not None:
             return onex_result
         logger.debug("ONEX routing returned None, falling through to legacy path")
+
+    # LLM routing path (when USE_LLM_ROUTING + ENABLE_LOCAL_INFERENCE_PIPELINE enabled)
+    if _use_llm_routing():
+        llm_result = _route_via_llm(prompt, correlation_id)
+        if llm_result is not None:
+            _emit_routing_decision(
+                result=llm_result, prompt=prompt, correlation_id=correlation_id
+            )
+            return llm_result
+        logger.debug("LLM routing returned None, falling through to fuzzy matching")
 
     # Attempt intelligent routing via AgentRouter
     router = _get_router()

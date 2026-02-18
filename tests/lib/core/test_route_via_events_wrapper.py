@@ -28,6 +28,8 @@ from route_via_events_wrapper import (
     RoutingPath,
     RoutingPolicy,
     _compute_routing_path,
+    _route_via_llm,
+    _use_llm_routing,
     main,
     route_via_events,
 )
@@ -732,3 +734,436 @@ class TestConfidenceThreshold:
             result = route_via_events("test", "corr")
 
         assert result["selected_agent"] == "agent-test"
+
+
+# ---------------------------------------------------------------------------
+# Tests for USE_LLM_ROUTING feature flag and _route_via_llm() scenarios
+# ---------------------------------------------------------------------------
+
+
+# Shared helper used by TestRouteViaLlmFallback and TestRouteViaEventsLlmIntegration.
+def _make_llm_result_dict(agent: str = "agent-debugger") -> dict:
+    """Build a minimal routing result dict matching the canonical wrapper format."""
+    return {
+        "selected_agent": agent,
+        "confidence": 0.85,
+        "candidates": [{"name": agent, "score": 0.85, "description": "", "reason": ""}],
+        "reasoning": "LLM selected",
+        "routing_method": RoutingMethod.LOCAL.value,
+        "routing_policy": "trigger_match",
+        "routing_path": "local",
+        "method": "trigger_match",
+        "latency_ms": 15,
+        "domain": "debugging",
+        "purpose": "",
+        "event_attempted": False,
+    }
+
+
+class TestUseLlmRouting:
+    """Tests for the _use_llm_routing() feature flag function."""
+
+    def test_disabled_by_default(self, monkeypatch):
+        """LLM routing should be off when flags are absent."""
+        monkeypatch.delenv("ENABLE_LOCAL_INFERENCE_PIPELINE", raising=False)
+        monkeypatch.delenv("USE_LLM_ROUTING", raising=False)
+
+        with (
+            patch("route_via_events_wrapper._llm_handler_available", True),
+            patch("route_via_events_wrapper._llm_registry_available", True),
+        ):
+            assert _use_llm_routing() is False
+
+    def test_disabled_when_parent_gate_off(self, monkeypatch):
+        """LLM routing should be off when ENABLE_LOCAL_INFERENCE_PIPELINE is false."""
+        monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "false")
+        monkeypatch.setenv("USE_LLM_ROUTING", "true")
+
+        with (
+            patch("route_via_events_wrapper._llm_handler_available", True),
+            patch("route_via_events_wrapper._llm_registry_available", True),
+        ):
+            assert _use_llm_routing() is False
+
+    def test_disabled_when_use_llm_routing_off(self, monkeypatch):
+        """LLM routing should be off when USE_LLM_ROUTING is false."""
+        monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
+        monkeypatch.setenv("USE_LLM_ROUTING", "false")
+
+        with (
+            patch("route_via_events_wrapper._llm_handler_available", True),
+            patch("route_via_events_wrapper._llm_registry_available", True),
+        ):
+            assert _use_llm_routing() is False
+
+    def test_enabled_when_both_flags_set(self, monkeypatch):
+        """LLM routing should be on when both flags are true."""
+        monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
+        monkeypatch.setenv("USE_LLM_ROUTING", "true")
+
+        with (
+            patch("route_via_events_wrapper._llm_handler_available", True),
+            patch("route_via_events_wrapper._llm_registry_available", True),
+        ):
+            assert _use_llm_routing() is True
+
+    def test_disabled_when_handler_unavailable(self, monkeypatch):
+        """LLM routing should be off when HandlerRoutingLlm import failed."""
+        monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
+        monkeypatch.setenv("USE_LLM_ROUTING", "true")
+
+        with (
+            patch("route_via_events_wrapper._llm_handler_available", False),
+            patch("route_via_events_wrapper._llm_registry_available", True),
+        ):
+            assert _use_llm_routing() is False
+
+    def test_disabled_when_registry_unavailable(self, monkeypatch):
+        """LLM routing should be off when LocalLlmEndpointRegistry import failed."""
+        monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
+        monkeypatch.setenv("USE_LLM_ROUTING", "true")
+
+        with (
+            patch("route_via_events_wrapper._llm_handler_available", True),
+            patch("route_via_events_wrapper._llm_registry_available", False),
+        ):
+            assert _use_llm_routing() is False
+
+
+class TestRouteViaLlmFallback:
+    """Tests for _route_via_llm() fallback scenarios."""
+
+    def test_returns_none_when_no_llm_url(self):
+        """Returns None when no LLM URL is configured."""
+        with patch("route_via_events_wrapper._get_llm_routing_url", return_value=None):
+            result = _route_via_llm("debug this", "corr-123")
+
+        assert result is None
+
+    def test_returns_none_when_health_check_fails(self):
+        """Returns None when LLM endpoint health check fails."""
+        with (
+            patch(
+                "route_via_events_wrapper._get_llm_routing_url",
+                return_value="http://localhost:8200",
+            ),
+            patch(
+                "route_via_events_wrapper._run_async",
+                return_value=False,  # Health check unhealthy
+            ),
+        ):
+            result = _route_via_llm("debug this", "corr-123")
+
+        assert result is None
+
+    def test_returns_none_on_health_check_exception(self):
+        """Returns None when health check raises (endpoint down)."""
+        with (
+            patch(
+                "route_via_events_wrapper._get_llm_routing_url",
+                return_value="http://localhost:8200",
+            ),
+            patch(
+                "route_via_events_wrapper._run_async",
+                side_effect=Exception("connection refused"),
+            ),
+        ):
+            result = _route_via_llm("debug this", "corr-123")
+
+        assert result is None
+
+    def test_returns_none_when_router_unavailable(self):
+        """Returns None when AgentRouter is not available."""
+        with (
+            patch(
+                "route_via_events_wrapper._get_llm_routing_url",
+                return_value="http://localhost:8200",
+            ),
+            patch(
+                "route_via_events_wrapper._run_async",
+                return_value=True,  # Health check passes
+            ),
+            patch("route_via_events_wrapper._get_router", return_value=None),
+        ):
+            result = _route_via_llm("debug this", "corr-123")
+
+        assert result is None
+
+    def test_returns_none_when_no_agent_defs(self):
+        """Returns None when _build_agent_definitions returns an empty tuple.
+
+        Exercises the guard at the top of _route_via_llm that rejects empty
+        agent definition sequences before constructing HandlerRoutingLlm.
+        """
+        mock_router = MagicMock()
+        mock_router.registry = {"agents": {}}
+
+        with (
+            patch(
+                "route_via_events_wrapper._get_llm_routing_url",
+                return_value="http://localhost:8200",
+            ),
+            patch(
+                "route_via_events_wrapper._run_async",
+                return_value=True,  # Health check passes
+            ),
+            patch("route_via_events_wrapper._get_router", return_value=mock_router),
+            patch(
+                "route_via_events_wrapper._build_agent_definitions",
+                return_value=(),
+            ),
+        ):
+            result = _route_via_llm("debug this", "corr-123")
+
+        assert result is None
+
+    def test_returns_none_on_llm_timeout(self):
+        """Returns None when the LLM call times out."""
+        mock_router = MagicMock()
+        mock_router.registry = {
+            "agents": {
+                "agent-debugger": {"description": "Debug agent"},
+            }
+        }
+
+        count = 0
+
+        def _run_async_side_effect(coro: object, timeout: float = 5.0) -> object:
+            # First call is health check (returns True), second call raises TimeoutError
+            nonlocal count
+            count += 1
+            if count == 1:
+                return True
+            raise TimeoutError("timed out")
+
+        with (
+            patch(
+                "route_via_events_wrapper._get_llm_routing_url",
+                return_value="http://localhost:8200",
+            ),
+            patch(
+                "route_via_events_wrapper._run_async",
+                side_effect=_run_async_side_effect,
+            ),
+            patch("route_via_events_wrapper._get_router", return_value=mock_router),
+            patch(
+                "route_via_events_wrapper._build_agent_definitions",
+                return_value=(MagicMock(),),
+            ),
+        ):
+            result = _route_via_llm("debug this", "corr-123")
+
+        assert result is None
+
+    def test_returns_none_on_llm_exception(self):
+        """Returns None on any unexpected LLM call exception."""
+        mock_router = MagicMock()
+        mock_router.registry = {
+            "agents": {
+                "agent-debugger": {"description": "Debug agent"},
+            }
+        }
+
+        count = 0
+
+        def _run_async_side_effect(coro: object, timeout: float = 5.0) -> object:
+            nonlocal count
+            count += 1
+            if count == 1:
+                return True
+            raise RuntimeError("unexpected error")
+
+        with (
+            patch(
+                "route_via_events_wrapper._get_llm_routing_url",
+                return_value="http://localhost:8200",
+            ),
+            patch(
+                "route_via_events_wrapper._run_async",
+                side_effect=_run_async_side_effect,
+            ),
+            patch("route_via_events_wrapper._get_router", return_value=mock_router),
+            patch(
+                "route_via_events_wrapper._build_agent_definitions",
+                return_value=(MagicMock(),),
+            ),
+        ):
+            result = _route_via_llm("debug this", "corr-123")
+
+        assert result is None
+
+    def test_confidence_breakdown_none_does_not_raise(self):
+        """Safe access on confidence_breakdown=None must not raise AttributeError.
+
+        This exercises the guard added for the case where the LLM result has
+        no confidence breakdown object (e.g. the model returned a minimal
+        response). The reasoning field should fall back to an empty string
+        rather than raising AttributeError on .explanation.
+        """
+        mock_router = MagicMock()
+        mock_router.registry = {
+            "agents": {
+                "agent-debugger": {
+                    "description": "Debug agent",
+                    "domain_context": "debugging",
+                },
+            }
+        }
+
+        # Minimal LLM result with confidence_breakdown explicitly set to None
+        mock_result = MagicMock()
+        mock_result.selected_agent = "agent-debugger"
+        mock_result.confidence = 0.75
+        mock_result.candidates = []
+        mock_result.fallback_reason = ""
+        mock_result.confidence_breakdown = None
+        mock_result.routing_path = "local"
+        mock_result.routing_policy = "trigger_match"
+
+        call_count = [0]
+
+        def _run_async_side_effect(coro: object, timeout: float = 5.0) -> object:
+            # First call is the health check (returns True), second returns the
+            # LLM result object with confidence_breakdown=None.
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return True
+            return mock_result
+
+        with (
+            patch(
+                "route_via_events_wrapper._get_llm_routing_url",
+                return_value="http://localhost:8200",
+            ),
+            patch(
+                "route_via_events_wrapper._run_async",
+                side_effect=_run_async_side_effect,
+            ),
+            patch("route_via_events_wrapper._get_router", return_value=mock_router),
+            patch(
+                "route_via_events_wrapper._build_agent_definitions",
+                return_value=(MagicMock(),),
+            ),
+            patch("route_via_events_wrapper.HandlerRoutingLlm"),
+            patch("route_via_events_wrapper.ModelRoutingRequest"),
+        ):
+            result = _route_via_llm("debug this", "corr-123")
+
+        assert result is not None
+        assert result["selected_agent"] == "agent-debugger"
+        # reasoning must be an empty string, not an AttributeError
+        assert result["reasoning"] == ""
+
+
+class TestRouteViaEventsLlmIntegration:
+    """Integration tests for LLM routing wired into route_via_events()."""
+
+    def test_llm_result_returned_when_flag_enabled_and_llm_succeeds(self, monkeypatch):
+        """When USE_LLM_ROUTING is active and LLM succeeds, its result is returned."""
+        monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
+        monkeypatch.setenv("USE_LLM_ROUTING", "true")
+
+        expected = _make_llm_result_dict("agent-debugger")
+
+        with (
+            patch(
+                "route_via_events_wrapper._use_onex_routing_nodes", return_value=False
+            ),
+            patch("route_via_events_wrapper._use_llm_routing", return_value=True),
+            patch("route_via_events_wrapper._route_via_llm", return_value=expected),
+            patch("route_via_events_wrapper._emit_routing_decision"),
+        ):
+            result = route_via_events("debug this error", "corr-123")
+
+        assert result["selected_agent"] == "agent-debugger"
+        assert result["routing_method"] == RoutingMethod.LOCAL.value
+
+    def test_falls_through_to_fuzzy_when_llm_returns_none(self, monkeypatch):
+        """When LLM returns None, routing falls through to fuzzy matching."""
+        monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
+        monkeypatch.setenv("USE_LLM_ROUTING", "true")
+
+        mock_conf = MagicMock()
+        mock_conf.total = 0.85
+        mock_conf.explanation = "Fuzzy match"
+
+        mock_rec = MagicMock()
+        mock_rec.agent_name = "agent-testing"
+        mock_rec.agent_title = "Testing Agent"
+        mock_rec.confidence = mock_conf
+        mock_rec.reason = "Trigger match: 'test'"
+        mock_rec.is_explicit = False
+
+        mock_router = MagicMock()
+        mock_router.route.return_value = [mock_rec]
+        mock_router.registry = {
+            "agents": {
+                "agent-testing": {
+                    "domain_context": "testing",
+                    "description": "Testing agent",
+                }
+            }
+        }
+
+        with (
+            patch(
+                "route_via_events_wrapper._use_onex_routing_nodes", return_value=False
+            ),
+            patch("route_via_events_wrapper._use_llm_routing", return_value=True),
+            patch("route_via_events_wrapper._route_via_llm", return_value=None),
+            patch("route_via_events_wrapper._get_router", return_value=mock_router),
+        ):
+            result = route_via_events("run tests", "corr-123")
+
+        # Should have fallen through to fuzzy and selected agent-testing
+        assert result["selected_agent"] == "agent-testing"
+        assert result["routing_policy"] == RoutingPolicy.TRIGGER_MATCH.value
+
+    def test_skips_llm_when_flag_disabled(self, monkeypatch):
+        """When USE_LLM_ROUTING is off, _route_via_llm is never called."""
+        monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "false")
+        monkeypatch.setenv("USE_LLM_ROUTING", "true")
+
+        with (
+            patch(
+                "route_via_events_wrapper._use_onex_routing_nodes", return_value=False
+            ),
+            patch("route_via_events_wrapper._use_llm_routing", return_value=False),
+            patch("route_via_events_wrapper._route_via_llm") as mock_llm_route,
+            patch("route_via_events_wrapper._get_router", return_value=None),
+        ):
+            result = route_via_events("test prompt", "corr-123")
+
+        mock_llm_route.assert_not_called()
+        assert result["selected_agent"] == DEFAULT_AGENT
+
+    def test_zero_regression_when_llm_endpoint_down(self, monkeypatch):
+        """Result is identical to pure fuzzy routing when LLM endpoint is down."""
+        monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
+        monkeypatch.setenv("USE_LLM_ROUTING", "true")
+
+        # LLM path is enabled but returns None (simulating endpoint down)
+        with (
+            patch(
+                "route_via_events_wrapper._use_onex_routing_nodes", return_value=False
+            ),
+            patch("route_via_events_wrapper._use_llm_routing", return_value=True),
+            patch("route_via_events_wrapper._route_via_llm", return_value=None),
+            patch("route_via_events_wrapper._get_router", return_value=None),
+        ):
+            result_with_llm = route_via_events("test prompt", "corr-123")
+
+        # Pure fuzzy routing (flag off) for comparison
+        with (
+            patch(
+                "route_via_events_wrapper._use_onex_routing_nodes", return_value=False
+            ),
+            patch("route_via_events_wrapper._use_llm_routing", return_value=False),
+            patch("route_via_events_wrapper._get_router", return_value=None),
+        ):
+            result_without_llm = route_via_events("test prompt", "corr-456")
+
+        # Core routing outcome must be identical
+        assert result_with_llm["selected_agent"] == result_without_llm["selected_agent"]
+        assert result_with_llm["routing_policy"] == result_without_llm["routing_policy"]
+        assert result_with_llm["routing_path"] == result_without_llm["routing_path"]
