@@ -44,6 +44,38 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# Logging configuration
+# ---------------------------------------------------------------------------
+# Honor LOG_FILE env var so hook logs are written when configured.
+# Mirrors the pattern used by other hooks in this lib.
+
+_LOG_FORMAT = "[%(asctime)s] %(levelname)s %(name)s: %(message)s"
+
+
+def _configure_logging() -> None:
+    """Configure file logging when LOG_FILE is set in the environment.
+
+    Attaches a FileHandler to the module logger only if LOG_FILE is set
+    and no handler has been added yet (avoids duplicates on re-import).
+    Sets propagate=False so records don't also appear on stderr.
+    """
+    log_file = os.environ.get("LOG_FILE", "").strip()
+    if not log_file or logger.handlers:
+        return
+    try:
+        handler = logging.FileHandler(str(Path(log_file).expanduser()))
+        handler.setFormatter(logging.Formatter(_LOG_FORMAT))
+        logger.addHandler(handler)
+        logger.setLevel(logging.DEBUG)
+        logger.propagate = False
+    except Exception:
+        # Never fail hook startup due to logging misconfiguration.
+        pass
+
+
+_configure_logging()
+
+# ---------------------------------------------------------------------------
 # Feature flag resolution
 # ---------------------------------------------------------------------------
 
@@ -359,6 +391,9 @@ def main() -> None:
     handle_delegation(), and prints JSON to stdout.
 
     Always exits 0. Non-zero exit would block the hook.
+
+    Note: Python 3.12+ is guaranteed by the project's requires-python
+    constraint and by find_python() in common.sh — no runtime check needed.
     """
     if len(sys.argv) < 3:
         print(json.dumps({"delegated": False, "reason": "missing_args"}))

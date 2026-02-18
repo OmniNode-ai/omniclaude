@@ -525,20 +525,14 @@ class TestConservativeFallback:
     def test_unexpected_exception_in_handle_delegation(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """If an unexpected exception escapes handle_delegation, main() catches it."""
+        """handle_delegation catches standard Exception subclasses and returns delegated=False."""
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
 
-        # Make _classify_prompt raise an unexpected type
-        with patch.object(ldh, "_classify_prompt", side_effect=MemoryError("oom")):
-            # handle_delegation catches Exception (not MemoryError in Python 3 hierarchy)
-            # MemoryError is BaseException, not Exception, so it propagates to main()
-            # main() has its own outer try/except. Let's verify handle_delegation doesn't
-            # accidentally raise on standard Exception subclasses.
-            with patch.object(
-                ldh, "_classify_prompt", side_effect=ValueError("unexpected")
-            ):
-                result = ldh.handle_delegation("document this", "corr-err")
+        with patch.object(
+            ldh, "_classify_prompt", side_effect=ValueError("unexpected")
+        ):
+            result = ldh.handle_delegation("document this", "corr-err")
         assert result["delegated"] is False
 
     def test_result_always_has_delegated_key(
