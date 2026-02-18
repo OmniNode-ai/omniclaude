@@ -630,7 +630,9 @@ def _route_via_llm(
 
     # Start timing immediately before the HTTP/LLM invocation so the LatencyGuard
     # SLO only measures the actual LLM call latency (not health check or setup).
-    start = time.time()
+    # Use monotonic clock (not wall clock) to avoid NTP adjustments producing
+    # incorrect (negative or inflated) latency readings per latency_guard.py.
+    start = time.monotonic()
     try:
         result = _run_async(
             llm_handler.compute_routing(request, correlation_id=cid),
@@ -643,7 +645,7 @@ def _route_via_llm(
             correlation_id,
         )
         if start is not None:
-            elapsed_ms = (time.time() - start) * 1000
+            elapsed_ms = (time.monotonic() - start) * 1000
             guard = _get_latency_guard()
             if guard is not None:
                 try:
@@ -666,10 +668,17 @@ def _route_via_llm(
     # (e.g. 80.9ms must not be truncated to 80.0ms, which would not trip the
     # P95 SLO circuit that opens at > 80.0ms).  The integer version is kept
     # for the output dict / logs so the external interface stays the same.
-    assert (
-        start is not None
-    )  # set before the LLM call; all early-returns above exit first
-    latency_ms_float = (time.time() - start) * 1000
+    if start is None:
+        # start is always set before the LLM call; all early-returns above exit
+        # first.  This guard defends against optimised builds where assert is
+        # stripped (-O flag) and any future code paths that bypass the assignment.
+        logger.warning(
+            "_route_via_llm: start timestamp unexpectedly None after LLM call "
+            "(correlation_id=%s); skipping latency recording",
+            correlation_id,
+        )
+        return result
+    latency_ms_float = (time.monotonic() - start) * 1000
     latency_ms = int(latency_ms_float)
 
     # Record latency with the guard so it can enforce the P95 SLO.
@@ -1053,7 +1062,11 @@ def _record_llm_fuzzy_agreement(llm_selected: str, prompt: str) -> None:
             agreed,
         )
     except Exception as exc:
-        logger.debug("_record_llm_fuzzy_agreement failed (non-blocking): %s", exc)
+        # Log at debug so failures in guard.record_agreement() or the fuzzy
+        # router are not completely invisible (non-blocking — routing continues).
+        logger.debug(
+            "_record_llm_fuzzy_agreement: guard.record_agreement raised: %s", exc
+        )
     finally:
         _agreement_lock.release()
 

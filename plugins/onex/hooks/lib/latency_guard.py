@@ -401,6 +401,8 @@ class LatencyGuard:
     def _prune_agreement_window(self, now: float) -> None:
         """Remove observations outside the rolling window."""
         cutoff = now - AGREEMENT_WINDOW_SECONDS
+        # Strict less-than: observations with timestamp == cutoff are retained
+        # (i.e. "older than" is exclusive of the boundary).
         while self._agreement_obs and self._agreement_obs[0].timestamp < cutoff:
             self._agreement_obs.popleft()
 

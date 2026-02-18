@@ -149,13 +149,12 @@ class TestLatencyTracking:
         """P95 breaches SLO when the 95th-percentile sample is slow."""
         guard = LatencyGuard.get_instance()
         # Use MIN_SAMPLES_FOR_TRIP samples so we stay at exactly that threshold.
-        # Make 90% fast and 10% slow.
-        # Sorted array: 90% at 1.0, 10% at SLO+10.
-        # P95 index = max(0, int(0.95 * n) - 1) where n = MIN_SAMPLES_FOR_TRIP.
-        # For MIN_SAMPLES_FOR_TRIP=10: idx = max(0, 9-1) = 8 → index 8 in a
-        # 10-element sorted list: [1,1,1,1,1,1,1,1,1,slow] → index 8 = 1.0 (fast).
-        # So we need >5% slow to land above index 94 for n=100.
-        # Simply use all samples breaching the SLO — guaranteed P95 > SLO.
+        # The implementation uses the nearest-rank method:
+        #   idx = max(0, math.ceil(0.95 * n) - 1)
+        # For MIN_SAMPLES_FOR_TRIP=10: idx = max(0, ceil(9.5) - 1) = max(0, 10-1) = 9
+        # → the last element of the sorted array.
+        # By making all n samples breach the SLO, every index (including 9) is
+        # above the SLO, so P95 > SLO is guaranteed regardless of n.
         n = MIN_SAMPLES_FOR_TRIP
         for _ in range(n):
             guard.record_latency(P95_SLO_MS + 10.0)
