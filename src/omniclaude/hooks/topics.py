@@ -148,6 +148,11 @@ class TopicBase(StrEnum):
     # ==========================================================================
     STATIC_CONTEXT_EDIT_DETECTED = "onex.evt.omniclaude.static-context-edit-detected.v1"
 
+    # ==========================================================================
+    # Enrichment observability topics (OMN-2274)
+    # ==========================================================================
+    CONTEXT_ENRICHMENT = "onex.evt.omniclaude.context-enrichment.v1"  # OMN-2274
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).

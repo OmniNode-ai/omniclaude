@@ -472,6 +472,21 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         required_fields=["session_id", "fallback_reason", "routing_prompt_version"],
     ),
     # =========================================================================
+    # Context Enrichment Observability Events (OMN-2274)
+    # =========================================================================
+    "context.enrichment": EventRegistration(
+        event_type="context.enrichment",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.CONTEXT_ENRICHMENT,
+                transform=None,  # Passthrough — no sensitive data in enrichment metadata
+                description="Per-channel enrichment observability event",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "enrichment_type"],
+    ),
+    # =========================================================================
     # Notification Events (OMN-1831)
     # =========================================================================
     "notification.blocked": EventRegistration(
