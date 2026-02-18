@@ -381,7 +381,7 @@ def main() -> None:
             sys.exit(0)
 
         # Approximate token count of the raw prompt for tokens_saved computation
-        original_prompt_token_count = _count_tokens(prompt)
+        original_prompt_token_count = _count_tokens(prompt)  # noqa: secrets
 
         # Run enrichments
         raw_results = asyncio.run(

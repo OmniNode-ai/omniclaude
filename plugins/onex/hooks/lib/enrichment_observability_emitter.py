@@ -213,14 +213,14 @@ def emit_enrichment_events(
             continue
 
         success: bool = bool(getattr(result, "success", False))
-        result_token_count: int = int(getattr(result, "tokens", 0))
+        result_token_count: int = int(getattr(result, "tokens", 0))  # noqa: secrets
 
         # was_dropped: ran and produced content but excluded by token cap
         was_dropped = success and (enrichment_type not in kept_names)
 
         # tokens_saved: only meaningful for summarization
         if enrichment_type == "summarization" and success and result_token_count > 0:
-            tokens_saved = max(0, original_prompt_token_count - result_token_count)
+            tokens_saved = max(0, original_prompt_token_count - result_token_count)  # noqa: secrets
         else:
             tokens_saved = 0
 
