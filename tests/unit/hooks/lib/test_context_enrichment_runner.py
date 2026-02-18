@@ -669,6 +669,7 @@ class TestSubprocessInterface:
             timeout=5,
             check=False,
             env={
+                **os.environ,
                 "ENABLE_LOCAL_INFERENCE_PIPELINE": "false",
                 "ENABLE_LOCAL_ENRICHMENT": "false",
             },
@@ -691,6 +692,7 @@ class TestSubprocessInterface:
             timeout=5,
             check=False,
             env={
+                **os.environ,
                 "ENABLE_LOCAL_INFERENCE_PIPELINE": "true",
                 "ENABLE_LOCAL_ENRICHMENT": "true",
             },
