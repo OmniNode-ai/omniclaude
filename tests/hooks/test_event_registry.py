@@ -755,6 +755,8 @@ class TestEventRegistryIntegration:
             "phase.metrics",
             # Agent status (OMN-1848)
             "agent.status",
+            # Pattern compliance (OMN-2263 → OMN-2256)
+            "compliance.evaluate",
         }
         assert set(EVENT_REGISTRY.keys()) == expected_types
 

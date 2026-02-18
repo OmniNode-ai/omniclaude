@@ -487,6 +487,24 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         required_fields=["event_id", "event_type", "timestamp_iso", "payload"],
     ),
     # =========================================================================
+    # Pattern Compliance (OMN-2263 → OMN-2256)
+    # =========================================================================
+    # No fan-out, no payload transform — full content goes to the intelligence
+    # cmd topic which is already access-restricted. Content must reach
+    # omniintelligence intact for content-aware compliance checking.
+    "compliance.evaluate": EventRegistration(
+        event_type="compliance.evaluate",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.COMPLIANCE_EVALUATE,
+                transform=None,  # Passthrough — full content to intelligence
+                description="Compliance evaluation request to omniintelligence",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "source_path", "applicable_patterns"],
+    ),
+    # =========================================================================
     # Agent Status (OMN-1848 - agent lifecycle reporting)
     # =========================================================================
     # NOTE: agent_name and session_id may carry the sentinel value "unknown".

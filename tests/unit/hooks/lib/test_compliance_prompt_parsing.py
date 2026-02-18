@@ -1,9 +1,9 @@
 """Compliance prompt regression tests (OMN-2258).
 
-Snapshot-tests the JSON schema of compliance prompt output (EnforcementResult,
-PatternAdvisory), validates parsing of violation lists from LLM/API responses,
-and exercises bad-output recovery paths (malformed JSON, empty stdin, unexpected
-fields, None values).
+Snapshot-tests the JSON schema of compliance output (EnforcementResult,
+PatternAdvisory), validates structural eligibility filtering of patterns,
+and exercises bad-output recovery paths (malformed JSON, empty stdin,
+unexpected fields, None values).
 
 All tests run without network access or external services.
 """
@@ -36,7 +36,7 @@ sys.path.insert(
 from pattern_enforcement import (
     EnforcementResult,
     PatternAdvisory,
-    check_compliance,
+    _is_eligible_pattern,
     enforce_patterns,
     main,
 )
@@ -79,6 +79,7 @@ def _enforcement_result_keys() -> set[str]:
         "patterns_skipped_cooldown",
         "elapsed_ms",
         "error",
+        "evaluation_submitted",
     }
 
 
@@ -111,6 +112,7 @@ class TestEnforcementResultSchema:
             patterns_skipped_cooldown=0,
             elapsed_ms=0.0,
             error=None,
+            evaluation_submitted=False,
         )
         assert set(result.keys()) == _enforcement_result_keys()
 
@@ -123,6 +125,7 @@ class TestEnforcementResultSchema:
             patterns_skipped_cooldown=2,
             elapsed_ms=42.5,
             error=None,
+            evaluation_submitted=True,
         )
         serialized = json.dumps(original)
         deserialized = json.loads(serialized)
@@ -133,6 +136,7 @@ class TestEnforcementResultSchema:
         assert deserialized["patterns_skipped_cooldown"] == 2
         assert deserialized["elapsed_ms"] == 42.5
         assert deserialized["error"] is None
+        assert deserialized["evaluation_submitted"] is True
 
     def test_enforcement_result_with_error_roundtrips(self) -> None:
         """EnforcementResult with a non-None error string round-trips correctly."""
@@ -143,10 +147,12 @@ class TestEnforcementResultSchema:
             patterns_skipped_cooldown=0,
             elapsed_ms=1.0,
             error="connection refused",
+            evaluation_submitted=False,
         )
         deserialized = json.loads(json.dumps(original))
         assert deserialized["enforced"] is False
         assert deserialized["error"] == "connection refused"
+        assert deserialized["evaluation_submitted"] is False
 
     def test_enforcement_result_enforced_types(self) -> None:
         """Type constraints: enforced is bool, elapsed_ms is float, etc."""
@@ -157,16 +163,22 @@ class TestEnforcementResultSchema:
             patterns_skipped_cooldown=0,
             elapsed_ms=0.0,
             error=None,
+            evaluation_submitted=False,
         )
         assert isinstance(result["enforced"], bool)
         assert isinstance(result["advisories"], list)
         assert isinstance(result["patterns_queried"], int)
         assert isinstance(result["patterns_skipped_cooldown"], int)
         assert isinstance(result["elapsed_ms"], float)
+        assert isinstance(result["evaluation_submitted"], bool)
 
 
 class TestPatternAdvisorySchema:
-    """Snapshot tests ensuring the PatternAdvisory schema is stable."""
+    """Snapshot tests ensuring the PatternAdvisory schema is stable.
+
+    PatternAdvisory TypedDict is still defined for use when Ticket 4
+    (compliance result subscriber) writes advisories back to storage.
+    """
 
     def test_advisory_has_all_expected_keys(self) -> None:
         """PatternAdvisory TypedDict declares exactly the expected keys."""
@@ -199,118 +211,62 @@ class TestPatternAdvisorySchema:
         assert deserialized["status"] == "validated"
         assert "Use type hints" in deserialized["message"]
 
-    def test_enforcement_result_with_advisories_roundtrips(self) -> None:
-        """Full EnforcementResult containing advisories round-trips via JSON."""
-        advisories = [
-            PatternAdvisory(
-                pattern_id="p-001",
-                pattern_signature="Use descriptive names",
-                domain_id="python",
-                confidence=0.88,
-                status="validated",
-                message="Descriptive names advisory",
-            ),
-            PatternAdvisory(
-                pattern_id="p-002",
-                pattern_signature="Add docstrings",
-                domain_id="python",
-                confidence=0.75,
-                status="validated",
-                message="Docstring advisory",
-            ),
-        ]
-        result = EnforcementResult(
-            enforced=True,
-            advisories=advisories,
-            patterns_queried=10,
-            patterns_skipped_cooldown=3,
-            elapsed_ms=150.0,
-            error=None,
-        )
-        deserialized = json.loads(json.dumps(result))
-        assert len(deserialized["advisories"]) == 2
-        assert deserialized["advisories"][0]["pattern_id"] == "p-001"
-        assert deserialized["advisories"][1]["pattern_id"] == "p-002"
-        for adv in deserialized["advisories"]:
-            assert set(adv.keys()) == _advisory_keys()
-
 
 # ============================================================================
-# 2. Violation List Parsing Tests
+# 2. Eligibility Filtering Tests
 # ============================================================================
 
 
-class TestViolationListParsing:
-    """Tests for check_compliance() parsing pattern data into advisories."""
+class TestEligibilityFiltering:
+    """Tests for _is_eligible_pattern() structural filtering."""
 
-    def test_valid_pattern_produces_advisory(self) -> None:
-        """Validated pattern with all fields returns a well-formed advisory."""
+    def test_valid_pattern_is_eligible(self) -> None:
+        """Validated pattern with all fields passes eligibility."""
         pattern = _make_pattern()
-        result = check_compliance(
-            file_path="/test/file.py",
-            content_preview="x = 1\n",
-            pattern=pattern,
-        )
-        assert result is not None
-        assert set(result.keys()) == _advisory_keys()
-        assert result["pattern_id"] == "pat-001"
-        assert result["confidence"] == 0.85
-        assert result["status"] == "validated"
+        assert _is_eligible_pattern(pattern) is True
 
-    def test_multiple_patterns_produce_independent_advisories(self) -> None:
-        """Each pattern produces its own advisory independently."""
+    def test_multiple_patterns_eligibility_is_independent(self) -> None:
+        """Each pattern's eligibility is evaluated independently."""
         patterns = [
             _make_pattern(pattern_id="p1", signature="sig-1", confidence=0.9),
             _make_pattern(pattern_id="p2", signature="sig-2", confidence=0.8),
             _make_pattern(pattern_id="p3", signature="sig-3", confidence=0.7),
         ]
-        results = [
-            check_compliance(file_path="f.py", content_preview="", pattern=p)
-            for p in patterns
-        ]
-        assert all(r is not None for r in results)
-        ids = [r["pattern_id"] for r in results if r is not None]
-        assert ids == ["p1", "p2", "p3"]
+        results = [_is_eligible_pattern(p) for p in patterns]
+        assert all(results)
 
-    def test_advisory_message_contains_signature(self) -> None:
-        """Advisory message includes the pattern signature."""
-        pattern = _make_pattern(signature="Always use type annotations")
-        result = check_compliance(
-            file_path="test.py", content_preview="", pattern=pattern
-        )
-        assert result is not None
-        # This assertion passes because the signature (28 chars) is shorter than
-        # the 80-char truncation threshold applied in check_compliance().
-        assert "Always use type annotations" in result["message"]
+    def test_draft_status_is_ineligible(self) -> None:
+        """Draft patterns are not eligible."""
+        pattern = _make_pattern(status="draft")
+        assert _is_eligible_pattern(pattern) is False
 
-    def test_advisory_message_contains_confidence(self) -> None:
-        """Advisory message includes the confidence value."""
-        pattern = _make_pattern(confidence=0.93)
-        result = check_compliance(
-            file_path="test.py", content_preview="", pattern=pattern
-        )
-        assert result is not None
-        assert "0.93" in result["message"]
+    def test_provisional_status_is_ineligible(self) -> None:
+        """Provisional patterns are not eligible."""
+        pattern = _make_pattern(status="provisional")
+        assert _is_eligible_pattern(pattern) is False
 
-    def test_enforce_patterns_produces_advisory_list(
+    def test_enforce_patterns_advisories_always_empty(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """enforce_patterns returns a list of advisories from matching patterns."""
+        """enforce_patterns returns advisories=[] always — results arrive async."""
         monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
         patterns = [
             _make_pattern(pattern_id="p1"),
             _make_pattern(pattern_id="p2"),
         ]
-        with patch("pattern_enforcement.query_patterns", return_value=patterns):
+        with (
+            patch("pattern_enforcement.query_patterns", return_value=patterns),
+            patch("pattern_enforcement._emit_compliance_evaluate", return_value=True),
+        ):
             result = enforce_patterns(
                 file_path="/test/file.py",
                 session_id="sess-parse",
                 language="python",
+                content_preview="def foo(): pass\n",
             )
         assert result["enforced"] is True
-        assert len(result["advisories"]) == 2
-        for adv in result["advisories"]:
-            assert set(adv.keys()) == _advisory_keys()
+        assert result["advisories"] == []  # always empty — async model
+        assert result["evaluation_submitted"] is True
 
 
 # ============================================================================
@@ -337,25 +293,31 @@ class TestBadOutputRecovery:
         assert result["enforced"] is True
         assert result["advisories"] == []
         assert result["error"] is None
+        assert result["evaluation_submitted"] is False
 
     def test_all_patterns_filtered_returns_empty_advisories(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Patterns that are all non-validated produce an empty advisory list."""
+        """Patterns that are all non-validated produce empty advisories and no emit."""
         monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
         patterns = [
             _make_pattern(pattern_id="draft-1", status="draft"),
             _make_pattern(pattern_id="prov-1", status="provisional"),
             _make_pattern(pattern_id="unknown-1", status="unknown"),
         ]
-        with patch("pattern_enforcement.query_patterns", return_value=patterns):
+        with (
+            patch("pattern_enforcement.query_patterns", return_value=patterns),
+            patch("pattern_enforcement._emit_compliance_evaluate") as mock_emit,
+        ):
             result = enforce_patterns(
                 file_path="/test/file.py",
                 session_id="sess-filtered",
                 language="python",
+                content_preview="def foo(): pass\n",
             )
         assert result["enforced"] is True
         assert result["advisories"] == []
+        mock_emit.assert_not_called()
 
     # --- Parse failure (malformed JSON in CLI) ---
 
@@ -459,18 +421,14 @@ class TestBadOutputRecovery:
 
     # --- Unexpected fields in pattern ---
 
-    def test_check_compliance_ignores_extra_pattern_fields(self) -> None:
+    def test_is_eligible_pattern_ignores_extra_pattern_fields(self) -> None:
         """Extra fields in the pattern dict are silently ignored."""
         pattern = _make_pattern(
             extra_field_1="unexpected",
             extra_field_2=42,
             nested_extra={"key": "value"},
         )
-        result = check_compliance(
-            file_path="test.py", content_preview="", pattern=pattern
-        )
-        assert result is not None
-        assert set(result.keys()) == _advisory_keys()
+        assert _is_eligible_pattern(pattern) is True
 
     def test_enforce_patterns_handles_exception_safely(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -489,6 +447,7 @@ class TestBadOutputRecovery:
         assert result["enforced"] is False
         assert result["error"] == "unexpected crash"
         assert result["advisories"] == []
+        assert result["evaluation_submitted"] is False
         assert set(result.keys()) == _enforcement_result_keys()
 
 
@@ -498,246 +457,141 @@ class TestBadOutputRecovery:
 
 
 class TestEdgeCases:
-    """Edge cases for compliance prompt parsing."""
+    """Edge cases for compliance eligibility and enforcement pipeline."""
 
-    # --- Very long violation descriptions ---
-
-    def test_long_signature_is_truncated_in_message(self) -> None:
-        """Very long pattern signatures are truncated in the advisory message."""
-        long_sig = "A" * 200
-        pattern = _make_pattern(signature=long_sig)
-        result = check_compliance(
-            file_path="test.py", content_preview="", pattern=pattern
-        )
-        assert result is not None
-        # The signature is truncated to 80 chars in the message
-        assert result["pattern_signature"] == long_sig  # Full in the field
-        assert long_sig[:80] in result["message"]  # Truncated version appears
-        assert long_sig[:81] not in result["message"]  # Confirms truncation at 80 chars
-
-    # --- Unicode in violation messages ---
+    # --- Domain/signature field handling ---
 
     def test_unicode_in_pattern_signature(self) -> None:
-        """Unicode characters in pattern signature are preserved."""
+        """Unicode characters in pattern signature are preserved in eligibility check."""
         unicode_sig = "Use descriptive names (beschreibende Namen verwenden)"
         pattern = _make_pattern(signature=unicode_sig)
-        result = check_compliance(
-            file_path="test.py", content_preview="", pattern=pattern
-        )
-        assert result is not None
-        assert result["pattern_signature"] == unicode_sig
-        assert unicode_sig[:80] in result["message"]
+        assert _is_eligible_pattern(pattern) is True
 
-    def test_domain_id_preserved_in_match(self) -> None:
-        """domain_id is correctly passed through in the pattern matching result."""
+    def test_domain_id_preserved_in_eligible_pattern(self) -> None:
+        """domain_id is present in eligible patterns."""
         pattern = _make_pattern(domain_id="code_quality")
-        result = check_compliance(
-            file_path="test.py", content_preview="", pattern=pattern
-        )
-        assert result is not None
-        assert result["domain_id"] == "code_quality"
+        assert _is_eligible_pattern(pattern) is True
 
     def test_emoji_in_pattern_signature(self) -> None:
         """Emoji characters in pattern signatures are handled without error."""
         pattern = _make_pattern(signature="Always add docstrings 📝 to classes ✅")
-        result = check_compliance(
-            file_path="test.py", content_preview="", pattern=pattern
-        )
-        assert result is not None
-        assert "📝" in result["message"]
+        assert _is_eligible_pattern(pattern) is True
 
     def test_cjk_characters_in_fields(self) -> None:
-        """CJK characters in pattern fields are preserved through round-trip."""
+        """CJK characters in pattern fields do not affect eligibility."""
         pattern = _make_pattern(
             signature="型注釈が必要です",  # "Type annotations required" in Japanese
             domain_id="代码质量",  # "code_quality" in Chinese
         )
-        result = check_compliance(
-            file_path="test.py", content_preview="", pattern=pattern
-        )
-        assert result is not None
-        serialized = json.dumps(result, ensure_ascii=False)
-        deserialized = json.loads(serialized)
-        assert deserialized["domain_id"] == "代码质量"
-        assert deserialized["pattern_signature"] == "型注釈が必要です"
+        assert _is_eligible_pattern(pattern) is True
 
-    # --- Multiple violations of the same type ---
+    # --- Duplicate / boundary confidence ---
 
-    def test_duplicate_pattern_ids_produce_separate_advisories(self) -> None:
-        """Same pattern ID appearing twice produces two independent advisories."""
-        pattern = _make_pattern(pattern_id="dup-001")
-        r1 = check_compliance(file_path="a.py", content_preview="", pattern=pattern)
-        r2 = check_compliance(file_path="b.py", content_preview="", pattern=pattern)
-        assert r1 is not None and r2 is not None
-        assert r1["pattern_id"] == r2["pattern_id"] == "dup-001"
+    def test_duplicate_pattern_ids_eligible_independently(self) -> None:
+        """Same pattern ID appearing in two separate dicts is eligible independently."""
+        p1 = _make_pattern(pattern_id="dup-001")
+        p2 = _make_pattern(pattern_id="dup-001")
+        assert _is_eligible_pattern(p1) is True
+        assert _is_eligible_pattern(p2) is True
 
-    def test_same_status_multiple_patterns(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Multiple patterns with same status all produce advisories."""
-        monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
-        patterns = [
-            _make_pattern(pattern_id=f"p-{i}", confidence=0.8 + i * 0.01)
-            for i in range(5)
-        ]
-        with patch("pattern_enforcement.query_patterns", return_value=patterns):
-            result = enforce_patterns(
-                file_path="/test/file.py",
-                session_id="sess-multi",
-                language="python",
-            )
-        assert len(result["advisories"]) == 5
-
-    # --- Boundary confidence values ---
-
-    def test_confidence_zero(self) -> None:
-        """Confidence of 0.0 produces a valid advisory."""
+    def test_confidence_zero_is_eligible(self) -> None:
+        """Confidence of 0.0 is structurally eligible (semantic filtering in intelligence)."""
         pattern = _make_pattern(confidence=0.0)
-        result = check_compliance(
-            file_path="test.py", content_preview="", pattern=pattern
-        )
-        assert result is not None
-        assert result["confidence"] == 0.0
+        assert _is_eligible_pattern(pattern) is True
 
-    def test_confidence_one(self) -> None:
-        """Confidence of 1.0 produces a valid advisory."""
+    def test_confidence_one_is_eligible(self) -> None:
+        """Confidence of 1.0 is eligible."""
         pattern = _make_pattern(confidence=1.0)
-        result = check_compliance(
-            file_path="test.py", content_preview="", pattern=pattern
-        )
-        assert result is not None
-        assert result["confidence"] == 1.0
+        assert _is_eligible_pattern(pattern) is True
 
-    def test_confidence_negative_clamped(self) -> None:
-        """Negative confidence is accepted by check_compliance (clamping is in query_patterns)."""
+    def test_confidence_negative_is_eligible(self) -> None:
+        """Negative confidence is structurally valid (clamping is in query_patterns)."""
         pattern = _make_pattern(confidence=-0.5)
-        result = check_compliance(
-            file_path="test.py", content_preview="", pattern=pattern
-        )
-        assert result is not None
-        assert result["confidence"] == -0.5  # check_compliance does not clamp
+        assert _is_eligible_pattern(pattern) is True
 
     # --- Missing or empty pattern fields ---
 
-    def test_missing_id_returns_none(self) -> None:
-        """Pattern without 'id' key returns None."""
+    def test_missing_id_is_ineligible(self) -> None:
+        """Pattern without 'id' key is ineligible."""
         pattern = {"pattern_signature": "sig", "confidence": 0.9, "status": "validated"}
-        result = check_compliance(
-            file_path="test.py", content_preview="", pattern=pattern
-        )
-        assert result is None
+        assert _is_eligible_pattern(pattern) is False
 
-    def test_empty_id_returns_none(self) -> None:
-        """Pattern with empty string 'id' returns None."""
+    def test_empty_id_is_ineligible(self) -> None:
+        """Pattern with empty string 'id' is ineligible."""
         pattern = _make_pattern(pattern_id="")
-        result = check_compliance(
-            file_path="test.py", content_preview="", pattern=pattern
-        )
-        assert result is None
+        assert _is_eligible_pattern(pattern) is False
 
-    def test_missing_signature_returns_none(self) -> None:
-        """Pattern without 'pattern_signature' key returns None."""
+    def test_missing_signature_is_ineligible(self) -> None:
+        """Pattern without 'pattern_signature' key is ineligible."""
         pattern = {"id": "p-001", "confidence": 0.9, "status": "validated"}
-        result = check_compliance(
-            file_path="test.py", content_preview="", pattern=pattern
-        )
-        assert result is None
+        assert _is_eligible_pattern(pattern) is False
 
-    def test_empty_signature_returns_none(self) -> None:
-        """Pattern with empty string signature returns None."""
+    def test_empty_signature_is_ineligible(self) -> None:
+        """Pattern with empty string signature is ineligible."""
         pattern = _make_pattern(signature="")
-        result = check_compliance(
-            file_path="test.py", content_preview="", pattern=pattern
-        )
-        assert result is None
+        assert _is_eligible_pattern(pattern) is False
 
-    def test_missing_confidence_defaults_to_zero(self) -> None:
-        """Pattern without confidence key defaults to 0.0."""
+    def test_missing_confidence_defaults_to_zero_and_is_eligible(self) -> None:
+        """Pattern without confidence key defaults to 0.0 (structurally valid)."""
         pattern = {
             "id": "p-001",
             "pattern_signature": "sig",
             "status": "validated",
         }
-        result = check_compliance(
-            file_path="test.py", content_preview="", pattern=pattern
-        )
-        assert result is not None
-        assert result["confidence"] == 0.0
+        assert _is_eligible_pattern(pattern) is True
 
-    def test_missing_domain_id_defaults_to_empty(self) -> None:
-        """Pattern without domain_id key defaults to empty string."""
+    def test_missing_domain_id_is_eligible(self) -> None:
+        """Pattern without domain_id is still structurally eligible."""
         pattern = {
             "id": "p-001",
             "pattern_signature": "sig",
             "confidence": 0.9,
             "status": "validated",
         }
-        result = check_compliance(
-            file_path="test.py", content_preview="", pattern=pattern
-        )
-        assert result is not None
-        assert result["domain_id"] == ""
+        assert _is_eligible_pattern(pattern) is True
 
-    def test_missing_status_defaults_to_unknown_and_filters(self) -> None:
-        """Pattern without status defaults to 'unknown' and is filtered out."""
+    def test_missing_status_defaults_to_unknown_and_is_ineligible(self) -> None:
+        """Pattern without status defaults to 'unknown' and is ineligible."""
         pattern = {
             "id": "p-001",
             "pattern_signature": "sig",
             "confidence": 0.9,
         }
-        result = check_compliance(
-            file_path="test.py", content_preview="", pattern=pattern
-        )
-        assert result is None  # status != "validated"
+        assert _is_eligible_pattern(pattern) is False
 
     # --- Non-numeric and unusual confidence values ---
 
-    def test_non_numeric_confidence_returns_none(self) -> None:
-        """Non-numeric confidence value returns None instead of crashing."""
+    def test_non_numeric_confidence_is_ineligible(self) -> None:
+        """Non-numeric confidence value is ineligible."""
         pattern = _make_pattern(confidence="not-a-number")  # type: ignore[arg-type]
-        result = check_compliance(
-            file_path="test.py", content_preview="", pattern=pattern
-        )
-        assert result is None
+        assert _is_eligible_pattern(pattern) is False
 
-    def test_none_confidence_returns_none(self) -> None:
-        """None confidence value returns None (float(None) raises TypeError)."""
+    def test_none_confidence_is_ineligible(self) -> None:
+        """None confidence value is ineligible (float(None) raises TypeError)."""
         pattern = _make_pattern(confidence=None)  # type: ignore[arg-type]
-        result = check_compliance(
-            file_path="test.py", content_preview="", pattern=pattern
-        )
-        assert result is None
+        assert _is_eligible_pattern(pattern) is False
 
-    def test_boolean_confidence_converts_to_float(self) -> None:
+    def test_boolean_confidence_is_eligible(self) -> None:
         """Boolean confidence values are converted via float() (True -> 1.0)."""
         pattern = _make_pattern(confidence=True)  # type: ignore[arg-type]
-        result = check_compliance(
-            file_path="test.py", content_preview="", pattern=pattern
-        )
-        assert result is not None
-        assert result["confidence"] == 1.0
+        assert _is_eligible_pattern(pattern) is True
 
     # --- Nested / complex pattern structures ---
 
-    def test_pattern_with_nested_metadata_ignored(self) -> None:
-        """Extra nested metadata in pattern is silently ignored."""
+    def test_pattern_with_nested_metadata_is_eligible(self) -> None:
+        """Extra nested metadata in pattern doesn't affect eligibility."""
         pattern = _make_pattern(
             metadata={"created_by": "system", "version": 2},
             tags=["python", "naming"],
             rules=[{"type": "naming", "severity": "warning"}],
         )
-        result = check_compliance(
-            file_path="test.py", content_preview="", pattern=pattern
-        )
-        assert result is not None
-        assert set(result.keys()) == _advisory_keys()
+        assert _is_eligible_pattern(pattern) is True
 
     # --- Empty pattern dict ---
 
-    def test_empty_pattern_dict_returns_none(self) -> None:
-        """Completely empty pattern dict returns None."""
-        result = check_compliance(file_path="test.py", content_preview="", pattern={})
-        assert result is None
+    def test_empty_pattern_dict_is_ineligible(self) -> None:
+        """Completely empty pattern dict is ineligible."""
+        assert _is_eligible_pattern({}) is False
 
     # --- CLI main() with valid but edge-case inputs ---
 
@@ -829,11 +683,15 @@ class TestEdgeCases:
         """patterns_queried reflects the number of patterns from the store."""
         monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
         patterns = [_make_pattern(pattern_id=f"p-{i}") for i in range(7)]
-        with patch("pattern_enforcement.query_patterns", return_value=patterns):
+        with (
+            patch("pattern_enforcement.query_patterns", return_value=patterns),
+            patch("pattern_enforcement._emit_compliance_evaluate", return_value=True),
+        ):
             result = enforce_patterns(
                 file_path="/test/file.py",
                 session_id="sess-count",
                 language="python",
+                content_preview="def foo(): pass\n",
             )
         assert result["patterns_queried"] == 7
 
@@ -860,24 +718,38 @@ class TestEdgeCases:
         assert result["enforced"] is False
         assert result["error"] is not None
 
-    # --- Large number of advisories ---
+    # --- Large number of patterns ---
 
-    def test_many_patterns_produce_many_advisories(
+    def test_many_eligible_patterns_emit_once(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A large number of patterns are all processed into advisories."""
+        """A large number of eligible patterns triggers a single emit."""
         monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
         count = 50
         patterns = [
             _make_pattern(pattern_id=f"p-{i}", confidence=0.7 + (i % 30) * 0.01)
             for i in range(count)
         ]
-        with patch("pattern_enforcement.query_patterns", return_value=patterns):
+        emit_call_count = [0]
+
+        def count_emit(**kwargs: Any) -> bool:
+            emit_call_count[0] += 1
+            return True
+
+        with (
+            patch("pattern_enforcement.query_patterns", return_value=patterns),
+            patch(
+                "pattern_enforcement._emit_compliance_evaluate", side_effect=count_emit
+            ),
+        ):
             result = enforce_patterns(
                 file_path="/test/file.py",
                 session_id="sess-many",
                 language="python",
+                content_preview="def foo(): pass\n",
             )
         assert result["enforced"] is True
-        assert len(result["advisories"]) == count
+        assert result["advisories"] == []  # always empty
         assert result["patterns_queried"] == count
+        # Single emit, not one per pattern
+        assert emit_call_count[0] == 1
