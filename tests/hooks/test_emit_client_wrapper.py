@@ -66,6 +66,7 @@ class TestModuleImport:
             "notification.completed",  # PR-92
             "phase.metrics",  # OMN-2027 - Phase instrumentation metrics
             "agent.status",  # OMN-1848 - Agent status reporting
+            "compliance.evaluate",  # OMN-2256
         }
         assert expected_types == SUPPORTED_EVENT_TYPES
 
