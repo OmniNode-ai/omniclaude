@@ -450,6 +450,7 @@ if [[ "${ENABLE_LOCAL_INFERENCE_PIPELINE:-false}" == "true" ]] && [[ "${ENABLE_L
         '{prompt: $prompt, session_id: $session_id, project_path: $project_path}' 2>/dev/null)
     if [[ -n "$ENRICHMENT_INPUT" ]]; then
         set +e
+        # 1s = Python startup overhead + 200ms inner budget
         ENRICHMENT_RESULT=$(echo "$ENRICHMENT_INPUT" | run_with_timeout 1 "$PYTHON_CMD" "$ENRICHMENT_RUNNER" 2>>"$LOG_FILE")
         set -e
         ENRICHMENT_SUCCESS=$(echo "$ENRICHMENT_RESULT" | jq -r '.success // false' 2>/dev/null || echo 'false')
