@@ -8,6 +8,8 @@ Used to guide manifest section selection and relevance filtering.
 import re
 from dataclasses import dataclass, field
 from enum import Enum
+from types import MappingProxyType
+from typing import ClassVar
 
 
 class TaskIntent(Enum):
@@ -218,11 +220,10 @@ class TaskClassifier:
         "workflow",
     ]
 
-    # Short keywords (<=4 chars) that need word boundary matching to avoid
-    # substring false positives (e.g., "api" matching "capital",
-    # "rest" matching "forest", "node" matching "anode",
-    # "file" matching "profile"/"defile", "run" matching "rundown",
-    # "git" matching "digital", "bash" matching "dashboard")
+    # Keywords that need word boundary matching to avoid substring false positives.
+    # Includes short (<=4 char) keywords as well as longer terms that are common
+    # substrings of unrelated words (e.g., "graph" in "paragraph", "figure" in
+    # "configure", "visual" in "audiovisual", "ocr" in "score").
     _SHORT_KEYWORDS: frozenset[str] = frozenset(
         {
             "new",
@@ -246,6 +247,11 @@ class TaskClassifier:
             "push",
             "curl",
             "bash",
+            # Vision signals that are common substrings of unrelated words
+            "ocr",     # 3 chars: matches "score", "discord", etc.
+            "graph",   # 5 chars: matches "paragraph", "biography", etc.
+            "figure",  # 6 chars: matches "configure", "disfigure", etc.
+            "visual",  # 6 chars: matches "audiovisual", etc.
         }
     )
 
@@ -370,11 +376,13 @@ class TaskClassifier:
     _DELEGATE_MODEL_COST_PER_1K: float = 0.001
 
     #: Average estimated token count per intent type, used for savings calculation.
-    _INTENT_AVG_TOKENS: dict[TaskIntent, int] = {
-        TaskIntent.DOCUMENT: 800,
-        TaskIntent.TEST: 600,
-        TaskIntent.RESEARCH: 400,
-    }
+    _INTENT_AVG_TOKENS: ClassVar[MappingProxyType[TaskIntent, int]] = MappingProxyType(
+        {
+            TaskIntent.DOCUMENT: 800,
+            TaskIntent.TEST: 600,
+            TaskIntent.RESEARCH: 400,
+        }
+    )
 
     #: Name/identifier of the default delegate model.
     _DELEGATE_MODEL_NAME: str = "qwen2.5-14b"
@@ -415,7 +423,7 @@ class TaskClassifier:
         # Primary intent = highest score
         if intent_scores:
             primary_intent = max(intent_scores, key=lambda k: intent_scores.get(k, 0))
-            confidence = intent_scores[primary_intent] / 10.0  # Normalize
+            confidence = intent_scores[primary_intent] / len(self.INTENT_KEYWORDS[primary_intent])  # Normalize
 
             # Boost confidence for IMPLEMENT intent with domain-specific terminology
             # Domain terms are strong implementation signals even without explicit verbs
@@ -544,9 +552,16 @@ class TaskClassifier:
     # ---------------------------------------------------------------------------
 
     def _has_vision_signals(self, prompt_lower: str) -> bool:
-        """Return True if the prompt contains any vision/image signals."""
+        """Return True if the prompt contains any vision/image signals.
+
+        Uses ``_keyword_in_text()`` so that signals registered in
+        ``_SHORT_KEYWORDS`` (e.g. "ocr", "graph", "figure", "visual") require a
+        word-boundary match, preventing false positives from substring containment
+        (e.g. "score" should not trigger on "ocr", "paragraph" on "graph",
+        "configure" on "figure", "audiovisual" on "visual").
+        """
         for signal in self._VISION_SIGNALS:
-            if signal in prompt_lower:
+            if self._keyword_in_text(signal, prompt_lower):
                 return True
         return False
 
