@@ -69,13 +69,14 @@ Targets for **synchronous path only** (excludes backgrounded processes):
 |------|--------|-------------|---------------------|
 | SessionStart | <50ms | Daemon check, stdin read | Kafka emit, Postgres log |
 | SessionEnd | <50ms | stdin read | Kafka emit, Postgres log |
-| UserPromptSubmit | <500ms typical (~6s worst-case) | Routing, candidate formatting, context injection | Kafka emit, intelligence requests |
+| UserPromptSubmit | <500ms typical (~15s worst-case with delegation) | Routing, candidate formatting, context injection, pattern advisory, local delegation | Kafka emit, intelligence requests |
 | PostToolUse | <100ms | stdin read, quality check | Kafka emit, content capture |
 
 > **Note**: UserPromptSubmit's 500ms target is for typical runs. Worst-case with all timeout
-> paths (routing 5s + injection 1s) is ~6s. Agent YAML loading was removed from the sync
-> path in OMN-1980 — Claude loads the selected agent's YAML on-demand. These timeouts are
-> safety nets; normal execution stays well under 500ms.
+> paths (routing 5s + injection 1s + advisory 1s + delegation 8s) is ~15s. Without delegation
+> enabled, worst-case is ~7s. Agent YAML loading was removed from the sync path in OMN-1980 —
+> Claude loads the selected agent's YAML on-demand. These timeouts are safety nets; normal
+> execution stays well under 500ms.
 
 If hooks exceed budget, check:
 1. Network latency to routing service

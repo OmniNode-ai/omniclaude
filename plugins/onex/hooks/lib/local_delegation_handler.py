@@ -101,12 +101,12 @@ _configure_logging()
 # Feature flag resolution
 # ---------------------------------------------------------------------------
 
-_TRUTHY = frozenset(("true", "1", "yes", "on", "y", "t"))
+_TRUTHY = frozenset(("true", "1", "yes", "on"))
 
 # Timeout for local LLM call in seconds.
 # Kept below the 8s shell-level timeout so httpx fails cleanly before SIGALRM
-# kills the process. Worst-case sync path: routing 5s + injection 1s + delegation
-# 8s = ~14s, well under the 41s that the previous 35s timeout produced.
+# kills the process. Worst-case sync path: routing 5s + injection 1s + advisory
+# 1s + delegation 8s = ~15s, well under the 41s that the previous 35s timeout produced.
 _LLM_CALL_TIMEOUT_S = 7.0
 
 # Maximum tokens requested from the local model.

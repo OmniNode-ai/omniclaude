@@ -110,8 +110,6 @@ class TestFeatureFlags:
         [
             ("1", "yes"),
             ("on", "on"),
-            ("y", "y"),
-            ("t", "t"),
         ],
     )
     def test_flags_truthy_variants(
@@ -120,7 +118,7 @@ class TestFeatureFlags:
         pipeline_val: str,
         delegation_val: str,
     ) -> None:
-        """All six truthy values (true/1/yes/on/y/t) are accepted."""
+        """All four truthy values (true/1/yes/on) are accepted."""
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", pipeline_val)
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", delegation_val)
         score = _make_delegation_score(False, reasons=["not delegatable"])
@@ -229,7 +227,7 @@ class TestEndpointResolution:
             "sys.modules", {"omniclaude.config.model_local_llm_config": None}
         ):
             url = ldh._get_delegate_endpoint_url()
-        assert url is None or url == ""
+        assert url is None
 
 
 # ---------------------------------------------------------------------------
@@ -657,3 +655,47 @@ class TestMainCli:
         data = json.loads(captured.out)
         assert data["delegated"] is True
         assert "[Local Model Response" in data["response"]
+
+    def test_main_prompt_stdin_path(
+        self, capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """main() with --prompt-stdin reads base64-encoded prompt from stdin."""
+        monkeypatch.delenv("ENABLE_LOCAL_INFERENCE_PIPELINE", raising=False)
+        monkeypatch.delenv("ENABLE_LOCAL_DELEGATION", raising=False)
+
+        prompt = "explain how kafka works"
+        prompt_b64 = base64.b64encode(prompt.encode()).decode()
+
+        mock_stdin = MagicMock()
+        mock_stdin.read.return_value = prompt_b64
+
+        with patch.object(sys, "argv", ["prog", "--prompt-stdin", "corr-stdin-1"]):
+            with patch.object(sys, "stdin", mock_stdin):
+                with pytest.raises(SystemExit) as exc_info:
+                    ldh.main()
+
+        assert exc_info.value.code == 0
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        # Flags are off, so delegation is disabled — but the path was exercised
+        assert "delegated" in data
+        assert data["delegated"] is False
+        assert data.get("reason") == "feature_disabled"
+
+    def test_main_prompt_stdin_read_failure(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        """main() with --prompt-stdin returns delegated=False when stdin.read() raises."""
+        mock_stdin = MagicMock()
+        mock_stdin.read.side_effect = OSError("stdin read failed")
+
+        with patch.object(sys, "argv", ["prog", "--prompt-stdin", "corr-stdin-err"]):
+            with patch.object(sys, "stdin", mock_stdin):
+                with pytest.raises(SystemExit) as exc_info:
+                    ldh.main()
+
+        assert exc_info.value.code == 0
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        assert data["delegated"] is False
+        assert data.get("reason") == "prompt_decode_error"

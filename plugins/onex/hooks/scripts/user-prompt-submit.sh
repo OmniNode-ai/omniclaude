@@ -411,17 +411,22 @@ if [[ "$DELEGATION_ACTIVE" == "true" ]] && [[ -n "$DELEGATED_RESPONSE" ]]; then
         "========================================================================\n"
         ' 2>/dev/null)"
 
-    _TS_FINAL="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-    echo "[$_TS_FINAL] [UserPromptSubmit] DELEGATED_CONTEXT_INJECTED context_chars=${#DELEGATED_CONTEXT}" >> "$TRACE_LOG"
+    if [[ -z "$DELEGATED_CONTEXT" ]]; then
+        log "WARNING: DELEGATED_CONTEXT construction failed (jq error); falling through to standard context path"
+        DELEGATION_ACTIVE="false"
+    else
+        _TS_FINAL="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+        echo "[$_TS_FINAL] [UserPromptSubmit] DELEGATED_CONTEXT_INJECTED context_chars=${#DELEGATED_CONTEXT}" >> "$TRACE_LOG"
 
-    printf %s "$INPUT" | jq --arg ctx "$DELEGATED_CONTEXT" --arg dmodel "$DELEGATED_MODEL" \
-        '.hookSpecificOutput.hookEventName = "UserPromptSubmit" |
-         .hookSpecificOutput.additionalContext = $ctx |
-         .hookSpecificOutput.metadata.delegation_active = true |
-         .hookSpecificOutput.metadata.delegation_model = $dmodel' \
-        2>>"$LOG_FILE" \
-        || { log "ERROR: Delegated context jq output failed, passing through raw input"; printf %s "$INPUT"; }
-    exit 0
+        printf %s "$INPUT" | jq --arg ctx "$DELEGATED_CONTEXT" --arg dmodel "$DELEGATED_MODEL" \
+            '.hookSpecificOutput.hookEventName = "UserPromptSubmit" |
+             .hookSpecificOutput.additionalContext = $ctx |
+             .hookSpecificOutput.metadata.delegation_active = true |
+             .hookSpecificOutput.metadata.delegation_model = $dmodel' \
+            2>>"$LOG_FILE" \
+            || { log "ERROR: Delegated context jq output failed, passing through raw input"; printf %s "$INPUT"; }
+        exit 0
+    fi
 fi
 
 # -----------------------------

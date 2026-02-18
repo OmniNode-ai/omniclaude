@@ -78,17 +78,17 @@ fi
 # Boolean Normalization
 # =============================================================================
 # Normalizes various boolean representations to "true" or "false".
-# Accepts: true, 1, yes (case-insensitive) -> "true"
+# Accepts: true, 1, yes, on (case-insensitive) -> "true"
 # Everything else -> "false"
 
 _normalize_bool() {
     # Use tr for lowercase conversion (compatible with bash 3.2 on macOS)
     # Accepted truthy values mirror Python's _TRUTHY frozenset in
-    # local_delegation_handler.py: true, 1, yes, on, y, t
+    # local_delegation_handler.py: true, 1, yes, on
     local val
     val=$(echo "$1" | tr '[:upper:]' '[:lower:]')
     case "$val" in
-        true|1|yes|on|y|t) echo "true" ;;
+        true|1|yes|on) echo "true" ;;
         *) echo "false" ;;
     esac
 }
