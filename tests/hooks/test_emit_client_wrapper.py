@@ -68,6 +68,8 @@ class TestModuleImport:
             "agent.status",  # OMN-1848 - Agent status reporting
             "compliance.evaluate",  # OMN-2256
             "static.context.edit.detected",  # OMN-2237 - Static context change detection
+            "llm.routing.decision",  # OMN-2273 - LLM routing decision observability
+            "llm.routing.fallback",  # OMN-2273 - LLM routing fallback observability
         }
         assert expected_types == SUPPORTED_EVENT_TYPES
 
