@@ -368,8 +368,8 @@ if [[ "$INFERENCE_PIPELINE_ENABLED" == "true" ]] && [[ "$LOCAL_DELEGATION_ENABLE
         set -e
 
         # Validate output is a parseable JSON object (not just any valid JSON value)
-        if [[ -n "$DELEGATION_RESULT" ]] && echo "$DELEGATION_RESULT" | jq -e 'type == "object"' >/dev/null 2>/dev/null; then
-            DELEGATION_ACTIVE="$(echo "$DELEGATION_RESULT" | jq -r '.delegated // false' 2>/dev/null || echo 'false')"
+        if [[ -n "$DELEGATION_RESULT" ]] && jq -e 'type == "object"' <<< "$DELEGATION_RESULT" >/dev/null 2>/dev/null; then
+            DELEGATION_ACTIVE="$(jq -r '.delegated // false' <<< "$DELEGATION_RESULT" 2>/dev/null || echo 'false')"
         else
             log "WARNING: local_delegation_handler.py produced non-JSON output, skipping"
             DELEGATION_RESULT=""
@@ -377,14 +377,14 @@ if [[ "$INFERENCE_PIPELINE_ENABLED" == "true" ]] && [[ "$LOCAL_DELEGATION_ENABLE
         fi
 
         if [[ "$DELEGATION_ACTIVE" == "true" ]]; then
-            DELEGATED_RESPONSE="$(echo "$DELEGATION_RESULT" | jq -r '.response // ""' 2>/dev/null || echo '')"
-            DELEGATED_MODEL="$(echo "$DELEGATION_RESULT" | jq -r '.model // "local-model"' 2>/dev/null || echo 'local-model')"
-            DELEGATED_LATENCY="$(echo "$DELEGATION_RESULT" | jq -r '.latency_ms // 0' 2>/dev/null || echo '0')"
+            DELEGATED_RESPONSE="$(jq -r '.response // ""' <<< "$DELEGATION_RESULT" 2>/dev/null || echo '')"
+            DELEGATED_MODEL="$(jq -r '.model // "local-model"' <<< "$DELEGATION_RESULT" 2>/dev/null || echo 'local-model')"
+            DELEGATED_LATENCY="$(jq -r '.latency_ms // 0' <<< "$DELEGATION_RESULT" 2>/dev/null || echo '0')"
             log "Delegation active: model=$DELEGATED_MODEL latency=${DELEGATED_LATENCY}ms"
             _TS_DEL="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-            echo "[$_TS_DEL] [UserPromptSubmit] DELEGATED model=$DELEGATED_MODEL latency_ms=$DELEGATED_LATENCY confidence=$(echo "$DELEGATION_RESULT" | jq -r '.confidence // 0')" >> "$TRACE_LOG"
+            echo "[$_TS_DEL] [UserPromptSubmit] DELEGATED model=$DELEGATED_MODEL latency_ms=$DELEGATED_LATENCY confidence=$(jq -r '.confidence // 0' <<< "$DELEGATION_RESULT")" >> "$TRACE_LOG"
         else
-            DELEGATION_REASON="$(echo "$DELEGATION_RESULT" | jq -r '.reason // "unknown"' 2>/dev/null || echo 'unknown')"
+            DELEGATION_REASON="$(jq -r '.reason // "unknown"' <<< "$DELEGATION_RESULT" 2>/dev/null || echo 'unknown')"
             log "Delegation skipped: $DELEGATION_REASON"
         fi
     else

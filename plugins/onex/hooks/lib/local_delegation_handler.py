@@ -309,6 +309,8 @@ def _format_delegated_response(
     # by the delegation context wrapper). ACCEPTED RISK: no sentinel-stripping
     # is implemented; the probability of collision is considered low. Exploiting
     # this requires a misbehaving model AND a user acting on malformed output.
+    # TODO(OMN-2271): consider tracking this as a known caveat in the issue; for
+    # now, jq --arg safely encodes the response as JSON string, preventing structural injection.
     safe_model_name = model_name.replace("{", "{{").replace("}", "}}")
     header = _ATTRIBUTION_HEADER.format(model=safe_model_name)
     reasons_list = delegation_score.reasons or []
@@ -352,7 +354,8 @@ def handle_delegation(
     Returns:
         Dict with at minimum {"delegated": bool}.
         When delegated=True: also includes "response", "model", "confidence",
-        "intent", "savings_usd", "latency_ms".
+        "intent", "savings_usd", "latency_ms" (total delegation wall-clock time,
+        including classification + endpoint resolution + LLM call).
         When delegated=False: also includes "reason".
     """
     start_time = time.time()
