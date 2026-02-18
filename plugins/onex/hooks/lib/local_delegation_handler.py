@@ -306,8 +306,9 @@ def _format_delegated_response(
     # NOTE: response_text and model_name are not sanitized against sentinel
     # strings; a misbehaving local model could confuse Claude's context parsing
     # (e.g., by returning text containing the "===...===" delimiter lines used
-    # by the delegation context wrapper). Low-severity: requires a misbehaving
-    # model AND a user acting on malformed output.
+    # by the delegation context wrapper). ACCEPTED RISK: no sentinel-stripping
+    # is implemented; the probability of collision is considered low. Exploiting
+    # this requires a misbehaving model AND a user acting on malformed output.
     safe_model_name = model_name.replace("{", "{{").replace("}", "}}")
     header = _ATTRIBUTION_HEADER.format(model=safe_model_name)
     reasons_summary = "; ".join(delegation_score.reasons)

@@ -339,6 +339,36 @@ class TestLlmCall:
             result = ldh._call_local_llm("explain this", "http://localhost:8200")
         assert result is None
 
+    def test_prompt_truncation_applied(self) -> None:
+        """Prompts longer than _MAX_PROMPT_CHARS are truncated before sending."""
+        long_prompt = "x" * 9000
+        mock_response = MagicMock()
+        mock_response.is_success = True
+        mock_response.json.return_value = {
+            "model": "qwen2.5-14b",
+            "choices": [{"message": {"content": "Truncated response."}}],
+        }
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.post = MagicMock(return_value=mock_response)
+
+        with patch("httpx.Client", return_value=mock_client):
+            result = ldh._call_local_llm(long_prompt, "http://localhost:8200")
+
+        assert result is not None
+        text, model = result
+        assert text == "Truncated response."
+        assert model == "qwen2.5-14b"
+
+        # Verify the payload sent to the mock contained the truncation marker
+        call_kwargs = mock_client.post.call_args
+        sent_payload = call_kwargs[1]["json"] if call_kwargs[1] else call_kwargs[0][1]
+        sent_content = sent_payload["messages"][0]["content"]
+        assert "[... prompt truncated at 8000 chars" in sent_content
+        assert len(sent_content) < 9000
+
     def test_llm_call_failure_returns_delegated_false(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -613,7 +643,7 @@ class TestMainCli:
         self, capsys: pytest.CaptureFixture
     ) -> None:
         """main() with non-base64 prompt arg → delegated=False, no crash."""
-        with patch.object(sys, "argv", ["prog", "NOT_VALID_BASE64!!!", "corr-id"]):
+        with patch.object(sys, "argv", ["prog", "not!valid@base64#chars", "corr-id"]):
             with pytest.raises(SystemExit) as exc_info:
                 ldh.main()
         assert exc_info.value.code == 0
@@ -701,3 +731,16 @@ class TestMainCli:
         data = json.loads(captured.out)
         assert data["delegated"] is False
         assert data.get("reason") == "prompt_decode_error"
+
+    def test_main_prompt_stdin_missing_correlation_id(
+        self, capsys: pytest.CaptureFixture
+    ) -> None:
+        """main() with --prompt-stdin but no correlation_id → exit 0, reason=missing_args."""
+        with patch.object(sys, "argv", ["prog", "--prompt-stdin"]):
+            with pytest.raises(SystemExit) as exc_info:
+                ldh.main()
+        assert exc_info.value.code == 0
+        captured = capsys.readouterr()
+        data = json.loads(captured.out)
+        assert data["delegated"] is False
+        assert data.get("reason") == "missing_args"

@@ -364,11 +364,11 @@ if [[ "$INFERENCE_PIPELINE_ENABLED" == "true" ]] && [[ "$LOCAL_DELEGATION_ENABLE
     if [[ -f "$DELEGATION_HANDLER" ]]; then
         log "Local delegation enabled — classifying prompt (correlation=$CORRELATION_ID)"
         set +e
-        DELEGATION_RESULT="$(printf '%s' "$PROMPT_B64" | run_with_timeout 8 $PYTHON_CMD "$DELEGATION_HANDLER" --prompt-stdin "$CORRELATION_ID" 2>>"$LOG_FILE")"
+        DELEGATION_RESULT="$(printf '%s' "$PROMPT_B64" | run_with_timeout 8 "$PYTHON_CMD" "$DELEGATION_HANDLER" --prompt-stdin "$CORRELATION_ID" 2>>"$LOG_FILE")"
         set -e
 
-        # Validate output is parseable JSON starting with '{'
-        if [[ -n "$DELEGATION_RESULT" ]] && echo "$DELEGATION_RESULT" | jq -e . >/dev/null 2>/dev/null; then
+        # Validate output is a parseable JSON object (not just any valid JSON value)
+        if [[ -n "$DELEGATION_RESULT" ]] && echo "$DELEGATION_RESULT" | jq -e 'type == "object"' >/dev/null 2>/dev/null; then
             DELEGATION_ACTIVE="$(echo "$DELEGATION_RESULT" | jq -r '.delegated // false' 2>/dev/null || echo 'false')"
         else
             log "WARNING: local_delegation_handler.py produced non-JSON output, skipping"
