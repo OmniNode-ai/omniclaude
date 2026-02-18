@@ -23,7 +23,10 @@ Conservative design:
     four delegation gates pass AND the LLM call succeeds.
 
 Usage (called from user-prompt-submit.sh):
-    python3 local_delegation_handler.py <prompt_b64> <correlation_id>
+    printf '%s' "$PROMPT_B64" | python3 local_delegation_handler.py --prompt-stdin <correlation_id>
+
+    The --prompt-stdin flag reads the base64-encoded prompt from stdin so it
+    never appears in the process table (ps aux / /proc/PID/cmdline).
 
     Outputs one of:
     - JSON with {"delegated": true, "response": "<formatted text>", ...}
@@ -42,6 +45,25 @@ from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# sys.path setup (module-level, idempotent)
+# ---------------------------------------------------------------------------
+# This file runs in the hook lib context, outside the installed package.
+# Ensure the repo src/ directory is on sys.path so omniclaude.* imports work.
+# Pattern mirrors hook_event_adapter.py and session_intelligence.py.
+
+_SCRIPT_DIR = Path(__file__).parent
+_SRC_PATH = _SCRIPT_DIR.parent.parent.parent.parent / "src"
+if _SRC_PATH.exists() and str(_SRC_PATH) not in sys.path:
+    sys.path.insert(0, str(_SRC_PATH))
+
+
+def _ensure_src_on_path() -> None:
+    """Ensure src/ is on sys.path (idempotent, no-op after first call)."""
+    if _SRC_PATH.exists() and str(_SRC_PATH) not in sys.path:
+        sys.path.insert(0, str(_SRC_PATH))
+
 
 # ---------------------------------------------------------------------------
 # Logging configuration
@@ -82,9 +104,10 @@ _configure_logging()
 _TRUTHY = frozenset(("true", "1", "yes", "on", "y", "t"))
 
 # Timeout for local LLM call in seconds.
-# Conservative: 30s to allow for slow local inference without blocking the hook
-# indefinitely. The hook itself has no hard block (non-blocking design).
-_LLM_CALL_TIMEOUT_S = 30.0
+# Kept below the 8s shell-level timeout so httpx fails cleanly before SIGALRM
+# kills the process. Worst-case sync path: routing 5s + injection 1s + delegation
+# 8s = ~14s, well under the 41s that the previous 35s timeout produced.
+_LLM_CALL_TIMEOUT_S = 7.0
 
 # Maximum tokens requested from the local model.
 # Delegation targets bounded text-only tasks (documentation, tests, research)
@@ -124,11 +147,7 @@ def _get_delegate_endpoint_url() -> str | None:
         URL string (no trailing slash) or None if unconfigured.
     """
     try:
-        # Add src to path for import (hook lib runs outside package context)
-        _script_dir = Path(__file__).parent
-        _possible_src = _script_dir.parent.parent.parent.parent / "src"
-        if _possible_src.exists() and str(_possible_src) not in sys.path:
-            sys.path.insert(0, str(_possible_src))
+        _ensure_src_on_path()
 
         from omniclaude.config.model_local_llm_config import (
             LlmEndpointPurpose,
@@ -160,10 +179,7 @@ def _classify_prompt(prompt: str) -> Any:
     Returns:
         ModelDelegationScore from TaskClassifier.is_delegatable().
     """
-    _script_dir = Path(__file__).parent
-    _possible_src = _script_dir.parent.parent.parent.parent / "src"
-    if _possible_src.exists() and str(_possible_src) not in sys.path:
-        sys.path.insert(0, str(_possible_src))
+    _ensure_src_on_path()
 
     from omniclaude.lib.task_classifier import TaskClassifier
 
@@ -263,7 +279,8 @@ def _format_delegated_response(
     Returns:
         Formatted attribution block ready for injection into Claude's context.
     """
-    header = _ATTRIBUTION_HEADER.format(model=model_name)
+    safe_model_name = model_name.replace("{", "{{").replace("}", "}}")
+    header = _ATTRIBUTION_HEADER.format(model=safe_model_name)
     reasons_summary = "; ".join(delegation_score.reasons)
     savings_str = (
         f"~${delegation_score.estimated_savings_usd:.4f}"
@@ -384,28 +401,48 @@ def handle_delegation(
 def main() -> None:
     """CLI entry point for user-prompt-submit.sh.
 
-    Usage:
+    Preferred usage (avoids exposing the prompt in the process table):
+        printf '%s' "$PROMPT_B64" | python3 local_delegation_handler.py --prompt-stdin <correlation_id>
+
+    Legacy usage (kept for backward-compat with tests; do NOT use in production):
         python3 local_delegation_handler.py <prompt_b64> <correlation_id>
 
-    Reads the base64-encoded prompt from argv[1], decodes it, runs
-    handle_delegation(), and prints JSON to stdout.
+    When --prompt-stdin is the first argument, the base64-encoded prompt is read
+    from stdin instead of argv[1], so the full prompt never appears in
+    /proc/PID/cmdline or `ps aux` output.
 
     Always exits 0. Non-zero exit would block the hook.
 
     Note: Python 3.12+ is guaranteed by the project's requires-python
     constraint and by find_python() in common.sh — no runtime check needed.
     """
-    if len(sys.argv) < 3:
-        print(json.dumps({"delegated": False, "reason": "missing_args"}))
-        sys.exit(0)
+    args = sys.argv[1:]
 
-    try:
-        prompt = base64.b64decode(sys.argv[1]).decode("utf-8", "replace")
-    except Exception:
-        print(json.dumps({"delegated": False, "reason": "prompt_decode_error"}))
-        sys.exit(0)
-
-    correlation_id = sys.argv[2]
+    if args and args[0] == "--prompt-stdin":
+        # Secure path: read base64-encoded prompt from stdin.
+        # Expected remaining args: [correlation_id]
+        if len(args) < 2:
+            print(json.dumps({"delegated": False, "reason": "missing_args"}))
+            sys.exit(0)
+        correlation_id = args[1]
+        try:
+            raw_b64 = sys.stdin.read().strip()
+            prompt = base64.b64decode(raw_b64).decode("utf-8", "replace")
+        except Exception:
+            print(json.dumps({"delegated": False, "reason": "prompt_decode_error"}))
+            sys.exit(0)
+    else:
+        # Legacy path: prompt_b64 passed as argv[1].
+        # Kept only for unit-test callers; not used by the hook script.
+        if len(args) < 2:
+            print(json.dumps({"delegated": False, "reason": "missing_args"}))
+            sys.exit(0)
+        try:
+            prompt = base64.b64decode(args[0]).decode("utf-8", "replace")
+        except Exception:
+            print(json.dumps({"delegated": False, "reason": "prompt_decode_error"}))
+            sys.exit(0)
+        correlation_id = args[1]
 
     try:
         result = handle_delegation(prompt, correlation_id)

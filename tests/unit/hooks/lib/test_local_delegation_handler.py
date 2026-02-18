@@ -105,10 +105,24 @@ class TestFeatureFlags:
             result = ldh.handle_delegation("fix the bug", "corr-4")
         assert result.get("reason") != "feature_disabled"
 
-    def test_flags_truthy_variants(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Truthy values beyond 'true' are accepted (e.g., '1', 'yes')."""
-        monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "1")
-        monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "yes")
+    @pytest.mark.parametrize(
+        ("pipeline_val", "delegation_val"),
+        [
+            ("1", "yes"),
+            ("on", "on"),
+            ("y", "y"),
+            ("t", "t"),
+        ],
+    )
+    def test_flags_truthy_variants(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        pipeline_val: str,
+        delegation_val: str,
+    ) -> None:
+        """All six truthy values (true/1/yes/on/y/t) are accepted."""
+        monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", pipeline_val)
+        monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", delegation_val)
         score = _make_delegation_score(False, reasons=["not delegatable"])
         with patch.object(ldh, "_classify_prompt", return_value=score):
             result = ldh.handle_delegation("explain how this works", "corr-5")

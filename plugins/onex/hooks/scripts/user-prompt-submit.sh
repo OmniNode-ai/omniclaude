@@ -352,12 +352,14 @@ DELEGATION_ACTIVE="false"
 INFERENCE_PIPELINE_ENABLED=$(_normalize_bool "${ENABLE_LOCAL_INFERENCE_PIPELINE:-false}")
 LOCAL_DELEGATION_ENABLED=$(_normalize_bool "${ENABLE_LOCAL_DELEGATION:-false}")
 
-if [[ "$INFERENCE_PIPELINE_ENABLED" == "true" ]] && [[ "$LOCAL_DELEGATION_ENABLED" == "true" ]]; then
+if [[ "$INFERENCE_PIPELINE_ENABLED" == "true" ]] && [[ "$LOCAL_DELEGATION_ENABLED" == "true" ]] \
+        && [[ "$WORKFLOW_DETECTED" != "true" ]] \
+        && [[ ! "$PROMPT" =~ ^/ ]]; then
     DELEGATION_HANDLER="${HOOKS_LIB}/local_delegation_handler.py"
     if [[ -f "$DELEGATION_HANDLER" ]]; then
         log "Local delegation enabled — classifying prompt (correlation=$CORRELATION_ID)"
         set +e
-        DELEGATION_RESULT="$(run_with_timeout 35 $PYTHON_CMD "$DELEGATION_HANDLER" "$PROMPT_B64" "$CORRELATION_ID" 2>>"$LOG_FILE")"
+        DELEGATION_RESULT="$(printf '%s' "$PROMPT_B64" | run_with_timeout 8 $PYTHON_CMD "$DELEGATION_HANDLER" --prompt-stdin "$CORRELATION_ID" 2>>"$LOG_FILE")"
         set -e
 
         # Validate output is parseable JSON starting with '{'
