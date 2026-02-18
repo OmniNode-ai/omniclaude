@@ -48,7 +48,7 @@ import time
 from collections.abc import Callable
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 # Add script directory to path for sibling imports
 _SCRIPT_DIR = Path(__file__).parent
@@ -154,6 +154,38 @@ if TYPE_CHECKING:
 VALID_ROUTING_PATHS = frozenset({"event", "local", "hybrid"})
 
 
+class _LatencyGuardProtocol(Protocol):
+    """Structural interface for the LatencyGuard singleton.
+
+    Describes only the methods actually called on the guard throughout this
+    module.  The conditional import of LatencyGuard uses this Protocol so
+    that mypy can type-check all call sites without requiring the concrete
+    class to be importable at type-check time.
+    """
+
+    @classmethod
+    def get_instance(cls) -> "_LatencyGuardProtocol": ...
+    def is_enabled(self) -> bool: ...
+    def record_latency(self, latency_ms: float) -> None: ...
+    def record_agreement(self, *, agreed: bool) -> None: ...
+
+
+# LatencyGuard import (for USE_LLM_ROUTING latency SLO enforcement).
+# Graceful fallback: if unavailable, LLM routing proceeds without the guard.
+_latency_guard_available = False
+_LatencyGuardClass: type[_LatencyGuardProtocol] | None = None
+try:
+    if __package__:
+        from .latency_guard import LatencyGuard as _LatencyGuardClass  # noqa: I001
+    else:
+        from latency_guard import (  # type: ignore[import-not-found,no-redef]
+            LatencyGuard as _LatencyGuardClass,
+        )
+    _latency_guard_available = True
+except ImportError:
+    logger.debug("latency_guard not available, LLM routing proceeds without SLO guard")
+
+
 def _compute_routing_path(method: str, event_attempted: bool) -> str:
     """
     Map method to canonical routing_path.
@@ -217,6 +249,12 @@ class RoutingPath(str, Enum):
 _AgentRouter: type | None = None
 _router_instance: Any = None
 _router_lock = threading.Lock()
+
+# Lock that ensures at most one llm-fuzzy-agreement thread runs at a time.
+# acquire(blocking=False) at spawn time: if already locked, skip spawning.
+# try/finally in the thread body always releases it.
+_agreement_lock = threading.Lock()
+
 try:
     from agent_router import AgentRouter
 
@@ -364,6 +402,21 @@ _LLM_ROUTING_TIMEOUT_S = 0.1
 _LLM_HEALTH_CHECK_TIMEOUT_S = 0.08
 
 
+def _get_latency_guard() -> _LatencyGuardProtocol | None:
+    """Return the LatencyGuard singleton, or None if unavailable.
+
+    Returns:
+        LatencyGuard instance or None when the guard module is not importable.
+    """
+    if not _latency_guard_available or _LatencyGuardClass is None:
+        return None
+    try:
+        return _LatencyGuardClass.get_instance()
+    except Exception as exc:
+        logger.debug("LatencyGuard.get_instance() failed (non-blocking): %s", exc)
+        return None
+
+
 def _use_llm_routing() -> bool:
     """Check if LLM routing is enabled.
 
@@ -371,6 +424,7 @@ def _use_llm_routing() -> bool:
     - ENABLE_LOCAL_INFERENCE_PIPELINE=true  (parent gate)
     - USE_LLM_ROUTING=true                  (specific flag)
     - HandlerRoutingLlm and LocalLlmEndpointRegistry importable
+    - LatencyGuard allows it (circuit not open, agreement rate not low)
 
     Returns:
         True only when all conditions are met.
@@ -381,7 +435,14 @@ def _use_llm_routing() -> bool:
     if parent not in _TRUTHY:
         return False
     flag = os.environ.get("USE_LLM_ROUTING", "").lower()
-    return flag in _TRUTHY
+    if flag not in _TRUTHY:
+        return False
+    # LatencyGuard is the final gate: circuit-open or low agreement → False.
+    guard = _get_latency_guard()
+    if guard is not None and not guard.is_enabled():
+        logger.debug("LLM routing suppressed by LatencyGuard (SLO or agreement breach)")
+        return False
+    return True
 
 
 def _get_llm_routing_url() -> str | None:
@@ -479,7 +540,12 @@ def _route_via_llm(
     """
     from uuid import UUID, uuid4
 
-    start = time.time()
+    # `start` is set later, immediately before the actual LLM HTTP call (step 4),
+    # so that the LatencyGuard SLO measures only the LLM invocation latency and
+    # not the pre-call overhead (URL resolution, health check, registry building).
+    # Including the health check (up to 80 ms) would cause false circuit trips
+    # even when the LLM itself responds within the 80 ms P95 SLO.
+    start: float | None = None
 
     # 1. Resolve LLM URL
     llm_url = _get_llm_routing_url()
@@ -562,6 +628,11 @@ def _route_via_llm(
         )
         return None
 
+    # Start timing immediately before the HTTP/LLM invocation so the LatencyGuard
+    # SLO only measures the actual LLM call latency (not health check or setup).
+    # Use monotonic clock (not wall clock) to avoid NTP adjustments producing
+    # incorrect (negative or inflated) latency readings per latency_guard.py.
+    start = time.monotonic()
     try:
         result = _run_async(
             llm_handler.compute_routing(request, correlation_id=cid),
@@ -573,6 +644,17 @@ def _route_via_llm(
             _LLM_ROUTING_TIMEOUT_S * 1000,
             correlation_id,
         )
+        if start is not None:
+            elapsed_ms = (time.monotonic() - start) * 1000
+            guard = _get_latency_guard()
+            if guard is not None:
+                try:
+                    guard.record_latency(elapsed_ms)
+                except Exception as exc:
+                    logger.debug(
+                        "LatencyGuard.record_latency failed on timeout (non-blocking): %s",
+                        exc,
+                    )
         return None
     except Exception as exc:
         logger.debug(
@@ -581,7 +663,35 @@ def _route_via_llm(
         return None
 
     # 5. Shape result into canonical wrapper dict
-    latency_ms = int((time.time() - start) * 1000)
+    # latency_ms measures only the LLM HTTP call (start set immediately above).
+    # Use float for the guard measurement to preserve sub-millisecond precision
+    # (e.g. 80.9ms must not be truncated to 80.0ms, which would not trip the
+    # P95 SLO circuit that opens at > 80.0ms).  The integer version is kept
+    # for the output dict / logs so the external interface stays the same.
+    if start is None:
+        # start is always set before the LLM call; all early-returns above exit
+        # first.  This guard defends against optimised builds where assert is
+        # stripped (-O flag) and any future code paths that bypass the assignment.
+        # Return None (not the raw Pydantic object) so the caller falls through
+        # to fuzzy routing — callers consume the return value as a dict via
+        # `.get(...)`, so a Pydantic object would cause silent attribute errors.
+        logger.warning(
+            "_route_via_llm: start timestamp unexpectedly None after LLM call "
+            "(correlation_id=%s); skipping latency recording",
+            correlation_id,
+        )
+        return None
+    latency_ms_float = (time.monotonic() - start) * 1000
+    latency_ms = int(latency_ms_float)
+
+    # Record latency with the guard so it can enforce the P95 SLO.
+    guard = _get_latency_guard()
+    if guard is not None:
+        try:
+            guard.record_latency(latency_ms_float)
+        except Exception as exc:
+            logger.debug("LatencyGuard.record_latency failed (non-blocking): %s", exc)
+
     agents_reg = router.registry.get("agents", {})
     agent_info = agents_reg.get(result.selected_agent, {})
     if result.selected_agent not in agents_reg:
@@ -911,6 +1021,58 @@ def _route_via_onex_nodes(
         return None
 
 
+def _record_llm_fuzzy_agreement(llm_selected: str, prompt: str) -> None:
+    """Record whether the LLM routing result agrees with fuzzy matching.
+
+    Runs fuzzy matching in shadow mode (result discarded) to compare against
+    the LLM-selected agent, then records the observation with the LatencyGuard.
+    Non-blocking: any failure is suppressed so routing is never affected.
+
+    Agreement is defined as both methods selecting the same top agent name.
+    When fuzzy matching falls back to DEFAULT_AGENT, the LLM must also have
+    selected DEFAULT_AGENT for agreement to be True.
+
+    Args:
+        llm_selected: Agent name selected by LLM routing.
+        prompt: The user prompt (passed to fuzzy router for comparison).
+    """
+    try:
+        guard = _get_latency_guard()
+        if guard is None:
+            return
+
+        router = _get_router()
+        if router is None:
+            # No fuzzy router — cannot compute agreement; skip recording to
+            # avoid artificially deflating the rate.
+            return
+
+        recommendations = router.route(prompt, max_recommendations=1)
+        if (
+            recommendations
+            and recommendations[0].confidence.total >= CONFIDENCE_THRESHOLD
+        ):
+            fuzzy_selected = recommendations[0].agent_name
+        else:
+            fuzzy_selected = DEFAULT_AGENT
+
+        agreed = llm_selected == fuzzy_selected
+        guard.record_agreement(agreed=agreed)
+        logger.debug(
+            "LatencyGuard agreement: llm=%s fuzzy=%s agreed=%s",
+            llm_selected,
+            fuzzy_selected,
+            agreed,
+        )
+    except Exception as exc:
+        # Log at debug so failures anywhere in this function (guard lookup, fuzzy
+        # router, or guard.record_agreement) are not completely invisible
+        # (non-blocking — routing continues).
+        logger.debug("_record_llm_fuzzy_agreement failed (non-blocking): %s", exc)
+    finally:
+        _agreement_lock.release()
+
+
 def route_via_events(
     prompt: str,
     correlation_id: str,
@@ -993,6 +1155,42 @@ def route_via_events(
     if _use_llm_routing():
         llm_result = _route_via_llm(prompt, correlation_id)
         if llm_result is not None:
+            # Record agreement: compare LLM selection against fuzzy matching.
+            # Run fuzzy in shadow (result discarded) to track the agreement rate
+            # that feeds the LatencyGuard auto-disable gate.
+            #
+            # Backgrounded in a daemon thread so that fuzzy routing (CPU-bound)
+            # does NOT add synchronous latency to the UserPromptSubmit hot path.
+            # Hooks must never block the UI (CLAUDE.md performance budget).
+            # The thread is a daemon so it does not prevent process exit.
+            #
+            # _agreement_lock ensures at most one agreement-recording thread
+            # runs at a time.  acquire(blocking=False) skips spawning a new
+            # thread when one is already running (prevents unbounded thread
+            # accumulation under concurrent routing calls).
+            _llm_selected = llm_result.get("selected_agent", "")
+            if _agreement_lock.acquire(blocking=False):
+                _agreement_thread = threading.Thread(
+                    target=_record_llm_fuzzy_agreement,
+                    args=(_llm_selected, prompt),
+                    daemon=True,
+                    name="llm-fuzzy-agreement",
+                )
+                try:
+                    _agreement_thread.start()
+                except Exception as exc:
+                    # Thread failed to start (e.g. RuntimeError: can't start new
+                    # thread).  Release the lock immediately so future routing
+                    # calls can still spawn an agreement thread.
+                    _agreement_lock.release()
+                    logger.debug(
+                        "llm-fuzzy-agreement thread failed to start (non-blocking): %s",
+                        exc,
+                    )
+            else:
+                logger.debug(
+                    "llm-fuzzy-agreement thread already running, skipping spawn"
+                )
             _emit_routing_decision(
                 result=llm_result, prompt=prompt, correlation_id=correlation_id
             )

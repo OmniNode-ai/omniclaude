@@ -801,11 +801,41 @@ class TestUseLlmRouting:
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("USE_LLM_ROUTING", "true")
 
+        # Mock the guard to return None so the guard gate is a no-op.
+        # This keeps the test isolated from any LatencyGuard singleton state
+        # that may have been modified by other tests in the same session.
         with (
             patch("route_via_events_wrapper._llm_handler_available", True),
             patch("route_via_events_wrapper._llm_registry_available", True),
+            patch("route_via_events_wrapper._get_latency_guard", return_value=None),
         ):
             assert _use_llm_routing() is True
+
+    def test_disabled_when_guard_present_and_disabled(self, monkeypatch):
+        """LLM routing should be off when the LatencyGuard is present but disabled.
+
+        Exercises the early-exit branch in _use_llm_routing() where
+        ``guard is not None`` but ``guard.is_enabled()`` returns False (e.g.
+        because the latency circuit is open or agreement rate is below threshold).
+        """
+        monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
+        monkeypatch.setenv("USE_LLM_ROUTING", "true")
+
+        mock_guard = MagicMock()
+        mock_guard.is_enabled.return_value = False
+
+        with (
+            patch("route_via_events_wrapper._llm_handler_available", True),
+            patch("route_via_events_wrapper._llm_registry_available", True),
+            patch(
+                "route_via_events_wrapper._get_latency_guard",
+                return_value=mock_guard,
+            ),
+        ):
+            result = _use_llm_routing()
+
+        assert result is False
+        mock_guard.is_enabled.assert_called_once()
 
     def test_disabled_when_handler_unavailable(self, monkeypatch):
         """LLM routing should be off when HandlerRoutingLlm import failed."""
@@ -1167,3 +1197,59 @@ class TestRouteViaEventsLlmIntegration:
         assert result_with_llm["selected_agent"] == result_without_llm["selected_agent"]
         assert result_with_llm["routing_policy"] == result_without_llm["routing_policy"]
         assert result_with_llm["routing_path"] == result_without_llm["routing_path"]
+
+    def test_falls_through_to_fuzzy_when_guard_disables_llm(self, monkeypatch):
+        """When the LatencyGuard is present but disabled, routing bypasses LLM and
+        falls back to fuzzy matching.
+
+        This covers the branch in _use_llm_routing() where ``guard is not None``
+        and ``guard.is_enabled()`` returns False (circuit open or low agreement).
+        The test verifies the end-to-end fall-through: _use_llm_routing() returns
+        False → _route_via_llm is never called → fuzzy routing produces the result.
+        """
+        monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
+        monkeypatch.setenv("USE_LLM_ROUTING", "true")
+
+        mock_guard = MagicMock()
+        mock_guard.is_enabled.return_value = False
+
+        mock_conf = MagicMock()
+        mock_conf.total = 0.85
+        mock_conf.explanation = "Fuzzy fallback match"
+
+        mock_rec = MagicMock()
+        mock_rec.agent_name = "agent-testing"
+        mock_rec.agent_title = "Testing Agent"
+        mock_rec.confidence = mock_conf
+        mock_rec.reason = "Trigger match: 'test'"
+        mock_rec.is_explicit = False
+
+        mock_router = MagicMock()
+        mock_router.route.return_value = [mock_rec]
+        mock_router.registry = {
+            "agents": {
+                "agent-testing": {
+                    "domain_context": "testing",
+                    "description": "Testing agent",
+                }
+            }
+        }
+
+        with (
+            patch(
+                "route_via_events_wrapper._use_onex_routing_nodes", return_value=False
+            ),
+            patch(
+                "route_via_events_wrapper._get_latency_guard",
+                return_value=mock_guard,
+            ),
+            patch("route_via_events_wrapper._route_via_llm") as mock_llm_route,
+            patch("route_via_events_wrapper._get_router", return_value=mock_router),
+        ):
+            result = route_via_events("run tests", "corr-123")
+
+        # LLM routing must not have been called — guard short-circuited it.
+        mock_llm_route.assert_not_called()
+        # Fuzzy routing should have taken over and selected agent-testing.
+        assert result["selected_agent"] == "agent-testing"
+        assert result["routing_policy"] == RoutingPolicy.TRIGGER_MATCH.value
