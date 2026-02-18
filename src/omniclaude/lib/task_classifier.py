@@ -552,7 +552,7 @@ class TaskClassifier:
         The formula uses per-1k-token pricing and an average token estimate
         per intent category.  Returns 0.0 for intents not in the allow-list.
         """
-        avg_tokens = self._INTENT_AVG_TOKENS.get(intent, 0)
+        avg_tokens = self._INTENT_AVG_TOKENS.get(intent, 0)  # noqa: secrets
         if avg_tokens == 0:
             return 0.0
         cost_delta = self._PRIMARY_MODEL_COST_PER_1K - self._DELEGATE_MODEL_COST_PER_1K
