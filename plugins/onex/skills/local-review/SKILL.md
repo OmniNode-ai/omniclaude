@@ -88,6 +88,10 @@ You do NOT review code or fix issues yourself. Both phases run in separate agent
 **Rule: The coordinator must NEVER call Edit(), Write(), or analyze code directly.**
 If code review or fixes are needed, dispatch a polymorphic agent.
 
+> **CRITICAL — subagent_type must be `"onex:polymorphic-agent"`** (with the `onex:` prefix).
+> Using `"polymorphic-agent"` without the prefix will immediately fail with:
+> `Error: Agent type 'polymorphic-agent' not found`
+
 ### Review Phase -- dispatch to polymorphic agent
 
 For each iteration:
