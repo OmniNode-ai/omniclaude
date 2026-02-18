@@ -1122,30 +1122,37 @@ class TestIsDelegatableConfidenceThreshold:
         # confidence from classify() ≈ 0.9 → NOT delegatable (threshold is strict >)
         assert result.delegatable is False
 
-    def test_high_confidence_document_delegatable(
+    def test_below_threshold_document_result_is_valid(
         self, classifier: TaskClassifier
     ) -> None:
-        """Confidence > 0.9 with DOCUMENT intent and no exclusion signals is delegated."""
-        # Build a prompt with ≥ 10 document-related keywords to exceed 0.9 confidence.
-        # DOCUMENT keywords: document, documentation, readme, docstring, comment,
-        # explain, describe, update (8 total in list).
-        # With 8 keywords, confidence = 8/10 = 0.8 — still below threshold.
-        # We must inject additional intent keywords that still classify as DOCUMENT.
-        # Instead, override intent and manipulate via the intent override path:
-        # supply a pre-classified intent=DOCUMENT and use a high-keyword DOCUMENT prompt.
-        # The safest approach: mock-test the boundary by checking a prompt
-        # that produces confidence = 1.0 (10+ keyword matches capped at 1.0).
+        """DOCUMENT intent with confidence below 0.9 returns a valid (non-delegatable) result."""
+        # DOCUMENT has 8 keywords; max natural confidence = 8/10 = 0.8, below threshold.
         prompt = (
             "document documentation readme docstring comment explain describe update "
             "documentation documentation documentation"
         )
         result = classifier.is_delegatable(prompt, intent=TaskIntent.DOCUMENT)
-        # confidence with 8 unique DOCUMENT keywords = 8/10 = 0.8 < 0.9, still not enough.
-        # Regardless: verify the result structure is correct
+        # confidence with 8 unique DOCUMENT keywords = 8/10 = 0.8 < 0.9 → not delegated.
         assert isinstance(result, ModelDelegationScore)
         assert isinstance(result.delegatable, bool)
         assert isinstance(result.confidence, float)
         assert 0.0 <= result.confidence <= 1.0
+        assert result.delegatable is False
+
+    def test_high_confidence_research_delegatable(
+        self, classifier: TaskClassifier
+    ) -> None:
+        """Confidence > 0.9 with RESEARCH intent and no exclusion signals is delegated."""
+        # RESEARCH keywords: what, how, where, when, which, explain, find, search,
+        # locate, show me, tell me (11 total).  Using all 11 gives confidence = 1.0,
+        # which strictly exceeds the 0.9 threshold.  None of these appear in
+        # _TOOL_CALL_SIGNALS or _VISION_SIGNALS, so all gates pass.
+        prompt = "what how where when which explain find search locate tell me show me"
+        result = classifier.is_delegatable(prompt)
+        assert result.delegatable is True
+        assert result.delegate_to_model != ""
+        assert result.estimated_savings_usd > 0.0
+        assert result.confidence > TaskClassifier.DELEGATION_CONFIDENCE_THRESHOLD
 
 
 # =============================================================================

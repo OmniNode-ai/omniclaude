@@ -220,7 +220,9 @@ class TaskClassifier:
 
     # Short keywords (<=4 chars) that need word boundary matching to avoid
     # substring false positives (e.g., "api" matching "capital",
-    # "rest" matching "forest", "node" matching "anode")
+    # "rest" matching "forest", "node" matching "anode",
+    # "file" matching "profile"/"defile", "run" matching "rundown",
+    # "git" matching "digital", "bash" matching "dashboard")
     _SHORT_KEYWORDS: frozenset[str] = frozenset(
         {
             "new",
@@ -235,6 +237,15 @@ class TaskClassifier:
             "call",
             "node",
             "data",
+            # Tool-call signals that are short enough to cause substring false positives
+            "run",
+            "git",
+            "file",
+            "tool",
+            "pull",
+            "push",
+            "curl",
+            "bash",
         }
     )
 
@@ -540,9 +551,14 @@ class TaskClassifier:
         return False
 
     def _has_tool_call_signals(self, prompt_lower: str) -> bool:
-        """Return True if the prompt contains any tool-call/agentic signals."""
+        """Return True if the prompt contains any tool-call/agentic signals.
+
+        Uses ``_keyword_in_text()`` so that short signals (e.g. "file", "run",
+        "git") require a word-boundary match, preventing false positives from
+        substring containment (e.g. "profile" should not trigger on "file").
+        """
         for signal in self._TOOL_CALL_SIGNALS:
-            if signal in prompt_lower:
+            if self._keyword_in_text(signal, prompt_lower):
                 return True
         return False
 
@@ -617,7 +633,16 @@ class TaskClassifier:
             classification_confidence = task_context.confidence
         else:
             resolved_intent = intent
-            # Re-classify to get a confidence score for the supplied intent
+            # Re-classify to get a confidence score.  Note: the confidence here
+            # reflects the classifier's *independent* read of the prompt (i.e., how
+            # strongly the prompt matches whatever intent classify() detects), NOT
+            # the suitability of the caller-supplied intent.  If the caller passes
+            # intent=DOCUMENT on a heavily DEBUG-flavoured prompt, confidence will
+            # be high for DEBUG keywords, not for DOCUMENT.  This is deliberate:
+            # the confidence gate acts as a general "how certain are we about this
+            # prompt?" signal, not as a measure of fit between the prompt and the
+            # overridden intent.  Callers who need confidence tied to a specific
+            # intent should compute it themselves before calling is_delegatable().
             task_context = self.classify(prompt)
             classification_confidence = task_context.confidence
 
