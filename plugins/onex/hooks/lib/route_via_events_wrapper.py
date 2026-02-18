@@ -642,6 +642,17 @@ def _route_via_llm(
             _LLM_ROUTING_TIMEOUT_S * 1000,
             correlation_id,
         )
+        if start is not None:
+            elapsed_ms = (time.time() - start) * 1000
+            guard = _get_latency_guard()
+            if guard is not None:
+                try:
+                    guard.record_latency(elapsed_ms)
+                except Exception as exc:
+                    logger.debug(
+                        "LatencyGuard.record_latency failed on timeout (non-blocking): %s",
+                        exc,
+                    )
         return None
     except Exception as exc:
         logger.debug(
@@ -655,6 +666,9 @@ def _route_via_llm(
     # (e.g. 80.9ms must not be truncated to 80.0ms, which would not trip the
     # P95 SLO circuit that opens at > 80.0ms).  The integer version is kept
     # for the output dict / logs so the external interface stays the same.
+    assert (
+        start is not None
+    )  # set before the LLM call; all early-returns above exit first
     latency_ms_float = (time.time() - start) * 1000
     latency_ms = int(latency_ms_float)
 
