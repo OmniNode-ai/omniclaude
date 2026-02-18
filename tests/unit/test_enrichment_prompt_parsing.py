@@ -406,7 +406,7 @@ class TestEnrichmentResultSchemaSnapshot:
     def test_schema_is_frozen(self) -> None:
         """ContractEnrichmentResult is immutable (frozen=True)."""
         result = _make_code_analysis_result()
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             result.token_count = 999  # pyright: ignore[reportAttributeAccessIssue]
 
     def test_extra_fields_are_forbidden(self) -> None:
