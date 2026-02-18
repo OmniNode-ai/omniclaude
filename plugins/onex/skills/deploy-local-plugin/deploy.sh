@@ -412,6 +412,17 @@ if [[ "$EXECUTE" == "true" ]]; then
         fi
     done
 
+    # Prune old version directories — keep only NEW_VERSION.
+    # Runs last so all writes (registry, settings) succeed before we remove rollback targets.
+    echo "  Pruning old version directories..."
+    for old_dir in "${CACHE_BASE}"/*/; do
+        old_version=$(basename "$old_dir")
+        if [[ "$old_version" != "$NEW_VERSION" ]]; then
+            rm -rf "$old_dir"
+            echo -e "${GREEN}  Removed old version: ${old_version}${NC}"
+        fi
+    done
+
     echo ""
     echo -e "${GREEN}Deployment complete!${NC}"
     echo ""
