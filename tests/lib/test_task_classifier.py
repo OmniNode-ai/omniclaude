@@ -1110,13 +1110,10 @@ class TestIsDelegatableConfidenceThreshold:
     ) -> None:
         """Confidence exactly at 0.9 is not sufficient (threshold is strict >)."""
         # Manufacture a scenario where confidence == 0.9 exactly.
-        # classify() caps at 1.0 and normalises as score/10; confidence 0.9 → score 9.
-        # We can use intent override with a prompt that produces confidence 0.9.
-        # Rather than relying on exact arithmetic, just pass the threshold value
-        # directly by monkey-patching the classifier locally.
-        # Simpler approach: verify the check is `<=` (not `<`) by inspecting boundary.
-        # We test the logic by forcing a known confidence via intent override on a
-        # prompt that resolves to exactly 0.9 confidence.
+        # classify() normalises as score / len(INTENT_KEYWORDS[intent]).
+        # DEBUG has 11 keywords; 9 hits → 9/11 ≈ 0.818, which is ≤ 0.9.
+        # We supply DOCUMENT intent override so the intent gate passes, then
+        # verify the confidence gate rejects it (threshold is strict >).
         # Use a prompt with 9 DEBUG keywords (9/11 ≈ 0.818) but supply DOCUMENT intent.
         prompt = "error failing broken not working issue bug fix debug troubleshoot"
         result = classifier.is_delegatable(prompt, intent=TaskIntent.DOCUMENT)
