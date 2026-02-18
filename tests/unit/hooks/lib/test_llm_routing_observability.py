@@ -77,7 +77,7 @@ def _valid_fallback_kwargs(**overrides: Any) -> dict[str, Any]:
         "correlation_id": uuid4(),
         "emitted_at": _utc_now(),
         "fallback_reason": "LLM endpoint unhealthy",
-        "llm_url": "http://192.168.86.100:8200",
+        "llm_url": "http://test-llm-server:8200",
         "routing_prompt_version": "1.0.0",
     }
     base.update(overrides)
@@ -241,7 +241,7 @@ class TestModelLlmRoutingFallbackPayload:
     def test_valid_construction(self) -> None:
         payload = ModelLlmRoutingFallbackPayload(**_valid_fallback_kwargs())
         assert payload.fallback_reason == "LLM endpoint unhealthy"
-        assert payload.llm_url == "http://192.168.86.100:8200"
+        assert payload.llm_url == "http://test-llm-server:8200"
         assert payload.routing_prompt_version == "1.0.0"
 
     @pytest.mark.unit
@@ -612,7 +612,7 @@ class TestEmitLlmRoutingFallback:
                 correlation_id="test-corr",
                 session_id="test-sess",
                 fallback_reason="LLM endpoint unhealthy",
-                llm_url="http://192.168.86.100:8200",
+                llm_url="http://test-llm-server:8200",
                 routing_prompt_version="1.0.0",
             )
         finally:
@@ -638,7 +638,7 @@ class TestEmitLlmRoutingFallback:
                 correlation_id="corr-xyz",
                 session_id="sess-abc",
                 fallback_reason="Timeout",
-                llm_url="http://192.168.86.100:8200",
+                llm_url="http://test-llm-server:8200",
                 routing_prompt_version="1.0.0",
             )
         finally:
@@ -649,7 +649,7 @@ class TestEmitLlmRoutingFallback:
         assert p["session_id"] == "sess-abc"
         assert p["correlation_id"] == "corr-xyz"
         assert p["fallback_reason"] == "Timeout"
-        assert p["llm_url"] == "http://192.168.86.100:8200"
+        assert p["llm_url"] == "http://test-llm-server:8200"
         assert p["routing_prompt_version"] == "1.0.0"
 
     @pytest.mark.unit

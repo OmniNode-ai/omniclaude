@@ -128,7 +128,7 @@ async def _run_single_enrichment(
             timeout=_PER_ENRICHMENT_TIMEOUT_S,
         )
         if result.success:
-            tokens = _count_tokens(result.markdown)  # noqa: secrets
+            tokens = _count_tokens(result.markdown)
             return _EnrichmentResult(
                 name=name,
                 markdown=result.markdown,
@@ -136,7 +136,7 @@ async def _run_single_enrichment(
                 success=True,
             )
         return _EnrichmentResult(name=name, markdown="", tokens=0, success=False)
-    except (TimeoutError, Exception) as exc:
+    except Exception as exc:
         logger.debug("Enrichment %r skipped: %s", name, exc)
         return _EnrichmentResult(name=name, markdown="", tokens=0, success=False)
 
@@ -152,7 +152,6 @@ async def _run_all_enrichments(
     """
     # Build task list for available handlers only
     tasks: list[asyncio.Task[_EnrichmentResult]] = []
-    names: list[str] = []
 
     handler_map: list[tuple[str, Any]] = [
         ("summarization", HandlerSummarizationEnrichment),
@@ -167,7 +166,6 @@ async def _run_all_enrichments(
                 _run_single_enrichment(name, handler_instance, prompt, project_path)
             )
             tasks.append(task)
-            names.append(name)
 
     if not tasks:
         return []
@@ -342,7 +340,7 @@ def main() -> None:
             sys.exit(0)
 
         enrichment_context = _build_enrichment_context(kept_results)
-        tokens_used = sum(r.tokens for r in kept_results)  # noqa: secrets
+        tokens_used = sum(r.tokens for r in kept_results)
 
         output: dict[str, Any] = {
             "success": True,

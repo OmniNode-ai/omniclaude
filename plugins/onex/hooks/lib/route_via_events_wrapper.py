@@ -561,9 +561,7 @@ def _get_llm_routing_url() -> tuple[str, str] | None:
             logger.debug("No LLM endpoint configured for routing")
             return None
         url = str(endpoint.url).rstrip("/")
-        model_name = (
-            endpoint.model_name if hasattr(endpoint, "model_name") else "unknown"
-        )
+        model_name = getattr(endpoint, "model_name", None) or "unknown"
         logger.debug(
             "Resolved LLM routing URL: purpose=%s url=%s model=%s",
             endpoint.purpose if hasattr(endpoint, "purpose") else "unknown",
@@ -1312,11 +1310,11 @@ def route_via_events(
                 result=llm_result,
                 correlation_id=correlation_id,
                 session_id=session_id,
-                fuzzy_top_candidate=None,  # computed async in background thread
+                fuzzy_top_candidate=None,  # not yet known at emission time; background thread runs after this call
                 llm_selected_candidate=llm_result.get(
                     "llm_selected_candidate", llm_result.get("selected_agent")
                 ),
-                agreement=False,  # populated by LatencyGuard in background
+                agreement=False,  # not yet known at emission time; Kafka is append-only so this field cannot be updated retroactively
                 routing_prompt_version=_llm_routing_prompt_version,
                 model_used=llm_result.get("model_used", "unknown"),
             )
@@ -1327,7 +1325,7 @@ def route_via_events(
             correlation_id=correlation_id,
             session_id=session_id,
             fallback_reason="LLM routing returned None",
-            llm_url=None,  # URL is only available inside _route_via_llm
+            llm_url=None,  # always None here: _route_via_llm returns None on any failure path, discarding the URL it resolved internally; surfacing it would require significant refactoring of the return signature
             routing_prompt_version=_llm_routing_prompt_version,
         )
         logger.debug("LLM routing returned None, falling through to fuzzy matching")
