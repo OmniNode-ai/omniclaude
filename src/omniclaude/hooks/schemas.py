@@ -1861,6 +1861,203 @@ class ModelAgentStatusPayload(BaseModel):
     )
 
 
+# =============================================================================
+# LLM Routing Observability Events (OMN-2273)
+# =============================================================================
+
+
+class ModelLlmRoutingDecisionPayload(BaseModel):
+    """Event payload for LLM-based routing decisions.
+
+    Emitted after a successful LLM routing decision to provide full
+    observability into the routing pipeline, including a determinism
+    audit comparing LLM and fuzzy-matching selections.
+
+    Attributes:
+        session_id: Session identifier (partition key).
+        correlation_id: Correlation ID for distributed tracing.
+        emitted_at: Timestamp when the event was emitted (UTC).
+        selected_agent: Agent chosen by LLM routing.
+        llm_confidence: Confidence score from the LLM selection (0.0-1.0).
+        llm_latency_ms: Time spent on the LLM HTTP call in milliseconds.
+        fallback_used: True when the LLM fell back to the fuzzy top candidate.
+        model_used: Model identifier used for routing (e.g. "Qwen2.5-14B").
+        fuzzy_top_candidate: Top candidate from fuzzy matching (for audit).
+        llm_selected_candidate: Agent name the LLM returned before validation.
+        agreement: True when LLM and fuzzy top candidates agree.
+        routing_prompt_version: Prompt template version for longitudinal comparison.
+
+    Note:
+        ``extra="ignore"`` is intentional — the payload dict assembled in
+        route_via_events_wrapper may carry additional keys that are not
+        needed by this schema. Ignoring extras avoids breaking the hook
+        when the routing result dict gains new fields.
+
+    Example:
+        >>> from datetime import UTC, datetime
+        >>> from uuid import uuid4
+        >>> event = ModelLlmRoutingDecisionPayload(
+        ...     session_id="abc12345-1234-5678-abcd-1234567890ab",
+        ...     correlation_id=uuid4(),
+        ...     emitted_at=datetime(2025, 1, 15, 12, 5, 0, tzinfo=UTC),
+        ...     selected_agent="agent-api-architect",
+        ...     llm_confidence=0.92,
+        ...     llm_latency_ms=45,
+        ...     fallback_used=False,
+        ...     model_used="Qwen2.5-14B",
+        ...     fuzzy_top_candidate="agent-api-architect",
+        ...     llm_selected_candidate="agent-api-architect",
+        ...     agreement=True,
+        ...     routing_prompt_version="1.0.0",
+        ... )
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="ignore",
+        from_attributes=True,
+    )
+
+    # Identity / tracing
+    session_id: str = Field(
+        ...,
+        min_length=1,
+        description="Session identifier (partition key for Kafka ordering)",
+    )
+    correlation_id: UUID = Field(
+        ...,
+        description="Correlation ID for distributed tracing",
+    )
+
+    # Timestamps — MUST be explicitly injected (no default_factory for testability)
+    emitted_at: TimezoneAwareDatetime = Field(
+        ...,
+        description="Timestamp when the event was emitted (UTC)",
+    )
+
+    # LLM routing outcome
+    selected_agent: str = Field(
+        ...,
+        min_length=1,
+        description="Agent chosen by LLM routing",
+    )
+    llm_confidence: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Confidence score from the LLM selection",
+    )
+    llm_latency_ms: int = Field(
+        ...,
+        ge=0,
+        le=60000,
+        description="Time spent on the LLM HTTP call in milliseconds",
+    )
+    fallback_used: bool = Field(
+        ...,
+        description="True when the LLM fell back to the fuzzy top candidate",
+    )
+    model_used: str = Field(
+        ...,
+        min_length=1,
+        description="Model identifier used for routing (e.g. 'Qwen2.5-14B')",
+    )
+
+    # Determinism audit fields
+    fuzzy_top_candidate: str | None = Field(
+        default=None,
+        description="Top candidate from fuzzy matching, for LLM/fuzzy agreement audit",
+    )
+    llm_selected_candidate: str | None = Field(
+        default=None,
+        description="Raw agent name the LLM returned before validation/fallback",
+    )
+    agreement: bool = Field(
+        default=False,
+        description="True when LLM selection and fuzzy top candidate agree",
+    )
+
+    # Longitudinal comparison
+    routing_prompt_version: str = Field(
+        ...,
+        min_length=1,
+        description="Routing prompt template version for longitudinal regression comparison",
+    )
+
+
+class ModelLlmRoutingFallbackPayload(BaseModel):
+    """Event payload emitted when LLM routing falls back to fuzzy matching.
+
+    Emitted when the LLM routing path (``_route_via_llm``) returns None,
+    causing the pipeline to fall through to fuzzy candidate matching.
+    Provides observability into why the LLM path was skipped.
+
+    Attributes:
+        session_id: Session identifier (partition key).
+        correlation_id: Correlation ID for distributed tracing.
+        emitted_at: Timestamp when the event was emitted (UTC).
+        fallback_reason: Human-readable reason for the fallback.
+        llm_url: LLM endpoint URL that was attempted (if known).
+        routing_prompt_version: Prompt template version for correlation.
+
+    Note:
+        ``extra="ignore"`` is intentional — the routing result dict may
+        carry keys that are not relevant to this payload.
+
+    Example:
+        >>> from datetime import UTC, datetime
+        >>> from uuid import uuid4
+        >>> event = ModelLlmRoutingFallbackPayload(
+        ...     session_id="abc12345-1234-5678-abcd-1234567890ab",
+        ...     correlation_id=uuid4(),
+        ...     emitted_at=datetime(2025, 1, 15, 12, 5, 0, tzinfo=UTC),
+        ...     fallback_reason="LLM endpoint unhealthy",
+        ...     llm_url="http://192.168.86.100:8200",
+        ...     routing_prompt_version="1.0.0",
+        ... )
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="ignore",
+        from_attributes=True,
+    )
+
+    # Identity / tracing
+    session_id: str = Field(
+        ...,
+        min_length=1,
+        description="Session identifier (partition key for Kafka ordering)",
+    )
+    correlation_id: UUID = Field(
+        ...,
+        description="Correlation ID for distributed tracing",
+    )
+
+    # Timestamps — MUST be explicitly injected (no default_factory for testability)
+    emitted_at: TimezoneAwareDatetime = Field(
+        ...,
+        description="Timestamp when the event was emitted (UTC)",
+    )
+
+    # Fallback details
+    fallback_reason: str = Field(
+        ...,
+        min_length=1,
+        max_length=500,
+        description="Human-readable reason for the fallback (e.g. 'LLM endpoint unhealthy')",
+    )
+    llm_url: str | None = Field(
+        default=None,
+        description="LLM endpoint URL that was attempted, if known",
+    )
+    routing_prompt_version: str = Field(
+        ...,
+        min_length=1,
+        description="Routing prompt template version for correlation",
+    )
+
+
 __all__ = [
     # Constants
     "PROMPT_PREVIEW_MAX_LENGTH",
@@ -1892,6 +2089,9 @@ __all__ = [
     # Static context edit detection (OMN-2237)
     "ModelChangedFileRecord",
     "ModelStaticContextEditDetectedPayload",
+    # LLM routing observability (OMN-2273)
+    "ModelLlmRoutingDecisionPayload",
+    "ModelLlmRoutingFallbackPayload",
     # Envelope and types
     "ModelHookEventEnvelope",
     "ModelHookPayload",
