@@ -31,10 +31,10 @@ Format matches the established deep dive pattern (see `${HOME}/Code/omni_save/DE
 ### Usage
 
 ```bash
-# Today's deep dive (display only)
+# Today's deep dive (display only) — auto-discovers all active repos
 ${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/deep-dive
 
-# Specific date
+# Specific date (auto-discovers repos with activity on that date)
 ${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/deep-dive --date 2025-12-09
 
 # Last N days (for weekly summary)
@@ -48,6 +48,9 @@ ${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/deep-dive --save --output-dir ~/rep
 
 # JSON output for processing
 ${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/deep-dive --json
+
+# Analyze specific repos only (overrides auto-discovery)
+${CLAUDE_PLUGIN_ROOT}/skills/linear-insights/deep-dive --repos omnibase_core,omniclaude
 ```
 
 ### Configuration
