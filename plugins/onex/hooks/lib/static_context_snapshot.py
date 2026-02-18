@@ -21,7 +21,7 @@ Design Decisions:
   - Fail-open: any file I/O or git error is logged and skipped.
   - Hooks must never block; this module exits 0 on all infrastructure failures.
   - Snapshot directory is ``~/.claude/snapshots/`` (persistent, not /tmp/).
-  - Content stored only when hash changes to minimise storage.
+  - Only the SHA-256 hash is stored (never file content) to detect changes without persisting secrets.
   - Git diff uses ``--stat`` (summary only) to avoid capturing secrets.
 
 CLI Usage::
@@ -40,7 +40,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import itertools
 import json
 import logging
 import os
@@ -68,6 +67,7 @@ _DEFAULT_NON_VERSIONED_PATHS: list[str] = [
 ]
 
 # Glob patterns within a project root that identify non-versioned local files.
+# These are used with _bounded_glob (not Path.glob) to avoid full-tree traversal.
 _LOCAL_GLOB_PATTERNS: list[str] = [
     "**/.local.md",
     "**/CLAUDE.local.md",
@@ -75,6 +75,10 @@ _LOCAL_GLOB_PATTERNS: list[str] = [
 
 # Maximum number of glob results per pattern to guard against traversing large trees.
 _MAX_LOCAL_GLOB_RESULTS = 100
+
+# Maximum directory depth to walk when searching for local files.
+# Prevents expensive traversal of very deep directory trees.
+_MAX_GLOB_DEPTH = 5
 
 # CLAUDE.md names that are considered versioned (in git repos)
 _VERSIONED_FILENAMES: frozenset[str] = frozenset(
@@ -173,6 +177,10 @@ def _save_snapshot_index(snapshot_dir: Path, index: dict[str, Any]) -> bool:
         tmp_path = index_path.with_suffix(".json.tmp")
         tmp_path.write_text(json.dumps(index, indent=2), encoding="utf-8")
         tmp_path.replace(index_path)
+        try:
+            index_path.chmod(0o600)
+        except OSError:
+            pass  # Non-fatal: file is still usable without permission restriction
         return True
     except OSError as exc:
         logger.debug("Failed to save snapshot index: %s", exc)
@@ -329,6 +337,67 @@ def _collect_versioned_files(project_path: Path) -> list[Path]:
     return [p for p in candidates if _is_git_tracked(p)]
 
 
+def _bounded_glob(
+    root: Path,
+    filename: str,
+    max_depth: int = _MAX_GLOB_DEPTH,
+    max_results: int = _MAX_LOCAL_GLOB_RESULTS,
+) -> list[Path]:
+    """Walk a directory tree up to ``max_depth`` levels, collecting files by name.
+
+    Unlike ``Path.glob("**/<name>")``, this function uses ``os.walk`` with early
+    directory pruning so that sub-trees beyond ``max_depth`` are never traversed.
+    Both ``max_depth`` and ``max_results`` limits trigger a warning when hit.
+
+    Args:
+        root: Directory to start walking from.
+        filename: Exact filename to match (e.g. ".local.md").
+        max_depth: Maximum depth relative to ``root`` to descend into.
+        max_results: Maximum number of matching files to return.
+
+    Returns:
+        List of matching ``Path`` objects, at most ``max_results`` entries.
+    """
+    results: list[Path] = []
+    root_str = str(root)
+    depth_truncated = False
+    results_truncated = False
+
+    for dirpath, dirs, files in os.walk(root_str):
+        # Compute depth: count extra separators beyond the root path
+        rel = os.path.relpath(dirpath, root_str)
+        depth = 0 if rel == "." else rel.count(os.sep) + 1
+
+        if depth >= max_depth:
+            # Prune: prevent os.walk from descending further
+            dirs[:] = []
+            depth_truncated = True
+
+        if filename in files:
+            results.append(Path(dirpath) / filename)
+            if len(results) >= max_results:
+                results_truncated = True
+                dirs[:] = []  # Stop further descent
+                break
+
+    if depth_truncated:
+        logger.warning(
+            "Bounded glob for %r in %s stopped at depth %d (performance guard)",
+            filename,
+            root,
+            max_depth,
+        )
+    if results_truncated:
+        logger.warning(
+            "Bounded glob for %r in %s truncated at %d results (performance guard)",
+            filename,
+            root,
+            max_results,
+        )
+
+    return results
+
+
 def _collect_non_versioned_files(project_path: Path | None = None) -> list[Path]:
     """Collect non-versioned static context files.
 
@@ -359,24 +428,25 @@ def _collect_non_versioned_files(project_path: Path | None = None) -> list[Path]
         except OSError as exc:
             logger.debug("Cannot scan memory dir %s: %s", memory_dir, exc)
 
-    # Project-local .local.md files
+    # Project-local .local.md files (depth-bounded walk to avoid full-tree traversal)
     if project_path and project_path.is_dir():
         for pattern in _LOCAL_GLOB_PATTERNS:
+            # Extract the literal filename from the glob pattern (part after last "/")
+            target_filename = pattern.rsplit("/", 1)[-1]
             try:
-                glob_iter = project_path.glob(pattern)
-                matches = list(itertools.islice(glob_iter, _MAX_LOCAL_GLOB_RESULTS))
-                if len(matches) >= _MAX_LOCAL_GLOB_RESULTS:
-                    logger.warning(
-                        "Glob %s in %s truncated at %d results (performance guard)",
-                        pattern,
-                        project_path,
-                        _MAX_LOCAL_GLOB_RESULTS,
-                    )
+                matches = _bounded_glob(
+                    root=project_path,
+                    filename=target_filename,
+                    max_depth=_MAX_GLOB_DEPTH,
+                    max_results=_MAX_LOCAL_GLOB_RESULTS,
+                )
                 for local_file in matches:
                     if local_file.is_file() and not _is_git_tracked(local_file):
                         paths.append(local_file)
             except OSError as exc:
-                logger.debug("Cannot glob %s in %s: %s", pattern, project_path, exc)
+                logger.debug(
+                    "Cannot walk %s in %s: %s", target_filename, project_path, exc
+                )
 
     return paths
 
@@ -488,13 +558,15 @@ def _update_index_entry(
 ) -> None:
     """Update the snapshot index entry for a file.
 
-    Only stores full content for non-versioned files when the hash has changed,
-    to minimise storage. For versioned files we rely on git for content history.
+    Stores hash and session metadata. For versioned files we rely on git for
+    content history. For non-versioned files, only the hash is recorded.
 
     Args:
         index: Mutable snapshot index to update in place.
         snapshot: The new snapshot to record.
     """
+    # NOTE: Only metadata is stored. File content is NEVER written to the index
+    # to prevent persisting secrets from CLAUDE.md or .local.md files.
     entry: dict[str, Any] = {
         "hash": snapshot.content_hash,
         "session_id": snapshot.session_id,
@@ -502,9 +574,16 @@ def _update_index_entry(
     }
 
     if snapshot.is_versioned:
-        current_commit = _git_commit_for_file(Path(snapshot.file_path))
-        if current_commit:
-            entry["git_commit"] = current_commit
+        if snapshot.changed:
+            # Only fetch current commit for changed files (avoids subprocess on stable files)
+            current_commit = _git_commit_for_file(Path(snapshot.file_path))
+            if current_commit:
+                entry["git_commit"] = current_commit
+        else:
+            # Unchanged file — preserve the git_commit from the previous index entry
+            prev_entry = index.get(snapshot.file_path, {})
+            if prev_commit := prev_entry.get("git_commit"):
+                entry["git_commit"] = prev_commit
 
     index[snapshot.file_path] = entry
 

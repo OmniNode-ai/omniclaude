@@ -603,18 +603,30 @@ fi
 STATIC_SNAPSHOT_ENABLED="${OMNICLAUDE_STATIC_SNAPSHOT_ENABLED:-true}"
 STATIC_SNAPSHOT_ENABLED=$(_normalize_bool "$STATIC_SNAPSHOT_ENABLED")
 
-STATIC_SNAPSHOT_STAMP="/tmp/omniclaude-static-snapshot-${SESSION_ID:-session}.done"
-if [[ -f "$STATIC_SNAPSHOT_STAMP" ]]; then
-    log "Static context snapshot already run for this session, skipping"
-elif [[ "${STATIC_SNAPSHOT_ENABLED}" == "true" ]] && [[ -f "${HOOKS_LIB}/static_context_snapshot.py" ]]; then
-    (
+if [[ "${STATIC_SNAPSHOT_ENABLED}" == "true" ]] && [[ -f "${HOOKS_LIB}/static_context_snapshot.py" ]]; then
+    _run_static_snapshot() {
+        local _log="${LOG_FILE:-/dev/null}"
         "$PYTHON_CMD" "${HOOKS_LIB}/static_context_snapshot.py" scan \
             --session-id "${SESSION_ID:-unknown}" \
             --project-path "${PROJECT_PATH:-${CWD}}" \
-            >> "$LOG_FILE" 2>&1
-        touch "$STATIC_SNAPSHOT_STAMP" 2>/dev/null || true
-    ) &
-    log "Static context snapshot started in background (PID: $!)"
+            >> "$_log" 2>&1
+    }
+    if [[ -z "${SESSION_ID}" ]]; then
+        log "WARNING: Empty SESSION_ID — skipping static snapshot idempotency guard"
+        ( _run_static_snapshot ) &
+        log "Static context snapshot started in background (PID: $!)"
+    else
+        STATIC_SNAPSHOT_STAMP="/tmp/omniclaude-static-snapshot-${SESSION_ID}.done"
+        if [[ -f "$STATIC_SNAPSHOT_STAMP" ]]; then
+            log "Static context snapshot already run for this session, skipping"
+        else
+            (
+                _run_static_snapshot
+                touch "$STATIC_SNAPSHOT_STAMP" 2>/dev/null || true
+            ) &
+            log "Static context snapshot started in background (PID: $!)"
+        fi
+    fi
 elif [[ "${STATIC_SNAPSHOT_ENABLED}" != "true" ]]; then
     log "Static context snapshot disabled (STATIC_SNAPSHOT_ENABLED=false)"
 else
