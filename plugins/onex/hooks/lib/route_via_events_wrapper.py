@@ -585,6 +585,10 @@ def _route_via_llm(
     agent_info = agents_reg.get(result.selected_agent, {})
     onex_routing_path = result.routing_path
     if onex_routing_path not in VALID_ROUTING_PATHS:
+        logger.warning(
+            "LLM routing returned invalid routing_path '%s', defaulting to 'local'",
+            onex_routing_path,
+        )
         onex_routing_path = "local"
 
     logger.info(
@@ -602,9 +606,9 @@ def _route_via_llm(
             {
                 "name": c.agent_name,
                 "score": c.confidence,
-                "description": agents_reg.get(c.agent_name, {}).get(
+                "description": (ci := agents_reg.get(c.agent_name, {})).get(
                     "description",
-                    agents_reg.get(c.agent_name, {}).get("title", c.agent_name),
+                    ci.get("title", c.agent_name),
                 ),
                 "reason": c.match_reason,
             }

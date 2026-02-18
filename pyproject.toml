@@ -340,5 +340,5 @@ filterwarnings = [
     # warning for _check_llm_health.  The warning is benign: the mock consumes the
     # coroutine argument without awaiting it, which is intentional in those tests.
     # Scoped to the specific test module to avoid masking real warnings elsewhere.
-    "ignore:coroutine '_check_llm_health' was never awaited:RuntimeWarning:tests.lib.core.test_route_via_events_wrapper",
+    "ignore:coroutine '_check_llm_health' was never awaited:RuntimeWarning:tests.lib.core.test_route_via_events_wrapper",  # intentional: mock intercepts coroutine before await
 ]

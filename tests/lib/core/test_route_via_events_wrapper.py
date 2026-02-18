@@ -889,6 +889,34 @@ class TestRouteViaLlmFallback:
 
         assert result is None
 
+    def test_returns_none_when_no_agent_defs(self):
+        """Returns None when _build_agent_definitions returns an empty tuple.
+
+        Exercises the guard at the top of _route_via_llm that rejects empty
+        agent definition sequences before constructing HandlerRoutingLlm.
+        """
+        mock_router = MagicMock()
+        mock_router.registry = {"agents": {}}
+
+        with (
+            patch(
+                "route_via_events_wrapper._get_llm_routing_url",
+                return_value="http://localhost:8200",
+            ),
+            patch(
+                "route_via_events_wrapper._run_async",
+                return_value=True,  # Health check passes
+            ),
+            patch("route_via_events_wrapper._get_router", return_value=mock_router),
+            patch(
+                "route_via_events_wrapper._build_agent_definitions",
+                return_value=(),
+            ),
+        ):
+            result = _route_via_llm("debug this", "corr-123")
+
+        assert result is None
+
     def test_returns_none_on_llm_timeout(self):
         """Returns None when the LLM call times out."""
         mock_router = MagicMock()
