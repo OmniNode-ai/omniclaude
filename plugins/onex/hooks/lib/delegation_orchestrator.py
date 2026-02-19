@@ -549,18 +549,20 @@ def _emit_delegation_event(
 
 
 def orchestrate_delegation(
+    *,
     prompt: str,
-    correlation_id: str,
     session_id: str = "",
-) -> dict[str, object]:
+    correlation_id: str,
+    emitted_at: datetime | None = None,
+) -> dict[str, Any]:
     """Orchestrate delegation with task-type routing and quality gate.
 
     Decision tree:
     1. Feature flags off                -> delegated=False, reason="feature_disabled"
     2. Classification fails / raises    -> delegated=False
     3. Not delegatable                  -> delegated=False
-    4. No endpoint for task type        -> delegated=False, reason="no_endpoint_configured"
-    5. LLM call fails                   -> delegated=False, reason="llm_call_failed"
+    4. No endpoint for task type        -> delegated=False, reason="pre_gate:no_endpoint_configured"
+    5. LLM call fails                   -> delegated=False, reason="pre_gate:llm_call_failed"
        (delegation event emitted with delegation_success=False)
     6. Quality gate fails               -> delegated=False, reason="quality_gate_failed"
        (delegation event emitted with quality_gate_passed=False, delegation_success=False)
@@ -572,8 +574,11 @@ def orchestrate_delegation(
 
     Args:
         prompt: Raw user prompt text.
-        correlation_id: Correlation ID for distributed tracing.
         session_id: Session identifier (empty string when not known).
+        correlation_id: Correlation ID for distributed tracing.
+        emitted_at: Timestamp for the delegation event. When None, defaults to
+            ``datetime.now(UTC)``. Inject a fixed value in tests for deterministic
+            assertions.
 
     Returns:
         Dict with at minimum ``{"delegated": bool}``.
@@ -581,8 +586,8 @@ def orchestrate_delegation(
         "intent", "savings_usd", "latency_ms", "handler", "quality_gate_passed".
         When delegated=False: also includes "reason".
     """
+    emitted_at = emitted_at or datetime.now(UTC)
     start_time = time.time()
-    emitted_at = datetime.now(UTC)
 
     # Gate 1: Feature flags
     if not _is_delegation_enabled():
@@ -628,7 +633,7 @@ def orchestrate_delegation(
             handler_name="unknown",
             model_name="unknown",
             quality_gate_passed=False,
-            quality_gate_reason=f"intent_extraction_error: {type(exc).__name__}",
+            quality_gate_reason=f"pre_gate:intent_extraction_error: {type(exc).__name__}",
             delegation_success=False,
             savings_usd=score.estimated_savings_usd,
             latency_ms=latency_ms,
@@ -636,7 +641,7 @@ def orchestrate_delegation(
         )
         return {
             "delegated": False,
-            "reason": f"intent_extraction_error: {type(exc).__name__}",
+            "reason": f"pre_gate:intent_extraction_error: {type(exc).__name__}",
         }
 
     # Gate 3: Endpoint selection for this specific task type
@@ -658,7 +663,7 @@ def orchestrate_delegation(
         )
         return {
             "delegated": False,
-            "reason": "no_endpoint_configured",
+            "reason": "pre_gate:no_endpoint_configured",
             "confidence": score.confidence,
             "intent": intent_value,
         }
@@ -676,7 +681,7 @@ def orchestrate_delegation(
             handler_name=handler_name,
             model_name=model_name,
             quality_gate_passed=False,
-            quality_gate_reason="llm_call_failed",
+            quality_gate_reason="pre_gate:llm_call_failed",
             delegation_success=False,
             savings_usd=score.estimated_savings_usd,
             latency_ms=latency_ms,
@@ -684,7 +689,7 @@ def orchestrate_delegation(
         )
         return {
             "delegated": False,
-            "reason": "llm_call_failed",
+            "reason": "pre_gate:llm_call_failed",
             "confidence": score.confidence,
             "intent": intent_value,
         }
@@ -699,7 +704,7 @@ def orchestrate_delegation(
             handler_name=handler_name,
             model_name=actual_model_name or model_name,
             quality_gate_passed=False,
-            quality_gate_reason="empty_response",
+            quality_gate_reason="pre_gate:empty_response",
             delegation_success=False,
             savings_usd=score.estimated_savings_usd,
             latency_ms=latency_ms,
@@ -707,7 +712,7 @@ def orchestrate_delegation(
         )
         return {
             "delegated": False,
-            "reason": "empty_response",
+            "reason": "pre_gate:empty_response",
             "confidence": score.confidence,
             "intent": intent_value,
         }

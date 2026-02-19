@@ -356,7 +356,10 @@ def test_handler_routing_purpose_names_match_enum() -> None:
     silently causes _select_handler_endpoint() to return None at runtime,
     so catching it in a test is essential.
     """
-    from omniclaude.config.model_local_llm_config import LlmEndpointPurpose
+    LlmEndpointPurpose = pytest.importorskip(
+        "omniclaude.config.model_local_llm_config",
+        reason="omniclaude package not installed",
+    ).LlmEndpointPurpose
 
     valid_purpose_values = {p.value for p in LlmEndpointPurpose}
 
@@ -382,21 +385,27 @@ class TestFeatureFlags:
     ) -> None:
         monkeypatch.delenv("ENABLE_LOCAL_INFERENCE_PIPELINE", raising=False)
         monkeypatch.delenv("ENABLE_LOCAL_DELEGATION", raising=False)
-        result = do.orchestrate_delegation("document this function", "corr-1")
+        result = do.orchestrate_delegation(
+            prompt="document this function", correlation_id="corr-1"
+        )
         assert result["delegated"] is False
         assert result.get("reason") == "feature_disabled"
 
     def test_only_parent_flag_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.delenv("ENABLE_LOCAL_DELEGATION", raising=False)
-        result = do.orchestrate_delegation("document this", "corr-2")
+        result = do.orchestrate_delegation(
+            prompt="document this", correlation_id="corr-2"
+        )
         assert result["delegated"] is False
         assert result.get("reason") == "feature_disabled"
 
     def test_only_delegation_flag_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv("ENABLE_LOCAL_INFERENCE_PIPELINE", raising=False)
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
-        result = do.orchestrate_delegation("document this", "corr-3")
+        result = do.orchestrate_delegation(
+            prompt="document this", correlation_id="corr-3"
+        )
         assert result["delegated"] is False
         assert result.get("reason") == "feature_disabled"
 
@@ -410,7 +419,9 @@ class TestFeatureFlags:
         classifier_mock = _make_classifier_mock(score, "debug")
 
         with patch.object(do, "TaskClassifier", return_value=classifier_mock):
-            result = do.orchestrate_delegation("fix the bug", "corr-4")
+            result = do.orchestrate_delegation(
+                prompt="fix the bug", correlation_id="corr-4"
+            )
         assert result.get("reason") != "feature_disabled"
 
     def test_unavailable_classifier_returns_error(
@@ -420,7 +431,9 @@ class TestFeatureFlags:
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
         with patch.object(do, "TaskClassifier", None):
-            result = do.orchestrate_delegation("document this", "corr-null-cls")
+            result = do.orchestrate_delegation(
+                prompt="document this", correlation_id="corr-null-cls"
+            )
         assert result["delegated"] is False
         assert "classification_error" in result.get("reason", "")
 
@@ -448,7 +461,9 @@ class TestClassificationGate:
         classifier_mock = _make_classifier_mock(score, "debug")
 
         with patch.object(do, "TaskClassifier", return_value=classifier_mock):
-            result = do.orchestrate_delegation("fix the bug", "corr-10")
+            result = do.orchestrate_delegation(
+                prompt="fix the bug", correlation_id="corr-10"
+            )
         assert result["delegated"] is False
         assert "not in allow-list" in result.get("reason", "")
 
@@ -459,7 +474,9 @@ class TestClassificationGate:
         with patch.object(
             do, "TaskClassifier", side_effect=RuntimeError("classify broke")
         ):
-            result = do.orchestrate_delegation("document this", "corr-11")
+            result = do.orchestrate_delegation(
+                prompt="document this", correlation_id="corr-11"
+            )
         assert result["delegated"] is False
         assert "classification_error" in result.get("reason", "")
 
@@ -484,10 +501,12 @@ class TestEndpointResolution:
 
         with patch.object(do, "TaskClassifier", return_value=classifier_mock):
             with patch.object(do, "_select_handler_endpoint", return_value=None):
-                result = do.orchestrate_delegation("document this", "corr-20")
+                result = do.orchestrate_delegation(
+                    prompt="document this", correlation_id="corr-20"
+                )
 
         assert result["delegated"] is False
-        assert result.get("reason") == "no_endpoint_configured"
+        assert result.get("reason") == "pre_gate:no_endpoint_configured"
 
     def test_no_endpoint_configured_emits_delegation_event(
         self, monkeypatch: pytest.MonkeyPatch
@@ -515,7 +534,7 @@ class TestEndpointResolution:
                     )
 
         assert result["delegated"] is False
-        assert "no_endpoint_configured" in result.get("reason", "")
+        assert "pre_gate:no_endpoint_configured" in result.get("reason", "")
 
         mock_emit.assert_called_once()
         call_kwargs = mock_emit.call_args.kwargs
@@ -542,10 +561,12 @@ class TestEndpointResolution:
                 with patch.object(
                     do, "_call_llm_with_system_prompt", return_value=None
                 ):
-                    result = do.orchestrate_delegation("document func", "corr-21")
+                    result = do.orchestrate_delegation(
+                        prompt="document func", correlation_id="corr-21"
+                    )
 
         # Should reach the LLM call gate, not endpoint gate
-        assert result.get("reason") == "llm_call_failed"
+        assert result.get("reason") == "pre_gate:llm_call_failed"
 
 
 # ---------------------------------------------------------------------------
@@ -585,11 +606,11 @@ class TestLlmCallFailure:
                     do, "_call_llm_with_system_prompt", return_value=None
                 ):
                     result = do.orchestrate_delegation(
-                        "document this function", "corr-30"
+                        prompt="document this function", correlation_id="corr-30"
                     )
 
         assert result["delegated"] is False
-        assert result.get("reason") == "llm_call_failed"
+        assert result.get("reason") == "pre_gate:llm_call_failed"
 
     def test_llm_call_failure_emits_delegation_event(
         self, monkeypatch: pytest.MonkeyPatch
@@ -605,7 +626,9 @@ class TestLlmCallFailure:
                     do, "_call_llm_with_system_prompt", return_value=None
                 ):
                     with patch.object(do, "_emit_delegation_event") as mock_emit:
-                        do.orchestrate_delegation("document this function", "corr-31")
+                        do.orchestrate_delegation(
+                            prompt="document this function", correlation_id="corr-31"
+                        )
 
         mock_emit.assert_called_once()
         call_kwargs = mock_emit.call_args.kwargs
@@ -628,11 +651,11 @@ class TestLlmCallFailure:
                     return_value=("   ", "Qwen2.5-72B"),
                 ):
                     result = do.orchestrate_delegation(
-                        "document this function", "corr-32"
+                        prompt="document this function", correlation_id="corr-32"
                     )
 
         assert result["delegated"] is False
-        assert result.get("reason") == "empty_response"
+        assert result.get("reason") == "pre_gate:empty_response"
 
     def test_intent_extraction_error_emits_delegation_event(
         self, monkeypatch: pytest.MonkeyPatch
@@ -657,7 +680,7 @@ class TestLlmCallFailure:
                 )
 
         assert result["delegated"] is False
-        assert "intent_extraction_error" in result.get("reason", "")
+        assert "pre_gate:intent_extraction_error" in result.get("reason", "")
 
         mock_emit.assert_called_once()
         call_kwargs = mock_emit.call_args.kwargs
@@ -706,7 +729,7 @@ class TestQualityGateFailure:
                     return_value=(bad_response, "Qwen2.5-72B"),
                 ):
                     result = do.orchestrate_delegation(
-                        "document this function", "corr-40"
+                        prompt="document this function", correlation_id="corr-40"
                     )
 
         assert result["delegated"] is False
@@ -730,7 +753,9 @@ class TestQualityGateFailure:
                     return_value=(bad_response, "Qwen2.5-72B"),
                 ):
                     with patch.object(do, "_emit_delegation_event") as mock_emit:
-                        do.orchestrate_delegation("document this function", "corr-41")
+                        do.orchestrate_delegation(
+                            prompt="document this function", correlation_id="corr-41"
+                        )
 
         mock_emit.assert_called_once()
         call_kwargs = mock_emit.call_args.kwargs
@@ -764,7 +789,8 @@ class TestQualityGateFailure:
                             do, "_emit_compliance_advisory"
                         ) as mock_compliance:
                             do.orchestrate_delegation(
-                                "document this function", "corr-42"
+                                prompt="document this function",
+                                correlation_id="corr-42",
                             )
 
         assert mock_compliance.call_count == 0
@@ -854,7 +880,8 @@ class TestOrchestratedDelegationSuccess:
                     with patch.object(do, "_emit_delegation_event"):
                         with patch.object(do, "_emit_compliance_advisory"):
                             result = do.orchestrate_delegation(
-                                "document this function", "corr-50"
+                                prompt="document this function",
+                                correlation_id="corr-50",
                             )
 
         assert result["delegated"] is True
@@ -888,7 +915,9 @@ class TestOrchestratedDelegationSuccess:
                 ):
                     with patch.object(do, "_emit_delegation_event") as mock_emit:
                         with patch.object(do, "_emit_compliance_advisory"):
-                            do.orchestrate_delegation("document func", "corr-51")
+                            do.orchestrate_delegation(
+                                prompt="document func", correlation_id="corr-51"
+                            )
 
         mock_emit.assert_called_once()
         call_kwargs = mock_emit.call_args.kwargs
@@ -918,7 +947,9 @@ class TestOrchestratedDelegationSuccess:
                         with patch.object(
                             do, "_emit_compliance_advisory"
                         ) as mock_advisory:
-                            do.orchestrate_delegation("document func", "corr-52")
+                            do.orchestrate_delegation(
+                                prompt="document func", correlation_id="corr-52"
+                            )
 
         mock_advisory.assert_called_once()
 
@@ -942,7 +973,8 @@ class TestOrchestratedDelegationSuccess:
                     with patch.object(do, "_emit_delegation_event"):
                         with patch.object(do, "_emit_compliance_advisory"):
                             result = do.orchestrate_delegation(
-                                "document this function", "corr-53"
+                                prompt="document this function",
+                                correlation_id="corr-53",
                             )
 
         assert "---" in result["response"]
@@ -958,7 +990,9 @@ class TestOrchestratedDelegationSuccess:
         with patch.object(
             do, "TaskClassifier", side_effect=SystemError("unrecoverable")
         ):
-            result = do.orchestrate_delegation("document this", "corr-err")
+            result = do.orchestrate_delegation(
+                prompt="document this", correlation_id="corr-err"
+            )
 
         assert result["delegated"] is False
         assert "classification_error" in result.get("reason", "")
@@ -978,7 +1012,9 @@ class TestOrchestratedDelegationSuccess:
             score = _make_score(False)
             classifier_mock = _make_classifier_mock(score, "debug")
             with patch.object(do, "TaskClassifier", return_value=classifier_mock):
-                result = do.orchestrate_delegation("some prompt", "corr-always")
+                result = do.orchestrate_delegation(
+                    prompt="some prompt", correlation_id="corr-always"
+                )
             assert "delegated" in result
             assert isinstance(result["delegated"], bool)
 
@@ -1011,7 +1047,8 @@ class TestOrchestratedDelegationSuccess:
                     with patch.object(do, "_emit_delegation_event"):
                         with patch.object(do, "_emit_compliance_advisory"):
                             result = do.orchestrate_delegation(
-                                "write tests for calculate", "corr-test"
+                                prompt="write tests for calculate",
+                                correlation_id="corr-test",
                             )
 
         assert result["delegated"] is True
@@ -1046,7 +1083,8 @@ class TestOrchestratedDelegationSuccess:
                     with patch.object(do, "_emit_delegation_event"):
                         with patch.object(do, "_emit_compliance_advisory"):
                             result = do.orchestrate_delegation(
-                                "explain how kafka works", "corr-research"
+                                prompt="explain how kafka works",
+                                correlation_id="corr-research",
                             )
 
         assert result["delegated"] is True
@@ -1066,6 +1104,8 @@ def test_orchestrate_delegation_returns_feature_disabled(
     """orchestrate_delegation returns feature_disabled when both flags are off."""
     monkeypatch.delenv("ENABLE_LOCAL_INFERENCE_PIPELINE", raising=False)
     monkeypatch.delenv("ENABLE_LOCAL_DELEGATION", raising=False)
-    result = do.orchestrate_delegation("test prompt", "corr-alias")
+    result = do.orchestrate_delegation(
+        prompt="test prompt", correlation_id="corr-alias"
+    )
     assert result["delegated"] is False
     assert result.get("reason") == "feature_disabled"
