@@ -1283,9 +1283,10 @@ class TestOrchestratedDelegationSuccess:
     def test_never_raises_on_unexpected_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """SystemError (subclass of Exception) is caught by the inner except
-        around classifier instantiation (~lines 678-685), not the outer guard.
-        Result is delegated=False with reason containing "classification_error"."""
+        """SystemError (subclass of Exception) is caught by the Gate 2 inner
+        try/except (around lines 717-738 in delegation_orchestrator.py), not
+        the outer guard. Result is delegated=False with reason containing
+        "classification_error"."""
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
 
