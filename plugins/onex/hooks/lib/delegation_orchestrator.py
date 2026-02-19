@@ -33,6 +33,7 @@ import logging
 import os
 import sys
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -242,7 +243,7 @@ def _select_handler_endpoint(
     _registry_cls = LocalLlmEndpointRegistry  # noqa: F821  (defined at module level)
     _purpose_cls = LlmEndpointPurpose  # noqa: F821  (defined at module level)
 
-    if _registry_cls is None or _purpose_cls is None:
+    if _registry_cls is None or _purpose_cls is None:  # type: ignore[unreachable]
         logger.debug(
             "LocalLlmEndpointRegistry or LlmEndpointPurpose unavailable; "
             "cannot resolve endpoint for intent=%s",
@@ -487,7 +488,6 @@ def _emit_delegation_event(
         emitted_at: Timestamp to use for the event (injected by caller, no datetime.now()).
     """
     try:
-        from datetime import UTC, datetime  # noqa: F401  (used by type annotation)
         from uuid import UUID, uuid4
 
         from omniclaude.hooks.schemas import ModelTaskDelegatedPayload
@@ -575,7 +575,7 @@ def orchestrate_delegation(
         "intent", "savings_usd", "latency_ms", "handler", "quality_gate_passed".
         When delegated=False: also includes "reason".
     """
-    from datetime import UTC, datetime
+    from datetime import datetime
 
     start_time = time.time()
     emitted_at = datetime.now(UTC)
@@ -586,7 +586,7 @@ def orchestrate_delegation(
 
     # Gate 2: Classification — use module-level TaskClassifier (patchable in tests)
     _classifier_cls = TaskClassifier  # noqa: F821  (module-level name)
-    if _classifier_cls is None:
+    if _classifier_cls is None:  # type: ignore[unreachable]
         return {
             "delegated": False,
             "reason": "classification_error: TaskClassifier not available",
@@ -616,6 +616,20 @@ def orchestrate_delegation(
         intent_value = ctx.primary_intent.value  # e.g., "document", "test", "research"
     except Exception as exc:
         logger.debug("Intent value extraction failed: %s", exc)
+        latency_ms = int((time.time() - start_time) * 1000)
+        _emit_delegation_event(
+            session_id=session_id,
+            correlation_id=correlation_id,
+            task_type="unknown",
+            handler_name="unknown",
+            model_name="unknown",
+            quality_gate_passed=False,
+            quality_gate_reason=f"intent_extraction_error: {type(exc).__name__}",
+            delegation_success=False,
+            savings_usd=score.estimated_savings_usd,
+            latency_ms=latency_ms,
+            emitted_at=emitted_at,
+        )
         return {
             "delegated": False,
             "reason": f"intent_extraction_error: {type(exc).__name__}",
@@ -624,6 +638,20 @@ def orchestrate_delegation(
     # Gate 3: Endpoint selection for this specific task type
     endpoint_result = _select_handler_endpoint(intent_value)
     if endpoint_result is None:
+        latency_ms = int((time.time() - start_time) * 1000)
+        _emit_delegation_event(
+            session_id=session_id,
+            correlation_id=correlation_id,
+            task_type=intent_value,
+            handler_name="unknown",
+            model_name="unknown",
+            quality_gate_passed=False,
+            quality_gate_reason="no_endpoint_configured",
+            delegation_success=False,
+            savings_usd=score.estimated_savings_usd,
+            latency_ms=latency_ms,
+            emitted_at=emitted_at,
+        )
         return {
             "delegated": False,
             "reason": "no_endpoint_configured",

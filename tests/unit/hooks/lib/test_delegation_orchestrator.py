@@ -343,6 +343,32 @@ class TestSelectHandlerEndpoint:
 
 
 # ---------------------------------------------------------------------------
+# Handler routing table contract test
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_handler_routing_purpose_names_match_enum() -> None:
+    """Every purpose string in _HANDLER_ROUTING must match an LlmEndpointPurpose value.
+
+    This acts as a contract check: if LlmEndpointPurpose enum values are
+    renamed, the routing table must be updated accordingly.  A mismatch
+    silently causes _select_handler_endpoint() to return None at runtime,
+    so catching it in a test is essential.
+    """
+    from omniclaude.config.model_local_llm_config import LlmEndpointPurpose
+
+    valid_purpose_values = {p.value for p in LlmEndpointPurpose}
+
+    for intent_key, routing_tuple in do._HANDLER_ROUTING.items():
+        purpose_name = routing_tuple[0]
+        assert purpose_name in valid_purpose_values, (
+            f"_HANDLER_ROUTING[{intent_key!r}] purpose {purpose_name!r} is not a "
+            f"valid LlmEndpointPurpose value. Valid values: {sorted(valid_purpose_values)}"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Feature flag tests
 # ---------------------------------------------------------------------------
 
@@ -575,6 +601,35 @@ class TestLlmCallFailure:
 
         assert result["delegated"] is False
         assert result.get("reason") == "empty_response"
+
+    def test_intent_extraction_error_emits_delegation_event(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """classify() raising -> delegated=False with intent_extraction_error and event emitted."""
+        from uuid import uuid4
+
+        monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
+        monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
+
+        score = _make_score(True, confidence=0.92)
+        classifier_instance = MagicMock()
+        classifier_instance.is_delegatable.return_value = score
+        classifier_instance.classify.side_effect = RuntimeError("classification failed")
+
+        with patch.object(do, "TaskClassifier", return_value=classifier_instance):
+            with patch.object(do, "_emit_delegation_event") as mock_emit:
+                result = do.orchestrate_delegation(
+                    prompt="write tests",
+                    session_id="s1",
+                    correlation_id=str(uuid4()),
+                )
+
+        assert result["delegated"] is False
+        assert "intent_extraction_error" in result.get("reason", "")
+
+        mock_emit.assert_called_once()
+        call_kwargs = mock_emit.call_args.kwargs
+        assert call_kwargs.get("delegation_success") is False
 
 
 # ---------------------------------------------------------------------------
