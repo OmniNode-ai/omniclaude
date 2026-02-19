@@ -143,7 +143,11 @@ _CLAUDE_GLOBAL_ENV="${HOME}/.claude/.env"
 if [[ -f "${_CLAUDE_GLOBAL_ENV}" ]]; then
     set -a
     # shellcheck disable=SC1090
-    source "${_CLAUDE_GLOBAL_ENV}" 2>/dev/null || true
+    if ! source "${_CLAUDE_GLOBAL_ENV}" 2>/dev/null; then
+        if [[ -n "${LOG_FILE:-}" ]]; then
+            log "WARN: Failed to source ${_CLAUDE_GLOBAL_ENV} - check file syntax"
+        fi
+    fi
     set +a
 fi
 unset _CLAUDE_GLOBAL_ENV

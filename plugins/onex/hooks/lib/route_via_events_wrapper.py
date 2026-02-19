@@ -3,8 +3,8 @@
 Route Via Events Wrapper - Intelligent Agent Routing
 
 Routes user prompts to the best-matched agent using trigger matching and
-confidence scoring. Falls back to polymorphic-agent only when no good match
-is found (confidence below threshold).
+confidence scoring. Returns an empty string (no agent selected) when no good
+match is found (confidence below threshold).
 
 Routing Semantics (three distinct fields):
 - routing_method: HOW routing executed (event_based, local, fallback)
@@ -488,11 +488,49 @@ def _use_onex_routing_nodes() -> bool:
     return os.environ.get("USE_ONEX_ROUTING_NODES", "false").lower() in _TRUTHY
 
 
+def _parse_routing_timeout(
+    raw: str | None, default: float, min_val: float = 0.01
+) -> float:
+    """Parse a timeout value from an environment variable string.
+
+    Args:
+        raw: Raw string value from the environment (or None / empty string).
+        default: Value to return when raw is absent, unparseable, or invalid.
+        min_val: Minimum acceptable value; values <= 0 are rejected.
+
+    Returns:
+        Parsed float timeout, or ``default`` when the input is absent or
+        invalid.  Warnings are written to stderr so they do not pollute the
+        hook's JSON stdout.
+    """
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        print(
+            f"[route_via_events_wrapper] WARNING: invalid timeout value {raw!r} "
+            f"(expected float) — using default {default}s",
+            file=sys.stderr,
+        )
+        return default
+    if value <= 0:
+        print(
+            f"[route_via_events_wrapper] WARNING: timeout value {value} is <= 0 "
+            f"— using default {default}s",
+            file=sys.stderr,
+        )
+        return default
+    return value
+
+
 # Timeout for the LLM health check and routing call.
 # Default is 100ms (per ticket spec, designed for local models).
 # Override via LLM_ROUTING_TIMEOUT_S env var for networked models — e.g.
 # set to 2.0 when routing through a model on a remote server.
-_LLM_ROUTING_TIMEOUT_S: float = float(os.environ.get("LLM_ROUTING_TIMEOUT_S", "0.1"))
+_LLM_ROUTING_TIMEOUT_S: float = _parse_routing_timeout(
+    os.environ.get("LLM_ROUTING_TIMEOUT_S"), default=0.1
+)
 # Inner httpx timeout for the health check, kept at 85% of the outer timeout
 # so the HTTP request can fail cleanly before asyncio.wait_for fires.
 _LLM_HEALTH_CHECK_TIMEOUT_S: float = _LLM_ROUTING_TIMEOUT_S * 0.85
@@ -1202,8 +1240,8 @@ def route_via_events(
     Route user prompt using intelligent trigger matching and confidence scoring.
 
     When USE_ONEX_ROUTING_NODES is enabled, delegates to ONEX compute and
-    effect nodes. Otherwise uses AgentRouter directly. Falls back to
-    polymorphic-agent only when no good match is found.
+    effect nodes. Otherwise uses AgentRouter directly. Returns an empty string
+    (no agent selected) when no good match is found.
 
     Args:
         prompt: User prompt to route
@@ -1394,7 +1432,7 @@ def route_via_events(
                         f"Routed to {selected_agent} (confidence={confidence:.2f}): {reasoning}"
                     )
                 else:
-                    # Low confidence - fall back to polymorphic-agent
+                    # Low confidence — no agent selected (empty string)
                     reasoning = (
                         f"Low confidence ({top_confidence:.2f} < {CONFIDENCE_THRESHOLD}), "
                         f"best match was {top_rec.agent_name}"

@@ -6,12 +6,20 @@ purpose, latency budget, and priority. The registry loads endpoint URLs from
 environment variables and provides lookup methods by purpose.
 
 Environment variables:
-    LLM_CODER_URL: Qwen2.5-Coder-14B endpoint for code generation.
-    LLM_CODER_FAST_URL: Qwen3-14B-AWQ endpoint for mid-tier tasks and routing classification (RTX 4090, 128K ctx).
-    LLM_EMBEDDING_URL: GTE-Qwen2 embedding endpoint.
+    LLM_CODER_URL: Qwen3-Coder-30B-A3B endpoint for code generation (RTX 5090).
+    LLM_CODER_MODEL_NAME: Model ID sent in API requests to the coder endpoint.
+        Default: "Qwen3-Coder-30B-A3B-Instruct". Must be non-empty if set.
+    LLM_CODER_FAST_URL: Qwen3-14B-AWQ endpoint for mid-tier tasks and routing classification (RTX 4090, 40K ctx).
+    LLM_CODER_FAST_MODEL_NAME: Model ID sent in API requests to the mid-tier endpoint.
+        Default: "Qwen3-14B-Instruct". Must be non-empty if set.
+    LLM_CODER_FAST_MAX_LATENCY_MS: Max acceptable latency (ms) for the mid-tier endpoint.
+        Default: 1000. Range: 100-60000.
+    LLM_EMBEDDING_URL: Qwen3-Embedding-8B-4bit embedding endpoint.
     LLM_FUNCTION_URL: Qwen2.5-7B function-calling endpoint (optional, hot-swap).
     LLM_DEEPSEEK_LITE_URL: DeepSeek-V2-Lite endpoint (optional, hot-swap).
     LLM_QWEN_72B_URL: Qwen2.5-72B large model endpoint.
+    LLM_QWEN_72B_MODEL_NAME: Model ID sent in API requests to the 72B endpoint.
+        Default: "Qwen2.5-72B". Override for MLX or renamed model builds. Must be non-empty if set.
     LLM_VISION_URL: Qwen2-VL vision endpoint.
     LLM_DEEPSEEK_R1_URL: DeepSeek-R1-Distill reasoning endpoint (optional, hot-swap).
     LLM_QWEN_14B_URL: Qwen2.5-14B general purpose endpoint.
@@ -75,7 +83,7 @@ class LlmEndpointConfig(BaseModel):
 
     Attributes:
         url: HTTP URL of the LLM endpoint.
-        model_name: Human-readable model identifier (e.g., "Qwen2.5-Coder-14B").
+        model_name: Human-readable model identifier (e.g., "Qwen3-Coder-30B-A3B").
         purpose: Primary purpose this endpoint is optimized for.
         max_latency_ms: Maximum acceptable latency in milliseconds (from E0 SLOs).
         priority: Selection priority (1-10, higher is preferred).
@@ -138,11 +146,15 @@ class LocalLlmEndpointRegistry(BaseSettings):
 
     Attributes:
         llm_coder_url: Code generation endpoint (Qwen3-Coder-30B-A3B, RTX 5090).
-        llm_coder_fast_url: Mid-tier endpoint for routing classification and long-context tasks (Qwen3-14B-AWQ, RTX 4090, 128K ctx).
-        llm_embedding_url: Embedding endpoint (GTE-Qwen2).
+        llm_coder_model_name: Model ID sent in API requests to the coder endpoint.
+        llm_coder_fast_url: Mid-tier endpoint for routing classification and long-context tasks (Qwen3-14B-AWQ, RTX 4090, 40K ctx).
+        llm_coder_fast_model_name: Model ID sent in API requests to the mid-tier endpoint.
+        llm_coder_fast_max_latency_ms: Max latency (ms) for the mid-tier endpoint (default 1000).
+        llm_embedding_url: Embedding endpoint (Qwen3-Embedding-8B-4bit).
         llm_function_url: Function-calling endpoint (Qwen2.5-7B, hot-swap).
         llm_deepseek_lite_url: Lightweight reasoning endpoint (DeepSeek-V2-Lite, hot-swap).
         llm_qwen_72b_url: Large model endpoint (Qwen2.5-72B).
+        llm_qwen_72b_model_name: Model ID sent in API requests to the 72B endpoint.
         llm_vision_url: Vision endpoint (Qwen2-VL).
         llm_deepseek_r1_url: Advanced reasoning endpoint (DeepSeek-R1-Distill, hot-swap).
         llm_qwen_14b_url: General purpose endpoint (Qwen2.5-14B).
@@ -175,14 +187,16 @@ class LocalLlmEndpointRegistry(BaseSettings):
     )
     llm_coder_model_name: str = Field(
         default="Qwen3-Coder-30B-A3B-Instruct",
+        min_length=1,
         description="Model ID to send in API requests for the coder endpoint",
     )
     llm_coder_fast_url: HttpUrl | None = Field(
         default=None,
-        description="Qwen3-14B-AWQ endpoint for mid-tier tasks and routing classification (RTX 4090, 128K ctx)",
+        description="Qwen3-14B-AWQ endpoint for mid-tier tasks and routing classification (RTX 4090, 40K ctx)",
     )
     llm_coder_fast_model_name: str = Field(
         default="Qwen3-14B-Instruct",
+        min_length=1,
         description="Model ID to send in API requests for the mid-tier endpoint (override via LLM_CODER_FAST_MODEL_NAME)",
     )
     llm_coder_fast_max_latency_ms: int = Field(
@@ -193,7 +207,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
     )
     llm_embedding_url: HttpUrl | None = Field(
         default=None,
-        description="GTE-Qwen2 endpoint for embeddings (RTX 4090)",
+        description="Qwen3-Embedding-8B-4bit endpoint for embeddings (M2 Ultra)",
     )
     llm_function_url: HttpUrl | None = Field(
         default=None,
@@ -209,6 +223,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
     )
     llm_qwen_72b_model_name: str = Field(
         default="Qwen2.5-72B",
+        min_length=1,
         description="Model ID to send in API requests for the 72B endpoint (override for mlx or renamed models)",
     )
     llm_vision_url: HttpUrl | None = Field(
@@ -300,7 +315,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
                 self.llm_coder_fast_model_name,
                 LlmEndpointPurpose.ROUTING,
                 self.llm_coder_fast_max_latency_ms,
-                9,  # Mid-tier model for routing classification (RTX 4090, 128K ctx)
+                9,  # Mid-tier model for routing classification (RTX 4090, 40K ctx)
             ),
             (
                 self.llm_coder_url,
