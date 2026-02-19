@@ -694,7 +694,7 @@ class TestBadOutputRecovery:
         )
         # Braces are doubled in the output because str.format() only un-doubles
         # {{ when it appears in the template string, not in substituted values.
-        # Known limitation: no ticket yet – brace-containing model names are not expected in production
+        # known limitation: accepted, not tracked separately – brace-containing model names are not expected in production
         assert "[Local Model Response - local{{test}}]" in output
         # Confidence and savings still appear correctly
         assert "confidence=0.950" in output
@@ -770,7 +770,7 @@ class TestBadOutputRecovery:
         # KNOWN LIMITATION: the extracted confidence is the embedded fake value
         # (0.850), NOT the real delegation confidence (0.920), because the parser
         # finds the first '---' separator and the first confidence= value after it.
-        # Known parser limitation: see TODO below or create a ticket to track rfind() fix
+        # known limitation: accepted, not tracked separately – rfind()-based fix deferred; callers treat confidence as approximate when body contains embedded separators
         assert abs(result.confidence - 0.850) < 0.001, (
             f"Expected embedded fake confidence 0.850, got {result.confidence:.3f}. "
             "If this assertion fails, the parser was improved to find the real footer."
@@ -787,7 +787,7 @@ class TestBadOutputRecovery:
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
 
-        # TODO: refactor to pytest.mark.parametrize when handler signature stabilizes
+        # TODO: refactor to pytest.mark.parametrize (deferred, low priority)
         for prompt, score_fn in [
             (_DOC_GEN_PROMPT, _doc_gen_score),
             (_BOILERPLATE_PROMPT, _boilerplate_score),
@@ -811,14 +811,32 @@ class TestBadOutputRecovery:
                     # the bad_response loop.  The current design is intentional,
                     # not an oversight.
                     #
-                    # Simulate LLM returning malformed/empty responses.
+                    # Cases where the handler must return delegated=False explicitly:
+                    # empty or whitespace response_text triggers the empty_response guard.
+                    for bad_response in [
+                        ("", "local"),
+                        ("   ", "local"),
+                    ]:
+                        with patch.object(
+                            ldh, "_call_local_llm", return_value=bad_response
+                        ):
+                            result = ldh.handle_delegation(prompt, "corr-bad")
+                        assert "delegated" in result, (
+                            f"'delegated' key missing for prompt={prompt!r}, "
+                            f"response={bad_response!r}"
+                        )
+                        assert result["delegated"] is False, (
+                            f"Expected delegated=False for empty/whitespace response, "
+                            f"prompt={prompt!r}, response={bad_response!r}"
+                        )
+
+                    # Cases where we only require the handler not to raise and
+                    # return a bool — the exact value depends on handler heuristics.
                     # ("some response text", None) covers the case where the
                     # LLM returns a non-empty body but a None model name — the
                     # handler must not raise even when model_name is None.
                     for bad_response in [
                         None,
-                        ("", "local"),
-                        ("   ", "local"),
                         ("some response text", None),
                     ]:
                         with patch.object(
