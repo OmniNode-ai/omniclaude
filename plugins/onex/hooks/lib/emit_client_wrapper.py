@@ -126,6 +126,7 @@ SUPPORTED_EVENT_TYPES = frozenset(
         "static.context.edit.detected",  # OMN-2237 - Static context file change detection
         "llm.routing.decision",  # OMN-2273 - LLM routing decision observability
         "llm.routing.fallback",  # OMN-2273 - LLM routing fallback observability
+        "context.enrichment",  # OMN-2274 - Per-enrichment observability events
     ]
 )
 

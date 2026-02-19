@@ -44,6 +44,16 @@ import context_enrichment_runner as cer
 pytestmark = pytest.mark.unit
 
 
+def _make_test_env(**overrides: str) -> dict[str, str]:
+    """Create a test environment merging overrides into the parent env.
+
+    Preserves PYTHONPATH and other variables needed for subprocess imports.
+    """
+    env = os.environ.copy()
+    env.update(overrides)
+    return env
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -314,7 +324,7 @@ class TestPerEnrichmentTimeout:
         # Slow handler that exceeds per-enrichment timeout (excluded)
         mock_slow_cls = MagicMock(
             return_value=_make_handler(
-                markdown="## Code Analysis\n\nSlow result.", tokens=10, delay_s=0.200
+                markdown="## Code Analysis\n\nSlow result.", tokens=10, delay_s=0.170
             )
         )
 
@@ -668,11 +678,11 @@ class TestSubprocessInterface:
             text=True,
             timeout=5,
             check=False,
-            env={
-                "ENABLE_LOCAL_INFERENCE_PIPELINE": "false",
-                "ENABLE_LOCAL_ENRICHMENT": "false",
-                "OMNICLAUDE_NO_HANDLERS": "1",
-            },
+            env=_make_test_env(
+                ENABLE_LOCAL_INFERENCE_PIPELINE="false",
+                ENABLE_LOCAL_ENRICHMENT="false",
+                OMNICLAUDE_NO_HANDLERS="1",
+            ),
         )
 
         assert proc.returncode == 0
@@ -691,11 +701,11 @@ class TestSubprocessInterface:
             text=True,
             timeout=5,
             check=False,
-            env={
-                "ENABLE_LOCAL_INFERENCE_PIPELINE": "true",
-                "ENABLE_LOCAL_ENRICHMENT": "true",
-                "OMNICLAUDE_NO_HANDLERS": "1",
-            },
+            env=_make_test_env(
+                ENABLE_LOCAL_INFERENCE_PIPELINE="true",
+                ENABLE_LOCAL_ENRICHMENT="true",
+                OMNICLAUDE_NO_HANDLERS="1",
+            ),
         )
 
         assert proc.returncode == 0
@@ -713,12 +723,11 @@ class TestSubprocessInterface:
             text=True,
             timeout=5,
             check=False,
-            env={
-                **os.environ,
-                "ENABLE_LOCAL_INFERENCE_PIPELINE": "true",
-                "ENABLE_LOCAL_ENRICHMENT": "true",
-                "OMNICLAUDE_NO_HANDLERS": "1",
-            },
+            env=_make_test_env(
+                ENABLE_LOCAL_INFERENCE_PIPELINE="true",
+                ENABLE_LOCAL_ENRICHMENT="true",
+                OMNICLAUDE_NO_HANDLERS="1",
+            ),
         )
 
         assert proc.returncode == 0
@@ -755,7 +764,7 @@ class TestSubprocessInterface:
                 text=True,
                 timeout=5,
                 check=False,
-                env={**os.environ, **extra_env, "OMNICLAUDE_NO_HANDLERS": "1"},
+                env=_make_test_env(**extra_env, OMNICLAUDE_NO_HANDLERS="1"),
             )
             assert proc.returncode == 0, f"Non-zero exit for stdin={stdin_data!r}"
             result = json.loads(proc.stdout)

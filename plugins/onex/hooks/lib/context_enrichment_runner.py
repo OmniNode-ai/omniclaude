@@ -86,6 +86,22 @@ else:
         HandlerSummarizationEnrichment = None
 
 # ---------------------------------------------------------------------------
+# Optional observability emitter — graceful degradation when unavailable
+# ---------------------------------------------------------------------------
+try:
+    from enrichment_observability_emitter import (
+        emit_enrichment_events as _emit_enrichment_events,
+    )
+except ImportError:
+    _emit_enrichment_events = None
+
+# Optional emit client reset — graceful degradation when unavailable
+try:
+    from emit_client_wrapper import reset_client as _reset_emit_client
+except ImportError:
+    _reset_emit_client = None
+
+# ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 _PER_ENRICHMENT_TIMEOUT_S: float = 0.150  # 150ms
@@ -95,6 +111,19 @@ _TOKEN_CAP: int = 2000
 # Priority order: highest-priority first (drop lowest first when over cap)
 # Index 0 = highest priority
 _PRIORITY_ORDER: list[str] = ["summarization", "code_analysis", "similarity"]
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+def _safe_float(value: Any) -> float | None:
+    """Convert value to float, returning None on any failure."""
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -114,11 +143,29 @@ def _count_tokens(text: str) -> int:
 class _EnrichmentResult:
     """Holds the result from a single enrichment handler."""
 
-    def __init__(self, name: str, markdown: str, tokens: int, success: bool) -> None:
+    def __init__(
+        self,
+        name: str,
+        markdown: str,
+        tokens: int,
+        success: bool,
+        *,
+        latency_ms: float = 0.0,
+        model_used: str = "",
+        relevance_score: float | None = None,
+        fallback_used: bool = False,
+        prompt_version: str = "",
+    ) -> None:
         self.name = name
         self.markdown = markdown
         self.tokens = tokens
         self.success = success
+        # Observability fields (OMN-2274)
+        self.latency_ms = latency_ms
+        self.model_used = model_used
+        self.relevance_score = relevance_score
+        self.fallback_used = fallback_used
+        self.prompt_version = prompt_version
 
 
 # ---------------------------------------------------------------------------
@@ -131,23 +178,39 @@ async def _run_single_enrichment(
     project_path: str,
 ) -> _EnrichmentResult:
     """Run a single enrichment handler with a per-enrichment timeout."""
+    t0 = asyncio.get_running_loop().time()
     try:
         result = await asyncio.wait_for(
             handler.enrich(prompt=prompt, project_path=project_path),
             timeout=_PER_ENRICHMENT_TIMEOUT_S,
         )
+        latency_ms = (asyncio.get_running_loop().time() - t0) * 1000.0
         if result.success:
-            tokens = _count_tokens(result.markdown)
+            tokens = _count_tokens(result.markdown)  # noqa: secrets
             return _EnrichmentResult(
                 name=name,
                 markdown=result.markdown,
                 tokens=tokens,
                 success=True,
+                latency_ms=latency_ms,
+                model_used=str(getattr(result, "model_used", "") or ""),
+                relevance_score=_safe_float(getattr(result, "relevance_score", None)),
+                fallback_used=bool(getattr(result, "fallback_used", False)),
+                prompt_version=str(getattr(result, "prompt_version", "") or ""),
             )
-        return _EnrichmentResult(name=name, markdown="", tokens=0, success=False)
+        latency_ms = (asyncio.get_running_loop().time() - t0) * 1000.0
+        return _EnrichmentResult(
+            name=name, markdown="", tokens=0, success=False, latency_ms=latency_ms
+        )
     except Exception as exc:
-        logger.debug("Enrichment %r skipped: %s", name, exc)
-        return _EnrichmentResult(name=name, markdown="", tokens=0, success=False)
+        latency_ms = (asyncio.get_running_loop().time() - t0) * 1000.0
+        if isinstance(exc, TimeoutError):
+            logger.debug("Enrichment %r timed out: %s", name, exc)
+        else:
+            logger.warning("Enrichment %r failed unexpectedly: %s", name, exc)
+        return _EnrichmentResult(
+            name=name, markdown="", tokens=0, success=False, latency_ms=latency_ms
+        )
 
 
 async def _run_all_enrichments(
@@ -297,6 +360,13 @@ def main() -> None:
         print(json.dumps(_empty_output()))
         sys.exit(0)
 
+    # Cap the emit socket timeout to 50ms when running as a subprocess.
+    # The default 5s socket timeout can cause subprocess.run(timeout=5) to
+    # expire in test environments where no emit daemon is present (OMN-2344).
+    os.environ.setdefault("OMNICLAUDE_EMIT_TIMEOUT", "0.05")
+    if _reset_emit_client is not None:
+        _reset_emit_client()
+
     # Check that at least one handler is available
     if all(
         cls is None
@@ -327,14 +397,16 @@ def main() -> None:
 
         prompt: str = input_data.get("prompt", "") or ""
         session_id: str = input_data.get("session_id", "") or ""
+        correlation_id: str = input_data.get("correlation_id", "") or ""
         project_path: str = input_data.get("project_path", "") or ""
-
-        _ = session_id  # Available for future use / tracing
 
         if not prompt:
             logger.debug("Empty prompt in input")
             print(json.dumps(_empty_output()))
             sys.exit(0)
+
+        # Approximate token count of the raw prompt for tokens_saved computation
+        original_prompt_token_count = _count_tokens(prompt)  # noqa: secrets
 
         # Run enrichments
         raw_results = asyncio.run(
@@ -344,12 +416,27 @@ def main() -> None:
         # Apply token cap
         kept_results = _apply_token_cap(raw_results)
 
+        # Emit per-enrichment observability events (OMN-2274).
+        # Fire-and-forget: errors must not affect the hook output.
+        if _emit_enrichment_events is not None and raw_results:
+            kept_names = {r.name for r in kept_results}
+            try:
+                _emit_enrichment_events(
+                    session_id=session_id,
+                    correlation_id=correlation_id,
+                    results=raw_results,
+                    kept_names=kept_names,
+                    original_prompt_token_count=original_prompt_token_count,
+                )
+            except Exception as _obs_exc:
+                logger.debug("Enrichment observability emission failed: %s", _obs_exc)
+
         if not kept_results:
             print(json.dumps(_empty_output()))
             sys.exit(0)
 
         enrichment_context = _build_enrichment_context(kept_results)
-        tokens_used = sum(r.tokens for r in kept_results)
+        tokens_used = sum(r.tokens for r in kept_results)  # noqa: secrets
 
         output: dict[str, Any] = {
             "success": True,

@@ -404,6 +404,21 @@ def handle_delegation(
         }
 
     response_text, model_name = result
+    # Guard: response_text must be non-empty; an empty or whitespace-only body
+    # means the LLM produced no usable output and delegation should be treated
+    # as failed rather than returning an empty response to the user.
+    if not response_text or not response_text.strip():
+        return {
+            "delegated": False,
+            "reason": "empty_response",
+            "confidence": score.confidence,
+        }
+    # Guard: model_name should always be a non-empty string (the call-site uses
+    # `data.get("model") or "local-model"` as a fallback), but defensive
+    # normalisation here prevents AttributeError in _format_delegated_response
+    # if a caller or test stub returns None for the model name.
+    if not model_name or not model_name.strip():
+        model_name = "local-model"
     latency_ms = int((time.time() - start_time) * 1000)
 
     formatted = _format_delegated_response(
@@ -435,15 +450,18 @@ def handle_delegation(
 def main() -> None:
     """CLI entry point for user-prompt-submit.sh.
 
-    Preferred usage (avoids exposing the prompt in the process table):
+    Supports two invocation styles:
+
+    Stdin style (preferred — avoids exposing the prompt in the process table):
         printf '%s' "$PROMPT_B64" | python3 local_delegation_handler.py --prompt-stdin <correlation_id>
 
-    Legacy usage (kept for backward-compat with tests; do NOT use in production):
+    Argv style (kept for unit-test callers; not used by the hook script):
         python3 local_delegation_handler.py <prompt_b64> <correlation_id>
 
-    When --prompt-stdin is the first argument, the base64-encoded prompt is read
-    from stdin instead of argv[1], so the full prompt never appears in
-    /proc/PID/cmdline or `ps aux` output.
+    The stdin style reads the base64-encoded prompt from stdin instead of
+    argv[1], so the full prompt never appears in /proc/PID/cmdline or
+    `ps aux` output. The argv style is simpler to invoke in tests where
+    process-table privacy is not a concern.
 
     Always exits 0. Non-zero exit would block the hook.
 

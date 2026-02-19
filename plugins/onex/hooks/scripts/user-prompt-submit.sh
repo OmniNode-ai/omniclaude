@@ -51,6 +51,8 @@ run_with_timeout() {
 # Input Processing
 # -----------------------------
 INPUT="$(cat)"
+# Start-of-hook timestamp for total latency measurement (OMN-2344)
+_HOOK_START_MS="$(date +%s%3N 2>/dev/null || echo 0)"
 if ! echo "$INPUT" | jq -e . >/dev/null 2>>"$LOG_FILE"; then
     log "ERROR: Malformed JSON on stdin, using empty object"
     INPUT='{}'
@@ -212,6 +214,10 @@ fi
 
 LEARNED_PATTERNS=""
 SESSION_ALREADY_INJECTED=false
+# Extraction event field defaults (overridden if injection succeeds)
+PATTERN_COUNT=0
+COHORT="treatment"
+RETRIEVAL_MS=0
 if [[ "$SKIP_IF_SESSION_INJECTED" == "true" ]] && [[ -f "${HOOKS_LIB}/session_marker.py" ]]; then
     if $PYTHON_CMD "${HOOKS_LIB}/session_marker.py" check --session-id "${SESSION_ID}" >/dev/null 2>/dev/null; then
         SESSION_ALREADY_INJECTED=true
@@ -265,6 +271,8 @@ if [[ "$SESSION_ALREADY_INJECTED" == "false" ]] && [[ -n "$AGENT_NAME" ]] && [[ 
     if [[ "$PATTERN_SUCCESS" == "true" ]]; then
         LEARNED_PATTERNS="$(echo "$PATTERN_RESULT" | jq -r '.patterns_context // ""' 2>/dev/null || echo '')"
         PATTERN_COUNT="$(echo "$PATTERN_RESULT" | jq -r '.pattern_count // 0' 2>/dev/null || echo '0')"
+        COHORT="$(echo "$PATTERN_RESULT" | jq -r '.cohort // "treatment"' 2>/dev/null || echo 'treatment')"
+        RETRIEVAL_MS="$(echo "$PATTERN_RESULT" | jq -r '.retrieval_ms // 0' 2>/dev/null || echo '0')"
         if [[ -n "$LEARNED_PATTERNS" ]] && [[ "$PATTERN_COUNT" != "0" ]]; then
             log "Learned patterns loaded: ${PATTERN_COUNT} patterns"
         fi
@@ -437,15 +445,19 @@ fi
 # -----------------------------
 # Run parallel enrichments (code analysis, similarity, summarization) if
 # ENABLE_LOCAL_INFERENCE_PIPELINE and ENABLE_LOCAL_ENRICHMENT are both set.
-# 200ms timeout (outer safety net); asyncio timeouts inside the runner.
+# 1s shell safety net; asyncio handles the 200ms inner budget itself.
+# The shell timeout catches pathological hangs beyond what asyncio can see
+# (e.g. Python startup failures, import freezes).
 ENRICHMENT_CONTEXT=""
 ENRICHMENT_RUNNER="${HOOKS_LIB}/context_enrichment_runner.py"
-if [[ "${ENABLE_LOCAL_INFERENCE_PIPELINE:-false}" == "true" ]] && [[ "${ENABLE_LOCAL_ENRICHMENT:-false}" == "true" ]] && [[ -f "$ENRICHMENT_RUNNER" ]]; then
+ENRICHMENT_FLAG_ENABLED=$(_normalize_bool "${ENABLE_LOCAL_ENRICHMENT:-false}")
+if [[ "$INFERENCE_PIPELINE_ENABLED" == "true" ]] && [[ "$ENRICHMENT_FLAG_ENABLED" == "true" ]] && [[ -f "$ENRICHMENT_RUNNER" ]]; then
     ENRICHMENT_INPUT=$(jq -n \
         --arg prompt "$PROMPT" \
         --arg session_id "$SESSION_ID" \
+        --arg correlation_id "$CORRELATION_ID" \
         --arg project_path "$PROJECT_ROOT" \
-        '{prompt: $prompt, session_id: $session_id, project_path: $project_path}' 2>/dev/null)
+        '{prompt: $prompt, session_id: $session_id, correlation_id: $correlation_id, project_path: $project_path}' 2>/dev/null)
     if [[ -n "$ENRICHMENT_INPUT" ]]; then
         set +e
         # 1s = Python startup overhead + 200ms inner budget
@@ -511,6 +523,53 @@ fi
 # Final trace: total context injected
 _TS3="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 echo "[$_TS3] [UserPromptSubmit] INJECTED context_chars=${#AGENT_CONTEXT} meets_threshold=$MEETS_THRESHOLD agent=$AGENT_NAME" >> "$TRACE_LOG"
+
+# -----------------------------
+# Emit extraction pipeline events (non-blocking) OMN-2344
+# Fires context.utilization + agent.match + latency.breakdown to omnidash topics.
+# Always runs in a background subshell — never blocks the hook.
+# -----------------------------
+if [[ "$KAFKA_ENABLED" == "true" ]] && [[ -f "${HOOKS_LIB}/extraction_event_emitter.py" ]]; then
+    _HOOK_END_MS="$(date +%s%3N 2>/dev/null || echo 0)"
+    _TOTAL_LATENCY_MS="$(( _HOOK_END_MS - _HOOK_START_MS ))"
+    # Clamp to 0 on clock skew (e.g. date fallback produces 0-0=0 which is fine)
+    [[ "$_TOTAL_LATENCY_MS" -lt 0 ]] 2>/dev/null && _TOTAL_LATENCY_MS=0
+    _INJECTION_OCCURRED="false"
+    [[ "${PATTERN_SUCCESS:-false}" == "true" ]] && [[ "${PATTERN_COUNT:-0}" != "0" ]] && _INJECTION_OCCURRED="true"
+    _EXTRACTION_PAYLOAD=$(jq -n \
+        --arg session_id "$SESSION_ID" \
+        --arg correlation_id "$CORRELATION_ID" \
+        --arg agent_name "${AGENT_NAME:-polymorphic-agent}" \
+        --arg cohort "${COHORT:-treatment}" \
+        --argjson injection_occurred "$_INJECTION_OCCURRED" \
+        --argjson patterns_count "${PATTERN_COUNT:-0}" \
+        --argjson routing_time_ms "${LATENCY_MS:-0}" \
+        --argjson retrieval_time_ms "${RETRIEVAL_MS:-0}" \
+        --argjson injection_time_ms "${RETRIEVAL_MS:-0}" \
+        --argjson user_visible_latency_ms "$_TOTAL_LATENCY_MS" \
+        --argjson routing_confidence "${CONFIDENCE:-0.5}" \
+        '{
+            session_id: $session_id,
+            correlation_id: $correlation_id,
+            agent_name: $agent_name,
+            agent_match_score: $routing_confidence,
+            routing_confidence: $routing_confidence,
+            cohort: $cohort,
+            injection_occurred: $injection_occurred,
+            patterns_count: $patterns_count,
+            routing_time_ms: $routing_time_ms,
+            retrieval_time_ms: $retrieval_time_ms,
+            injection_time_ms: $injection_time_ms,
+            user_visible_latency_ms: $user_visible_latency_ms,
+            cache_hit: false
+        }' 2>/dev/null)
+    if [[ -n "$_EXTRACTION_PAYLOAD" ]]; then
+        (
+            echo "$_EXTRACTION_PAYLOAD" | $PYTHON_CMD "${HOOKS_LIB}/extraction_event_emitter.py" \
+                2>>"$LOG_FILE" || true
+        ) &
+    fi
+fi
 
 # Final Output via jq to ensure JSON integrity
 printf %s "$INPUT" | jq --arg ctx "$AGENT_CONTEXT" \
