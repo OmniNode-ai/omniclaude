@@ -136,7 +136,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
         class; construct a new instance instead.
 
     Attributes:
-        llm_coder_url: Code generation endpoint (Qwen2.5-Coder-14B).
+        llm_coder_url: Code generation endpoint (Qwen3-Coder-30B-A3B, RTX 5090).
         llm_embedding_url: Embedding endpoint (GTE-Qwen2).
         llm_function_url: Function-calling endpoint (Qwen2.5-7B, hot-swap).
         llm_deepseek_lite_url: Lightweight reasoning endpoint (DeepSeek-V2-Lite, hot-swap).
@@ -169,7 +169,11 @@ class LocalLlmEndpointRegistry(BaseSettings):
     # =========================================================================
     llm_coder_url: HttpUrl | None = Field(
         default=None,
-        description="Qwen2.5-Coder-14B endpoint for code generation (RTX 5090)",
+        description="Qwen3-Coder-30B-A3B endpoint for code generation (RTX 5090)",
+    )
+    llm_coder_model_name: str = Field(
+        default="Qwen3-Coder-30B-A3B-Instruct",
+        description="Model ID to send in API requests for the coder endpoint",
     )
     llm_embedding_url: HttpUrl | None = Field(
         default=None,
@@ -186,6 +190,10 @@ class LocalLlmEndpointRegistry(BaseSettings):
     llm_qwen_72b_url: HttpUrl | None = Field(
         default=None,
         description="Qwen2.5-72B endpoint for documentation and analysis (M2 Ultra)",
+    )
+    llm_qwen_72b_model_name: str = Field(
+        default="Qwen2.5-72B",
+        description="Model ID to send in API requests for the 72B endpoint (override for mlx or renamed models)",
     )
     llm_vision_url: HttpUrl | None = Field(
         default=None,
@@ -277,7 +285,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
         ] = [
             (
                 self.llm_coder_url,
-                "Qwen2.5-Coder-14B",
+                self.llm_coder_model_name,
                 LlmEndpointPurpose.CODE_ANALYSIS,
                 self.llm_coder_max_latency_ms,
                 9,  # High priority: dedicated GPU (RTX 5090)
@@ -305,7 +313,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
             ),
             (
                 self.llm_qwen_72b_url,
-                "Qwen2.5-72B",
+                self.llm_qwen_72b_model_name,
                 LlmEndpointPurpose.REASONING,
                 self.llm_qwen_72b_max_latency_ms,
                 8,  # High priority: best for complex reasoning
