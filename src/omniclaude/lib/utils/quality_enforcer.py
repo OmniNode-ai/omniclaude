@@ -315,7 +315,9 @@ class ViolationsLogger:
             safe_error = _sanitize_for_logging(str(e))
             print(f"[Warning] Failed to log violations: {safe_error}", file=sys.stderr)
 
-    def _update_summary(self, file_path: str, violations: list[Violation], timestamp: str) -> None:
+    def _update_summary(
+        self, file_path: str, violations: list[Violation], timestamp: str
+    ) -> None:
         """Update violations_summary.json with new violation data."""
         try:
             # Load existing summary
@@ -628,7 +630,9 @@ class QualityEnforcer:
                 intelligence_url = rag_config.get("base_url", "http://localhost:8181")
                 timeout = rag_config.get("timeout_seconds", 0.5)
 
-                generator = CorrectionGenerator(intelligence_url=intelligence_url, timeout=timeout)
+                generator = CorrectionGenerator(
+                    intelligence_url=intelligence_url, timeout=timeout
+                )
                 corrections = await generator.generate_corrections(
                     violations, content, file_path, language
                 )
@@ -676,7 +680,9 @@ class QualityEnforcer:
                     new_name = str(correction.get("new_name", ""))
                     violation = correction.get("violation")
                     correction_type = (
-                        getattr(violation, "type", "unknown") if violation else "unknown"
+                        getattr(violation, "type", "unknown")
+                        if violation
+                        else "unknown"
                     )
 
                     score = await quorum.score_correction(
@@ -707,7 +713,9 @@ class QualityEnforcer:
 
         return result
 
-    def _generate_simple_corrections(self, violations: list[Violation]) -> list[dict[str, Any]]:
+    def _generate_simple_corrections(
+        self, violations: list[Violation]
+    ) -> list[dict[str, Any]]:
         """
         Generate simple corrections without RAG intelligence.
         Fallback when Phase 2 is disabled or fails.
@@ -728,7 +736,9 @@ class QualityEnforcer:
 
         return corrections
 
-    def _create_fallback_scores(self, corrections: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _create_fallback_scores(
+        self, corrections: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """
         Create fallback scores when AI Quorum is disabled or fails.
         Use medium confidence scores that won't trigger auto-apply.
@@ -750,7 +760,10 @@ class QualityEnforcer:
         return scored
 
     def _apply_decisions(
-        self, tool_call: dict[str, Any], scored_corrections: list[dict[str, Any]], content: str
+        self,
+        tool_call: dict[str, Any],
+        scored_corrections: list[dict[str, Any]],
+        content: str,
     ) -> dict[str, Any]:
         """
         Apply corrections based on AI consensus scores.
@@ -854,7 +867,9 @@ class QualityEnforcer:
 
         return ""
 
-    def _update_tool_content(self, tool_call: dict[str, Any], new_content: str) -> dict[str, Any]:
+    def _update_tool_content(
+        self, tool_call: dict[str, Any], new_content: str
+    ) -> dict[str, Any]:
         """Update tool call with corrected content (Claude Code uses 'tool_input')."""
         params_key = "tool_input" if "tool_input" in tool_call else "parameters"
         params = tool_call.get(params_key, {})
@@ -866,7 +881,9 @@ class QualityEnforcer:
 
         return tool_call
 
-    def _append_comment(self, tool_call: dict[str, Any], comment: str) -> dict[str, Any]:
+    def _append_comment(
+        self, tool_call: dict[str, Any], comment: str
+    ) -> dict[str, Any]:
         """Append a comment to the content (Claude Code uses 'tool_input')."""
         params_key = "tool_input" if "tool_input" in tool_call else "parameters"
         params = tool_call.get(params_key, {})
@@ -965,7 +982,9 @@ class QualityEnforcer:
         """Log message to stderr."""
         print(message, file=sys.stderr)
 
-    def _capture_tool_selection_metadata(self, tool_name: str, tool_input: dict[str, Any]) -> None:
+    def _capture_tool_selection_metadata(
+        self, tool_name: str, tool_input: dict[str, Any]
+    ) -> None:
         """
         Capture tool selection intelligence metadata.
 
