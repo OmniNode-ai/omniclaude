@@ -648,9 +648,17 @@ class TestBadOutputRecovery:
         when they appear in the FORMAT TEMPLATE, not in substituted values).
         So a model_name of "local{test}" produces "local{{test}}" in the output.
 
+        KNOWN DISPLAY ARTIFACT: If a model name contains braces, end-users will
+        literally see the doubled braces in their UI (e.g., "local{{test}}" rather
+        than "local{test}").  This is an accepted side-effect of the escaping
+        strategy; model names with braces are not expected in normal usage.
+
         What matters here:
           1. The handler does not raise KeyError/ValueError.
           2. The output contains the (escaped) model name.
+
+        The assertion below asserting "{{" is intentional — it snapshots this
+        known display artifact, not a typo.
         """
         score = _make_delegation_score(
             delegatable=True,
@@ -693,6 +701,12 @@ class TestBadOutputRecovery:
         assert result is not None
         # Confidence is still extracted correctly
         assert abs(result.confidence - 0.920) < 0.001
+        # Known limitation: the parser uses find() which matches the FIRST '---'.
+        # When the LLM body itself contains '---', everything after that embedded
+        # separator is silently dropped from parsed.body and treated as footer text.
+        # The body is truncated at the first separator, not the last.
+        assert result.body == "Here is a markdown separator:"
+        assert "But this is still body." not in result.body
 
     def test_handle_delegation_never_raises_on_any_prompt_type(
         self, monkeypatch: pytest.MonkeyPatch
