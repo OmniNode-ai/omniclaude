@@ -7,6 +7,7 @@ environment variables and provides lookup methods by purpose.
 
 Environment variables:
     LLM_CODER_URL: Qwen2.5-Coder-14B endpoint for code generation.
+    LLM_CODER_FAST_URL: Qwen3-14B-AWQ endpoint for mid-tier tasks and routing classification (RTX 4090, 128K ctx).
     LLM_EMBEDDING_URL: GTE-Qwen2 embedding endpoint.
     LLM_FUNCTION_URL: Qwen2.5-7B function-calling endpoint (optional, hot-swap).
     LLM_DEEPSEEK_LITE_URL: DeepSeek-V2-Lite endpoint (optional, hot-swap).
@@ -137,6 +138,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
 
     Attributes:
         llm_coder_url: Code generation endpoint (Qwen3-Coder-30B-A3B, RTX 5090).
+        llm_coder_fast_url: Mid-tier endpoint for routing classification and long-context tasks (Qwen3-14B-AWQ, RTX 4090, 128K ctx).
         llm_embedding_url: Embedding endpoint (GTE-Qwen2).
         llm_function_url: Function-calling endpoint (Qwen2.5-7B, hot-swap).
         llm_deepseek_lite_url: Lightweight reasoning endpoint (DeepSeek-V2-Lite, hot-swap).
@@ -174,6 +176,20 @@ class LocalLlmEndpointRegistry(BaseSettings):
     llm_coder_model_name: str = Field(
         default="Qwen3-Coder-30B-A3B-Instruct",
         description="Model ID to send in API requests for the coder endpoint",
+    )
+    llm_coder_fast_url: HttpUrl | None = Field(
+        default=None,
+        description="Qwen3-14B-AWQ endpoint for mid-tier tasks and routing classification (RTX 4090, 128K ctx)",
+    )
+    llm_coder_fast_model_name: str = Field(
+        default="Qwen3-14B-Instruct",
+        description="Model ID to send in API requests for the mid-tier endpoint (override via LLM_CODER_FAST_MODEL_NAME)",
+    )
+    llm_coder_fast_max_latency_ms: int = Field(
+        default=1000,
+        ge=100,
+        le=60000,
+        description="Max latency for mid-tier routing/classification endpoint",
     )
     llm_embedding_url: HttpUrl | None = Field(
         default=None,
@@ -276,13 +292,16 @@ class LocalLlmEndpointRegistry(BaseSettings):
         Returns:
             List of LlmEndpointConfig for all configured (non-None) endpoints.
         """
-        # NOTE: LlmEndpointPurpose.ROUTING is intentionally unassigned here.
-        # It is reserved for future use when a dedicated routing model is
-        # deployed. Until then, routing decisions are handled outside this
-        # registry (e.g., by the event-based routing service).
         endpoint_specs: list[
             tuple[HttpUrl | None, str, LlmEndpointPurpose, int, int]
         ] = [
+            (
+                self.llm_coder_fast_url,
+                self.llm_coder_fast_model_name,
+                LlmEndpointPurpose.ROUTING,
+                self.llm_coder_fast_max_latency_ms,
+                9,  # Mid-tier model for routing classification (RTX 4090, 128K ctx)
+            ),
             (
                 self.llm_coder_url,
                 self.llm_coder_model_name,
@@ -292,7 +311,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
             ),
             (
                 self.llm_embedding_url,
-                "GTE-Qwen2-1.5B",
+                "Qwen3-Embedding-8B-4bit",
                 LlmEndpointPurpose.EMBEDDING,
                 self.llm_embedding_max_latency_ms,
                 9,  # High priority: currently running
