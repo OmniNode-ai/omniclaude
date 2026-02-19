@@ -253,6 +253,7 @@ These modules are intended for external use:
 | `ENFORCEMENT_MODE` | Quality enforcement: `warn`, `block`, `silent` | No (default: warn) |
 | `OMNICLAUDE_PROJECT_ROOT` | Explicit project root for dev-mode Python venv resolution | No (dev only) |
 | `PLUGIN_PYTHON_BIN` | Override Python interpreter path for hooks (escape hatch) | No |
+| `DUAL_PUBLISH_LEGACY_TOPICS` | Enable dual-publish to legacy topics during migration window (OMN-2368) | No (default: false) |
 
 ---
 

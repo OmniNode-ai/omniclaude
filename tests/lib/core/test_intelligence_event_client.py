@@ -736,3 +736,16 @@ class NodeUserEffect:
             assert result["quality_score"] == 0.92
             assert result["onex_compliance"] == 0.95
             assert len(result["patterns"]) == 1
+
+
+class TestIntelligenceEventClientTopicStability:
+    """Guards against silent renames of migration-critical topic constants."""
+
+    def test_legacy_topic_constant_is_stable(self) -> None:
+        """Guard migration-window dual-publish from silent constant renames (OMN-2368)."""
+        # DUAL_PUBLISH_LEGACY_TOPICS publishes to this exact string during the migration
+        # window. A rename would silently route to the wrong topic. Pin the value here.
+        assert (
+            IntelligenceEventClient.TOPIC_REQUEST_LEGACY
+            == "omninode.intelligence.code-analysis.requested.v1"
+        )
