@@ -34,6 +34,7 @@ class IntelligenceEventClient:
     TOPIC_FAILED = "onex.evt.omniintelligence.code-analysis-failed.v1"
 
     # Legacy topic — dual-publish migration window only (remove after migration)
+    # TODO(OMN-2368): Remove after omniintelligence confirms migration to canonical topics
     TOPIC_REQUEST_LEGACY = "omninode.intelligence.code-analysis.requested.v1"
 
     _INSTANCE_NAME = "intelligence"

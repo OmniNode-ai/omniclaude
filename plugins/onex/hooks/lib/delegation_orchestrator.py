@@ -22,7 +22,9 @@ failures so that success rate (golden metric >80%) can be tracked downstream.
 
 Design constraints:
 - NEVER raises from ``orchestrate_delegation()``
-- All I/O is bounded (LLM call <= 7 s, emit timeout <= 50 ms)
+- All I/O is bounded (LLM call <= 7 s, emit via daemon is fire-and-forget;
+  actual emit client timeout is controlled by OMNICLAUDE_EMIT_TIMEOUT env var,
+  defaulting to 5 s — the hook does not block on it)
 - No ``datetime.now()`` defaults in internal sub-functions — ``emitted_at`` is
   injected explicitly through the call chain; the public entrypoint
   (``orchestrate_delegation``) accepts an optional ``emitted_at`` for testing.
@@ -136,6 +138,7 @@ except ImportError:  # pragma: no cover
 # constructs a fresh instance.  _reset_classifier_cache() is provided for
 # explicit teardown in tests.
 
+# Not thread-safe: hook execution is single-threaded by design
 _cached_classifier: TaskClassifier | None = None
 
 
@@ -418,6 +421,9 @@ def _call_llm_with_system_prompt(
     }
 
     try:
+        # httpx scalar timeout sets all four phases (connect, read, write, pool)
+        # to the same value — unlike requests which only covers read.  No
+        # separate connect timeout is needed; TCP connect is bounded by timeout_s.
         with httpx.Client(timeout=timeout_s) as client:
             response = client.post(url, json=payload)
             response.raise_for_status()
@@ -544,6 +550,8 @@ def _emit_compliance_advisory(
         # only" framing for cmd.omniintelligence topics — the handler output is
         # model-generated, not user-supplied, and has been classified as safe for
         # this restricted topic.
+        # See ADR-005 deviation note: model output may contain prompt echoes;
+        # compliance-evaluate.v1 is access-restricted
         emit_event(
             event_type=TopicBase.COMPLIANCE_EVALUATE,
             payload={
