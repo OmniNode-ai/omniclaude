@@ -404,6 +404,21 @@ def handle_delegation(
         }
 
     response_text, model_name = result
+    # Guard: response_text must be non-empty; an empty or whitespace-only body
+    # means the LLM produced no usable output and delegation should be treated
+    # as failed rather than returning an empty response to the user.
+    if not response_text or not response_text.strip():
+        return {
+            "delegated": False,
+            "reason": "empty_response",
+            "confidence": score.confidence,
+        }
+    # Guard: model_name should always be a non-empty string (the call-site uses
+    # `data.get("model") or "local-model"` as a fallback), but defensive
+    # normalisation here prevents AttributeError in _format_delegated_response
+    # if a caller or test stub returns None for the model name.
+    if not model_name or not model_name.strip():
+        model_name = "local-model"
     latency_ms = int((time.time() - start_time) * 1000)
 
     formatted = _format_delegated_response(

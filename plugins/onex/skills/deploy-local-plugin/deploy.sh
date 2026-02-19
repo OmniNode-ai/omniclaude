@@ -400,6 +400,18 @@ if [[ "$EXECUTE" == "true" ]]; then
         fi
     fi
 
+    # Install register-tab.sh to ~/.claude/ — required by statusline.sh for tab bar.
+    # This file is not inside the plugin cache; it must live at ~/.claude/register-tab.sh.
+    REGISTER_TAB_SRC="${SOURCE_ROOT}/hooks/scripts/register-tab.sh"
+    REGISTER_TAB_DEST="$HOME/.claude/register-tab.sh"
+    if [[ -f "$REGISTER_TAB_SRC" ]]; then
+        cp "$REGISTER_TAB_SRC" "$REGISTER_TAB_DEST"
+        chmod +x "$REGISTER_TAB_DEST"
+        echo -e "${GREEN}  Installed register-tab.sh to ${REGISTER_TAB_DEST}${NC}"
+    else
+        echo -e "${YELLOW}  Warning: register-tab.sh not found at ${REGISTER_TAB_SRC} (tab bar will be empty)${NC}"
+    fi
+
     # Clean up legacy ~/.claude/{commands,skills,agents}/onex/ directories.
     # Skills/commands/agents are now discovered via the plugin installPath only.
     CLAUDE_DIR="$HOME/.claude"
