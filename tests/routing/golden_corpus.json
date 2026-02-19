@@ -41,7 +41,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 16.4
+      "generation_latency_ms": 16.16
     },
     {
       "id": 2,
@@ -71,7 +71,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 11.69
+      "generation_latency_ms": 11.96
     },
     {
       "id": 3,
@@ -136,7 +136,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 13.52
+      "generation_latency_ms": 13.5
     },
     {
       "id": 5,
@@ -166,7 +166,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 13.71
+      "generation_latency_ms": 13.82
     },
     {
       "id": 6,
@@ -201,7 +201,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 9.96
+      "generation_latency_ms": 9.97
     },
     {
       "id": 7,
@@ -231,7 +231,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 12.57
+      "generation_latency_ms": 12.71
     },
     {
       "id": 8,
@@ -261,7 +261,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 13.63
+      "generation_latency_ms": 14.1
     },
     {
       "id": 9,
@@ -296,7 +296,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 11.29
+      "generation_latency_ms": 11.26
     },
     {
       "id": 10,
@@ -331,7 +331,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 12.02
+      "generation_latency_ms": 12.03
     },
     {
       "id": 11,
@@ -361,7 +361,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 12.52
+      "generation_latency_ms": 12.3
     },
     {
       "id": 12,
@@ -396,7 +396,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 12.19
+      "generation_latency_ms": 12.08
     },
     {
       "id": 13,
@@ -436,7 +436,7 @@
         "top_historical_score": 0.5,
         "match_count": 3
       },
-      "generation_latency_ms": 12.79
+      "generation_latency_ms": 12.88
     },
     {
       "id": 14,
@@ -466,7 +466,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 11.26
+      "generation_latency_ms": 11.0
     },
     {
       "id": 15,
@@ -501,7 +501,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 12.58
+      "generation_latency_ms": 12.62
     },
     {
       "id": 16,
@@ -536,7 +536,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 12.84
+      "generation_latency_ms": 12.88
     },
     {
       "id": 17,
@@ -571,7 +571,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 14.64
+      "generation_latency_ms": 14.91
     },
     {
       "id": 18,
@@ -601,7 +601,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 13.01
+      "generation_latency_ms": 13.24
     },
     {
       "id": 19,
@@ -636,7 +636,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 12.68
+      "generation_latency_ms": 12.66
     },
     {
       "id": 20,
@@ -676,7 +676,7 @@
         "top_historical_score": 0.5,
         "match_count": 3
       },
-      "generation_latency_ms": 12.22
+      "generation_latency_ms": 12.29
     },
     {
       "id": 21,
@@ -711,7 +711,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 10.04
+      "generation_latency_ms": 9.84
     },
     {
       "id": 22,
@@ -741,7 +741,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 9.96
+      "generation_latency_ms": 10.26
     },
     {
       "id": 23,
@@ -776,7 +776,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 12.36
+      "generation_latency_ms": 12.65
     },
     {
       "id": 24,
@@ -816,7 +816,7 @@
         "top_historical_score": 0.5,
         "match_count": 3
       },
-      "generation_latency_ms": 12.87
+      "generation_latency_ms": 13.38
     },
     {
       "id": 25,
@@ -851,7 +851,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 12.05
+      "generation_latency_ms": 12.43
     },
     {
       "id": 26,
@@ -886,7 +886,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 12.44
+      "generation_latency_ms": 12.63
     },
     {
       "id": 27,
@@ -916,7 +916,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 11.92
+      "generation_latency_ms": 12.02
     },
     {
       "id": 28,
@@ -961,7 +961,7 @@
         "top_historical_score": 0.5,
         "match_count": 4
       },
-      "generation_latency_ms": 10.3
+      "generation_latency_ms": 10.34
     },
     {
       "id": 29,
@@ -996,7 +996,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 11.81
+      "generation_latency_ms": 12.01
     },
     {
       "id": 30,
@@ -1031,7 +1031,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 12.3
+      "generation_latency_ms": 12.57
     },
     {
       "id": 31,
@@ -1061,7 +1061,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 12.92
+      "generation_latency_ms": 12.86
     },
     {
       "id": 32,
@@ -1091,7 +1091,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 14.2
+      "generation_latency_ms": 14.27
     },
     {
       "id": 33,
@@ -1121,7 +1121,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 11.0
+      "generation_latency_ms": 10.89
     },
     {
       "id": 34,
@@ -1151,7 +1151,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 13.38
+      "generation_latency_ms": 13.06
     },
     {
       "id": 35,
@@ -1186,7 +1186,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 12.65
+      "generation_latency_ms": 12.11
     },
     {
       "id": 36,
@@ -1221,7 +1221,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 11.55
+      "generation_latency_ms": 11.26
     },
     {
       "id": 37,
@@ -1251,7 +1251,7 @@
         "top_historical_score": 1.0,
         "match_count": 1
       },
-      "generation_latency_ms": 0.04
+      "generation_latency_ms": 0.01
     },
     {
       "id": 38,
@@ -1319,7 +1319,7 @@
       "category": "fallback",
       "notes": "No routing triggers - should fallback",
       "expected": {
-        "selected_agent": "polymorphic-agent",
+        "selected_agent": "",
         "confidence": 0.5,
         "routing_policy": "fallback_default",
         "routing_path": "local",
@@ -1335,7 +1335,7 @@
         "top_historical_score": null,
         "match_count": 0
       },
-      "generation_latency_ms": 9.0
+      "generation_latency_ms": 8.86
     },
     {
       "id": 41,
@@ -1365,7 +1365,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 9.55
+      "generation_latency_ms": 9.58
     },
     {
       "id": 42,
@@ -1373,7 +1373,7 @@
       "category": "fallback",
       "notes": "Completely unrelated - should fallback",
       "expected": {
-        "selected_agent": "polymorphic-agent",
+        "selected_agent": "",
         "confidence": 0.5,
         "routing_policy": "fallback_default",
         "routing_path": "local",
@@ -1389,7 +1389,7 @@
         "top_historical_score": null,
         "match_count": 0
       },
-      "generation_latency_ms": 9.13
+      "generation_latency_ms": 9.18
     },
     {
       "id": 43,
@@ -1419,7 +1419,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 5.21
+      "generation_latency_ms": 5.14
     },
     {
       "id": 44,
@@ -1427,7 +1427,31 @@
       "category": "fallback",
       "notes": "No dev triggers - should fallback",
       "expected": {
-        "selected_agent": "polymorphic-agent",
+        "selected_agent": "",
+        "confidence": 0.5,
+        "routing_policy": "fallback_default",
+        "routing_path": "local",
+        "reasoning_contains": "No trigger matches found"
+      },
+      "candidates": [],
+      "router_layer": {
+        "top_agent": null,
+        "top_confidence": null,
+        "top_trigger_score": null,
+        "top_context_score": null,
+        "top_capability_score": null,
+        "top_historical_score": null,
+        "match_count": 0
+      },
+      "generation_latency_ms": 11.13
+    },
+    {
+      "id": 45,
+      "prompt": "List the planets in the solar system",
+      "category": "fallback",
+      "notes": "No dev triggers - should fallback",
+      "expected": {
+        "selected_agent": "",
         "confidence": 0.5,
         "routing_policy": "fallback_default",
         "routing_path": "local",
@@ -1446,36 +1470,12 @@
       "generation_latency_ms": 10.79
     },
     {
-      "id": 45,
-      "prompt": "List the planets in the solar system",
-      "category": "fallback",
-      "notes": "No dev triggers - should fallback",
-      "expected": {
-        "selected_agent": "polymorphic-agent",
-        "confidence": 0.5,
-        "routing_policy": "fallback_default",
-        "routing_path": "local",
-        "reasoning_contains": "No trigger matches found"
-      },
-      "candidates": [],
-      "router_layer": {
-        "top_agent": null,
-        "top_confidence": null,
-        "top_trigger_score": null,
-        "top_context_score": null,
-        "top_capability_score": null,
-        "top_historical_score": null,
-        "match_count": 0
-      },
-      "generation_latency_ms": 10.53
-    },
-    {
       "id": 46,
       "prompt": "Write me a haiku about spring",
       "category": "fallback",
       "notes": "Creative writing - should fallback",
       "expected": {
-        "selected_agent": "polymorphic-agent",
+        "selected_agent": "",
         "confidence": 0.5,
         "routing_policy": "fallback_default",
         "routing_path": "local",
@@ -1491,7 +1491,7 @@
         "top_historical_score": null,
         "match_count": 0
       },
-      "generation_latency_ms": 9.15
+      "generation_latency_ms": 9.33
     },
     {
       "id": 47,
@@ -1499,7 +1499,7 @@
       "category": "fallback",
       "notes": "Trivia - should fallback",
       "expected": {
-        "selected_agent": "polymorphic-agent",
+        "selected_agent": "",
         "confidence": 0.5,
         "routing_policy": "fallback_default",
         "routing_path": "local",
@@ -1515,7 +1515,7 @@
         "top_historical_score": null,
         "match_count": 0
       },
-      "generation_latency_ms": 8.72
+      "generation_latency_ms": 8.7
     },
     {
       "id": 48,
@@ -1523,7 +1523,7 @@
       "category": "fallback",
       "notes": "Translation - should fallback",
       "expected": {
-        "selected_agent": "polymorphic-agent",
+        "selected_agent": "",
         "confidence": 0.5,
         "routing_policy": "fallback_default",
         "routing_path": "local",
@@ -1539,7 +1539,7 @@
         "top_historical_score": null,
         "match_count": 0
       },
-      "generation_latency_ms": 10.24
+      "generation_latency_ms": 10.36
     },
     {
       "id": 49,
@@ -1569,7 +1569,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 8.7
+      "generation_latency_ms": 8.67
     },
     {
       "id": 50,
@@ -1609,7 +1609,7 @@
         "top_historical_score": 0.5,
         "match_count": 3
       },
-      "generation_latency_ms": 10.27
+      "generation_latency_ms": 10.04
     },
     {
       "id": 51,
@@ -1644,7 +1644,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 7.81
+      "generation_latency_ms": 7.76
     },
     {
       "id": 52,
@@ -1679,7 +1679,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 10.62
+      "generation_latency_ms": 10.69
     },
     {
       "id": 53,
@@ -1729,7 +1729,7 @@
         "top_historical_score": 0.5,
         "match_count": 5
       },
-      "generation_latency_ms": 12.19
+      "generation_latency_ms": 12.63
     },
     {
       "id": 54,
@@ -1759,7 +1759,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 12.13
+      "generation_latency_ms": 12.7
     },
     {
       "id": 55,
@@ -1794,7 +1794,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 11.01
+      "generation_latency_ms": 11.4
     },
     {
       "id": 56,
@@ -1824,7 +1824,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 9.12
+      "generation_latency_ms": 8.9
     },
     {
       "id": 57,
@@ -1864,7 +1864,7 @@
         "top_historical_score": 0.5,
         "match_count": 3
       },
-      "generation_latency_ms": 10.97
+      "generation_latency_ms": 11.07
     },
     {
       "id": 58,
@@ -1894,7 +1894,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 13.01
+      "generation_latency_ms": 12.86
     },
     {
       "id": 59,
@@ -1934,7 +1934,7 @@
         "top_historical_score": 0.5,
         "match_count": 3
       },
-      "generation_latency_ms": 10.25
+      "generation_latency_ms": 10.46
     },
     {
       "id": 60,
@@ -1942,7 +1942,7 @@
       "category": "context_filter",
       "notes": "Should NOT trigger polymorphic-agent (technical usage)",
       "expected": {
-        "selected_agent": "polymorphic-agent",
+        "selected_agent": "",
         "confidence": 0.5,
         "routing_policy": "fallback_default",
         "routing_path": "local",
@@ -1958,7 +1958,7 @@
         "top_historical_score": null,
         "match_count": 0
       },
-      "generation_latency_ms": 10.68
+      "generation_latency_ms": 10.45
     },
     {
       "id": 61,
@@ -1966,7 +1966,7 @@
       "category": "context_filter",
       "notes": "Should NOT trigger polymorphic-agent (technical usage)",
       "expected": {
-        "selected_agent": "polymorphic-agent",
+        "selected_agent": "",
         "confidence": 0.5,
         "routing_policy": "fallback_default",
         "routing_path": "local",
@@ -1982,7 +1982,7 @@
         "top_historical_score": null,
         "match_count": 0
       },
-      "generation_latency_ms": 13.35
+      "generation_latency_ms": 13.14
     },
     {
       "id": 62,
@@ -2012,7 +2012,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 10.28
+      "generation_latency_ms": 10.09
     },
     {
       "id": 63,
@@ -2042,7 +2042,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 9.98
+      "generation_latency_ms": 9.95
     },
     {
       "id": 64,
@@ -2050,7 +2050,7 @@
       "category": "context_filter",
       "notes": "Should NOT trigger polymorphic-agent (casual reference)",
       "expected": {
-        "selected_agent": "polymorphic-agent",
+        "selected_agent": "",
         "confidence": 0.5,
         "routing_policy": "fallback_default",
         "routing_path": "local",
@@ -2066,7 +2066,7 @@
         "top_historical_score": null,
         "match_count": 0
       },
-      "generation_latency_ms": 11.06
+      "generation_latency_ms": 11.03
     },
     {
       "id": 65,
@@ -2096,7 +2096,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 10.31
+      "generation_latency_ms": 10.48
     },
     {
       "id": 66,
@@ -2104,7 +2104,7 @@
       "category": "context_filter",
       "notes": "Should NOT trigger polymorphic-agent (pollyanna rejection)",
       "expected": {
-        "selected_agent": "polymorphic-agent",
+        "selected_agent": "",
         "confidence": 0.5,
         "routing_policy": "fallback_default",
         "routing_path": "local",
@@ -2120,7 +2120,7 @@
         "top_historical_score": null,
         "match_count": 0
       },
-      "generation_latency_ms": 10.89
+      "generation_latency_ms": 10.68
     },
     {
       "id": 67,
@@ -2128,7 +2128,7 @@
       "category": "context_filter",
       "notes": "May partially match - tests boundary",
       "expected": {
-        "selected_agent": "polymorphic-agent",
+        "selected_agent": "",
         "confidence": 0.5,
         "routing_policy": "fallback_default",
         "routing_path": "local",
@@ -2150,7 +2150,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 11.49
+      "generation_latency_ms": 11.52
     },
     {
       "id": 68,
@@ -2190,7 +2190,7 @@
         "top_historical_score": 0.5,
         "match_count": 3
       },
-      "generation_latency_ms": 9.38
+      "generation_latency_ms": 9.6
     },
     {
       "id": 69,
@@ -2198,7 +2198,7 @@
       "category": "context_filter",
       "notes": "Should NOT trigger polymorphic-agent (technical usage)",
       "expected": {
-        "selected_agent": "polymorphic-agent",
+        "selected_agent": "",
         "confidence": 0.5,
         "routing_policy": "fallback_default",
         "routing_path": "local",
@@ -2214,7 +2214,7 @@
         "top_historical_score": null,
         "match_count": 0
       },
-      "generation_latency_ms": 10.74
+      "generation_latency_ms": 10.78
     },
     {
       "id": 70,
@@ -2244,7 +2244,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 11.58
+      "generation_latency_ms": 11.35
     },
     {
       "id": 71,
@@ -2279,7 +2279,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 8.97
+      "generation_latency_ms": 8.9
     },
     {
       "id": 72,
@@ -2314,7 +2314,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 10.83
+      "generation_latency_ms": 10.26
     },
     {
       "id": 73,
@@ -2349,7 +2349,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 10.56
+      "generation_latency_ms": 10.04
     },
     {
       "id": 74,
@@ -2384,7 +2384,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 11.32
+      "generation_latency_ms": 11.3
     },
     {
       "id": 75,
@@ -2419,7 +2419,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 9.95
+      "generation_latency_ms": 9.7
     },
     {
       "id": 76,
@@ -2427,7 +2427,7 @@
       "category": "fuzzy_match",
       "notes": "'profile' -> performance (high confidence trigger)",
       "expected": {
-        "selected_agent": "polymorphic-agent",
+        "selected_agent": "",
         "confidence": 0.5,
         "routing_policy": "fallback_default",
         "routing_path": "local",
@@ -2443,7 +2443,7 @@
         "top_historical_score": null,
         "match_count": 0
       },
-      "generation_latency_ms": 11.77
+      "generation_latency_ms": 11.39
     },
     {
       "id": 77,
@@ -2473,7 +2473,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 11.45
+      "generation_latency_ms": 11.1
     },
     {
       "id": 78,
@@ -2503,7 +2503,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 11.26
+      "generation_latency_ms": 10.83
     },
     {
       "id": 79,
@@ -2538,7 +2538,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 11.99
+      "generation_latency_ms": 12.16
     },
     {
       "id": 80,
@@ -2573,7 +2573,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 14.38
+      "generation_latency_ms": 14.26
     },
     {
       "id": 81,
@@ -2618,7 +2618,7 @@
         "top_historical_score": 0.5,
         "match_count": 4
       },
-      "generation_latency_ms": 12.71
+      "generation_latency_ms": 12.45
     },
     {
       "id": 82,
@@ -2653,7 +2653,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 12.91
+      "generation_latency_ms": 12.68
     },
     {
       "id": 83,
@@ -2688,7 +2688,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 12.87
+      "generation_latency_ms": 12.91
     },
     {
       "id": 84,
@@ -2696,7 +2696,7 @@
       "category": "compound",
       "notes": "Primary: performance or api-architect",
       "expected": {
-        "selected_agent": "polymorphic-agent",
+        "selected_agent": "",
         "confidence": 0.5,
         "routing_policy": "fallback_default",
         "routing_path": "local",
@@ -2712,7 +2712,7 @@
         "top_historical_score": null,
         "match_count": 0
       },
-      "generation_latency_ms": 14.24
+      "generation_latency_ms": 14.13
     },
     {
       "id": 85,
@@ -2742,7 +2742,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 2.93
+      "generation_latency_ms": 2.85
     },
     {
       "id": 86,
@@ -2807,7 +2807,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 3.03
+      "generation_latency_ms": 3.16
     },
     {
       "id": 88,
@@ -2837,7 +2837,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 3.54
+      "generation_latency_ms": 3.75
     },
     {
       "id": 89,
@@ -2872,7 +2872,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 3.91
+      "generation_latency_ms": 3.74
     },
     {
       "id": 90,
@@ -2907,7 +2907,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 3.29
+      "generation_latency_ms": 3.34
     },
     {
       "id": 91,
@@ -2942,7 +2942,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 2.55
+      "generation_latency_ms": 2.58
     },
     {
       "id": 92,
@@ -2972,7 +2972,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 2.79
+      "generation_latency_ms": 2.8
     },
     {
       "id": 93,
@@ -3002,7 +3002,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 2.97
+      "generation_latency_ms": 3.0
     },
     {
       "id": 94,
@@ -3032,55 +3032,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 3.37
-    },
-    {
-      "id": 95,
-      "prompt": "",
-      "category": "integration_edge",
-      "notes": "Empty prompt -> wrapper returns fallback with 'Invalid input'",
-      "expected": {
-        "selected_agent": "polymorphic-agent",
-        "confidence": 0.5,
-        "routing_policy": "fallback_default",
-        "routing_path": "local",
-        "reasoning_contains": "No trigger matches found"
-      },
-      "candidates": [],
-      "router_layer": {
-        "top_agent": null,
-        "top_confidence": null,
-        "top_trigger_score": null,
-        "top_context_score": null,
-        "top_capability_score": null,
-        "top_historical_score": null,
-        "match_count": 0
-      },
-      "generation_latency_ms": 0.99
-    },
-    {
-      "id": 96,
-      "prompt": "   ",
-      "category": "integration_edge",
-      "notes": "Whitespace-only prompt -> wrapper returns fallback",
-      "expected": {
-        "selected_agent": "polymorphic-agent",
-        "confidence": 0.5,
-        "routing_policy": "fallback_default",
-        "routing_path": "local",
-        "reasoning_contains": "No trigger matches found"
-      },
-      "candidates": [],
-      "router_layer": {
-        "top_agent": null,
-        "top_confidence": null,
-        "top_trigger_score": null,
-        "top_context_score": null,
-        "top_capability_score": null,
-        "top_historical_score": null,
-        "match_count": 0
-      },
-      "generation_latency_ms": 1.27
+      "generation_latency_ms": 3.11
     },
     {
       "id": 97,
@@ -3110,7 +3062,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 9.94
+      "generation_latency_ms": 9.97
     },
     {
       "id": 98,
@@ -3140,7 +3092,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 9.68
+      "generation_latency_ms": 9.73
     },
     {
       "id": 99,
@@ -3190,7 +3142,7 @@
         "top_historical_score": 0.5,
         "match_count": 5
       },
-      "generation_latency_ms": 11.48
+      "generation_latency_ms": 11.79
     },
     {
       "id": 100,
@@ -3220,7 +3172,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 10.35
+      "generation_latency_ms": 10.27
     },
     {
       "id": 101,
@@ -3255,7 +3207,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 10.1
+      "generation_latency_ms": 9.79
     },
     {
       "id": 102,
@@ -3285,7 +3237,7 @@
         "top_historical_score": 0.5,
         "match_count": 1
       },
-      "generation_latency_ms": 8.81
+      "generation_latency_ms": 8.64
     },
     {
       "id": 103,
@@ -3320,7 +3272,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 11.09
+      "generation_latency_ms": 10.74
     },
     {
       "id": 104,
@@ -3355,7 +3307,7 @@
         "top_historical_score": 0.5,
         "match_count": 2
       },
-      "generation_latency_ms": 9.58
+      "generation_latency_ms": 9.57
     }
   ]
 }

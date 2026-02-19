@@ -654,7 +654,7 @@ class TestConfidenceThreshold:
 
     def test_default_agent_is_defined(self):
         """Default fallback agent constant should be defined."""
-        assert DEFAULT_AGENT == "polymorphic-agent"
+        assert DEFAULT_AGENT == ""
 
     def test_threshold_boundary_below(self):
         """Confidence just below threshold should fall back."""

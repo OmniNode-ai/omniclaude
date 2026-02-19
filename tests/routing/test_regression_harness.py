@@ -32,7 +32,7 @@ from .conftest import TOLERANCE_CONFIDENCE
 # --------------------------------------------------------------------------
 
 CONFIDENCE_THRESHOLD = 0.5  # Mirrors route_via_events_wrapper.py
-DEFAULT_AGENT = "polymorphic-agent"
+DEFAULT_AGENT = ""
 
 
 def _determine_expected_agent_and_policy(
@@ -297,7 +297,9 @@ class TestRouteViaEventsIntegration:
     """
 
     @pytest.fixture(autouse=True)
-    def _setup_wrapper_imports(self, registry_path: str, router: AgentRouter) -> None:
+    def _setup_wrapper_imports(
+        self, registry_path: str, router: AgentRouter, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         """Set up imports for route_via_events wrapper."""
         # The wrapper lives in plugins/onex/hooks/lib/ and does its own
         # path manipulation. We need to make AgentRouter available via
@@ -305,6 +307,13 @@ class TestRouteViaEventsIntegration:
         hooks_lib = Path(__file__).parents[2] / "plugins" / "onex" / "hooks" / "lib"
         if str(hooks_lib) not in sys.path:
             sys.path.insert(0, str(hooks_lib))
+
+        # Disable LLM routing so these tests exercise the local router
+        # path with the injected test AgentRouter. LLM routing is tested
+        # separately via dedicated integration tests that handle LLM
+        # dependencies explicitly.
+        monkeypatch.delenv("USE_LLM_ROUTING", raising=False)
+        monkeypatch.delenv("ENABLE_LOCAL_INFERENCE_PIPELINE", raising=False)
 
         # Store for use in tests
         self._registry_path = registry_path
@@ -333,7 +342,7 @@ class TestRouteViaEventsIntegration:
         result = route_via_events("", "test-correlation-id")
 
         assert result["selected_agent"] == DEFAULT_AGENT
-        assert result["confidence"] == 0.5
+        assert result["confidence"] == 0.0
         assert result["routing_policy"] == "fallback_default"
         assert result["routing_path"] == "local"
         assert result["candidates"] == []
@@ -344,7 +353,7 @@ class TestRouteViaEventsIntegration:
         result = route_via_events("   ", "test-correlation-id")
 
         assert result["selected_agent"] == DEFAULT_AGENT
-        assert result["confidence"] == 0.5
+        assert result["confidence"] == 0.0
         assert result["routing_policy"] == "fallback_default"
 
     def test_empty_correlation_id_returns_fallback(self) -> None:
@@ -433,10 +442,16 @@ class TestRouteViaEventsIntegration:
         )
 
     def test_explicit_agent_via_wrapper(self) -> None:
-        """Explicit @agent request via wrapper layer."""
+        """Prompt containing 'agent' keyword should match polymorphic-agent via trigger_match.
+
+        Note: explicit_request policy requires AgentRecommendation.is_explicit=True,
+        which the local router does not currently set. All local-router matches
+        resolve as trigger_match regardless of the trigger type.
+        """
         route_via_events = self._get_route_via_events()
         result = route_via_events("use an agent to help me with this task", "corr-123")
         assert result["selected_agent"] == "polymorphic-agent"
+        assert result["routing_policy"] == "trigger_match"
 
     def test_method_mirrors_routing_policy(self) -> None:
         """Legacy 'method' field should mirror 'routing_policy'."""
@@ -461,10 +476,14 @@ class TestCrossValidation:
     """
 
     @pytest.fixture(autouse=True)
-    def _setup_wrapper(self, registry_path: str, router: AgentRouter) -> None:
+    def _setup_wrapper(
+        self, registry_path: str, router: AgentRouter, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         hooks_lib = Path(__file__).parents[2] / "plugins" / "onex" / "hooks" / "lib"
         if str(hooks_lib) not in sys.path:
             sys.path.insert(0, str(hooks_lib))
+        monkeypatch.delenv("USE_LLM_ROUTING", raising=False)
+        monkeypatch.delenv("ENABLE_LOCAL_INFERENCE_PIPELINE", raising=False)
         self._router = router
 
     def test_inference_matches_wrapper(

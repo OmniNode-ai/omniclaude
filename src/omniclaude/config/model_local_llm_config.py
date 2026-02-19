@@ -11,18 +11,30 @@ Environment variables:
         Default: "Qwen3-Coder-30B-A3B-Instruct". Must be non-empty if set.
     LLM_CODER_FAST_URL: Qwen3-14B-AWQ endpoint for mid-tier tasks and routing classification (RTX 4090, 40K ctx).
     LLM_CODER_FAST_MODEL_NAME: Model ID sent in API requests to the mid-tier endpoint.
-        Default: "Qwen3-14B-Instruct". Must be non-empty if set.
+        Default: "Qwen/Qwen3-14B-AWQ". Must be non-empty if set.
     LLM_CODER_FAST_MAX_LATENCY_MS: Max acceptable latency (ms) for the mid-tier endpoint.
         Default: 1000. Range: 100-60000.
     LLM_EMBEDDING_URL: Qwen3-Embedding-8B-4bit embedding endpoint.
+    LLM_EMBEDDING_MODEL_NAME: Model ID sent in API requests to the embedding endpoint.
+        Default: "Qwen3-Embedding-8B-4bit". Must be non-empty if set.
     LLM_FUNCTION_URL: Qwen2.5-7B function-calling endpoint (optional, hot-swap).
+    LLM_FUNCTION_MODEL_NAME: Model ID sent in API requests to the function calling endpoint.
+        Default: "Qwen2.5-7B". Must be non-empty if set.
     LLM_DEEPSEEK_LITE_URL: DeepSeek-V2-Lite endpoint (optional, hot-swap).
+    LLM_DEEPSEEK_LITE_MODEL_NAME: Model ID sent in API requests to the DeepSeek-Lite endpoint.
+        Default: "DeepSeek-V2-Lite". Must be non-empty if set.
     LLM_QWEN_72B_URL: Qwen2.5-72B large model endpoint.
     LLM_QWEN_72B_MODEL_NAME: Model ID sent in API requests to the 72B endpoint.
         Default: "Qwen2.5-72B". Override for MLX or renamed model builds. Must be non-empty if set.
     LLM_VISION_URL: Qwen2-VL vision endpoint.
+    LLM_VISION_MODEL_NAME: Model ID sent in API requests to the vision endpoint.
+        Default: "Qwen2-VL". Must be non-empty if set.
     LLM_DEEPSEEK_R1_URL: DeepSeek-R1-Distill reasoning endpoint (optional, hot-swap).
+    LLM_DEEPSEEK_R1_MODEL_NAME: Model ID sent in API requests to the DeepSeek-R1 endpoint.
+        Default: "DeepSeek-R1-Distill". Must be non-empty if set.
     LLM_QWEN_14B_URL: Qwen2.5-14B general purpose endpoint.
+    LLM_QWEN_14B_MODEL_NAME: Model ID sent in API requests to the Qwen 14B endpoint.
+        Default: "Qwen2.5-14B". Must be non-empty if set.
 
 Example:
     >>> from omniclaude.config.model_local_llm_config import (
@@ -151,13 +163,19 @@ class LocalLlmEndpointRegistry(BaseSettings):
         llm_coder_fast_model_name: Model ID sent in API requests to the mid-tier endpoint.
         llm_coder_fast_max_latency_ms: Max latency (ms) for the mid-tier endpoint (default 1000).
         llm_embedding_url: Embedding endpoint (Qwen3-Embedding-8B-4bit).
+        llm_embedding_model_name: Model ID sent in API requests to the embedding endpoint.
         llm_function_url: Function-calling endpoint (Qwen2.5-7B, hot-swap).
+        llm_function_model_name: Model ID sent in API requests to the function calling endpoint.
         llm_deepseek_lite_url: Lightweight reasoning endpoint (DeepSeek-V2-Lite, hot-swap).
+        llm_deepseek_lite_model_name: Model ID sent in API requests to the DeepSeek-Lite endpoint.
         llm_qwen_72b_url: Large model endpoint (Qwen2.5-72B).
         llm_qwen_72b_model_name: Model ID sent in API requests to the 72B endpoint.
         llm_vision_url: Vision endpoint (Qwen2-VL).
+        llm_vision_model_name: Model ID sent in API requests to the vision endpoint.
         llm_deepseek_r1_url: Advanced reasoning endpoint (DeepSeek-R1-Distill, hot-swap).
+        llm_deepseek_r1_model_name: Model ID sent in API requests to the DeepSeek-R1 endpoint.
         llm_qwen_14b_url: General purpose endpoint (Qwen2.5-14B).
+        llm_qwen_14b_model_name: Model ID sent in API requests to the Qwen 14B endpoint.
 
     Example:
         >>> import os
@@ -195,7 +213,7 @@ class LocalLlmEndpointRegistry(BaseSettings):
         description="Qwen3-14B-AWQ endpoint for mid-tier tasks and routing classification (RTX 4090, 40K ctx)",
     )
     llm_coder_fast_model_name: str = Field(
-        default="Qwen3-14B-Instruct",
+        default="Qwen/Qwen3-14B-AWQ",
         min_length=1,
         description="Model ID to send in API requests for the mid-tier endpoint (override via LLM_CODER_FAST_MODEL_NAME)",
     )
@@ -209,13 +227,28 @@ class LocalLlmEndpointRegistry(BaseSettings):
         default=None,
         description="Qwen3-Embedding-8B-4bit endpoint for embeddings (M2 Ultra)",
     )
+    llm_embedding_model_name: str = Field(
+        default="Qwen3-Embedding-8B-4bit",
+        min_length=1,
+        description="Model ID to send in API requests for the embedding endpoint",
+    )
     llm_function_url: HttpUrl | None = Field(
         default=None,
         description="Qwen2.5-7B endpoint for function calling (RTX 4090, hot-swap)",
     )
+    llm_function_model_name: str = Field(
+        default="Qwen2.5-7B",
+        min_length=1,
+        description="Model ID to send in API requests for the function calling endpoint",
+    )
     llm_deepseek_lite_url: HttpUrl | None = Field(
         default=None,
         description="DeepSeek-V2-Lite endpoint for lightweight reasoning (RTX 4090, hot-swap)",
+    )
+    llm_deepseek_lite_model_name: str = Field(
+        default="DeepSeek-V2-Lite",
+        min_length=1,
+        description="Model ID to send in API requests for the DeepSeek-Lite endpoint",
     )
     llm_qwen_72b_url: HttpUrl | None = Field(
         default=None,
@@ -230,13 +263,28 @@ class LocalLlmEndpointRegistry(BaseSettings):
         default=None,
         description="Qwen2-VL endpoint for vision and multimodal (M2 Ultra)",
     )
+    llm_vision_model_name: str = Field(
+        default="Qwen2-VL",
+        min_length=1,
+        description="Model ID to send in API requests for the vision endpoint",
+    )
     llm_deepseek_r1_url: HttpUrl | None = Field(
         default=None,
         description="DeepSeek-R1-Distill endpoint for advanced reasoning (M2 Ultra, hot-swap)",
     )
+    llm_deepseek_r1_model_name: str = Field(
+        default="DeepSeek-R1-Distill",
+        min_length=1,
+        description="Model ID to send in API requests for the DeepSeek-R1 endpoint",
+    )
     llm_qwen_14b_url: HttpUrl | None = Field(
         default=None,
         description="Qwen2.5-14B endpoint for general purpose tasks (M2 Pro)",
+    )
+    llm_qwen_14b_model_name: str = Field(
+        default="Qwen2.5-14B",
+        min_length=1,
+        description="Model ID to send in API requests for the Qwen 14B endpoint",
     )
 
     # =========================================================================
@@ -326,21 +374,21 @@ class LocalLlmEndpointRegistry(BaseSettings):
             ),
             (
                 self.llm_embedding_url,
-                "Qwen3-Embedding-8B-4bit",
+                self.llm_embedding_model_name,
                 LlmEndpointPurpose.EMBEDDING,
                 self.llm_embedding_max_latency_ms,
                 9,  # High priority: currently running
             ),
             (
                 self.llm_function_url,
-                "Qwen2.5-7B",
+                self.llm_function_model_name,
                 LlmEndpointPurpose.FUNCTION_CALLING,
                 self.llm_function_max_latency_ms,
                 5,  # Medium priority: hot-swap, may not be running
             ),
             (
                 self.llm_deepseek_lite_url,
-                "DeepSeek-V2-Lite",
+                self.llm_deepseek_lite_model_name,
                 LlmEndpointPurpose.GENERAL,
                 self.llm_deepseek_lite_max_latency_ms,
                 3,  # Lower priority: hot-swap, lightweight fallback
@@ -354,21 +402,21 @@ class LocalLlmEndpointRegistry(BaseSettings):
             ),
             (
                 self.llm_vision_url,
-                "Qwen2-VL",
+                self.llm_vision_model_name,
                 LlmEndpointPurpose.VISION,
                 self.llm_vision_max_latency_ms,
                 9,  # High priority: only vision model
             ),
             (
                 self.llm_deepseek_r1_url,
-                "DeepSeek-R1-Distill",
+                self.llm_deepseek_r1_model_name,
                 LlmEndpointPurpose.REASONING,
                 self.llm_deepseek_r1_max_latency_ms,
                 7,  # Medium-high: hot-swap with 72B
             ),
             (
                 self.llm_qwen_14b_url,
-                "Qwen2.5-14B",
+                self.llm_qwen_14b_model_name,
                 LlmEndpointPurpose.GENERAL,
                 self.llm_qwen_14b_max_latency_ms,
                 6,  # Medium: always available, balanced
