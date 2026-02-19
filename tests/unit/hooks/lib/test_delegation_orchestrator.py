@@ -496,6 +496,34 @@ class TestFeatureFlags:
         assert result["delegated"] is False
         assert result.get("reason") == "feature_disabled"
 
+    def test_feature_disabled_emits_delegation_event(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """feature_disabled path emits a delegation event with delegation_success=False."""
+        from uuid import uuid4
+
+        monkeypatch.delenv("ENABLE_LOCAL_INFERENCE_PIPELINE", raising=False)
+        monkeypatch.delenv("ENABLE_LOCAL_DELEGATION", raising=False)
+
+        with patch.object(do, "_emit_delegation_event") as mock_emit:
+            result = do.orchestrate_delegation(
+                prompt="document this function",
+                session_id="s-flags",
+                correlation_id=str(uuid4()),
+            )
+
+        assert result["delegated"] is False
+        assert result.get("reason") == "feature_disabled"
+
+        mock_emit.assert_called_once()
+        call_kwargs = mock_emit.call_args.kwargs
+        assert call_kwargs.get("delegation_success") is False
+        assert call_kwargs.get("quality_gate_passed") is False
+        assert call_kwargs.get("quality_gate_reason") == "feature_disabled"
+        assert call_kwargs.get("task_type") == "unknown"
+        assert call_kwargs.get("handler_name") == "unknown"
+        assert call_kwargs.get("savings_usd") == 0.0
+
     def test_both_flags_true_proceeds_past_feature_gate(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -523,6 +551,36 @@ class TestFeatureFlags:
             )
         assert result["delegated"] is False
         assert "classification_error" in result.get("reason", "")
+
+    def test_unavailable_classifier_emits_delegation_event(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When TaskClassifier is None, a delegation event is emitted with delegation_success=False."""
+        from uuid import uuid4
+
+        monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
+        monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
+
+        with patch.object(do, "TaskClassifier", None):
+            with patch.object(do, "_emit_delegation_event") as mock_emit:
+                result = do.orchestrate_delegation(
+                    prompt="document this",
+                    session_id="s-null-cls",
+                    correlation_id=str(uuid4()),
+                )
+
+        assert result["delegated"] is False
+        assert "classification_error" in result.get("reason", "")
+
+        mock_emit.assert_called_once()
+        call_kwargs = mock_emit.call_args.kwargs
+        assert call_kwargs.get("delegation_success") is False
+        assert call_kwargs.get("quality_gate_passed") is False
+        assert (call_kwargs.get("quality_gate_reason") or "").startswith(
+            "classification_error:"
+        )
+        assert call_kwargs.get("task_type") == "unknown"
+        assert call_kwargs.get("savings_usd") == 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -554,6 +612,39 @@ class TestClassificationGate:
         assert result["delegated"] is False
         assert "not in allow-list" in result.get("reason", "")
 
+    def test_not_delegatable_emits_delegation_event(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """not-delegatable path emits a delegation event with delegation_success=False."""
+        from uuid import uuid4
+
+        self._enable_flags(monkeypatch)
+        score = _make_score(
+            False,
+            confidence=0.3,
+            estimated_savings_usd=0.005,
+            reasons=["intent 'debug' not in allow-list"],
+        )
+        classifier_mock = _make_classifier_mock(score, "debug")
+
+        with patch.object(do, "TaskClassifier", return_value=classifier_mock):
+            with patch.object(do, "_emit_delegation_event") as mock_emit:
+                result = do.orchestrate_delegation(
+                    prompt="fix the bug",
+                    session_id="s-not-deleg",
+                    correlation_id=str(uuid4()),
+                )
+
+        assert result["delegated"] is False
+
+        mock_emit.assert_called_once()
+        call_kwargs = mock_emit.call_args.kwargs
+        assert call_kwargs.get("delegation_success") is False
+        assert call_kwargs.get("quality_gate_passed") is False
+        assert "not in allow-list" in call_kwargs.get("quality_gate_reason", "")
+        assert call_kwargs.get("task_type") == "unknown"
+        assert call_kwargs.get("savings_usd") == pytest.approx(0.005)
+
     def test_classification_exception_returns_false(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -566,6 +657,36 @@ class TestClassificationGate:
             )
         assert result["delegated"] is False
         assert "classification_error" in result.get("reason", "")
+
+    def test_classification_exception_emits_delegation_event(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Classification exception path emits a delegation event with delegation_success=False."""
+        from uuid import uuid4
+
+        self._enable_flags(monkeypatch)
+
+        with patch.object(
+            do, "TaskClassifier", side_effect=RuntimeError("classify broke")
+        ):
+            with patch.object(do, "_emit_delegation_event") as mock_emit:
+                result = do.orchestrate_delegation(
+                    prompt="document this",
+                    session_id="s-cls-exc",
+                    correlation_id=str(uuid4()),
+                )
+
+        assert result["delegated"] is False
+        assert "classification_error" in result.get("reason", "")
+
+        mock_emit.assert_called_once()
+        call_kwargs = mock_emit.call_args.kwargs
+        assert call_kwargs.get("delegation_success") is False
+        assert call_kwargs.get("quality_gate_passed") is False
+        assert "classification_error" in call_kwargs.get("quality_gate_reason", "")
+        assert "RuntimeError" in call_kwargs.get("quality_gate_reason", "")
+        assert call_kwargs.get("task_type") == "unknown"
+        assert call_kwargs.get("savings_usd") == 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -1425,3 +1546,125 @@ def test_orchestrate_delegation_returns_feature_disabled(
     )
     assert result["delegated"] is False
     assert result.get("reason") == "feature_disabled"
+
+
+# ---------------------------------------------------------------------------
+# Classifier instance caching tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestClassifierInstanceCaching:
+    """_get_classifier() caches the TaskClassifier instance across calls.
+
+    Verifies that repeated calls to orchestrate_delegation reuse a single
+    TaskClassifier instance instead of constructing a new one each time.
+    Also verifies that patching TaskClassifier (as tests do) invalidates the
+    cache so the patched class gets a fresh instance.
+    """
+
+    def setup_method(self) -> None:
+        """Reset the cache before each test to avoid cross-test contamination."""
+        do._reset_classifier_cache()
+
+    def teardown_method(self) -> None:
+        """Reset the cache after each test so subsequent tests start clean."""
+        do._reset_classifier_cache()
+
+    def test_classifier_instantiated_only_once_across_two_calls(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """TaskClassifier.__init__ is called only once when orchestrate_delegation
+        is invoked twice in succession (cache hit on second call).
+        """
+        monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
+        monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
+
+        score = _make_score(False, reasons=["not delegatable"])
+        classifier_instance = _make_classifier_mock(score, "debug")
+
+        init_call_count = 0
+
+        class TrackingClassifier:
+            def __init__(self) -> None:
+                nonlocal init_call_count
+                init_call_count += 1
+                # Delegate all attribute access to the pre-built mock.
+                self._inner = classifier_instance
+
+            def is_delegatable(self, prompt: str) -> Any:
+                return self._inner.is_delegatable(prompt)
+
+            def classify(self, prompt: str) -> Any:
+                return self._inner.classify(prompt)
+
+        with patch.object(do, "TaskClassifier", TrackingClassifier):
+            do.orchestrate_delegation(prompt="fix the bug", correlation_id="c-1")
+            do.orchestrate_delegation(prompt="fix another bug", correlation_id="c-2")
+
+        assert init_call_count == 1, (
+            f"TaskClassifier was instantiated {init_call_count} times; "
+            "expected exactly 1 (cache hit on second call)"
+        )
+
+    def test_cache_miss_when_classifier_class_is_replaced(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Patching TaskClassifier to a different class causes _get_classifier()
+        to construct a new instance (cache type-check fails).
+        """
+        monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
+        monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
+
+        score = _make_score(False, reasons=["not delegatable"])
+        classifier_instance = _make_classifier_mock(score, "debug")
+
+        first_init_count = 0
+        second_init_count = 0
+
+        class FirstClassifier:
+            def __init__(self) -> None:
+                nonlocal first_init_count
+                first_init_count += 1
+                self._inner = classifier_instance
+
+            def is_delegatable(self, prompt: str) -> Any:
+                return self._inner.is_delegatable(prompt)
+
+            def classify(self, prompt: str) -> Any:
+                return self._inner.classify(prompt)
+
+        class SecondClassifier:
+            def __init__(self) -> None:
+                nonlocal second_init_count
+                second_init_count += 1
+                self._inner = classifier_instance
+
+            def is_delegatable(self, prompt: str) -> Any:
+                return self._inner.is_delegatable(prompt)
+
+            def classify(self, prompt: str) -> Any:
+                return self._inner.classify(prompt)
+
+        # First call — installs FirstClassifier in the cache.
+        with patch.object(do, "TaskClassifier", FirstClassifier):
+            do.orchestrate_delegation(prompt="document this", correlation_id="c-3")
+
+        # Second call — TaskClassifier is now SecondClassifier; cache should miss.
+        with patch.object(do, "TaskClassifier", SecondClassifier):
+            do.orchestrate_delegation(prompt="document that", correlation_id="c-4")
+
+        assert first_init_count == 1, "FirstClassifier should be instantiated once"
+        assert second_init_count == 1, (
+            "SecondClassifier should be instantiated once (cache miss due to class change)"
+        )
+
+    def test_reset_classifier_cache_clears_cached_instance(self) -> None:
+        """_reset_classifier_cache() sets _cached_classifier back to None."""
+        # Inject a fake instance directly into the module cache.
+        do._cached_classifier = MagicMock()
+        assert do._cached_classifier is not None
+
+        do._reset_classifier_cache()
+
+        assert do._cached_classifier is None

@@ -90,7 +90,7 @@ except ImportError:
         (_re.compile(r"(://[^:]+:)[^@]+(@)"), r"\1***REDACTED***\2"),
     ]
 
-    def _redact_secrets(text: str) -> str:  # type: ignore[no-redef]
+    def _redact_secrets(text: str) -> str:
         result = text
         for pattern, replacement in _INLINE_SECRET_PATTERNS:
             result = pattern.sub(replacement, result)
@@ -123,6 +123,45 @@ try:
 except ImportError:  # pragma: no cover
     LlmEndpointPurpose = None  # type: ignore[assignment,misc]
     LocalLlmEndpointRegistry = None  # type: ignore[assignment,misc]
+
+# ---------------------------------------------------------------------------
+# Classifier instance cache
+# ---------------------------------------------------------------------------
+# The module-level TaskClassifier name is already cached for test patchability.
+# We additionally cache the *instance* so that repeated hook calls (one per
+# user prompt) do not pay the constructor cost on every invocation.
+#
+# Cache invalidation: if TaskClassifier changes (e.g., a test patches it with
+# a different object), _get_classifier() detects the type mismatch and
+# constructs a fresh instance.  _reset_classifier_cache() is provided for
+# explicit teardown in tests.
+
+_cached_classifier: TaskClassifier | None = None
+
+
+def _get_classifier() -> TaskClassifier:
+    """Return the cached TaskClassifier instance, creating it when necessary.
+
+    The cache is invalidated whenever ``TaskClassifier`` itself has been
+    replaced (e.g., by ``unittest.mock.patch``) so that test patches receive a
+    fresh instance instead of the stale one.
+    """
+    global _cached_classifier
+    if _cached_classifier is not None and type(_cached_classifier) is TaskClassifier:
+        return _cached_classifier
+    _cached_classifier = TaskClassifier()
+    return _cached_classifier
+
+
+def _reset_classifier_cache() -> None:
+    """Reset the cached TaskClassifier instance.
+
+    Call this in test teardown after patching ``TaskClassifier`` to ensure the
+    next real (unpatched) call gets a fresh instance.
+    """
+    global _cached_classifier
+    _cached_classifier = None
+
 
 # ---------------------------------------------------------------------------
 # Logging configuration
@@ -301,14 +340,6 @@ def _select_handler_endpoint(
     # If imports failed at module load, these will be None and we catch below.
     _registry_cls = LocalLlmEndpointRegistry  # noqa: F821  (defined at module level)
     _purpose_cls = LlmEndpointPurpose  # noqa: F821  (defined at module level)
-
-    if _registry_cls is None or _purpose_cls is None:  # type: ignore[unreachable]
-        logger.debug(
-            "LocalLlmEndpointRegistry or LlmEndpointPurpose unavailable; "
-            "cannot resolve endpoint for intent=%s",
-            intent_value,
-        )
-        return None
 
     try:
         purpose = _purpose_cls(purpose_name)
@@ -522,7 +553,7 @@ def _emit_compliance_advisory(
                 "session_id": session_id,
                 "source": "delegation_orchestrator",
             },
-            timeout_ms=50,
+            # timeout_ms is ignored by emit_event — actual timeout is OMNICLAUDE_EMIT_TIMEOUT (default 5 s)
         )
     except Exception as exc:
         logger.debug("Compliance advisory emit failed (non-critical): %s", exc)
@@ -598,12 +629,12 @@ def _emit_delegation_event(
             latency_ms=max(0, latency_ms),
         )
 
-        from emit_client_wrapper import emit_event  # type: ignore[import-not-found]
+        from emit_client_wrapper import emit_event
 
         emit_event(
             event_type=TopicBase.TASK_DELEGATED,
             payload=payload.model_dump(mode="json"),
-            timeout_ms=50,
+            # timeout_ms is ignored by emit_event — actual timeout is OMNICLAUDE_EMIT_TIMEOUT (default 5 s)
         )
         logger.debug(
             "Emitted task-delegated event: task=%s handler=%s success=%s",
@@ -631,9 +662,13 @@ def orchestrate_delegation(
 
     Decision tree:
     1. Feature flags off                -> delegated=False, reason="feature_disabled"
+       (delegation event emitted with delegation_success=False)
     2. Classification fails / raises    -> delegated=False
+       (delegation event emitted with delegation_success=False)
     3. Not delegatable                  -> delegated=False
+       (delegation event emitted with delegation_success=False)
     4. No endpoint for task type        -> delegated=False, reason="pre_gate:no_endpoint_configured"
+       (delegation event emitted with delegation_success=False)
     5. LLM call fails                   -> delegated=False, reason="pre_gate:llm_call_failed"
        (delegation event emitted with delegation_success=False)
     6. Quality gate fails               -> delegated=False, reason="quality_gate_failed"
@@ -664,21 +699,42 @@ def orchestrate_delegation(
     try:
         # Gate 1: Feature flags
         if not _is_delegation_enabled():
+            _emit_delegation_event(
+                session_id=session_id,
+                correlation_id=correlation_id,
+                task_type="unknown",
+                handler_name="unknown",
+                model_name="unknown",
+                quality_gate_passed=False,
+                quality_gate_reason="feature_disabled",
+                delegation_success=False,
+                savings_usd=0.0,
+                latency_ms=int((time.time() - start_time) * 1000),
+                emitted_at=emitted_at,
+            )
             return {"delegated": False, "reason": "feature_disabled"}
 
         # Gate 2: Classification — use module-level TaskClassifier (patchable in tests)
         _classifier_cls = TaskClassifier  # noqa: F821  (module-level name)
-        if _classifier_cls is None:  # type: ignore[unreachable]
-            return {
-                "delegated": False,
-                "reason": "classification_error: TaskClassifier not available",
-            }
 
         try:
-            classifier = _classifier_cls()
+            classifier = _get_classifier()
             score = classifier.is_delegatable(prompt)
         except Exception as exc:
             logger.debug("Classification failed: %s", exc)
+            _emit_delegation_event(
+                session_id=session_id,
+                correlation_id=correlation_id,
+                task_type="unknown",
+                handler_name="unknown",
+                model_name="unknown",
+                quality_gate_passed=False,
+                quality_gate_reason=f"classification_error: {type(exc).__name__}",
+                delegation_success=False,
+                savings_usd=0.0,
+                latency_ms=int((time.time() - start_time) * 1000),
+                emitted_at=emitted_at,
+            )
             return {
                 "delegated": False,
                 "reason": f"classification_error: {type(exc).__name__}",
@@ -686,6 +742,19 @@ def orchestrate_delegation(
 
         if not score.delegatable:
             reasons = "; ".join(score.reasons) if score.reasons else "not delegatable"
+            _emit_delegation_event(
+                session_id=session_id,
+                correlation_id=correlation_id,
+                task_type="unknown",
+                handler_name="unknown",
+                model_name="unknown",
+                quality_gate_passed=False,
+                quality_gate_reason=reasons,
+                delegation_success=False,
+                savings_usd=score.estimated_savings_usd,
+                latency_ms=int((time.time() - start_time) * 1000),
+                emitted_at=emitted_at,
+            )
             return {
                 "delegated": False,
                 "reason": reasons,
