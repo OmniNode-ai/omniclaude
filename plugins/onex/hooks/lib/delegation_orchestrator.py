@@ -158,9 +158,26 @@ _SYSTEM_PROMPT_RESEARCH = (
 # purpose_name must match an LlmEndpointPurpose value (lowercase).
 
 _HANDLER_ROUTING: dict[str, tuple[str, str, str, int]] = {
-    "document": ("reasoning", _SYSTEM_PROMPT_DOC, "doc_gen", 100),
-    "test": ("code_analysis", _SYSTEM_PROMPT_TEST, "test_boilerplate", 80),
-    "research": ("code_analysis", _SYSTEM_PROMPT_RESEARCH, "code_review", 60),
+    # Each purpose string must exactly match an LlmEndpointPurpose enum value.
+    # A mismatch silently causes _select_handler_endpoint() to return None.
+    "document": (
+        "reasoning",
+        _SYSTEM_PROMPT_DOC,
+        "doc_gen",
+        100,
+    ),  # LlmEndpointPurpose.REASONING
+    "test": (
+        "code_analysis",
+        _SYSTEM_PROMPT_TEST,
+        "test_boilerplate",
+        80,
+    ),  # LlmEndpointPurpose.CODE_ANALYSIS
+    "research": (
+        "code_analysis",
+        _SYSTEM_PROMPT_RESEARCH,
+        "code_review",
+        60,
+    ),  # LlmEndpointPurpose.CODE_ANALYSIS
 }
 
 # Error phrases that indicate the model refused or couldn't complete the request.
@@ -453,6 +470,7 @@ def _emit_delegation_event(
     delegation_success: bool,
     savings_usd: float,
     latency_ms: int,
+    emitted_at: datetime,
 ) -> None:
     """Emit onex.evt.omniclaude.task-delegated.v1 for observability (fire-and-forget).
 
@@ -470,9 +488,10 @@ def _emit_delegation_event(
         delegation_success: Whether the delegation produced a usable response.
         savings_usd: Estimated cost savings in USD.
         latency_ms: Total delegation wall-clock time in milliseconds.
+        emitted_at: Timestamp to use for the event (injected by caller, no datetime.now()).
     """
     try:
-        from datetime import UTC, datetime
+        from datetime import UTC, datetime  # noqa: F401  (used by type annotation)
         from uuid import UUID, uuid4
 
         _ensure_src_on_path()
@@ -493,7 +512,7 @@ def _emit_delegation_event(
         payload = ModelTaskDelegatedPayload(
             session_id=session_id or "unknown",
             correlation_id=corr_uuid,
-            emitted_at=datetime.now(UTC),
+            emitted_at=emitted_at,
             task_type=task_type,
             handler_used=handler_name,
             model_used=model_name,
@@ -528,7 +547,7 @@ def _emit_delegation_event(
 # ---------------------------------------------------------------------------
 
 
-def handle_orchestrated_delegation(
+def orchestrate_delegation(
     prompt: str,
     correlation_id: str,
     session_id: str = "",
@@ -561,7 +580,10 @@ def handle_orchestrated_delegation(
         "intent", "savings_usd", "latency_ms", "handler", "quality_gate_passed".
         When delegated=False: also includes "reason".
     """
+    from datetime import UTC, datetime
+
     start_time = time.time()
+    emitted_at = datetime.now(UTC)
 
     # Gate 1: Feature flags
     if not _is_delegation_enabled():
@@ -593,9 +615,9 @@ def handle_orchestrated_delegation(
             "confidence": score.confidence,
         }
 
-    # Extract the intent value string for routing.
+    # Extract the intent value string for routing (reuse existing classifier instance).
     try:
-        ctx = _classifier_cls().classify(prompt)
+        ctx = classifier.classify(prompt)
         intent_value = ctx.primary_intent.value  # e.g., "document", "test", "research"
     except Exception as exc:
         logger.debug("Intent value extraction failed: %s", exc)
@@ -631,6 +653,7 @@ def handle_orchestrated_delegation(
             delegation_success=False,
             savings_usd=score.estimated_savings_usd,
             latency_ms=latency_ms,
+            emitted_at=emitted_at,
         )
         return {
             "delegated": False,
@@ -653,6 +676,7 @@ def handle_orchestrated_delegation(
             delegation_success=False,
             savings_usd=score.estimated_savings_usd,
             latency_ms=latency_ms,
+            emitted_at=emitted_at,
         )
         return {
             "delegated": False,
@@ -687,6 +711,7 @@ def handle_orchestrated_delegation(
             delegation_success=False,
             savings_usd=score.estimated_savings_usd,
             latency_ms=latency_ms,
+            emitted_at=emitted_at,
         )
         return {
             "delegated": False,
@@ -709,6 +734,7 @@ def handle_orchestrated_delegation(
         delegation_success=True,
         savings_usd=score.estimated_savings_usd,
         latency_ms=latency_ms,
+        emitted_at=emitted_at,
     )
 
     logger.info(
@@ -751,10 +777,3 @@ def handle_orchestrated_delegation(
         "handler": handler_name,
         "quality_gate_passed": True,
     }
-
-
-# ---------------------------------------------------------------------------
-# Public alias for backwards compatibility with any future callers
-# ---------------------------------------------------------------------------
-
-orchestrate_delegation = handle_orchestrated_delegation
