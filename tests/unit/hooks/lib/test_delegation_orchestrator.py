@@ -802,6 +802,41 @@ class TestLlmCallFailure:
         assert result["delegated"] is False
         assert result.get("reason") == "redaction_error"
 
+    def test_redaction_failure_emits_delegation_event(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When _redact_secrets raises, a delegation event is emitted before returning.
+
+        All other post-classification failure paths emit a delegation event.
+        The redaction_error path must not be the exception.
+        """
+        from uuid import uuid4
+
+        _score, classifier_mock, endpoint_tuple = self._setup(monkeypatch)
+
+        with patch.object(do, "TaskClassifier", return_value=classifier_mock):
+            with patch.object(
+                do, "_select_handler_endpoint", return_value=endpoint_tuple
+            ):
+                with patch.object(
+                    do, "_redact_secrets", side_effect=RuntimeError("redaction broke")
+                ):
+                    with patch.object(do, "_emit_delegation_event") as mock_emit:
+                        result = do.orchestrate_delegation(
+                            prompt="document this function sk-abc123secretkey",
+                            session_id="s-redact",
+                            correlation_id=str(uuid4()),
+                        )
+
+        assert result["delegated"] is False
+        assert result.get("reason") == "redaction_error"
+
+        mock_emit.assert_called_once()
+        call_kwargs = mock_emit.call_args.kwargs
+        assert call_kwargs.get("delegation_success") is False
+        assert call_kwargs.get("quality_gate_passed") is False
+        assert call_kwargs.get("quality_gate_reason") == "pre_gate:redaction_error"
+
     def test_model_name_forwarded_to_llm_call(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

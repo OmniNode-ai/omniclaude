@@ -62,8 +62,8 @@ if _LIB_DIR not in sys.path:
 # Secret redaction (imported after path setup so secret_redactor is on sys.path)
 # ---------------------------------------------------------------------------
 try:
-    from secret_redactor import (
-        redact_secrets as _redact_secrets,  # type: ignore[import]
+    from secret_redactor import (  # type: ignore[import-not-found]
+        redact_secrets as _redact_secrets,
     )
 except ImportError:
     # Minimal inline fallback covering the patterns documented in CLAUDE.md.
@@ -90,7 +90,7 @@ except ImportError:
         (_re.compile(r"(://[^:]+:)[^@]+(@)"), r"\1***REDACTED***\2"),
     ]
 
-    def _redact_secrets(text: str) -> str:  # type: ignore[misc]
+    def _redact_secrets(text: str) -> str:  # type: ignore[no-redef]
         result = text
         for pattern, replacement in _INLINE_SECRET_PATTERNS:
             result = pattern.sub(replacement, result)
@@ -302,7 +302,7 @@ def _select_handler_endpoint(
     _registry_cls = LocalLlmEndpointRegistry  # noqa: F821  (defined at module level)
     _purpose_cls = LlmEndpointPurpose  # noqa: F821  (defined at module level)
 
-    if _registry_cls is None or _purpose_cls is None:
+    if _registry_cls is None or _purpose_cls is None:  # type: ignore[unreachable]
         logger.debug(
             "LocalLlmEndpointRegistry or LlmEndpointPurpose unavailable; "
             "cannot resolve endpoint for intent=%s",
@@ -402,8 +402,8 @@ def _call_llm_with_system_prompt(
             logger.debug("LLM returned empty content")
             return None
 
-        model_name: str = data.get("model") or "local-model"
-        return content, model_name
+        _returned_model_name: str = data.get("model") or "local-model"
+        return content, _returned_model_name
 
     except Exception as exc:
         logger.debug("LLM call failed: %s: %s", type(exc).__name__, exc)
@@ -495,7 +495,7 @@ def _emit_compliance_advisory(
         session_id: Session identifier.
     """
     try:
-        from emit_client_wrapper import emit_event  # type: ignore[import]
+        from emit_client_wrapper import emit_event  # type: ignore[import-not-found]
 
         from omniclaude.hooks.topics import TopicBase
 
@@ -594,7 +594,7 @@ def _emit_delegation_event(
             latency_ms=max(0, latency_ms),
         )
 
-        from emit_client_wrapper import emit_event  # type: ignore[import]
+        from emit_client_wrapper import emit_event  # type: ignore[import-not-found]
 
         emit_event(
             event_type=TopicBase.TASK_DELEGATED,
@@ -664,7 +664,7 @@ def orchestrate_delegation(
 
         # Gate 2: Classification — use module-level TaskClassifier (patchable in tests)
         _classifier_cls = TaskClassifier  # noqa: F821  (module-level name)
-        if _classifier_cls is None:
+        if _classifier_cls is None:  # type: ignore[unreachable]
             return {
                 "delegated": False,
                 "reason": "classification_error: TaskClassifier not available",
@@ -750,6 +750,19 @@ def orchestrate_delegation(
             logger.debug(
                 "Secret redaction failed; aborting delegation to protect secrets: %s",
                 exc,
+            )
+            _emit_delegation_event(
+                session_id=session_id,
+                correlation_id=correlation_id,
+                task_type="unknown",
+                handler_name="unknown",
+                model_name="unknown",
+                quality_gate_passed=False,
+                quality_gate_reason="pre_gate:redaction_error",
+                delegation_success=False,
+                savings_usd=0.0,
+                latency_ms=int((time.time() - start_time) * 1000),
+                emitted_at=emitted_at,
             )
             return {"delegated": False, "reason": "redaction_error"}
 
@@ -867,8 +880,8 @@ def orchestrate_delegation(
         )
 
         # Format the response with visible attribution (mirrors local_delegation_handler pattern).
-        safe_model = actual_model_name
-        attribution = f"[Local Model Response - {safe_model}]"
+        display_model_name = actual_model_name
+        attribution = f"[Local Model Response - {display_model_name}]"
         reasons_summary = "; ".join(score.reasons) if score.reasons else ""
         savings_str = (
             f"~${score.estimated_savings_usd:.4f}"
