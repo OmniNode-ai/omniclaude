@@ -127,19 +127,19 @@ class TestIntelligenceEventClientInitialization:
             assert client.enable_intelligence is False
 
     def test_topic_names_follow_event_bus_convention(self, mock_settings) -> None:
-        """Test that topic names follow EVENT_BUS_INTEGRATION_GUIDE convention."""
+        """Test that topic names follow onex.cmd/evt convention (OMN-2367)."""
         # Check class-level topic constants (no instantiation needed)
         assert (
             IntelligenceEventClient.TOPIC_REQUEST
-            == "omninode.intelligence.code-analysis.requested.v1"
+            == "onex.cmd.omniintelligence.code-analysis.v1"
         )
         assert (
             IntelligenceEventClient.TOPIC_COMPLETED
-            == "omninode.intelligence.code-analysis.completed.v1"
+            == "onex.evt.omniintelligence.code-analysis-completed.v1"
         )
         assert (
             IntelligenceEventClient.TOPIC_FAILED
-            == "omninode.intelligence.code-analysis.failed.v1"
+            == "onex.evt.omniintelligence.code-analysis-failed.v1"
         )
 
 

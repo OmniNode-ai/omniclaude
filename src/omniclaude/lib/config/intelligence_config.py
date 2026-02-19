@@ -41,15 +41,10 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from omniclaude.config import settings
 
 # Topic names (wire-ready, no environment prefix per OMN-1972)
-TOPIC_CODE_ANALYSIS_REQUESTED = (
-    "onex-intelligence.intelligence.code-analysis-requested.v1"
-)
-TOPIC_CODE_ANALYSIS_COMPLETED = (
-    "onex-intelligence.intelligence.code-analysis-completed.v1"
-)
-TOPIC_CODE_ANALYSIS_FAILED = (
-    "onex-intelligence.intelligence.code-analysis-failed.v1"
-)
+# Corrected to canonical onex.cmd/evt convention (OMN-2367)
+TOPIC_CODE_ANALYSIS_REQUESTED = "onex.cmd.omniintelligence.code-analysis.v1"
+TOPIC_CODE_ANALYSIS_COMPLETED = "onex.evt.omniintelligence.code-analysis-completed.v1"
+TOPIC_CODE_ANALYSIS_FAILED = "onex.evt.omniintelligence.code-analysis-failed.v1"
 
 
 class IntelligenceConfig(BaseModel):

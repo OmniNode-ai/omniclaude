@@ -28,9 +28,14 @@ logger = logging.getLogger(__name__)
 class IntelligenceEventClient:
     """Kafka client for intelligence events using RequestResponseWiring."""
 
-    TOPIC_REQUEST = "omninode.intelligence.code-analysis.requested.v1"
-    TOPIC_COMPLETED = "omninode.intelligence.code-analysis.completed.v1"
-    TOPIC_FAILED = "omninode.intelligence.code-analysis.failed.v1"
+    # Canonical topic names per onex.cmd/evt convention (OMN-2367)
+    TOPIC_REQUEST = "onex.cmd.omniintelligence.code-analysis.v1"
+    TOPIC_COMPLETED = "onex.evt.omniintelligence.code-analysis-completed.v1"
+    TOPIC_FAILED = "onex.evt.omniintelligence.code-analysis-failed.v1"
+
+    # Legacy topic — dual-publish migration window only (remove after migration)
+    TOPIC_REQUEST_LEGACY = "omninode.intelligence.code-analysis.requested.v1"
+
     _INSTANCE_NAME = "intelligence"
 
     def __init__(
@@ -150,6 +155,15 @@ class IntelligenceEventClient:
             },
         }
         try:
+            # Dual-publish: mirror to legacy topic during migration window (remove after migration)
+            if os.environ.get("DUAL_PUBLISH_LEGACY_TOPICS") == "1" and self._event_bus is not None:
+                try:
+                    await self._event_bus.publish(self.TOPIC_REQUEST_LEGACY, payload)
+                except Exception as legacy_err:
+                    self.logger.debug(
+                        f"Dual-publish to legacy topic failed (non-fatal): {legacy_err}"
+                    )
+
             result = await self._wiring.send_request(
                 instance_name=self._INSTANCE_NAME, payload=payload, timeout_seconds=timeout_seconds,
             )
