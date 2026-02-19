@@ -509,6 +509,10 @@ def _emit_compliance_advisory(
         # identifiers used exclusively for distributed tracing correlation; they
         # carry no user-identifiable content and are safe to include on this topic.
         # The 500-char truncation is the agreed privacy boundary for this topic.
+        # This is an intentional, reviewed deviation from CLAUDE.md's "full prompts
+        # only" framing for cmd.omniintelligence topics — the handler output is
+        # model-generated, not user-supplied, and has been classified as safe for
+        # this restricted topic.
         emit_event(
             event_type=TopicBase.COMPLIANCE_EVALUATE,
             payload={
