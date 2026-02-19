@@ -942,10 +942,12 @@ class TestOrchestratedDelegationSuccess:
 
 
 @pytest.mark.unit
-def test_orchestrate_delegation_alias_matches(monkeypatch: pytest.MonkeyPatch) -> None:
-    """orchestrate_delegation is an alias for handle_orchestrated_delegation."""
+def test_orchestrate_delegation_returns_feature_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """orchestrate_delegation returns feature_disabled when both flags are off."""
     monkeypatch.delenv("ENABLE_LOCAL_INFERENCE_PIPELINE", raising=False)
-    result1 = do.orchestrate_delegation("test prompt", "corr-alias")
-    result2 = do.handle_orchestrated_delegation("test prompt", "corr-alias")
-    assert result1["delegated"] == result2["delegated"]
-    assert result1.get("reason") == result2.get("reason")
+    monkeypatch.delenv("ENABLE_LOCAL_DELEGATION", raising=False)
+    result = do.orchestrate_delegation("test prompt", "corr-alias")
+    assert result["delegated"] is False
+    assert result.get("reason") == "feature_disabled"

@@ -56,12 +56,6 @@ if _LIB_DIR not in sys.path:
     sys.path.insert(0, _LIB_DIR)
 
 
-def _ensure_src_on_path() -> None:
-    """Ensure src/ is on sys.path (idempotent, no-op after first call)."""
-    if _SRC_PATH.exists() and str(_SRC_PATH) not in sys.path:
-        sys.path.insert(0, str(_SRC_PATH))
-
-
 # ---------------------------------------------------------------------------
 # Module-level imports (after path setup, with graceful fallback)
 # ---------------------------------------------------------------------------
@@ -438,8 +432,10 @@ def _emit_compliance_advisory(
     try:
         from emit_client_wrapper import emit_event  # type: ignore[import]
 
+        from omniclaude.hooks.topics import TopicBase
+
         emit_event(
-            event_type="compliance.evaluate",
+            event_type=TopicBase.COMPLIANCE_EVALUATE,
             payload={
                 "response": response[:500],  # Truncate to stay within payload limits
                 "task_type": task_type,
@@ -494,7 +490,6 @@ def _emit_delegation_event(
         from datetime import UTC, datetime  # noqa: F401  (used by type annotation)
         from uuid import UUID, uuid4
 
-        _ensure_src_on_path()
         from omniclaude.hooks.schemas import ModelTaskDelegatedPayload
         from omniclaude.hooks.topics import TopicBase
 
