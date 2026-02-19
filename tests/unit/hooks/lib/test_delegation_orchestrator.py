@@ -738,6 +738,37 @@ class TestQualityGateFailure:
         assert call_kwargs["delegation_success"] is False
         assert call_kwargs["task_type"] == "document"
 
+    def test_quality_gate_failure_does_not_emit_compliance_advisory(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Compliance advisory must NOT be emitted when quality gate fails.
+
+        _emit_compliance_advisory is on the success path only.  A failed
+        quality gate means no handler response was accepted, so there is
+        nothing to evaluate for compliance.
+        """
+        _score, classifier_mock, endpoint_tuple = self._setup(monkeypatch)
+        bad_response = "x" * 120  # No docstring markers — fails doc quality gate
+
+        with patch.object(do, "TaskClassifier", return_value=classifier_mock):
+            with patch.object(
+                do, "_select_handler_endpoint", return_value=endpoint_tuple
+            ):
+                with patch.object(
+                    do,
+                    "_call_llm_with_system_prompt",
+                    return_value=(bad_response, "Qwen2.5-72B"),
+                ):
+                    with patch.object(do, "_emit_delegation_event"):
+                        with patch.object(
+                            do, "_emit_compliance_advisory"
+                        ) as mock_compliance:
+                            do.orchestrate_delegation(
+                                "document this function", "corr-42"
+                            )
+
+        assert mock_compliance.call_count == 0
+
 
 # ---------------------------------------------------------------------------
 # Full success path tests
