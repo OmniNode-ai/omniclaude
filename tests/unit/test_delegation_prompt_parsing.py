@@ -327,7 +327,7 @@ class TestDocGenOutputSchema:
         """Attribution header appears before body, body before separator, separator before footer."""
         output = self._make_output()
         attr_pos = output.index("[Local Model Response")
-        sep_pos = output.index("---")
+        sep_pos = output.index("\n---\n")
         footer_pos = output.index("Delegated via local model:")
         assert attr_pos < sep_pos < footer_pos
 
@@ -371,7 +371,7 @@ class TestBoilerplateOutputSchema:
     def test_footer_contains_test_intent_reason(self) -> None:
         """Footer includes the 'test' intent delegation reason."""
         output = self._make_output()
-        assert "test" in output.split("---")[-1]
+        assert "test" in output.split("\n---\n")[-1]
 
     def test_savings_present_for_test_intent(self) -> None:
         """Savings line present; TEST intent has positive estimated savings."""
@@ -417,7 +417,7 @@ class TestCodeReviewOutputSchema:
     def test_footer_contains_research_intent_reason(self) -> None:
         """Footer includes the 'research' intent delegation reason."""
         output = self._make_output()
-        assert "research" in output.split("---")[-1]
+        assert "research" in output.split("\n---\n")[-1]
 
     def test_savings_present_for_research_intent(self) -> None:
         """Savings present; RESEARCH intent has lower but positive savings vs. doc gen."""
