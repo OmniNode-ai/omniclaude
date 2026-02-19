@@ -953,7 +953,6 @@ class QualityEnforcer:
         else:
             lines.append("💡 Recommendation: Fix violations to maintain code quality")
             lines.append("   Write will proceed, but please address these issues.")
-        lines.append("   See naming conventions: docs/OMNINODE_NAMING_CONVENTIONS.md")
         lines.append("=" * 70)
 
         return "\n".join(lines)

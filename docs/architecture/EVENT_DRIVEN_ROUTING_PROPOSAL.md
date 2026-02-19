@@ -1,3 +1,7 @@
+> ⚠️ **SUPERSEDED**: This was a pre-implementation proposal. The routing migration described here is complete. Current architecture is documented in `CLAUDE.md` and `docs/architecture/AGENT_ROUTING_ARCHITECTURE.md`. Kept because it is referenced by `plugins/onex/skills/routing/request-agent-routing/SKILL.md`.
+
+---
+
 # Event-Driven Agent Routing Architecture Proposal
 
 **Status**: PROPOSAL (NOT YET IMPLEMENTED)

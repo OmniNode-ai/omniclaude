@@ -56,7 +56,6 @@ Privacy Considerations:
 
 See Also:
     - omnibase_infra/models/registration/events/ for pattern reference
-    - docs/design/ONEX_RUNTIME_REGISTRATION_TICKET_PLAN.md
 """
 
 from __future__ import annotations

@@ -1,3 +1,7 @@
+> ⚠️ **DEPRECATED**: This document describes the pre-DB-split database schema (agent_execution_logs, agent_actions tables). Current observability uses Kafka event emission via the emit daemon. Kept because it is referenced by `plugins/onex/skills/routing/request-agent-routing/SKILL.md`.
+
+---
+
 # Agent Traceability System
 
 Complete observability and traceability for polymorphic agent executions with Kafka-based event logging and PostgreSQL persistence.

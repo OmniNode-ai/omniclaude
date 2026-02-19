@@ -268,9 +268,14 @@ omniclaude/
 │   │   ├── handler_event_emitter.py
 │   │   └── contracts/           # YAML contracts + Python models
 │   ├── aggregators/             # Session aggregation
+│   ├── cli/                     # CLI entry points
 │   ├── config/                  # Pydantic Settings
+│   ├── contracts/               # Cross-cutting contract models
 │   ├── handlers/                # Business logic
-│   └── nodes/                   # ONEX nodes
+│   ├── lib/                     # Shared utilities
+│   ├── nodes/                   # ONEX nodes
+│   ├── publisher/               # Event publisher
+│   └── runtime/                 # Runtime support
 ├── plugins/onex/                # Claude Code plugin
 │   ├── hooks/                   # Hook scripts and library
 │   │   ├── hooks.json           # Hook configuration

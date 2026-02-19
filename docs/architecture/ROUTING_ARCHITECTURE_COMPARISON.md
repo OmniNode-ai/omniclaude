@@ -1,3 +1,7 @@
+> ⚠️ **HISTORICAL**: This comparison documents the completed migration from synchronous routing to event-driven routing. The "before" state no longer exists. Kept because it is referenced by `plugins/onex/skills/routing/request-agent-routing/SKILL.md`.
+
+---
+
 # Agent Routing Architecture - Visual Comparison
 
 This document provides visual comparisons between the current synchronous routing architecture and the proposed event-driven architecture.

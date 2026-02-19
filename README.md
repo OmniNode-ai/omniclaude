@@ -1,64 +1,96 @@
 # OmniClaude
 
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![Status](https://img.shields.io/badge/status-in%20development-yellow.svg)](#status)
+> Claude Code integration layer for the ONEX platform — hooks, routing, intelligence, and agent coordination.
 
-Claude Code hooks and learning loop integration with the omnibase ecosystem.
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![Mypy](https://img.shields.io/badge/mypy-strict-blue)](https://mypy.readthedocs.io/)
+[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://pre-commit.com/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-## Overview
+## What is OmniClaude?
 
-OmniClaude provides:
+OmniClaude is a Claude Code plugin that instruments every Claude Code session with typed ONEX events. On each prompt it routes the request to a specialized agent (from a library of 53), enriches the context with learned patterns retrieved from the ONEX intelligence layer, enforces architectural compliance via pattern advisory, and — when local LLMs are available — optionally delegates tasks to them through a quality-gated orchestrator. All hook activity is emitted asynchronously to Kafka via a Unix socket daemon so the Claude Code UI is never blocked.
 
-- **ONEX-compatible event schemas** for Claude Code hook events
-- **Claude Code plugin** with hooks for session, prompt, and tool lifecycle
-- **Event-driven architecture** using Kafka for learning and intelligence
-- **Integration with omnibase ecosystem** (omnibase-core, omnibase-spi, omnibase-infra)
+## Hook Architecture
 
-## Status
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Claude Code Session                                                    │
+│                                                                         │
+│  SessionStart ──────────────────────────────────────────────────────►  │
+│    SYNC:  start emit daemon if not running                              │
+│    ASYNC: emit session-started.v1                                       │
+│                                                                         │
+│  UserPromptSubmit ──────────────────────────────────────────────────►  │
+│    SYNC:  detect automated workflow → route → enrich → pattern advisory │
+│           → (optional) local delegation                                 │
+│    ASYNC: emit prompt-submitted.v1 (100-char preview)                   │
+│           emit claude-hook-event.v1 (full prompt, intelligence topic)   │
+│                                                                         │
+│  PreToolUse (Edit | Write) ─────────────────────────────────────────►  │
+│    SYNC:  authorization check                                           │
+│                                                                         │
+│  PostToolUse (Read|Write|Edit|Bash|Glob|Grep|Task|Skill|...) ───────►  │
+│    SYNC:  pattern compliance enforcement                                │
+│    ASYNC: emit tool-executed.v1, capture tool content                   │
+│                                                                         │
+│  SessionEnd ────────────────────────────────────────────────────────►  │
+│    ASYNC: emit session-ended.v1, session outcome                        │
+└─────────────────────────────────────────────────────────────────────────┘
+                              │ Unix socket
+                              ▼
+                    Emit Daemon (/tmp/omniclaude-emit.sock)
+                              │
+                              ▼
+                    Kafka / Redpanda (ONEX event bus)
+```
 
-**Currently in development** - Reset in progress as part of OMN-1399.
+**Design principle**: Hooks never block the Claude Code UI. Infrastructure failures degrade gracefully — events are dropped, not retried, and hooks always exit 0 (except for a missing Python interpreter, which exits 1 with a clear fix message).
 
-- [x] Archive old code
-- [x] Create new package structure
-- [x] Define ONEX event schemas
-- [x] Configure hook scripts (stubs)
-- [ ] Implement event emission (OMN-1400)
-- [ ] Session storage integration (OMN-1401)
-- [ ] Learning compute node (OMN-1402)
+## What This Repo Provides
+
+- **5 Claude Code hooks** — SessionStart, UserPromptSubmit, PreToolUse (Edit/Write), PostToolUse, SessionEnd — each implemented as a shell script delegating to Python handler modules
+- **53 agent YAML definitions** for specialized routing (API design, debugging, PR review, testing, devops, and more)
+- **55+ skills and 4 slash commands** — reusable methodologies and user-invocable workflows
+- **Unix socket emit daemon** — non-blocking Kafka emission across hook invocations via a persistent background process
+- **LLM-based agent routing** — prompt-to-agent matching with fuzzy fallback to `polymorphic-agent`
+- **Multi-channel context enrichment** — learned patterns from Qdrant injected into the system prompt
+- **Pattern compliance enforcement** — post-tool architectural advisories from the ONEX intelligence layer
+- **Local LLM delegation orchestrator** — quality-gated task delegation to on-premises models (OMN-2281)
+- **Typed ONEX event schemas** — frozen Pydantic models for all hook events with automatic secret redaction
 
 ## Quick Start
 
-### Installation
+Install dependencies:
 
 ```bash
-# Clone repository
-git clone https://github.com/OmniNode-ai/omniclaude.git
-cd omniclaude
-
-# Install with uv (recommended)
 uv sync
-
-# Or with pip
-pip install -e .
 ```
 
-### Configuration
+Copy and configure environment:
 
 ```bash
-# Copy and configure environment
 cp .env.example .env
-nano .env
-source .env
+# Edit .env — set KAFKA_BOOTSTRAP_SERVERS, POSTGRES_* as needed
 ```
 
-### Testing
+Deploy the plugin to Claude Code:
 
 ```bash
-# Run tests
-pytest tests/ -v
+uv run deploy-local-plugin
+# or use the /deploy-local-plugin skill from within a Claude Code session
+```
 
-# Validate hooks.json
+Verify the emit daemon is reachable:
+
+```bash
+python plugins/onex/hooks/lib/emit_client_wrapper.py status --json
+```
+
+Validate the hook configuration:
+
+```bash
 jq . plugins/onex/hooks/hooks.json
 ```
 
@@ -66,166 +98,89 @@ jq . plugins/onex/hooks/hooks.json
 
 ```
 omniclaude/
-├── src/omniclaude/           # Main Python package
-│   ├── hooks/                # Event schemas and topics
-│   │   ├── schemas.py        # ONEX event models
-│   │   └── topics.py         # Kafka topic definitions
-│   └── config/               # Configuration (future)
-├── plugins/onex/             # Claude Code plugin
-│   ├── hooks/                # Hook configuration
-│   │   ├── hooks.json        # Hook definitions
-│   │   └── scripts/          # Shell handlers
-│   ├── agents/               # Agent YAML configs
-│   ├── commands/             # Command definitions
-│   └── skills/               # Skill definitions
-├── tests/                    # Test suite
-├── pyproject.toml            # Package config
-└── CLAUDE.md                 # Development guide
+├── src/omniclaude/              # Main Python package
+│   ├── hooks/                   # Core hook module
+│   │   ├── schemas.py           # Frozen Pydantic event models
+│   │   ├── topics.py            # Kafka topic definitions (TopicBase enum)
+│   │   ├── handler_context_injection.py
+│   │   ├── handler_event_emitter.py
+│   │   └── contracts/           # YAML contracts + Python models
+│   ├── aggregators/             # Session aggregation
+│   ├── cli/                     # CLI entry points
+│   ├── config/                  # Pydantic Settings
+│   ├── contracts/               # Cross-cutting contract models
+│   ├── handlers/                # Business logic handlers
+│   ├── lib/                     # Shared utilities
+│   ├── nodes/                   # ONEX node implementations
+│   ├── publisher/               # Event publisher
+│   └── runtime/                 # Runtime support
+├── plugins/onex/                # Claude Code plugin root
+│   ├── hooks/
+│   │   ├── hooks.json           # Hook configuration (tool matchers, script paths)
+│   │   ├── scripts/             # Shell handlers (session-start.sh, user-prompt-submit.sh, …)
+│   │   └── lib/                 # 55+ Python handler modules
+│   │       ├── emit_client_wrapper.py       # Public: event emission via daemon
+│   │       ├── context_injection_wrapper.py # Public: inject learned patterns
+│   │       ├── route_via_events_wrapper.py  # Public: agent routing
+│   │       ├── correlation_manager.py       # Public: correlation ID persistence
+│   │       ├── delegation_orchestrator.py   # Local LLM delegation
+│   │       ├── pattern_enforcement.py       # Compliance enforcement
+│   │       └── …                            # Internal implementation modules
+│   ├── agents/configs/          # 53 agent YAML definitions
+│   ├── commands/                # 4 slash command definitions
+│   └── skills/                  # 55+ skill definitions
+├── docs/                        # Architecture decision records and proposals
+├── tests/                       # Test suite (unit, integration)
+├── pyproject.toml               # Package config
+└── CLAUDE.md                    # Development guide and reference
 ```
 
-## Event Schemas
+## Kafka Topics
 
-ONEX-compatible event schemas for Claude Code hooks:
+Topics follow the ONEX canonical format: `onex.{kind}.{producer}.{event-name}.v{n}`
 
-| Event | Schema | Purpose |
-|-------|--------|---------|
-| Session Start | `ModelSessionStarted` | Session initialization |
-| Session End | `ModelSessionEnded` | Session completion |
-| Prompt Submit | `ModelPromptSubmitted` | User prompt submission |
-| Tool Execute | `ModelToolExecuted` | Tool completion |
+| Topic | Kind | Purpose |
+|-------|------|---------|
+| `onex.evt.omniclaude.session-started.v1` | evt | Session initialization |
+| `onex.evt.omniclaude.session-ended.v1` | evt | Session close |
+| `onex.evt.omniclaude.prompt-submitted.v1` | evt | 100-char prompt preview (broad access) |
+| `onex.evt.omniclaude.tool-executed.v1` | evt | Tool completion metrics |
+| `onex.cmd.omniintelligence.claude-hook-event.v1` | cmd | Full prompt — intelligence only (restricted) |
+| `onex.cmd.omniintelligence.tool-content.v1` | cmd | Tool content for pattern learning (restricted) |
+| `onex.cmd.omninode.routing-requested.v1` | cmd | Agent routing requests |
+| `onex.evt.omniclaude.routing-decision.v1` | evt | Routing outcomes and confidence scores |
+| `onex.evt.omniclaude.manifest-injected.v1` | evt | Agent manifest injection tracking |
+| `onex.evt.omniclaude.context-injected.v1` | evt | Context enrichment tracking |
+| `onex.evt.omniclaude.task-delegated.v1` | evt | Local LLM delegation events |
+| `onex.cmd.omniintelligence.compliance-evaluate.v1` | cmd | Compliance evaluation requests |
 
-```python
-from omniclaude.hooks import (
-    ModelSessionStarted,
-    TopicBase,
-    build_topic,
-)
+Full topic list: `src/omniclaude/hooks/topics.py`
 
-# Create event
-event = ModelSessionStarted(
-    session_id="abc123",
-    working_directory="/workspace/project",
-    hook_source="startup",
-)
+## Privacy Design
 
-# Get Kafka topic
-topic = build_topic("", TopicBase.SESSION_STARTED)
-# → "onex.evt.omniclaude.session-started.v1"
+`prompt_preview` captures the **first 100 characters** of each user prompt only — full prompt content is never stored in observability topics. The field also automatically redacts secrets: OpenAI keys (`sk-*`), AWS keys (`AKIA*`), GitHub tokens (`ghp_*`), Slack tokens (`xox*`), PEM keys, Bearer tokens, and passwords in URLs. Full prompt content is sent exclusively to the access-restricted `onex.cmd.omniintelligence.*` topics consumed only by the OmniIntelligence service.
+
+## Development
+
+```bash
+uv sync --group dev              # Install with dev tools
+
+uv run pytest tests/ -m unit -v  # Unit tests (no services required)
+uv run pytest tests/ -v          # All tests
+
+uv run ruff check src/ tests/    # Lint
+uv run ruff format src/ tests/   # Format
+uv run mypy src/omniclaude/      # Type check (strict)
+uv run bandit -r src/omniclaude/ # Security scan
 ```
 
-## Privacy Considerations
+Integration tests require Kafka:
 
-The event schemas are designed with privacy in mind using a **data minimization** approach.
-
-### Prompt Preview Field
-
-The `prompt_preview` field captures a **truncated preview** of user prompts:
-
-| Attribute | Value | Rationale |
-|-----------|-------|-----------|
-| Max Length | 200 characters | Limits exposure while preserving intent detection |
-| Truncation | Hard cut at 200 chars | No smart truncation to avoid unintended data exposure |
-| Full Content | **Never stored** | Only preview + length metadata |
-| PII Handling | **User responsibility** | Prompts may contain sensitive data |
-
-**What is captured**:
-- First 200 characters of the prompt text
-- Total character count (`prompt_length`)
-- Optional classified intent (`detected_intent`)
-
-**What is NOT captured**:
-- Full prompt content beyond 200 chars
-- File contents read/written by tools
-- API keys, credentials, or secrets (unless in first 200 chars of prompt)
-
-### Other Privacy Considerations
-
-- **Working Directory**: Paths may reveal project names. Consider this when configuring consumers.
-- **Tool Summaries**: The `summary` field (max 500 chars) on tool events may contain file paths.
-- **Session IDs**: UUIDs are pseudonymous but can be correlated within a session.
-
-### Recommendations
-
-1. **Access Control**: Use Kafka topic-level ACLs to restrict access to event streams
-2. **Data Retention**: Configure appropriate retention (e.g., 7-30 days for learning events)
-3. **Audit Logging**: Track access to event consumers
-4. **Encryption**: Enable TLS for Kafka connections
-5. **User Consent**: Inform users that session metadata is collected for learning
-
-## Schema Evolution
-
-Event schemas follow **semantic versioning** for backwards compatibility.
-
-### Version Change Rules
-
-| Change Type | Version Bump | Example | Consumer Impact |
-|-------------|--------------|---------|-----------------|
-| **Patch** (1.0.x) | Bug fixes, docs | Field description update | None |
-| **Minor** (1.x.0) | New optional fields | Adding `metadata` field with default | None (backwards compatible) |
-| **Major** (x.0.0) | Breaking changes | Renaming/removing fields | Requires consumer update |
-
-### Current Schema Version
-
-**Version**: 1.0.0 (initial release)
-
-### Evolution Strategy
-
-**Adding Fields (Minor Version)**:
-1. New fields MUST be optional with sensible defaults
-2. Use `Field(default=None)` or `Field(default_factory=...)` in Pydantic
-3. Producers upgrade first, then consumers
-4. No topic version change required
-
-**Breaking Changes (Major Version)**:
-1. Create new topic version (e.g., `omniclaude.session.started.v2`)
-2. Run old and new topics in parallel during migration
-3. Producers emit to both topics temporarily
-4. Consumers migrate to new topic at their pace
-5. Deprecate old topic after migration window
-
-**Consumer Guidelines**:
-- Use `extra="ignore"` in Pydantic models to ignore unknown fields
-- Always check schema version in envelope before processing
-- Implement graceful degradation for missing optional fields
-
-### Example: Adding a New Field
-
-```python
-# Version 1.0.0
-class ModelHookSessionStartedPayload(BaseModel):
-    session_id: str
-    working_directory: str
-    # ... existing fields
-
-# Version 1.1.0 - Adding optional field (backwards compatible)
-class ModelHookSessionStartedPayload(BaseModel):
-    session_id: str
-    working_directory: str
-    # New optional field with default
-    user_agent: str | None = Field(default=None, description="Client user agent")
-```
-
-## Dependencies
-
-```toml
-dependencies = [
-    "omnibase-core>=0.8.0,<0.9.0",
-    "omnibase-spi>=0.5.0,<0.6.0",
-    "omnibase-infra>=0.2.1,<0.3.0",
-    "pydantic>=2.9.0",
-    "pydantic-settings>=2.6.0",
-]
+```bash
+KAFKA_INTEGRATION_TESTS=1 uv run pytest -m integration
 ```
 
 ## Documentation
 
-- [CLAUDE.md](CLAUDE.md) - Development guide and reference
-- [RUNBOOK_VERTICAL_DEMO.md](plugins/onex/docs/RUNBOOK_VERTICAL_DEMO.md) - Pattern pipeline demo
-
-## Contributing
-
-This project is part of the OmniNode ecosystem. See the main documentation for contribution guidelines.
-
-## License
-
-MIT License - See LICENSE file for details.
+- [CLAUDE.md](CLAUDE.md) — Architecture, invariants, failure modes, performance budgets, and where to change things
+- [docs/](docs/) — Architecture decision records and design proposals
