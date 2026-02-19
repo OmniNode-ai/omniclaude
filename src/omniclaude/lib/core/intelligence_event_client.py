@@ -181,6 +181,9 @@ class IntelligenceEventClient:
             "source": "omniclaude",
             "correlation_id": correlation_id,
             "causation_id": correlation_id,
+            # schema_ref is a schema registry URI (registry:// scheme), not a Kafka topic name.
+            # Schema registry paths use a separate naming hierarchy from Kafka topics and were
+            # NOT renamed as part of the OMN-2367 topic convention update.
             "schema_ref": "registry://omninode/intelligence/code_analysis_requested/v1",
             "payload": {
                 "source_path": source_path,

@@ -139,7 +139,7 @@ except ImportError:  # pragma: no cover
 # explicit teardown in tests.
 
 # Not thread-safe: hook execution is single-threaded by design
-_cached_classifier: TaskClassifier | None = None
+_cached_classifier: TaskClassifier | None = None  # type: ignore[valid-type]  # TaskClassifier may be None on failed import (graceful degradation)
 
 
 def _get_classifier() -> TaskClassifier:
@@ -536,22 +536,13 @@ def _emit_compliance_advisory(
 
         from omniclaude.hooks.topics import TopicBase
 
-        # NOTE: TopicBase.COMPLIANCE_EVALUATE is an onex.cmd.omniintelligence.*
-        # topic, which CLAUDE.md restricts to "full prompts only."  The payload
-        # here is the handler's *generated* output (an LLM-produced response),
-        # not the user's raw prompt.  It contains no user PII and is safe for
-        # the compliance pipeline topic — the restriction exists to guard raw
-        # user input, not downstream model outputs.
-        # The ``session_id`` and ``correlation_id`` fields are non-PII session
-        # identifiers used exclusively for distributed tracing correlation; they
-        # carry no user-identifiable content and are safe to include on this topic.
-        # The 500-char truncation is the agreed privacy boundary for this topic.
-        # This is an intentional, reviewed deviation from CLAUDE.md's "full prompts
-        # only" framing for cmd.omniintelligence topics — the handler output is
-        # model-generated, not user-supplied, and has been classified as safe for
-        # this restricted topic.
-        # See ADR-005 deviation note: model output may contain prompt echoes;
-        # compliance-evaluate.v1 is access-restricted
+        # INTENTIONAL (ADR-005, reviewed): sending model-generated output to an
+        # access-restricted cmd.omniintelligence.* topic is correct per CLAUDE.md —
+        # cmd topics are the preferred channel for content that may contain model
+        # echoes of user input.  The ``response[:500]`` truncation caps the echo
+        # blast radius to 500 chars, which is the agreed privacy boundary for this
+        # topic.  This is NOT an oversight; the alternative (evt.*) would be wrong
+        # because evt topics have broad access and this content could echo user input.
         emit_event(
             event_type=TopicBase.COMPLIANCE_EVALUATE,
             payload={
@@ -722,9 +713,7 @@ def orchestrate_delegation(
             )
             return {"delegated": False, "reason": "feature_disabled"}
 
-        # Gate 2: Classification — use module-level TaskClassifier (patchable in tests)
-        _classifier_cls = TaskClassifier  # noqa: F821  (module-level name)
-
+        # Gate 2: Classification
         try:
             classifier = _get_classifier()
             score = classifier.is_delegatable(prompt)
