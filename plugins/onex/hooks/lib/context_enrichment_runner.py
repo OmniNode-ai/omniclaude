@@ -86,6 +86,12 @@ try:
 except ImportError:
     _emit_enrichment_events = None
 
+# Optional emit client reset — graceful degradation when unavailable
+try:
+    from emit_client_wrapper import reset_client as _reset_emit_client
+except ImportError:
+    _reset_emit_client = None
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -344,6 +350,13 @@ def main() -> None:
     if enable_pipeline != "true" or enable_enrichment != "true":
         print(json.dumps(_empty_output()))
         sys.exit(0)
+
+    # Cap the emit socket timeout to 50ms when running as a subprocess.
+    # The default 5s socket timeout can cause subprocess.run(timeout=5) to
+    # expire in test environments where no emit daemon is present (OMN-2344).
+    os.environ.setdefault("OMNICLAUDE_EMIT_TIMEOUT", "0.05")
+    if _reset_emit_client is not None:
+        _reset_emit_client()
 
     # Check that at least one handler is available
     if all(
