@@ -1212,6 +1212,112 @@ class TestOrchestratedDelegationSuccess:
 
 
 # ---------------------------------------------------------------------------
+# _emit_delegation_event unit tests (real function, mock only emit_event)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestEmitDelegationEvent:
+    """Tests for the internal logic of _emit_delegation_event.
+
+    Calls the REAL function — only the inner ``emit_event`` call is mocked
+    so that we can inspect the payload that would be sent to Kafka.
+
+    Because ``emit_event`` is imported with a local ``from emit_client_wrapper
+    import emit_event`` inside the function's try block, we inject the mock
+    via ``sys.modules`` before the call so the local import resolves to our
+    mock object.
+    """
+
+    def _run(
+        self,
+        mock_emit: MagicMock,
+        *,
+        session_id: str = "abc-session",
+        correlation_id: str = "00000000-0000-0000-0000-000000000001",
+        task_type: str = "document",
+        handler_name: str = "doc_gen",
+        model_name: str = "Qwen2.5-72B",
+        quality_gate_passed: bool = True,
+        quality_gate_reason: str = "",
+        delegation_success: bool = True,
+        savings_usd: float = 0.01,
+        latency_ms: int = 250,
+        emitted_at: datetime | None = None,
+    ) -> None:
+        """Helper: inject mock emit_client_wrapper and call _emit_delegation_event."""
+        if emitted_at is None:
+            emitted_at = datetime(2025, 6, 1, 12, 0, 0, tzinfo=UTC)
+
+        # Build a fake emit_client_wrapper module with our mock emit_event.
+        fake_module = MagicMock()
+        fake_module.emit_event = mock_emit
+
+        original = sys.modules.get("emit_client_wrapper")
+        sys.modules["emit_client_wrapper"] = fake_module
+        try:
+            do._emit_delegation_event(
+                session_id=session_id,
+                correlation_id=correlation_id,
+                task_type=task_type,
+                handler_name=handler_name,
+                model_name=model_name,
+                quality_gate_passed=quality_gate_passed,
+                quality_gate_reason=quality_gate_reason,
+                delegation_success=delegation_success,
+                savings_usd=savings_usd,
+                latency_ms=latency_ms,
+                emitted_at=emitted_at,
+            )
+        finally:
+            if original is None:
+                sys.modules.pop("emit_client_wrapper", None)
+            else:
+                sys.modules["emit_client_wrapper"] = original
+
+    def test_emit_uses_unknown_session_id_when_empty(self) -> None:
+        """session_id='' causes the payload to use 'unknown' for session_id."""
+        mock_emit = MagicMock()
+        self._run(mock_emit, session_id="")
+
+        mock_emit.assert_called_once()
+        payload = mock_emit.call_args.kwargs["payload"]
+        assert payload["session_id"] == "unknown"
+
+    def test_emit_truncates_quality_gate_reason_at_200(self) -> None:
+        """A quality_gate_reason longer than 200 chars is truncated to 200 in the payload."""
+        long_reason = "x" * 300
+        mock_emit = MagicMock()
+        self._run(
+            mock_emit,
+            quality_gate_passed=False,
+            quality_gate_reason=long_reason,
+            delegation_success=False,
+        )
+
+        mock_emit.assert_called_once()
+        payload = mock_emit.call_args.kwargs["payload"]
+        assert payload["quality_gate_reason"] is not None
+        assert len(payload["quality_gate_reason"]) == 200
+        assert payload["quality_gate_reason"] == "x" * 200
+
+    def test_emit_generates_uuid_when_correlation_id_invalid(self) -> None:
+        """Passing a non-UUID correlation_id does not raise; a placeholder UUID is generated."""
+        mock_emit = MagicMock()
+        # Should not raise even with an invalid UUID string.
+        self._run(mock_emit, correlation_id="not-a-uuid")
+
+        # emit_event was still called — function recovered gracefully.
+        mock_emit.assert_called_once()
+
+    def test_emit_swallows_exceptions(self) -> None:
+        """If emit_event raises, _emit_delegation_event does not propagate the exception."""
+        mock_emit = MagicMock(side_effect=RuntimeError("Kafka unavailable"))
+        # Must not raise.
+        self._run(mock_emit)
+
+
+# ---------------------------------------------------------------------------
 # orchestrate_delegation alias test
 # ---------------------------------------------------------------------------
 

@@ -58,6 +58,48 @@ _LIB_DIR = str(_SCRIPT_DIR)
 if _LIB_DIR not in sys.path:
     sys.path.insert(0, _LIB_DIR)
 
+# ---------------------------------------------------------------------------
+# Secret redaction (imported after path setup so secret_redactor is on sys.path)
+# ---------------------------------------------------------------------------
+try:
+    from secret_redactor import (
+        redact_secrets as _redact_secrets,  # type: ignore[import]
+    )
+except ImportError:
+    # Minimal inline fallback covering the patterns documented in CLAUDE.md.
+    import re as _re
+
+    _INLINE_SECRET_PATTERNS: list[tuple[_re.Pattern[str], str]] = [
+        (_re.compile(r"\bsk-[a-zA-Z0-9]{20,}", _re.IGNORECASE), "sk-***REDACTED***"),
+        (_re.compile(r"\bAKIA[A-Z0-9]{16}", _re.IGNORECASE), "AKIA***REDACTED***"),
+        (_re.compile(r"\bghp_[a-zA-Z0-9]{36}", _re.IGNORECASE), "ghp_***REDACTED***"),
+        (
+            _re.compile(r"\bxox[baprs]-[a-zA-Z0-9-]{10,}", _re.IGNORECASE),
+            "xox*-***REDACTED***",
+        ),
+        (
+            _re.compile(
+                r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED )?PRIVATE KEY-----"
+            ),
+            "-----BEGIN ***REDACTED*** PRIVATE KEY-----",
+        ),
+        (
+            _re.compile(r"(Bearer\s+)[a-zA-Z0-9._-]{20,}", _re.IGNORECASE),
+            r"\1***REDACTED***",
+        ),
+        (_re.compile(r"(://[^:]+:)[^@]+(@)"), r"\1***REDACTED***\2"),
+    ]
+
+    def _redact_secrets(text: str) -> str:  # type: ignore[misc]
+        result = text
+        for pattern, replacement in _INLINE_SECRET_PATTERNS:
+            result = pattern.sub(replacement, result)
+        return result
+
+    logger.debug(
+        "secret_redactor not available; using inline fallback for prompt redaction"
+    )
+
 
 # ---------------------------------------------------------------------------
 # Module-level imports (after path setup, with graceful fallback)
@@ -680,7 +722,19 @@ def orchestrate_delegation(
         endpoint_url, model_name, system_prompt, handler_name = endpoint_result
 
         # Gate 4: LLM call with task-specific system prompt
-        llm_result = _call_llm_with_system_prompt(prompt, endpoint_url, system_prompt)
+        # Redact secrets from the prompt before forwarding to the local LLM
+        # (CLAUDE.md invariant: "Automatic secret redaction").
+        try:
+            redacted_prompt = _redact_secrets(prompt)
+        except Exception as _redact_exc:
+            logger.debug(
+                "Secret redaction failed (using original prompt): %s", _redact_exc
+            )
+            redacted_prompt = prompt
+
+        llm_result = _call_llm_with_system_prompt(
+            redacted_prompt, endpoint_url, system_prompt
+        )
         if llm_result is None:
             latency_ms = int((time.time() - start_time) * 1000)
             _emit_delegation_event(
