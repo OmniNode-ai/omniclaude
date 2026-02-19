@@ -423,3 +423,63 @@ class TestLocalLlmEndpointRegistry:
         # Should not raise
         registry = make_registry()
         assert len(registry.get_all_endpoints()) == 1
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "field_env_var",
+        [
+            "LLM_CODER_MODEL_NAME",
+            "LLM_CODER_FAST_MODEL_NAME",
+            "LLM_EMBEDDING_MODEL_NAME",
+            "LLM_FUNCTION_MODEL_NAME",
+            "LLM_DEEPSEEK_LITE_MODEL_NAME",
+            "LLM_QWEN_72B_MODEL_NAME",
+            "LLM_VISION_MODEL_NAME",
+            "LLM_DEEPSEEK_R1_MODEL_NAME",
+            "LLM_QWEN_14B_MODEL_NAME",
+        ],
+    )
+    def test_whitespace_only_model_name_rejected(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        _clean_env: None,
+        make_registry: Callable[..., LocalLlmEndpointRegistry],
+        field_env_var: str,
+    ) -> None:
+        """Whitespace-only model names are rejected at validation time."""
+        monkeypatch.setenv(field_env_var, "   ")
+        with pytest.raises(ValidationError, match="whitespace"):
+            make_registry()
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "field_env_var",
+        [
+            "LLM_CODER_MODEL_NAME",
+            "LLM_CODER_FAST_MODEL_NAME",
+            "LLM_EMBEDDING_MODEL_NAME",
+        ],
+    )
+    def test_tabs_only_model_name_rejected(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        _clean_env: None,
+        make_registry: Callable[..., LocalLlmEndpointRegistry],
+        field_env_var: str,
+    ) -> None:
+        """Tab-only model names are also rejected (tabs are whitespace)."""
+        monkeypatch.setenv(field_env_var, "\t\t")
+        with pytest.raises(ValidationError, match="whitespace"):
+            make_registry()
+
+    @pytest.mark.unit
+    def test_valid_model_name_with_spaces_accepted(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        _clean_env: None,
+        make_registry: Callable[..., LocalLlmEndpointRegistry],
+    ) -> None:
+        """A model name with interior spaces (but non-empty when stripped) is accepted."""
+        monkeypatch.setenv("LLM_CODER_MODEL_NAME", "my model v2")
+        registry = make_registry()
+        assert registry.llm_coder_model_name == "my model v2"

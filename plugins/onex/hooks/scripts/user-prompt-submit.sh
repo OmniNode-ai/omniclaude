@@ -138,7 +138,7 @@ WORKFLOW_DETECTED="false"
 # "/local-review ...code review..." would incorrectly match code-quality-analyzer).
 if [[ "$PROMPT" =~ ^/[a-zA-Z_-] ]]; then
     SLASH_CMD="$(echo "$PROMPT" | grep -oE '^/[a-zA-Z_-]+' || echo "")"
-    log "Slash command detected: ${SLASH_CMD} — skipping agent routing, no agent pre-selected (Claude selects from candidates)"
+    log "Slash command detected: ${SLASH_CMD} — skipping agent routing (slash commands manage their own dispatch)"
     ROUTING_RESULT='{"selected_agent":"","confidence":1.0,"reasoning":"slash_command_bypass","method":"slash_command","domain":"","purpose":"","candidates":[]}'
     # Update tab activity for statusline (e.g. "/ticket-work" → "ticket-work")
     update_tab_activity "${SLASH_CMD#/}"

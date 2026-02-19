@@ -493,33 +493,51 @@ def _parse_routing_timeout(
 ) -> float:
     """Parse a timeout value from an environment variable string.
 
+    Enforces a lower bound (``min_val``) and an upper bound of 60 seconds.
+    Values outside either bound are rejected and ``default`` is returned
+    instead.  The 60-second ceiling prevents accidental misconfiguration
+    (e.g. ``LLM_ROUTING_TIMEOUT_S=600``) from freezing the hook indefinitely.
+
     Args:
         raw: Raw string value from the environment (or None / empty string).
         default: Value to return when raw is absent, unparseable, or invalid.
-        min_val: Minimum acceptable value; values <= 0 are rejected.
+        min_val: Minimum acceptable value; values <= min_val are rejected.
 
     Returns:
         Parsed float timeout, or ``default`` when the input is absent or
-        invalid.  Warnings are written to stderr so they do not pollute the
-        hook's JSON stdout.
+        invalid.  Warnings are written to both stderr and the module logger
+        so they do not pollute the hook's JSON stdout while still appearing
+        in structured log output.
     """
+    _MAX_TIMEOUT_S = 60.0  # Hard ceiling — values above this indicate misconfiguration
+
     if not raw:
         return default
     try:
         value = float(raw)
     except ValueError:
-        print(
+        msg = (
             f"[route_via_events_wrapper] WARNING: invalid timeout value {raw!r} "
-            f"(expected float) — using default {default}s",
-            file=sys.stderr,
+            f"(expected float) — using default {default}s"
         )
+        print(msg, file=sys.stderr)
+        logger.warning(msg)
         return default
-    if value <= 0:
-        print(
-            f"[route_via_events_wrapper] WARNING: timeout value {value} is <= 0 "
-            f"— using default {default}s",
-            file=sys.stderr,
+    if value <= min_val:
+        msg = (
+            f"[route_via_events_wrapper] WARNING: timeout value {value} is <= {min_val} "
+            f"— using default {default}s"
         )
+        print(msg, file=sys.stderr)
+        logger.warning(msg)
+        return default
+    if value > _MAX_TIMEOUT_S:
+        msg = (
+            f"[route_via_events_wrapper] WARNING: timeout value {value} exceeds "
+            f"maximum allowed {_MAX_TIMEOUT_S}s — clamping to default {default}s"
+        )
+        print(msg, file=sys.stderr)
+        logger.warning(msg)
         return default
     return value
 

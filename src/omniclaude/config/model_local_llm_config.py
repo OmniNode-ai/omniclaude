@@ -54,7 +54,7 @@ import functools
 import logging
 from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -286,6 +286,38 @@ class LocalLlmEndpointRegistry(BaseSettings):
         min_length=1,
         description="Model ID to send in API requests for the Qwen 14B endpoint",
     )
+
+    @field_validator(
+        "llm_coder_model_name",
+        "llm_coder_fast_model_name",
+        "llm_embedding_model_name",
+        "llm_function_model_name",
+        "llm_deepseek_lite_model_name",
+        "llm_qwen_72b_model_name",
+        "llm_vision_model_name",
+        "llm_deepseek_r1_model_name",
+        "llm_qwen_14b_model_name",
+        mode="before",
+    )
+    @classmethod
+    def validate_model_name_not_whitespace(cls, v: object) -> object:
+        """Reject model names that are empty or consist only of whitespace.
+
+        A value like ``"   "`` passes ``min_length=1`` but is not a valid model
+        ID. This validator strips the value and raises if nothing remains.
+
+        Args:
+            v: The raw field value before Pydantic coerces it.
+
+        Returns:
+            The original (unstripped) value when it is non-empty after stripping.
+
+        Raises:
+            ValueError: When the value is a string containing only whitespace.
+        """
+        if isinstance(v, str) and not v.strip():
+            raise ValueError("model name must not be empty or whitespace-only")
+        return v
 
     # =========================================================================
     # LATENCY BUDGETS (per endpoint, in milliseconds)

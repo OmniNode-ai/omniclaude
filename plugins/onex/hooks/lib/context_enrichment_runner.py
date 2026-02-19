@@ -233,7 +233,13 @@ async def _run_all_enrichments(
 
     for name, cls in handler_map:
         if cls is not None:
-            handler_instance = cls()
+            try:
+                handler_instance = cls()
+            except Exception as exc:
+                logger.warning(
+                    "Failed to instantiate enrichment handler %r: %s", name, exc
+                )
+                continue
             task = asyncio.create_task(
                 _run_single_enrichment(name, handler_instance, prompt, project_path)
             )
