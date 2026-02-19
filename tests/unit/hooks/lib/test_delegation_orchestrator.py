@@ -1162,7 +1162,9 @@ class TestOrchestratedDelegationSuccess:
     def test_never_raises_on_unexpected_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """orchestrate_delegation never raises; any error -> delegated=False."""
+        """SystemError (subclass of Exception) is caught by the inner except
+        around classifier instantiation (~lines 678-685), not the outer guard.
+        Result is delegated=False with reason containing "classification_error"."""
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
 

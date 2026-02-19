@@ -758,8 +758,8 @@ def orchestrate_delegation(
             _emit_delegation_event(
                 session_id=session_id,
                 correlation_id=correlation_id,
-                task_type="unknown",
-                handler_name="unknown",
+                task_type=intent_value,
+                handler_name=handler_name,
                 model_name="unknown",
                 quality_gate_passed=False,
                 quality_gate_reason="pre_gate:redaction_error",
