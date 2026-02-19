@@ -1105,11 +1105,18 @@ class ModelContextUtilizationPayload(BaseModel):
         correlation_id: Correlation ID for distributed tracing.
         causation_id: ID of the event that triggered this measurement.
         emitted_at: Timestamp when the event was emitted (UTC).
+        cohort: Experiment cohort assignment ("treatment" or "control").
+            Required by omnidash isExtractionBaseEvent() type guard.
+        injection_occurred: Whether context was actually injected this session.
+        agent_name: Selected agent name for this session.
         utilization_score: Ratio of reused identifiers (0.0-1.0).
         method: Detection method used ("identifier_overlap" or "timeout_fallback").
         injected_count: Number of identifiers found in injected context.
         reused_count: Number of injected identifiers found in response.
         detection_duration_ms: Time taken for utilization detection.
+        user_visible_latency_ms: Total user-visible hook latency in milliseconds.
+        cache_hit: Whether patterns were served from cache (vs database).
+        patterns_count: Number of patterns injected this session.
     """
 
     model_config = ConfigDict(
@@ -1143,6 +1150,39 @@ class ModelContextUtilizationPayload(BaseModel):
     emitted_at: TimezoneAwareDatetime = Field(
         ...,
         description="Timestamp when the event was emitted (UTC)",
+    )
+
+    # Extraction pipeline fields — required by omnidash isExtractionBaseEvent() type guard
+    cohort: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Experiment cohort assignment ('treatment' or 'control'). "
+            "Required by omnidash isExtractionBaseEvent() type guard."
+        ),
+    )
+    injection_occurred: bool = Field(
+        ...,
+        description="Whether context was actually injected (patterns_count > 0)",
+    )
+    agent_name: str | None = Field(
+        default=None,
+        description="Selected agent name for this session (e.g. 'agent-api-architect')",
+    )
+    user_visible_latency_ms: int | None = Field(
+        default=None,
+        ge=0,
+        le=600000,
+        description="Total user-visible hook latency in milliseconds",
+    )
+    cache_hit: bool = Field(
+        default=False,
+        description="Whether patterns were served from cache (vs database)",
+    )
+    patterns_count: int = Field(
+        default=0,
+        ge=0,
+        description="Number of patterns injected this session",
     )
 
     # Utilization metrics
@@ -1186,10 +1226,13 @@ class ModelAgentMatchPayload(BaseModel):
         correlation_id: Correlation ID for distributed tracing.
         causation_id: ID of the routing event being evaluated.
         emitted_at: Timestamp when the event was emitted (UTC).
+        cohort: Experiment cohort assignment ("treatment" or "control").
+            Required by omnidash isExtractionBaseEvent() type guard.
         selected_agent: Agent that was selected by routing.
         expected_agent: Expected agent (from feedback or heuristics), if known.
         match_grade: Quality of match ("exact", "partial", "mismatch", "unknown").
-        confidence: Routing confidence score (0.0-1.0).
+        agent_match_score: Graded accuracy of agent selection vs session signals (0.0-1.0).
+        confidence: Routing confidence score from the router (0.0-1.0).
         routing_method: Method used for routing ("event_routing", "fallback", "cache").
     """
 
@@ -1226,6 +1269,16 @@ class ModelAgentMatchPayload(BaseModel):
         description="Timestamp when the event was emitted (UTC)",
     )
 
+    # Extraction pipeline field — required by omnidash isExtractionBaseEvent() type guard
+    cohort: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Experiment cohort assignment ('treatment' or 'control'). "
+            "Required by omnidash isExtractionBaseEvent() type guard."
+        ),
+    )
+
     # Agent match metrics
     selected_agent: str = Field(
         ...,
@@ -1240,11 +1293,21 @@ class ModelAgentMatchPayload(BaseModel):
         ...,
         description="Quality of match: 'exact', 'partial', 'mismatch', or 'unknown'",
     )
+    agent_match_score: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Graded accuracy of agent selection vs session signals (0.0-1.0). "
+            "Computed by calculate_agent_match_score() comparing agent triggers "
+            "against observed session context signals."
+        ),
+    )
     confidence: float = Field(
         ...,
         ge=0.0,
         le=1.0,
-        description="Routing confidence score",
+        description="Routing confidence score from the router",
     )
     routing_method: Literal["event_routing", "fallback", "cache"] = Field(
         ...,
@@ -1264,12 +1327,17 @@ class ModelLatencyBreakdownPayload(BaseModel):
         correlation_id: Correlation ID for distributed tracing.
         causation_id: ID of the prompt event being measured.
         emitted_at: Timestamp when the event was emitted (UTC).
-        routing_ms: Time spent on agent routing.
-        agent_load_ms: Time spent loading agent YAML.
-        context_injection_ms: Time spent on context/pattern injection.
+        cohort: Experiment cohort assignment ("treatment" or "control").
+            Required by omnidash isExtractionBaseEvent() type guard.
+        routing_time_ms: Time spent on agent routing (renamed from routing_ms).
+        retrieval_time_ms: Time spent loading patterns from database.
+        injection_time_ms: Time spent on context/pattern injection (renamed from context_injection_ms).
         intelligence_request_ms: Time spent on intelligence requests (optional).
         total_hook_ms: Total hook execution time.
-        user_perceived_ms: User-perceived latency (optional).
+        user_visible_latency_ms: User-visible latency from prompt submit to hook completion
+            (renamed from user_perceived_ms).
+        cache_hit: Whether patterns were served from cache (vs database).
+        agent_load_ms: Time spent loading agent YAML (retained for observability).
     """
 
     model_config = ConfigDict(
@@ -1305,20 +1373,30 @@ class ModelLatencyBreakdownPayload(BaseModel):
         description="Timestamp when the event was emitted (UTC)",
     )
 
-    # Latency breakdown
-    routing_ms: int = Field(
+    # Extraction pipeline field — required by omnidash isExtractionBaseEvent() type guard
+    cohort: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Experiment cohort assignment ('treatment' or 'control'). "
+            "Required by omnidash isExtractionBaseEvent() type guard."
+        ),
+    )
+
+    # Latency breakdown — field names aligned with omnidash latency_breakdowns table
+    routing_time_ms: int = Field(
         ...,
         ge=0,
         le=60000,
         description="Time spent on agent routing in milliseconds",
     )
-    agent_load_ms: int = Field(
-        ...,
+    retrieval_time_ms: int | None = Field(
+        default=None,
         ge=0,
         le=60000,
-        description="Time spent loading agent YAML in milliseconds",
+        description="Time spent loading patterns from database in milliseconds",
     )
-    context_injection_ms: int = Field(
+    injection_time_ms: int = Field(
         ...,
         ge=0,
         le=60000,
@@ -1336,11 +1414,21 @@ class ModelLatencyBreakdownPayload(BaseModel):
         le=600000,
         description="Total hook execution time in milliseconds",
     )
-    user_perceived_ms: int | None = Field(
+    user_visible_latency_ms: int | None = Field(
         default=None,
         ge=0,
         le=600000,
-        description="User-perceived latency from prompt to response start (optional)",
+        description="User-visible latency from prompt submit to hook completion in milliseconds",
+    )
+    cache_hit: bool = Field(
+        default=False,
+        description="Whether patterns were served from cache (vs database)",
+    )
+    agent_load_ms: int = Field(
+        default=0,
+        ge=0,
+        le=60000,
+        description="Time spent loading agent YAML in milliseconds (observability only)",
     )
 
 
