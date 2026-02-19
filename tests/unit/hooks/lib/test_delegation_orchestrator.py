@@ -776,6 +776,60 @@ class TestLlmCallFailure:
         call_kwargs = mock_emit.call_args.kwargs
         assert call_kwargs.get("delegation_success") is False
 
+    def test_redaction_failure_aborts_delegation(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When _redact_secrets raises, delegation is aborted with reason='redaction_error'.
+
+        The old behavior forwarded the unredacted prompt to the LLM; the new
+        behavior aborts immediately to prevent secret exposure (CLAUDE.md invariant:
+        'Automatic secret redaction').
+        """
+        _score, classifier_mock, endpoint_tuple = self._setup(monkeypatch)
+
+        with patch.object(do, "TaskClassifier", return_value=classifier_mock):
+            with patch.object(
+                do, "_select_handler_endpoint", return_value=endpoint_tuple
+            ):
+                with patch.object(
+                    do, "_redact_secrets", side_effect=RuntimeError("redaction broke")
+                ):
+                    result = do.orchestrate_delegation(
+                        prompt="document this function sk-abc123secretkey",
+                        correlation_id="corr-redact-fail",
+                    )
+
+        assert result["delegated"] is False
+        assert result.get("reason") == "redaction_error"
+
+    def test_model_name_forwarded_to_llm_call(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The model_name from the endpoint registry is passed to _call_llm_with_system_prompt.
+
+        Verifies that the call site passes model_name so the LLM request payload
+        uses the actual configured model identifier instead of the hardcoded 'local'.
+        """
+        _score, classifier_mock, endpoint_tuple = self._setup(monkeypatch)
+        # endpoint_tuple[1] is the model_name from the registry ("Qwen2.5-72B")
+
+        with patch.object(do, "TaskClassifier", return_value=classifier_mock):
+            with patch.object(
+                do, "_select_handler_endpoint", return_value=endpoint_tuple
+            ):
+                with patch.object(
+                    do, "_call_llm_with_system_prompt", return_value=None
+                ) as mock_llm_call:
+                    do.orchestrate_delegation(
+                        prompt="document this function",
+                        correlation_id="corr-model-name",
+                    )
+
+        mock_llm_call.assert_called_once()
+        call_args = mock_llm_call.call_args
+        # Positional args: (prompt, endpoint_url, system_prompt, model_name)
+        assert call_args.args[3] == "Qwen2.5-72B"
+
 
 # ---------------------------------------------------------------------------
 # Quality gate failure tests

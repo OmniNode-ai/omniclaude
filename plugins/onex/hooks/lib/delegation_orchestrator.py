@@ -219,6 +219,21 @@ _HANDLER_ROUTING: dict[str, tuple[str, str, str, int]] = {
     ),  # LlmEndpointPurpose.CODE_ANALYSIS
 }
 
+# Module-load validation of routing table purpose names
+try:
+    if LlmEndpointPurpose is not None:
+        _valid_purposes = {p.value for p in LlmEndpointPurpose}
+        for _intent, (_purpose, *_) in _HANDLER_ROUTING.items():
+            if _purpose not in _valid_purposes:
+                logger.warning(
+                    "HANDLER_ROUTING: intent=%r maps to unknown purpose=%r (valid: %s)",
+                    _intent,
+                    _purpose,
+                    sorted(_valid_purposes),
+                )
+except Exception:
+    pass
+
 # Error phrases that indicate the model refused or couldn't complete the request.
 # Checked against the first 200 characters of the response (case-insensitive).
 _ERROR_INDICATORS: tuple[str, ...] = (
@@ -327,6 +342,7 @@ def _call_llm_with_system_prompt(
     prompt: str,
     endpoint_url: str,
     system_prompt: str,
+    model_name: str = "local",
     timeout_s: float = _LLM_CALL_TIMEOUT_S,
 ) -> tuple[str, str] | None:
     """Call local LLM via OpenAI-compatible /v1/chat/completions with a system prompt.
@@ -335,6 +351,7 @@ def _call_llm_with_system_prompt(
         prompt: User prompt to send.
         endpoint_url: Base URL of the OpenAI-compatible endpoint (no trailing slash).
         system_prompt: System-level instruction for the model.
+        model_name: Model identifier to include in the request payload.
         timeout_s: HTTP request timeout in seconds.
 
     Returns:
@@ -360,7 +377,7 @@ def _call_llm_with_system_prompt(
 
     url = f"{endpoint_url}/v1/chat/completions"
     payload: dict[str, Any] = {
-        "model": "local",
+        "model": model_name,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": prompt},
@@ -488,6 +505,9 @@ def _emit_compliance_advisory(
         # not the user's raw prompt.  It contains no user PII and is safe for
         # the compliance pipeline topic — the restriction exists to guard raw
         # user input, not downstream model outputs.
+        # The ``session_id`` and ``correlation_id`` fields are non-PII session
+        # identifiers used exclusively for distributed tracing correlation; they
+        # carry no user-identifiable content and are safe to include on this topic.
         # The 500-char truncation is the agreed privacy boundary for this topic.
         emit_event(
             event_type=TopicBase.COMPLIANCE_EVALUATE,
@@ -726,14 +746,15 @@ def orchestrate_delegation(
         # (CLAUDE.md invariant: "Automatic secret redaction").
         try:
             redacted_prompt = _redact_secrets(prompt)
-        except Exception as _redact_exc:
+        except Exception as exc:
             logger.debug(
-                "Secret redaction failed (using original prompt): %s", _redact_exc
+                "Secret redaction failed; aborting delegation to protect secrets: %s",
+                exc,
             )
-            redacted_prompt = prompt
+            return {"delegated": False, "reason": "redaction_error"}
 
         llm_result = _call_llm_with_system_prompt(
-            redacted_prompt, endpoint_url, system_prompt
+            redacted_prompt, endpoint_url, system_prompt, model_name
         )
         if llm_result is None:
             latency_ms = int((time.time() - start_time) * 1000)
