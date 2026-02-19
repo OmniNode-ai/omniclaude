@@ -23,7 +23,9 @@ failures so that success rate (golden metric >80%) can be tracked downstream.
 Design constraints:
 - NEVER raises from ``orchestrate_delegation()``
 - All I/O is bounded (LLM call <= 7 s, emit timeout <= 50 ms)
-- No datetime.now() defaults — timestamps injected explicitly
+- No ``datetime.now()`` defaults in internal sub-functions — ``emitted_at`` is
+  injected explicitly through the call chain; the public entrypoint
+  (``orchestrate_delegation``) accepts an optional ``emitted_at`` for testing.
 - Module-level imports (after path setup) allow unit tests to patch them easily
 """
 
@@ -444,6 +446,7 @@ def _emit_compliance_advisory(
         # not the user's raw prompt.  It contains no user PII and is safe for
         # the compliance pipeline topic — the restriction exists to guard raw
         # user input, not downstream model outputs.
+        # The 500-char truncation is the agreed privacy boundary for this topic.
         emit_event(
             event_type=TopicBase.COMPLIANCE_EVALUATE,
             payload={
@@ -592,148 +595,176 @@ def orchestrate_delegation(
     emitted_at = emitted_at or datetime.now(UTC)
     start_time = time.time()
 
-    # Gate 1: Feature flags
-    if not _is_delegation_enabled():
-        return {"delegated": False, "reason": "feature_disabled"}
-
-    # Gate 2: Classification — use module-level TaskClassifier (patchable in tests)
-    _classifier_cls = TaskClassifier  # noqa: F821  (module-level name)
-    if _classifier_cls is None:
-        return {
-            "delegated": False,
-            "reason": "classification_error: TaskClassifier not available",
-        }
-
     try:
-        classifier = _classifier_cls()
-        score = classifier.is_delegatable(prompt)
-    except Exception as exc:
-        logger.debug("Classification failed: %s", exc)
-        return {
-            "delegated": False,
-            "reason": f"classification_error: {type(exc).__name__}",
-        }
+        # Gate 1: Feature flags
+        if not _is_delegation_enabled():
+            return {"delegated": False, "reason": "feature_disabled"}
 
-    if not score.delegatable:
-        reasons = "; ".join(score.reasons) if score.reasons else "not delegatable"
-        return {
-            "delegated": False,
-            "reason": reasons,
-            "confidence": score.confidence,
-        }
+        # Gate 2: Classification — use module-level TaskClassifier (patchable in tests)
+        _classifier_cls = TaskClassifier  # noqa: F821  (module-level name)
+        if _classifier_cls is None:
+            return {
+                "delegated": False,
+                "reason": "classification_error: TaskClassifier not available",
+            }
 
-    # Extract the intent value string for routing (reuse existing classifier instance).
-    try:
-        ctx = classifier.classify(prompt)
-        intent_value = ctx.primary_intent.value  # e.g., "document", "test", "research"
-    except Exception as exc:
-        logger.debug("Intent value extraction failed: %s", exc)
+        try:
+            classifier = _classifier_cls()
+            score = classifier.is_delegatable(prompt)
+        except Exception as exc:
+            logger.debug("Classification failed: %s", exc)
+            return {
+                "delegated": False,
+                "reason": f"classification_error: {type(exc).__name__}",
+            }
+
+        if not score.delegatable:
+            reasons = "; ".join(score.reasons) if score.reasons else "not delegatable"
+            return {
+                "delegated": False,
+                "reason": reasons,
+                "confidence": score.confidence,
+            }
+
+        # Extract the intent value string for routing (reuse existing classifier instance).
+        try:
+            ctx = classifier.classify(prompt)
+            intent_value = (
+                ctx.primary_intent.value
+            )  # e.g., "document", "test", "research"
+        except Exception as exc:
+            logger.debug("Intent value extraction failed: %s", exc)
+            latency_ms = int((time.time() - start_time) * 1000)
+            _emit_delegation_event(
+                session_id=session_id,
+                correlation_id=correlation_id,
+                task_type="unknown",
+                handler_name="unknown",
+                model_name="unknown",
+                quality_gate_passed=False,
+                quality_gate_reason=f"pre_gate:intent_extraction_error: {type(exc).__name__}",
+                delegation_success=False,
+                savings_usd=score.estimated_savings_usd,
+                latency_ms=latency_ms,
+                emitted_at=emitted_at,
+            )
+            return {
+                "delegated": False,
+                "reason": f"pre_gate:intent_extraction_error: {type(exc).__name__}",
+            }
+
+        # Gate 3: Endpoint selection for this specific task type
+        endpoint_result = _select_handler_endpoint(intent_value)
+        if endpoint_result is None:
+            latency_ms = int((time.time() - start_time) * 1000)
+            _emit_delegation_event(
+                session_id=session_id,
+                correlation_id=correlation_id,
+                task_type=intent_value,
+                handler_name="unknown",
+                model_name="unknown",
+                quality_gate_passed=False,
+                quality_gate_reason="pre_gate:no_endpoint_configured",
+                delegation_success=False,
+                savings_usd=score.estimated_savings_usd,
+                latency_ms=latency_ms,
+                emitted_at=emitted_at,
+            )
+            return {
+                "delegated": False,
+                "reason": "pre_gate:no_endpoint_configured",
+                "confidence": score.confidence,
+                "intent": intent_value,
+            }
+
+        endpoint_url, model_name, system_prompt, handler_name = endpoint_result
+
+        # Gate 4: LLM call with task-specific system prompt
+        llm_result = _call_llm_with_system_prompt(prompt, endpoint_url, system_prompt)
+        if llm_result is None:
+            latency_ms = int((time.time() - start_time) * 1000)
+            _emit_delegation_event(
+                session_id=session_id,
+                correlation_id=correlation_id,
+                task_type=intent_value,
+                handler_name=handler_name,
+                model_name=model_name,
+                quality_gate_passed=False,
+                quality_gate_reason="pre_gate:llm_call_failed",
+                delegation_success=False,
+                savings_usd=score.estimated_savings_usd,
+                latency_ms=latency_ms,
+                emitted_at=emitted_at,
+            )
+            return {
+                "delegated": False,
+                "reason": "pre_gate:llm_call_failed",
+                "confidence": score.confidence,
+                "intent": intent_value,
+            }
+
+        response_text, actual_model_name = llm_result
+        if not response_text or not response_text.strip():
+            latency_ms = int((time.time() - start_time) * 1000)
+            _emit_delegation_event(
+                session_id=session_id,
+                correlation_id=correlation_id,
+                task_type=intent_value,
+                handler_name=handler_name,
+                model_name=actual_model_name or model_name,
+                quality_gate_passed=False,
+                quality_gate_reason="pre_gate:empty_response",
+                delegation_success=False,
+                savings_usd=score.estimated_savings_usd,
+                latency_ms=latency_ms,
+                emitted_at=emitted_at,
+            )
+            return {
+                "delegated": False,
+                "reason": "pre_gate:empty_response",
+                "confidence": score.confidence,
+                "intent": intent_value,
+            }
+
+        # Normalise model name (the endpoint may return None for the model field)
+        if not actual_model_name or not actual_model_name.strip():
+            actual_model_name = model_name or "local-model"
+
+        # Gate 5: Quality gate
+        gate_passed, gate_reason = _run_quality_gate(response_text, intent_value)
         latency_ms = int((time.time() - start_time) * 1000)
-        _emit_delegation_event(
-            session_id=session_id,
-            correlation_id=correlation_id,
-            task_type="unknown",
-            handler_name="unknown",
-            model_name="unknown",
-            quality_gate_passed=False,
-            quality_gate_reason=f"pre_gate:intent_extraction_error: {type(exc).__name__}",
-            delegation_success=False,
-            savings_usd=score.estimated_savings_usd,
-            latency_ms=latency_ms,
-            emitted_at=emitted_at,
-        )
-        return {
-            "delegated": False,
-            "reason": f"pre_gate:intent_extraction_error: {type(exc).__name__}",
-        }
 
-    # Gate 3: Endpoint selection for this specific task type
-    endpoint_result = _select_handler_endpoint(intent_value)
-    if endpoint_result is None:
-        latency_ms = int((time.time() - start_time) * 1000)
-        _emit_delegation_event(
-            session_id=session_id,
-            correlation_id=correlation_id,
-            task_type=intent_value,
-            handler_name="unknown",
-            model_name="unknown",
-            quality_gate_passed=False,
-            quality_gate_reason="pre_gate:no_endpoint_configured",
-            delegation_success=False,
-            savings_usd=score.estimated_savings_usd,
-            latency_ms=latency_ms,
-            emitted_at=emitted_at,
-        )
-        return {
-            "delegated": False,
-            "reason": "pre_gate:no_endpoint_configured",
-            "confidence": score.confidence,
-            "intent": intent_value,
-        }
+        if not gate_passed:
+            logger.debug(
+                "Quality gate failed: reason=%s task=%s handler=%s",
+                gate_reason,
+                intent_value,
+                handler_name,
+            )
+            _emit_delegation_event(
+                session_id=session_id,
+                correlation_id=correlation_id,
+                task_type=intent_value,
+                handler_name=handler_name,
+                model_name=actual_model_name,
+                quality_gate_passed=False,
+                quality_gate_reason=gate_reason,
+                delegation_success=False,
+                savings_usd=score.estimated_savings_usd,
+                latency_ms=latency_ms,
+                emitted_at=emitted_at,
+            )
+            return {
+                "delegated": False,
+                "reason": "quality_gate_failed",
+                "quality_gate_reason": gate_reason,
+                "confidence": score.confidence,
+                "intent": intent_value,
+            }
 
-    endpoint_url, model_name, system_prompt, handler_name = endpoint_result
-
-    # Gate 4: LLM call with task-specific system prompt
-    llm_result = _call_llm_with_system_prompt(prompt, endpoint_url, system_prompt)
-    if llm_result is None:
-        latency_ms = int((time.time() - start_time) * 1000)
-        _emit_delegation_event(
-            session_id=session_id,
-            correlation_id=correlation_id,
-            task_type=intent_value,
-            handler_name=handler_name,
-            model_name=model_name,
-            quality_gate_passed=False,
-            quality_gate_reason="pre_gate:llm_call_failed",
-            delegation_success=False,
-            savings_usd=score.estimated_savings_usd,
-            latency_ms=latency_ms,
-            emitted_at=emitted_at,
-        )
-        return {
-            "delegated": False,
-            "reason": "pre_gate:llm_call_failed",
-            "confidence": score.confidence,
-            "intent": intent_value,
-        }
-
-    response_text, actual_model_name = llm_result
-    if not response_text or not response_text.strip():
-        latency_ms = int((time.time() - start_time) * 1000)
-        _emit_delegation_event(
-            session_id=session_id,
-            correlation_id=correlation_id,
-            task_type=intent_value,
-            handler_name=handler_name,
-            model_name=actual_model_name or model_name,
-            quality_gate_passed=False,
-            quality_gate_reason="pre_gate:empty_response",
-            delegation_success=False,
-            savings_usd=score.estimated_savings_usd,
-            latency_ms=latency_ms,
-            emitted_at=emitted_at,
-        )
-        return {
-            "delegated": False,
-            "reason": "pre_gate:empty_response",
-            "confidence": score.confidence,
-            "intent": intent_value,
-        }
-
-    # Normalise model name (the endpoint may return None for the model field)
-    if not actual_model_name or not actual_model_name.strip():
-        actual_model_name = model_name or "local-model"
-
-    # Gate 5: Quality gate
-    gate_passed, gate_reason = _run_quality_gate(response_text, intent_value)
-    latency_ms = int((time.time() - start_time) * 1000)
-
-    if not gate_passed:
-        logger.debug(
-            "Quality gate failed: reason=%s task=%s handler=%s",
-            gate_reason,
-            intent_value,
-            handler_name,
+        # All gates passed — emit compliance advisory and delegation event.
+        _emit_compliance_advisory(
+            response_text, intent_value, correlation_id, session_id
         )
         _emit_delegation_event(
             session_id=session_id,
@@ -741,74 +772,57 @@ def orchestrate_delegation(
             task_type=intent_value,
             handler_name=handler_name,
             model_name=actual_model_name,
-            quality_gate_passed=False,
-            quality_gate_reason=gate_reason,
-            delegation_success=False,
+            quality_gate_passed=True,
+            quality_gate_reason="",
+            delegation_success=True,
             savings_usd=score.estimated_savings_usd,
             latency_ms=latency_ms,
             emitted_at=emitted_at,
         )
+
+        logger.info(
+            "Orchestrated delegation succeeded: model=%s intent=%s handler=%s "
+            "confidence=%.3f latency=%dms correlation=%s",
+            actual_model_name,
+            intent_value,
+            handler_name,
+            score.confidence,
+            latency_ms,
+            correlation_id,
+        )
+
+        # Format the response with visible attribution (mirrors local_delegation_handler pattern).
+        safe_model = actual_model_name
+        attribution = f"[Local Model Response - {safe_model}]"
+        reasons_summary = "; ".join(score.reasons) if score.reasons else ""
+        savings_str = (
+            f"~${score.estimated_savings_usd:.4f}"
+            if score.estimated_savings_usd > 0
+            else "local inference"
+        )
+        formatted_response = (
+            f"{attribution}\n\n"
+            f"{response_text}\n\n"
+            f"---\n"
+            f"Delegated via local model: confidence={score.confidence:.3f}, "
+            f"savings={savings_str}, handler={handler_name}. "
+            f"Reason: {reasons_summary}"
+        )
+
         return {
-            "delegated": False,
-            "reason": "quality_gate_failed",
-            "quality_gate_reason": gate_reason,
+            "delegated": True,
+            "response": formatted_response,
+            "model": actual_model_name,
             "confidence": score.confidence,
             "intent": intent_value,
+            "savings_usd": score.estimated_savings_usd,
+            "latency_ms": latency_ms,
+            "handler": handler_name,
+            "quality_gate_passed": True,
         }
 
-    # All gates passed — emit compliance advisory and delegation event.
-    _emit_compliance_advisory(response_text, intent_value, correlation_id, session_id)
-    _emit_delegation_event(
-        session_id=session_id,
-        correlation_id=correlation_id,
-        task_type=intent_value,
-        handler_name=handler_name,
-        model_name=actual_model_name,
-        quality_gate_passed=True,
-        quality_gate_reason="",
-        delegation_success=True,
-        savings_usd=score.estimated_savings_usd,
-        latency_ms=latency_ms,
-        emitted_at=emitted_at,
-    )
-
-    logger.info(
-        "Orchestrated delegation succeeded: model=%s intent=%s handler=%s "
-        "confidence=%.3f latency=%dms correlation=%s",
-        actual_model_name,
-        intent_value,
-        handler_name,
-        score.confidence,
-        latency_ms,
-        correlation_id,
-    )
-
-    # Format the response with visible attribution (mirrors local_delegation_handler pattern).
-    safe_model = actual_model_name.replace("{", "{{").replace("}", "}}")
-    attribution = f"[Local Model Response - {safe_model}]"
-    reasons_summary = "; ".join(score.reasons) if score.reasons else ""
-    savings_str = (
-        f"~${score.estimated_savings_usd:.4f}"
-        if score.estimated_savings_usd > 0
-        else "local inference"
-    )
-    formatted_response = (
-        f"{attribution}\n\n"
-        f"{response_text}\n\n"
-        f"---\n"
-        f"Delegated via local model: confidence={score.confidence:.3f}, "
-        f"savings={savings_str}, handler={handler_name}. "
-        f"Reason: {reasons_summary}"
-    )
-
-    return {
-        "delegated": True,
-        "response": formatted_response,
-        "model": actual_model_name,
-        "confidence": score.confidence,
-        "intent": intent_value,
-        "savings_usd": score.estimated_savings_usd,
-        "latency_ms": latency_ms,
-        "handler": handler_name,
-        "quality_gate_passed": True,
-    }
+    except Exception as exc:
+        logger.debug(
+            "orchestrate_delegation unexpected error: %s: %s", type(exc).__name__, exc
+        )
+        return {"delegated": False, "reason": "orchestrator_error", "error": str(exc)}

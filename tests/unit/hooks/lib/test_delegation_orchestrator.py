@@ -104,15 +104,21 @@ class TestModelTaskDelegatedPayloadSchema:
         with pytest.raises(ValidationError):
             ModelTaskDelegatedPayload(**kwargs)
 
-    def test_emitted_at_must_be_utc(self) -> None:
-        """A naive (timezone-unaware) datetime must raise ValidationError for emitted_at."""
+    def test_emitted_at_gets_timezone_attached(self) -> None:
+        """A naive datetime passed to emitted_at is coerced to UTC by TimezoneAwareDatetime.
+
+        TimezoneAwareDatetime uses ensure_timezone_aware(assume_utc=True), which
+        converts naive datetimes to UTC rather than rejecting them.  The resulting
+        payload must be created successfully and emitted_at must carry tzinfo.
+        """
         from omniclaude.hooks.schemas import ModelTaskDelegatedPayload
 
         kwargs = _valid_payload_kwargs()
-        # Naive datetime has no tzinfo — the TimezoneAwareDatetime validator rejects it.
+        # Naive datetime has no tzinfo — TimezoneAwareDatetime coerces it to UTC.
         kwargs["emitted_at"] = datetime(2025, 1, 15, 12, 0, 0)
-        with pytest.raises(ValidationError):
-            ModelTaskDelegatedPayload(**kwargs)
+        payload = ModelTaskDelegatedPayload(**kwargs)
+        assert payload.emitted_at.tzinfo is not None
+        assert payload.emitted_at.tzinfo == UTC
 
 
 # ---------------------------------------------------------------------------
@@ -1080,6 +1086,35 @@ class TestOrchestratedDelegationSuccess:
 
         assert result["delegated"] is False
         assert "classification_error" in result.get("reason", "")
+
+    def test_orchestrator_unexpected_exception_returns_false(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Outer try/except catches AttributeError from score attribute access.
+
+        is_delegatable() returns successfully, but accessing score.delegatable
+        raises AttributeError — this access happens outside the inner
+        try/except in Gate 2, so only the outer guard can catch it.
+        The function must return the safe orchestrator_error fallback.
+        """
+        monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
+        monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
+
+        # Build a score object whose .delegatable property raises AttributeError.
+        # is_delegatable() returns this score successfully; the AttributeError
+        # is raised when orchestrate_delegation accesses score.delegatable outside
+        # the inner try/except block.
+        bad_score = MagicMock(spec=[])  # spec=[] means NO attributes are allowed
+        classifier_instance = MagicMock()
+        classifier_instance.is_delegatable.return_value = bad_score
+
+        with patch.object(do, "TaskClassifier", return_value=classifier_instance):
+            result = do.orchestrate_delegation(
+                prompt="document this function", correlation_id="corr-attr-err"
+            )
+
+        assert result["delegated"] is False
+        assert result.get("reason") == "orchestrator_error"
 
     def test_result_always_has_delegated_key(
         self, monkeypatch: pytest.MonkeyPatch
