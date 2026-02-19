@@ -404,6 +404,12 @@ def handle_delegation(
         }
 
     response_text, model_name = result
+    # Guard: model_name should always be a non-empty string (the call-site uses
+    # `data.get("model") or "local-model"` as a fallback), but defensive
+    # normalisation here prevents AttributeError in _format_delegated_response
+    # if a caller or test stub returns None for the model name.
+    if not model_name:
+        model_name = "local-model"
     latency_ms = int((time.time() - start_time) * 1000)
 
     formatted = _format_delegated_response(

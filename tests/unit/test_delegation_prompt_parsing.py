@@ -106,13 +106,24 @@ class ModelDelegatedResponse:
 # version annotation in the handler too.
 _ATTRIBUTION_RE = re.compile(r"^\[Local Model Response - (.+?)\]$", re.MULTILINE)
 _CONFIDENCE_RE = re.compile(r"confidence=(\d+\.\d+)")
-_SAVINGS_RE = re.compile(r"savings=(~\$[\d.]+|local inference)")
+# The production format is: savings=~$0.0112. Reason: ...
+# The literal "." after the savings amount is the sentence separator, not part
+# of the number.  [\d.]+ would greedily consume it (matching "0.0112." instead
+# of "0.0112"), so we use [0-9]+\.[0-9]+ which requires an integer-dot-integer
+# structure and stops before any trailing punctuation.
+_SAVINGS_RE = re.compile(r"savings=(~\$[0-9]+\.[0-9]+|local inference)")
 # re.DOTALL is required because delegation reasons can span multiple lines
 # (e.g., a reasons list joined by "; " may contain embedded newlines if a reason
 # string itself contains a newline), and "." must match newlines to capture the
 # entire reason text in a single group up to end-of-string.
 _REASON_RE = re.compile(r"Reason: (.+)$", re.DOTALL)
-_SEPARATOR = "---"
+# The production code always emits "\n---\n" as the separator (see
+# _format_delegated_response: f"---\n" preceded by f"{response_text}\n\n").
+# Using the full "\n---\n" form prevents a false match on "---" that appears
+# mid-line in the body (e.g., inside a markdown table or inline usage), and
+# also means len(_SEPARATOR) correctly advances past the trailing newline when
+# slicing the footer, so the footer string begins at the "Delegated" line.
+_SEPARATOR = "\n---\n"
 
 
 def parse_delegated_response(text: str) -> ModelDelegatedResponse | None:
@@ -350,7 +361,7 @@ class TestBoilerplateOutputSchema:
     def test_separator_present(self) -> None:
         """'---' separator line is present."""
         output = self._make_output()
-        assert "---" in output
+        assert "\n---\n" in output
 
     def test_footer_confidence_reflects_boilerplate_score(self) -> None:
         """Footer confidence matches the boilerplate delegation score (0.920)."""
@@ -396,7 +407,7 @@ class TestCodeReviewOutputSchema:
     def test_separator_present(self) -> None:
         """'---' separator line is present."""
         output = self._make_output()
-        assert "---" in output
+        assert "\n---\n" in output
 
     def test_footer_confidence_reflects_research_score(self) -> None:
         """Footer confidence matches research delegation score (0.910)."""
@@ -506,11 +517,16 @@ class TestModelDelegatedResponseParsing:
         assert abs(parsed.confidence - 0.975) < 1e-6
 
     def test_parse_savings_dollar_amount(self) -> None:
-        """savings_str contains ~$X format for positive savings."""
+        """savings_str contains exact ~$X.XXXX value for positive savings.
+
+        Pins the exact extracted value so a trailing-period regression (where
+        _SAVINGS_RE consumes the sentence-separator "." and returns "~$0.0112."
+        instead of "~$0.0112") would be caught immediately.
+        """
         output = self._canonical_output(savings_usd=0.0112)
         parsed = parse_delegated_response(output)
         assert parsed is not None
-        assert parsed.savings_str.startswith("~$")
+        assert parsed.savings_str == "~$0.0112"
 
     def test_parse_savings_local_inference_when_zero(self) -> None:
         """savings_str contains 'local inference' when estimated_savings_usd is 0."""
@@ -792,8 +808,16 @@ class TestBadOutputRecovery:
                     # the bad_response loop.  The current design is intentional,
                     # not an oversight.
                     #
-                    # Simulate LLM returning malformed/empty responses
-                    for bad_response in [None, ("", "local"), ("   ", "local")]:
+                    # Simulate LLM returning malformed/empty responses.
+                    # ("some response text", None) covers the case where the
+                    # LLM returns a non-empty body but a None model name — the
+                    # handler must not raise even when model_name is None.
+                    for bad_response in [
+                        None,
+                        ("", "local"),
+                        ("   ", "local"),
+                        ("some response text", None),
+                    ]:
                         with patch.object(
                             ldh, "_call_local_llm", return_value=bad_response
                         ):
