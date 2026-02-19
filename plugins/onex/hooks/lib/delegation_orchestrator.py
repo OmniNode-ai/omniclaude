@@ -385,6 +385,9 @@ def _run_quality_gate(response: str, task_type: str) -> tuple[bool, str]:
         )
 
     # Check 2: error indicators in the first 200 chars
+    # Fast heuristic: check first 200 chars only. Models typically front-load
+    # refusals; longer preambles may bypass this check (acceptable tradeoff for
+    # a <5ms gate).
     preview = response[:200].lower()
     for indicator in _ERROR_INDICATORS:
         if indicator in preview:
@@ -655,7 +658,7 @@ def orchestrate_delegation(
             handler_name="unknown",
             model_name="unknown",
             quality_gate_passed=False,
-            quality_gate_reason="",
+            quality_gate_reason="pre_gate:no_endpoint_configured",
             delegation_success=False,
             savings_usd=score.estimated_savings_usd,
             latency_ms=latency_ms,

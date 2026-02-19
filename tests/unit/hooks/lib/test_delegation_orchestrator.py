@@ -13,11 +13,14 @@ Covers:
 from __future__ import annotations
 
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
+from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
 
 # Insert hooks/lib so delegation_orchestrator can be imported directly.
 # Mirrors the pattern used by test_local_delegation_handler.py.
@@ -32,6 +35,84 @@ if str(_HOOKS_LIB) not in sys.path:
     sys.path.insert(0, str(_HOOKS_LIB))
 
 import delegation_orchestrator as do  # noqa: E402 I001
+
+
+# ---------------------------------------------------------------------------
+# ModelTaskDelegatedPayload schema tests
+# ---------------------------------------------------------------------------
+
+
+def _valid_payload_kwargs() -> dict[str, Any]:
+    """Return a minimal set of valid kwargs for ModelTaskDelegatedPayload."""
+    from omniclaude.hooks.schemas import ModelTaskDelegatedPayload  # noqa: F401
+
+    return {
+        "session_id": "abc12345-1234-5678-abcd-1234567890ab",
+        "correlation_id": uuid4(),
+        "emitted_at": datetime(2025, 1, 15, 12, 0, 0, tzinfo=UTC),
+        "task_type": "document",
+        "handler_used": "doc_gen",
+        "model_used": "Qwen2.5-72B",
+        "quality_gate_passed": True,
+        "quality_gate_reason": None,
+        "delegation_success": True,
+        "estimated_savings_usd": 0.0112,
+        "latency_ms": 320,
+    }
+
+
+@pytest.mark.unit
+class TestModelTaskDelegatedPayloadSchema:
+    """Direct field-constraint tests for ModelTaskDelegatedPayload."""
+
+    def test_valid_payload_construction(self) -> None:
+        """Construct a valid payload with all required fields; assert it succeeds."""
+        from omniclaude.hooks.schemas import ModelTaskDelegatedPayload
+
+        kwargs = _valid_payload_kwargs()
+        payload = ModelTaskDelegatedPayload(**kwargs)
+        assert payload.task_type == "document"
+        assert payload.handler_used == "doc_gen"
+        assert payload.model_used == "Qwen2.5-72B"
+        assert payload.delegation_success is True
+        assert payload.estimated_savings_usd == pytest.approx(0.0112)
+        assert payload.latency_ms == 320
+
+    def test_frozen_model_raises_on_mutation(self) -> None:
+        """Attempting to set an attribute on a frozen payload raises TypeError or ValidationError."""
+        from omniclaude.hooks.schemas import ModelTaskDelegatedPayload
+
+        payload = ModelTaskDelegatedPayload(**_valid_payload_kwargs())
+        with pytest.raises((TypeError, ValidationError)):
+            payload.task_type = "test"  # type: ignore[misc]
+
+    def test_handler_used_min_length_enforced(self) -> None:
+        """handler_used='' (empty string) must raise ValidationError (min_length=1)."""
+        from omniclaude.hooks.schemas import ModelTaskDelegatedPayload
+
+        kwargs = _valid_payload_kwargs()
+        kwargs["handler_used"] = ""
+        with pytest.raises(ValidationError):
+            ModelTaskDelegatedPayload(**kwargs)
+
+    def test_quality_gate_reason_max_length_enforced(self) -> None:
+        """quality_gate_reason of 201 chars must raise ValidationError (max_length=200)."""
+        from omniclaude.hooks.schemas import ModelTaskDelegatedPayload
+
+        kwargs = _valid_payload_kwargs()
+        kwargs["quality_gate_reason"] = "x" * 201
+        with pytest.raises(ValidationError):
+            ModelTaskDelegatedPayload(**kwargs)
+
+    def test_emitted_at_must_be_utc(self) -> None:
+        """A naive (timezone-unaware) datetime must raise ValidationError for emitted_at."""
+        from omniclaude.hooks.schemas import ModelTaskDelegatedPayload
+
+        kwargs = _valid_payload_kwargs()
+        # Naive datetime has no tzinfo — the TimezoneAwareDatetime validator rejects it.
+        kwargs["emitted_at"] = datetime(2025, 1, 15, 12, 0, 0)
+        with pytest.raises(ValidationError):
+            ModelTaskDelegatedPayload(**kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -539,6 +620,9 @@ class TestEndpointResolution:
         mock_emit.assert_called_once()
         call_kwargs = mock_emit.call_args.kwargs
         assert call_kwargs.get("delegation_success") is False
+        assert (
+            call_kwargs.get("quality_gate_reason") == "pre_gate:no_endpoint_configured"
+        )
 
     def test_delegation_proceeds_when_endpoint_available(
         self, monkeypatch: pytest.MonkeyPatch
