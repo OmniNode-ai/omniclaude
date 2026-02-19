@@ -489,6 +489,38 @@ class TestEndpointResolution:
         assert result["delegated"] is False
         assert result.get("reason") == "no_endpoint_configured"
 
+    def test_no_endpoint_configured_emits_delegation_event(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Delegation event is emitted with delegation_success=False when no endpoint is configured."""
+        from uuid import uuid4
+
+        self._enable_flags(monkeypatch)
+        score = _make_score(True, confidence=0.91)
+        classifier_instance = MagicMock()
+        classifier_instance.is_delegatable.return_value = score
+        intent = MagicMock()
+        intent.value = "document"
+        ctx = MagicMock()
+        ctx.primary_intent = intent
+        classifier_instance.classify.return_value = ctx
+
+        with patch.object(do, "TaskClassifier", return_value=classifier_instance):
+            with patch.object(do, "_select_handler_endpoint", return_value=None):
+                with patch.object(do, "_emit_delegation_event") as mock_emit:
+                    result = do.orchestrate_delegation(
+                        prompt="generate docs",
+                        session_id="s1",
+                        correlation_id=str(uuid4()),
+                    )
+
+        assert result["delegated"] is False
+        assert "no_endpoint_configured" in result.get("reason", "")
+
+        mock_emit.assert_called_once()
+        call_kwargs = mock_emit.call_args.kwargs
+        assert call_kwargs.get("delegation_success") is False
+
     def test_delegation_proceeds_when_endpoint_available(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

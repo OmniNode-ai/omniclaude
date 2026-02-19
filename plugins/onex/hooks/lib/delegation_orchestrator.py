@@ -243,7 +243,7 @@ def _select_handler_endpoint(
     _registry_cls = LocalLlmEndpointRegistry  # noqa: F821  (defined at module level)
     _purpose_cls = LlmEndpointPurpose  # noqa: F821  (defined at module level)
 
-    if _registry_cls is None or _purpose_cls is None:  # type: ignore[unreachable]
+    if _registry_cls is None or _purpose_cls is None:
         logger.debug(
             "LocalLlmEndpointRegistry or LlmEndpointPurpose unavailable; "
             "cannot resolve endpoint for intent=%s",
@@ -575,8 +575,6 @@ def orchestrate_delegation(
         "intent", "savings_usd", "latency_ms", "handler", "quality_gate_passed".
         When delegated=False: also includes "reason".
     """
-    from datetime import datetime
-
     start_time = time.time()
     emitted_at = datetime.now(UTC)
 
@@ -586,7 +584,7 @@ def orchestrate_delegation(
 
     # Gate 2: Classification — use module-level TaskClassifier (patchable in tests)
     _classifier_cls = TaskClassifier  # noqa: F821  (module-level name)
-    if _classifier_cls is None:  # type: ignore[unreachable]
+    if _classifier_cls is None:
         return {
             "delegated": False,
             "reason": "classification_error: TaskClassifier not available",
@@ -646,7 +644,7 @@ def orchestrate_delegation(
             handler_name="unknown",
             model_name="unknown",
             quality_gate_passed=False,
-            quality_gate_reason="no_endpoint_configured",
+            quality_gate_reason="",
             delegation_success=False,
             savings_usd=score.estimated_savings_usd,
             latency_ms=latency_ms,
