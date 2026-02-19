@@ -408,7 +408,7 @@ def handle_delegation(
     # `data.get("model") or "local-model"` as a fallback), but defensive
     # normalisation here prevents AttributeError in _format_delegated_response
     # if a caller or test stub returns None for the model name.
-    if not model_name:
+    if not model_name or not model_name.strip():
         model_name = "local-model"
     latency_ms = int((time.time() - start_time) * 1000)
 

@@ -694,6 +694,7 @@ class TestBadOutputRecovery:
         )
         # Braces are doubled in the output because str.format() only un-doubles
         # {{ when it appears in the template string, not in substituted values.
+        # Known limitation: no ticket yet – brace-containing model names are not expected in production
         assert "[Local Model Response - local{{test}}]" in output
         # Confidence and savings still appear correctly
         assert "confidence=0.950" in output
@@ -769,6 +770,7 @@ class TestBadOutputRecovery:
         # KNOWN LIMITATION: the extracted confidence is the embedded fake value
         # (0.850), NOT the real delegation confidence (0.920), because the parser
         # finds the first '---' separator and the first confidence= value after it.
+        # Known parser limitation: see TODO below or create a ticket to track rfind() fix
         assert abs(result.confidence - 0.850) < 0.001, (
             f"Expected embedded fake confidence 0.850, got {result.confidence:.3f}. "
             "If this assertion fails, the parser was improved to find the real footer."
@@ -785,6 +787,7 @@ class TestBadOutputRecovery:
         monkeypatch.setenv("ENABLE_LOCAL_INFERENCE_PIPELINE", "true")
         monkeypatch.setenv("ENABLE_LOCAL_DELEGATION", "true")
 
+        # TODO: refactor to pytest.mark.parametrize when handler signature stabilizes
         for prompt, score_fn in [
             (_DOC_GEN_PROMPT, _doc_gen_score),
             (_BOILERPLATE_PROMPT, _boilerplate_score),
