@@ -241,66 +241,65 @@ print(result.outcome)
             emit_via_daemon "session.outcome" "$OUTCOME_PAYLOAD" 100
         fi
 
-        # --- Evaluate feedback guardrails ---
-        # ===================================================================
-        # PHASE 1 PLUMBING (OMN-1892): Guardrail logic is wired but inputs
-        # are hardcoded. Feedback will always be skipped (NO_INJECTION).
-        # Future tickets to wire real values:
-        #   - injection_occurred: Read from session injection marker
-        #   - utilization_score: Read from PostToolUse utilization metrics
-        #   - agent_match_score: Read from UserPromptSubmit routing decision
-        # ===================================================================
-        FEEDBACK_RESULT=$(HOOKS_LIB="$HOOKS_LIB" DERIVED_OUTCOME="$DERIVED_OUTCOME" \
-            "$PYTHON_CMD" -c "
-import os, sys, json
-sys.path.insert(0, os.environ['HOOKS_LIB'])
-from feedback_guardrails import should_reinforce_routing
-result = should_reinforce_routing(
-    injection_occurred=False,
-    utilization_score=0.0,
-    agent_match_score=0.0,
-    session_outcome=os.environ['DERIVED_OUTCOME'],
-)
-print(json.dumps({
-    'should_reinforce': result.should_reinforce,
-    'skip_reason': result.skip_reason,
-}))
-" 2>>"$LOG_FILE") || FEEDBACK_RESULT='{"should_reinforce":false,"skip_reason":"PYTHON_ERROR"}'
+        # --- Emit routing.outcome.raw event (OMN-2356) ---
+        # Replaces the no-op feedback guardrail loop that used hardcoded/zero values.
+        # Emits RAW OBSERVABLE FACTS only — no derived scores.
+        # utilization_score and agent_match_score are computed by omniintelligence's
+        # routing-feedback consumer using its own context (Invariant 5 compliance).
+        #
+        # Data sources:
+        #   injection_occurred / patterns_injected_count / agent_selected /
+        #   routing_confidence: read from session accumulator written by
+        #   user-prompt-submit.sh at /tmp/omniclaude-session-${SESSION_ID}.json
+        #
+        #   tool_calls_count: tools_used_count from Claude SessionEnd payload
+        #   duration_ms: durationMs from Claude SessionEnd payload
 
-        SHOULD_REINFORCE=$(echo "$FEEDBACK_RESULT" | jq -r '.should_reinforce' 2>>"$LOG_FILE") || SHOULD_REINFORCE="false"
-        SKIP_REASON=$(echo "$FEEDBACK_RESULT" | jq -r '.skip_reason // empty' 2>>"$LOG_FILE") || SKIP_REASON=""
+        SESSION_STATE_FILE="/tmp/omniclaude-session-${SESSION_ID}.json"  # noqa: S108  # nosec B108
+        RAW_INJECTION_OCCURRED="false"
+        RAW_PATTERNS_COUNT=0
+        RAW_AGENT_SELECTED=""
+        RAW_ROUTING_CONFIDENCE=0.0
 
-        if [[ "$SHOULD_REINFORCE" == "true" ]] && [[ "$KAFKA_ENABLED" == "true" ]]; then
-            if ! FEEDBACK_PAYLOAD=$(jq -n \
-                --arg session_id "$SESSION_ID" \
-                --arg outcome "$DERIVED_OUTCOME" \
-                --arg emitted_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-                '{session_id: $session_id, outcome: $outcome, emitted_at: $emitted_at}' 2>>"$LOG_FILE"); then
-                log "WARNING: Failed to construct routing.feedback payload (jq failed), skipping emission"
-                exit 0
-            fi
-
-            if [[ -n "$FEEDBACK_PAYLOAD" && "$FEEDBACK_PAYLOAD" != "null" ]]; then
-                emit_via_daemon "routing.feedback" "$FEEDBACK_PAYLOAD" 100
-            fi
-        elif [[ -n "$SKIP_REASON" ]] && [[ "$KAFKA_ENABLED" == "true" ]]; then
-            if ! SKIP_PAYLOAD=$(jq -n \
-                --arg session_id "$SESSION_ID" \
-                --arg skip_reason "$SKIP_REASON" \
-                --arg emitted_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-                '{session_id: $session_id, skip_reason: $skip_reason, emitted_at: $emitted_at}' 2>>"$LOG_FILE"); then
-                log "WARNING: Failed to construct routing.skipped payload (jq failed), skipping emission"
-                exit 0
-            fi
-
-            if [[ -z "$SKIP_PAYLOAD" || "$SKIP_PAYLOAD" == "null" ]]; then
-                log "WARNING: routing.skipped payload empty or null, skipping emission"
-            else
-                emit_via_daemon "routing.skipped" "$SKIP_PAYLOAD" 100
-            fi
+        if [[ -f "$SESSION_STATE_FILE" ]]; then
+            RAW_INJECTION_OCCURRED=$(jq -r '.injection_occurred // false' "$SESSION_STATE_FILE" 2>>"$LOG_FILE") || RAW_INJECTION_OCCURRED="false"
+            RAW_PATTERNS_COUNT=$(jq -r '.patterns_injected_count // 0' "$SESSION_STATE_FILE" 2>>"$LOG_FILE") || RAW_PATTERNS_COUNT=0
+            RAW_AGENT_SELECTED=$(jq -r '.agent_selected // ""' "$SESSION_STATE_FILE" 2>>"$LOG_FILE") || RAW_AGENT_SELECTED=""
+            RAW_ROUTING_CONFIDENCE=$(jq -r '.routing_confidence // 0.0' "$SESSION_STATE_FILE" 2>>"$LOG_FILE") || RAW_ROUTING_CONFIDENCE=0.0
+            log "Session accumulator read: injection=$RAW_INJECTION_OCCURRED patterns=$RAW_PATTERNS_COUNT agent=${RAW_AGENT_SELECTED:-none}"
+        else
+            log "Session accumulator not found (${SESSION_STATE_FILE}): no UserPromptSubmit this session or file cleanup already ran"
         fi
 
-        log "Feedback guardrail: should_reinforce=$SHOULD_REINFORCE skip_reason=$SKIP_REASON"
+        # Sanitize: ensure numeric fields are numeric
+        [[ "$RAW_PATTERNS_COUNT" =~ ^[0-9]+$ ]] || RAW_PATTERNS_COUNT=0
+        [[ "$RAW_ROUTING_CONFIDENCE" =~ ^[0-9]+(\.[0-9]+)?$ ]] || RAW_ROUTING_CONFIDENCE=0.0
+        [[ "$RAW_INJECTION_OCCURRED" == "true" ]] || RAW_INJECTION_OCCURRED="false"
+
+        if ! RAW_OUTCOME_PAYLOAD=$(jq -n \
+            --arg session_id "$SESSION_ID" \
+            --argjson injection_occurred "$RAW_INJECTION_OCCURRED" \
+            --argjson patterns_injected_count "$RAW_PATTERNS_COUNT" \
+            --argjson tool_calls_count "$TOOL_CALLS_COMPLETED" \
+            --argjson duration_ms "$SESSION_DURATION" \
+            --arg agent_selected "$RAW_AGENT_SELECTED" \
+            --argjson routing_confidence "$RAW_ROUTING_CONFIDENCE" \
+            '{
+                session_id: $session_id,
+                injection_occurred: $injection_occurred,
+                patterns_injected_count: $patterns_injected_count,
+                tool_calls_count: $tool_calls_count,
+                duration_ms: $duration_ms,
+                agent_selected: $agent_selected,
+                routing_confidence: $routing_confidence
+            }' 2>>"$LOG_FILE"); then
+            log "WARNING: Failed to construct routing.outcome.raw payload (jq failed), skipping emission"
+        elif [[ -z "$RAW_OUTCOME_PAYLOAD" || "$RAW_OUTCOME_PAYLOAD" == "null" ]]; then
+            log "WARNING: routing.outcome.raw payload empty or null, skipping emission"
+        else
+            emit_via_daemon "routing.outcome.raw" "$RAW_OUTCOME_PAYLOAD" 100
+            log "routing.outcome.raw emitted: injection=$RAW_INJECTION_OCCURRED patterns=$RAW_PATTERNS_COUNT tool_calls=$TOOL_CALLS_COMPLETED"
+        fi
     ) &
     EMIT_PIDS+=($!)
 

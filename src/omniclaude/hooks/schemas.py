@@ -685,6 +685,112 @@ class ModelRoutingFeedbackPayload(BaseModel):
     )
 
 
+class ModelSessionRawOutcomePayload(BaseModel):
+    """Event payload for raw session outcome signals (OMN-2356).
+
+    Emitted at session end with only observable facts — no derived scores.
+    Derived metrics (utilization_score, agent_match_score) belong in
+    omniintelligence's routing-feedback consumer, not in the hook.
+
+    This replaces the no-op feedback loop that emitted hardcoded/zero values.
+    omniintelligence consumes this event and computes derived scores from
+    the raw signals plus its own context (e.g., context utilization events).
+
+    Attributes:
+        event_name: Literal discriminator for polymorphic deserialization.
+        session_id: Session identifier string.
+        injection_occurred: Whether context injection happened this session.
+        patterns_injected_count: Number of patterns injected (0 if no injection).
+        tool_calls_count: Total tool calls observed during the session.
+        error_count: Number of tool/hook errors observed.
+        files_touched_count: Number of distinct files accessed via tool calls.
+        duration_ms: Session duration in milliseconds (0 if unknown).
+        agent_selected: Agent name selected by routing (empty string if none).
+        routing_confidence: Routing confidence score (0.0-1.0).
+        emitted_at: Timestamp when the event was emitted (UTC).
+
+    Note:
+        ``utilization_score`` and ``agent_match_score`` are intentionally
+        absent. Computing them requires DB reads (Invariant 5 violation).
+        omniintelligence's routing-feedback consumer handles derivation.
+
+    Example:
+        >>> from datetime import UTC, datetime
+        >>> event = ModelSessionRawOutcomePayload(
+        ...     session_id="abc12345-1234-5678-abcd-1234567890ab",
+        ...     injection_occurred=True,
+        ...     patterns_injected_count=3,
+        ...     tool_calls_count=12,
+        ...     error_count=1,
+        ...     files_touched_count=4,
+        ...     duration_ms=45200,
+        ...     agent_selected="omniarchon",
+        ...     routing_confidence=0.91,
+        ...     emitted_at=datetime(2025, 1, 15, 12, 30, 0, tzinfo=UTC),
+        ... )
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="forbid",
+    )
+
+    event_name: Literal["routing.outcome.raw"] = Field(
+        default="routing.outcome.raw",
+        description="Event type discriminator for polymorphic deserialization",
+    )
+    session_id: str = Field(
+        ...,
+        min_length=1,
+        description="Session identifier",
+    )
+    injection_occurred: bool = Field(
+        ...,
+        description="Whether context injection happened this session",
+    )
+    patterns_injected_count: int = Field(
+        ...,
+        ge=0,
+        description="Number of patterns injected (0 if no injection occurred)",
+    )
+    tool_calls_count: int = Field(
+        ...,
+        ge=0,
+        description="Total tool calls observed during the session",
+    )
+    error_count: int = Field(
+        default=0,
+        ge=0,
+        description="Number of tool or hook errors observed during the session",
+    )
+    files_touched_count: int = Field(
+        default=0,
+        ge=0,
+        description="Number of distinct files accessed via tool calls",
+    )
+    duration_ms: int = Field(
+        ...,
+        ge=0,
+        description="Session duration in milliseconds (0 if unknown)",
+    )
+    agent_selected: str = Field(
+        default="",
+        description="Agent name selected by routing (empty string if none selected)",
+    )
+    routing_confidence: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Routing confidence score from the router (0.0-1.0)",
+    )
+    # Timestamps - MUST be explicitly injected (no default_factory for testability)
+    # Uses TimezoneAwareDatetime for automatic timezone validation
+    emitted_at: TimezoneAwareDatetime = Field(
+        ...,
+        description="Timestamp when the event was emitted (UTC)",
+    )
+
+
 class ModelRoutingFeedbackSkippedPayload(BaseModel):
     """Event payload for routing feedback that was skipped by guardrails.
 
@@ -2270,6 +2376,7 @@ __all__ = [
     "ModelHookSessionEndedPayload",
     "ModelSessionOutcome",
     "ModelRoutingFeedbackPayload",
+    "ModelSessionRawOutcomePayload",
     "ModelRoutingFeedbackSkippedPayload",
     "ModelHookPromptSubmittedPayload",
     "ModelHookToolExecutedPayload",
