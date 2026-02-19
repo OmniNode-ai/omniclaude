@@ -959,10 +959,17 @@ class TestHandlerIntegration:
 
     @pytest.mark.asyncio
     async def test_load_patterns_disabled_returns_empty_with_warning(self) -> None:
-        """DB pattern loading is disabled (OMN-2058) — returns empty result with warning."""
+        """Pattern loading returns empty with warning when api_enabled=False (OMN-2355).
+
+        OMN-2058 disabled direct DB access. OMN-2355 restored loading via HTTP API.
+        When api_enabled=False (explicit opt-out), the method returns empty patterns
+        with a structured warning. The old "pending_api" stub is replaced by the real
+        API path; this test verifies the explicit-disabled fallback.
+        """
         config = ContextInjectionConfig(
             enabled=True,
             db_enabled=True,
+            api_enabled=False,  # Explicit opt-out → disabled path
             min_confidence=0.0,
             limits=InjectionLimitsConfig(include_provisional=True),
         )
@@ -970,17 +977,18 @@ class TestHandlerIntegration:
 
         result = await handler._load_patterns_from_database(domain="testing")
 
-        # Should return empty patterns (DB access disabled)
+        # Should return empty patterns (API explicitly disabled)
         assert len(result.patterns) == 0
         assert len(result.warnings) == 1
         assert "OMN-2059" in result.warnings[0]
 
     @pytest.mark.asyncio
     async def test_load_patterns_disabled_without_domain(self) -> None:
-        """DB pattern loading is disabled even without domain filter."""
+        """Pattern loading disabled even without domain filter when api_enabled=False."""
         config = ContextInjectionConfig(
             enabled=True,
             db_enabled=True,
+            api_enabled=False,  # Explicit opt-out → disabled path
             min_confidence=0.0,
             limits=InjectionLimitsConfig(include_provisional=True),
         )
@@ -988,7 +996,7 @@ class TestHandlerIntegration:
 
         result = await handler._load_patterns_from_database(domain=None)
 
-        # Should return empty patterns (DB access disabled)
+        # Should return empty patterns (API explicitly disabled)
         assert len(result.patterns) == 0
         assert len(result.warnings) == 1
-        assert "patterns_read_disabled_pending_api" in result.warnings[0]
+        assert "api_enabled=False" in result.warnings[0]
