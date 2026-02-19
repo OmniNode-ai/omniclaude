@@ -591,7 +591,7 @@ def generate_corpus(
                     }
                 )
         else:
-            selected_agent = "polymorphic-agent"
+            selected_agent = ""
             confidence = 0.5
             reason = "No trigger matches found"
             explanation = ""
@@ -605,7 +605,7 @@ def generate_corpus(
             routing_policy = "trigger_match"
         else:
             routing_policy = "fallback_default"
-            selected_agent = "polymorphic-agent"
+            selected_agent = ""
             confidence = 0.5
 
         entry = {

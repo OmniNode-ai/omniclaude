@@ -3,8 +3,8 @@
 Route Via Events Wrapper - Intelligent Agent Routing
 
 Routes user prompts to the best-matched agent using trigger matching and
-confidence scoring. Falls back to polymorphic-agent only when no good match
-is found (confidence below threshold).
+confidence scoring. Returns an empty string (no agent selected) when no good
+match is found (confidence below threshold).
 
 Routing Semantics (three distinct fields):
 - routing_method: HOW routing executed (event_based, local, fallback)
@@ -268,11 +268,11 @@ except ImportError:
 
 
 # Confidence threshold for accepting a routed agent
-# Below this threshold, we fall back to polymorphic-agent
+# Below this threshold, no agent is selected (empty string)
 CONFIDENCE_THRESHOLD = 0.5
 
-# Default fallback agent when no good match is found
-DEFAULT_AGENT = "polymorphic-agent"
+# Empty string — no fallback agent; callers receive "" when nothing matched
+DEFAULT_AGENT = ""
 
 
 def _get_router() -> Any:
@@ -488,13 +488,70 @@ def _use_onex_routing_nodes() -> bool:
     return os.environ.get("USE_ONEX_ROUTING_NODES", "false").lower() in _TRUTHY
 
 
-# Timeout for the LLM health check and routing call (100 ms per ticket spec).
-_LLM_ROUTING_TIMEOUT_S = 0.1
-# Inner httpx timeout for the health check, kept slightly below the outer
-# asyncio.wait_for timeout so the HTTP request can fail/cancel before the
-# outer wait_for fires.  Without this margin the outer cancellation arrives
-# first, leaving the httpx connection in an ambiguous state.
-_LLM_HEALTH_CHECK_TIMEOUT_S = 0.08
+def _parse_routing_timeout(
+    raw: str | None, default: float, min_val: float = 0.01
+) -> float:
+    """Parse a timeout value from an environment variable string.
+
+    Enforces a lower bound (``min_val``) and an upper bound of 60 seconds.
+    Values outside either bound are rejected and ``default`` is returned
+    instead.  The 60-second ceiling prevents accidental misconfiguration
+    (e.g. ``LLM_ROUTING_TIMEOUT_S=600``) from freezing the hook indefinitely.
+
+    Args:
+        raw: Raw string value from the environment (or None / empty string).
+        default: Value to return when raw is absent, unparseable, or invalid.
+        min_val: Minimum acceptable value; values <= min_val are rejected.
+
+    Returns:
+        Parsed float timeout, or ``default`` when the input is absent or
+        invalid.  Warnings are written to both stderr and the module logger
+        so they do not pollute the hook's JSON stdout while still appearing
+        in structured log output.
+    """
+    _MAX_TIMEOUT_S = 60.0  # Hard ceiling — values above this indicate misconfiguration
+
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        msg = (
+            f"[route_via_events_wrapper] WARNING: invalid timeout value {raw!r} "
+            f"(expected float) — using default {default}s"
+        )
+        print(msg, file=sys.stderr)
+        logger.warning(msg)
+        return default
+    if value <= min_val:
+        msg = (
+            f"[route_via_events_wrapper] WARNING: timeout value {value} is <= {min_val} "
+            f"— using default {default}s"
+        )
+        print(msg, file=sys.stderr)
+        logger.warning(msg)
+        return default
+    if value > _MAX_TIMEOUT_S:
+        msg = (
+            f"[route_via_events_wrapper] WARNING: timeout value {value} exceeds "
+            f"maximum allowed {_MAX_TIMEOUT_S}s — clamping to default {default}s"
+        )
+        print(msg, file=sys.stderr)
+        logger.warning(msg)
+        return default
+    return value
+
+
+# Timeout for the LLM health check and routing call.
+# Default is 100ms (per ticket spec, designed for local models).
+# Override via LLM_ROUTING_TIMEOUT_S env var for networked models — e.g.
+# set to 2.0 when routing through a model on a remote server.
+_LLM_ROUTING_TIMEOUT_S: float = _parse_routing_timeout(
+    os.environ.get("LLM_ROUTING_TIMEOUT_S"), default=0.1
+)
+# Inner httpx timeout for the health check, kept at 85% of the outer timeout
+# so the HTTP request can fail cleanly before asyncio.wait_for fires.
+_LLM_HEALTH_CHECK_TIMEOUT_S: float = _LLM_ROUTING_TIMEOUT_S * 0.85
 
 
 def _get_latency_guard() -> _LatencyGuardProtocol | None:
@@ -543,8 +600,9 @@ def _use_llm_routing() -> bool:
 def _get_llm_routing_url() -> tuple[str, str] | None:
     """Return the (url, model_name) pair to use for routing, or None.
 
-    Prefers LlmEndpointPurpose.ROUTING; falls back to GENERAL (Qwen2.5-14B)
-    since no dedicated routing model is currently deployed.
+    Prefers LlmEndpointPurpose.ROUTING; falls back to GENERAL (Qwen2.5-14B),
+    then REASONING (Qwen2.5-72B) since no dedicated routing model is currently
+    deployed.
 
     Returns:
         ``(url, model_name)`` tuple (url without trailing slash) or None.
@@ -553,10 +611,16 @@ def _get_llm_routing_url() -> tuple[str, str] | None:
         return None
     try:
         registry = LocalLlmEndpointRegistry()
-        # Try dedicated ROUTING purpose first, fall back to GENERAL
+        # Try dedicated ROUTING purpose first, then GENERAL, REASONING, CODE_ANALYSIS.
+        # CODE_ANALYSIS last so that a coder model (e.g. .201) is picked up
+        # automatically once LLM_CODER_URL is set, without needing a code change.
         endpoint = registry.get_endpoint(LlmEndpointPurpose.ROUTING)
         if endpoint is None:
             endpoint = registry.get_endpoint(LlmEndpointPurpose.GENERAL)
+        if endpoint is None:
+            endpoint = registry.get_endpoint(LlmEndpointPurpose.REASONING)
+        if endpoint is None:
+            endpoint = registry.get_endpoint(LlmEndpointPurpose.CODE_ANALYSIS)
         if endpoint is None:
             logger.debug("No LLM endpoint configured for routing")
             return None
@@ -701,6 +765,7 @@ def _route_via_llm(
     try:
         llm_handler = HandlerRoutingLlm(
             llm_url=llm_url,
+            model_name=llm_model_name,
             timeout=_LLM_ROUTING_TIMEOUT_S,
         )
     except Exception as exc:
@@ -1193,8 +1258,8 @@ def route_via_events(
     Route user prompt using intelligent trigger matching and confidence scoring.
 
     When USE_ONEX_ROUTING_NODES is enabled, delegates to ONEX compute and
-    effect nodes. Otherwise uses AgentRouter directly. Falls back to
-    polymorphic-agent only when no good match is found.
+    effect nodes. Otherwise uses AgentRouter directly. Returns an empty string
+    (no agent selected) when no good match is found.
 
     Args:
         prompt: User prompt to route
@@ -1221,7 +1286,7 @@ def route_via_events(
         logger.warning("Invalid or empty prompt received, using fallback")
         return {
             "selected_agent": DEFAULT_AGENT,
-            "confidence": 0.5,
+            "confidence": 0.0,
             "candidates": [],
             "reasoning": "Invalid input - empty or non-string prompt",
             "routing_method": RoutingMethod.FALLBACK.value,
@@ -1229,8 +1294,8 @@ def route_via_events(
             "routing_path": RoutingPath.LOCAL.value,
             "method": RoutingPolicy.FALLBACK_DEFAULT.value,
             "latency_ms": 0,
-            "domain": "workflow_coordination",
-            "purpose": "Intelligent coordinator for development workflows",
+            "domain": "",
+            "purpose": "",
             "event_attempted": False,
         }
 
@@ -1238,7 +1303,7 @@ def route_via_events(
         logger.warning("Invalid or empty correlation_id, using fallback")
         return {
             "selected_agent": DEFAULT_AGENT,
-            "confidence": 0.5,
+            "confidence": 0.0,
             "candidates": [],
             "reasoning": "Invalid input - empty or non-string correlation_id",
             "routing_method": RoutingMethod.FALLBACK.value,
@@ -1246,8 +1311,8 @@ def route_via_events(
             "routing_path": RoutingPath.LOCAL.value,
             "method": RoutingPolicy.FALLBACK_DEFAULT.value,
             "latency_ms": 0,
-            "domain": "workflow_coordination",
-            "purpose": "Intelligent coordinator for development workflows",
+            "domain": "",
+            "purpose": "",
             "event_attempted": False,
         }
 
@@ -1333,11 +1398,11 @@ def route_via_events(
     # Attempt intelligent routing via AgentRouter
     router = _get_router()
     selected_agent = DEFAULT_AGENT
-    confidence = 0.5
+    confidence = 0.0
     reasoning = "Fallback: no router available"
     routing_policy = RoutingPolicy.FALLBACK_DEFAULT
-    domain = "workflow_coordination"
-    purpose = "Intelligent coordinator for development workflows"
+    domain = ""
+    purpose = ""
 
     # Candidates list populated from all router recommendations
     candidates_list: list[dict[str, Any]] = []
@@ -1385,7 +1450,7 @@ def route_via_events(
                         f"Routed to {selected_agent} (confidence={confidence:.2f}): {reasoning}"
                     )
                 else:
-                    # Low confidence - fall back to polymorphic-agent
+                    # Low confidence — no agent selected (empty string)
                     reasoning = (
                         f"Low confidence ({top_confidence:.2f} < {CONFIDENCE_THRESHOLD}), "
                         f"best match was {top_rec.agent_name}"
@@ -1414,12 +1479,12 @@ def route_via_events(
             DEFAULT_AGENT,
         )
         selected_agent = DEFAULT_AGENT
-        confidence = 0.5
+        confidence = 0.0
         candidates_list = []
         reasoning = f"Routing timeout ({latency_ms}ms > {timeout_ms}ms limit)"
         routing_policy = RoutingPolicy.FALLBACK_DEFAULT
-        domain = "workflow_coordination"
-        purpose = "Intelligent coordinator for development workflows"
+        domain = ""
+        purpose = ""
 
     # Compute routing_path using the helper (for consistency with observability)
     routing_path = _compute_routing_path(RoutingMethod.LOCAL.value, event_attempted)
@@ -1466,7 +1531,7 @@ def main() -> None:
             json.dumps(
                 {
                     "selected_agent": DEFAULT_AGENT,
-                    "confidence": 0.5,
+                    "confidence": 0.0,
                     "candidates": [],
                     "reasoning": "Fallback: missing required arguments",
                     "routing_method": RoutingMethod.LOCAL.value,
@@ -1474,8 +1539,8 @@ def main() -> None:
                     "routing_path": RoutingPath.LOCAL.value,
                     "method": RoutingPolicy.FALLBACK_DEFAULT.value,
                     "latency_ms": 0,
-                    "domain": "workflow_coordination",
-                    "purpose": "Intelligent coordinator for development workflows",
+                    "domain": "",
+                    "purpose": "",
                     "event_attempted": False,
                 }
             )

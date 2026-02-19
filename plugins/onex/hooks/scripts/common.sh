@@ -136,6 +136,22 @@ get_time_ms() {
 # subprocesses spawned by hooks. This is standard shell behavior for local dev
 # environments but be aware of the implications for sensitive credentials.
 
+# Load global ~/.claude/.env first (lowest priority — project .env overrides below).
+# This ensures LLM routing, Kafka, and other shared vars are always available even
+# when the hook runs from a non-project CWD (e.g. home dir on dock launch).
+_CLAUDE_GLOBAL_ENV="${HOME}/.claude/.env"
+if [[ -f "${_CLAUDE_GLOBAL_ENV}" ]]; then
+    set -a
+    # shellcheck disable=SC1090
+    if ! source "${_CLAUDE_GLOBAL_ENV}" 2>/dev/null; then
+        if [[ -n "${LOG_FILE:-}" ]]; then
+            log "WARN: Failed to source ${_CLAUDE_GLOBAL_ENV} - check file syntax"
+        fi
+    fi
+    set +a
+fi
+unset _CLAUDE_GLOBAL_ENV
+
 if [[ -f "${PROJECT_ROOT}/.env" ]]; then
     # Source .env - note this WILL override already-set variables
     # Using set -a to export all variables, then set +a to stop

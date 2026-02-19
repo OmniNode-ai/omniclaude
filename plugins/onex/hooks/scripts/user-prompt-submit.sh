@@ -138,8 +138,8 @@ WORKFLOW_DETECTED="false"
 # "/local-review ...code review..." would incorrectly match code-quality-analyzer).
 if [[ "$PROMPT" =~ ^/[a-zA-Z_-] ]]; then
     SLASH_CMD="$(echo "$PROMPT" | grep -oE '^/[a-zA-Z_-]+' || echo "")"
-    log "Slash command detected: ${SLASH_CMD} — skipping agent routing, defaulting to polymorphic-agent"
-    ROUTING_RESULT='{"selected_agent":"polymorphic-agent","confidence":1.0,"reasoning":"slash_command_bypass","method":"slash_command","domain":"workflow_coordination","purpose":"Slash commands manage their own agent dispatch","candidates":[]}'
+    log "Slash command detected: ${SLASH_CMD} — skipping agent routing (slash commands manage their own dispatch)"
+    ROUTING_RESULT='{"selected_agent":"","confidence":1.0,"reasoning":"slash_command_bypass","method":"slash_command","domain":"","purpose":"","candidates":[]}'
     # Update tab activity for statusline (e.g. "/ticket-work" → "ticket-work")
     update_tab_activity "${SLASH_CMD#/}"
 else
@@ -149,7 +149,7 @@ else
 fi
 
 if [ -z "$ROUTING_RESULT" ]; then
-    ROUTING_RESULT='{"selected_agent":"polymorphic-agent","confidence":0.5,"reasoning":"fallback","method":"fallback","domain":"workflow_coordination"}'
+    ROUTING_RESULT='{"selected_agent":"","confidence":0.0,"reasoning":"routing unavailable","method":"fallback","domain":"","candidates":[]}'
 fi
 
 # -----------------------------------------------------------------------
@@ -193,7 +193,7 @@ if [[ "$CANDIDATE_COUNT" -gt 0 ]]; then
         [to_entries[] | "\(.key + 1). \(.value.name) (\(.value.score)) - \(.value.description // "No description")"] | join("\n")
     ' 2>/dev/null || echo "")"
 
-    FUZZY_BEST="$(echo "$CANDIDATES_JSON" | jq -r '.[0].name // "polymorphic-agent"' 2>/dev/null || echo "polymorphic-agent")"
+    FUZZY_BEST="$(echo "$CANDIDATES_JSON" | jq -r '.[0].name // ""' 2>/dev/null || echo "")"
     FUZZY_BEST_SCORE="$(echo "$CANDIDATES_JSON" | jq -r '.[0].score // "0.5"' 2>/dev/null || echo "0.5")"
 
     AGENT_YAML_INJECTION="========================================================================
@@ -208,8 +208,6 @@ ${CANDIDATE_LIST}
 
 FUZZY BEST: ${FUZZY_BEST} (${FUZZY_BEST_SCORE})
 YOUR DECISION: Pick the agent that best matches the user's actual intent.
-
-If no agent fits, default to polymorphic-agent.
 ========================================================================
 "
 fi
@@ -487,37 +485,40 @@ fi
 POLLY_DISPATCH_THRESHOLD="${POLLY_DISPATCH_THRESHOLD:-0.7}"
 MEETS_THRESHOLD="$(awk -v conf="$CONFIDENCE" -v thresh="$POLLY_DISPATCH_THRESHOLD" 'BEGIN {print (conf >= thresh) ? "true" : "false"}')"
 
-# Construct the core context without expanding internal variables immediately
-# Use jq to safely combine the header/footer with the dynamic data to avoid quote issues
-AGENT_CONTEXT=$(jq -rn \
-    --arg emit_warn "$EMIT_HEALTH_WARNING" \
-    --arg yaml "$AGENT_YAML_INJECTION" \
-    --arg patterns "$LEARNED_PATTERNS" \
-    --arg enrichment "$ENRICHMENT_CONTEXT" \
-    --arg advisory "$PATTERN_ADVISORY" \
-    --arg name "$AGENT_NAME" \
-    --arg conf "$CONFIDENCE" \
-    --arg domain "$AGENT_DOMAIN" \
-    --arg purpose "$AGENT_PURPOSE" \
-    --arg reason "$SELECTION_REASONING" \
-    --arg thresh "$POLLY_DISPATCH_THRESHOLD" \
-    --arg meets "$MEETS_THRESHOLD" \
-    '
-    (if $emit_warn != "" then $emit_warn + "\n\n" else "" end) +
-    $yaml + "\n" + $patterns + "\n" +
-    (if $enrichment != "" then $enrichment + "\n" else "" end) +
-    (if $advisory != "" then $advisory + "\n" else "" end) +
-    "========================================================================\n" +
-    "AGENT CONTEXT\n" +
-    "========================================================================\n" +
-    "AGENT: " + $name + "\n" +
-    "CONFIDENCE: " + $conf + " (Threshold: " + $thresh + ")\n" +
-    "MEETS THRESHOLD: " + $meets + "\n" +
-    "DOMAIN: " + $domain + "\n" +
-    "PURPOSE: " + $purpose + "\n" +
-    "REASONING: " + $reason + "\n" +
-    "========================================================================\n"
-    ')
+# Only inject agent context when an agent was actually matched.
+# When nothing matched, pass through with no additional context — no fallback noise.
+AGENT_CONTEXT=""
+if [[ -n "$AGENT_NAME" ]] && [[ "$AGENT_NAME" != "NO_AGENT_DETECTED" ]]; then
+    AGENT_CONTEXT=$(jq -rn \
+        --arg emit_warn "$EMIT_HEALTH_WARNING" \
+        --arg yaml "$AGENT_YAML_INJECTION" \
+        --arg patterns "$LEARNED_PATTERNS" \
+        --arg enrichment "$ENRICHMENT_CONTEXT" \
+        --arg advisory "$PATTERN_ADVISORY" \
+        --arg name "$AGENT_NAME" \
+        --arg conf "$CONFIDENCE" \
+        --arg domain "$AGENT_DOMAIN" \
+        --arg purpose "$AGENT_PURPOSE" \
+        --arg reason "$SELECTION_REASONING" \
+        --arg thresh "$POLLY_DISPATCH_THRESHOLD" \
+        --arg meets "$MEETS_THRESHOLD" \
+        '
+        (if $emit_warn != "" then $emit_warn + "\n\n" else "" end) +
+        $yaml + "\n" + $patterns + "\n" +
+        (if $enrichment != "" then $enrichment + "\n" else "" end) +
+        (if $advisory != "" then $advisory + "\n" else "" end) +
+        "========================================================================\n" +
+        "AGENT CONTEXT\n" +
+        "========================================================================\n" +
+        "AGENT: " + $name + "\n" +
+        "CONFIDENCE: " + $conf + " (Threshold: " + $thresh + ")\n" +
+        "MEETS THRESHOLD: " + $meets + "\n" +
+        "DOMAIN: " + $domain + "\n" +
+        "PURPOSE: " + $purpose + "\n" +
+        "REASONING: " + $reason + "\n" +
+        "========================================================================\n"
+        ')
+fi
 
 # Final trace: total context injected
 _TS3="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"

@@ -55,26 +55,35 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Optional handler imports — graceful degradation when omnibase_infra absent
 # ---------------------------------------------------------------------------
-try:
-    from omnibase_infra.nodes.node_llm_inference_effect.handlers.handler_code_analysis_enrichment import (  # noqa: E501
-        HandlerCodeAnalysisEnrichment,
-    )
-except ImportError:
+import os as _os
+
+if _os.environ.get("OMNICLAUDE_NO_HANDLERS") == "1":
+    # Test isolation guard: skip all handler imports to prevent import-time
+    # blocking when omnibase_infra handlers try to connect to services.
     HandlerCodeAnalysisEnrichment = None
-
-try:
-    from omnibase_infra.nodes.node_llm_embedding_effect.handlers.handler_similarity_enrichment import (  # noqa: E501
-        HandlerSimilarityEnrichment,
-    )
-except ImportError:
     HandlerSimilarityEnrichment = None
-
-try:
-    from omnibase_infra.nodes.node_llm_inference_effect.handlers.handler_summarization_enrichment import (  # noqa: E501
-        HandlerSummarizationEnrichment,
-    )
-except ImportError:
     HandlerSummarizationEnrichment = None
+else:
+    try:
+        from omnibase_infra.nodes.node_llm_inference_effect.handlers.handler_code_analysis_enrichment import (  # type: ignore[no-redef]  # noqa: E501
+            HandlerCodeAnalysisEnrichment,
+        )
+    except ImportError:
+        HandlerCodeAnalysisEnrichment = None
+
+    try:
+        from omnibase_infra.nodes.node_llm_embedding_effect.handlers.handler_similarity_enrichment import (  # type: ignore[no-redef]  # noqa: E501
+            HandlerSimilarityEnrichment,
+        )
+    except ImportError:
+        HandlerSimilarityEnrichment = None
+
+    try:
+        from omnibase_infra.nodes.node_llm_inference_effect.handlers.handler_summarization_enrichment import (  # type: ignore[no-redef]  # noqa: E501
+            HandlerSummarizationEnrichment,
+        )
+    except ImportError:
+        HandlerSummarizationEnrichment = None
 
 # ---------------------------------------------------------------------------
 # Optional observability emitter — graceful degradation when unavailable
@@ -224,7 +233,13 @@ async def _run_all_enrichments(
 
     for name, cls in handler_map:
         if cls is not None:
-            handler_instance = cls()
+            try:
+                handler_instance = cls()
+            except Exception as exc:
+                logger.warning(
+                    "Failed to instantiate enrichment handler %r: %s", name, exc
+                )
+                continue
             task = asyncio.create_task(
                 _run_single_enrichment(name, handler_instance, prompt, project_path)
             )

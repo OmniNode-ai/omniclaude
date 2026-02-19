@@ -265,8 +265,8 @@ class TestLocalLlmEndpointRegistry:
         endpoints = registry.get_all_endpoints()
         assert len(endpoints) == 5
         model_names = {ep.model_name for ep in endpoints}
-        assert "Qwen2.5-Coder-14B" in model_names
-        assert "GTE-Qwen2-1.5B" in model_names
+        assert "Qwen3-Coder-30B-A3B-Instruct" in model_names
+        assert "Qwen3-Embedding-8B-4bit" in model_names
         assert "Qwen2.5-72B" in model_names
         assert "Qwen2-VL" in model_names
         assert "Qwen2.5-14B" in model_names
@@ -294,7 +294,7 @@ class TestLocalLlmEndpointRegistry:
         registry = make_registry()
         endpoint = registry.get_endpoint(LlmEndpointPurpose.CODE_ANALYSIS)
         assert endpoint is not None
-        assert endpoint.model_name == "Qwen2.5-Coder-14B"
+        assert endpoint.model_name == "Qwen3-Coder-30B-A3B-Instruct"
         assert endpoint.priority == 9
 
     @pytest.mark.unit
@@ -423,3 +423,63 @@ class TestLocalLlmEndpointRegistry:
         # Should not raise
         registry = make_registry()
         assert len(registry.get_all_endpoints()) == 1
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "field_env_var",
+        [
+            "LLM_CODER_MODEL_NAME",
+            "LLM_CODER_FAST_MODEL_NAME",
+            "LLM_EMBEDDING_MODEL_NAME",
+            "LLM_FUNCTION_MODEL_NAME",
+            "LLM_DEEPSEEK_LITE_MODEL_NAME",
+            "LLM_QWEN_72B_MODEL_NAME",
+            "LLM_VISION_MODEL_NAME",
+            "LLM_DEEPSEEK_R1_MODEL_NAME",
+            "LLM_QWEN_14B_MODEL_NAME",
+        ],
+    )
+    def test_whitespace_only_model_name_rejected(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        _clean_env: None,
+        make_registry: Callable[..., LocalLlmEndpointRegistry],
+        field_env_var: str,
+    ) -> None:
+        """Whitespace-only model names are rejected at validation time."""
+        monkeypatch.setenv(field_env_var, "   ")
+        with pytest.raises(ValidationError, match="whitespace"):
+            make_registry()
+
+    @pytest.mark.unit
+    @pytest.mark.parametrize(
+        "field_env_var",
+        [
+            "LLM_CODER_MODEL_NAME",
+            "LLM_CODER_FAST_MODEL_NAME",
+            "LLM_EMBEDDING_MODEL_NAME",
+        ],
+    )
+    def test_tabs_only_model_name_rejected(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        _clean_env: None,
+        make_registry: Callable[..., LocalLlmEndpointRegistry],
+        field_env_var: str,
+    ) -> None:
+        """Tab-only model names are also rejected (tabs are whitespace)."""
+        monkeypatch.setenv(field_env_var, "\t\t")
+        with pytest.raises(ValidationError, match="whitespace"):
+            make_registry()
+
+    @pytest.mark.unit
+    def test_valid_model_name_with_spaces_accepted(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        _clean_env: None,
+        make_registry: Callable[..., LocalLlmEndpointRegistry],
+    ) -> None:
+        """A model name with interior spaces (but non-empty when stripped) is accepted."""
+        monkeypatch.setenv("LLM_CODER_MODEL_NAME", "my model v2")
+        registry = make_registry()
+        assert registry.llm_coder_model_name == "my model v2"

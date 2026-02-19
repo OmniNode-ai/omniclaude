@@ -681,6 +681,7 @@ class TestSubprocessInterface:
             env=_make_test_env(
                 ENABLE_LOCAL_INFERENCE_PIPELINE="false",
                 ENABLE_LOCAL_ENRICHMENT="false",
+                OMNICLAUDE_NO_HANDLERS="1",
             ),
         )
 
@@ -703,6 +704,7 @@ class TestSubprocessInterface:
             env=_make_test_env(
                 ENABLE_LOCAL_INFERENCE_PIPELINE="true",
                 ENABLE_LOCAL_ENRICHMENT="true",
+                OMNICLAUDE_NO_HANDLERS="1",
             ),
         )
 
@@ -724,6 +726,7 @@ class TestSubprocessInterface:
             env=_make_test_env(
                 ENABLE_LOCAL_INFERENCE_PIPELINE="true",
                 ENABLE_LOCAL_ENRICHMENT="true",
+                OMNICLAUDE_NO_HANDLERS="1",
             ),
         )
 
@@ -761,7 +764,7 @@ class TestSubprocessInterface:
                 text=True,
                 timeout=5,
                 check=False,
-                env=_make_test_env(**extra_env),
+                env=_make_test_env(**extra_env, OMNICLAUDE_NO_HANDLERS="1"),
             )
             assert proc.returncode == 0, f"Non-zero exit for stdin={stdin_data!r}"
             result = json.loads(proc.stdout)
