@@ -2146,6 +2146,111 @@ class ModelLlmRoutingFallbackPayload(BaseModel):
     )
 
 
+class ModelTaskDelegatedPayload(BaseModel):
+    """Event payload for task delegation with quality gate result (OMN-2281).
+
+    Emitted after each delegation attempt — whether the quality gate passed
+    or failed — to allow tracking of delegation success rate (golden metric: >80%).
+
+    Attributes:
+        session_id: Session identifier for correlation.
+        correlation_id: Correlation ID for distributed tracing.
+        emitted_at: Timestamp when the event was emitted (UTC). Must be injected explicitly.
+        task_type: TaskIntent value (document, test, research).
+        handler_used: Endpoint purpose used (doc_gen, test_boilerplate, code_review).
+        model_used: Model identifier returned by the endpoint.
+        quality_gate_passed: True when the heuristic quality check succeeded.
+        quality_gate_reason: Human-readable reason for quality gate failure (max 200 chars).
+        delegation_success: True when delegation produced a usable response.
+        estimated_savings_usd: Estimated cost savings compared to primary model (>= 0.0).
+        latency_ms: Total delegation wall-clock time in milliseconds (>= 0).
+
+    Note:
+        ``extra="ignore"`` is intentional — the delegation result dict may carry
+        additional keys (e.g., debug fields) that are not needed by this schema.
+
+    Example:
+        >>> from datetime import UTC, datetime
+        >>> from uuid import uuid4
+        >>> event = ModelTaskDelegatedPayload(
+        ...     session_id="abc12345-1234-5678-abcd-1234567890ab",
+        ...     correlation_id=uuid4(),
+        ...     emitted_at=datetime(2025, 1, 15, 12, 5, 0, tzinfo=UTC),
+        ...     task_type="document",
+        ...     handler_used="doc_gen",
+        ...     model_used="Qwen2.5-72B",
+        ...     quality_gate_passed=True,
+        ...     quality_gate_reason=None,
+        ...     delegation_success=True,
+        ...     estimated_savings_usd=0.0112,
+        ...     latency_ms=320,
+        ... )
+    """
+
+    model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
+
+    # Identity / tracing
+    session_id: str = Field(
+        ...,
+        min_length=1,
+        description="Session identifier for correlation",
+    )
+    correlation_id: UUID = Field(
+        ...,
+        description="Correlation ID for distributed tracing",
+    )
+
+    # Timestamps — MUST be explicitly injected (no default_factory for testability)
+    emitted_at: TimezoneAwareDatetime = Field(
+        ...,
+        description="Timestamp when the event was emitted (UTC)",
+    )
+
+    # Delegation metadata
+    task_type: str = Field(
+        ...,
+        min_length=1,
+        description="TaskIntent value: document, test, research",
+    )
+    handler_used: str = Field(
+        ...,
+        min_length=1,
+        description="Endpoint purpose used: doc_gen, test_boilerplate, code_review",
+    )
+    model_used: str = Field(
+        ...,
+        min_length=1,
+        description="Model identifier returned by the endpoint",
+    )
+
+    # Quality gate outcome
+    quality_gate_passed: bool = Field(
+        ...,
+        description="True when the heuristic quality check succeeded",
+    )
+    quality_gate_reason: str | None = Field(
+        default=None,
+        max_length=200,
+        description="Human-readable reason for quality gate failure (None when passed)",
+    )
+
+    # Delegation outcome
+    delegation_success: bool = Field(
+        ...,
+        description="True when delegation produced a usable response for the user",
+    )
+    estimated_savings_usd: float = Field(
+        ...,
+        ge=0.0,
+        description="Estimated cost savings compared to primary model in USD",
+    )
+    latency_ms: int = Field(
+        ...,
+        ge=0,
+        description="Total delegation wall-clock time in milliseconds",
+    )
+
+
 __all__ = [
     # Constants
     "PROMPT_PREVIEW_MAX_LENGTH",
@@ -2180,6 +2285,8 @@ __all__ = [
     # LLM routing observability (OMN-2273)
     "ModelLlmRoutingDecisionPayload",
     "ModelLlmRoutingFallbackPayload",
+    # Delegation observability (OMN-2281)
+    "ModelTaskDelegatedPayload",
     # Envelope and types
     "ModelHookEventEnvelope",
     "ModelHookPayload",

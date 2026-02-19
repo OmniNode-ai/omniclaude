@@ -153,6 +153,11 @@ class TopicBase(StrEnum):
     # ==========================================================================
     CONTEXT_ENRICHMENT = "onex.evt.omniclaude.context-enrichment.v1"  # OMN-2274
 
+    # ==========================================================================
+    # Delegation observability topics (OMN-2281)
+    # ==========================================================================
+    TASK_DELEGATED = "onex.evt.omniclaude.task-delegated.v1"
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).
