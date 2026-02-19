@@ -207,10 +207,14 @@ class IntelligenceConfig(BaseModel):
         servers = [s.strip() for s in v.split(",")]
         for server in servers:
             if ":" not in server:
-                raise ValueError(f"Invalid server format '{server}'. Expected 'host:port'")
+                raise ValueError(
+                    f"Invalid server format '{server}'. Expected 'host:port'"
+                )
             host, port = server.rsplit(":", 1)
             if not host or not port:
-                raise ValueError(f"Invalid server format '{server}'. Expected 'host:port'")
+                raise ValueError(
+                    f"Invalid server format '{server}'. Expected 'host:port'"
+                )
             try:
                 port_int = int(port)
                 if port_int < 1 or port_int > 65535:
@@ -331,7 +335,10 @@ class IntelligenceConfig(BaseModel):
             ValueError: If configuration is inconsistent
         """
         # Check fallback configuration
-        if not self.enable_event_based_discovery and not self.enable_filesystem_fallback:
+        if (
+            not self.enable_event_based_discovery
+            and not self.enable_filesystem_fallback
+        ):
             raise ValueError(
                 "At least one intelligence source must be enabled: "
                 "enable_event_based_discovery or enable_filesystem_fallback"
