@@ -1057,7 +1057,9 @@ class TestRunShadowWorker:
                 api_key="test-api-key",  # noqa: secrets  # pragma: allowlist secret
                 base_url="https://api.anthropic.com",
                 timeout_s=30.0,
+                max_tokens=512,
                 emitted_at=_FIXED_EMITTED_AT,
+                auto_disable_triggered=False,
             )
 
         # The shadow Claude API must be called with the correct parameters
@@ -1067,6 +1069,7 @@ class TestRunShadowWorker:
             api_key="test-api-key",  # noqa: secrets  # pragma: allowlist secret
             base_url="https://api.anthropic.com",
             timeout_s=30.0,
+            max_tokens=512,
         )
 
         # compare_responses must be called with local and shadow text
@@ -1107,7 +1110,9 @@ class TestRunShadowWorker:
                 api_key="test-api-key",  # noqa: secrets  # pragma: allowlist secret
                 base_url="https://api.anthropic.com",
                 timeout_s=30.0,
+                max_tokens=512,
                 emitted_at=_FIXED_EMITTED_AT,
+                auto_disable_triggered=False,
             )
 
         # No event should be emitted when the API call fails
@@ -1136,7 +1141,9 @@ class TestRunShadowWorker:
                 api_key="test-api-key",  # noqa: secrets  # pragma: allowlist secret
                 base_url="https://api.anthropic.com",
                 timeout_s=30.0,
+                max_tokens=512,
                 emitted_at=_FIXED_EMITTED_AT,
+                auto_disable_triggered=False,
             )
 
         mock_emit.assert_not_called()
@@ -1200,6 +1207,7 @@ class TestEmitShadowComparisonEvent:
                 shadow_latency_ms=1200,
                 sample_rate=0.07,
                 emitted_at=_FIXED_EMITTED_AT,
+                auto_disable_triggered=False,
             )
 
         assert len(emitted_calls) == 1
@@ -1244,4 +1252,5 @@ class TestEmitShadowComparisonEvent:
                 shadow_latency_ms=950,
                 sample_rate=0.07,
                 emitted_at=_FIXED_EMITTED_AT,
+                auto_disable_triggered=False,
             )
