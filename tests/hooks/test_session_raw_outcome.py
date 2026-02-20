@@ -219,6 +219,41 @@ class TestSessionRawOutcomeSchema:
                 emitted_at=now,
             )
 
+    def test_slash_command_sentinel_confidence_zero(self) -> None:
+        """Slash-command bypass: session-end.sh zeroes routing_confidence to 0.0.
+
+        When user-prompt-submit.sh detects a slash command, it writes the accumulator
+        with agent_selected="" and routing_confidence=1.0 (a sentinel meaning no real
+        routing decision was made). session-end.sh detects this pair and zeroes
+        routing_confidence to 0.0 before emitting, so omniintelligence receives an
+        unambiguous no-routing-decision signal (agent_selected="" + confidence=0.0).
+
+        Both states (pre-zeroing 1.0 and post-zeroing 0.0) must be valid schema values.
+        This test documents the expected emitted state (post-zeroing, confidence=0.0).
+        If the sentinel logic is removed from session-end.sh, consumers would receive
+        the misleading confidence=1.0 sentinel — this test provides a documentation
+        anchor for that regression risk.
+        """
+        pytest.importorskip(
+            "tiktoken", reason="requires tiktoken for omniclaude.hooks import chain"
+        )
+        from omniclaude.hooks.schemas import ModelSessionRawOutcomePayload
+
+        now = datetime(2026, 2, 19, 12, 0, 0, tzinfo=UTC)
+        # Post-zeroing: what session-end.sh actually emits for slash commands
+        emitted = ModelSessionRawOutcomePayload(
+            session_id="abc12345-1234-5678-abcd-1234567890ab",
+            injection_occurred=False,
+            patterns_injected_count=0,
+            agent_selected="",
+            tool_calls_count=0,
+            duration_ms=0,
+            routing_confidence=0.0,  # zeroed by sentinel detection in session-end.sh
+            emitted_at=now,
+        )
+        assert emitted.routing_confidence == 0.0
+        assert emitted.agent_selected == ""
+
     def test_event_name_discriminator(self) -> None:
         """event_name must be 'routing.outcome.raw' for polymorphic deserialization."""
         pytest.importorskip(
