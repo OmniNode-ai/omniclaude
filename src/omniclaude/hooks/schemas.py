@@ -2340,6 +2340,217 @@ class ModelTaskDelegatedPayload(BaseModel):
     )
 
 
+class ModelDelegationShadowComparisonPayload(BaseModel):
+    """Event payload for delegation shadow validation comparison (OMN-2283).
+
+    Emitted asynchronously after shadow validation runs a delegated prompt
+    through Claude to compare quality.  This event is non-blocking — the local
+    model response is returned to the user immediately; Claude's shadow response
+    is obtained in a background thread and compared after the fact.
+
+    Purpose: detect quality degradation before users notice it.  Without this,
+    the only feedback loop is user complaints.
+
+    Exit criteria: shadow validation is automatically disabled once the daily
+    pass rate has met or exceeded the ``exit_threshold`` for
+    ``exit_window_days`` consecutive days (default: 95% for 30 days).
+
+    Attributes:
+        session_id: Session identifier for correlation.
+        correlation_id: Correlation ID for distributed tracing.
+        emitted_at: Timestamp when the event was emitted (UTC). Must be injected
+            explicitly (no default_factory).
+        task_type: TaskIntent value (document, test, research).
+        local_model: Model identifier used for the delegated (local) response.
+        shadow_model: Model identifier used for the shadow (Claude) response.
+        local_response_length: Character count of the local model response.
+        shadow_response_length: Character count of the shadow (Claude) response.
+        length_divergence_ratio: Absolute ratio of length difference to shadow
+            length: abs(local_len - shadow_len) / max(shadow_len, 1). Range 0.0+.
+            Values > 0.5 indicate significant length divergence.
+        keyword_overlap_score: Jaccard similarity of significant word sets
+            between local and shadow responses (0.0 = no overlap, 1.0 = identical
+            vocabulary). Uses word sets after stop-word removal.
+        structural_match: True when both responses have the same top-level
+            structural category (e.g., both have code blocks, both are prose).
+        quality_gate_passed: True when all comparison metrics are within
+            acceptable divergence thresholds.
+        divergence_reason: Human-readable summary of why quality_gate_passed is
+            False.  None when the gate passed.
+        shadow_latency_ms: Wall-clock time for the shadow Claude call in ms.
+        sample_rate: The configured sampling rate (0.05 - 0.10) at which this
+            shadow check was triggered.
+        consecutive_passing_days: Number of consecutive days where the pass rate
+            met or exceeded the exit threshold (for exit criteria tracking).
+        exit_threshold: The pass-rate threshold (e.g. 0.95) required to count a
+            day toward the exit window.
+        exit_window_days: Number of consecutive days above threshold required to
+            trigger auto-disable (e.g. 30).
+        auto_disable_triggered: True when this event triggered the auto-disable
+            condition (consecutive_passing_days >= exit_window_days).
+
+    Note:
+        ``extra="ignore"`` is intentional — the shadow comparison result dict may
+        carry additional debug fields not needed by this schema.
+
+    Example:
+        >>> from datetime import UTC, datetime
+        >>> from uuid import uuid4
+        >>> event = ModelDelegationShadowComparisonPayload(
+        ...     session_id="abc12345-1234-5678-abcd-1234567890ab",
+        ...     correlation_id=uuid4(),
+        ...     emitted_at=datetime(2025, 1, 15, 12, 5, 0, tzinfo=UTC),
+        ...     task_type="document",
+        ...     local_model="Qwen2.5-72B",
+        ...     shadow_model="claude-sonnet-4-6",
+        ...     local_response_length=450,
+        ...     shadow_response_length=520,
+        ...     length_divergence_ratio=0.135,
+        ...     keyword_overlap_score=0.82,
+        ...     structural_match=True,
+        ...     quality_gate_passed=True,
+        ...     divergence_reason=None,
+        ...     shadow_latency_ms=1240,
+        ...     sample_rate=0.07,
+        ...     consecutive_passing_days=12,
+        ...     exit_threshold=0.95,
+        ...     exit_window_days=30,
+        ...     auto_disable_triggered=False,
+        ... )
+    """
+
+    model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
+
+    # Identity / tracing
+    session_id: str = Field(
+        ...,
+        min_length=1,
+        description="Session identifier for correlation",
+    )
+    correlation_id: UUID = Field(
+        ...,
+        description="Correlation ID for distributed tracing",
+    )
+
+    # Timestamps — MUST be explicitly injected (no default_factory for testability)
+    emitted_at: TimezoneAwareDatetime = Field(
+        ...,
+        description="Timestamp when the event was emitted (UTC)",
+    )
+
+    # Delegation context
+    task_type: str = Field(
+        ...,
+        min_length=1,
+        description="TaskIntent value: document, test, research",
+    )
+    local_model: str = Field(
+        ...,
+        min_length=1,
+        description="Model identifier used for the delegated (local) response",
+    )
+    shadow_model: str = Field(
+        ...,
+        min_length=1,
+        description="Model identifier used for the shadow (Claude) response",
+    )
+
+    # Output comparison metrics
+    local_response_length: int = Field(
+        ...,
+        ge=0,
+        description="Character count of the local model response",
+    )
+    shadow_response_length: int = Field(
+        ...,
+        ge=0,
+        description="Character count of the shadow (Claude) response",
+    )
+    length_divergence_ratio: float = Field(
+        ...,
+        ge=0.0,
+        description=(
+            "Absolute ratio of length difference to shadow length: "
+            "abs(local_len - shadow_len) / max(shadow_len, 1). "
+            "Values > 0.5 indicate significant length divergence."
+        ),
+    )
+    keyword_overlap_score: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Jaccard similarity of significant word sets (0.0 = no overlap, "
+            "1.0 = identical vocabulary). Stop-words excluded."
+        ),
+    )
+    structural_match: bool = Field(
+        ...,
+        description=(
+            "True when both responses share the same top-level structural "
+            "category (e.g., both contain code blocks, or both are prose)."
+        ),
+    )
+
+    # Quality gate outcome
+    quality_gate_passed: bool = Field(
+        ...,
+        description="True when all comparison metrics are within acceptable thresholds",
+    )
+    divergence_reason: str | None = Field(
+        default=None,
+        max_length=500,
+        description=(
+            "Human-readable summary of why quality_gate_passed is False. "
+            "None when the gate passed."
+        ),
+    )
+
+    # Performance
+    shadow_latency_ms: int = Field(
+        ...,
+        ge=0,
+        description="Wall-clock time for the shadow Claude API call in milliseconds",
+    )
+
+    # Sampling / exit-criteria metadata
+    sample_rate: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Configured sampling rate at which this shadow check was triggered",
+    )
+    consecutive_passing_days: int = Field(
+        default=0,
+        ge=0,
+        description=(
+            "Number of consecutive days where the pass rate met or exceeded "
+            "exit_threshold (for exit-criteria tracking)."
+        ),
+    )
+    exit_threshold: float = Field(
+        default=0.95,
+        ge=0.0,
+        le=1.0,
+        description="Daily pass-rate threshold required to count toward the exit window",
+    )
+    exit_window_days: int = Field(
+        default=30,
+        ge=1,
+        description=(
+            "Number of consecutive days above exit_threshold required to trigger "
+            "automatic shadow validation disable."
+        ),
+    )
+    auto_disable_triggered: bool = Field(
+        default=False,
+        description=(
+            "True when this event triggered the auto-disable condition "
+            "(consecutive_passing_days >= exit_window_days)."
+        ),
+    )
+
+
 __all__ = [
     # Constants
     "PROMPT_PREVIEW_MAX_LENGTH",
@@ -2377,6 +2588,8 @@ __all__ = [
     "ModelLlmRoutingFallbackPayload",
     # Delegation observability (OMN-2281)
     "ModelTaskDelegatedPayload",
+    # Shadow validation (OMN-2283)
+    "ModelDelegationShadowComparisonPayload",
     # Envelope and types
     "ModelHookEventEnvelope",
     "ModelHookPayload",

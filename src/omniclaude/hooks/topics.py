@@ -161,6 +161,11 @@ class TopicBase(StrEnum):
     # ==========================================================================
     TASK_DELEGATED = "onex.evt.omniclaude.task-delegated.v1"
 
+    # ==========================================================================
+    # Shadow validation topics (OMN-2283)
+    # ==========================================================================
+    DELEGATION_SHADOW_COMPARISON = "onex.evt.omniclaude.delegation-shadow-comparison.v1"
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).
