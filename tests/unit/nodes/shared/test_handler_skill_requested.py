@@ -187,3 +187,18 @@ class TestHandleSkillRequested:
         prompt_arg: str = dispatcher.call_args[0][0]
         assert "--verbose" in prompt_arg
         assert "--pr 42" in prompt_arg
+
+    @pytest.mark.asyncio
+    async def test_handle_skill_requested_partial_for_unrecognized_status(
+        self,
+    ) -> None:
+        """A RESULT: block with an unrecognized status value produces PARTIAL."""
+        request = _make_request()
+        polly_output = (
+            "Skill execution finished.\nRESULT:\nstatus: in-progress\nerror:\n"
+        )
+        dispatcher = AsyncMock(return_value=polly_output)
+
+        result = await handle_skill_requested(request, task_dispatcher=dispatcher)
+
+        assert result.status == SkillResultStatus.PARTIAL
