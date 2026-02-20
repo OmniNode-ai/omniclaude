@@ -169,11 +169,16 @@ class TestPatternCacheStaleness:
         cache.update(
             "general", [{"id": "p1", "pattern_signature": "x", "confidence": 0.9}]
         )
-        # Simulate 601 seconds elapsed (beyond the default 600s threshold)
+        # Simulate 601 seconds elapsed (beyond the default 600s threshold).
+        # We patch only time.monotonic rather than the whole time module so that
+        # time.sleep (used by the retry loop in _run_projection_consumer) is not
+        # accidentally suppressed if it is ever called in a related code path.
         fake_now = time.monotonic() + 601
 
-        with patch("plugins.onex.hooks.lib.pattern_cache.time") as mock_time:
-            mock_time.monotonic.return_value = fake_now
+        with patch(
+            "plugins.onex.hooks.lib.pattern_cache.time.monotonic",
+            return_value=fake_now,
+        ):
             # _get_stale_threshold uses os.environ, not time — no need to mock it
             # Force the cache's _last_updated_at to be in the past
             with cache._lock:

@@ -40,6 +40,15 @@ _PROJECTION_TOPIC = "onex.evt.omniintelligence.pattern-projection.v1"
 # Default staleness threshold in seconds (10 minutes)
 _DEFAULT_STALE_SECONDS = 600
 
+# Retry configuration for the background projection consumer.
+# _MAX_CONSUMER_RETRIES=None keeps current unlimited behaviour — the consumer
+# will retry indefinitely as long as the process is alive (daemon thread).
+# _CONSUMER_RETRY_SLEEP_S is the flat sleep between retry attempts; there is
+# intentionally no exponential backoff because the consumer is a long-lived
+# daemon and a flat 30-second pause is acceptable for infrastructure recovery.
+_MAX_CONSUMER_RETRIES: int | None = None
+_CONSUMER_RETRY_SLEEP_S: int = 30
+
 
 def _get_stale_threshold() -> int:
     """Read PATTERN_CACHE_STALE_SECONDS from env, returning default on parse failure."""
@@ -282,7 +291,11 @@ def _run_projection_consumer(kafka_bootstrap_servers: str) -> None:
         kafka_bootstrap_servers,
     )
 
+    retry_count = 0
     while True:
+        # Reset consumer reference at the top of every iteration so the except
+        # handlers below never see a stale reference from a previous iteration
+        # that has already been closed (fixes potential double-close race).
         consumer = None
         try:
             consumer = KafkaConsumer(
@@ -314,35 +327,45 @@ def _run_projection_consumer(kafka_bootstrap_servers: str) -> None:
                     )
 
         except KafkaError as exc:
+            retry_count += 1
             logger.warning(
                 "pattern_cache: Kafka error in projection consumer: %s; "
-                "retrying in 30s",
+                "retrying in %ds (retry_count=%d)",
                 exc,
+                _CONSUMER_RETRY_SLEEP_S,
+                retry_count,
             )
             if consumer is not None:
                 try:
                     consumer.close()
                 except Exception:
                     pass
-            time.sleep(30)
+            time.sleep(_CONSUMER_RETRY_SLEEP_S)
         except Exception as exc:
+            retry_count += 1
             logger.warning(
                 "pattern_cache: unexpected error in projection consumer: %s; "
-                "retrying in 30s",
+                "retrying in %ds (retry_count=%d)",
                 exc,
+                _CONSUMER_RETRY_SLEEP_S,
+                retry_count,
             )
             if consumer is not None:
                 try:
                     consumer.close()
                 except Exception:
                     pass
-            time.sleep(30)
+            time.sleep(_CONSUMER_RETRY_SLEEP_S)
 
 
-def start_projection_consumer(kafka_bootstrap_servers: str) -> None:
+def _start_projection_consumer(kafka_bootstrap_servers: str) -> None:
     """Start the background projection consumer thread.
 
     The thread is a daemon so it will not block process exit.
+
+    Private: use start_projection_consumer_if_configured() as the public entry
+    point. Calling this function directly bypasses the _consumer_started guard
+    and can cause duplicate consumer threads competing on the singleton cache.
 
     Args:
         kafka_bootstrap_servers: Kafka bootstrap server address(es), e.g.
@@ -388,9 +411,10 @@ def start_projection_consumer_if_configured() -> None:
                     "pattern_cache: KAFKA_BOOTSTRAP_SERVERS not set; "
                     "projection consumer disabled"
                 )
-                # Mark as "started" (no-op) so subsequent calls skip the lock.
-                _consumer_started = True
+                # Do NOT set _consumer_started here: if Kafka is configured
+                # later at runtime a subsequent call must still be able to
+                # start the consumer.
                 return
 
-            start_projection_consumer(bootstrap)
+            _start_projection_consumer(bootstrap)
             _consumer_started = True

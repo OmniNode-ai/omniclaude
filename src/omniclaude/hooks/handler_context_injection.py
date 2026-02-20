@@ -846,80 +846,101 @@ class HandlerContextInjection:
         # --- Cache-first read (OMN-2425) ---
         # Start the background consumer on first call (no-op if already running
         # or if KAFKA_BOOTSTRAP_SERVERS is unset).
+        #
+        # The import try/except is kept separate from the cache-read try/except
+        # so that ImportError (kafka-python missing) is distinguishable from
+        # programming errors inside the cache-read logic. Programming errors in
+        # the cache-read path (AttributeError, NameError, TypeError, etc.) will
+        # be logged via logger.exception so they are visible in logs rather than
+        # silently swallowed.
+        _get_pattern_cache = None
+        _start_consumer = None
         try:
             from plugins.onex.hooks.lib.pattern_cache import (
-                get_pattern_cache,
-                start_projection_consumer_if_configured,
+                get_pattern_cache as _get_pattern_cache,
             )
+            from plugins.onex.hooks.lib.pattern_cache import (
+                start_projection_consumer_if_configured as _start_consumer,
+            )
+        except ImportError as exc:
+            logger.warning("pattern_cache module unavailable (ImportError): %s", exc)
 
-            start_projection_consumer_if_configured()
+        if _get_pattern_cache is not None and _start_consumer is not None:
+            try:
+                _start_consumer()
 
-            cache = get_pattern_cache()
-            if cache.is_warm() and not cache.is_stale():
-                domain_key = domain or "general"
-                cached_raw = cache.get(domain_key)
-                # Map raw projection dicts → ModelPatternRecord (same field mapping
-                # as _load_patterns_from_api to ensure consistency).
-                records: list[ModelPatternRecord] = []
-                excluded = 0
-                for raw_p in cached_raw:
-                    pattern_id = _safe_str(raw_p.get("id"))
-                    signature = _safe_str(raw_p.get("pattern_signature"))
-                    confidence_raw = raw_p.get("confidence")
-                    if not pattern_id or not signature or confidence_raw is None:
-                        excluded += 1
-                        continue
-                    try:
-                        confidence = float(confidence_raw)
-                    except (TypeError, ValueError):
-                        excluded += 1
-                        continue
-                    domain_id = _safe_str(raw_p.get("domain_id"), default="general")
-                    quality_score_raw = raw_p.get("quality_score")
-                    if quality_score_raw is None:
-                        success_rate = 0.0
-                    else:
+                cache = _get_pattern_cache()
+                cache_warm = cache.is_warm()
+                cache_stale = cache.is_stale()
+                if cache_warm and not cache_stale:
+                    domain_key = domain or "general"
+                    cached_raw = cache.get(domain_key)
+                    # Map raw projection dicts → ModelPatternRecord (same field mapping
+                    # as _load_patterns_from_api to ensure consistency).
+                    records: list[ModelPatternRecord] = []
+                    excluded = 0
+                    for raw_p in cached_raw:
+                        pattern_id = _safe_str(raw_p.get("id"))
+                        signature = _safe_str(raw_p.get("pattern_signature"))
+                        confidence_raw = raw_p.get("confidence")
+                        if not pattern_id or not signature or confidence_raw is None:
+                            excluded += 1
+                            continue
                         try:
-                            success_rate = float(quality_score_raw)
+                            confidence = float(confidence_raw)
                         except (TypeError, ValueError):
+                            excluded += 1
+                            continue
+                        domain_id = _safe_str(raw_p.get("domain_id"), default="general")
+                        quality_score_raw = raw_p.get("quality_score")
+                        if quality_score_raw is None:
                             success_rate = 0.0
-                    status = raw_p.get("status")
-                    lifecycle_state: str | None = (
-                        status if status in {"validated", "provisional"} else None
-                    )
-                    try:
-                        record = ModelPatternRecord(
-                            pattern_id=pattern_id,
-                            domain=domain_id,
-                            title=signature,
-                            description=signature,
-                            confidence=confidence,
-                            usage_count=0,
-                            success_rate=max(0.0, min(1.0, success_rate)),
-                            lifecycle_state=lifecycle_state,
+                        else:
+                            try:
+                                success_rate = float(quality_score_raw)
+                            except (TypeError, ValueError):
+                                success_rate = 0.0
+                        status = raw_p.get("status")
+                        lifecycle_state: str | None = (
+                            status if status in {"validated", "provisional"} else None
                         )
-                        records.append(record)
-                    except (ValueError, TypeError):
-                        excluded += 1
-                        continue
+                        try:
+                            record = ModelPatternRecord(
+                                pattern_id=pattern_id,
+                                domain=domain_id,
+                                title=signature,
+                                description=signature,
+                                confidence=confidence,
+                                usage_count=0,
+                                success_rate=max(0.0, min(1.0, success_rate)),
+                                lifecycle_state=lifecycle_state,
+                            )
+                            records.append(record)
+                        except (ValueError, TypeError):
+                            excluded += 1
+                            continue
 
-                logger.info(
-                    "pattern_source=cache_hit domain=%r count=%d excluded=%d",
-                    domain_key,
-                    len(records),
-                    excluded,
+                    logger.info(
+                        "pattern_source=cache_hit domain=%r count=%d excluded=%d",
+                        domain_key,
+                        len(records),
+                        excluded,
+                    )
+                    return ModelLoadPatternsResult(
+                        patterns=records,
+                        source_files=[],
+                        warnings=[],
+                    )
+
+                # Derive reason from the already-evaluated booleans — avoids a
+                # third lock acquisition on cache.is_warm() after the guard block.
+                reason = "cold" if not cache_warm else "stale"
+                logger.info("pattern_source=cache_miss reason=%s", reason)
+
+            except Exception as exc:
+                logger.exception(
+                    "pattern_cache read failed, falling back to API: %s", exc
                 )
-                return ModelLoadPatternsResult(
-                    patterns=records,
-                    source_files=[],
-                    warnings=[],
-                )
-
-            reason = "cold" if not cache.is_warm() else "stale"
-            logger.info("pattern_source=cache_miss reason=%s", reason)
-
-        except Exception as exc:
-            logger.warning("pattern_cache unavailable, falling back to API: %s", exc)
 
         # --- HTTP API fallback (OMN-2355 escape hatch) ---
         cfg = self._config

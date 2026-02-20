@@ -94,6 +94,14 @@ class TestContextInjectionCacheHit:
         handler = _make_handler()
         cache = _warm_cache()
 
+        # Patch target note: we patch the module-level names in pattern_cache
+        # (e.g. "plugins.onex.hooks.lib.pattern_cache.get_pattern_cache") rather
+        # than the import site in handler_context_injection.  This works because
+        # handler_context_injection imports pattern_cache lazily — inside the
+        # _load_patterns_from_database function body — so no module-level binding
+        # is created at import time.  If those imports are ever hoisted to the top
+        # of the file the patch targets here will silently stop working and will
+        # need to be updated to target the handler module's namespace instead.
         with (
             patch(
                 "plugins.onex.hooks.lib.pattern_cache.get_pattern_cache",
