@@ -31,7 +31,7 @@ class ModelSkillResult(BaseModel):
         skill_name: Human-readable skill identifier matching the request.
         status: Final status of the skill invocation.
         output: Raw output text from the skill (None if not available).
-        error: Error detail when status is FAILED or PARTIAL (None otherwise).
+        error: Error detail, typically populated when status is FAILED or PARTIAL.
         correlation_id: Correlation ID carried through from the request.
     """
 
