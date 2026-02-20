@@ -503,21 +503,33 @@ class HandlerContextInjection:
             )
 
         # Step 2: Filter by domain (pre-filter before selection)
-        patterns_before_filter = len(patterns)
+        patterns_before_domain_filter = len(patterns)
         if agent_domain:
             patterns = [
                 p for p in patterns if p.domain == agent_domain or p.domain == "general"
             ]
+        patterns_after_domain_filter = len(patterns)
+
+        # Warn specifically when the domain filter alone eliminated everything
+        if patterns_before_domain_filter > 0 and patterns_after_domain_filter == 0:
+            logger.warning(
+                "domain filter excluded all %d patterns: domain_filter=%r. "
+                "No patterns will be injected. Check that patterns exist for this domain.",
+                patterns_before_domain_filter,
+                agent_domain,
+            )
 
         # Step 3: Filter by confidence threshold (pre-filter)
         patterns = [p for p in patterns if p.confidence >= cfg.min_confidence]
 
-        # Warn when filters exclude all patterns that were available from the API
-        if patterns_before_filter > 0 and not patterns:
+        # Warn specifically when the confidence filter (not the domain filter) eliminated
+        # everything — i.e. the domain filter passed some patterns through but confidence
+        # removed them all.
+        if patterns_after_domain_filter > 0 and not patterns:
             logger.warning(
-                "filter excluded all %d patterns: confidence_min=%.2f, domain_filter=%r. "
-                "No patterns will be injected. Adjust thresholds or domain to include patterns.",
-                patterns_before_filter,
+                "confidence filter excluded all %d patterns: confidence_min=%.2f, domain_filter=%r. "
+                "No patterns will be injected. Lower min_confidence or add higher-confidence patterns.",
+                patterns_after_domain_filter,
                 cfg.min_confidence,
                 agent_domain or "<none>",
             )
