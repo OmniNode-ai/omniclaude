@@ -1,0 +1,192 @@
+#!/usr/bin/env python3
+"""Crash recovery: list recent pipeline state files sorted by mtime."""
+
+import argparse
+import json
+import sys
+import time
+from pathlib import Path
+
+try:
+    import yaml
+except ImportError:
+    print(
+        "Error: PyYAML is not available. Install it with: pip install pyyaml",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+
+
+def format_age(mtime: float) -> str:
+    delta = time.time() - mtime
+    if delta < 60:
+        return f"{int(delta)}s ago"
+    if delta < 3600:
+        return f"{int(delta / 60)}m ago"
+    if delta < 86400:
+        return f"{int(delta / 3600)}h ago"
+    if delta < 604800:
+        return f"{int(delta / 86400)}d ago"
+    return f"{int(delta / 604800)}w ago"
+
+
+def load_state(state_file: Path) -> dict | None:
+    try:
+        with state_file.open() as f:
+            return yaml.safe_load(f) or {}
+    except Exception as exc:
+        print(f"Warning: skipping {state_file} — {exc}", file=sys.stderr)
+        return None
+
+
+def extract_entry(state_file: Path, data: dict) -> dict:
+    stat = state_file.stat()
+    mtime = stat.st_mtime
+
+    # Determine schema variant
+    if "ticket_id" in data or "current_phase" in data:
+        # Newer schema
+        ticket_id = data.get("ticket_id", state_file.parent.name)
+        title = data.get("title", "unknown")
+        current_phase = data.get("current_phase", "unknown")
+        branch_name = data.get("branch_name", "")
+        repo_path = data.get("repo_path", "")
+    else:
+        # Older schema — infer from directory name and tasks list
+        ticket_id = state_file.parent.name
+        tasks = data.get("tasks") or []
+        if tasks and isinstance(tasks, list) and isinstance(tasks[0], dict):
+            title = tasks[0].get("description", "unknown")
+        else:
+            title = "unknown"
+        current_phase = data.get("status", "unknown")
+        branch_name = data.get("branch_name", "")
+        repo_path = data.get("repo_path", "")
+
+    return {
+        "ticket_id": ticket_id,
+        "title": title,
+        "current_phase": current_phase,
+        "branch_name": branch_name,
+        "repo_path": repo_path,
+        "age_seconds": time.time() - mtime,
+        "age_human": format_age(mtime),
+        "state_file": str(state_file),
+        "_status": data.get("status", ""),
+    }
+
+
+def is_complete(entry: dict) -> bool:
+    done_phases = {"done", "completed", "ready_for_merge", "merged"}
+    if entry.get("current_phase", "").lower() in done_phases:
+        return True
+    if entry.get("_status", "").lower() in {"completed", "done"}:
+        return True
+    return False
+
+
+def truncate(s: str, max_len: int, ellipsis: str = "\u2026") -> str:
+    if len(s) <= max_len:
+        return s
+    return s[: max_len - len(ellipsis)] + ellipsis
+
+
+def shorten_branch(branch: str, max_len: int = 30) -> str:
+    # Use last path segment (after last /)
+    segment = branch.split("/")[-1] if branch else ""
+    return truncate(segment, max_len)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="List recent pipeline state files sorted by modification time."
+    )
+    parser.add_argument(
+        "--count",
+        type=int,
+        default=10,
+        metavar="N",
+        help="Maximum number of entries to show (default: 10)",
+    )
+    parser.add_argument(
+        "--in-progress",
+        action="store_true",
+        help="Filter out entries where phase is done/completed/ready_for_merge/merged",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="output_json",
+        help="Output JSON array instead of markdown table",
+    )
+    args = parser.parse_args()
+
+    pipelines_dir = Path.home() / ".claude" / "pipelines"
+    state_files = sorted(
+        pipelines_dir.glob("*/state.yaml"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+
+    if not state_files:
+        print(
+            "No pipeline state files found in ~/.claude/pipelines/. "
+            "Run /ticket-pipeline TICKET-ID to start a pipeline.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    entries: list[dict] = []
+    for state_file in state_files:
+        data = load_state(state_file)
+        if data is None:
+            continue
+        entries.append(extract_entry(state_file, data))
+
+    total_found = len(entries)
+
+    if args.in_progress:
+        entries = [e for e in entries if not is_complete(e)]
+
+    entries = entries[: args.count]
+
+    if args.in_progress and not entries:
+        print(
+            f"No in-progress pipelines found. All {total_found} recent pipelines are complete."
+        )
+        sys.exit(0)
+
+    if args.output_json:
+        output = [
+            {
+                "ticket_id": e["ticket_id"],
+                "title": e["title"],
+                "current_phase": e["current_phase"],
+                "branch_name": e["branch_name"],
+                "repo_path": e["repo_path"],
+                "age_seconds": e["age_seconds"],
+                "age_human": e["age_human"],
+                "state_file": e["state_file"],
+            }
+            for e in entries
+        ]
+        print(json.dumps(output, indent=2))
+    else:
+        # Markdown table
+        header = f"{'Ticket':<20} {'Title':<56} {'Phase':<22} {'Branch':<31} {'Age'}"
+        separator = (
+            "-" * 20 + " " + "-" * 56 + " " + "-" * 22 + " " + "-" * 31 + " " + "-" * 10
+        )
+        print(header)
+        print(separator)
+        for e in entries:
+            ticket = truncate(e["ticket_id"], 20)
+            title = truncate(e["title"], 55)
+            phase = truncate(e["current_phase"], 22)
+            branch = shorten_branch(e["branch_name"], 30)
+            age = e["age_human"]
+            print(f"{ticket:<20} {title:<56} {phase:<22} {branch:<31} {age}")
+
+
+if __name__ == "__main__":
+    main()

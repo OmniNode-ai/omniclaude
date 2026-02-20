@@ -634,6 +634,70 @@ else
 fi
 
 # -----------------------------
+# Pipeline State Cleanup
+# -----------------------------
+# Remove pipeline state dirs for branches merged into main.
+# Runs ASYNCHRONOUSLY (backgrounded) — never blocks the hook.
+
+_cleanup_merged_pipeline_states() {
+    local _log="${LOG_FILE:-/dev/null}"
+    local pipelines_dir="${HOME}/.claude/pipelines"
+
+    [[ -d "$pipelines_dir" ]] || return 0
+
+    local removed=0
+    for state_file in "$pipelines_dir"/*/state.yaml; do
+        [[ -f "$state_file" ]] || continue
+
+        # Read branch_name and repo_path in one Python call
+        local fields branch repo
+        fields=$("$PYTHON_CMD" - "$state_file" <<'PYEOF' 2>/dev/null
+import yaml, sys
+try:
+    d = yaml.safe_load(open(sys.argv[1])) or {}
+    print(d.get('branch_name', ''))
+    print(d.get('repo_path', ''))
+except Exception:
+    print('')
+    print('')
+PYEOF
+) || fields=""
+        branch=$(echo "$fields" | sed -n '1p')
+        repo=$(echo "$fields" | sed -n '2p')
+
+        [[ -n "$branch" && -n "$repo" && -d "$repo" ]] || continue
+
+        # Check if branch is merged into main or master
+        local merged=""
+        if git -C "$repo" rev-parse --git-dir >/dev/null 2>&1; then
+            merged=$(git -C "$repo" branch --merged main 2>/dev/null | grep -F "$branch" || \
+                     git -C "$repo" branch --merged master 2>/dev/null | grep -F "$branch" || true)
+        fi
+
+        if [[ -n "$merged" ]]; then
+            local ticket_dir
+            ticket_dir="$(dirname "$state_file")"
+            if rm -rf "$ticket_dir" 2>/dev/null; then
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] [pipeline-cleanup] Removed merged state: $(basename "$ticket_dir") (branch: $branch)" >> "$_log"
+                ((removed++)) || true
+            fi
+        fi
+    done
+
+    [[ $removed -gt 0 ]] && echo "[$(date '+%Y-%m-%d %H:%M:%S')] [pipeline-cleanup] Cleaned $removed merged pipeline state dir(s)" >> "$_log" || true
+}
+
+PIPELINE_CLEANUP_ENABLED="${OMNICLAUDE_PIPELINE_CLEANUP_ENABLED:-true}"
+PIPELINE_CLEANUP_ENABLED=$(_normalize_bool "$PIPELINE_CLEANUP_ENABLED")
+
+if [[ "${PIPELINE_CLEANUP_ENABLED}" == "true" ]]; then
+    ( _cleanup_merged_pipeline_states ) &
+    log "Pipeline state cleanup started in background (PID: $!)"
+else
+    log "Pipeline state cleanup disabled (OMNICLAUDE_PIPELINE_CLEANUP_ENABLED=false)"
+fi
+
+# -----------------------------
 # Ticket Context Injection (OMN-1830)
 # -----------------------------
 # Inject active ticket context for session continuity.
