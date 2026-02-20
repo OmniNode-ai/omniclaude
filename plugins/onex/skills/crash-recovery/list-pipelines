@@ -170,6 +170,10 @@ def main() -> None:
     # Clamp args.count before filtering so the guard always runs against the
     # full entry list, not after --in-progress has already narrowed it.
     if args.count < 1:
+        print(
+            f"Warning: --count {args.count} is invalid; using default 10",
+            file=sys.stderr,
+        )
         args.count = 10
 
     # --in-progress filters the full entry list first, then --count caps displayed results.

@@ -178,14 +178,13 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
             exit 0
         fi
 
-        # Ensure accumulator is always cleaned up — including early-exit paths
-        # (non-UUID SESSION_ID) that would otherwise leave the file orphaned in /tmp.
-        # Registered AFTER the empty-SESSION_ID guard so the trap only fires when
-        # SESSION_STATE_FILE has a proper session-specific path; an empty SESSION_ID
-        # would expand to /tmp/omniclaude-session-.json — a fixed non-namespaced path
-        # that could collide between concurrent sessions.
-        # The trap fires on EXIT so normal-path cleanup (after the file is read below)
-        # also goes through here.
+        # Ensure accumulator is always cleaned up — including early-exit paths.
+        # Registered AFTER the empty-SESSION_ID guard so SESSION_STATE_FILE has a
+        # proper session-specific path (not /tmp/omniclaude-session-.json, which could
+        # collide between concurrent sessions with empty IDs).
+        # NOTE: the trap DOES fire on UUID-format-invalid exit (line 192-194) — this is
+        # intentional; a file written under a non-UUID session ID is still cleaned up.
+        # The trap also fires on the normal completion path (after the file is read).
         trap 'rm -f "$SESSION_STATE_FILE"' EXIT
 
         # Validate UUID format (8-4-4-4-12 structure, case-insensitive)
@@ -326,6 +325,8 @@ print(result.outcome)
         # is unavailable (unlikely — PYTHON_CMD is required by this hook).
         RAW_EMITTED_AT=$("$PYTHON_CMD" -c 'from datetime import datetime, timezone; print(datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z")' 2>/dev/null \
             || date -u +"%Y-%m-%dT%H:%M:%SZ")
+        # SESSION_DURATION is pre-sanitized to integer in the outer shell (lines 110-125)
+        # before this subshell forks — no re-check needed here.
         if ! RAW_OUTCOME_PAYLOAD=$(jq -n \
             --arg session_id "$SESSION_ID" \
             --argjson injection_occurred "$RAW_INJECTION_OCCURRED" \
