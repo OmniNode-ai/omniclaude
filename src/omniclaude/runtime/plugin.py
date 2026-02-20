@@ -275,6 +275,10 @@ class PluginClaude:
             if self._compliance_stop_event is not None:
                 self._compliance_stop_event.set()
                 self._compliance_stop_event = None
+                # Intentionally not joined: the daemon thread will drain its own
+                # Kafka poll loop once the stop_event is set, then exit naturally.
+                # Blocking here would delay shutdown and risk deadlock if the
+                # Kafka consumer is stuck waiting on a network call.
                 self._compliance_thread = None
 
             if self._publisher is None:

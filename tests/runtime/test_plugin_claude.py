@@ -408,12 +408,13 @@ class TestStartConsumers:
     @pytest.mark.asyncio
     async def test_skipped_when_kafka_not_set(self, plugin, config):
         """Without KAFKA_BOOTSTRAP_SERVERS, start_consumers returns skipped."""
-        env = {
-            k: v
-            for k, v in __import__("os").environ.items()
-            if k != "KAFKA_BOOTSTRAP_SERVERS"
-        }
-        with patch.dict("os.environ", env, clear=True):
+        import os
+
+        # Use clear=False to preserve all other env vars (e.g.
+        # OMNICLAUDE_PUBLISHER_SOCKET_PATH) that code under test may need.
+        # We only remove KAFKA_BOOTSTRAP_SERVERS for the duration of this test.
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("KAFKA_BOOTSTRAP_SERVERS", None)
             result = await plugin.start_consumers(config)
 
         assert result.success is True
@@ -633,20 +634,39 @@ class TestComplianceSubscriberDriftGuard:
     This test catches that drift early.
     """
 
-    def test_run_subscriber_is_not_a_coroutine(self) -> None:
-        """run_subscriber must be a plain callable, not an async coroutine function."""
-        import asyncio
-        import sys as _sys
+    @pytest.fixture(autouse=True)
+    def _scoped_hooks_lib_path(self):
+        """Temporarily add plugins/onex/hooks/lib to sys.path for this test only.
 
-        _HOOKS_LIB = str(
-            __import__("pathlib").Path(__file__).resolve().parent.parent.parent
+        plugins/onex/hooks/lib has no __init__.py and no installed package path,
+        so a sys.path insertion is the only way to import its modules directly.
+        The insertion is scoped to each test method: sys.path is saved before
+        the test and fully restored after it, preventing contamination of other
+        tests in the session.
+        """
+        import pathlib
+        import sys
+
+        hooks_lib = str(
+            pathlib.Path(__file__).resolve().parent.parent.parent
             / "plugins"
             / "onex"
             / "hooks"
             / "lib"
         )
-        if _HOOKS_LIB not in _sys.path:
-            _sys.path.insert(0, _HOOKS_LIB)
+        original_path = sys.path[:]
+        if hooks_lib not in sys.path:
+            sys.path.insert(0, hooks_lib)
+        try:
+            yield
+        finally:
+            sys.path[:] = original_path
+            # Also remove the cached module so future imports use the restored path
+            sys.modules.pop("compliance_result_subscriber", None)
+
+    def test_run_subscriber_is_not_a_coroutine(self) -> None:
+        """run_subscriber must be a plain callable, not an async coroutine function."""
+        import asyncio
 
         from compliance_result_subscriber import run_subscriber  # type: ignore[import]
 
@@ -658,17 +678,6 @@ class TestComplianceSubscriberDriftGuard:
     def test_run_subscriber_background_is_not_a_coroutine(self) -> None:
         """run_subscriber_background must also be a plain callable."""
         import asyncio
-        import sys as _sys
-
-        _HOOKS_LIB = str(
-            __import__("pathlib").Path(__file__).resolve().parent.parent.parent
-            / "plugins"
-            / "onex"
-            / "hooks"
-            / "lib"
-        )
-        if _HOOKS_LIB not in _sys.path:
-            _sys.path.insert(0, _HOOKS_LIB)
 
         from compliance_result_subscriber import (  # type: ignore[import]
             run_subscriber_background,
