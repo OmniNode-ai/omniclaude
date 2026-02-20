@@ -23,7 +23,6 @@ Restored by OMN-2355: fix context injection injecting zero patterns.
 from __future__ import annotations
 
 import asyncio
-import functools
 import hashlib
 import json
 import logging
@@ -637,12 +636,13 @@ class HandlerContextInjection:
 
         try:
             req = urllib.request.Request(url, method="GET")  # noqa: S310  # nosec B310
-            loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
-                None,
-                functools.partial(urllib.request.urlopen, req, timeout=timeout_s),  # noqa: S310  # nosec B310
-            )
-            raw_bytes = await loop.run_in_executor(None, response.read)
+            loop = asyncio.get_running_loop()
+
+            def _fetch() -> bytes:
+                with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # noqa: S310  # nosec B310
+                    return resp.read()
+
+            raw_bytes = await loop.run_in_executor(None, _fetch)
             raw = raw_bytes.decode("utf-8")
         except urllib.error.URLError as e:
             logger.warning("omniintelligence API unavailable: %s (url=%s)", e, url)

@@ -353,7 +353,7 @@ class ContextInjectionConfig(BaseSettings):
     )
 
     api_timeout_ms: int = Field(
-        default=2000,
+        default=900,
         ge=100,
         le=10000,
         description=(
