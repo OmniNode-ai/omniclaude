@@ -319,10 +319,14 @@ if [[ -n "$SESSION_ID" ]]; then
         # PATTERN_SUCCESS stays "false" for this prompt — override so injection_occurred
         # is truthful. PATTERN_COUNT remains 0 (count unknown for SessionStart injection).
         [[ "$SESSION_ALREADY_INJECTED" == "true" ]] && _INJECT_OCCURRED="true"
+        # Normalize sentinel to empty string — "NO_AGENT_DETECTED" is a jq fallback
+        # for malformed/partial routing JSON, not a real agent name.
+        _ACCUM_AGENT="${AGENT_NAME}"
+        [[ "$_ACCUM_AGENT" == "NO_AGENT_DETECTED" ]] && _ACCUM_AGENT=""
         _ACCUM_JSON="$(jq -n \
             --argjson injection_occurred "$_INJECT_OCCURRED" \
             --argjson patterns_injected_count "${PATTERN_COUNT:-0}" \
-            --arg agent_selected "${AGENT_NAME:-}" \
+            --arg agent_selected "$_ACCUM_AGENT" \
             --argjson routing_confidence "${CONFIDENCE:-0.5}" \
             '{
                 injection_occurred: $injection_occurred,
