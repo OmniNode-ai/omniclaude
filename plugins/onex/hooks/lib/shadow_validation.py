@@ -171,6 +171,17 @@ _MAX_LENGTH_DIVERGENCE: float = 0.70
 # Regex to detect code blocks (``` or 4-space indented lines with def/class).
 _CODE_BLOCK_RE = re.compile(r"```|^\s{4}(?:def |class |import |from )", re.MULTILINE)
 
+# Local URL prefixes that are allowed to use plain HTTP (loopback only).
+# Used in both run_shadow_validation (primary enforcement) and
+# _call_shadow_claude (defense-in-depth secondary guard).
+# 0.0.0.0 is intentionally excluded: it is a wildcard bind address (all
+# interfaces), not a loopback, and is externally routable on most OSes.
+_LOCAL_PREFIXES: tuple[str, ...] = (
+    "http://localhost",
+    "http://127.0.0.1",
+    "http://[::1]",
+)
+
 
 # ---------------------------------------------------------------------------
 # Feature flag helpers
@@ -435,6 +446,18 @@ def _call_shadow_claude(
     Returns:
         Tuple of (response_text, latency_ms) on success, None on any error.
     """
+    # Defense-in-depth: enforce HTTPS at the request level too.
+    # Primary enforcement is in run_shadow_validation; this is a secondary guard
+    # that protects against future callers that bypass the public API.
+    if not base_url.startswith("https://") and not any(
+        base_url.startswith(p) for p in _LOCAL_PREFIXES
+    ):
+        logger.debug(
+            "Blocked non-HTTPS base_url in _call_shadow_claude: %s",
+            base_url.split("://")[0] + "://...",
+        )
+        return None
+
     try:
         import httpx
     except ImportError:
@@ -756,13 +779,7 @@ def run_shadow_validation(
         )
 
         # Security: Reject non-HTTPS base URLs unless they point to loopback.
-        # 0.0.0.0 is intentionally excluded: it is a wildcard bind address (all
-        # interfaces), not a loopback, and is externally routable on most OSes.
-        _LOCAL_PREFIXES = (
-            "http://localhost",
-            "http://127.0.0.1",
-            "http://[::1]",
-        )
+        # _LOCAL_PREFIXES is defined at module level (see above).
         if not base_url.startswith("https://") and not any(
             base_url.startswith(p) for p in _LOCAL_PREFIXES
         ):
@@ -786,9 +803,9 @@ def run_shadow_validation(
         except (ValueError, TypeError):
             max_tokens = _DEFAULT_SHADOW_MAX_TOKENS
 
-        # Capture all params in a closure to avoid storing api_key in
-        # thread.kwargs where it would be live for the entire thread lifetime
-        # and visible via thread introspection.
+        # Closure pattern: api_key is NOT stored in thread.kwargs (which is introspectable).
+        # It lives in the closure __closure__ cells — same lifetime, but not accessible
+        # via thread._kwargs introspection or exception tracebacks that serialize thread state.
         _prompt = prompt
         _local_response = local_response
         _local_model = local_model
