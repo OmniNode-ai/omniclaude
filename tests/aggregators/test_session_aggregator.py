@@ -2131,6 +2131,7 @@ class TestCleanupFinalizedSessions:
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestFinalizedSessionWarning:
     """Tests for memory growth warning when finalized sessions exceed threshold.
 
