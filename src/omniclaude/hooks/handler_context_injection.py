@@ -36,7 +36,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from omniclaude.hooks.cohort_assignment import (
@@ -853,8 +853,8 @@ class HandlerContextInjection:
         # the cache-read path (AttributeError, NameError, TypeError, etc.) will
         # be logged via logger.exception so they are visible in logs rather than
         # silently swallowed.
-        _get_pattern_cache = None
-        _start_consumer = None
+        _get_pattern_cache: Callable[[], Any] | None = None
+        _start_consumer: Callable[[], None] | None = None
         try:
             from plugins.onex.hooks.lib.pattern_cache import (
                 get_pattern_cache as _get_pattern_cache,
