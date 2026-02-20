@@ -139,7 +139,9 @@ except ImportError:  # pragma: no cover
 # explicit teardown in tests.
 
 # Not thread-safe: hook execution is single-threaded by design
-_cached_classifier: TaskClassifier | None = None  # type: ignore[valid-type]  # TaskClassifier may be None on failed import (graceful degradation)
+_cached_classifier: TaskClassifier | None = (
+    None  # TaskClassifier may be None on failed import (graceful degradation)
+)
 
 
 def _get_classifier() -> TaskClassifier:
