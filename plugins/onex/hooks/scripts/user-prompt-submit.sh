@@ -306,7 +306,7 @@ if [[ -n "$SESSION_ID" ]]; then
             --argjson injection_occurred "$_INJECT_OCCURRED" \
             --argjson patterns_injected_count "${PATTERN_COUNT:-0}" \
             --arg agent_selected "${AGENT_NAME:-}" \
-            --argjson routing_confidence "${CONFIDENCE:-0.0}" \
+            --argjson routing_confidence "${CONFIDENCE:-0.5}" \
             '{
                 injection_occurred: $injection_occurred,
                 patterns_injected_count: $patterns_injected_count,

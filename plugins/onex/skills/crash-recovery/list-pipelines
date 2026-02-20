@@ -11,7 +11,7 @@ try:
     import yaml
 except ImportError:
     print(
-        "Error: PyYAML is not available. Install it with: pip install pyyaml",
+        "Error: PyYAML is not available. Install it with: uv add pyyaml",
         file=sys.stderr,
     )
     sys.exit(1)

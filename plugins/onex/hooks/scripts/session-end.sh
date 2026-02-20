@@ -331,9 +331,9 @@ else
     log "Kafka emission skipped (KAFKA_ENABLED=$KAFKA_ENABLED)"
 fi
 
-# Clean up session accumulator file — fully consumed at this point (or not needed).
-# Runs unconditionally so /tmp does not accumulate files in dev/offline mode
-# where KAFKA_ENABLED=false (one file per session, written by user-prompt-submit.sh).
+# Clean up accumulator unconditionally. The background subshell may still be reading it —
+# if so, it falls back to safe defaults. Prevents /tmp accumulation in both Kafka-enabled
+# and offline modes (one file per session, written by user-prompt-submit.sh).
 SESSION_STATE_FILE="/tmp/omniclaude-session-${SESSION_ID}.json"  # noqa: S108  # nosec B108
 rm -f "$SESSION_STATE_FILE"
 

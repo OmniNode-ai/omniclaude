@@ -440,37 +440,42 @@ class TestSessionAccumulatorFileFormat:
         assert event["injection_occurred"] is False
 
     def test_accumulator_with_nonnumeric_pattern_count_defaults_to_zero(self) -> None:
-        """Non-numeric patterns_injected_count in the accumulator is coerced to 0.
+        """Documents the Python-side and shell-side behavior for a non-numeric
+        patterns_injected_count value.
 
-        This test exercises the shell-side numeric guard in user-prompt-submit.sh:
-        ([[ PATTERN_COUNT =~ ^[0-9]+$ ]] || PATTERN_COUNT=0)
-        That guard ensures only a valid integer reaches the accumulator JSON, and
-        by extension the Python helper.  The test simulates what would happen if
-        that guard were absent (or a corrupt accumulator were read) by manually
-        coercing the bad value to 0 before calling build_session_raw_outcome_event.
+        Part (a) — Python-side behavior:
+          build_session_raw_outcome_event uses bare int() with no try/except.
+          Passing "not-a-number" directly raises ValueError.  This documents
+          that the helper does NOT silently coerce bad input.
 
-        Note: build_session_raw_outcome_event itself uses bare int() with no
-        try/except — it would raise ValueError if passed "not-a-number" directly.
-        The coercion modelled here is the shell-side guard's responsibility, not
-        a Python-level fallback in the helper.
+        Part (b) — Shell-side guard behavior:
+          user-prompt-submit.sh guards with:
+            [[ PATTERN_COUNT =~ ^[0-9]+$ ]] || PATTERN_COUNT=0
+          After that coercion the helper receives a valid integer and succeeds.
+          This part verifies the post-coercion path produces the expected result.
         """
-        # Simulate an accumulator where patterns_injected_count somehow became
-        # a non-integer value (e.g. a corrupt write, or future schema mismatch).
         accumulator_with_bad_count: dict[str, Any] = {
             "injection_occurred": True,
             "patterns_injected_count": "not-a-number",  # malformed
             "agent_selected": "agent-api-architect",
             "routing_confidence": 0.85,
         }
-        # The helper uses int(..., 0) default so this must not raise.
-        try:
-            count = int(accumulator_with_bad_count.get("patterns_injected_count", 0))
-        except (ValueError, TypeError):
-            count = 0
 
-        # Rebuild via the helper, replacing the bad value with the coerced int.
+        # Part (a): helper raises ValueError on non-numeric input — no silent coercion.
+        with pytest.raises(ValueError):
+            build_session_raw_outcome_event(
+                session_id="abc12345-1234-5678-abcd-1234567890ab",
+                session_state=accumulator_with_bad_count,
+                tool_calls_count=5,
+                duration_ms=10000,
+            )
+
+        # Part (b): after the shell-side guard coerces the bad value to 0,
+        # the helper succeeds and the event reflects the coerced count.
         safe_state = dict(accumulator_with_bad_count)
-        safe_state["patterns_injected_count"] = count
+        safe_state["patterns_injected_count"] = int(
+            "0"
+        )  # mirrors shell: PATTERN_COUNT=0
 
         event = build_session_raw_outcome_event(
             session_id="abc12345-1234-5678-abcd-1234567890ab",
@@ -479,7 +484,7 @@ class TestSessionAccumulatorFileFormat:
             duration_ms=10000,
         )
         assert event["patterns_injected_count"] == 0, (
-            "Non-numeric patterns_injected_count must default to 0, not propagate the bad string"
+            "After shell-side coercion to 0, patterns_injected_count must be 0"
         )
         # injection_occurred=True is preserved — the count coercion is independent
         assert event["injection_occurred"] is True
