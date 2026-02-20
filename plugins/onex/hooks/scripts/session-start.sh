@@ -685,6 +685,11 @@ PYEOF
         if [[ -n "$merged" ]]; then
             local ticket_dir
             ticket_dir="$(dirname "$state_file")"
+            # Canonicalize to resolve symlinks before the prefix guard, matching
+            # the worktree cleanup in session-end.sh which uses `pwd -P`.
+            # If the directory is already gone (race), skip it entirely.
+            ticket_dir="$(cd "$ticket_dir" 2>/dev/null && pwd -P || echo "")"
+            [[ -z "$ticket_dir" ]] && continue
             # Defense-in-depth: confirm ticket_dir is a direct child of pipelines_dir
             # before removing it.  A symlink under pipelines_dir pointing outside the
             # tree would otherwise cause rm -rf to delete an unrelated target.

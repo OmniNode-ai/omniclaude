@@ -296,6 +296,10 @@ fi
 if [[ -n "$SESSION_ID" ]]; then
     _ACCUM_FILE="/tmp/omniclaude-session-${SESSION_ID}.json"  # noqa: S108  # nosec B108
     if [[ ! -f "$_ACCUM_FILE" ]]; then
+        # Guard: PATTERN_COUNT must be numeric before passing to jq --argjson.
+        # A non-numeric string (e.g. from a malformed wrapper response) would
+        # cause jq to fail silently (|| true) and leave _ACCUM_FILE unwritten.
+        [[ "${PATTERN_COUNT:-0}" =~ ^[0-9]+$ ]] || PATTERN_COUNT=0
         _INJECT_OCCURRED="false"
         [[ "${PATTERN_SUCCESS:-false}" == "true" ]] && [[ "${PATTERN_COUNT:-0}" != "0" ]] && _INJECT_OCCURRED="true"
         _ACCUM_JSON="$(jq -n \

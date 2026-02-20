@@ -39,8 +39,11 @@ def load_state(state_file: Path) -> dict | None:
         return None
 
 
-def extract_entry(state_file: Path, data: dict) -> dict:
-    stat = state_file.stat()
+def extract_entry(state_file: Path, data: dict) -> dict | None:
+    try:
+        stat = state_file.stat()
+    except FileNotFoundError:
+        return None
     mtime = stat.st_mtime
 
     # Determine schema variant
@@ -155,7 +158,10 @@ def main() -> None:
         data = load_state(state_file)
         if data is None:
             continue
-        entries.append(extract_entry(state_file, data))
+        entry = extract_entry(state_file, data)
+        if entry is None:
+            continue
+        entries.append(entry)
 
     total_found = len(entries)
 
