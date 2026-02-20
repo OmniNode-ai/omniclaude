@@ -522,6 +522,7 @@ def _emit_shadow_comparison_event(
     shadow_latency_ms: int,
     sample_rate: float,
     emitted_at: datetime,
+    auto_disable_triggered: bool,
 ) -> None:
     """Emit onex.evt.omniclaude.delegation-shadow-comparison.v1 (fire-and-forget).
 
@@ -538,6 +539,9 @@ def _emit_shadow_comparison_event(
         shadow_latency_ms: Wall-clock time for the shadow call.
         sample_rate: Configured sampling rate.
         emitted_at: Timestamp to use (injected by caller, no datetime.now()).
+        auto_disable_triggered: Pre-computed by run_shadow_validation. True when
+            this run is the last before auto-disable fires
+            (consecutive_passing_days + 1 >= exit_window_days).
     """
     try:
         from uuid import UUID, uuid4
@@ -558,7 +562,6 @@ def _emit_shadow_comparison_event(
         consecutive_passing_days = _get_consecutive_passing_days()
         exit_threshold = _get_exit_threshold()
         exit_window_days = _get_exit_window_days()
-        auto_disable_triggered = consecutive_passing_days >= exit_window_days
 
         # Truncate divergence_reason to schema max_length=500
         divergence_reason = comparison.get("divergence_reason")
@@ -629,6 +632,7 @@ def _run_shadow_worker(
     timeout_s: float,
     max_tokens: int,
     emitted_at: datetime,
+    auto_disable_triggered: bool,
 ) -> None:
     """Execute shadow validation in a background thread.
 
@@ -649,6 +653,8 @@ def _run_shadow_worker(
         timeout_s: HTTP timeout for the shadow call.
         max_tokens: Maximum number of tokens in the shadow response.
         emitted_at: Timestamp for the comparison event.
+        auto_disable_triggered: Pre-computed by run_shadow_validation. True when
+            this run is the last before auto-disable fires.
     """
     try:
         shadow_result = _call_shadow_claude(
@@ -681,6 +687,7 @@ def _run_shadow_worker(
             shadow_latency_ms=shadow_latency_ms,
             sample_rate=sample_rate,
             emitted_at=emitted_at,
+            auto_disable_triggered=auto_disable_triggered,
         )
 
     except Exception as exc:
@@ -742,6 +749,28 @@ def run_shadow_validation(
             "emitted_at must be provided explicitly (e.g., datetime.now(UTC)). "
             "No datetime.now() default is allowed per repo invariant."
         )
+
+    # Compute auto_disable_triggered BEFORE the enabled check so the field can
+    # truthfully reflect "this run is the last before auto-disable fires" even
+    # when shadow validation is enabled.  The enabled check gates on
+    # consecutive_days >= window, so if that passes we know the NEXT invocation
+    # (consecutive_days + 1) will hit or exceed the window.
+    try:
+        _consecutive_days = max(
+            0, int(os.environ.get("SHADOW_CONSECUTIVE_PASSING_DAYS", "0"))
+        )
+        _exit_window = max(
+            1,
+            int(
+                os.environ.get(
+                    "SHADOW_EXIT_WINDOW_DAYS", str(_DEFAULT_EXIT_WINDOW_DAYS)
+                )
+            ),
+        )
+    except (ValueError, TypeError):
+        _consecutive_days = 0
+        _exit_window = _DEFAULT_EXIT_WINDOW_DAYS
+    _auto_disable_triggered = (_consecutive_days + 1) >= _exit_window
 
     try:
         if not _is_shadow_validation_enabled():
@@ -822,6 +851,7 @@ def run_shadow_validation(
         _max_tokens = max_tokens
         _emitted_at = emitted_at
         _api_key_local = api_key  # captured by closure, not stored in thread dict
+        _auto_disable = _auto_disable_triggered
 
         def _worker() -> None:
             _run_shadow_worker(
@@ -838,6 +868,7 @@ def run_shadow_validation(
                 timeout_s=_timeout_s,
                 max_tokens=_max_tokens,
                 emitted_at=_emitted_at,
+                auto_disable_triggered=_auto_disable,
             )
 
         thread = threading.Thread(

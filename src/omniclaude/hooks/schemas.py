@@ -2390,8 +2390,8 @@ class ModelDelegationShadowComparisonPayload(BaseModel):
             day toward the exit window.
         exit_window_days: Number of consecutive days above threshold required to
             trigger auto-disable (e.g. 30).
-        auto_disable_triggered: True when this event triggered the auto-disable
-            condition (consecutive_passing_days >= exit_window_days).
+        auto_disable_triggered: True when this run is the last before auto-disable
+            fires (consecutive_passing_days + 1 >= exit_window_days).
 
     Note:
         ``extra="ignore"`` is intentional — the shadow comparison result dict may
@@ -2480,7 +2480,7 @@ class ModelDelegationShadowComparisonPayload(BaseModel):
         description=(
             "Absolute ratio of length difference to shadow length: "
             "abs(local_len - shadow_len) / max(shadow_len, 1). "
-            "Values > 0.5 indicate significant length divergence. "
+            "Values > 0.70 indicate significant length divergence (gate threshold). "
             "Capped at 10.0 to ensure bounded downstream consumption."
         ),
     )
@@ -2555,8 +2555,8 @@ class ModelDelegationShadowComparisonPayload(BaseModel):
     auto_disable_triggered: bool = Field(
         default=False,
         description=(
-            "True when this event triggered the auto-disable condition "
-            "(consecutive_passing_days >= exit_window_days)."
+            "True when this run is the last before auto-disable fires "
+            "(consecutive_passing_days + 1 >= exit_window_days)."
         ),
     )
 
