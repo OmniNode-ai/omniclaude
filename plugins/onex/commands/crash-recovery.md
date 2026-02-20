@@ -22,7 +22,7 @@ When invoked:
 
 1. Execute `${CLAUDE_PLUGIN_ROOT}/skills/crash-recovery/list-pipelines`, passing through any user-provided flags (`--count`, `--in-progress`, `--json`)
 2. Display the output table to the user
-3. If any in-progress pipelines are shown, offer to resume the most recent one with `/ticket-pipeline {TICKET_ID}` or `/ticket-work {TICKET_ID}`
+3. If any in-progress pipelines are shown, offer to resume the most recent one using the `ticket-pipeline` skill or `ticket-work` skill with the relevant `{TICKET_ID}` (these are skills invoked by natural language, not `/command` prefixes)
 
 ## Examples
 
