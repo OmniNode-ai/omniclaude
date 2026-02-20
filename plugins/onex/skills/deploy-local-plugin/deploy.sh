@@ -290,14 +290,35 @@ if [[ "$EXECUTE" == "true" ]]; then
     "$VENV_DIR/bin/pip" install --upgrade pip wheel --quiet
     echo -e "${GREEN}  pip toolchain bootstrapped${NC}"
 
-    # --- Install project (non-editable, no cache) ---
-    echo "  Installing project from ${PROJECT_ROOT}..."
-    if ! "$VENV_DIR/bin/pip" install --no-cache-dir "${PROJECT_ROOT}" --quiet; then
-        echo -e "${RED}Error: pip install failed for ${PROJECT_ROOT}. Deploy aborted.${NC}"
-        rm -rf "$VENV_DIR"
-        exit 1
+    # --- Install project using locked dependencies from uv.lock ---
+    # Use 'uv export --frozen' to pin exact versions from uv.lock, preventing
+    # version drift between deploys (e.g. qdrant-client 1.17.0 introduced a
+    # runtime TypeError with grpcio's EnumTypeWrapper that breaks the smoke test).
+    echo "  Installing project from ${PROJECT_ROOT} (locked versions)..."
+    LOCKED_REQS_FILE=$(mktemp /tmp/omniclaude-locked-reqs.XXXXXX)
+    if command -v uv &>/dev/null && [[ -f "${PROJECT_ROOT}/uv.lock" ]] && \
+       (cd "${PROJECT_ROOT}" && uv export --frozen --no-dev --no-hashes --format requirements-txt > "$LOCKED_REQS_FILE" 2>&1); then
+        # Run pip install from PROJECT_ROOT so that the '-e .' editable entry in the
+        # requirements file (produced by 'uv export') resolves to PROJECT_ROOT rather
+        # than the script's current working directory.
+        if ! (cd "${PROJECT_ROOT}" && "$VENV_DIR/bin/pip" install --no-cache-dir -r "$LOCKED_REQS_FILE" --quiet); then
+            echo -e "${RED}Error: pip install from locked requirements failed. Deploy aborted.${NC}"
+            rm -f "$LOCKED_REQS_FILE"
+            rm -rf "$VENV_DIR"
+            exit 1
+        fi
+        rm -f "$LOCKED_REQS_FILE"
+        echo -e "${GREEN}  Project installed into venv (locked versions from uv.lock)${NC}"
+    else
+        echo -e "${YELLOW}  uv not found or uv.lock missing — falling back to pip install (versions may drift)${NC}"
+        rm -f "$LOCKED_REQS_FILE"
+        if ! "$VENV_DIR/bin/pip" install --no-cache-dir "${PROJECT_ROOT}" --quiet; then
+            echo -e "${RED}Error: pip install failed for ${PROJECT_ROOT}. Deploy aborted.${NC}"
+            rm -rf "$VENV_DIR"
+            exit 1
+        fi
+        echo -e "${GREEN}  Project installed into venv${NC}"
     fi
-    echo -e "${GREEN}  Project installed into venv${NC}"
 
     # --- Write venv manifest ---
     MANIFEST="${TARGET}/lib/venv_manifest.txt"

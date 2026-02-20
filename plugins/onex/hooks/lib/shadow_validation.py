@@ -1,0 +1,776 @@
+#!/usr/bin/env python3
+"""Shadow Validation — async quality comparison for delegated tasks (OMN-2283).
+
+Samples 5-10% of delegated tasks and calls Claude (shadow model) asynchronously
+to compare the local model response against Claude's response.  The local model
+response is returned to the user immediately; shadow validation runs in a
+background thread and never blocks the hook.
+
+Architecture:
+    - Shadow call is non-blocking (threading.Thread, daemon=True)
+    - Sampling decision is made via deterministic hash of the correlation_id so
+      the same task is never double-counted in tests
+    - Comparison metrics: length divergence, keyword overlap (Jaccard), structural
+      match (code block presence)
+    - Divergence events are emitted to onex.evt.omniclaude.delegation-shadow-comparison.v1
+    - Exit criteria: auto-disable when pass rate >= 95% for 30 consecutive days
+      (tracked via SHADOW_CONSECUTIVE_PASSING_DAYS env var written by a reducer)
+
+Feature flags:
+    ENABLE_SHADOW_VALIDATION=true        (master switch)
+    SHADOW_SAMPLE_RATE=0.07              (float 0.0-1.0, default 0.07 = 7%)
+    SHADOW_EXIT_THRESHOLD=0.95           (float, default 0.95)
+    SHADOW_EXIT_WINDOW_DAYS=30           (int, default 30)
+    SHADOW_CONSECUTIVE_PASSING_DAYS=0    (int, updated by exit-criteria reducer)
+    SHADOW_MODEL=claude-sonnet-4-6       (model identifier for shadow calls)
+    SHADOW_CLAUDE_API_KEY=<key>          (Anthropic API key for shadow calls)
+    SHADOW_CLAUDE_BASE_URL=              (optional override, default https://api.anthropic.com)
+    SHADOW_CALL_TIMEOUT_S=30             (float, default 30 seconds)
+
+Design constraints:
+    - NEVER raises from run_shadow_validation()
+    - All I/O (Claude API call, event emit) is bounded and non-blocking
+    - emitted_at is injected by callers; run_shadow_validation() falls back to
+      datetime.now(UTC) only when the caller does not provide a value (tests
+      should always inject a fixed timestamp)
+    - Module-level imports allow unit tests to patch them easily
+"""
+
+from __future__ import annotations
+
+import hashlib
+import logging
+import os
+import re
+import sys
+import threading
+import time
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# sys.path setup (module-level, idempotent)
+# ---------------------------------------------------------------------------
+_SCRIPT_DIR = Path(__file__).parent
+_SRC_PATH = _SCRIPT_DIR.parent.parent.parent.parent / "src"
+if _SRC_PATH.exists() and str(_SRC_PATH) not in sys.path:
+    sys.path.insert(0, str(_SRC_PATH))
+
+_LIB_DIR = str(_SCRIPT_DIR)
+if _LIB_DIR not in sys.path:
+    sys.path.insert(0, _LIB_DIR)
+
+# ---------------------------------------------------------------------------
+# Logging configuration
+# ---------------------------------------------------------------------------
+
+_LOG_FORMAT = "[%(asctime)s] %(levelname)s %(name)s: %(message)s"
+
+
+def _configure_logging() -> None:
+    """Configure file logging when LOG_FILE is set in the environment."""
+    log_file = os.environ.get("LOG_FILE", "").strip()
+    if not log_file or logger.handlers:
+        return
+    try:
+        handler = logging.FileHandler(str(Path(log_file).expanduser()))
+        handler.setFormatter(logging.Formatter(_LOG_FORMAT))
+        logger.addHandler(handler)
+        logger.setLevel(logging.DEBUG)
+        logger.propagate = False
+    except Exception:
+        pass
+
+
+_configure_logging()
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+_TRUTHY = frozenset(("true", "1", "yes", "on"))
+
+# Default sampling rate (7%).  Overridden by SHADOW_SAMPLE_RATE env var.
+_DEFAULT_SAMPLE_RATE: float = 0.07
+
+# Default timeout for the shadow Claude API call.
+_DEFAULT_SHADOW_TIMEOUT_S: float = 30.0
+
+# Default shadow model identifier.
+_DEFAULT_SHADOW_MODEL: str = "claude-sonnet-4-6"
+
+# Default exit criteria thresholds.
+_DEFAULT_EXIT_THRESHOLD: float = 0.95
+_DEFAULT_EXIT_WINDOW_DAYS: int = 30
+
+# English stop-words to exclude from keyword overlap computation.
+# A minimal set covering the most common words to reduce noise.
+_STOP_WORDS: frozenset[str] = frozenset(
+    {
+        "a",
+        "an",
+        "and",
+        "are",
+        "as",
+        "at",
+        "be",
+        "been",
+        "being",
+        "but",
+        "by",
+        "can",
+        "do",
+        "for",
+        "from",
+        "get",
+        "has",
+        "have",
+        "if",
+        "in",
+        "is",
+        "it",
+        "its",
+        "not",
+        "of",
+        "on",
+        "or",
+        "should",
+        "so",
+        "than",
+        "that",
+        "the",
+        "their",
+        "them",
+        "then",
+        "there",
+        "these",
+        "they",
+        "this",
+        "to",
+        "was",
+        "we",
+        "were",
+        "which",
+        "with",
+        "would",
+        "you",
+    }
+)
+
+# Minimum significant-word overlap score to pass the quality gate.
+_MIN_KEYWORD_OVERLAP: float = 0.35
+
+# Maximum length divergence ratio to pass the quality gate.
+_MAX_LENGTH_DIVERGENCE: float = 0.70
+
+# Regex to detect code blocks (``` or 4-space indented lines with def/class).
+_CODE_BLOCK_RE = re.compile(r"```|^\s{4}(?:def |class |import |from )", re.MULTILINE)
+
+
+# ---------------------------------------------------------------------------
+# Feature flag helpers
+# ---------------------------------------------------------------------------
+
+
+def _is_shadow_validation_enabled() -> bool:
+    """Return True when shadow validation is enabled and not auto-disabled.
+
+    Auto-disable occurs when SHADOW_CONSECUTIVE_PASSING_DAYS >=
+    SHADOW_EXIT_WINDOW_DAYS.  The env var is updated by the exit-criteria
+    reducer and checked here to prevent unnecessary shadow calls after the
+    quality bar has been met for the full window.
+    """
+    flag = os.environ.get("ENABLE_SHADOW_VALIDATION", "").lower()
+    if flag not in _TRUTHY:
+        return False
+
+    # Check exit criteria (auto-disable)
+    try:
+        consecutive = int(os.environ.get("SHADOW_CONSECUTIVE_PASSING_DAYS", "0"))
+        window = int(
+            os.environ.get("SHADOW_EXIT_WINDOW_DAYS", str(_DEFAULT_EXIT_WINDOW_DAYS))
+        )
+        if consecutive >= window:
+            logger.debug(
+                "Shadow validation auto-disabled: consecutive_passing_days=%d >= window=%d",
+                consecutive,
+                window,
+            )
+            return False
+    except (ValueError, TypeError):
+        pass
+
+    return True
+
+
+def _get_sample_rate() -> float:
+    """Return the configured sampling rate, clamped to [0.0, 1.0]."""
+    try:
+        rate = float(os.environ.get("SHADOW_SAMPLE_RATE", str(_DEFAULT_SAMPLE_RATE)))
+        return max(0.0, min(1.0, rate))
+    except (ValueError, TypeError):
+        return _DEFAULT_SAMPLE_RATE
+
+
+def _get_exit_threshold() -> float:
+    """Return the configured exit threshold, clamped to [0.0, 1.0]."""
+    try:
+        threshold = float(
+            os.environ.get("SHADOW_EXIT_THRESHOLD", str(_DEFAULT_EXIT_THRESHOLD))
+        )
+        return max(0.0, min(1.0, threshold))
+    except (ValueError, TypeError):
+        return _DEFAULT_EXIT_THRESHOLD
+
+
+def _get_exit_window_days() -> int:
+    """Return the configured exit window in days (minimum 1)."""
+    try:
+        days = int(
+            os.environ.get("SHADOW_EXIT_WINDOW_DAYS", str(_DEFAULT_EXIT_WINDOW_DAYS))
+        )
+        return max(1, days)
+    except (ValueError, TypeError):
+        return _DEFAULT_EXIT_WINDOW_DAYS
+
+
+def _get_consecutive_passing_days() -> int:
+    """Return the number of consecutive passing days from env (for event payload)."""
+    try:
+        return max(0, int(os.environ.get("SHADOW_CONSECUTIVE_PASSING_DAYS", "0")))
+    except (ValueError, TypeError):
+        return 0
+
+
+# ---------------------------------------------------------------------------
+# Sampling decision
+# ---------------------------------------------------------------------------
+
+
+def _should_sample(correlation_id: str, sample_rate: float) -> bool:
+    """Determine whether this task should be shadow-validated.
+
+    Uses a deterministic hash of the correlation_id so the same task is
+    consistently sampled or skipped (useful for reproducible test assertions).
+
+    Args:
+        correlation_id: Unique identifier for this delegation invocation.
+        sample_rate: Fraction of tasks to sample (0.0-1.0).
+
+    Returns:
+        True when this task falls within the sample.
+    """
+    if sample_rate <= 0.0:
+        return False
+    if sample_rate >= 1.0:
+        return True
+
+    # 4-byte unsigned int from the first 4 bytes of the SHA-256 hash
+    digest = hashlib.sha256(correlation_id.encode("utf-8", "replace")).digest()
+    bucket = int.from_bytes(digest[:4], "big") / (2**32)
+    return bucket < sample_rate
+
+
+# ---------------------------------------------------------------------------
+# Output comparison
+# ---------------------------------------------------------------------------
+
+
+def _extract_keywords(text: str) -> frozenset[str]:
+    """Extract significant words from text, excluding stop-words.
+
+    Splits on non-alphanumeric characters, lower-cases, and removes
+    stop-words and single-character tokens.
+
+    Args:
+        text: Raw response text.
+
+    Returns:
+        Frozenset of significant lowercase words.
+    """
+    words = re.split(r"[^a-zA-Z0-9_]+", text.lower())
+    return frozenset(w for w in words if len(w) > 1 and w not in _STOP_WORDS)
+
+
+def _jaccard_similarity(a: frozenset[str], b: frozenset[str]) -> float:
+    """Compute Jaccard similarity between two word sets.
+
+    Args:
+        a: First word set.
+        b: Second word set.
+
+    Returns:
+        Float in [0.0, 1.0] where 1.0 = identical sets.
+    """
+    if not a and not b:
+        return 1.0
+    intersection = len(a & b)
+    union = len(a | b)
+    return intersection / union if union > 0 else 0.0
+
+
+def _has_code_block(text: str) -> bool:
+    """Return True when the text contains a recognizable code block.
+
+    Checks for triple-backtick fences OR 4-space indented code with Python
+    keywords.
+
+    Args:
+        text: Response text to inspect.
+
+    Returns:
+        True when a code block is detected.
+    """
+    return bool(_CODE_BLOCK_RE.search(text))
+
+
+def compare_responses(
+    local_response: str,
+    shadow_response: str,
+) -> dict[str, Any]:
+    """Compare local model and shadow (Claude) responses.
+
+    Computes three metrics:
+    1. Length divergence ratio: abs(local_len - shadow_len) / max(shadow_len, 1)
+    2. Keyword overlap score: Jaccard similarity of significant word sets
+    3. Structural match: both responses have (or both lack) code blocks
+
+    Then evaluates a quality gate:
+    - Gate PASSES when all of:
+        - length_divergence_ratio <= _MAX_LENGTH_DIVERGENCE (0.70)
+        - keyword_overlap_score >= _MIN_KEYWORD_OVERLAP (0.35)
+        - structural_match is True
+
+    Args:
+        local_response: Text returned by the local (delegated) model.
+        shadow_response: Text returned by the shadow (Claude) model.
+
+    Returns:
+        Dict with keys:
+            local_response_length, shadow_response_length,
+            length_divergence_ratio, keyword_overlap_score,
+            structural_match, quality_gate_passed, divergence_reason.
+    """
+    local_len = len(local_response)
+    shadow_len = len(shadow_response)
+
+    # Length divergence
+    length_divergence = abs(local_len - shadow_len) / max(shadow_len, 1)
+
+    # Keyword overlap
+    local_kw = _extract_keywords(local_response)
+    shadow_kw = _extract_keywords(shadow_response)
+    overlap = _jaccard_similarity(local_kw, shadow_kw)
+
+    # Structural match (code block presence)
+    local_has_code = _has_code_block(local_response)
+    shadow_has_code = _has_code_block(shadow_response)
+    structural_match = local_has_code == shadow_has_code
+
+    # Quality gate
+    reasons: list[str] = []
+    if length_divergence > _MAX_LENGTH_DIVERGENCE:
+        reasons.append(
+            f"length_divergence={length_divergence:.3f} > threshold={_MAX_LENGTH_DIVERGENCE}"
+        )
+    if overlap < _MIN_KEYWORD_OVERLAP:
+        reasons.append(
+            f"keyword_overlap={overlap:.3f} < threshold={_MIN_KEYWORD_OVERLAP}"
+        )
+    if not structural_match:
+        reasons.append(
+            f"structural_mismatch: local_code={local_has_code} shadow_code={shadow_has_code}"
+        )
+
+    gate_passed = len(reasons) == 0
+    divergence_reason: str | None = "; ".join(reasons) if reasons else None
+
+    return {
+        "local_response_length": local_len,
+        "shadow_response_length": shadow_len,
+        "length_divergence_ratio": round(length_divergence, 6),
+        "keyword_overlap_score": round(overlap, 6),
+        "structural_match": structural_match,
+        "quality_gate_passed": gate_passed,
+        "divergence_reason": divergence_reason,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Shadow Claude API call
+# ---------------------------------------------------------------------------
+
+
+def _call_shadow_claude(
+    prompt: str,
+    *,
+    model: str,
+    api_key: str,
+    base_url: str,
+    timeout_s: float,
+) -> tuple[str, int] | None:
+    """Call Claude (shadow model) via the Anthropic Messages API.
+
+    Uses the OpenAI-compatible messages endpoint when base_url is overridden,
+    otherwise uses the native Anthropic messages API format.
+
+    Args:
+        prompt: The user prompt to send (already redacted by delegation_orchestrator).
+        model: Claude model identifier (e.g., "claude-sonnet-4-6").
+        api_key: Anthropic API key.
+        base_url: API base URL (default: https://api.anthropic.com).
+        timeout_s: HTTP timeout in seconds.
+
+    Returns:
+        Tuple of (response_text, latency_ms) on success, None on any error.
+    """
+    try:
+        import httpx
+    except ImportError:
+        logger.debug("httpx not installed; shadow Claude call skipped")
+        return None
+
+    start_time = time.time()
+    url = f"{base_url.rstrip('/')}/v1/messages"
+
+    headers = {
+        "x-api-key": api_key,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+    }
+    payload: dict[str, Any] = {
+        "model": model,
+        "max_tokens": 2048,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+
+    try:
+        with httpx.Client(timeout=timeout_s) as client:
+            response = client.post(url, json=payload, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+
+        content_blocks = data.get("content", [])
+        if not content_blocks:
+            logger.debug("Shadow Claude returned empty content")
+            return None
+
+        text = "".join(
+            block.get("text", "")
+            for block in content_blocks
+            if block.get("type") == "text"
+        )
+        if not text:
+            logger.debug("Shadow Claude returned no text content")
+            return None
+
+        latency_ms = int((time.time() - start_time) * 1000)
+        return text, latency_ms
+
+    except Exception as exc:
+        logger.debug("Shadow Claude call failed: %s: %s", type(exc).__name__, exc)
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Event emission
+# ---------------------------------------------------------------------------
+
+
+def _emit_shadow_comparison_event(
+    *,
+    session_id: str,
+    correlation_id: str,
+    task_type: str,
+    local_model: str,
+    shadow_model: str,
+    comparison: dict[str, Any],
+    shadow_latency_ms: int,
+    sample_rate: float,
+    emitted_at: datetime,
+) -> None:
+    """Emit onex.evt.omniclaude.delegation-shadow-comparison.v1 (fire-and-forget).
+
+    This function never raises.  Failure to emit is logged at DEBUG level and
+    silently swallowed so that shadow validation never blocks or crashes.
+
+    Args:
+        session_id: Session identifier.
+        correlation_id: Correlation ID for distributed tracing.
+        task_type: TaskIntent value string.
+        local_model: Model identifier of the delegated response.
+        shadow_model: Model identifier of the shadow response.
+        comparison: Dict returned by compare_responses().
+        shadow_latency_ms: Wall-clock time for the shadow call.
+        sample_rate: Configured sampling rate.
+        emitted_at: Timestamp to use (injected by caller, no datetime.now()).
+    """
+    try:
+        from uuid import UUID, uuid4
+
+        from omniclaude.hooks.schemas import ModelDelegationShadowComparisonPayload
+        from omniclaude.hooks.topics import TopicBase
+
+        try:
+            corr_uuid = UUID(correlation_id)
+        except (ValueError, AttributeError):
+            corr_uuid = uuid4()
+            logger.debug(
+                "correlation_id %r is not a UUID; generated placeholder %s",
+                correlation_id,
+                corr_uuid,
+            )
+
+        consecutive_passing_days = _get_consecutive_passing_days()
+        exit_threshold = _get_exit_threshold()
+        exit_window_days = _get_exit_window_days()
+        auto_disable_triggered = consecutive_passing_days >= exit_window_days
+
+        # Truncate divergence_reason to schema max_length=500
+        divergence_reason = comparison.get("divergence_reason")
+        if divergence_reason and len(divergence_reason) > 500:
+            divergence_reason = divergence_reason[:497] + "..."
+
+        payload = ModelDelegationShadowComparisonPayload(
+            session_id=session_id or "unknown",
+            correlation_id=corr_uuid,
+            emitted_at=emitted_at,
+            task_type=task_type,
+            local_model=local_model,
+            shadow_model=shadow_model,
+            local_response_length=comparison["local_response_length"],
+            shadow_response_length=comparison["shadow_response_length"],
+            length_divergence_ratio=comparison["length_divergence_ratio"],
+            keyword_overlap_score=comparison["keyword_overlap_score"],
+            structural_match=comparison["structural_match"],
+            quality_gate_passed=comparison["quality_gate_passed"],
+            divergence_reason=divergence_reason,
+            shadow_latency_ms=shadow_latency_ms,
+            sample_rate=sample_rate,
+            consecutive_passing_days=consecutive_passing_days,
+            exit_threshold=exit_threshold,
+            exit_window_days=exit_window_days,
+            auto_disable_triggered=auto_disable_triggered,
+        )
+
+        from emit_client_wrapper import emit_event  # type: ignore[import-not-found]
+
+        emit_event(
+            event_type=TopicBase.DELEGATION_SHADOW_COMPARISON,
+            payload=payload.model_dump(mode="json"),
+        )
+        logger.debug(
+            "Emitted shadow comparison event: task=%s gate_passed=%s "
+            "overlap=%.3f divergence=%.3f correlation=%s",
+            task_type,
+            comparison["quality_gate_passed"],
+            comparison["keyword_overlap_score"],
+            comparison["length_divergence_ratio"],
+            correlation_id,
+        )
+
+    except Exception as exc:
+        logger.debug("Shadow comparison event emission failed (non-critical): %s", exc)
+
+
+# ---------------------------------------------------------------------------
+# Background shadow validation worker
+# ---------------------------------------------------------------------------
+
+
+def _run_shadow_worker(
+    *,
+    prompt: str,
+    local_response: str,
+    local_model: str,
+    session_id: str,
+    correlation_id: str,
+    task_type: str,
+    sample_rate: float,
+    shadow_model: str,
+    api_key: str,
+    base_url: str,
+    timeout_s: float,
+    emitted_at: datetime,
+) -> None:
+    """Execute shadow validation in a background thread.
+
+    Calls the shadow Claude model, compares outputs, and emits a divergence
+    event.  All errors are caught and logged; this function never raises.
+
+    Args:
+        prompt: The redacted prompt sent to the local model.
+        local_response: The response from the local (delegated) model.
+        local_model: Model identifier of the local response.
+        session_id: Session identifier.
+        correlation_id: Correlation ID for distributed tracing.
+        task_type: TaskIntent value.
+        sample_rate: Sampling rate at which this check was triggered.
+        shadow_model: Claude model identifier.
+        api_key: Anthropic API key.
+        base_url: API base URL.
+        timeout_s: HTTP timeout for the shadow call.
+        emitted_at: Timestamp for the comparison event.
+    """
+    try:
+        shadow_result = _call_shadow_claude(
+            prompt,
+            model=shadow_model,
+            api_key=api_key,
+            base_url=base_url,
+            timeout_s=timeout_s,
+        )
+
+        if shadow_result is None:
+            logger.debug(
+                "Shadow call failed or skipped for correlation=%s; no event emitted",
+                correlation_id,
+            )
+            return
+
+        shadow_response, shadow_latency_ms = shadow_result
+
+        comparison = compare_responses(local_response, shadow_response)
+
+        _emit_shadow_comparison_event(
+            session_id=session_id,
+            correlation_id=correlation_id,
+            task_type=task_type,
+            local_model=local_model,
+            shadow_model=shadow_model,
+            comparison=comparison,
+            shadow_latency_ms=shadow_latency_ms,
+            sample_rate=sample_rate,
+            emitted_at=emitted_at,
+        )
+
+    except Exception as exc:
+        logger.debug(
+            "Shadow validation worker error (non-critical): %s: %s",
+            type(exc).__name__,
+            exc,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Public entry point
+# ---------------------------------------------------------------------------
+
+
+def run_shadow_validation(
+    *,
+    prompt: str,
+    local_response: str,
+    local_model: str,
+    session_id: str,
+    correlation_id: str,
+    task_type: str,
+    emitted_at: datetime | None = None,
+) -> bool:
+    """Trigger async shadow validation for a delegated task (non-blocking).
+
+    Checks feature flags, makes a deterministic sampling decision, then
+    fires a background daemon thread to perform the shadow call and emit the
+    comparison event.  The local model response is returned to the user
+    immediately; this function returns as soon as the thread is started.
+
+    This function NEVER raises.  All errors are caught and logged at DEBUG level.
+
+    Args:
+        prompt: The redacted user prompt (already secret-scrubbed by the
+            delegation orchestrator — do NOT pass the raw prompt here).
+        local_response: Response text from the local (delegated) model.
+        local_model: Model identifier string of the local model.
+        session_id: Session identifier.
+        correlation_id: Correlation ID for the delegation event.
+        task_type: TaskIntent value (document, test, research).
+        emitted_at: Timestamp for the comparison event.  Defaults to
+            datetime.now(UTC) when None.  Inject a fixed value in tests.
+
+    Returns:
+        True when a shadow validation thread was started, False otherwise
+        (feature disabled, not sampled, missing config, etc.).
+    """
+    emitted_at = emitted_at or datetime.now(UTC)
+
+    try:
+        if not _is_shadow_validation_enabled():
+            logger.debug(
+                "Shadow validation disabled; skipping for correlation=%s",
+                correlation_id,
+            )
+            return False
+
+        sample_rate = _get_sample_rate()
+        if not _should_sample(correlation_id, sample_rate):
+            logger.debug(
+                "Shadow validation not sampled (rate=%.2f) for correlation=%s",
+                sample_rate,
+                correlation_id,
+            )
+            return False
+
+        # Resolve shadow model configuration
+        shadow_model = (
+            os.environ.get("SHADOW_MODEL", _DEFAULT_SHADOW_MODEL).strip()
+            or _DEFAULT_SHADOW_MODEL
+        )
+
+        api_key = os.environ.get("SHADOW_CLAUDE_API_KEY", "").strip()
+        if not api_key:
+            logger.debug(
+                "SHADOW_CLAUDE_API_KEY not set; shadow validation skipped for correlation=%s",
+                correlation_id,
+            )
+            return False
+
+        base_url = (
+            os.environ.get("SHADOW_CLAUDE_BASE_URL", "").strip()
+            or "https://api.anthropic.com"
+        )
+
+        try:
+            timeout_s = float(
+                os.environ.get("SHADOW_CALL_TIMEOUT_S", str(_DEFAULT_SHADOW_TIMEOUT_S))
+            )
+        except (ValueError, TypeError):
+            timeout_s = _DEFAULT_SHADOW_TIMEOUT_S
+
+        thread = threading.Thread(
+            target=_run_shadow_worker,
+            kwargs={
+                "prompt": prompt,
+                "local_response": local_response,
+                "local_model": local_model,
+                "session_id": session_id,
+                "correlation_id": correlation_id,
+                "task_type": task_type,
+                "sample_rate": sample_rate,
+                "shadow_model": shadow_model,
+                "api_key": api_key,
+                "base_url": base_url,
+                "timeout_s": timeout_s,
+                "emitted_at": emitted_at,
+            },
+            daemon=True,  # Daemon threads do not prevent process exit
+            name=f"shadow-validation-{correlation_id[:8]}",
+        )
+        thread.start()
+        logger.debug(
+            "Shadow validation thread started: correlation=%s task=%s sample_rate=%.2f",
+            correlation_id,
+            task_type,
+            sample_rate,
+        )
+        return True
+
+    except Exception as exc:
+        logger.debug(
+            "run_shadow_validation unexpected error (non-critical): %s: %s",
+            type(exc).__name__,
+            exc,
+        )
+        return False
