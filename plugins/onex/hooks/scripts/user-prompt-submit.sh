@@ -316,7 +316,8 @@ if [[ -n "$SESSION_ID" ]]; then
                 routing_confidence: $routing_confidence
             }' 2>/dev/null)" || true
         if [[ -n "$_ACCUM_JSON" ]]; then
-            printf '%s\n' "$_ACCUM_JSON" > "$_ACCUM_FILE" 2>>"$LOG_FILE" || true
+            _ACCUM_TMP="$_ACCUM_FILE.tmp.$$"
+            printf '%s\n' "$_ACCUM_JSON" > "$_ACCUM_TMP" && mv "$_ACCUM_TMP" "$_ACCUM_FILE" || rm -f "$_ACCUM_TMP"
             log "Session accumulator written: ${_ACCUM_FILE}"
         fi
     else

@@ -203,7 +203,7 @@ def main() -> None:
         print(separator)
         for e in entries:
             ticket = truncate(e["ticket_id"], 20)
-            title = truncate(e["title"], 55)
+            title = truncate(e["title"], 56)
             phase = truncate(e["current_phase"], 22)
             branch = shorten_branch(e["branch_name"], 30)
             age = e["age_human"]
