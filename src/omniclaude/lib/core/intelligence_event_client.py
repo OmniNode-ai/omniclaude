@@ -34,9 +34,10 @@ class IntelligenceEventClient:
     TOPIC_COMPLETED = "onex.evt.omniintelligence.code-analysis-completed.v1"
     TOPIC_FAILED = "onex.evt.omniintelligence.code-analysis-failed.v1"
 
-    # Legacy topic — dual-publish migration window only (remove after migration)
-    # TODO(OMN-2414): Remove after omniintelligence confirms migration to canonical topics
-    TOPIC_REQUEST_LEGACY = "omninode.intelligence.code-analysis.requested.v1"
+    # Legacy topic — internal use only during dual-publish migration window.
+    # Not part of the public API; prefixed with underscore to signal internal-only access.
+    # TODO(OMN-2367): remove after migration complete
+    _TOPIC_REQUEST_LEGACY = "omninode.intelligence.code-analysis.requested.v1"
 
     _INSTANCE_NAME = "intelligence"
 
@@ -201,9 +202,8 @@ class IntelligenceEventClient:
             },
         }
         try:
-            # Dual-publish: mirror to legacy topic during migration window (remove after migration, OMN-2414).
-            # settings.dual_publish_legacy_topics is evaluated per-call (not cached at start()),
-            # so toggling DUAL_PUBLISH_LEGACY_TOPICS at runtime takes effect immediately.
+            # Dual-publish: mirror to legacy topic during migration window (remove after migration, OMN-2367).
+            # Feature flag: DUAL_PUBLISH_LEGACY_TOPICS=1 — see CLAUDE.md canonical env-var table.
             if (
                 settings.dual_publish_legacy_topics
                 and self._event_bus is not None
@@ -211,10 +211,10 @@ class IntelligenceEventClient:
                 try:
                     legacy_payload = {
                         **payload,
-                        "event_type": self.TOPIC_REQUEST_LEGACY,
+                        "event_type": self._TOPIC_REQUEST_LEGACY,
                         "event_id": str(uuid4()),  # distinct id; avoids broker-side dedup conflicts
                     }
-                    await self._event_bus.publish(self.TOPIC_REQUEST_LEGACY, legacy_payload)
+                    await self._event_bus.publish(self._TOPIC_REQUEST_LEGACY, legacy_payload)
                 except Exception as legacy_err:
                     self.logger.warning(
                         f"Dual-publish to legacy topic failed (non-fatal): {legacy_err}"

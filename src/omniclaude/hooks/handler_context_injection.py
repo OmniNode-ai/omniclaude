@@ -729,9 +729,19 @@ class HandlerContextInjection:
                 _safe_str(raw_p.get("domain_id"), default="general") or "general"
             )
             quality_score_raw = raw_p.get("quality_score")
-            success_rate = (
-                float(quality_score_raw) if quality_score_raw is not None else 0.0
-            )
+            if quality_score_raw is None:
+                success_rate = 0.0
+            else:
+                try:
+                    success_rate = float(quality_score_raw)  # type: ignore[arg-type]
+                except (TypeError, ValueError):
+                    logger.warning(
+                        "omniintelligence API: invalid quality_score value %r for "
+                        "pattern_id=%r — defaulting success_rate to 0.0",
+                        quality_score_raw,
+                        pattern_id,
+                    )
+                    success_rate = 0.0
             status = raw_p.get("status")
             lifecycle_state: str | None = (
                 status if status in {"validated", "provisional"} else None
@@ -772,10 +782,11 @@ class HandlerContextInjection:
             url,
         )
 
-        source_path = Path(url)
+        # source_files expects filesystem Path objects; the API URL is not a path.
+        # Attribution is already logged at DEBUG level above; omit source_files here.
         return ModelLoadPatternsResult(
             patterns=records,
-            source_files=[source_path] if records else [],
+            source_files=[],
             warnings=[],
         )
 
