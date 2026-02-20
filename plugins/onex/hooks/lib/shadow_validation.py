@@ -803,9 +803,9 @@ def run_shadow_validation(
             or _DEFAULT_SHADOW_MODEL
         )
 
-        api_key = os.environ.get(
+        api_key = os.environ.get(  # noqa: secrets  # pragma: allowlist secret
             "SHADOW_CLAUDE_API_KEY", ""
-        ).strip()  # noqa: secrets  # pragma: allowlist secret
+        ).strip()
         if not api_key:
             logger.debug(
                 "SHADOW_CLAUDE_API_KEY not set; shadow validation skipped for correlation=%s",
@@ -837,7 +837,7 @@ def run_shadow_validation(
             timeout_s = _DEFAULT_SHADOW_TIMEOUT_S
 
         try:
-            max_tokens = int(
+            max_tokens = int(  # noqa: secrets
                 os.environ.get("SHADOW_MAX_TOKENS", str(_DEFAULT_SHADOW_MAX_TOKENS))
             )
         except (ValueError, TypeError):
