@@ -502,7 +502,7 @@ def _emit_shadow_comparison_event(
 ) -> None:
     """Emit onex.evt.omniclaude.delegation-shadow-comparison.v1 (fire-and-forget).
 
-    This function never raises.  Failure to emit is logged at DEBUG level and
+    This function never raises.  Failure to emit is logged at WARNING level and
     silently swallowed so that shadow validation never blocks or crashes.
 
     Args:

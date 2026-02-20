@@ -296,18 +296,27 @@ if [[ "$EXECUTE" == "true" ]]; then
     # runtime TypeError with grpcio's EnumTypeWrapper that breaks the smoke test).
     echo "  Installing project from ${PROJECT_ROOT} (locked versions)..."
     LOCKED_REQS_FILE=$(mktemp /tmp/omniclaude-locked-reqs.XXXXXX)
+    _uv_stderr="$(mktemp /tmp/omniclaude-uv-export-err.XXXXXX)"
     _USE_LOCKED=false
-    if command -v uv &>/dev/null && [[ -f "${PROJECT_ROOT}/uv.lock" ]] && \
-       (cd "${PROJECT_ROOT}" && uv export --frozen --no-dev --no-hashes --format requirements-txt > "$LOCKED_REQS_FILE" 2>/dev/null); then
-        # Validate the requirements file is non-empty (uv export can produce an empty
-        # file in degenerate cases; pip install on an empty file silently succeeds).
-        if [ ! -s "$LOCKED_REQS_FILE" ]; then
-            echo -e "${YELLOW}  WARNING: uv export produced empty requirements file; falling back to pip install (versions may drift)${NC}"
-            rm -f "$LOCKED_REQS_FILE"
+    if command -v uv &>/dev/null && [[ -f "${PROJECT_ROOT}/uv.lock" ]]; then
+        if (cd "${PROJECT_ROOT}" && uv export --frozen --no-dev --no-hashes --format requirements-txt > "$LOCKED_REQS_FILE" 2>"$_uv_stderr"); then
+            # Validate the requirements file is non-empty (uv export can produce an empty
+            # file in degenerate cases; pip install on an empty file silently succeeds).
+            if [ ! -s "$LOCKED_REQS_FILE" ]; then
+                echo -e "${YELLOW}  WARNING: uv export produced empty requirements file; falling back to pip install (versions may drift)${NC}"
+                rm -f "$LOCKED_REQS_FILE"
+            else
+                _USE_LOCKED=true
+            fi
         else
-            _USE_LOCKED=true
+            # uv export failed — show why so users aren't left wondering
+            if [ -s "$_uv_stderr" ]; then
+                echo -e "${YELLOW}  WARNING: uv export failed: $(head -3 "$_uv_stderr")${NC}"
+            fi
+            rm -f "$LOCKED_REQS_FILE"
         fi
     fi
+    rm -f "$_uv_stderr"
 
     if [[ "$_USE_LOCKED" == "true" ]]; then
         # Run pip install from PROJECT_ROOT so that the '-e .' editable entry in the

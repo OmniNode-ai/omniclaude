@@ -2375,8 +2375,10 @@ class ModelDelegationShadowComparisonPayload(BaseModel):
             structural category (e.g., both have code blocks, both are prose).
         quality_gate_passed: True when all comparison metrics are within
             acceptable divergence thresholds.
-        divergence_reason: Human-readable summary of why quality_gate_passed is
-            False.  None when the gate passed.
+        divergence_reason: Human-readable explanation of divergence. None when
+            all metrics pass (no divergence of any kind). May be set even when
+            quality_gate_passed=True (e.g., structural mismatch noted as
+            advisory).
         shadow_latency_ms: Wall-clock time for the shadow Claude call in ms.
         sample_rate: The configured sampling rate (0.05 - 0.10) at which this
             shadow check was triggered.
@@ -2503,8 +2505,9 @@ class ModelDelegationShadowComparisonPayload(BaseModel):
         default=None,
         max_length=500,
         description=(
-            "Human-readable summary of why quality_gate_passed is False. "
-            "None when the gate passed."
+            "Human-readable explanation of divergence. None when all metrics pass "
+            "(no divergence of any kind). May be set even when quality_gate_passed=True "
+            "(e.g., structural mismatch noted as advisory)."
         ),
     )
 
