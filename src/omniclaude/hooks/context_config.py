@@ -8,6 +8,8 @@ Environment variables use the OMNICLAUDE_CONTEXT_ prefix:
     OMNICLAUDE_CONTEXT_MAX_PATTERNS: Maximum patterns to inject (default: 5)
     OMNICLAUDE_CONTEXT_MIN_CONFIDENCE: Minimum confidence threshold (default: 0.7)
     OMNICLAUDE_CONTEXT_TIMEOUT_MS: Timeout for retrieval in milliseconds (default: 2000)
+    OMNICLAUDE_CONTEXT_API_TIMEOUT_MS: Timeout in milliseconds for omniintelligence API calls
+        during context injection (default: 900, range: 100-10000)
 
     Database configuration (primary source):
     OMNICLAUDE_CONTEXT_DB_ENABLED: Enable database as pattern source (default: true)

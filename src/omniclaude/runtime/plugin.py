@@ -293,10 +293,13 @@ class PluginClaude:
                 # Blocking here would delay shutdown and risk deadlock if the
                 # Kafka consumer is stuck waiting on a network call.
                 # stop_event already set; daemon self-terminates.
-                self._compliance_thread = None
                 # Narrow race: if start_consumers() is called before the daemon fully stops,
                 # stop_event being set means the thread will exit without processing new work.
                 # No data loss risk — the publisher handles event delivery independently.
+            # Clear unconditionally: if _compliance_thread is set but
+            # _compliance_stop_event is None (e.g. partially initialised state),
+            # the thread reference must still be released to avoid a leak.
+            self._compliance_thread = None
 
             if self._publisher is None:
                 return ModelDomainPluginResult.succeeded(

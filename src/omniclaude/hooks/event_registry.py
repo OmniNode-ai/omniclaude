@@ -585,6 +585,21 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         required_fields=["session_id", "changed_file_count"],
     ),
     # =========================================================================
+    # Delegation Shadow Validation (OMN-2283)
+    # =========================================================================
+    "delegation.shadow.comparison": EventRegistration(
+        event_type="delegation.shadow.comparison",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.DELEGATION_SHADOW_COMPARISON,
+                transform=None,  # Passthrough — no sensitive data in comparison metrics
+                description="Shadow validation comparison result for quality monitoring",
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=["session_id", "correlation_id"],
+    ),
+    # =========================================================================
     # Agent Status (OMN-1848 - agent lifecycle reporting)
     # =========================================================================
     # NOTE: agent_name and session_id may carry the sentinel value "unknown".

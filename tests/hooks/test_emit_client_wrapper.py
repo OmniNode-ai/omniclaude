@@ -72,6 +72,7 @@ class TestModuleImport:
             "llm.routing.fallback",  # OMN-2273 - LLM routing fallback observability
             "context.enrichment",  # OMN-2274 - Enrichment observability
             "routing.outcome.raw",  # OMN-2356 - Raw session outcome for feedback loop
+            "delegation.shadow.comparison",  # OMN-2283 - Shadow validation mode comparison results
         }
         assert expected_types == SUPPORTED_EVENT_TYPES
 
