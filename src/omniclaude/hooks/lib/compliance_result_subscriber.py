@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import sys
 import threading
@@ -139,8 +140,6 @@ def violations_to_advisories(
 
             # Validate confidence is a finite number in [0, 1]
             try:
-                import math  # noqa: PLC0415
-
                 confidence = float(v.get("confidence", 0.0))
                 if not math.isfinite(confidence):
                     confidence = 0.0
@@ -175,8 +174,20 @@ def violations_to_advisories(
 
 
 def _resolve_hooks_lib_dir() -> Path:
-    """Return the absolute path to this script's directory (hooks lib)."""
-    return Path(__file__).resolve().parent
+    """Return the absolute path to the plugins hooks lib directory.
+
+    ``pattern_advisory_formatter`` lives at
+    ``plugins/onex/hooks/lib/pattern_advisory_formatter.py``, not alongside
+    this installed-package module.  Walk up from the repo root (three levels
+    above ``src/``) and resolve the plugins path so the import in
+    ``_save_advisory`` always finds the correct file regardless of how the
+    package was installed.
+    """
+    # __file__ is  <repo>/src/omniclaude/hooks/lib/compliance_result_subscriber.py
+    # .parents[3] is  <repo>/src → [2] omniclaude → [1] hooks → [0] lib
+    # We want <repo> = .parents[4] then /plugins/onex/hooks/lib
+    repo_root = Path(__file__).resolve().parents[4]
+    return repo_root / "plugins" / "onex" / "hooks" / "lib"
 
 
 def _save_advisory(session_id: str, advisories: list[dict[str, Any]]) -> bool:

@@ -21,7 +21,10 @@ from typing import Any
 import pytest
 
 # ---------------------------------------------------------------------------
-# sys.path: hook lib modules live outside the normal package tree
+# sys.path: pattern_advisory_formatter lives in plugins/onex/hooks/lib (not
+# a proper package), so we must inject that directory for it.
+# compliance_result_subscriber has moved to src/omniclaude and is importable
+# as a package module — no sys.path manipulation needed for it.
 # ---------------------------------------------------------------------------
 
 _HOOKS_LIB = (
@@ -31,14 +34,15 @@ if str(_HOOKS_LIB) not in sys.path:
     sys.path.insert(0, str(_HOOKS_LIB))
 
 
-from compliance_result_subscriber import (
+from pattern_advisory_formatter import (
+    load_and_clear_advisories,
+)
+
+from omniclaude.hooks.lib.compliance_result_subscriber import (
     COMPLIANCE_EVALUATED_TOPIC,
     _parse_compliance_result,
     process_compliance_event,
     violations_to_advisories,
-)
-from pattern_advisory_formatter import (
-    load_and_clear_advisories,
 )
 
 # ---------------------------------------------------------------------------
