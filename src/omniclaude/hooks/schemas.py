@@ -726,9 +726,7 @@ class ModelSessionRawOutcomePayload(BaseModel):
         ... )
     """
 
-    model_config = ConfigDict(
-        frozen=True, extra="ignore", from_attributes=True
-    )  # forward-compat: allow unknown fields from future schema versions
+    model_config = ConfigDict(frozen=True, extra="forbid", from_attributes=True)
 
     event_name: Literal["routing.outcome.raw"] = Field(
         default="routing.outcome.raw",

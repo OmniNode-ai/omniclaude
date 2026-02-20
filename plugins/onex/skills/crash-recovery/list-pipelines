@@ -185,7 +185,7 @@ def main() -> None:
 
     if args.in_progress and not entries:
         print(
-            f"No in-progress pipelines found. All {total_found} recent pipelines are complete."
+            f"No in-progress pipelines found. All {total_shown} most recent pipelines are complete."
         )
         sys.exit(0)
 
