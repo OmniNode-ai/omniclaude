@@ -719,7 +719,7 @@ def run_shadow_validation(
             or _DEFAULT_SHADOW_MODEL
         )
 
-        api_key = os.environ.get("SHADOW_CLAUDE_API_KEY", "").strip()
+        api_key = os.environ.get("SHADOW_CLAUDE_API_KEY", "").strip()  # noqa: secrets
         if not api_key:
             logger.debug(
                 "SHADOW_CLAUDE_API_KEY not set; shadow validation skipped for correlation=%s",
