@@ -323,9 +323,6 @@ print(result.outcome)
             log "routing.outcome.raw emitted: injection=$RAW_INJECTION_OCCURRED patterns=$RAW_PATTERNS_COUNT tool_calls=$TOOL_CALLS_COMPLETED"
         fi
 
-        # Clean up session accumulator file — fully consumed at this point.
-        # Prevents /tmp accumulation on long-running machines (one file per session).
-        rm -f "$SESSION_STATE_FILE"
     ) &
     EMIT_PIDS+=($!)
 
@@ -333,6 +330,12 @@ print(result.outcome)
 else
     log "Kafka emission skipped (KAFKA_ENABLED=$KAFKA_ENABLED)"
 fi
+
+# Clean up session accumulator file — fully consumed at this point (or not needed).
+# Runs unconditionally so /tmp does not accumulate files in dev/offline mode
+# where KAFKA_ENABLED=false (one file per session, written by user-prompt-submit.sh).
+SESSION_STATE_FILE="/tmp/omniclaude-session-${SESSION_ID}.json"  # noqa: S108  # nosec B108
+rm -f "$SESSION_STATE_FILE"
 
 # Clean up correlation state
 if [[ -f "${HOOKS_LIB}/correlation_manager.py" ]]; then

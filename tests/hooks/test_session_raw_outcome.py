@@ -442,14 +442,17 @@ class TestSessionAccumulatorFileFormat:
     def test_accumulator_with_nonnumeric_pattern_count_defaults_to_zero(self) -> None:
         """Non-numeric patterns_injected_count in the accumulator is coerced to 0.
 
-        The shell-side guard ([[ PATTERN_COUNT =~ ^[0-9]+$ ]] || PATTERN_COUNT=0)
-        prevents a malformed wrapper response from causing jq to fail and skip
-        the accumulator write entirely.  On the Python side, the helper uses
-        int() with a fallback default so a stale/corrupt accumulator still
-        produces a valid event rather than raising.
+        This test exercises the shell-side numeric guard in user-prompt-submit.sh:
+        ([[ PATTERN_COUNT =~ ^[0-9]+$ ]] || PATTERN_COUNT=0)
+        That guard ensures only a valid integer reaches the accumulator JSON, and
+        by extension the Python helper.  The test simulates what would happen if
+        that guard were absent (or a corrupt accumulator were read) by manually
+        coercing the bad value to 0 before calling build_session_raw_outcome_event.
 
-        Note: The TOCTOU scenario in list-pipelines is a shell-level concern and
-        is not tested here — it is covered by the try/except in extract_entry().
+        Note: build_session_raw_outcome_event itself uses bare int() with no
+        try/except — it would raise ValueError if passed "not-a-number" directly.
+        The coercion modelled here is the shell-side guard's responsibility, not
+        a Python-level fallback in the helper.
         """
         # Simulate an accumulator where patterns_injected_count somehow became
         # a non-integer value (e.g. a corrupt write, or future schema mismatch).
