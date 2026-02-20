@@ -635,8 +635,8 @@ class HandlerContextInjection:
         url = f"{base_url}/api/v1/patterns?{query_string}"
 
         try:
-            req = urllib.request.Request(url, method="GET")  # noqa: S310
-            with urllib.request.urlopen(req, timeout=timeout_s) as response:  # noqa: S310
+            req = urllib.request.Request(url, method="GET")  # noqa: S310  # nosec B310
+            with urllib.request.urlopen(req, timeout=timeout_s) as response:  # noqa: S310  # nosec B310
                 raw = response.read().decode("utf-8")
         except urllib.error.URLError as e:
             logger.warning("omniintelligence API unavailable: %s (url=%s)", e, url)
