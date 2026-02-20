@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import os
 from datetime import UTC, datetime
 from pathlib import Path
@@ -98,7 +99,7 @@ class IntelligenceEventClient:
                         reply_topics=ModelReplyTopics(
                             completed=self.TOPIC_COMPLETED, failed=self.TOPIC_FAILED
                         ),
-                        timeout_seconds=self.request_timeout_ms // 1000,
+                        timeout_seconds=max(1, math.ceil(self.request_timeout_ms / 1000)),
                     )
                 ]
             )
@@ -167,7 +168,8 @@ class IntelligenceEventClient:
                 message="Client not started. Call start() first.",
                 details={"component": "IntelligenceEventClient"},
             )
-        timeout_seconds = (timeout_ms or self.request_timeout_ms) // 1000
+        # Ceiling division: 500ms → 1s, 1500ms → 2s. Floor would silently truncate caller intent.
+        timeout_seconds = max(1, math.ceil((timeout_ms or self.request_timeout_ms) / 1000))
         correlation_id = str(uuid4())
         timestamp = (
             emitted_at if emitted_at is not None else datetime.now(UTC)
@@ -199,15 +201,22 @@ class IntelligenceEventClient:
             },
         }
         try:
-            # Dual-publish: mirror to legacy topic during migration window (remove after migration)
+            # Dual-publish: mirror to legacy topic during migration window (remove after migration, OMN-2414).
+            # settings.dual_publish_legacy_topics is evaluated per-call (not cached at start()),
+            # so toggling DUAL_PUBLISH_LEGACY_TOPICS at runtime takes effect immediately.
             if (
-                os.environ.get("DUAL_PUBLISH_LEGACY_TOPICS") == "1"
+                settings.dual_publish_legacy_topics
                 and self._event_bus is not None
             ):
                 try:
-                    await self._event_bus.publish(self.TOPIC_REQUEST_LEGACY, payload)
+                    legacy_payload = {
+                        **payload,
+                        "event_type": self.TOPIC_REQUEST_LEGACY,
+                        "event_id": str(uuid4()),  # distinct id; avoids broker-side dedup conflicts
+                    }
+                    await self._event_bus.publish(self.TOPIC_REQUEST_LEGACY, legacy_payload)
                 except Exception as legacy_err:
-                    self.logger.debug(
+                    self.logger.warning(
                         f"Dual-publish to legacy topic failed (non-fatal): {legacy_err}"
                     )
 

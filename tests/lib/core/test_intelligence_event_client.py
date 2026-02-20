@@ -15,7 +15,7 @@ All Kafka and RequestResponseWiring operations are mocked via conftest.py.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -41,6 +41,9 @@ def mock_settings():
     settings_mock = MagicMock()
     settings_mock.get_effective_kafka_bootstrap_servers.return_value = "localhost:9092"
     settings_mock.kafka_environment = "dev"
+    settings_mock.dual_publish_legacy_topics = (
+        False  # off by default; override per test
+    )
     return settings_mock
 
 
@@ -749,3 +752,144 @@ class TestIntelligenceEventClientTopicStability:
             IntelligenceEventClient.TOPIC_REQUEST_LEGACY
             == "omninode.intelligence.code-analysis.requested.v1"
         )
+
+
+class TestIntelligenceEventClientDualPublish:
+    """Tests for the settings.dual_publish_legacy_topics-gated dual-publish branch."""
+
+    @pytest.mark.asyncio
+    async def test_dual_publish_enabled_publishes_to_both_topics(
+        self, mock_settings, mock_wiring, mock_event_bus
+    ) -> None:
+        """When dual_publish_legacy_topics=True, publish to legacy topic AND canonical topic."""
+        mock_settings.dual_publish_legacy_topics = True
+        mock_event_bus.publish = AsyncMock()
+        mock_wiring.send_request = AsyncMock(return_value={"payload": {}})
+
+        with patch.object(intelligence_module, "settings", mock_settings):
+            client = IntelligenceEventClient(bootstrap_servers="localhost:9092")
+            client._started = True
+            client._wiring = mock_wiring
+            client._event_bus = mock_event_bus
+
+            await client.request_code_analysis(
+                content="def hello(): pass",
+                source_path="test.py",
+                language="python",
+            )
+
+        # Legacy topic published exactly once with correct topic name
+        mock_event_bus.publish.assert_called_once_with(
+            IntelligenceEventClient.TOPIC_REQUEST_LEGACY, ANY
+        )
+        # Canonical request also sent via wiring
+        mock_wiring.send_request.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_dual_publish_disabled_by_default_publishes_only_canonical_topic(
+        self, mock_settings, mock_wiring, mock_event_bus
+    ) -> None:
+        """When dual_publish_legacy_topics=False (default), only canonical topic is published."""
+        mock_settings.dual_publish_legacy_topics = False
+        mock_event_bus.publish = AsyncMock()
+        mock_wiring.send_request = AsyncMock(return_value={"payload": {}})
+
+        with patch.object(intelligence_module, "settings", mock_settings):
+            client = IntelligenceEventClient(bootstrap_servers="localhost:9092")
+            client._started = True
+            client._wiring = mock_wiring
+            client._event_bus = mock_event_bus
+
+            await client.request_code_analysis(
+                content="def hello(): pass",
+                source_path="test.py",
+                language="python",
+            )
+
+        mock_event_bus.publish.assert_not_called()
+        mock_wiring.send_request.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_dual_publish_legacy_error_is_non_fatal(
+        self, mock_settings, mock_wiring, mock_event_bus
+    ) -> None:
+        """A failure in the dual-publish to legacy topic must not raise — logged and skipped."""
+        mock_settings.dual_publish_legacy_topics = True
+        mock_event_bus.publish = AsyncMock(
+            side_effect=Exception("Legacy broker unavailable")
+        )
+        mock_wiring.send_request = AsyncMock(return_value={"payload": {"ok": True}})
+
+        with patch.object(intelligence_module, "settings", mock_settings):
+            client = IntelligenceEventClient(bootstrap_servers="localhost:9092")
+            client._started = True
+            client._wiring = mock_wiring
+            client._event_bus = mock_event_bus
+
+            result = await client.request_code_analysis(
+                content="def hello(): pass",
+                source_path="test.py",
+                language="python",
+            )
+
+        assert result == {"ok": True}
+        mock_wiring.send_request.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_dual_publish_skipped_when_event_bus_is_none(
+        self, mock_settings, mock_wiring
+    ) -> None:
+        """Dual-publish is skipped when _event_bus is None even if dual_publish_legacy_topics=True."""
+        mock_settings.dual_publish_legacy_topics = True
+        mock_wiring.send_request = AsyncMock(return_value={"payload": {}})
+
+        with patch.object(intelligence_module, "settings", mock_settings):
+            client = IntelligenceEventClient(bootstrap_servers="localhost:9092")
+            client._started = True
+            client._wiring = mock_wiring
+            client._event_bus = None
+
+            await client.request_code_analysis(
+                content="def hello(): pass",
+                source_path="test.py",
+                language="python",
+            )
+
+        mock_wiring.send_request.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_dual_publish_legacy_payload_has_distinct_event_id(
+        self, mock_settings, mock_wiring, mock_event_bus
+    ) -> None:
+        """Legacy payload must have a different event_id to avoid broker-side dedup conflicts."""
+        mock_settings.dual_publish_legacy_topics = True
+        published_payloads: list[dict] = []
+        canonical_payloads: list[dict] = []
+
+        async def capture_publish(topic: str, payload: dict) -> None:
+            published_payloads.append(payload)
+
+        async def capture_send(**kwargs: object) -> dict:
+            canonical_payloads.append(kwargs.get("payload", {}))  # type: ignore[arg-type]
+            return {"payload": {}}
+
+        mock_event_bus.publish = AsyncMock(side_effect=capture_publish)
+        mock_wiring.send_request = AsyncMock(side_effect=capture_send)
+
+        with patch.object(intelligence_module, "settings", mock_settings):
+            client = IntelligenceEventClient(bootstrap_servers="localhost:9092")
+            client._started = True
+            client._wiring = mock_wiring
+            client._event_bus = mock_event_bus
+
+            await client.request_code_analysis(
+                content="def hello(): pass",
+                source_path="test.py",
+                language="python",
+            )
+
+        assert len(published_payloads) == 1
+        assert len(canonical_payloads) == 1
+        legacy_event_id = published_payloads[0]["event_id"]
+        canonical_event_id = canonical_payloads[0]["event_id"]
+        assert legacy_event_id != canonical_event_id
