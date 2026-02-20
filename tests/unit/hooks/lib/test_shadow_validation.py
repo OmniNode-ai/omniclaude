@@ -1010,3 +1010,243 @@ class TestDelegationOrchestratorIntegration:
 
         # Delegation still succeeds
         assert result["delegated"] is True
+
+
+# ---------------------------------------------------------------------------
+# _run_shadow_worker tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestRunShadowWorker:
+    """_run_shadow_worker calls the shadow API, compares, and emits an event."""
+
+    def test_run_shadow_worker_emits_comparison_event(self) -> None:
+        """_run_shadow_worker calls compare_responses and _emit_shadow_comparison_event."""
+        shadow_text = "def shadow_fn(): return 42"
+        shadow_latency = 750
+
+        with (
+            patch.object(
+                sv,
+                "_call_shadow_claude",
+                return_value=(shadow_text, shadow_latency),
+            ) as mock_call,
+            patch.object(sv, "compare_responses") as mock_compare,
+            patch.object(sv, "_emit_shadow_comparison_event") as mock_emit,
+        ):
+            mock_compare.return_value = {
+                "local_response_length": 20,
+                "shadow_response_length": 26,
+                "length_divergence_ratio": 0.23,
+                "keyword_overlap_score": 0.75,
+                "structural_match": True,
+                "quality_gate_passed": True,
+                "divergence_reason": None,
+            }
+
+            sv._run_shadow_worker(
+                prompt="document this function",
+                local_response="def local_fn(): return 1",
+                local_model="qwen-14b",
+                session_id="sess-abc",
+                correlation_id=_FIXED_CORR_ID,
+                task_type="document",
+                sample_rate=0.07,
+                shadow_model="claude-sonnet-4-6",
+                api_key="test-api-key",  # noqa: secrets  # pragma: allowlist secret
+                base_url="https://api.anthropic.com",
+                timeout_s=30.0,
+                emitted_at=_FIXED_EMITTED_AT,
+            )
+
+        # The shadow Claude API must be called with the correct parameters
+        mock_call.assert_called_once_with(
+            "document this function",
+            model="claude-sonnet-4-6",
+            api_key="test-api-key",  # noqa: secrets  # pragma: allowlist secret
+            base_url="https://api.anthropic.com",
+            timeout_s=30.0,
+        )
+
+        # compare_responses must be called with local and shadow text
+        mock_compare.assert_called_once_with(
+            "def local_fn(): return 1",
+            shadow_text,
+        )
+
+        # _emit_shadow_comparison_event must be called with the comparison result
+        mock_emit.assert_called_once()
+        emit_kwargs = mock_emit.call_args.kwargs
+        assert emit_kwargs["session_id"] == "sess-abc"
+        assert emit_kwargs["correlation_id"] == _FIXED_CORR_ID
+        assert emit_kwargs["task_type"] == "document"
+        assert emit_kwargs["local_model"] == "qwen-14b"
+        assert emit_kwargs["shadow_model"] == "claude-sonnet-4-6"
+        assert emit_kwargs["comparison"] == mock_compare.return_value
+        assert emit_kwargs["shadow_latency_ms"] == shadow_latency
+        assert emit_kwargs["sample_rate"] == 0.07
+        assert emit_kwargs["emitted_at"] == _FIXED_EMITTED_AT
+
+    def test_run_shadow_worker_handles_api_error(self) -> None:
+        """When _call_shadow_claude returns None (API error), no event is emitted."""
+        with (
+            patch.object(sv, "_call_shadow_claude", return_value=None),
+            patch.object(sv, "_emit_shadow_comparison_event") as mock_emit,
+        ):
+            # Must not raise
+            sv._run_shadow_worker(
+                prompt="document this function",
+                local_response="def local_fn(): return 1",
+                local_model="qwen-14b",
+                session_id="sess-abc",
+                correlation_id=_FIXED_CORR_ID,
+                task_type="document",
+                sample_rate=0.07,
+                shadow_model="claude-sonnet-4-6",
+                api_key="test-api-key",  # noqa: secrets  # pragma: allowlist secret
+                base_url="https://api.anthropic.com",
+                timeout_s=30.0,
+                emitted_at=_FIXED_EMITTED_AT,
+            )
+
+        # No event should be emitted when the API call fails
+        mock_emit.assert_not_called()
+
+    def test_run_shadow_worker_never_raises(self) -> None:
+        """Even if _call_shadow_claude raises unexpectedly, _run_shadow_worker does not propagate."""
+        with (
+            patch.object(
+                sv,
+                "_call_shadow_claude",
+                side_effect=RuntimeError("unexpected failure"),
+            ),
+            patch.object(sv, "_emit_shadow_comparison_event") as mock_emit,
+        ):
+            # Must not raise
+            sv._run_shadow_worker(
+                prompt="document this function",
+                local_response="def local_fn(): return 1",
+                local_model="qwen-14b",
+                session_id="sess-abc",
+                correlation_id=_FIXED_CORR_ID,
+                task_type="document",
+                sample_rate=0.07,
+                shadow_model="claude-sonnet-4-6",
+                api_key="test-api-key",  # noqa: secrets  # pragma: allowlist secret
+                base_url="https://api.anthropic.com",
+                timeout_s=30.0,
+                emitted_at=_FIXED_EMITTED_AT,
+            )
+
+        mock_emit.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# _emit_shadow_comparison_event tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestEmitShadowComparisonEvent:
+    """_emit_shadow_comparison_event builds the payload and calls emit_event."""
+
+    def _comparison(self) -> dict[str, Any]:
+        """Return a passing comparison dict."""
+        return {
+            "local_response_length": 450,
+            "shadow_response_length": 520,
+            "length_divergence_ratio": 0.135,
+            "keyword_overlap_score": 0.82,
+            "structural_match": True,
+            "quality_gate_passed": True,
+            "divergence_reason": None,
+        }
+
+    def test_emit_shadow_comparison_event_calls_emit_event(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """_emit_shadow_comparison_event calls emit_event with the correct arguments.
+
+        The function does a late import (`from emit_client_wrapper import emit_event`)
+        inside the function body, so we patch at the module attribute level
+        ("emit_client_wrapper.emit_event") which affects the module object that
+        the late import will look up from sys.modules.
+
+        The event_type passed to emit_event is the semantic name
+        "delegation.shadow.comparison" (not the wire topic string), routing
+        through the emit daemon's EVENT_REGISTRY for fan-out.
+
+        Note: "delegation.shadow.comparison" is NOT yet registered in
+        event_registry.py's EVENT_REGISTRY as of the time this test was written.
+        The entry should be added as a follow-up (the daemon will drop unknown
+        event types gracefully).
+        """
+        emitted_calls: list[dict[str, Any]] = []
+
+        def _fake_emit_event(event_type: Any, payload: dict[str, Any]) -> bool:
+            emitted_calls.append({"event_type": event_type, "payload": payload})
+            return True
+
+        monkeypatch.setenv("SHADOW_CONSECUTIVE_PASSING_DAYS", "0")
+        monkeypatch.setenv("SHADOW_EXIT_WINDOW_DAYS", "30")
+        monkeypatch.setenv("SHADOW_EXIT_THRESHOLD", "0.95")
+
+        # Patch at the module attribute level so the late `from emit_client_wrapper
+        # import emit_event` inside _emit_shadow_comparison_event picks up the mock.
+        with patch("emit_client_wrapper.emit_event", side_effect=_fake_emit_event):
+            sv._emit_shadow_comparison_event(
+                session_id="sess-test-1234",
+                correlation_id=_FIXED_CORR_ID,
+                task_type="document",
+                local_model="qwen-14b",
+                shadow_model="claude-sonnet-4-6",
+                comparison=self._comparison(),
+                shadow_latency_ms=1200,
+                sample_rate=0.07,
+                emitted_at=_FIXED_EMITTED_AT,
+            )
+
+        assert len(emitted_calls) == 1
+        call = emitted_calls[0]
+
+        # event_type is the semantic name passed to the emit daemon
+        assert call["event_type"] == "delegation.shadow.comparison"
+
+        # Verify payload contains the expected comparison fields
+        payload = call["payload"]
+        assert payload["session_id"] == "sess-test-1234"
+        assert payload["task_type"] == "document"
+        assert payload["local_model"] == "qwen-14b"
+        assert payload["shadow_model"] == "claude-sonnet-4-6"
+        assert payload["quality_gate_passed"] is True
+        assert payload["keyword_overlap_score"] == pytest.approx(0.82)
+        assert payload["shadow_latency_ms"] == 1200
+        assert payload["sample_rate"] == pytest.approx(0.07)
+        assert "emitted_at" in payload
+
+    def test_emit_shadow_comparison_event_handles_emit_failure(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """When emit_event returns False, _emit_shadow_comparison_event handles it gracefully.
+
+        The function must not raise — it silently swallows the failure per the
+        fire-and-forget design contract.
+        """
+        monkeypatch.setenv("SHADOW_CONSECUTIVE_PASSING_DAYS", "0")
+        monkeypatch.setenv("SHADOW_EXIT_WINDOW_DAYS", "30")
+        monkeypatch.setenv("SHADOW_EXIT_THRESHOLD", "0.95")
+
+        with patch("emit_client_wrapper.emit_event", return_value=False):
+            # Must not raise even when emit_event signals failure
+            sv._emit_shadow_comparison_event(
+                session_id="sess-test-emit-fail",
+                correlation_id=_FIXED_CORR_ID,
+                task_type="test",
+                local_model="qwen-14b",
+                shadow_model="claude-sonnet-4-6",
+                comparison=self._comparison(),
+                shadow_latency_ms=950,
+                sample_rate=0.07,
+                emitted_at=_FIXED_EMITTED_AT,
+            )

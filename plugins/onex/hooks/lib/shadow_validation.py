@@ -556,7 +556,6 @@ def _emit_shadow_comparison_event(
         from uuid import UUID, uuid4
 
         from omniclaude.hooks.schemas import ModelDelegationShadowComparisonPayload
-        from omniclaude.hooks.topics import TopicBase
 
         try:
             corr_uuid = UUID(correlation_id)
@@ -602,7 +601,7 @@ def _emit_shadow_comparison_event(
         from emit_client_wrapper import emit_event  # type: ignore[import-not-found]
 
         emit_event(
-            event_type=TopicBase.DELEGATION_SHADOW_COMPARISON,
+            event_type="delegation.shadow.comparison",
             payload=payload.model_dump(mode="json"),
         )
         logger.debug(
@@ -806,7 +805,7 @@ def run_shadow_validation(
 
         api_key = os.environ.get(
             "SHADOW_CLAUDE_API_KEY", ""
-        ).strip()  # pragma: allowlist secret
+        ).strip()  # noqa: secrets  # pragma: allowlist secret
         if not api_key:
             logger.debug(
                 "SHADOW_CLAUDE_API_KEY not set; shadow validation skipped for correlation=%s",

@@ -2425,6 +2425,11 @@ class ModelDelegationShadowComparisonPayload(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="ignore", from_attributes=True)
 
+    event_name: Literal["delegation.shadow.comparison"] = Field(
+        default="delegation.shadow.comparison",
+        description="Event type discriminator for polymorphic deserialization",
+    )
+
     # Identity / tracing
     session_id: str = Field(
         ...,
