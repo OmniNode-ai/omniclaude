@@ -14,6 +14,7 @@ All Kafka and RequestResponseWiring operations are mocked via conftest.py.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -521,6 +522,53 @@ class TestIntelligenceEventClientRequestCodeAnalysis:
                 1
             ].get("timeout_seconds")
             assert timeout_seconds == 15  # 15000ms / 1000
+
+    @pytest.mark.asyncio
+    async def test_request_code_analysis_uses_injected_timestamp(
+        self, mock_settings, mock_wiring
+    ) -> None:
+        """Test request_code_analysis uses emitted_at when provided (deterministic testing)."""
+        fixed_ts = datetime(2025, 1, 15, 12, 0, 0, tzinfo=UTC)
+        mock_wiring.send_request = AsyncMock(return_value={"payload": {}})
+
+        with patch.object(intelligence_module, "settings", mock_settings):
+            client = IntelligenceEventClient(bootstrap_servers="localhost:9092")
+            client._started = True
+            client._wiring = mock_wiring
+
+            await client.request_code_analysis(
+                content="def hello(): pass",
+                source_path="test.py",
+                language="python",
+                emitted_at=fixed_ts,
+            )
+
+            call_args = mock_wiring.send_request.call_args
+            payload = call_args.kwargs.get("payload") or call_args[1].get("payload")
+            assert payload["timestamp"] == fixed_ts.isoformat()
+
+    @pytest.mark.asyncio
+    async def test_request_pattern_discovery_passes_emitted_at_through(
+        self, mock_settings, mock_wiring
+    ) -> None:
+        """Test request_pattern_discovery forwards emitted_at to request_code_analysis."""
+        fixed_ts = datetime(2025, 6, 30, 8, 0, 0, tzinfo=UTC)
+        mock_wiring.send_request = AsyncMock(return_value={"payload": {"patterns": []}})
+
+        with patch.object(intelligence_module, "settings", mock_settings):
+            client = IntelligenceEventClient(bootstrap_servers="localhost:9092")
+            client._started = True
+            client._wiring = mock_wiring
+
+            await client.request_pattern_discovery(
+                source_path="nonexistent_node.py",
+                language="python",
+                emitted_at=fixed_ts,
+            )
+
+            call_args = mock_wiring.send_request.call_args
+            payload = call_args.kwargs.get("payload") or call_args[1].get("payload")
+            assert payload["timestamp"] == fixed_ts.isoformat()
 
 
 class TestIntelligenceEventClientContext:
