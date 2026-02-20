@@ -379,8 +379,6 @@ def run_subscriber_background(
     Returns:
         The started ``threading.Thread`` instance.
     """
-    import threading  # noqa: PLC0415
-
     thread = threading.Thread(
         target=run_subscriber,
         kwargs={
