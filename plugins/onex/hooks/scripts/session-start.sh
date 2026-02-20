@@ -684,10 +684,22 @@ PYEOF
         if [[ -n "$merged" ]]; then
             local ticket_dir
             ticket_dir="$(dirname "$state_file")"
-            if rm -rf "$ticket_dir" 2>/dev/null; then
-                echo "[$(date '+%Y-%m-%d %H:%M:%S')] [pipeline-cleanup] Removed merged state: $(basename "$ticket_dir") (branch: $branch)" >> "$_log"
-                ((removed++)) || true
-            fi
+            # Defense-in-depth: confirm ticket_dir is a direct child of pipelines_dir
+            # before removing it.  A symlink under pipelines_dir pointing outside the
+            # tree would otherwise cause rm -rf to delete an unrelated target.
+            # Use a case-prefix check (the same pattern the worktree cleanup in
+            # session-end.sh uses) to guard against symlink traversal.
+            case "$ticket_dir" in
+                "${pipelines_dir}"/*)
+                    if rm -rf "$ticket_dir" 2>/dev/null; then
+                        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [pipeline-cleanup] Removed merged state: $(basename "$ticket_dir") (branch: $branch)" >> "$_log"
+                        ((removed++)) || true
+                    fi
+                    ;;
+                *)
+                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [pipeline-cleanup] SKIP: ticket_dir '${ticket_dir}' is outside pipelines_dir '${pipelines_dir}' — refusing to rm -rf" >> "$_log"
+                    ;;
+            esac
         fi
     done
 

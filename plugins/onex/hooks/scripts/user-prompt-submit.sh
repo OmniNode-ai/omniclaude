@@ -287,27 +287,34 @@ fi
 # Session Accumulator: Write raw signal state for session-end feedback (OMN-2356)
 # session-end.sh reads this file to emit raw outcome signals to routing-feedback topic.
 # Kept minimal: only observable facts, no derived scores.
-# Written on every UserPromptSubmit so the first-prompt routing is captured.
+# Written ONCE (first UserPromptSubmit) so the first-prompt routing and injection
+# outcome are preserved. Subsequent prompts skip the write when the file already
+# exists, preventing a later prompt (SESSION_ALREADY_INJECTED=true, PATTERN_SUCCESS
+# undefined) from overwriting injection_occurred=true with injection_occurred=false.
 # Uses atomic write (jq + redirect) — if jq fails the file is left unchanged.
 # -----------------------------
 if [[ -n "$SESSION_ID" ]]; then
     _ACCUM_FILE="/tmp/omniclaude-session-${SESSION_ID}.json"  # noqa: S108  # nosec B108
-    _INJECT_OCCURRED="false"
-    [[ "${PATTERN_SUCCESS:-false}" == "true" ]] && [[ "${PATTERN_COUNT:-0}" != "0" ]] && _INJECT_OCCURRED="true"
-    _ACCUM_JSON="$(jq -n \
-        --argjson injection_occurred "$_INJECT_OCCURRED" \
-        --argjson patterns_injected_count "${PATTERN_COUNT:-0}" \
-        --arg agent_selected "${AGENT_NAME:-}" \
-        --argjson routing_confidence "${CONFIDENCE:-0.0}" \
-        '{
-            injection_occurred: $injection_occurred,
-            patterns_injected_count: $patterns_injected_count,
-            agent_selected: $agent_selected,
-            routing_confidence: $routing_confidence
-        }' 2>/dev/null)" || true
-    if [[ -n "$_ACCUM_JSON" ]]; then
-        printf '%s\n' "$_ACCUM_JSON" > "$_ACCUM_FILE" 2>>"$LOG_FILE" || true
-        log "Session accumulator written: ${_ACCUM_FILE}"
+    if [[ ! -f "$_ACCUM_FILE" ]]; then
+        _INJECT_OCCURRED="false"
+        [[ "${PATTERN_SUCCESS:-false}" == "true" ]] && [[ "${PATTERN_COUNT:-0}" != "0" ]] && _INJECT_OCCURRED="true"
+        _ACCUM_JSON="$(jq -n \
+            --argjson injection_occurred "$_INJECT_OCCURRED" \
+            --argjson patterns_injected_count "${PATTERN_COUNT:-0}" \
+            --arg agent_selected "${AGENT_NAME:-}" \
+            --argjson routing_confidence "${CONFIDENCE:-0.0}" \
+            '{
+                injection_occurred: $injection_occurred,
+                patterns_injected_count: $patterns_injected_count,
+                agent_selected: $agent_selected,
+                routing_confidence: $routing_confidence
+            }' 2>/dev/null)" || true
+        if [[ -n "$_ACCUM_JSON" ]]; then
+            printf '%s\n' "$_ACCUM_JSON" > "$_ACCUM_FILE" 2>>"$LOG_FILE" || true
+            log "Session accumulator written: ${_ACCUM_FILE}"
+        fi
+    else
+        log "Session accumulator already exists, preserving first-prompt state: ${_ACCUM_FILE}"
     fi
 fi
 

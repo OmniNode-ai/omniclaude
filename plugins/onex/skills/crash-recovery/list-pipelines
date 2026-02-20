@@ -123,6 +123,13 @@ def main() -> None:
 
     pipelines_dir = Path.home() / ".claude" / "pipelines"
 
+    if not pipelines_dir.exists():
+        print(
+            "No pipeline states found. "
+            "Run /ticket-pipeline TICKET-ID to start a pipeline."
+        )
+        sys.exit(0)
+
     def _safe_mtime(p: Path) -> float:
         """Return mtime for sort key; fall back to 0.0 if file was deleted between glob and stat."""
         try:

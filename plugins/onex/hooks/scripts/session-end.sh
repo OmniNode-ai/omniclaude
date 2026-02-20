@@ -108,8 +108,20 @@ fi
 # on the synchronous path (preserves <50ms SessionEnd budget).
 DURATION_SECONDS="0"
 if [[ -n "$SESSION_DURATION" && "$SESSION_DURATION" != "0" ]]; then
-    # Sanitize: ensure SESSION_DURATION is strictly numeric before awk
-    [[ "$SESSION_DURATION" =~ ^[0-9]+$ ]] || SESSION_DURATION=0
+    # Sanitize: accept integer or float durationMs from Claude Code.
+    # Float values (e.g. 45200.5) are valid — truncate to integer to satisfy
+    # the schema's duration_ms: int declaration and pass them to awk.
+    if [[ "$SESSION_DURATION" =~ ^[0-9]+$ ]]; then
+        : # Already a strict integer — no change needed
+    elif [[ "$SESSION_DURATION" =~ ^[0-9]+\.[0-9]+$ ]]; then
+        # Float: truncate fractional part (e.g. 45200.5 → 45200)
+        _raw_duration="$SESSION_DURATION"
+        SESSION_DURATION="${SESSION_DURATION%%.*}"
+        log "WARNING: durationMs is a float (${_raw_duration}), truncating to integer (${SESSION_DURATION})"
+    else
+        log "WARNING: durationMs has unexpected format '${SESSION_DURATION}', resetting to 0"
+        SESSION_DURATION=0
+    fi
     DURATION_SECONDS=$(awk -v ms="$SESSION_DURATION" 'BEGIN{v=ms/1000; printf "%.3f", (v<0?0:v)}' 2>/dev/null || echo "0")
 fi
 

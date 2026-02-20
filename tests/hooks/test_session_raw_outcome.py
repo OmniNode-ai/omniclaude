@@ -438,3 +438,50 @@ class TestSessionAccumulatorFileFormat:
         )
         # injection_occurred=False takes precedence (as written by hook)
         assert event["injection_occurred"] is False
+
+    def test_multi_prompt_accumulator_not_overwritten(self) -> None:
+        """Regression: SESSION_ALREADY_INJECTED=true on subsequent prompts must not
+        overwrite the first-prompt injection_occurred=true value with false.
+
+        user-prompt-submit.sh guards against this by only writing the accumulator
+        when the file does not yet exist (! -f $_ACCUM_FILE).  This test verifies
+        the Python helper preserves the first-prompt state when it is passed in
+        as session_state — i.e. the accumulator file content is used as-is, with
+        no further mutation for subsequent prompts.
+
+        Scenario:
+          Prompt 1 → injection_occurred=True, patterns=3 written to accumulator.
+          Prompt 2 → SESSION_ALREADY_INJECTED=true → accumulator file already exists,
+                     write is skipped in the shell script.
+          session-end.sh reads accumulator → must see injection_occurred=True (prompt 1).
+        """
+        # Accumulator as written by the FIRST prompt (injection succeeded)
+        first_prompt_accumulator = {
+            "injection_occurred": True,
+            "patterns_injected_count": 3,
+            "agent_selected": "agent-api-architect",
+            "routing_confidence": 0.85,
+        }
+
+        # Build event from the accumulator that session-end reads (unchanged from prompt 1)
+        event = build_session_raw_outcome_event(
+            session_id="abc12345-1234-5678-abcd-1234567890ab",
+            session_state=first_prompt_accumulator,
+            tool_calls_count=10,
+            duration_ms=60000,
+        )
+
+        # The first-prompt injection state must be preserved — NOT overwritten with false
+        assert event["injection_occurred"] is True, (
+            "Multi-prompt regression: injection_occurred must preserve the first-prompt "
+            "value (True), not be overwritten by a subsequent prompt's SESSION_ALREADY_INJECTED=true path"
+        )
+        assert event["patterns_injected_count"] == 3, (
+            "patterns_injected_count from first prompt must be preserved"
+        )
+        assert event["agent_selected"] == "agent-api-architect", (
+            "agent_selected from first prompt must be preserved"
+        )
+        assert abs(event["routing_confidence"] - 0.85) < 1e-9, (
+            "routing_confidence from first prompt must be preserved"
+        )
