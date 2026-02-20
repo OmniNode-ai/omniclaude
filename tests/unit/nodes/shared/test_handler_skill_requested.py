@@ -155,6 +155,8 @@ class TestHandleSkillRequested:
         result = await handle_skill_requested(request, task_dispatcher=dispatcher)
 
         assert result.status == SkillResultStatus.PARTIAL
+        assert result.error is not None
+        assert result.error == "No RESULT: block in output"
 
     @pytest.mark.asyncio
     async def test_handle_skill_requested_failed_status_from_result_block(
