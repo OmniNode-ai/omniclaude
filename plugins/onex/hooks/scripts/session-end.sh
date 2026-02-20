@@ -182,7 +182,7 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
         # Registered AFTER the empty-SESSION_ID guard so SESSION_STATE_FILE has a
         # proper session-specific path (not /tmp/omniclaude-session-.json, which could
         # collide between concurrent sessions with empty IDs).
-        # NOTE: the trap DOES fire on UUID-format-invalid exit (line 192-194) — this is
+        # NOTE: the trap DOES fire on UUID-format-invalid exit (line 191-194) — this is
         # intentional; a file written under a non-UUID session ID is still cleaned up.
         # The trap also fires on the normal completion path (after the file is read).
         trap 'rm -f "$SESSION_STATE_FILE"' EXIT
