@@ -2469,10 +2469,12 @@ class ModelDelegationShadowComparisonPayload(BaseModel):
     length_divergence_ratio: float = Field(
         ...,
         ge=0.0,
+        le=10.0,
         description=(
             "Absolute ratio of length difference to shadow length: "
             "abs(local_len - shadow_len) / max(shadow_len, 1). "
-            "Values > 0.5 indicate significant length divergence."
+            "Values > 0.5 indicate significant length divergence. "
+            "Capped at 10.0 to ensure bounded downstream consumption."
         ),
     )
     keyword_overlap_score: float = Field(

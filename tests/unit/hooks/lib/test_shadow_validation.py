@@ -173,10 +173,10 @@ class TestSamplingDecision:
     def test_different_correlation_ids_may_differ(self) -> None:
         """Different correlation_ids at 50% rate produce a mix of True/False."""
         rate = 0.5
-        results = {sv._should_sample(str(uuid4()), rate) for _ in range(20)}
-        # With 20 samples at 50% rate, we expect both True and False to appear
+        results = {sv._should_sample(str(uuid4()), rate) for _ in range(100)}
+        # With 100 samples at 50% rate, we expect both True and False to appear
         assert len(results) == 2, (
-            "Expected both True and False in 20 samples at 50% rate"
+            "Expected both True and False in 100 samples at 50% rate"
         )
 
     def test_rate_clamped_above_1(self) -> None:
@@ -429,8 +429,6 @@ class TestRunShadowValidation:
 
         started_threads: list[Any] = []
 
-        original_start = __import__("threading").Thread.start
-
         def _mock_start(self: Any) -> None:  # type: ignore[no-untyped-def]
             started_threads.append(self)
             # Do not actually start; capture the thread object
@@ -471,22 +469,21 @@ class TestRunShadowValidation:
         # Returns False (thread start failed) without raising
         assert result is False
 
-    def test_default_emitted_at_is_used_when_none(
+    def test_raises_when_emitted_at_is_none(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """When emitted_at is None, datetime.now(UTC) is used (no error)."""
+        """Passing emitted_at=None raises ValueError (no silent datetime.now fallback)."""
         monkeypatch.delenv("ENABLE_SHADOW_VALIDATION", raising=False)
-        # Feature disabled → returns False quickly, but emitted_at defaults safely
-        result = sv.run_shadow_validation(
-            prompt="document this",
-            local_response="response",
-            local_model="qwen",
-            session_id="sess-1",
-            correlation_id=_FIXED_CORR_ID,
-            task_type="document",
-            emitted_at=None,  # Let it default to datetime.now(UTC)
-        )
-        assert result is False  # Disabled, but no error
+        with pytest.raises(ValueError, match="emitted_at must be provided explicitly"):
+            sv.run_shadow_validation(
+                prompt="document this",
+                local_response="response",
+                local_model="qwen",
+                session_id="sess-1",
+                correlation_id=_FIXED_CORR_ID,
+                task_type="document",
+                emitted_at=None,  # type: ignore[arg-type]
+            )
 
 
 # ---------------------------------------------------------------------------

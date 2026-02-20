@@ -26,13 +26,13 @@ Feature flags:
     SHADOW_CLAUDE_API_KEY=<key>          (Anthropic API key for shadow calls)
     SHADOW_CLAUDE_BASE_URL=              (optional override, default https://api.anthropic.com)
     SHADOW_CALL_TIMEOUT_S=30             (float, default 30 seconds)
+    SHADOW_MAX_TOKENS=2048               (int, max tokens for shadow API call, default 2048)
 
 Design constraints:
     - NEVER raises from run_shadow_validation()
     - All I/O (Claude API call, event emit) is bounded and non-blocking
-    - emitted_at is injected by callers; run_shadow_validation() falls back to
-      datetime.now(UTC) only when the caller does not provide a value (tests
-      should always inject a fixed timestamp)
+    - emitted_at must be injected by callers; run_shadow_validation() raises
+      ValueError when emitted_at is None (no datetime.now() fallback allowed)
     - Module-level imports allow unit tests to patch them easily
 """
 
@@ -45,7 +45,7 @@ import re
 import sys
 import threading
 import time
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -98,6 +98,9 @@ _DEFAULT_SAMPLE_RATE: float = 0.07
 
 # Default timeout for the shadow Claude API call.
 _DEFAULT_SHADOW_TIMEOUT_S: float = 30.0
+
+# Default max tokens for the shadow Claude API call.
+_DEFAULT_SHADOW_MAX_TOKENS: int = 2048
 
 # Default shadow model identifier.
 _DEFAULT_SHADOW_MODEL: str = "claude-sonnet-4-6"
@@ -357,8 +360,8 @@ def compare_responses(
     local_len = len(local_response)
     shadow_len = len(shadow_response)
 
-    # Length divergence
-    length_divergence = abs(local_len - shadow_len) / max(shadow_len, 1)
+    # Length divergence (capped at 10.0 to match schema le=10.0 constraint)
+    length_divergence = min(abs(local_len - shadow_len) / max(shadow_len, 1), 10.0)
 
     # Keyword overlap
     local_kw = _extract_keywords(local_response)
@@ -411,6 +414,7 @@ def _call_shadow_claude(
     api_key: str,
     base_url: str,
     timeout_s: float,
+    max_tokens: int,
 ) -> tuple[str, int] | None:
     """Call Claude (shadow model) via the Anthropic Messages API.
 
@@ -423,6 +427,7 @@ def _call_shadow_claude(
         api_key: Anthropic API key.
         base_url: API base URL (default: https://api.anthropic.com).
         timeout_s: HTTP timeout in seconds.
+        max_tokens: Maximum number of tokens in the shadow response.
 
     Returns:
         Tuple of (response_text, latency_ms) on success, None on any error.
@@ -443,7 +448,7 @@ def _call_shadow_claude(
     }
     payload: dict[str, Any] = {
         "model": model,
-        "max_tokens": 2048,
+        "max_tokens": max_tokens,
         "messages": [{"role": "user", "content": prompt}],
     }
 
@@ -594,6 +599,7 @@ def _run_shadow_worker(
     api_key: str,
     base_url: str,
     timeout_s: float,
+    max_tokens: int,
     emitted_at: datetime,
 ) -> None:
     """Execute shadow validation in a background thread.
@@ -613,6 +619,7 @@ def _run_shadow_worker(
         api_key: Anthropic API key.
         base_url: API base URL.
         timeout_s: HTTP timeout for the shadow call.
+        max_tokens: Maximum number of tokens in the shadow response.
         emitted_at: Timestamp for the comparison event.
     """
     try:
@@ -622,6 +629,7 @@ def _run_shadow_worker(
             api_key=api_key,
             base_url=base_url,
             timeout_s=timeout_s,
+            max_tokens=max_tokens,
         )
 
         if shadow_result is None:
@@ -668,7 +676,7 @@ def run_shadow_validation(
     session_id: str,
     correlation_id: str,
     task_type: str,
-    emitted_at: datetime | None = None,
+    emitted_at: datetime,
 ) -> bool:
     """Trigger async shadow validation for a delegated task (non-blocking).
 
@@ -687,14 +695,22 @@ def run_shadow_validation(
         session_id: Session identifier.
         correlation_id: Correlation ID for the delegation event.
         task_type: TaskIntent value (document, test, research).
-        emitted_at: Timestamp for the comparison event.  Defaults to
-            datetime.now(UTC) when None.  Inject a fixed value in tests.
+        emitted_at: Timestamp for the comparison event.  Must be provided
+            explicitly by the caller (e.g., datetime.now(UTC)).  No default
+            is provided to ensure deterministic testing.
 
     Returns:
         True when a shadow validation thread was started, False otherwise
         (feature disabled, not sampled, missing config, etc.).
+
+    Raises:
+        ValueError: If emitted_at is None (callers must provide a timestamp).
     """
-    emitted_at = emitted_at or datetime.now(UTC)
+    if emitted_at is None:
+        raise ValueError(
+            "emitted_at must be provided explicitly (e.g., datetime.now(UTC)). "
+            "No datetime.now() default is allowed per repo invariant."
+        )
 
     try:
         if not _is_shadow_validation_enabled():
@@ -719,7 +735,9 @@ def run_shadow_validation(
             or _DEFAULT_SHADOW_MODEL
         )
 
-        api_key = os.environ.get("SHADOW_CLAUDE_API_KEY", "").strip()  # noqa: secrets
+        api_key = os.environ.get(
+            "SHADOW_CLAUDE_API_KEY", ""
+        ).strip()  # pragma: allowlist secret
         if not api_key:
             logger.debug(
                 "SHADOW_CLAUDE_API_KEY not set; shadow validation skipped for correlation=%s",
@@ -739,6 +757,13 @@ def run_shadow_validation(
         except (ValueError, TypeError):
             timeout_s = _DEFAULT_SHADOW_TIMEOUT_S
 
+        try:
+            max_tokens = int(
+                os.environ.get("SHADOW_MAX_TOKENS", str(_DEFAULT_SHADOW_MAX_TOKENS))
+            )
+        except (ValueError, TypeError):
+            max_tokens = _DEFAULT_SHADOW_MAX_TOKENS
+
         thread = threading.Thread(
             target=_run_shadow_worker,
             kwargs={
@@ -753,6 +778,7 @@ def run_shadow_validation(
                 "api_key": api_key,
                 "base_url": base_url,
                 "timeout_s": timeout_s,
+                "max_tokens": max_tokens,
                 "emitted_at": emitted_at,
             },
             daemon=True,  # Daemon threads do not prevent process exit

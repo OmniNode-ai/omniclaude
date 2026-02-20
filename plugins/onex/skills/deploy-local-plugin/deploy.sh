@@ -297,7 +297,7 @@ if [[ "$EXECUTE" == "true" ]]; then
     echo "  Installing project from ${PROJECT_ROOT} (locked versions)..."
     LOCKED_REQS_FILE=$(mktemp /tmp/omniclaude-locked-reqs.XXXXXX)
     if command -v uv &>/dev/null && [[ -f "${PROJECT_ROOT}/uv.lock" ]] && \
-       (cd "${PROJECT_ROOT}" && uv export --frozen --no-dev --no-hashes --format requirements-txt > "$LOCKED_REQS_FILE" 2>&1); then
+       (cd "${PROJECT_ROOT}" && uv export --frozen --no-dev --no-hashes --format requirements-txt > "$LOCKED_REQS_FILE" 2>/dev/null); then
         # Run pip install from PROJECT_ROOT so that the '-e .' editable entry in the
         # requirements file (produced by 'uv export') resolves to PROJECT_ROOT rather
         # than the script's current working directory.
