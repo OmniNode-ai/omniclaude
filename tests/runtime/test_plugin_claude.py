@@ -383,12 +383,12 @@ class TestWireHandlers:
 
 
 # ===================================================================
-# wire_dispatchers / start_consumers — both skip
+# wire_dispatchers — still skips
 # ===================================================================
 
 
-class TestSkippedPhases:
-    """Verify wire_dispatchers and start_consumers return .skipped()."""
+class TestWireDispatchers:
+    """Verify wire_dispatchers returns .skipped()."""
 
     @pytest.mark.asyncio
     async def test_wire_dispatchers_skipped(self, plugin, config):
@@ -396,12 +396,107 @@ class TestSkippedPhases:
         assert result.success is True
         assert "skipped" in result.message.lower()
 
+
+# ===================================================================
+# start_consumers — compliance subscriber lifecycle
+# ===================================================================
+
+
+class TestStartConsumers:
+    """Verify start_consumers starts compliance subscriber or skips gracefully."""
+
     @pytest.mark.asyncio
-    async def test_start_consumers_skipped(self, plugin, config):
-        result = await plugin.start_consumers(config)
+    async def test_skipped_when_kafka_not_set(self, plugin, config):
+        """Without KAFKA_BOOTSTRAP_SERVERS, start_consumers returns skipped."""
+        env = {
+            k: v
+            for k, v in __import__("os").environ.items()
+            if k != "KAFKA_BOOTSTRAP_SERVERS"
+        }
+        with patch.dict("os.environ", env, clear=True):
+            result = await plugin.start_consumers(config)
+
         assert result.success is True
         assert "skipped" in result.message.lower()
-        assert "consumer" in result.message.lower()
+
+    @pytest.mark.asyncio
+    async def test_skipped_when_kafka_empty(self, plugin, config):
+        """Empty KAFKA_BOOTSTRAP_SERVERS also causes a skip."""
+        with patch.dict("os.environ", {"KAFKA_BOOTSTRAP_SERVERS": ""}):
+            result = await plugin.start_consumers(config)
+
+        assert result.success is True
+        assert "skipped" in result.message.lower()
+
+    @pytest.mark.asyncio
+    async def test_starts_compliance_thread_when_kafka_set(self, plugin, config):
+        """With KAFKA_BOOTSTRAP_SERVERS set, compliance subscriber thread is started."""
+        mock_thread = MagicMock()
+        mock_thread.is_alive.return_value = True
+
+        with (
+            patch.dict("os.environ", {"KAFKA_BOOTSTRAP_SERVERS": "localhost:9092"}),
+            patch.dict(
+                sys.modules,
+                {
+                    "omniclaude.hooks.lib.compliance_result_subscriber": MagicMock(
+                        run_subscriber_background=MagicMock(return_value=mock_thread)
+                    ),
+                },
+            ),
+        ):
+            result = await plugin.start_consumers(config)
+
+        assert result.success is True
+        assert "compliance" in result.message.lower()
+        assert "compliance-subscriber-thread" in result.resources_created
+        assert plugin._compliance_stop_event is not None
+        assert plugin._compliance_thread is mock_thread
+
+    @pytest.mark.asyncio
+    async def test_consumer_group_id_is_versioned(self, plugin, config):
+        """Consumer group ID must encode schema version: omniclaude-compliance-subscriber.v1."""
+        mock_thread = MagicMock()
+        mock_run = MagicMock(return_value=mock_thread)
+
+        with (
+            patch.dict("os.environ", {"KAFKA_BOOTSTRAP_SERVERS": "localhost:9092"}),
+            patch.dict(
+                sys.modules,
+                {
+                    "omniclaude.hooks.lib.compliance_result_subscriber": MagicMock(
+                        run_subscriber_background=mock_run
+                    ),
+                },
+            ),
+        ):
+            await plugin.start_consumers(config)
+
+        _, kwargs = mock_run.call_args
+        assert kwargs["group_id"] == "omniclaude-compliance-subscriber.v1"
+
+    @pytest.mark.asyncio
+    async def test_failed_result_when_import_raises(self, plugin, config):
+        """If run_subscriber_background raises, start_consumers returns failed."""
+        with (
+            patch.dict("os.environ", {"KAFKA_BOOTSTRAP_SERVERS": "localhost:9092"}),
+            patch.dict(
+                sys.modules,
+                {
+                    "omniclaude.hooks.lib.compliance_result_subscriber": MagicMock(
+                        run_subscriber_background=MagicMock(
+                            side_effect=RuntimeError("thread error")
+                        )
+                    ),
+                },
+            ),
+        ):
+            result = await plugin.start_consumers(config)
+
+        assert result.success is False
+        assert "thread error" in (result.error_message or "")
+        assert plugin._compliance_stop_event is None
+        assert plugin._compliance_thread is None
 
 
 # ===================================================================
@@ -470,6 +565,91 @@ class TestShutdown:
         await plugin.shutdown(config)
 
         assert plugin._shutdown_in_progress is False
+
+    @pytest.mark.asyncio
+    async def test_shutdown_signals_compliance_stop_event(self, plugin, config):
+        """Shutdown sets the compliance stop_event and clears references."""
+        stop_event = MagicMock()
+        plugin._compliance_stop_event = stop_event
+        plugin._compliance_thread = MagicMock()
+
+        await plugin.shutdown(config)
+
+        stop_event.set.assert_called_once()
+        assert plugin._compliance_stop_event is None
+        assert plugin._compliance_thread is None
+
+    @pytest.mark.asyncio
+    async def test_shutdown_without_compliance_thread_is_safe(
+        self, plugin, config, mock_publisher
+    ):
+        """Shutdown without a compliance thread does not raise."""
+        plugin._publisher = mock_publisher
+        assert plugin._compliance_stop_event is None
+
+        result = await plugin.shutdown(config)
+
+        assert result.success is True
+
+
+# ===================================================================
+# Async-sync drift guard
+# ===================================================================
+
+
+class TestComplianceSubscriberDriftGuard:
+    """Sync guard: run_subscriber must remain a regular function, not a coroutine.
+
+    If run_subscriber is converted to an async function, the daemon thread
+    will silently hang because Thread.run() does not schedule coroutines.
+    This test catches that drift early.
+    """
+
+    def test_run_subscriber_is_not_a_coroutine(self) -> None:
+        """run_subscriber must be a plain callable, not an async coroutine function."""
+        import asyncio
+        import sys as _sys
+
+        _HOOKS_LIB = str(
+            __import__("pathlib").Path(__file__).resolve().parent.parent.parent
+            / "plugins"
+            / "onex"
+            / "hooks"
+            / "lib"
+        )
+        if _HOOKS_LIB not in _sys.path:
+            _sys.path.insert(0, _HOOKS_LIB)
+
+        from compliance_result_subscriber import run_subscriber  # type: ignore[import]
+
+        assert not asyncio.iscoroutinefunction(run_subscriber), (
+            "run_subscriber is now a coroutine — "
+            "update run_subscriber_background to use asyncio.run() inside the thread"
+        )
+
+    def test_run_subscriber_background_is_not_a_coroutine(self) -> None:
+        """run_subscriber_background must also be a plain callable."""
+        import asyncio
+        import sys as _sys
+
+        _HOOKS_LIB = str(
+            __import__("pathlib").Path(__file__).resolve().parent.parent.parent
+            / "plugins"
+            / "onex"
+            / "hooks"
+            / "lib"
+        )
+        if _HOOKS_LIB not in _sys.path:
+            _sys.path.insert(0, _HOOKS_LIB)
+
+        from compliance_result_subscriber import (  # type: ignore[import]
+            run_subscriber_background,
+        )
+
+        assert not asyncio.iscoroutinefunction(run_subscriber_background), (
+            "run_subscriber_background is now a coroutine — "
+            "daemon thread dispatch will silently hang"
+        )
 
 
 # ===================================================================

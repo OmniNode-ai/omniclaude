@@ -31,6 +31,7 @@ import json
 import logging
 import os
 import sys
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -351,6 +352,51 @@ def run_subscriber(
         except Exception:
             pass
         logger.info("Compliance-evaluated subscriber stopped")
+
+
+# ---------------------------------------------------------------------------
+# Background thread launcher (used by plugin.py:start_consumers)
+# ---------------------------------------------------------------------------
+
+
+def run_subscriber_background(
+    *,
+    kafka_bootstrap_servers: str,
+    group_id: str = "omniclaude-compliance-subscriber.v1",
+    stop_event: Any = None,
+) -> threading.Thread:
+    """Launch ``run_subscriber`` in a daemon background thread.
+
+    The thread is marked daemon=True so it does not block interpreter exit.
+    The caller owns the ``stop_event`` and must set it to request a graceful
+    shutdown before the thread naturally exits.
+
+    Args:
+        kafka_bootstrap_servers: Kafka bootstrap servers string.
+        group_id: Consumer group ID (schema version encoded).
+        stop_event: ``threading.Event`` instance; loop exits when set.
+
+    Returns:
+        The started ``threading.Thread`` instance.
+    """
+    import threading  # noqa: PLC0415
+
+    thread = threading.Thread(
+        target=run_subscriber,
+        kwargs={
+            "kafka_bootstrap_servers": kafka_bootstrap_servers,
+            "group_id": group_id,
+            "stop_event": stop_event,
+        },
+        name="compliance-subscriber",
+        daemon=True,
+    )
+    thread.start()
+    logger.info(
+        "Compliance subscriber daemon thread started (group_id=%s)",
+        group_id,
+    )
+    return thread
 
 
 # ---------------------------------------------------------------------------

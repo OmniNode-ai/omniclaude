@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -56,6 +57,8 @@ class PluginClaude:
         self._publisher: object | None = None
         self._publisher_config: object | None = None
         self._shutdown_in_progress: bool = False
+        self._compliance_stop_event: threading.Event | None = None
+        self._compliance_thread: threading.Thread | None = None
 
     # ------------------------------------------------------------------
     # Protocol properties
@@ -187,18 +190,53 @@ class PluginClaude:
         self,
         config: ModelDomainPluginConfig,
     ) -> ModelDomainPluginResult:
-        """Consumer topics not yet specified — skip.
+        """Start the compliance-evaluated subscriber as a daemon background thread.
 
-        See follow-up ticket for start_consumers() behavior contract.
+        Subscribes to ``onex.evt.omniintelligence.compliance-evaluated.v1`` and
+        transforms violations into PatternAdvisory entries for context injection.
+
+        Skips gracefully when ``KAFKA_BOOTSTRAP_SERVERS`` is not set.
         """
         from omnibase_infra.runtime.protocol_domain_plugin import (
             ModelDomainPluginResult,
         )
 
-        return ModelDomainPluginResult.skipped(
-            plugin_id=_PLUGIN_ID,
-            reason="consumer topics not yet specified; see follow-up ticket",
-        )
+        bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "").strip()
+        if not bootstrap_servers:
+            logger.warning(
+                "KAFKA_BOOTSTRAP_SERVERS not set — compliance subscriber not started"
+            )
+            return ModelDomainPluginResult.skipped(
+                plugin_id=_PLUGIN_ID,
+                reason="KAFKA_BOOTSTRAP_SERVERS not set; compliance subscriber skipped",
+            )
+
+        try:
+            from omniclaude.hooks.lib.compliance_result_subscriber import (  # noqa: PLC0415
+                run_subscriber_background,
+            )
+
+            self._compliance_stop_event = threading.Event()
+            self._compliance_thread = run_subscriber_background(
+                kafka_bootstrap_servers=bootstrap_servers,
+                group_id="omniclaude-compliance-subscriber.v1",
+                stop_event=self._compliance_stop_event,
+            )
+
+            return ModelDomainPluginResult(
+                plugin_id=_PLUGIN_ID,
+                success=True,
+                message="Compliance subscriber daemon thread started",
+                resources_created=["compliance-subscriber-thread"],
+            )
+        except Exception as exc:
+            logger.warning("Failed to start compliance subscriber: %s", exc)
+            self._compliance_stop_event = None
+            self._compliance_thread = None
+            return ModelDomainPluginResult.failed(
+                plugin_id=_PLUGIN_ID,
+                error_message=str(exc),
+            )
 
     async def shutdown(
         self,
@@ -207,7 +245,8 @@ class PluginClaude:
         """Idempotent, exception-safe shutdown.
 
         Stops the publisher and clears all references regardless of
-        whether stop() raises.
+        whether stop() raises.  Also signals the compliance subscriber
+        daemon thread to stop gracefully.
         """
         from omnibase_infra.runtime.protocol_domain_plugin import (
             ModelDomainPluginResult,
@@ -218,6 +257,12 @@ class PluginClaude:
 
         self._shutdown_in_progress = True
         try:
+            # Signal compliance subscriber to stop (non-blocking — thread drains itself)
+            if self._compliance_stop_event is not None:
+                self._compliance_stop_event.set()
+                self._compliance_stop_event = None
+                self._compliance_thread = None
+
             if self._publisher is None:
                 return ModelDomainPluginResult.succeeded(
                     plugin_id=_PLUGIN_ID,
