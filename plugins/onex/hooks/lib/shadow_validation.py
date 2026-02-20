@@ -751,8 +751,14 @@ def run_shadow_validation(
 
         # Security: Reject non-HTTPS base URLs unless they point to localhost
         # (localhost is allowed for local testing/development environments).
+        _LOCAL_PREFIXES = (
+            "http://localhost",
+            "http://127.0.0.1",
+            "http://[::1]",
+            "http://0.0.0.0",
+        )
         if not base_url.startswith("https://") and not any(
-            base_url.startswith(p) for p in ("http://localhost", "http://127.0.0.1")
+            base_url.startswith(p) for p in _LOCAL_PREFIXES
         ):
             logger.warning(
                 "SHADOW_CLAUDE_BASE_URL uses non-HTTPS scheme; shadow validation skipped "

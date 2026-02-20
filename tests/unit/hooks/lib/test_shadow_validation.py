@@ -359,6 +359,24 @@ class TestCompareResponses:
         # At least two failure reasons should be present
         assert reason.count(";") >= 1
 
+    def test_both_empty_strings_pass_gate(self) -> None:
+        """compare_responses('', '') documents the empty-string edge case behavior.
+
+        Both responses are empty:
+        - length_divergence_ratio = 0.0 (passes)
+        - keyword_overlap_score = 1.0 (both sets empty → Jaccard vacuously 1.0, passes)
+        - structural_match = True (neither has code blocks, passes)
+        → quality_gate_passed = True, divergence_reason = None
+        """
+        result = sv.compare_responses("", "")
+        assert result["local_response_length"] == 0
+        assert result["shadow_response_length"] == 0
+        assert result["length_divergence_ratio"] == pytest.approx(0.0)
+        assert result["keyword_overlap_score"] == pytest.approx(1.0)
+        assert result["structural_match"] is True
+        assert result["quality_gate_passed"] is True
+        assert result["divergence_reason"] is None
+
 
 # ---------------------------------------------------------------------------
 # run_shadow_validation tests
@@ -484,6 +502,78 @@ class TestRunShadowValidation:
                 task_type="document",
                 emitted_at=None,  # type: ignore[arg-type]
             )
+
+    def test_returns_false_for_non_https_external_url(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Non-HTTPS external URL (http://api.example.com) is rejected for security."""
+        _enable_shadow(monkeypatch)
+        monkeypatch.setenv("SHADOW_CLAUDE_API_KEY", "test-api-key")
+        monkeypatch.setenv("SHADOW_CLAUDE_BASE_URL", "http://api.example.com")
+        result = sv.run_shadow_validation(
+            prompt="document this",
+            local_response="response",
+            local_model="qwen",
+            session_id="sess-1",
+            correlation_id=_FIXED_CORR_ID,
+            task_type="document",
+            emitted_at=_FIXED_EMITTED_AT,
+        )
+        assert result is False
+
+    def test_returns_true_for_http_localhost_url(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Non-HTTPS localhost URL (http://localhost) is accepted for local dev/testing."""
+        _enable_shadow(monkeypatch)
+        monkeypatch.setenv("SHADOW_CLAUDE_API_KEY", "test-api-key")
+        monkeypatch.setenv("SHADOW_CLAUDE_BASE_URL", "http://localhost:8000")
+
+        started_threads: list[Any] = []
+
+        def _mock_start(self: Any) -> None:  # type: ignore[no-untyped-def]
+            started_threads.append(self)
+
+        with patch("threading.Thread.start", _mock_start):
+            result = sv.run_shadow_validation(
+                prompt="document this",
+                local_response="response",
+                local_model="qwen",
+                session_id="sess-1",
+                correlation_id=_FIXED_CORR_ID,
+                task_type="document",
+                emitted_at=_FIXED_EMITTED_AT,
+            )
+
+        assert result is True
+        assert len(started_threads) == 1
+
+    def test_returns_true_for_http_127_0_0_1_url(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Non-HTTPS loopback URL (http://127.0.0.1) is accepted for local dev/testing."""
+        _enable_shadow(monkeypatch)
+        monkeypatch.setenv("SHADOW_CLAUDE_API_KEY", "test-api-key")
+        monkeypatch.setenv("SHADOW_CLAUDE_BASE_URL", "http://127.0.0.1:8000")
+
+        started_threads: list[Any] = []
+
+        def _mock_start(self: Any) -> None:  # type: ignore[no-untyped-def]
+            started_threads.append(self)
+
+        with patch("threading.Thread.start", _mock_start):
+            result = sv.run_shadow_validation(
+                prompt="document this",
+                local_response="response",
+                local_model="qwen",
+                session_id="sess-1",
+                correlation_id=_FIXED_CORR_ID,
+                task_type="document",
+                emitted_at=_FIXED_EMITTED_AT,
+            )
+
+        assert result is True
+        assert len(started_threads) == 1
 
 
 # ---------------------------------------------------------------------------

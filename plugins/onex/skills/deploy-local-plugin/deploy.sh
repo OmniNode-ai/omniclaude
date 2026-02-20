@@ -296,25 +296,30 @@ if [[ "$EXECUTE" == "true" ]]; then
     # runtime TypeError with grpcio's EnumTypeWrapper that breaks the smoke test).
     echo "  Installing project from ${PROJECT_ROOT} (locked versions)..."
     LOCKED_REQS_FILE=$(mktemp /tmp/omniclaude-locked-reqs.XXXXXX)
+    _USE_LOCKED=false
     if command -v uv &>/dev/null && [[ -f "${PROJECT_ROOT}/uv.lock" ]] && \
        (cd "${PROJECT_ROOT}" && uv export --frozen --no-dev --no-hashes --format requirements-txt > "$LOCKED_REQS_FILE" 2>/dev/null); then
         # Validate the requirements file is non-empty (uv export can produce an empty
         # file in degenerate cases; pip install on an empty file silently succeeds).
         if [ ! -s "$LOCKED_REQS_FILE" ]; then
-            echo -e "${YELLOW}  WARNING: uv export produced empty requirements file; skipping pip install${NC}"
+            echo -e "${YELLOW}  WARNING: uv export produced empty requirements file; falling back to pip install (versions may drift)${NC}"
             rm -f "$LOCKED_REQS_FILE"
-            LOCKED_REQS_FILE=""
+        else
+            _USE_LOCKED=true
         fi
+    fi
+
+    if [[ "$_USE_LOCKED" == "true" ]]; then
         # Run pip install from PROJECT_ROOT so that the '-e .' editable entry in the
         # requirements file (produced by 'uv export') resolves to PROJECT_ROOT rather
         # than the script's current working directory.
-        if [[ -n "${LOCKED_REQS_FILE:-}" ]] && ! (cd "${PROJECT_ROOT}" && "$VENV_DIR/bin/pip" install --no-cache-dir -r "$LOCKED_REQS_FILE" --quiet); then
+        if ! (cd "${PROJECT_ROOT}" && "$VENV_DIR/bin/pip" install --no-cache-dir -r "$LOCKED_REQS_FILE" --quiet); then
             echo -e "${RED}Error: pip install from locked requirements failed. Deploy aborted.${NC}"
             rm -f "$LOCKED_REQS_FILE"
             rm -rf "$VENV_DIR"
             exit 1
         fi
-        [[ -n "${LOCKED_REQS_FILE:-}" ]] && rm -f "$LOCKED_REQS_FILE"
+        rm -f "$LOCKED_REQS_FILE"
         echo -e "${GREEN}  Project installed into venv (locked versions from uv.lock)${NC}"
     else
         echo -e "${YELLOW}  uv not found or uv.lock missing — falling back to pip install (versions may drift)${NC}"
