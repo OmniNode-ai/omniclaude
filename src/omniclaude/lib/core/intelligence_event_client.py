@@ -34,8 +34,9 @@ class IntelligenceEventClient:
     TOPIC_COMPLETED = "onex.evt.omniintelligence.code-analysis-completed.v1"
     TOPIC_FAILED = "onex.evt.omniintelligence.code-analysis-failed.v1"
 
-    # Legacy topic — dual-publish migration window only (remove after migration)
-    # TODO(OMN-2414): Remove after omniintelligence confirms migration to canonical topics
+    # Legacy topic — stable constant during dual-publish migration window (OMN-2368).
+    # Public so tests can pin the exact value and guard against silent renames.
+    # TODO(OMN-2367): remove after migration complete
     TOPIC_REQUEST_LEGACY = "omninode.intelligence.code-analysis.requested.v1"
 
     _INSTANCE_NAME = "intelligence"
@@ -201,9 +202,8 @@ class IntelligenceEventClient:
             },
         }
         try:
-            # Dual-publish: mirror to legacy topic during migration window (remove after migration, OMN-2414).
-            # settings.dual_publish_legacy_topics is evaluated per-call (not cached at start()),
-            # so toggling DUAL_PUBLISH_LEGACY_TOPICS at runtime takes effect immediately.
+            # Dual-publish: mirror to legacy topic during migration window (remove after migration, OMN-2367).
+            # Feature flag: DUAL_PUBLISH_LEGACY_TOPICS=1 — see CLAUDE.md canonical env-var table.
             if (
                 settings.dual_publish_legacy_topics
                 and self._event_bus is not None

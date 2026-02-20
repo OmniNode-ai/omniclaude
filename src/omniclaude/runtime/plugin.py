@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -29,6 +30,8 @@ if TYPE_CHECKING:
         ModelDomainPluginConfig,
         ModelDomainPluginResult,
     )
+
+    from omniclaude.publisher.embedded_publisher import EmbeddedEventPublisher
 
 logger = logging.getLogger(__name__)
 
@@ -53,9 +56,11 @@ class PluginClaude:
     # ------------------------------------------------------------------
 
     def __init__(self) -> None:
-        self._publisher: object | None = None
+        self._publisher: EmbeddedEventPublisher | None = None
         self._publisher_config: object | None = None
         self._shutdown_in_progress: bool = False
+        self._compliance_stop_event: threading.Event | None = None
+        self._compliance_thread: threading.Thread | None = None
 
     # ------------------------------------------------------------------
     # Protocol properties
@@ -187,18 +192,78 @@ class PluginClaude:
         self,
         config: ModelDomainPluginConfig,
     ) -> ModelDomainPluginResult:
-        """Consumer topics not yet specified — skip.
+        """Start the compliance-evaluated subscriber as a daemon background thread.
 
-        See follow-up ticket for start_consumers() behavior contract.
+        Subscribes to ``onex.evt.omniintelligence.compliance-evaluated.v1`` and
+        transforms violations into PatternAdvisory entries for context injection.
+
+        Skips gracefully when ``KAFKA_BOOTSTRAP_SERVERS`` is not set.
         """
         from omnibase_infra.runtime.protocol_domain_plugin import (
             ModelDomainPluginResult,
         )
 
-        return ModelDomainPluginResult.skipped(
-            plugin_id=_PLUGIN_ID,
-            reason="consumer topics not yet specified; see follow-up ticket",
-        )
+        # Shutdown guard: if shutdown() is in progress it has already cleared
+        # _compliance_thread to None but the old thread may still be draining.
+        # Spawning a new thread here would create a second consumer racing the
+        # first one — return early to prevent that.
+        if self._shutdown_in_progress:
+            logger.debug("Compliance subscriber start skipped — shutdown in progress")
+            return ModelDomainPluginResult.skipped(
+                plugin_id=_PLUGIN_ID,
+                reason="shutdown in progress; compliance subscriber not started",
+            )
+
+        # Idempotency guard: SessionStart may be called multiple times on reconnect.
+        # If the thread is still alive, return early rather than spawning a second
+        # daemon thread and silently leaking the first one.
+        if self._compliance_thread is not None and self._compliance_thread.is_alive():
+            logger.debug(
+                "Compliance subscriber already running — skipping duplicate start"
+            )
+            return ModelDomainPluginResult(
+                plugin_id=_PLUGIN_ID,
+                success=True,
+                message="Compliance subscriber already running (idempotent)",
+                resources_created=[],
+            )
+
+        bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "").strip()
+        if not bootstrap_servers:
+            logger.debug(
+                "KAFKA_BOOTSTRAP_SERVERS not set — compliance subscriber not started"
+            )
+            return ModelDomainPluginResult.skipped(
+                plugin_id=_PLUGIN_ID,
+                reason="KAFKA_BOOTSTRAP_SERVERS not set; compliance subscriber skipped",
+            )
+
+        try:
+            from omniclaude.hooks.lib.compliance_result_subscriber import (  # noqa: PLC0415
+                run_subscriber_background,
+            )
+
+            self._compliance_stop_event = threading.Event()
+            self._compliance_thread = run_subscriber_background(
+                kafka_bootstrap_servers=bootstrap_servers,
+                group_id="omniclaude-compliance-subscriber.v1",
+                stop_event=self._compliance_stop_event,
+            )
+
+            return ModelDomainPluginResult(
+                plugin_id=_PLUGIN_ID,
+                success=True,
+                message="Compliance subscriber daemon thread started",
+                resources_created=["compliance-subscriber-thread"],
+            )
+        except Exception as exc:
+            logger.warning("Failed to start compliance subscriber: %s", exc)
+            self._compliance_stop_event = None
+            self._compliance_thread = None
+            return ModelDomainPluginResult.failed(
+                plugin_id=_PLUGIN_ID,
+                error_message=str(exc),
+            )
 
     async def shutdown(
         self,
@@ -207,7 +272,8 @@ class PluginClaude:
         """Idempotent, exception-safe shutdown.
 
         Stops the publisher and clears all references regardless of
-        whether stop() raises.
+        whether stop() raises.  Also signals the compliance subscriber
+        daemon thread to stop gracefully.
         """
         from omnibase_infra.runtime.protocol_domain_plugin import (
             ModelDomainPluginResult,
@@ -218,6 +284,20 @@ class PluginClaude:
 
         self._shutdown_in_progress = True
         try:
+            # Signal compliance subscriber to stop (non-blocking — thread drains itself)
+            if self._compliance_stop_event is not None:
+                self._compliance_stop_event.set()
+                self._compliance_stop_event = None
+                # Intentionally not joined: the daemon thread will drain its own
+                # Kafka poll loop once the stop_event is set, then exit naturally.
+                # Blocking here would delay shutdown and risk deadlock if the
+                # Kafka consumer is stuck waiting on a network call.
+                # stop_event already set; daemon self-terminates.
+                self._compliance_thread = None
+                # Narrow race: if start_consumers() is called before the daemon fully stops,
+                # stop_event being set means the thread will exit without processing new work.
+                # No data loss risk — the publisher handles event delivery independently.
+
             if self._publisher is None:
                 return ModelDomainPluginResult.succeeded(
                     plugin_id=_PLUGIN_ID,
@@ -227,7 +307,7 @@ class PluginClaude:
             errors: list[str] = []
             try:
                 # EmbeddedEventPublisher.stop() is async
-                await self._publisher.stop()  # type: ignore[union-attr]
+                await self._publisher.stop()
             except Exception as exc:
                 errors.append(str(exc))
 
@@ -265,7 +345,7 @@ class PluginClaude:
         """Best-effort cleanup after a failed initialisation."""
         if self._publisher is not None:
             try:
-                await self._publisher.stop()  # type: ignore[union-attr]
+                await self._publisher.stop()
             except Exception:
                 logger.debug("Cleanup: publisher stop failed", exc_info=True)
         self._publisher = None

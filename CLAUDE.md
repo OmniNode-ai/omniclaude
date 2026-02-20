@@ -77,6 +77,12 @@ Targets for **synchronous path only** (excludes backgrounded processes):
 > enabled, worst-case is ~7s. Agent YAML loading was removed from the sync path in OMN-1980 —
 > Claude loads the selected agent's YAML on-demand. These timeouts are safety nets; normal
 > execution stays well under 500ms.
+>
+> **Tuning `api_timeout_ms`**: The context injection step has a 1s wall-clock budget. The
+> internal HTTP request timeout (`api_timeout_ms`, default 900ms) must stay well below that
+> limit — the ~100ms gap covers executor scheduling overhead and result processing. Do not raise
+> `api_timeout_ms` to 1000ms or higher; doing so will cause the injection step to regularly
+> breach its budget even when the API responds exactly at the timeout boundary.
 
 If hooks exceed budget, check:
 1. Network latency to routing service
@@ -253,7 +259,11 @@ These modules are intended for external use:
 | `ENFORCEMENT_MODE` | Quality enforcement: `warn`, `block`, `silent` | No (default: warn) |
 | `OMNICLAUDE_PROJECT_ROOT` | Explicit project root for dev-mode Python venv resolution | No (dev only) |
 | `PLUGIN_PYTHON_BIN` | Override Python interpreter path for hooks (escape hatch) | No |
-| `DUAL_PUBLISH_LEGACY_TOPICS` | Enable dual-publish to legacy topics during migration window (OMN-2368) | No (default: false) |
+| `INTELLIGENCE_SERVICE_URL` | Overrides default context injection API URL (http://localhost:8053); ignored if `OMNICLAUDE_CONTEXT_API_URL` is explicitly set | No |
+| `OMNICLAUDE_CONTEXT_API_URL` | Overrides the omniintelligence HTTP API base URL used for context injection (default: `INTELLIGENCE_SERVICE_URL` or http://localhost:8053) | No |
+| `OMNICLAUDE_CONTEXT_API_ENABLED` | Enable (`true`) or disable (`false`) the omniintelligence HTTP API as a context injection pattern source (default: true) | No |
+| `OMNICLAUDE_CONTEXT_API_TIMEOUT_MS` | Timeout in milliseconds for omniintelligence API calls during context injection (default: 900, range: 100–10000) | No |
+| `DUAL_PUBLISH_LEGACY_TOPICS` | Enable dual-publish to legacy topics during migration window (OMN-2368); set to `1` to enable | No (default: false) |
 
 ---
 

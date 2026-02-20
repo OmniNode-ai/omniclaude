@@ -557,29 +557,25 @@ class TestContextInjectionConfigAPIUrl:
         """Default api_url is http://localhost:8053."""
         import os
 
-        # Ensure env var not set
-        env_backup = os.environ.pop("INTELLIGENCE_SERVICE_URL", None)
-        try:
+        # Inject a sentinel value so patch.dict always has the key to restore,
+        # then immediately remove it — guaranteeing INTELLIGENCE_SERVICE_URL is
+        # absent for the duration of this test regardless of the outer environment.
+        with patch.dict(os.environ, {"INTELLIGENCE_SERVICE_URL": ""}, clear=False):
+            del os.environ["INTELLIGENCE_SERVICE_URL"]
             cfg = ContextInjectionConfig()
             assert "8053" in cfg.api_url or "localhost" in cfg.api_url
-        finally:
-            if env_backup is not None:
-                os.environ["INTELLIGENCE_SERVICE_URL"] = env_backup
 
     def test_api_url_reads_intelligence_service_url(self) -> None:
         """api_url falls back to INTELLIGENCE_SERVICE_URL env var."""
         import os
 
-        env_backup = os.environ.get("INTELLIGENCE_SERVICE_URL")
-        os.environ["INTELLIGENCE_SERVICE_URL"] = "http://192.168.86.200:8053"
-        try:
+        with patch.dict(
+            os.environ,
+            {"INTELLIGENCE_SERVICE_URL": "http://192.168.86.200:8053"},
+            clear=False,
+        ):
             cfg = ContextInjectionConfig()
             assert cfg.api_url == "http://192.168.86.200:8053"
-        finally:
-            if env_backup is None:
-                os.environ.pop("INTELLIGENCE_SERVICE_URL", None)
-            else:
-                os.environ["INTELLIGENCE_SERVICE_URL"] = env_backup
 
     def test_api_enabled_default_true(self) -> None:
         """api_enabled defaults to True."""

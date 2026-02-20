@@ -48,6 +48,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from omniclaude.hooks.cohort_assignment import CohortAssignmentConfig
 from omniclaude.hooks.injection_limits import InjectionLimitsConfig
 
+# Sentinel used to distinguish "user never set api_url" from "user explicitly set it to the
+# same value as the built-in default". Must not be a valid URL.
+_API_URL_UNSET = "__unset__"
+# Built-in fallback when neither OMNICLAUDE_CONTEXT_API_URL nor INTELLIGENCE_SERVICE_URL is set.
+_API_URL_DEFAULT = "http://localhost:8053"
+
 
 class SessionStartInjectionConfig(BaseModel):
     """Configuration for SessionStart pattern injection.
@@ -344,7 +350,7 @@ class ContextInjectionConfig(BaseSettings):
     )
 
     api_url: str = Field(
-        default="http://localhost:8053",
+        default=_API_URL_UNSET,
         description=(
             "Base URL for omniintelligence HTTP API. "
             "Default: INTELLIGENCE_SERVICE_URL env var or http://localhost:8053. "
@@ -353,7 +359,7 @@ class ContextInjectionConfig(BaseSettings):
     )
 
     api_timeout_ms: int = Field(
-        default=2000,
+        default=900,
         ge=100,
         le=10000,
         description=(
@@ -415,24 +421,25 @@ class ContextInjectionConfig(BaseSettings):
 
     @model_validator(mode="after")
     def resolve_api_url_from_env(self) -> Self:
-        """Resolve api_url from INTELLIGENCE_SERVICE_URL if using default.
+        """Resolve api_url from INTELLIGENCE_SERVICE_URL when not explicitly set.
 
-        When api_url is at its built-in default (http://localhost:8053),
-        check if INTELLIGENCE_SERVICE_URL or INTELLIGENCE_SERVICE_PORT is set
-        and use that instead. This allows omniclaude to inherit the service
-        URL from the shared environment without requiring a separate
-        OMNICLAUDE_CONTEXT_API_URL override.
+        Checks the sentinel value to distinguish between:
+        - User never set OMNICLAUDE_CONTEXT_API_URL → may override with
+          INTELLIGENCE_SERVICE_URL or fall back to the built-in default.
+        - User explicitly set OMNICLAUDE_CONTEXT_API_URL (even to the same
+          value as the built-in default) → keep it unchanged.
 
         Priority:
             1. OMNICLAUDE_CONTEXT_API_URL (handled by pydantic-settings above)
             2. INTELLIGENCE_SERVICE_URL
             3. Built-in default: http://localhost:8053
         """
-        default_api_url = "http://localhost:8053"
-        if self.api_url == default_api_url:
+        if self.api_url == _API_URL_UNSET:
             intelligence_url = os.environ.get("INTELLIGENCE_SERVICE_URL", "").strip()
             if intelligence_url:
                 object.__setattr__(self, "api_url", intelligence_url)
+            else:
+                object.__setattr__(self, "api_url", _API_URL_DEFAULT)
         return self
 
     def get_db_dsn(self) -> str:
@@ -443,7 +450,7 @@ class ContextInjectionConfig(BaseSettings):
 
         Returns:
             PostgreSQL connection string in the format:
-            postgresql://user:password@host:port/dbname
+            postgresql://user:<password>@host:port/dbname
 
         Example:
             >>> config = ContextInjectionConfig(db_password=SecretStr("secret"))

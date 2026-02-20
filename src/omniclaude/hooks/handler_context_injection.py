@@ -448,7 +448,6 @@ class HandlerContextInjection:
                     db_result = await asyncio.wait_for(
                         self._load_patterns_from_database(
                             domain=agent_domain,
-                            project_scope=project_root,
                         ),
                         timeout=timeout_seconds,
                     )
@@ -503,21 +502,33 @@ class HandlerContextInjection:
             )
 
         # Step 2: Filter by domain (pre-filter before selection)
-        patterns_before_filter = len(patterns)
+        patterns_before_domain_filter = len(patterns)
         if agent_domain:
             patterns = [
                 p for p in patterns if p.domain == agent_domain or p.domain == "general"
             ]
+        patterns_after_domain_filter = len(patterns)
+
+        # Warn specifically when the domain filter alone eliminated everything
+        if patterns_before_domain_filter > 0 and patterns_after_domain_filter == 0:
+            logger.warning(
+                "domain filter excluded all %d patterns: domain_filter=%r. "
+                "No patterns will be injected. Check that patterns exist for this domain.",
+                patterns_before_domain_filter,
+                agent_domain,
+            )
 
         # Step 3: Filter by confidence threshold (pre-filter)
         patterns = [p for p in patterns if p.confidence >= cfg.min_confidence]
 
-        # Warn when filters exclude all patterns that were available from the API
-        if patterns_before_filter > 0 and not patterns:
+        # Warn specifically when the confidence filter (not the domain filter) eliminated
+        # everything — i.e. the domain filter passed some patterns through but confidence
+        # removed them all.
+        if patterns_after_domain_filter > 0 and not patterns:
             logger.warning(
-                "filter excluded all %d patterns: confidence_min=%.2f, domain_filter=%r. "
-                "No patterns will be injected. Adjust thresholds or domain to include patterns.",
-                patterns_before_filter,
+                "confidence filter excluded all %d patterns: confidence_min=%.2f, domain_filter=%r. "
+                "No patterns will be injected. Lower min_confidence or add higher-confidence patterns.",
+                patterns_after_domain_filter,
                 cfg.min_confidence,
                 agent_domain or "<none>",
             )
@@ -587,7 +598,7 @@ class HandlerContextInjection:
         )
 
     # =========================================================================
-    # Database Methods
+    # Pattern Source Methods
     # =========================================================================
 
     async def _load_patterns_from_api(
@@ -623,9 +634,13 @@ class HandlerContextInjection:
         base_url = cfg.api_url.rstrip("/")
         timeout_s = cfg.api_timeout_ms / 1000.0
 
-        # Build query params
+        # Build query params.
+        # Fetch 2x the injection limit to give the post-fetch filters (domain,
+        # confidence, provisional, evidence) enough candidates to work with
+        # without pulling an unbounded page from the API.
+        fetch_limit = max(cfg.limits.max_patterns_per_injection * 2, 10)
         params: dict[str, str] = {
-            "limit": "50",
+            "limit": str(fetch_limit),
             "min_confidence": str(cfg.min_confidence),
         }
         if domain:
@@ -635,9 +650,29 @@ class HandlerContextInjection:
         url = f"{base_url}/api/v1/patterns?{query_string}"
 
         try:
+            # Request is read-only after construction; safe to share with executor thread.
             req = urllib.request.Request(url, method="GET")  # noqa: S310  # nosec B310
-            with urllib.request.urlopen(req, timeout=timeout_s) as response:  # noqa: S310  # nosec B310
-                raw = response.read().decode("utf-8")
+            loop = asyncio.get_running_loop()
+
+            def _fetch() -> bytes:
+                with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # noqa: S310  # nosec B310
+                    return resp.read()
+
+            try:
+                raw_bytes = await asyncio.wait_for(
+                    loop.run_in_executor(None, _fetch),
+                    timeout=timeout_s,
+                )
+            except TimeoutError:
+                logger.warning(
+                    "API pattern load timed out (asyncio deadline) after %.1fs: %s",
+                    timeout_s,
+                    url,
+                )
+                return ModelLoadPatternsResult.error(
+                    f"API timeout after {timeout_s:.1f}s"
+                )
+            raw = raw_bytes.decode("utf-8")
         except urllib.error.URLError as e:
             logger.warning("omniintelligence API unavailable: %s (url=%s)", e, url)
             return ModelLoadPatternsResult(
@@ -713,7 +748,7 @@ class HandlerContextInjection:
             try:
                 # confidence_raw is not None here: we appended "confidence" to
                 # missing if it were None, and continued. mypy cannot infer this.
-                confidence = float(confidence_raw)  # type: ignore[arg-type]
+                confidence = float(confidence_raw)  # type: ignore[arg-type]  # None excluded above
             except (TypeError, ValueError):
                 excluded += 1
                 logger.warning(
@@ -725,13 +760,21 @@ class HandlerContextInjection:
                 continue
 
             # Map optional fields
-            domain_id = (
-                _safe_str(raw_p.get("domain_id"), default="general") or "general"
-            )
+            domain_id = _safe_str(raw_p.get("domain_id"), default="general")
             quality_score_raw = raw_p.get("quality_score")
-            success_rate = (
-                float(quality_score_raw) if quality_score_raw is not None else 0.0
-            )
+            if quality_score_raw is None:
+                success_rate = 0.0
+            else:
+                try:
+                    success_rate = float(quality_score_raw)  # type: ignore[arg-type]
+                except (TypeError, ValueError):
+                    logger.warning(
+                        "omniintelligence API: invalid quality_score value %r for "
+                        "pattern_id=%r — defaulting success_rate to 0.0",
+                        quality_score_raw,
+                        pattern_id,
+                    )
+                    success_rate = 0.0
             status = raw_p.get("status")
             lifecycle_state: str | None = (
                 status if status in {"validated", "provisional"} else None
@@ -772,23 +815,26 @@ class HandlerContextInjection:
             url,
         )
 
-        source_path = Path(url)
+        # source_files expects filesystem Path objects; the API URL is not a path.
+        # Attribution is already logged at DEBUG level above; omit source_files here.
         return ModelLoadPatternsResult(
             patterns=records,
-            source_files=[source_path] if records else [],
+            source_files=[],
             warnings=[],
         )
 
     async def _load_patterns_from_database(
         self,
         domain: str | None = None,
-        project_scope: str | None = None,
     ) -> ModelLoadPatternsResult:
         """Load patterns via omniintelligence HTTP API (OMN-2355).
 
         DB access was disabled in OMN-2058 (DB-SPLIT-07: learned_patterns moved
         to omniintelligence). This method now delegates to _load_patterns_from_api,
         the approved escape hatch until event bus projections are available (OMN-2059).
+
+        Note: project_scope is not forwarded because the omniintelligence API
+        does not expose a project_scope query param; scoping is handled server-side.
         """
         cfg = self._config
         if cfg.api_enabled:

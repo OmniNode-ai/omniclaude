@@ -29,8 +29,11 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import sys
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -150,8 +153,6 @@ def violations_to_advisories(
 
             # Validate confidence is a finite number in [0, 1]
             try:
-                import math  # noqa: PLC0415
-
                 confidence = float(v.get("confidence", 0.0))
                 if not math.isfinite(confidence):
                     confidence = 0.0
@@ -186,8 +187,20 @@ def violations_to_advisories(
 
 
 def _resolve_hooks_lib_dir() -> Path:
-    """Return the absolute path to this script's directory (hooks lib)."""
-    return Path(__file__).resolve().parent
+    """Return the absolute path to the plugins hooks lib directory.
+
+    ``pattern_advisory_formatter`` lives at
+    ``plugins/onex/hooks/lib/pattern_advisory_formatter.py``, not alongside
+    this installed-package module.  Walk up from the repo root (three levels
+    above ``src/``) and resolve the plugins path so the import in
+    ``_save_advisory`` always finds the correct file regardless of how the
+    package was installed.
+    """
+    # __file__ is  <repo>/src/omniclaude/hooks/lib/compliance_result_subscriber.py
+    # .parents[3] is  <repo>/src → [2] omniclaude → [1] hooks → [0] lib
+    # We want <repo> = .parents[4] then /plugins/onex/hooks/lib
+    repo_root = Path(__file__).resolve().parents[4]
+    return repo_root / "plugins" / "onex" / "hooks" / "lib"
 
 
 def _save_advisory(session_id: str, advisories: list[dict[str, Any]]) -> bool:
@@ -281,7 +294,7 @@ def process_compliance_event(raw_value: bytes) -> bool:
 def run_subscriber(
     *,
     kafka_bootstrap_servers: str,
-    group_id: str = "omniclaude-compliance-subscriber",
+    group_id: str = "omniclaude-compliance-subscriber.v1",
     poll_timeout_ms: int = 1000,
     max_poll_records: int = 50,
     stop_event: Any = None,
@@ -298,7 +311,8 @@ def run_subscriber(
 
     Args:
         kafka_bootstrap_servers: Kafka bootstrap servers string.
-        group_id: Consumer group ID (one per omniclaude instance is fine).
+        group_id: Consumer group ID (schema version encoded; default:
+            ``omniclaude-compliance-subscriber.v1``).
         poll_timeout_ms: Kafka poll timeout in milliseconds.
         max_poll_records: Maximum records per poll.
         stop_event: Optional threading.Event; loop exits when set.
@@ -354,8 +368,6 @@ def run_subscriber(
             except Exception as exc:
                 logger.warning("Kafka poll error: %s", exc)
                 # Brief backoff before retrying
-                import time  # noqa: PLC0415
-
                 time.sleep(1.0)
 
     finally:
@@ -364,6 +376,49 @@ def run_subscriber(
         except Exception:
             pass
         logger.info("Compliance-evaluated subscriber stopped")
+
+
+# ---------------------------------------------------------------------------
+# Background thread launcher (used by plugin.py:start_consumers)
+# ---------------------------------------------------------------------------
+
+
+def run_subscriber_background(
+    *,
+    kafka_bootstrap_servers: str,
+    group_id: str = "omniclaude-compliance-subscriber.v1",
+    stop_event: Any = None,
+) -> threading.Thread:
+    """Launch ``run_subscriber`` in a daemon background thread.
+
+    The thread is marked daemon=True so it does not block interpreter exit.
+    The caller owns the ``stop_event`` and must set it to request a graceful
+    shutdown before the thread naturally exits.
+
+    Args:
+        kafka_bootstrap_servers: Kafka bootstrap servers string.
+        group_id: Consumer group ID (schema version encoded).
+        stop_event: ``threading.Event`` instance; loop exits when set.
+
+    Returns:
+        The started ``threading.Thread`` instance.
+    """
+    thread = threading.Thread(
+        target=run_subscriber,
+        kwargs={
+            "kafka_bootstrap_servers": kafka_bootstrap_servers,
+            "group_id": group_id,
+            "stop_event": stop_event,
+        },
+        name="compliance-subscriber",
+        daemon=True,
+    )
+    thread.start()
+    logger.debug(
+        "Compliance subscriber daemon thread started (group_id=%s)",
+        group_id,
+    )
+    return thread
 
 
 # ---------------------------------------------------------------------------
