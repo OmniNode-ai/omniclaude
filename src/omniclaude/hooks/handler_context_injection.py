@@ -599,7 +599,7 @@ class HandlerContextInjection:
         )
 
     # =========================================================================
-    # Database Methods
+    # Pattern Source Methods
     # =========================================================================
 
     async def _load_patterns_from_api(
@@ -748,9 +748,7 @@ class HandlerContextInjection:
                 continue
 
             # Map optional fields
-            domain_id = (
-                _safe_str(raw_p.get("domain_id"), default="general") or "general"
-            )
+            domain_id = _safe_str(raw_p.get("domain_id"), default="general")
             quality_score_raw = raw_p.get("quality_score")
             if quality_score_raw is None:
                 success_rate = 0.0
