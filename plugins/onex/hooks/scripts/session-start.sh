@@ -641,7 +641,8 @@ fi
 
 _cleanup_merged_pipeline_states() {
     local _log="${LOG_FILE:-/dev/null}"
-    local pipelines_dir="${HOME}/.claude/pipelines"
+    local pipelines_dir
+    pipelines_dir=$(cd "$HOME/.claude/pipelines" 2>/dev/null && pwd -P || echo "$HOME/.claude/pipelines")
 
     [[ -d "$pipelines_dir" ]] || return 0
 

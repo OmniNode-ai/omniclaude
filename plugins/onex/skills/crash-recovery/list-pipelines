@@ -49,22 +49,24 @@ def extract_entry(state_file: Path, data: dict) -> dict | None:
     # Determine schema variant
     if "ticket_id" in data or "current_phase" in data:
         # Newer schema
-        ticket_id = data.get("ticket_id", state_file.parent.name)
-        title = data.get("title", "unknown")
-        current_phase = data.get("current_phase", "unknown")
-        branch_name = data.get("branch_name", "")
-        repo_path = data.get("repo_path", "")
+        ticket_id = str(
+            data.get("ticket_id", state_file.parent.name) or state_file.parent.name
+        )
+        title = str(data.get("title", "unknown") or "unknown")
+        current_phase = str(data.get("current_phase", "unknown") or "unknown")
+        branch_name = str(data.get("branch_name", "") or "")
+        repo_path = str(data.get("repo_path", "") or "")
     else:
         # Older schema — infer from directory name and tasks list
         ticket_id = state_file.parent.name
         tasks = data.get("tasks") or []
         if tasks and isinstance(tasks, list) and isinstance(tasks[0], dict):
-            title = tasks[0].get("description", "unknown")
+            title = str(tasks[0].get("description", "unknown") or "unknown")
         else:
             title = "unknown"
-        current_phase = data.get("status", "unknown")
-        branch_name = data.get("branch_name", "")
-        repo_path = data.get("repo_path", "")
+        current_phase = str(data.get("status", "unknown") or "unknown")
+        branch_name = str(data.get("branch_name", "") or "")
+        repo_path = str(data.get("repo_path", "") or "")
 
     return {
         "ticket_id": ticket_id,
@@ -75,15 +77,15 @@ def extract_entry(state_file: Path, data: dict) -> dict | None:
         "age_seconds": time.time() - mtime,
         "age_human": format_age(mtime),
         "state_file": str(state_file),
-        "_status": data.get("status", ""),
+        "_status": str(data.get("status", "") or ""),
     }
 
 
 def is_complete(entry: dict) -> bool:
     done_phases = {"done", "completed", "ready_for_merge", "merged"}
-    if entry.get("current_phase", "").lower() in done_phases:
+    if (entry.get("current_phase") or "").lower() in done_phases:
         return True
-    if entry.get("_status", "").lower() in {"completed", "done"}:
+    if (entry.get("_status") or "").lower() in {"completed", "done"}:
         return True
     return False
 

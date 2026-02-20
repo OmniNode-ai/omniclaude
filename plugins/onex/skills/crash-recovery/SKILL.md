@@ -88,14 +88,14 @@ OMN-2367 was in 'implement' phase. Run `/ticket-pipeline OMN-2367` to resume, or
 
 ## Output Format
 
-Default markdown table output (newest first):
+Default output is a fixed-width column table (newest first). Columns are space-padded, separated by a single space, with a dashed separator line — not standard markdown table syntax:
 
 ```
-| Ticket    | Title                                   | Phase           | Branch                   | Age      |
-|-----------|-----------------------------------------|-----------------|--------------------------|----------|
-| OMN-2371  | fix: session-end feedback loop is no-op | ready_for_merge | omn-2371-fix-session-end | 5m ago   |
-| OMN-2367  | feat: delegation orchestrator           | implement       | omn-2367-delegation      | 12m ago  |
-| OMN-2355  | fix: context injection timeout          | local_review    | omn-2355-context-inject  | 18m ago  |
+Ticket               Title                                                    Phase                  Branch                          Age
+-------------------- -------------------------------------------------------- ---------------------- ------------------------------- ----------
+OMN-2371             fix: session-end feedback loop is no-op                  ready_for_merge        omn-2371-fix-session-end        5m ago
+OMN-2367             feat: delegation orchestrator                             implement              omn-2367-delegation             12m ago
+OMN-2355             fix: context injection timeout                            local_review           omn-2355-context-inject         18m ago
 ```
 
 Columns:
