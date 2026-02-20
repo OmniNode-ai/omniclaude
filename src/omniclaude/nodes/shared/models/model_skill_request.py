@@ -49,6 +49,14 @@ class ModelSkillRequest(BaseModel):
         description="Correlation ID for end-to-end request tracing",
     )
 
+    @field_validator("skill_name")
+    @classmethod
+    def _validate_skill_name(cls, value: str) -> str:
+        """Reject whitespace-only skill_name values."""
+        if not value.strip():
+            raise ValueError("skill_name must not be blank or whitespace-only")
+        return value
+
     @field_validator("skill_path")
     @classmethod
     def _validate_skill_path(cls, value: str) -> str:
@@ -57,6 +65,17 @@ class ModelSkillRequest(BaseModel):
             raise ValueError("skill_path must not be empty")
         if not value.endswith("SKILL.md"):
             raise ValueError(f"skill_path must end with 'SKILL.md', got: {value!r}")
+        return value
+
+    @field_validator("args")
+    @classmethod
+    def _validate_args_keys(cls, value: dict[str, str]) -> dict[str, str]:
+        """Reject args dicts that contain empty or whitespace-only keys."""
+        for key in value:
+            if not key.strip():
+                raise ValueError(
+                    f"args keys must not be empty or whitespace-only, got: {key!r}"
+                )
         return value
 
 
