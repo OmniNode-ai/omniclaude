@@ -36,7 +36,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from uuid import UUID, uuid4
 
 from omniclaude.hooks.cohort_assignment import (
@@ -637,10 +637,12 @@ class HandlerContextInjection:
         timeout_s = cfg.api_timeout_ms / 1000.0
 
         # Build query params.
-        # Fetch 2x the injection limit to give the post-fetch filters (domain,
-        # confidence, provisional, evidence) enough candidates to work with
-        # without pulling an unbounded page from the API.
-        fetch_limit = max(cfg.limits.max_patterns_per_injection * 2, 10)
+        # Fetch 10x the injection limit to give the post-fetch filters (domain,
+        # confidence, provisional, evidence) enough candidates to work with.
+        # The 10x multiplier accounts for all chained filter stages (domain +
+        # confidence + provisional + evidence) each of which can eliminate the
+        # majority of candidates.  Minimum of 50 preserves pre-refactor headroom.
+        fetch_limit = max(cfg.limits.max_patterns_per_injection * 10, 50)
         params: dict[str, str] = {
             "limit": str(fetch_limit),
             "min_confidence": str(cfg.min_confidence),
@@ -658,12 +660,12 @@ class HandlerContextInjection:
 
             def _fetch() -> bytes:
                 with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # noqa: S310  # nosec B310
-                    return bytes(resp.read())
+                    return cast("bytes", resp.read())
 
             try:
                 raw_bytes = await asyncio.wait_for(
                     loop.run_in_executor(None, _fetch),
-                    timeout=timeout_s,
+                    timeout=timeout_s + 1.0,
                 )
             except TimeoutError:
                 logger.warning(
@@ -674,7 +676,7 @@ class HandlerContextInjection:
                 return ModelLoadPatternsResult(
                     patterns=[],
                     source_files=[],
-                    warnings=[f"API timeout after {timeout_s:.1f}s"],
+                    warnings=[f"omniintelligence_api_timeout: {timeout_s:.1f}s"],
                 )
             raw = raw_bytes.decode("utf-8")
         except urllib.error.URLError as e:
@@ -764,7 +766,9 @@ class HandlerContextInjection:
                 continue
 
             # Map optional fields
-            domain_id = _safe_str(raw_p.get("domain_id"), default="general")
+            domain_id = (
+                _safe_str(raw_p.get("domain_id"), default="general") or "general"
+            )
             quality_score_raw = raw_p.get("quality_score")
             if quality_score_raw is None:
                 success_rate = 0.0

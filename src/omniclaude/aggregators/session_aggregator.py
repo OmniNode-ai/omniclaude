@@ -535,8 +535,11 @@ class SessionAggregator:
         # Checking here, rather than on every event, ensures the warning fires
         # precisely when the finalized count increases and avoids spurious
         # re-checks on non-finalizing event types.
-        # Safe to call without lock: Python async is cooperative, no await points
-        # between lock release and this call; _sessions cannot be mutated between them.
+        # Safe to call without lock (caller: process_event): Python async is
+        # cooperative and there are no await points between the _handle_session_ended
+        # lock release and this call, so _sessions cannot be mutated concurrently.
+        # Invariant to preserve: do NOT add any await between the handler return
+        # and this call, or the cooperative-scheduling safety guarantee breaks.
         if result and event.event_type == HookEventType.SESSION_ENDED:
             self._maybe_warn_finalized_sessions()
 
@@ -677,8 +680,13 @@ class SessionAggregator:
         await self._cleanup_session_lock_only(session_id)
 
         # Check for memory growth after finalization (outside any lock).
-        # Safe to call without lock: Python async is cooperative, no await points
-        # between lock release and this call; _sessions cannot be mutated between them.
+        # Safe to call without lock (caller: _finalize_session): the per-session
+        # lock was released by the `async with lock` block above, and
+        # _cleanup_session_lock_only (which holds _locks_lock briefly) has
+        # already returned.  There are no await points between that return and
+        # this call, so _sessions cannot be mutated concurrently.
+        # Invariant to preserve: do NOT add any await between
+        # _cleanup_session_lock_only and this call, or the safety guarantee breaks.
         self._maybe_warn_finalized_sessions()
 
         return snapshot

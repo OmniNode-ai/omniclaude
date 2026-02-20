@@ -126,6 +126,14 @@ except ImportError:  # pragma: no cover
     LlmEndpointPurpose = None  # type: ignore[assignment,misc]
     LocalLlmEndpointRegistry = None  # type: ignore[assignment,misc]
 
+# Shadow validation (OMN-2283) — imported at module level so tests can patch it.
+try:
+    from shadow_validation import (  # type: ignore[import-not-found]
+        run_shadow_validation as _run_shadow_validation,
+    )
+except ImportError:  # pragma: no cover
+    _run_shadow_validation = None  # type: ignore[assignment]
+
 # ---------------------------------------------------------------------------
 # Classifier instance cache
 # ---------------------------------------------------------------------------
@@ -926,6 +934,37 @@ def orchestrate_delegation(
         _emit_compliance_advisory(
             response_text, intent_value, correlation_id, session_id
         )
+
+        # Shadow validation (OMN-2283): sample 5-10% of successful delegations
+        # and asynchronously compare local model output against Claude.
+        # This is non-blocking — the response is returned to the user immediately.
+        _shadow_fn = _run_shadow_validation  # module-level name, patchable in tests
+        if _shadow_fn is not None:
+            try:
+                _shadow_fn(
+                    prompt=redacted_prompt,
+                    local_response=response_text,
+                    local_model=actual_model_name,
+                    session_id=session_id,
+                    correlation_id=correlation_id,
+                    task_type=intent_value,
+                    emitted_at=emitted_at,
+                )
+            except ValueError as _shadow_val_err:
+                # ValueError from shadow validation is a programming error
+                # (e.g. emitted_at is None) — log at WARNING, not DEBUG.
+                logger.warning(
+                    "Shadow validation rejected call (programming error): %s",
+                    _shadow_val_err,
+                )
+            except Exception as _shadow_exc:
+                # Other errors (network, import, etc.) are non-critical
+                logger.debug(
+                    "Shadow validation call raised unexpectedly (non-critical): %s: %s",
+                    type(_shadow_exc).__name__,
+                    _shadow_exc,
+                )
+
         _emit_delegation_event(
             session_id=session_id,
             correlation_id=correlation_id,
