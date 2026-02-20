@@ -76,14 +76,18 @@ ${CLAUDE_PLUGIN_ROOT}/skills/crash-recovery/list-pipelines --count 5 --json
 
 For each ticket shown whose phase is **not** `ready_for_merge` or `done`, offer:
 
-- "Run `/ticket-pipeline {TICKET_ID}` to resume from where it stopped."
-- "Run `/ticket-work {TICKET_ID}` if it was in the `implement` phase and you want to continue coding."
+- "Use the `ticket-pipeline` skill for OMN-XXXX to resume from where it stopped."
+- "Use the `ticket-work` skill for OMN-XXXX if it was in the `implement` phase and you want to continue coding."
+
+Note: `ticket-pipeline` and `ticket-work` are **skills**, not slash commands. They are
+invoked by asking Claude to use them (e.g., "use the ticket-pipeline skill for OMN-2367"),
+not via a `/command` prefix.
 
 Example follow-up after displaying the table:
 
 ```
-OMN-2367 was in 'implement' phase. Run `/ticket-pipeline OMN-2367` to resume, or
-`/ticket-work OMN-2367` to continue implementation directly.
+OMN-2367 was in 'implement' phase. Ask Claude to use the ticket-pipeline skill for OMN-2367
+to resume, or the ticket-work skill to continue implementation directly.
 ```
 
 ## Output Format
@@ -137,6 +141,6 @@ The `list-pipelines` script handles both schemas gracefully. If a required field
 
 ## See Also
 
-- `/ticket-pipeline` -- full pipeline orchestrator (implement → review → PR → merge)
-- `/ticket-work` -- jump directly into the implement phase for a ticket
+- `ticket-pipeline` skill -- full pipeline orchestrator (implement → review → PR → merge)
+- `ticket-work` skill -- jump directly into the implement phase for a ticket
 - `checkpoint` skill -- per-phase checkpoint management for finer-grained resume

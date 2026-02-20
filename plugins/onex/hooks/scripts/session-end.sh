@@ -298,6 +298,14 @@ print(result.outcome)
         # Sanitize: ensure numeric fields are numeric
         [[ "$RAW_PATTERNS_COUNT" =~ ^[0-9]+$ ]] || RAW_PATTERNS_COUNT=0
         [[ "$RAW_ROUTING_CONFIDENCE" =~ ^[0-9]+(\.[0-9]+)?$ ]] || RAW_ROUTING_CONFIDENCE=0.0
+        # Slash-command sentinel: agent_selected="" + confidence=1.0 means routing was
+        # bypassed (not a real routing decision). Zero out confidence so omniintelligence
+        # consumers receive an unambiguous no-routing-decision signal (confidence=0.0,
+        # agent_selected="") instead of a misleading high-confidence empty-agent pair.
+        if [[ -z "$RAW_AGENT_SELECTED" && "$RAW_ROUTING_CONFIDENCE" == "1.0" ]]; then
+            log "Slash-command sentinel detected (agent_selected='', confidence=1.0) — zeroing routing_confidence"
+            RAW_ROUTING_CONFIDENCE="0.0"
+        fi
         # Clamp to [0.0, 1.0] — le=1.0 constraint matches schema
         awk "BEGIN{exit !($RAW_ROUTING_CONFIDENCE > 1.0)}" 2>/dev/null && RAW_ROUTING_CONFIDENCE="1.0"
         # Three-branch float-handling for TOOL_CALLS_COMPLETED (mirrors SESSION_DURATION logic).
