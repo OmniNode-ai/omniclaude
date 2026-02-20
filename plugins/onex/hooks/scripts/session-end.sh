@@ -289,7 +289,13 @@ print(result.outcome)
         [[ "$TOOL_CALLS_COMPLETED" =~ ^[0-9]+$ ]] || TOOL_CALLS_COMPLETED=0
         [[ "$RAW_INJECTION_OCCURRED" == "true" ]] || RAW_INJECTION_OCCURRED="false"
 
-        RAW_EMITTED_AT=$(date -u +"%Y-%m-%dT%H:%M:%S.%3NZ" 2>/dev/null || date -u +"%Y-%m-%dT%H:%M:%SZ")
+        # Use Python for a portable ISO timestamp with millisecond precision.
+        # `date -u +"%Y-%m-%dT%H:%M:%S.%3NZ"` exits 0 on macOS but produces a
+        # literal ".3NZ" suffix instead of milliseconds, causing fromisoformat()
+        # validation to fail downstream. Fall back to second-precision if Python
+        # is unavailable (unlikely — PYTHON_CMD is required by this hook).
+        RAW_EMITTED_AT=$("$PYTHON_CMD" -c 'from datetime import datetime, timezone; print(datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z")' 2>/dev/null \
+            || date -u +"%Y-%m-%dT%H:%M:%SZ")
         if ! RAW_OUTCOME_PAYLOAD=$(jq -n \
             --arg session_id "$SESSION_ID" \
             --argjson injection_occurred "$RAW_INJECTION_OCCURRED" \

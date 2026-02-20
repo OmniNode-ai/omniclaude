@@ -654,7 +654,8 @@ _cleanup_merged_pipeline_states() {
         fields=$("$PYTHON_CMD" - "$state_file" <<'PYEOF' 2>/dev/null
 import yaml, sys
 try:
-    d = yaml.safe_load(open(sys.argv[1], encoding='utf-8')) or {}
+    with open(sys.argv[1], encoding='utf-8') as f:
+        d = yaml.safe_load(f) or {}
     print(d.get('branch_name', ''))
     print(d.get('repo_path', ''))
 except Exception:
