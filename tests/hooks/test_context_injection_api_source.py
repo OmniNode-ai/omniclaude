@@ -557,10 +557,11 @@ class TestContextInjectionConfigAPIUrl:
         """Default api_url is http://localhost:8053."""
         import os
 
-        # Remove the key inside patch.dict so the original value is restored
-        # even if the test is interrupted before the block exits.
-        with patch.dict(os.environ, {}, clear=False):
-            os.environ.pop("INTELLIGENCE_SERVICE_URL", None)
+        # Inject a sentinel value so patch.dict always has the key to restore,
+        # then immediately remove it — guaranteeing INTELLIGENCE_SERVICE_URL is
+        # absent for the duration of this test regardless of the outer environment.
+        with patch.dict(os.environ, {"INTELLIGENCE_SERVICE_URL": ""}, clear=False):
+            del os.environ["INTELLIGENCE_SERVICE_URL"]
             cfg = ContextInjectionConfig()
             assert "8053" in cfg.api_url or "localhost" in cfg.api_url
 
