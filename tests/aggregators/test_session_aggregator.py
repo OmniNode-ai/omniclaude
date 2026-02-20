@@ -17,6 +17,7 @@ Related Tickets:
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import pytest
@@ -2123,3 +2124,286 @@ class TestCleanupFinalizedSessions:
         for i in range(2):
             snap = await aggregator.get_snapshot(f"cleanup-timeout-{i}", correlation_id)
             assert snap is None
+
+
+# =============================================================================
+# Finalized Session Memory Growth Warning Tests
+# =============================================================================
+
+
+class TestFinalizedSessionWarning:
+    """Tests for memory growth warning when finalized sessions exceed threshold.
+
+    Related ticket: OMN-1541
+    """
+
+    @pytest.mark.asyncio
+    async def test_warning_emitted_when_threshold_exceeded(
+        self, correlation_id: UUID
+    ) -> None:
+        """Warning is logged when finalized session count exceeds threshold."""
+        config = ConfigSessionAggregator(finalized_session_warning_threshold=2)
+        aggregator = SessionAggregator(config, aggregator_id="warn-threshold-test")
+
+        # Create 3 sessions (all started before any are ended)
+        for i in range(3):
+            session_id = f"warn-threshold-session-{i}"
+            await aggregator.process_event(
+                make_session_started(session_id), correlation_id
+            )
+
+        # End the first two sessions (count == threshold, no warning yet)
+        await aggregator.process_event(
+            make_session_ended("warn-threshold-session-0"), correlation_id
+        )
+        await aggregator.process_event(
+            make_session_ended("warn-threshold-session-1"), correlation_id
+        )
+
+        # End the third session — count becomes 3, exceeds threshold of 2
+        logger_name = "omniclaude.aggregators.session_aggregator"
+        with patch(f"{logger_name}.logger") as mock_logger:
+            await aggregator.process_event(
+                make_session_ended("warn-threshold-session-2"), correlation_id
+            )
+            # Verify a warning was emitted
+            mock_logger.warning.assert_called_once()
+            call_args = mock_logger.warning.call_args
+            assert "cleanup_finalized_sessions" in call_args[0][0]
+            extra = call_args[1]["extra"]
+            assert extra["finalized_count"] == 3
+            assert extra["threshold"] == 2
+
+    @pytest.mark.asyncio
+    async def test_warning_not_emitted_below_threshold(
+        self, correlation_id: UUID
+    ) -> None:
+        """No warning is logged when finalized session count is at or below threshold."""
+        config = ConfigSessionAggregator(finalized_session_warning_threshold=5)
+        aggregator = SessionAggregator(config, aggregator_id="no-warn-test")
+
+        # Create and end 5 sessions (at threshold, not above)
+        for i in range(5):
+            session_id = f"no-warn-session-{i}"
+            await aggregator.process_event(
+                make_session_started(session_id), correlation_id
+            )
+
+        logger_name = "omniclaude.aggregators.session_aggregator"
+        with patch(f"{logger_name}.logger") as mock_logger:
+            for i in range(5):
+                await aggregator.process_event(
+                    make_session_ended(f"no-warn-session-{i}"), correlation_id
+                )
+            # No warning should have been emitted
+            mock_logger.warning.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_warning_rate_limited(self, correlation_id: UUID) -> None:
+        """Warning is only emitted once per rate-limit interval."""
+        config = ConfigSessionAggregator(
+            finalized_session_warning_threshold=1,
+            finalized_session_warning_interval_seconds=3600,
+        )
+        aggregator = SessionAggregator(config, aggregator_id="rate-limit-test")
+
+        # Create and end several sessions above threshold
+        for i in range(5):
+            session_id = f"rate-limit-session-{i}"
+            await aggregator.process_event(
+                make_session_started(session_id), correlation_id
+            )
+
+        logger_name = "omniclaude.aggregators.session_aggregator"
+        with patch(f"{logger_name}.logger") as mock_logger:
+            for i in range(5):
+                await aggregator.process_event(
+                    make_session_ended(f"rate-limit-session-{i}"), correlation_id
+                )
+            # Despite 5 finalized sessions (all above threshold=1), warning
+            # should only be emitted once due to rate limiting.
+            warning_calls = [
+                c
+                for c in mock_logger.warning.call_args_list
+                if "cleanup_finalized_sessions" in c[0][0]
+            ]
+            assert len(warning_calls) == 1
+
+    @pytest.mark.asyncio
+    async def test_warning_re_emitted_after_interval(
+        self, correlation_id: UUID
+    ) -> None:
+        """Warning is re-emitted after the rate-limit interval expires."""
+        # threshold=1: warning fires when finalized_count > 1 (i.e. >= 2)
+        config = ConfigSessionAggregator(
+            finalized_session_warning_threshold=1,
+            finalized_session_warning_interval_seconds=60,
+        )
+        aggregator = SessionAggregator(config, aggregator_id="re-emit-test")
+
+        # Start two sessions so we can end both and exceed the threshold.
+        for i in range(2):
+            await aggregator.process_event(
+                make_session_started(f"re-emit-session-{i}"), correlation_id
+            )
+
+        logger_name = "omniclaude.aggregators.session_aggregator"
+        # End both sessions; the second end brings finalized_count to 2 (> threshold=1).
+        with patch(f"{logger_name}.logger") as mock_logger:
+            await aggregator.process_event(
+                make_session_ended("re-emit-session-0"), correlation_id
+            )
+            await aggregator.process_event(
+                make_session_ended("re-emit-session-1"), correlation_id
+            )
+            first_calls = [
+                c
+                for c in mock_logger.warning.call_args_list
+                if "cleanup_finalized_sessions" in c[0][0]
+            ]
+            assert len(first_calls) == 1
+
+        # Simulate time passing (more than the interval) by back-dating the
+        # last warning timestamp.
+        aggregator._last_finalized_warning_at = datetime.now(UTC) - timedelta(
+            seconds=3601
+        )
+
+        # Start session-2 before the patch block (a SESSION_STARTED event does
+        # not trigger the warning check, so it won't reset _last_finalized_warning_at).
+        await aggregator.process_event(
+            make_session_started("re-emit-session-2"), correlation_id
+        )
+
+        # End session-2 inside the patch block — finalized_count becomes 3 (> 1),
+        # and the rate-limit window has expired, so the warning fires again.
+        with patch(f"{logger_name}.logger") as mock_logger:
+            await aggregator.process_event(
+                make_session_ended("re-emit-session-2"), correlation_id
+            )
+            second_calls = [
+                c
+                for c in mock_logger.warning.call_args_list
+                if "cleanup_finalized_sessions" in c[0][0]
+            ]
+            assert len(second_calls) == 1
+
+    @pytest.mark.asyncio
+    async def test_warning_includes_count_threshold_and_guidance(
+        self, correlation_id: UUID
+    ) -> None:
+        """Warning message includes count, threshold, and guidance."""
+        config = ConfigSessionAggregator(finalized_session_warning_threshold=1)
+        aggregator = SessionAggregator(config, aggregator_id="warning-content-test")
+
+        await aggregator.process_event(
+            make_session_started("warning-content-session-0"), correlation_id
+        )
+        await aggregator.process_event(
+            make_session_started("warning-content-session-1"), correlation_id
+        )
+
+        logger_name = "omniclaude.aggregators.session_aggregator"
+        with patch(f"{logger_name}.logger") as mock_logger:
+            # End both sessions so finalized count (2) exceeds threshold (1)
+            await aggregator.process_event(
+                make_session_ended("warning-content-session-0"), correlation_id
+            )
+            await aggregator.process_event(
+                make_session_ended("warning-content-session-1"), correlation_id
+            )
+
+        # Find the warning call
+        warning_calls = [
+            c
+            for c in mock_logger.warning.call_args_list
+            if "cleanup_finalized_sessions" in c[0][0]
+        ]
+        assert len(warning_calls) >= 1
+        call_args = warning_calls[0]
+        extra = call_args[1]["extra"]
+        assert "finalized_count" in extra
+        assert "threshold" in extra
+        assert extra["threshold"] == 1
+        assert extra["finalized_count"] >= 2
+
+    @pytest.mark.asyncio
+    async def test_warning_triggered_by_finalize_session(
+        self, correlation_id: UUID
+    ) -> None:
+        """Warning is emitted when finalize_session() causes threshold to be exceeded."""
+        config = ConfigSessionAggregator(finalized_session_warning_threshold=1)
+        aggregator = SessionAggregator(config, aggregator_id="finalize-warn-test")
+
+        # Create two sessions
+        await aggregator.process_event(
+            make_session_started("finalize-warn-session-0"), correlation_id
+        )
+        await aggregator.process_event(
+            make_session_started("finalize-warn-session-1"), correlation_id
+        )
+
+        logger_name = "omniclaude.aggregators.session_aggregator"
+        with patch(f"{logger_name}.logger") as mock_logger:
+            # Finalize both via finalize_session() (timeout path)
+            await aggregator.finalize_session(
+                "finalize-warn-session-0", correlation_id, reason="timeout"
+            )
+            await aggregator.finalize_session(
+                "finalize-warn-session-1", correlation_id, reason="timeout"
+            )
+
+        # Warning should have fired (count 2 > threshold 1)
+        warning_calls = [
+            c
+            for c in mock_logger.warning.call_args_list
+            if "cleanup_finalized_sessions" in c[0][0]
+        ]
+        assert len(warning_calls) >= 1
+
+    @pytest.mark.asyncio
+    async def test_no_warning_after_cleanup(self, correlation_id: UUID) -> None:
+        """Warning is not emitted after cleanup_finalized_sessions() reduces count."""
+        config = ConfigSessionAggregator(
+            finalized_session_warning_threshold=1,
+            finalized_session_warning_interval_seconds=60,
+        )
+        aggregator = SessionAggregator(config, aggregator_id="no-warn-after-cleanup")
+
+        # Build up finalized sessions above threshold
+        for i in range(3):
+            session_id = f"cleanup-warn-session-{i}"
+            await aggregator.process_event(
+                make_session_started(session_id), correlation_id
+            )
+            await aggregator.process_event(
+                make_session_ended(session_id), correlation_id
+            )
+
+        # Cleanup all finalized sessions
+        cleaned = await aggregator.cleanup_finalized_sessions(correlation_id)
+        assert cleaned == 3
+
+        # Expire the rate-limit window so warnings are no longer suppressed by
+        # the interval guard.
+        aggregator._last_finalized_warning_at = datetime.now(UTC) - timedelta(
+            seconds=3601
+        )
+
+        # Create and end one more session — count is 1, which is NOT above threshold
+        # after cleanup, so no warning should fire.
+        await aggregator.process_event(
+            make_session_started("post-cleanup-session"), correlation_id
+        )
+        logger_name = "omniclaude.aggregators.session_aggregator"
+        with patch(f"{logger_name}.logger") as mock_logger:
+            await aggregator.process_event(
+                make_session_ended("post-cleanup-session"), correlation_id
+            )
+            # Count is exactly 1 (== threshold), not above it, so no warning
+            warning_calls = [
+                c
+                for c in mock_logger.warning.call_args_list
+                if "cleanup_finalized_sessions" in c[0][0]
+            ]
+            assert len(warning_calls) == 0

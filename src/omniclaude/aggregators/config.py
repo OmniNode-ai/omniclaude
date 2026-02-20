@@ -22,6 +22,8 @@ class ConfigSessionAggregator(BaseSettings):
         - out_of_order_buffer_seconds: Used for accepting late-arriving events
         - max_orphan_sessions: Used to cap memory usage from orphan sessions
         - timeout_sweep_interval_seconds: Used to configure sweep frequency
+        - finalized_session_warning_threshold: Warn when finalized session count exceeds this
+        - finalized_session_warning_interval_seconds: Rate-limit for finalized-session warnings
 
     Reserved for Future Implementation:
         - session_max_duration_seconds: Max duration enforcement not yet implemented
@@ -108,4 +110,26 @@ class ConfigSessionAggregator(BaseSettings):
         ge=10,
         le=600,
         description="Interval for running timeout sweep",
+    )
+
+    # Memory growth warnings
+    finalized_session_warning_threshold: int = Field(
+        default=10000,
+        ge=1,
+        le=10000000,
+        description=(
+            "Warn when finalized session count exceeds this threshold. "
+            "Indicates that cleanup_finalized_sessions() is not being called "
+            "often enough. Set to 0 to disable warnings (not allowed; use a "
+            "large value to effectively disable)."
+        ),
+    )
+    finalized_session_warning_interval_seconds: int = Field(
+        default=3600,  # 1 hour
+        ge=60,
+        le=86400,
+        description=(
+            "Minimum seconds between repeated finalized-session warnings "
+            "to avoid log spam."
+        ),
     )
