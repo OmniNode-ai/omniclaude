@@ -315,6 +315,10 @@ if [[ -n "$SESSION_ID" ]]; then
         awk "BEGIN{exit !($CONFIDENCE > 1.0)}" 2>/dev/null && CONFIDENCE="1.0"
         _INJECT_OCCURRED="false"
         [[ "${PATTERN_SUCCESS:-false}" == "true" ]] && [[ "${PATTERN_COUNT:-0}" != "0" ]] && _INJECT_OCCURRED="true"
+        # When SESSION_ALREADY_INJECTED=true (SessionStart performed injection),
+        # PATTERN_SUCCESS stays "false" for this prompt — override so injection_occurred
+        # is truthful. PATTERN_COUNT remains 0 (count unknown for SessionStart injection).
+        [[ "$SESSION_ALREADY_INJECTED" == "true" ]] && _INJECT_OCCURRED="true"
         _ACCUM_JSON="$(jq -n \
             --argjson injection_occurred "$_INJECT_OCCURRED" \
             --argjson patterns_injected_count "${PATTERN_COUNT:-0}" \
