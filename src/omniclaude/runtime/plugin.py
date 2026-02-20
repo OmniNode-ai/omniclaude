@@ -31,6 +31,8 @@ if TYPE_CHECKING:
         ModelDomainPluginResult,
     )
 
+    from omniclaude.publisher.embedded_publisher import EmbeddedEventPublisher
+
 logger = logging.getLogger(__name__)
 
 _PLUGIN_ID = "claude"
@@ -54,7 +56,7 @@ class PluginClaude:
     # ------------------------------------------------------------------
 
     def __init__(self) -> None:
-        self._publisher: object | None = None
+        self._publisher: EmbeddedEventPublisher | None = None
         self._publisher_config: object | None = None
         self._shutdown_in_progress: bool = False
         self._compliance_stop_event: threading.Event | None = None
@@ -290,9 +292,8 @@ class PluginClaude:
                 # Kafka poll loop once the stop_event is set, then exit naturally.
                 # Blocking here would delay shutdown and risk deadlock if the
                 # Kafka consumer is stuck waiting on a network call.
-                self._compliance_thread = (
-                    None  # stop_event already set; daemon self-terminates.
-                )
+                # stop_event already set; daemon self-terminates.
+                self._compliance_thread = None
                 # Narrow race: if start_consumers() is called before the daemon fully stops,
                 # stop_event being set means the thread will exit without processing new work.
                 # No data loss risk — the publisher handles event delivery independently.
@@ -306,7 +307,7 @@ class PluginClaude:
             errors: list[str] = []
             try:
                 # EmbeddedEventPublisher.stop() is async
-                await self._publisher.stop()  # type: ignore[union-attr]
+                await self._publisher.stop()
             except Exception as exc:
                 errors.append(str(exc))
 
@@ -344,7 +345,7 @@ class PluginClaude:
         """Best-effort cleanup after a failed initialisation."""
         if self._publisher is not None:
             try:
-                await self._publisher.stop()  # type: ignore[union-attr]
+                await self._publisher.stop()
             except Exception:
                 logger.debug("Cleanup: publisher stop failed", exc_info=True)
         self._publisher = None

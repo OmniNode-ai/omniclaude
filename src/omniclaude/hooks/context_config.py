@@ -51,6 +51,8 @@ from omniclaude.hooks.injection_limits import InjectionLimitsConfig
 # Sentinel used to distinguish "user never set api_url" from "user explicitly set it to the
 # same value as the built-in default". Must not be a valid URL.
 _API_URL_UNSET = "__unset__"
+# Built-in fallback when neither OMNICLAUDE_CONTEXT_API_URL nor INTELLIGENCE_SERVICE_URL is set.
+_API_URL_DEFAULT = "http://localhost:8053"
 
 
 class SessionStartInjectionConfig(BaseModel):
@@ -432,13 +434,12 @@ class ContextInjectionConfig(BaseSettings):
             2. INTELLIGENCE_SERVICE_URL
             3. Built-in default: http://localhost:8053
         """
-        _real_default = "http://localhost:8053"
         if self.api_url == _API_URL_UNSET:
             intelligence_url = os.environ.get("INTELLIGENCE_SERVICE_URL", "").strip()
             if intelligence_url:
                 object.__setattr__(self, "api_url", intelligence_url)
             else:
-                object.__setattr__(self, "api_url", _real_default)
+                object.__setattr__(self, "api_url", _API_URL_DEFAULT)
         return self
 
     def get_db_dsn(self) -> str:

@@ -448,7 +448,6 @@ class HandlerContextInjection:
                     db_result = await asyncio.wait_for(
                         self._load_patterns_from_database(
                             domain=agent_domain,
-                            project_scope=project_root,
                         ),
                         timeout=timeout_seconds,
                     )
@@ -659,7 +658,20 @@ class HandlerContextInjection:
                 with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # noqa: S310  # nosec B310
                     return resp.read()
 
-            raw_bytes = await loop.run_in_executor(None, _fetch)
+            try:
+                raw_bytes = await asyncio.wait_for(
+                    loop.run_in_executor(None, _fetch),
+                    timeout=timeout_s,
+                )
+            except TimeoutError:
+                logger.warning(
+                    "API pattern load timed out (asyncio deadline) after %.1fs: %s",
+                    timeout_s,
+                    url,
+                )
+                return ModelLoadPatternsResult.error(
+                    f"API timeout after {timeout_s:.1f}s"
+                )
             raw = raw_bytes.decode("utf-8")
         except urllib.error.URLError as e:
             logger.warning("omniintelligence API unavailable: %s (url=%s)", e, url)
@@ -814,13 +826,15 @@ class HandlerContextInjection:
     async def _load_patterns_from_database(
         self,
         domain: str | None = None,
-        project_scope: str | None = None,
     ) -> ModelLoadPatternsResult:
         """Load patterns via omniintelligence HTTP API (OMN-2355).
 
         DB access was disabled in OMN-2058 (DB-SPLIT-07: learned_patterns moved
         to omniintelligence). This method now delegates to _load_patterns_from_api,
         the approved escape hatch until event bus projections are available (OMN-2059).
+
+        Note: project_scope is not forwarded because the omniintelligence API
+        does not expose a project_scope query param; scoping is handled server-side.
         """
         cfg = self._config
         if cfg.api_enabled:
