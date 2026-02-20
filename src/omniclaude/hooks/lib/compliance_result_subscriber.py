@@ -84,7 +84,7 @@ def _parse_compliance_result(raw: bytes) -> dict[str, Any] | None:
                     "confidence": float,
                     "violated": bool,
                     "severity": str,
-                    "message": str,
+                    "description": str,  # canonical field; "message" is legacy fallback
                 },
                 ...
             ]
@@ -136,7 +136,20 @@ def violations_to_advisories(
             pattern_id = str(v.get("pattern_id", "")).strip()
             pattern_signature = str(v.get("pattern_signature", "")).strip()
             domain_id = str(v.get("domain_id", "")).strip()
-            message = str(v.get("message", "")).strip()
+
+            # Read 'description' (canonical field in ModelComplianceViolationPayload).
+            # Fall back to 'message' with a warning if 'description' is absent —
+            # that indicates schema drift between omniintelligence producer and this
+            # consumer. (OMN-2369)
+            _desc = v.get("description")
+            _msg = v.get("message")
+            if _desc is None and _msg is not None:
+                logger.warning(
+                    "compliance violation payload uses 'message' field — expected 'description'; schema drift detected"
+                )
+            violation_message = str(
+                _desc if _desc is not None else (_msg or "")
+            ).strip()
 
             # Validate confidence is a finite number in [0, 1]
             try:
@@ -157,7 +170,7 @@ def violations_to_advisories(
                 "domain_id": domain_id,
                 "confidence": confidence,
                 "status": "validated",
-                "message": message,
+                "message": violation_message,
             }
             advisories.append(advisory)
 
