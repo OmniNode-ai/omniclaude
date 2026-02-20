@@ -274,8 +274,10 @@ print(result.outcome)
         # Sanitize: ensure numeric fields are numeric
         [[ "$RAW_PATTERNS_COUNT" =~ ^[0-9]+$ ]] || RAW_PATTERNS_COUNT=0
         [[ "$RAW_ROUTING_CONFIDENCE" =~ ^[0-9]+(\.[0-9]+)?$ ]] || RAW_ROUTING_CONFIDENCE=0.0
+        [[ "$TOOL_CALLS_COMPLETED" =~ ^[0-9]+$ ]] || TOOL_CALLS_COMPLETED=0
         [[ "$RAW_INJECTION_OCCURRED" == "true" ]] || RAW_INJECTION_OCCURRED="false"
 
+        RAW_EMITTED_AT=$(date -u +"%Y-%m-%dT%H:%M:%S.%3NZ" 2>/dev/null || date -u +"%Y-%m-%dT%H:%M:%SZ")
         if ! RAW_OUTCOME_PAYLOAD=$(jq -n \
             --arg session_id "$SESSION_ID" \
             --argjson injection_occurred "$RAW_INJECTION_OCCURRED" \
@@ -284,6 +286,7 @@ print(result.outcome)
             --argjson duration_ms "$SESSION_DURATION" \
             --arg agent_selected "$RAW_AGENT_SELECTED" \
             --argjson routing_confidence "$RAW_ROUTING_CONFIDENCE" \
+            --arg emitted_at "$RAW_EMITTED_AT" \
             '{
                 session_id: $session_id,
                 injection_occurred: $injection_occurred,
@@ -291,7 +294,8 @@ print(result.outcome)
                 tool_calls_count: $tool_calls_count,
                 duration_ms: $duration_ms,
                 agent_selected: $agent_selected,
-                routing_confidence: $routing_confidence
+                routing_confidence: $routing_confidence,
+                emitted_at: $emitted_at
             }' 2>>"$LOG_FILE"); then
             log "WARNING: Failed to construct routing.outcome.raw payload (jq failed), skipping emission"
         elif [[ -z "$RAW_OUTCOME_PAYLOAD" || "$RAW_OUTCOME_PAYLOAD" == "null" ]]; then

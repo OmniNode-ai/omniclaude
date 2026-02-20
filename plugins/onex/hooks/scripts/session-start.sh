@@ -654,7 +654,7 @@ _cleanup_merged_pipeline_states() {
         fields=$("$PYTHON_CMD" - "$state_file" <<'PYEOF' 2>/dev/null
 import yaml, sys
 try:
-    d = yaml.safe_load(open(sys.argv[1])) or {}
+    d = yaml.safe_load(open(sys.argv[1], encoding='utf-8')) or {}
     print(d.get('branch_name', ''))
     print(d.get('repo_path', ''))
 except Exception:
@@ -667,11 +667,18 @@ PYEOF
 
         [[ -n "$branch" && -n "$repo" && -d "$repo" ]] || continue
 
-        # Check if branch is merged into main or master
+        # Check if branch is merged into main or master.
+        # git branch --merged outputs names with two leading spaces (e.g., "  feature-x")
+        # or "* current-branch" for the active branch. Use grep -qxF with the exact
+        # two-space prefix to avoid false positives from substring matches or the
+        # active-branch marker ("* main" matching when branch="main").
         local merged=""
         if git -C "$repo" rev-parse --git-dir >/dev/null 2>&1; then
-            merged=$(git -C "$repo" branch --merged main 2>/dev/null | grep -F "$branch" || \
-                     git -C "$repo" branch --merged master 2>/dev/null | grep -F "$branch" || true)
+            if git -C "$repo" branch --merged main 2>/dev/null | grep -qxF "  $branch"; then
+                merged="yes"
+            elif git -C "$repo" branch --merged master 2>/dev/null | grep -qxF "  $branch"; then
+                merged="yes"
+            fi
         fi
 
         if [[ -n "$merged" ]]; then
