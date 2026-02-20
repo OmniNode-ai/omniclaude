@@ -269,7 +269,7 @@ def process_compliance_event(raw_value: bytes) -> bool:
 def run_subscriber(
     *,
     kafka_bootstrap_servers: str,
-    group_id: str = "omniclaude-compliance-subscriber",
+    group_id: str = "omniclaude-compliance-subscriber.v1",
     poll_timeout_ms: int = 1000,
     max_poll_records: int = 50,
     stop_event: Any = None,
@@ -286,7 +286,8 @@ def run_subscriber(
 
     Args:
         kafka_bootstrap_servers: Kafka bootstrap servers string.
-        group_id: Consumer group ID (one per omniclaude instance is fine).
+        group_id: Consumer group ID (schema version encoded; default:
+            ``omniclaude-compliance-subscriber.v1``).
         poll_timeout_ms: Kafka poll timeout in milliseconds.
         max_poll_records: Maximum records per poll.
         stop_event: Optional threading.Event; loop exits when set.

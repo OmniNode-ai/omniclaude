@@ -201,6 +201,20 @@ class PluginClaude:
             ModelDomainPluginResult,
         )
 
+        # Idempotency guard: SessionStart may be called multiple times on reconnect.
+        # If the thread is still alive, return early rather than spawning a second
+        # daemon thread and silently leaking the first one.
+        if self._compliance_thread is not None and self._compliance_thread.is_alive():
+            logger.debug(
+                "Compliance subscriber already running — skipping duplicate start"
+            )
+            return ModelDomainPluginResult(
+                plugin_id=_PLUGIN_ID,
+                success=True,
+                message="Compliance subscriber already running (idempotent)",
+                resources_created=[],
+            )
+
         bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "").strip()
         if not bootstrap_servers:
             logger.warning(

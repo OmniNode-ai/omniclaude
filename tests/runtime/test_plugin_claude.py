@@ -498,6 +498,34 @@ class TestStartConsumers:
         assert plugin._compliance_stop_event is None
         assert plugin._compliance_thread is None
 
+    @pytest.mark.asyncio
+    async def test_idempotent_when_thread_already_alive(self, plugin, config):
+        """start_consumers returns early without spawning a second thread when thread is alive."""
+        existing_thread = MagicMock()
+        existing_thread.is_alive.return_value = True
+        plugin._compliance_thread = existing_thread
+
+        mock_run = MagicMock()
+
+        with (
+            patch.dict("os.environ", {"KAFKA_BOOTSTRAP_SERVERS": "localhost:9092"}),
+            patch.dict(
+                sys.modules,
+                {
+                    "omniclaude.hooks.lib.compliance_result_subscriber": MagicMock(
+                        run_subscriber_background=mock_run
+                    ),
+                },
+            ),
+        ):
+            result = await plugin.start_consumers(config)
+
+        mock_run.assert_not_called()
+        assert result.success is True
+        assert "already running" in result.message.lower()
+        # Thread reference unchanged
+        assert plugin._compliance_thread is existing_thread
+
 
 # ===================================================================
 # shutdown
