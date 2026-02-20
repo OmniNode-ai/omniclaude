@@ -568,16 +568,13 @@ class TestContextInjectionConfigAPIUrl:
         """api_url falls back to INTELLIGENCE_SERVICE_URL env var."""
         import os
 
-        env_backup = os.environ.get("INTELLIGENCE_SERVICE_URL")
-        os.environ["INTELLIGENCE_SERVICE_URL"] = "http://192.168.86.200:8053"
-        try:
+        with patch.dict(
+            os.environ,
+            {"INTELLIGENCE_SERVICE_URL": "http://192.168.86.200:8053"},
+            clear=False,
+        ):
             cfg = ContextInjectionConfig()
             assert cfg.api_url == "http://192.168.86.200:8053"
-        finally:
-            if env_backup is None:
-                os.environ.pop("INTELLIGENCE_SERVICE_URL", None)
-            else:
-                os.environ["INTELLIGENCE_SERVICE_URL"] = env_backup
 
     def test_api_enabled_default_true(self) -> None:
         """api_enabled defaults to True."""

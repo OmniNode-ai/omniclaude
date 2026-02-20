@@ -32,6 +32,7 @@ import logging
 import os
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -343,8 +344,6 @@ def run_subscriber(
             except Exception as exc:
                 logger.warning("Kafka poll error: %s", exc)
                 # Brief backoff before retrying
-                import time  # noqa: PLC0415
-
                 time.sleep(1.0)
 
     finally:

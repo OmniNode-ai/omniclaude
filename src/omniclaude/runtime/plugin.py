@@ -217,7 +217,7 @@ class PluginClaude:
 
         bootstrap_servers = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "").strip()
         if not bootstrap_servers:
-            logger.warning(
+            logger.debug(
                 "KAFKA_BOOTSTRAP_SERVERS not set — compliance subscriber not started"
             )
             return ModelDomainPluginResult.skipped(

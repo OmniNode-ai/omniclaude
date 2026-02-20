@@ -635,9 +635,13 @@ class HandlerContextInjection:
         base_url = cfg.api_url.rstrip("/")
         timeout_s = cfg.api_timeout_ms / 1000.0
 
-        # Build query params
+        # Build query params.
+        # Fetch 2x the injection limit to give the post-fetch filters (domain,
+        # confidence, provisional, evidence) enough candidates to work with
+        # without pulling an unbounded page from the API.
+        fetch_limit = max(cfg.limits.max_patterns_per_injection * 2, 10)
         params: dict[str, str] = {
-            "limit": "50",
+            "limit": str(fetch_limit),
             "min_confidence": str(cfg.min_confidence),
         }
         if domain:
