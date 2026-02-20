@@ -14,6 +14,7 @@ Kafka consumer integration is not tested here — that path requires a live brok
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from pathlib import Path
 from typing import Any
@@ -58,6 +59,9 @@ def _make_violation(
     severity: str = "warning",
     message: str = "Type hints are missing.",
 ) -> dict[str, Any]:
+    # Use 'description' field to match what omniintelligence actually emits (OMN-2369).
+    # The 'message' parameter name is kept for backwards compatibility with call sites,
+    # but the dict key is 'description' per ModelComplianceViolationPayload.
     return {
         "pattern_id": pattern_id,
         "pattern_signature": pattern_signature,
@@ -65,7 +69,7 @@ def _make_violation(
         "confidence": confidence,
         "violated": violated,
         "severity": severity,
-        "message": message,
+        "description": message,
     }
 
 
@@ -252,6 +256,155 @@ class TestViolationsToAdvisories:
         ]
         advisories = violations_to_advisories(violations)
         assert len(advisories) == 5
+
+    def test_violations_to_advisories_uses_description_field(self) -> None:
+        """violations_to_advisories reads 'description' field (what omniintelligence emits)."""
+        violations = [
+            {
+                "pattern_id": "PAT-001",
+                "pattern_signature": "no bare except",
+                "description": "Found bare except clause",  # what omniintelligence emits
+                "severity": "major",
+                "violated": True,
+            }
+        ]
+        advisories = violations_to_advisories(violations)
+        assert len(advisories) == 1
+        assert advisories[0]["message"] == "Found bare except clause"
+
+    def test_violations_to_advisories_warns_on_message_fallback(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Falls back to 'message' field with WARNING log when 'description' absent."""
+        violations = [
+            {
+                "pattern_id": "PAT-002",
+                "pattern_signature": "no globals",
+                "message": "Found global statement",  # legacy/wrong field
+                "severity": "minor",
+                "violated": True,
+            }
+        ]
+        with caplog.at_level(logging.WARNING):
+            advisories = violations_to_advisories(violations)
+        assert advisories[0]["message"] == "Found global statement"
+        assert "schema drift" in caplog.text.lower()
+
+    def test_description_takes_priority_over_message(self) -> None:
+        """When both 'description' and 'message' present, 'description' wins."""
+        violations = [
+            {
+                "pattern_id": "PAT-003",
+                "pattern_signature": "no bare except",
+                "description": "Correct description field",
+                "message": "Old message field",
+                "violated": True,
+            }
+        ]
+        advisories = violations_to_advisories(violations)
+        assert len(advisories) == 1
+        assert advisories[0]["message"] == "Correct description field"
+
+    def test_description_absent_message_absent_returns_empty_string(self) -> None:
+        """When neither 'description' nor 'message' present, message is empty string."""
+        violations = [
+            {
+                "pattern_id": "PAT-004",
+                "pattern_signature": "no bare except",
+                "violated": True,
+            }
+        ]
+        advisories = violations_to_advisories(violations)
+        assert len(advisories) == 1
+        assert advisories[0]["message"] == ""
+
+
+# ---------------------------------------------------------------------------
+# Wire payload sentinel: omniintelligence actual payload shape (Appendix D)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestWirePayloadSentinel:
+    """Verify that the actual omniintelligence wire payload shape is processed correctly.
+
+    omniintelligence emits compliance-evaluated payloads with 'description' (not
+    'message') in each violation. These tests use a realistic wire payload to confirm
+    that the subscriber correctly extracts the description text end-to-end.
+
+    Appendix D pattern: wire payload sentinel tests catch schema drift between
+    producers and consumers before it silently causes empty advisory messages.
+    """
+
+    def _make_omniintelligence_wire_payload(
+        self,
+        *,
+        session_id: str = "wire-sentinel-session",
+    ) -> bytes:
+        """Build a wire payload in the shape omniintelligence actually emits."""
+        return json.dumps(
+            {
+                "correlation_id": "corr-wire-001",
+                "session_id": session_id,
+                "source_path": "/src/example.py",
+                "content_sha256": "deadbeef1234",
+                "language": "python",
+                "violations": [
+                    {
+                        "pattern_id": "PAT-WIRE-001",
+                        "pattern_signature": "no bare except",
+                        "domain_id": "error_handling",
+                        "confidence": 0.92,
+                        "violated": True,
+                        "severity": "major",
+                        "description": "Bare except clause found at line 42",  # actual field
+                    },
+                    {
+                        "pattern_id": "PAT-WIRE-002",
+                        "pattern_signature": "use type hints",
+                        "domain_id": "code_quality",
+                        "confidence": 0.78,
+                        "violated": False,  # not violated — should be excluded
+                        "severity": "minor",
+                        "description": "Return type annotation missing",
+                    },
+                ],
+            }
+        ).encode("utf-8")
+
+    @pytest.mark.unit
+    def test_wire_payload_description_field_extracted(self) -> None:
+        """description field from omniintelligence wire payload is used as advisory message."""
+        wire = self._make_omniintelligence_wire_payload()
+        payload_dict = json.loads(wire.decode("utf-8"))
+        advisories = violations_to_advisories(payload_dict["violations"])
+
+        # Only the violated=True entry produces an advisory
+        assert len(advisories) == 1
+        assert advisories[0]["pattern_id"] == "PAT-WIRE-001"
+        assert advisories[0]["message"] == "Bare except clause found at line 42"
+
+    @pytest.mark.unit
+    def test_wire_payload_end_to_end(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Full pipeline: omniintelligence wire payload → advisory persisted with correct message."""
+        monkeypatch.setattr("pattern_advisory_formatter._ADVISORY_DIR", tmp_path)
+
+        from pattern_advisory_formatter import (
+            load_and_clear_advisories,  # noqa: PLC0415
+        )
+
+        wire = self._make_omniintelligence_wire_payload(session_id="wire-e2e-session")
+        result = process_compliance_event(wire)
+
+        assert result is True
+        advisories = load_and_clear_advisories("wire-e2e-session")
+        assert len(advisories) == 1
+        assert advisories[0]["pattern_id"] == "PAT-WIRE-001"
+        assert advisories[0]["message"] == "Bare except clause found at line 42"
+        # Confirm the advisory message is not empty (the pre-fix bug)
+        assert advisories[0]["message"] != ""
 
 
 # ---------------------------------------------------------------------------
