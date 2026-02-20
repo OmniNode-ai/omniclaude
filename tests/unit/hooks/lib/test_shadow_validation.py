@@ -659,6 +659,84 @@ class TestRunShadowValidation:
         assert result is True
         assert len(started_threads) == 1
 
+    def test_non_string_correlation_id_does_not_raise(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Passing a non-string correlation_id (e.g. UUID object) returns gracefully.
+
+        _should_sample calls correlation_id.encode('utf-8', 'replace'), which raises
+        AttributeError if the caller passes a UUID object instead of a str.  The outer
+        try/except in run_shadow_validation must catch that error and return False
+        rather than propagating the exception.
+        """
+        import uuid
+
+        _enable_shadow(monkeypatch)
+        monkeypatch.setenv("SHADOW_CLAUDE_API_KEY", "test-api-key")
+
+        # Pass a UUID object (non-string) as correlation_id
+        non_string_corr_id = uuid.uuid4()
+
+        # Must not raise; returns False because the error path is hit
+        result = sv.run_shadow_validation(
+            prompt="document this",
+            local_response="response",
+            local_model="qwen",
+            session_id="sess-1",
+            correlation_id=non_string_corr_id,  # type: ignore[arg-type]
+            task_type="document",
+            emitted_at=_FIXED_EMITTED_AT,
+        )
+        assert result is False
+
+    def test_auto_disable_triggered_reaches_worker(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """auto_disable_triggered=True is computed and forwarded to _run_shadow_worker.
+
+        When SHADOW_CONSECUTIVE_PASSING_DAYS=29 and SHADOW_EXIT_WINDOW_DAYS=30,
+        consecutive_days + 1 (30) >= window (30), so auto_disable_triggered must
+        be True.  The test verifies this value propagates into _run_shadow_worker's
+        kwargs by making threading.Thread.start invoke the target synchronously,
+        then inspecting the captured _run_shadow_worker call kwargs.
+        """
+        # consecutive_days=29, window=30 → (29 + 1) >= 30 → auto_disable_triggered=True
+        monkeypatch.setenv("ENABLE_SHADOW_VALIDATION", "true")
+        monkeypatch.setenv("SHADOW_SAMPLE_RATE", "1.0")
+        monkeypatch.setenv("SHADOW_CONSECUTIVE_PASSING_DAYS", "29")
+        monkeypatch.setenv("SHADOW_EXIT_WINDOW_DAYS", "30")
+        monkeypatch.setenv("SHADOW_CLAUDE_API_KEY", "test-api-key")
+        monkeypatch.setenv("SHADOW_MODEL", "claude-test-model")
+
+        worker_calls: list[dict[str, Any]] = []
+
+        def _fake_worker(**kwargs: Any) -> None:
+            worker_calls.append(kwargs)
+
+        def _sync_thread_start(self: Any) -> None:  # type: ignore[no-untyped-def]
+            # Run the thread target synchronously so the _worker closure executes
+            # and the _run_shadow_worker mock is called within this test's scope.
+            if self._target is not None:  # type: ignore[union-attr]
+                self._target()  # type: ignore[union-attr]
+
+        with (
+            patch.object(sv, "_run_shadow_worker", side_effect=_fake_worker),
+            patch("threading.Thread.start", _sync_thread_start),
+        ):
+            result = sv.run_shadow_validation(
+                prompt="document this function",
+                local_response="def fn(): pass",
+                local_model="qwen-14b",
+                session_id="sess-1",
+                correlation_id=_FIXED_CORR_ID,
+                task_type="document",
+                emitted_at=_FIXED_EMITTED_AT,
+            )
+
+        assert result is True
+        assert len(worker_calls) == 1
+        assert worker_calls[0]["auto_disable_triggered"] is True
+
 
 # ---------------------------------------------------------------------------
 # Schema tests (ModelDelegationShadowComparisonPayload)
