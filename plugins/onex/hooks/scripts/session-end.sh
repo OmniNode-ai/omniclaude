@@ -299,6 +299,8 @@ print(result.outcome)
         # Sanitize: ensure numeric fields are numeric
         [[ "$RAW_PATTERNS_COUNT" =~ ^[0-9]+$ ]] || RAW_PATTERNS_COUNT=0
         [[ "$RAW_ROUTING_CONFIDENCE" =~ ^[0-9]+(\.[0-9]+)?$ ]] || RAW_ROUTING_CONFIDENCE=0.0
+        # Clamp to [0.0, 1.0] — le=1.0 constraint matches schema
+        awk "BEGIN{exit !($RAW_ROUTING_CONFIDENCE > 1.0)}" 2>/dev/null && RAW_ROUTING_CONFIDENCE="1.0"
         # Three-branch float-handling for TOOL_CALLS_COMPLETED (mirrors SESSION_DURATION logic).
         # Float values (e.g. 5.0) are valid — strip fractional part and warn; anything else resets to 0.
         if [[ "$TOOL_CALLS_COMPLETED" =~ ^[0-9]+$ ]]; then

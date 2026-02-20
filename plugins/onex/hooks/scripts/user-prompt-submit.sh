@@ -307,6 +307,8 @@ if [[ -n "$SESSION_ID" ]]; then
         [[ "${PATTERN_COUNT:-0}" =~ ^[0-9]+$ ]] || PATTERN_COUNT=0
         # Guard: CONFIDENCE must be numeric before passing to jq --argjson.
         [[ "${CONFIDENCE:-0.5}" =~ ^[0-9]+(\.[0-9]+)?$ ]] || CONFIDENCE="0.5"
+        # Clamp to [0.0, 1.0] — le=1.0 constraint matches schema
+        awk "BEGIN{exit !($CONFIDENCE > 1.0)}" 2>/dev/null && CONFIDENCE="1.0"
         _INJECT_OCCURRED="false"
         [[ "${PATTERN_SUCCESS:-false}" == "true" ]] && [[ "${PATTERN_COUNT:-0}" != "0" ]] && _INJECT_OCCURRED="true"
         _ACCUM_JSON="$(jq -n \
