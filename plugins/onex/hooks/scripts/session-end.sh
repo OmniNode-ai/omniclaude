@@ -172,17 +172,21 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
         # regardless of which exit path is taken.
         SESSION_STATE_FILE="/tmp/omniclaude-session-${SESSION_ID}.json"  # noqa: S108  # nosec B108
 
-        # Ensure accumulator is always cleaned up — including early-exit paths
-        # (empty SESSION_ID, non-UUID SESSION_ID) that would otherwise leave the
-        # file orphaned in /tmp.  The trap fires on EXIT so normal-path cleanup
-        # (after the file is read below) also goes through here.
-        trap 'rm -f "$SESSION_STATE_FILE"' EXIT
-
         # Validate SESSION_ID once for all outcome/feedback work
         if [[ -z "$SESSION_ID" ]]; then
             log "WARNING: SESSION_ID is empty, skipping session.outcome and feedback"
             exit 0
         fi
+
+        # Ensure accumulator is always cleaned up — including early-exit paths
+        # (non-UUID SESSION_ID) that would otherwise leave the file orphaned in /tmp.
+        # Registered AFTER the empty-SESSION_ID guard so the trap only fires when
+        # SESSION_STATE_FILE has a proper session-specific path; an empty SESSION_ID
+        # would expand to /tmp/omniclaude-session-.json — a fixed non-namespaced path
+        # that could collide between concurrent sessions.
+        # The trap fires on EXIT so normal-path cleanup (after the file is read below)
+        # also goes through here.
+        trap 'rm -f "$SESSION_STATE_FILE"' EXIT
 
         # Validate UUID format (8-4-4-4-12 structure, case-insensitive)
         if [[ ! "$SESSION_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
@@ -295,7 +299,18 @@ print(result.outcome)
         # Sanitize: ensure numeric fields are numeric
         [[ "$RAW_PATTERNS_COUNT" =~ ^[0-9]+$ ]] || RAW_PATTERNS_COUNT=0
         [[ "$RAW_ROUTING_CONFIDENCE" =~ ^[0-9]+(\.[0-9]+)?$ ]] || RAW_ROUTING_CONFIDENCE=0.0
-        [[ "$TOOL_CALLS_COMPLETED" =~ ^[0-9]+$ ]] || TOOL_CALLS_COMPLETED=0
+        # Three-branch float-handling for TOOL_CALLS_COMPLETED (mirrors SESSION_DURATION logic).
+        # Float values (e.g. 5.0) are valid — strip fractional part and warn; anything else resets to 0.
+        if [[ "$TOOL_CALLS_COMPLETED" =~ ^[0-9]+$ ]]; then
+            : # Already a strict integer — no change needed
+        elif [[ "$TOOL_CALLS_COMPLETED" =~ ^[0-9]+\.[0-9]+$ ]]; then
+            _raw_tool_calls="$TOOL_CALLS_COMPLETED"
+            TOOL_CALLS_COMPLETED="${TOOL_CALLS_COMPLETED%%.*}"
+            log "WARNING: tools_used_count is a float (${_raw_tool_calls}), truncating to integer (${TOOL_CALLS_COMPLETED})"
+        else
+            log "WARNING: tools_used_count has unexpected format '${TOOL_CALLS_COMPLETED}', resetting to 0"
+            TOOL_CALLS_COMPLETED=0
+        fi
         [[ "$RAW_INJECTION_OCCURRED" == "true" ]] || RAW_INJECTION_OCCURRED="false"
 
         # Use Python for a portable ISO timestamp with millisecond precision.
