@@ -658,7 +658,7 @@ class HandlerContextInjection:
 
             def _fetch() -> bytes:
                 with urllib.request.urlopen(req, timeout=timeout_s) as resp:  # noqa: S310  # nosec B310
-                    return resp.read()
+                    return bytes(resp.read())
 
             try:
                 raw_bytes = await asyncio.wait_for(
@@ -671,8 +671,10 @@ class HandlerContextInjection:
                     timeout_s,
                     url,
                 )
-                return ModelLoadPatternsResult.error(
-                    f"API timeout after {timeout_s:.1f}s"
+                return ModelLoadPatternsResult(
+                    patterns=[],
+                    source_files=[],
+                    warnings=[f"API timeout after {timeout_s:.1f}s"],
                 )
             raw = raw_bytes.decode("utf-8")
         except urllib.error.URLError as e:
@@ -768,7 +770,7 @@ class HandlerContextInjection:
                 success_rate = 0.0
             else:
                 try:
-                    success_rate = float(quality_score_raw)  # type: ignore[arg-type]
+                    success_rate = float(quality_score_raw)
                 except (TypeError, ValueError):
                     logger.warning(
                         "omniintelligence API: invalid quality_score value %r for "
