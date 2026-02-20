@@ -222,6 +222,10 @@ def _save_advisory(session_id: str, advisories: list[dict[str, Any]]) -> bool:
 
     lib_dir = str(_resolve_hooks_lib_dir())
     if lib_dir not in sys.path:
+        # Called from the Kafka consumer background thread.  The check-then-act
+        # on sys.path is non-atomic, but CPython's GIL serialises list mutations
+        # so the worst case is a duplicate entry (harmless).  Do not rely on this
+        # in environments that drop the GIL (e.g. free-threaded CPython 3.13+).
         sys.path.insert(0, lib_dir)
 
     try:
