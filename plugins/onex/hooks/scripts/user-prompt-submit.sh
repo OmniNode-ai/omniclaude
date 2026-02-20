@@ -85,6 +85,11 @@ fi
 ) &
 
 SESSION_ID="$(printf %s "$INPUT" | jq -r '.sessionId // .session_id // ""' 2>/dev/null || echo "")"
+# NOTE: When sessionId is absent, SESSION_ID falls back to CORRELATION_ID.
+# The accumulator file is then written as /tmp/omniclaude-session-<correlation_id>.json.
+# session-end.sh derives SESSION_STATE_FILE from .sessionId, so the file names
+# will not match and the accumulator will be orphaned in /tmp.  This is a known
+# limitation — sessionId should always be present in normal Claude Code operation.
 [[ -z "$SESSION_ID" ]] && SESSION_ID="$CORRELATION_ID"
 
 if [[ "$KAFKA_ENABLED" == "true" ]] && [ "${SKIP_CLAUDE_HOOK_EVENT_EMIT:-0}" -ne 1 ]; then

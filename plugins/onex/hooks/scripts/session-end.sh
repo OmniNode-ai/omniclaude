@@ -168,6 +168,16 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
     # Consolidated into a single backgrounded subshell so the DERIVED_OUTCOME
     # Python computation (~30-50ms interpreter startup) stays off the sync path.
     (
+        # Define accumulator path up front so the trap below can reference it
+        # regardless of which exit path is taken.
+        SESSION_STATE_FILE="/tmp/omniclaude-session-${SESSION_ID}.json"  # noqa: S108  # nosec B108
+
+        # Ensure accumulator is always cleaned up — including early-exit paths
+        # (empty SESSION_ID, non-UUID SESSION_ID) that would otherwise leave the
+        # file orphaned in /tmp.  The trap fires on EXIT so normal-path cleanup
+        # (after the file is read below) also goes through here.
+        trap 'rm -f "$SESSION_STATE_FILE"' EXIT
+
         # Validate SESSION_ID once for all outcome/feedback work
         if [[ -z "$SESSION_ID" ]]; then
             log "WARNING: SESSION_ID is empty, skipping session.outcome and feedback"
@@ -267,7 +277,6 @@ print(result.outcome)
         #   tool_calls_count: tools_used_count from Claude SessionEnd payload
         #   duration_ms: durationMs from Claude SessionEnd payload
 
-        SESSION_STATE_FILE="/tmp/omniclaude-session-${SESSION_ID}.json"  # noqa: S108  # nosec B108
         RAW_INJECTION_OCCURRED="false"
         RAW_PATTERNS_COUNT=0
         RAW_AGENT_SELECTED=""
@@ -282,7 +291,6 @@ print(result.outcome)
         else
             log "Session accumulator not found (${SESSION_STATE_FILE}) — no UserPromptSubmit this session"
         fi
-        rm -f "$SESSION_STATE_FILE"
 
         # Sanitize: ensure numeric fields are numeric
         [[ "$RAW_PATTERNS_COUNT" =~ ^[0-9]+$ ]] || RAW_PATTERNS_COUNT=0

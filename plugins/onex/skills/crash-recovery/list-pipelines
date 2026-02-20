@@ -167,6 +167,8 @@ def main() -> None:
 
     total_found = len(entries)
 
+    # Clamp args.count before filtering so the guard always runs against the
+    # full entry list, not after --in-progress has already narrowed it.
     if args.count < 1:
         args.count = 10
 
