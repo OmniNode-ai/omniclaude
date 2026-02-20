@@ -2382,7 +2382,7 @@ class ModelDelegationShadowComparisonPayload(BaseModel):
             structural). May be non-None even when quality_gate_passed=True
             (e.g., structural mismatch is advisory and does not fail the gate).
         shadow_latency_ms: Wall-clock time for the shadow Claude call in ms.
-        sample_rate: The configured sampling rate (0.05 - 0.10) at which this
+        sample_rate: The configured sampling rate (0.0-1.0) at which this
             shadow check was triggered.
         consecutive_passing_days: Number of consecutive days where the pass rate
             met or exceeded the exit threshold (for exit criteria tracking).
