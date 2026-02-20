@@ -224,7 +224,11 @@ def main() -> None:
             branch = shorten_branch(e["branch_name"], 30)
             age = e["age_human"]
             print(f"{ticket:<20} {title:<56} {phase:<22} {branch:<31} {age}")
-        if total_found > len(entries):
+        # Only show truncation footer when --count was the binding constraint.
+        # If --in-progress filtering reduced results below the count limit, the
+        # user already asked to see only in-progress pipelines — "Showing X of Y"
+        # would misleadingly imply Y-X results were hidden by truncation.
+        if len(entries) == args.count and total_found > args.count:
             print(f"\nShowing {len(entries)} of {total_found} pipelines.")
 
 
