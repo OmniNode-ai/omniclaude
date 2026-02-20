@@ -2369,7 +2369,7 @@ class ModelDelegationShadowComparisonPayload(BaseModel):
         shadow_response_length: Character count of the shadow (Claude) response.
         length_divergence_ratio: Absolute ratio of length difference to shadow
             length: abs(local_len - shadow_len) / max(shadow_len, 1). Range 0.0+.
-            Values > 0.5 indicate significant length divergence.
+            Values > 0.70 indicate significant length divergence (gate threshold).
         keyword_overlap_score: Jaccard similarity of significant word sets
             between local and shadow responses (0.0 = no overlap, 1.0 = identical
             vocabulary). Uses word sets after stop-word removal.
