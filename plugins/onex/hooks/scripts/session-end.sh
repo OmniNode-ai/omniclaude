@@ -55,7 +55,7 @@ SESSION_REASON=$(echo "$INPUT" | jq -r '.reason // "other"' 2>/dev/null || echo 
 # Extract tool call count from session payload (if available)
 TOOL_CALLS_COMPLETED=$(echo "$INPUT" | jq -r '.tools_used_count // 0' 2>/dev/null || echo "0")
 if [[ "$TOOL_CALLS_COMPLETED" == "0" ]]; then
-    log "Phase 1: tools_used_count absent or zero — SUCCESS gate unreachable (see OMN-1892)"
+    log "Phase 1: tools_used_count absent or zero — SUCCESS gate unreachable (see OMN-1892); raw outcome still emitted via OMN-2356"
 fi
 
 # Validate reason is one of the allowed values

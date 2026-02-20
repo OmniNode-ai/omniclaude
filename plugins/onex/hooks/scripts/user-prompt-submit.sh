@@ -220,6 +220,7 @@ fi
 LEARNED_PATTERNS=""
 SESSION_ALREADY_INJECTED=false
 # Extraction event field defaults (overridden if injection succeeds)
+PATTERN_SUCCESS="false"
 PATTERN_COUNT=0
 COHORT="treatment"
 RETRIEVAL_MS=0

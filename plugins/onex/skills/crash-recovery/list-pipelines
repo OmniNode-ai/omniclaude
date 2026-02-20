@@ -172,12 +172,9 @@ def main() -> None:
     if args.count < 1:
         args.count = 10
 
-    # total_shown: how many entries were actually examined (capped by --count).
-    # Computed before --in-progress filtering so the "all complete" message
-    # accurately reflects the number inspected, not the filtered result.
-    # Example: --count 3 with 5 total → total_shown=3, message says "All 3 … complete".
-    total_shown = min(total_found, args.count)
-
+    # --in-progress filters the full entry list first, then --count caps displayed results.
+    # This means --count 5 with 100 entries will show up to 5 in-progress pipelines
+    # drawn from all 100, not just the first 5.
     if args.in_progress:
         entries = [e for e in entries if not is_complete(e)]
 
@@ -185,7 +182,7 @@ def main() -> None:
 
     if args.in_progress and not entries:
         print(
-            f"No in-progress pipelines found. All {total_shown} most recent pipelines are complete."
+            f"No in-progress pipelines found. All {total_found} recent pipelines are complete."
         )
         sys.exit(0)
 
