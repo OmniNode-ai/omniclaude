@@ -702,8 +702,6 @@ class ModelSessionRawOutcomePayload(BaseModel):
         injection_occurred: Whether context injection happened this session.
         patterns_injected_count: Number of patterns injected (0 if no injection).
         tool_calls_count: Total tool calls observed during the session.
-        error_count: Number of tool/hook errors observed.
-        files_touched_count: Number of distinct files accessed via tool calls.
         duration_ms: Session duration in milliseconds (0 if unknown).
         agent_selected: Agent name selected by routing (empty string if none).
         routing_confidence: Routing confidence score (0.0-1.0).
@@ -721,8 +719,6 @@ class ModelSessionRawOutcomePayload(BaseModel):
         ...     injection_occurred=True,
         ...     patterns_injected_count=3,
         ...     tool_calls_count=12,
-        ...     error_count=1,
-        ...     files_touched_count=4,
         ...     duration_ms=45200,
         ...     agent_selected="omniarchon",
         ...     routing_confidence=0.91,
@@ -754,16 +750,6 @@ class ModelSessionRawOutcomePayload(BaseModel):
         ...,
         ge=0,
         description="Total tool calls observed during the session",
-    )
-    error_count: int = Field(
-        default=0,
-        ge=0,
-        description="Number of tool or hook errors observed during the session",
-    )
-    files_touched_count: int = Field(
-        default=0,
-        ge=0,
-        description="Number of distinct files accessed via tool calls",
     )
     duration_ms: int = Field(
         ...,

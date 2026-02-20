@@ -142,8 +142,6 @@ class TestSessionRawOutcomeSchema:
             injection_occurred=True,
             patterns_injected_count=3,
             tool_calls_count=12,
-            error_count=1,
-            files_touched_count=4,
             duration_ms=45200,
             agent_selected="omniarchon",
             routing_confidence=0.91,
@@ -153,8 +151,6 @@ class TestSessionRawOutcomeSchema:
         assert event.injection_occurred is True
         assert event.patterns_injected_count == 3
         assert event.tool_calls_count == 12
-        assert event.error_count == 1
-        assert event.files_touched_count == 4
         assert event.duration_ms == 45200
         assert event.agent_selected == "omniarchon"
         assert abs(event.routing_confidence - 0.91) < 1e-9

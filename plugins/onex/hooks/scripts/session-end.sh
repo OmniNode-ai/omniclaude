@@ -304,6 +304,10 @@ print(result.outcome)
             emit_via_daemon "routing.outcome.raw" "$RAW_OUTCOME_PAYLOAD" 100
             log "routing.outcome.raw emitted: injection=$RAW_INJECTION_OCCURRED patterns=$RAW_PATTERNS_COUNT tool_calls=$TOOL_CALLS_COMPLETED"
         fi
+
+        # Clean up session accumulator file — fully consumed at this point.
+        # Prevents /tmp accumulation on long-running machines (one file per session).
+        rm -f "$SESSION_STATE_FILE"
     ) &
     EMIT_PIDS+=($!)
 
