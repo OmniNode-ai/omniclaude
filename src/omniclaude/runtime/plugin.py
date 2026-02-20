@@ -201,6 +201,17 @@ class PluginClaude:
             ModelDomainPluginResult,
         )
 
+        # Shutdown guard: if shutdown() is in progress it has already cleared
+        # _compliance_thread to None but the old thread may still be draining.
+        # Spawning a new thread here would create a second consumer racing the
+        # first one — return early to prevent that.
+        if self._shutdown_in_progress:
+            logger.debug("Compliance subscriber start skipped — shutdown in progress")
+            return ModelDomainPluginResult.skipped(
+                plugin_id=_PLUGIN_ID,
+                reason="shutdown in progress; compliance subscriber not started",
+            )
+
         # Idempotency guard: SessionStart may be called multiple times on reconnect.
         # If the thread is still alive, return early rather than spawning a second
         # daemon thread and silently leaking the first one.

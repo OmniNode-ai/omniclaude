@@ -390,7 +390,7 @@ def run_subscriber_background(
         daemon=True,
     )
     thread.start()
-    logger.info(
+    logger.debug(
         "Compliance subscriber daemon thread started (group_id=%s)",
         group_id,
     )
