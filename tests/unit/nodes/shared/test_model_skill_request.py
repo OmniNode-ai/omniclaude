@@ -77,3 +77,18 @@ class TestModelSkillRequestValidation:
                 correlation_id=uuid4(),
                 unknown_field="oops",  # type: ignore[call-arg]
             )
+
+    def test_skill_name_whitespace_only_is_rejected(self) -> None:
+        """A whitespace-only skill_name is rejected."""
+        with pytest.raises(ValidationError):
+            _valid_request(skill_name="   ")
+
+    def test_args_empty_key_is_rejected(self) -> None:
+        """An empty string key in args is rejected."""
+        with pytest.raises(ValidationError):
+            _valid_request(args={"": "val"})
+
+    def test_args_whitespace_key_is_rejected(self) -> None:
+        """A whitespace-only key in args is rejected."""
+        with pytest.raises(ValidationError):
+            _valid_request(args={" ": "val"})
