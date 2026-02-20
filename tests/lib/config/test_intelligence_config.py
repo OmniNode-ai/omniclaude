@@ -336,6 +336,82 @@ class TestConsumerGroupPrefixValidation:
         assert config.kafka_consumer_group_prefix == "my_group-v1.0"
 
 
+class TestCanonicalTopicConstants:
+    """GAP-1 regression tests: verify intelligence_config.py topic constants (OMN-2367)."""
+
+    def test_topic_requested_constant_uses_onex_cmd_prefix(self) -> None:
+        """TOPIC_CODE_ANALYSIS_REQUESTED must use onex.cmd namespace (OMN-2367)."""
+        from omniclaude.lib.config.intelligence_config import (
+            TOPIC_CODE_ANALYSIS_REQUESTED,
+        )
+
+        assert TOPIC_CODE_ANALYSIS_REQUESTED.startswith("onex.cmd.")
+
+    def test_topic_requested_constant_exact_value(self) -> None:
+        """TOPIC_CODE_ANALYSIS_REQUESTED must match canonical omniintelligence topic (OMN-2367)."""
+        from omniclaude.lib.config.intelligence_config import (
+            TOPIC_CODE_ANALYSIS_REQUESTED,
+        )
+
+        assert (
+            TOPIC_CODE_ANALYSIS_REQUESTED
+            == "onex.cmd.omniintelligence.code-analysis.v1"
+        )
+
+    def test_topic_completed_constant_uses_onex_evt_prefix(self) -> None:
+        """TOPIC_CODE_ANALYSIS_COMPLETED must use onex.evt namespace (OMN-2367)."""
+        from omniclaude.lib.config.intelligence_config import (
+            TOPIC_CODE_ANALYSIS_COMPLETED,
+        )
+
+        assert TOPIC_CODE_ANALYSIS_COMPLETED.startswith("onex.evt.")
+
+    def test_topic_completed_constant_exact_value(self) -> None:
+        """TOPIC_CODE_ANALYSIS_COMPLETED must match canonical omniintelligence topic (OMN-2367)."""
+        from omniclaude.lib.config.intelligence_config import (
+            TOPIC_CODE_ANALYSIS_COMPLETED,
+        )
+
+        assert (
+            TOPIC_CODE_ANALYSIS_COMPLETED
+            == "onex.evt.omniintelligence.code-analysis-completed.v1"
+        )
+
+    def test_topic_failed_constant_uses_onex_evt_prefix(self) -> None:
+        """TOPIC_CODE_ANALYSIS_FAILED must use onex.evt namespace (OMN-2367)."""
+        from omniclaude.lib.config.intelligence_config import TOPIC_CODE_ANALYSIS_FAILED
+
+        assert TOPIC_CODE_ANALYSIS_FAILED.startswith("onex.evt.")
+
+    def test_topic_failed_constant_exact_value(self) -> None:
+        """TOPIC_CODE_ANALYSIS_FAILED must match canonical omniintelligence topic (OMN-2367)."""
+        from omniclaude.lib.config.intelligence_config import TOPIC_CODE_ANALYSIS_FAILED
+
+        assert (
+            TOPIC_CODE_ANALYSIS_FAILED
+            == "onex.evt.omniintelligence.code-analysis-failed.v1"
+        )
+
+    def test_config_topic_fields_use_canonical_values(self) -> None:
+        """IntelligenceConfig fields must reflect canonical topic constants (OMN-2367)."""
+        from omniclaude.lib.config.intelligence_config import IntelligenceConfig
+
+        config = IntelligenceConfig(kafka_bootstrap_servers="localhost:9092")
+
+        assert (
+            config.topic_code_analysis_requested
+            == "onex.cmd.omniintelligence.code-analysis.v1"
+        )
+        assert (
+            config.topic_code_analysis_completed
+            == "onex.evt.omniintelligence.code-analysis-completed.v1"
+        )
+        assert (
+            config.topic_code_analysis_failed
+            == "onex.evt.omniintelligence.code-analysis-failed.v1"
+        )
+
+
 class TestDynamicTopicNameBuilding:
     """Tests for build_dynamic_topic_names model validator."""
 
@@ -849,3 +925,35 @@ class TestKafkaEnvironmentValidation:
         # Topics should NOT start with environment prefix
         assert not config.topic_code_analysis_requested.startswith("staging.")
         assert not config.topic_code_analysis_requested.startswith(".")
+
+
+class TestDualPublishLegacyTopicsSettings:
+    """Tests for dual_publish_legacy_topics Settings field env-var binding."""
+
+    def test_dual_publish_legacy_topics_defaults_false(self) -> None:
+        """dual_publish_legacy_topics defaults to False when env var is absent."""
+        from omniclaude.config.settings import Settings
+
+        with patch.dict("os.environ", {}, clear=False):
+            s = Settings(kafka_bootstrap_servers="localhost:9092")
+        assert s.dual_publish_legacy_topics is False
+
+    def test_dual_publish_legacy_topics_reads_env_var(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """dual_publish_legacy_topics is True when DUAL_PUBLISH_LEGACY_TOPICS=1."""
+        from omniclaude.config.settings import Settings
+
+        monkeypatch.setenv("DUAL_PUBLISH_LEGACY_TOPICS", "1")
+        s = Settings(kafka_bootstrap_servers="localhost:9092")
+        assert s.dual_publish_legacy_topics is True
+
+    def test_dual_publish_legacy_topics_accepts_true_string(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """dual_publish_legacy_topics accepts 'true' (Pydantic bool coercion)."""
+        from omniclaude.config.settings import Settings
+
+        monkeypatch.setenv("DUAL_PUBLISH_LEGACY_TOPICS", "true")
+        s = Settings(kafka_bootstrap_servers="localhost:9092")
+        assert s.dual_publish_legacy_topics is True

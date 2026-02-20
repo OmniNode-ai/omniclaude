@@ -22,7 +22,9 @@ failures so that success rate (golden metric >80%) can be tracked downstream.
 
 Design constraints:
 - NEVER raises from ``orchestrate_delegation()``
-- All I/O is bounded (LLM call <= 7 s, emit timeout <= 50 ms)
+- All I/O is bounded (LLM call <= 7 s, emit via daemon is fire-and-forget;
+  actual emit client timeout is controlled by OMNICLAUDE_EMIT_TIMEOUT env var,
+  defaulting to 5 s — the hook does not block on it)
 - No ``datetime.now()`` defaults in internal sub-functions — ``emitted_at`` is
   injected explicitly through the call chain; the public entrypoint
   (``orchestrate_delegation``) accepts an optional ``emitted_at`` for testing.
@@ -136,7 +138,10 @@ except ImportError:  # pragma: no cover
 # constructs a fresh instance.  _reset_classifier_cache() is provided for
 # explicit teardown in tests.
 
-_cached_classifier: TaskClassifier | None = None
+# Not thread-safe: hook execution is single-threaded by design
+_cached_classifier: TaskClassifier | None = (
+    None  # TaskClassifier may be None on failed import (graceful degradation)
+)
 
 
 def _get_classifier() -> TaskClassifier:
@@ -418,6 +423,9 @@ def _call_llm_with_system_prompt(
     }
 
     try:
+        # httpx scalar timeout sets all four phases (connect, read, write, pool)
+        # to the same value — unlike requests which only covers read.  No
+        # separate connect timeout is needed; TCP connect is bounded by timeout_s.
         with httpx.Client(timeout=timeout_s) as client:
             response = client.post(url, json=payload)
             response.raise_for_status()
@@ -530,20 +538,13 @@ def _emit_compliance_advisory(
 
         from omniclaude.hooks.topics import TopicBase
 
-        # NOTE: TopicBase.COMPLIANCE_EVALUATE is an onex.cmd.omniintelligence.*
-        # topic, which CLAUDE.md restricts to "full prompts only."  The payload
-        # here is the handler's *generated* output (an LLM-produced response),
-        # not the user's raw prompt.  It contains no user PII and is safe for
-        # the compliance pipeline topic — the restriction exists to guard raw
-        # user input, not downstream model outputs.
-        # The ``session_id`` and ``correlation_id`` fields are non-PII session
-        # identifiers used exclusively for distributed tracing correlation; they
-        # carry no user-identifiable content and are safe to include on this topic.
-        # The 500-char truncation is the agreed privacy boundary for this topic.
-        # This is an intentional, reviewed deviation from CLAUDE.md's "full prompts
-        # only" framing for cmd.omniintelligence topics — the handler output is
-        # model-generated, not user-supplied, and has been classified as safe for
-        # this restricted topic.
+        # INTENTIONAL (ADR-005, reviewed): sending model-generated output to an
+        # access-restricted cmd.omniintelligence.* topic is correct per CLAUDE.md —
+        # cmd topics are the preferred channel for content that may contain model
+        # echoes of user input.  The ``response[:500]`` truncation caps the echo
+        # blast radius to 500 chars, which is the agreed privacy boundary for this
+        # topic.  This is NOT an oversight; the alternative (evt.*) would be wrong
+        # because evt topics have broad access and this content could echo user input.
         emit_event(
             event_type=TopicBase.COMPLIANCE_EVALUATE,
             payload={
@@ -714,9 +715,7 @@ def orchestrate_delegation(
             )
             return {"delegated": False, "reason": "feature_disabled"}
 
-        # Gate 2: Classification — use module-level TaskClassifier (patchable in tests)
-        _classifier_cls = TaskClassifier  # noqa: F821  (module-level name)
-
+        # Gate 2: Classification
         try:
             classifier = _get_classifier()
             score = classifier.is_delegatable(prompt)

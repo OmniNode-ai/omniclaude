@@ -52,16 +52,16 @@ Event-driven integration with Claude Code lifecycle events:
 - `metadata_extractor.py` - Extracts prompt metadata
 
 **Performance Targets**:
-- UserPromptSubmit: <500ms (critical: >2000ms)
-- PostToolUse: <100ms (critical: >500ms)
-- SessionStart: <50ms (critical: >200ms)
+- UserPromptSubmit: <500ms typical (~15s worst-case with delegation)
+- PostToolUse: <100ms
+- SessionStart/SessionEnd: <50ms
 
 ### Agents
 
 Polymorphic agent framework with ONEX compliance:
 
 - Dynamic agent transformation based on task domain
-- YAML-based agent definitions in `~/.claude/agent-definitions/`
+- YAML-based agent definitions in `plugins/onex/agents/configs/`
 - Manifest injection with intelligence context
 - Correlation tracking for end-to-end traceability
 - Multi-agent coordination with parallel execution
@@ -111,49 +111,47 @@ The ONEX plugin is automatically discovered by Claude Code when placed in the `~
 
 ### Hook Configuration
 
-Hooks are configured in `~/.claude/settings.json`:
+Hooks are configured in `plugins/onex/hooks/hooks.json`. Claude Code reads
+this file from the plugin directory automatically — no changes to
+`~/.claude/settings.json` are needed.
+
+The configuration uses `${CLAUDE_PLUGIN_ROOT}` (injected by Claude Code) to
+reference hook scripts:
 
 ```json
 {
+  "$schema": "https://claude.ai/schemas/hooks.json",
   "hooks": {
-    "UserPromptSubmit": [
-      {
-        "command": "/path/to/omniclaude/plugins/onex/hooks/scripts/user-prompt-submit.sh"
-      }
-    ],
+    "SessionStart": [{"hooks": [{"type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session-start.sh"}]}],
+    "UserPromptSubmit": [{"hooks": [{"type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/user-prompt-submit.sh"}]}],
     "PostToolUse": [
       {
-        "command": "/path/to/omniclaude/plugins/onex/hooks/scripts/post-tool-use-quality.sh"
-      }
-    ],
-    "SessionStart": [
-      {
-        "command": "/path/to/omniclaude/plugins/onex/hooks/scripts/session-start.sh"
+        "matcher": "^(Read|Write|Edit|Bash|Glob|Grep|Task|Skill|WebFetch|WebSearch|NotebookEdit|NotebookRead)$",
+        "hooks": [{"type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/scripts/post-tool-use-quality.sh"}]
       }
     ]
   }
 }
 ```
 
+See `plugins/onex/hooks/hooks.json` for the full configuration including
+`PreToolUse` and `SessionEnd` hooks.
+
 ### Dependencies
 
-Hooks require a Python virtual environment with dependencies:
-
-**Venv Location**: `${PROJECT_ROOT}/claude/lib/.venv` (where `PROJECT_ROOT` is the repository root)
-
-**Required Packages**:
-- `kafka-python`, `aiokafka` - Kafka integration
-- `psycopg2-binary` - PostgreSQL connectivity
-- `pydantic` - Data validation
+Hooks require a Python virtual environment with dependencies managed via
+`uv`. The project uses Python 3.12+.
 
 **Setup**:
 ```bash
-# Set PROJECT_ROOT to your repository location
-cd ${PROJECT_ROOT}/claude/lib
-python3 -m venv .venv
-source .venv/bin/activate
-pip install kafka-python aiokafka psycopg2-binary pydantic
+# Install all dependencies (including dev tools)
+uv sync --group dev
 ```
+
+All required packages (`aiokafka`, `psycopg2-binary`, `pydantic`, etc.) are
+declared in `pyproject.toml` and installed automatically by `uv sync`.
+
+**Never use `pip install` directly** — always use `uv sync` or `uv run`.
 
 ## Migration from Legacy Plugin Structure
 
@@ -382,16 +380,27 @@ KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092
 
 Agent definitions are stored in YAML format:
 
-**Location**: `~/.claude/agent-definitions/`
+**Location**: `plugins/onex/agents/configs/`
 
 **Example**:
 ```yaml
-name: agent-api
-domain: api
-description: FastAPI and REST API specialist
-system_prompt: |
-  You are an expert API developer...
+schema_version: "1.0.0"
+agent_type: "api_architect"
+
+agent_identity:
+  name: "agent-api-architect"
+  description: "Designs RESTful APIs and OpenAPI schemas"
+  color: "blue"
+
+activation_patterns:
+  explicit_triggers:
+    - "api design"
+    - "openapi"
+  context_triggers:
+    - "designing HTTP endpoints"
 ```
+
+See `docs/guides/ADDING_AN_AGENT.md` for the full guide.
 
 ## Usage
 
@@ -427,20 +436,27 @@ Skills are invoked automatically by the agent framework when domain expertise is
 1. Create shell script in `hooks/scripts/`
 2. Add Python libraries to `hooks/lib/` as needed
 3. Update `hooks/hooks.json` configuration
-4. Add to `~/.claude/settings.json`
+4. Deploy with `/deploy-local-plugin`
+
+See `docs/guides/ADDING_A_HOOK_HANDLER.md` for the step-by-step guide.
 
 ### Adding New Agents
 
-1. Create YAML definition in `~/.claude/agent-definitions/`
-2. Define domain, system prompt, and capabilities
-3. Test with routing framework
+1. Create YAML definition in `agents/configs/`
+2. Define activation patterns (explicit and context triggers)
+3. Test with routing framework: `python hooks/lib/route_via_events_wrapper.py "test prompt"`
+4. Deploy with `/deploy-local-plugin`
+
+See `docs/guides/ADDING_AN_AGENT.md` for the step-by-step guide.
 
 ### Adding New Skills
 
-1. Create skill directory in `skills/`
-2. Add `SKILL.md` with documentation
-3. Implement skill logic
-4. Register in agent manifests
+1. Create skill directory in `skills/my-skill/`
+2. Add `SKILL.md` with Overview, Quick Start, and Methodology sections
+3. Optionally add `prompt.md` for orchestration logic and scripts
+4. Deploy with `/deploy-local-plugin`; invoke with `/my-skill`
+
+See `docs/guides/ADDING_A_SKILL.md` for the step-by-step guide.
 
 ### Adding New Commands
 
@@ -453,8 +469,9 @@ Skills are invoked automatically by the agent framework when domain expertise is
 
 | Issue | Solution |
 |-------|----------|
-| Hooks not firing | Verify `~/.claude/settings.json` paths are absolute |
-| Import errors | Ensure `${PROJECT_ROOT}/claude/lib/.venv` exists with dependencies |
+| Hooks not firing | Verify `plugins/onex/hooks/hooks.json` is valid JSON (`jq . hooks/hooks.json`) |
+| Import errors | Run `uv sync` to install dependencies; check `OMNICLAUDE_PROJECT_ROOT` |
+| Hook exits 1 | Wrong Python interpreter — set `OMNICLAUDE_PROJECT_ROOT` or `PLUGIN_PYTHON_BIN` |
 | Kafka errors | Check `KAFKA_BOOTSTRAP_SERVERS` in `.env` |
 | Database errors | Verify `POSTGRES_*` variables and `source .env` |
 | Permission denied | Make hook scripts executable: `chmod +x hooks/scripts/*.sh` |
@@ -463,14 +480,17 @@ Skills are invoked automatically by the agent framework when domain expertise is
 ### Debug Commands
 
 ```bash
-# Check hook logs (relative to plugin)
-tail -f ${CLAUDE_PLUGIN_ROOT}/hooks/logs/hook-enhanced.log
+# Check hook logs
+tail -f ~/.claude/hooks.log
 
-# Verify venv
-${PROJECT_ROOT}/claude/lib/.venv/bin/python3 -c "import kafka; import psycopg2; print('OK')"
+# Daemon status
+uv run python plugins/onex/hooks/lib/emit_client_wrapper.py status --json
+
+# Validate hooks.json
+jq . plugins/onex/hooks/hooks.json
 
 # Test routing
-python3 ${CLAUDE_PLUGIN_ROOT}/hooks/lib/route_via_events_wrapper.py "test prompt" "test-correlation-id"
+uv run python ${CLAUDE_PLUGIN_ROOT}/hooks/lib/route_via_events_wrapper.py "test prompt" "test-correlation-id"
 
 # Verify environment variables
 echo "PROJECT_ROOT: ${PROJECT_ROOT}"
@@ -482,11 +502,18 @@ echo "CLAUDE_PLUGIN_ROOT: ${CLAUDE_PLUGIN_ROOT}"
 
 ### Hook Performance
 
-| Hook | Target | Critical |
-|------|--------|----------|
-| UserPromptSubmit | <500ms | >2000ms |
-| PostToolUse | <100ms | >500ms |
-| SessionStart | <50ms | >200ms |
+Targets for the **synchronous path only** (backgrounded work does not count
+against these budgets):
+
+| Hook | Budget | Notes |
+|------|--------|-------|
+| SessionStart | <50ms | Daemon check, stdin read |
+| SessionEnd | <50ms | stdin read |
+| UserPromptSubmit | <500ms typical | ~15s worst-case with all timeout paths (routing 5s + injection 1s + advisory 1s + delegation 8s). Without delegation, worst-case is ~7s. |
+| PostToolUse | <100ms | stdin read, quality check |
+
+Kafka emission, PostgreSQL logging, and intelligence requests are all
+backgrounded and do not block.
 
 ### Agent Routing
 
@@ -501,13 +528,77 @@ echo "CLAUDE_PLUGIN_ROOT: ${CLAUDE_PLUGIN_ROOT}"
 - Manifest query: <2000ms (critical: >5000ms)
 - Intelligence availability: >95% (critical: <80%)
 
+## Subsystems
+
+### LLM-Based Routing
+
+User prompts are matched against agent activation patterns using a fuzzy
+scorer. The routing system returns a ranked candidate list; Claude selects
+from the list and loads the winning agent's YAML on demand (agent YAML
+loading is not on the synchronous hook path — see OMN-1980).
+
+Routing falls back to `polymorphic-agent` on timeout (5s). With no-fallback
+mode enabled (OMN-2340), prompts that match no agent below a confidence
+threshold are rejected rather than silently downgraded.
+
+See `docs/architecture/EVENT_DRIVEN_ROUTING_PROPOSAL.md` and
+`docs/architecture/ROUTING_ARCHITECTURE_COMPARISON.md` for architecture
+details.
+
+### Context Enrichment
+
+After routing, `context_injection_wrapper.py` queries the database for
+learned patterns relevant to the session and appends them to
+`hookSpecificOutput.additionalContext`. This gives Claude codebase-specific
+context without requiring the user to repeat it.
+
+Context injection has a 1s timeout. If the database is unreachable,
+the hook proceeds without patterns (data loss acceptable; UI freeze is not).
+
+See `docs/observability/AGENT_TRACEABILITY.md` for enrichment observability.
+
+### Compliance Enforcement
+
+`PostToolUse` hooks run a quality check on every tool call. The enforcement
+mode is controlled by `ENFORCEMENT_MODE`:
+
+| Mode | Behavior |
+|------|----------|
+| `warn` (default) | Log violations, do not block |
+| `block` | Emit non-zero exit on violations (blocks the tool call) |
+| `silent` | Suppress all compliance output |
+
+Compliance results are published to Kafka for downstream consumers
+(e.g., `compliance_result_subscriber.py` transforms violations into
+`PatternAdvisory` events).
+
+See `docs/architecture/SERVICE-BOUNDARIES.md` for service boundary details.
+
+### Local LLM Delegation
+
+When `USE_LOCAL_DELEGATION=true`, `UserPromptSubmit` can delegate prompts
+to a local LLM endpoint (configured via `LLM_CODER_URL` or
+`LLM_CODER_FAST_URL`) before returning a response to Claude. Delegation
+adds up to 8s to the worst-case `UserPromptSubmit` path.
+
+The delegation orchestrator (`delegation_orchestrator.py`) coordinates the
+request, validates the response, and injects the result into
+`additionalContext`.
+
+See `docs/decisions/ADR-005-delegation-orchestrator.md` for the decision
+record.
+
+---
+
 ## Resources
 
 - **Shared Infrastructure**: `~/.claude/CLAUDE.md`
 - **Repository Documentation**: `${PROJECT_ROOT}/CLAUDE.md`
-- **Agent Framework**: `${CLAUDE_PLUGIN_ROOT}/agents/polymorphic-agent.md`
-- **Type-Safe Config**: `${PROJECT_ROOT}/config/README.md` (omniclaude)
-- **Docker Deployment**: `${PROJECT_ROOT}/deployment/README.md` (omniclaude)
+- **Hook Data Flow**: `docs/architecture/HOOK_DATA_FLOW.md`
+- **Routing Architecture**: `docs/architecture/EVENT_DRIVEN_ROUTING_PROPOSAL.md`
+- **Service Boundaries**: `docs/architecture/SERVICE-BOUNDARIES.md`
+- **Guides**: `docs/guides/` (hook handlers, agents, skills, testing)
+- **ADRs**: `docs/decisions/`
 
 ## License
 
@@ -515,6 +606,6 @@ Part of the OmniClaude project. See repository root for license information.
 
 ---
 
-**Version**: 1.0.0
-**Last Updated**: 2026-01-08
+**Version**: 1.1.0
+**Last Updated**: 2026-02-19
 **Status**: Active Development

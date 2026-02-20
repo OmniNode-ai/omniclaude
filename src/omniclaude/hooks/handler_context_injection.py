@@ -34,7 +34,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from omniclaude.hooks.cohort_assignment import (
@@ -654,7 +654,7 @@ class HandlerContextInjection:
             )
 
         try:
-            page: dict[str, Any] = json.loads(raw)
+            page = json.loads(raw)
         except json.JSONDecodeError as e:
             logger.warning("omniintelligence API returned invalid JSON: %s", e)
             return ModelLoadPatternsResult(

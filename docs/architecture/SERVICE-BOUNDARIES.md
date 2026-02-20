@@ -71,7 +71,7 @@ These services are **owned, maintained, and deployed** by the omniclaude reposit
 - `agents/lib/routing_event_client.py` - Event-based routing client
 - `agents/lib/agent_execution_logger.py` - Execution lifecycle tracking
 - `agents/lib/agent_history_browser.py` - Interactive history browser
-- `~/.claude/agent-definitions/` - Agent registry (YAML configs)
+- `plugins/onex/agents/configs/` - Agent registry (YAML configs)
 
 **Dependencies**:
 - External: Archon Intelligence (patterns), Kafka (events), PostgreSQL (logging)
@@ -110,7 +110,7 @@ KAFKA_REQUEST_TIMEOUT_MS=5000
 
 **Dependencies**:
 - External: Kafka (`${KAFKA_BOOTSTRAP_SERVERS}`), PostgreSQL (`${POSTGRES_HOST}:${POSTGRES_PORT}`)
-- Internal: Agent registry (`~/.claude/agent-definitions/`)
+- Internal: Agent registry (`plugins/onex/agents/configs/`)
 
 **Kafka Topics**:
 - **Consumes**: `agent.routing.requested.v1`

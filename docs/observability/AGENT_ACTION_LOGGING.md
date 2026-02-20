@@ -1,3 +1,7 @@
+> ⚠️ **DEPRECATED**: This document describes the old agent execution framework (`agents/lib/`). The current architecture uses the emit daemon via Unix socket (`emit_client_wrapper.py`). Kept because it is referenced by `plugins/onex/agents/configs/polymorphic-agent.yaml`.
+
+---
+
 # Agent Action Logging Implementation
 
 ## Overview

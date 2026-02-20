@@ -253,6 +253,7 @@ These modules are intended for external use:
 | `ENFORCEMENT_MODE` | Quality enforcement: `warn`, `block`, `silent` | No (default: warn) |
 | `OMNICLAUDE_PROJECT_ROOT` | Explicit project root for dev-mode Python venv resolution | No (dev only) |
 | `PLUGIN_PYTHON_BIN` | Override Python interpreter path for hooks (escape hatch) | No |
+| `DUAL_PUBLISH_LEGACY_TOPICS` | Enable dual-publish to legacy topics during migration window (OMN-2368) | No (default: false) |
 
 ---
 
@@ -268,9 +269,14 @@ omniclaude/
 │   │   ├── handler_event_emitter.py
 │   │   └── contracts/           # YAML contracts + Python models
 │   ├── aggregators/             # Session aggregation
+│   ├── cli/                     # CLI entry points
 │   ├── config/                  # Pydantic Settings
+│   ├── contracts/               # Cross-cutting contract models
 │   ├── handlers/                # Business logic
-│   └── nodes/                   # ONEX nodes
+│   ├── lib/                     # Shared utilities
+│   ├── nodes/                   # ONEX nodes
+│   ├── publisher/               # Event publisher
+│   └── runtime/                 # Runtime support
 ├── plugins/onex/                # Claude Code plugin
 │   ├── hooks/                   # Hook scripts and library
 │   │   ├── hooks.json           # Hook configuration

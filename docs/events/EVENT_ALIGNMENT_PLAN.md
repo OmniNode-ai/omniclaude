@@ -1,3 +1,7 @@
+> ⚠️ **COMPLETED**: This alignment plan was executed. The current event architecture is described in `ADR-001-event-fan-out-and-app-owned-catalogs.md` and `docs/reference/KAFKA_TOPICS_REFERENCE.md`. Kept because it is referenced by `plugins/onex/skills/pr-review/SKILL.md`, `plugins/onex/skills/ci-failures/SKILL.md`, and `plugins/onex/skills/linear/SKILL.md`.
+
+---
+
 # OmniClaude Event Alignment Plan
 
 **Purpose**: Track alignment of omniclaude events with EVENT_BUS_INTEGRATION_GUIDE and MVP Event Catalog

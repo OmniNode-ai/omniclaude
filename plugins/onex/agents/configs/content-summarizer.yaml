@@ -251,7 +251,6 @@ test_examples:
 
 # Documentation References
 documentation:
-  implementation_guide: "docs/guides/CONTENT_SUMMARIZATION_INTEGRATION.md"
   node_location: "src/omninode_bridge/nodes/content_summarizer_effect/v1_0_0/node.py"
   examples: "examples/use_content_summarizer.py"
   contract: "src/omninode_bridge/nodes/content_summarizer_effect/v1_0_0/contract.yaml"
