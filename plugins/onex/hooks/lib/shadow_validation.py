@@ -368,6 +368,10 @@ def compare_responses(
             local_response_length, shadow_response_length,
             length_divergence_ratio, keyword_overlap_score,
             structural_match, quality_gate_passed, divergence_reason.
+            divergence_reason: Explanation of divergence. None only when no
+            divergence of any kind occurred (including advisory metrics). May
+            be non-None even when quality_gate_passed=True (e.g., structural
+            mismatch is advisory and does not fail the gate).
     """
     local_len = len(local_response)
     shadow_len = len(shadow_response)
@@ -432,8 +436,10 @@ def _call_shadow_claude(
 ) -> tuple[str, int] | None:
     """Call Claude (shadow model) via the Anthropic Messages API.
 
-    Uses the OpenAI-compatible messages endpoint when base_url is overridden,
-    otherwise uses the native Anthropic messages API format.
+    Uses the Anthropic Messages API format (`/v1/messages`). When `base_url`
+    is overridden via `SHADOW_CLAUDE_BASE_URL`, the server must support the
+    Anthropic Messages API format — OpenAI-compatible endpoints are not
+    supported.
 
     Args:
         prompt: The user prompt to send (already redacted by delegation_orchestrator).
