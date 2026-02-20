@@ -651,6 +651,7 @@ class HandlerContextInjection:
         url = f"{base_url}/api/v1/patterns?{query_string}"
 
         try:
+            # Request is read-only after construction; safe to share with executor thread.
             req = urllib.request.Request(url, method="GET")  # noqa: S310  # nosec B310
             loop = asyncio.get_running_loop()
 
@@ -735,7 +736,7 @@ class HandlerContextInjection:
             try:
                 # confidence_raw is not None here: we appended "confidence" to
                 # missing if it were None, and continued. mypy cannot infer this.
-                confidence = float(confidence_raw)  # type: ignore[arg-type]
+                confidence = float(confidence_raw)  # type: ignore[arg-type]  # None excluded above
             except (TypeError, ValueError):
                 excluded += 1
                 logger.warning(

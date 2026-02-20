@@ -290,7 +290,12 @@ class PluginClaude:
                 # Kafka poll loop once the stop_event is set, then exit naturally.
                 # Blocking here would delay shutdown and risk deadlock if the
                 # Kafka consumer is stuck waiting on a network call.
-                self._compliance_thread = None
+                self._compliance_thread = (
+                    None  # stop_event already set; daemon self-terminates.
+                )
+                # Narrow race: if start_consumers() is called before the daemon fully stops,
+                # stop_event being set means the thread will exit without processing new work.
+                # No data loss risk — the publisher handles event delivery independently.
 
             if self._publisher is None:
                 return ModelDomainPluginResult.succeeded(
