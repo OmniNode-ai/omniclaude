@@ -310,6 +310,9 @@ print(result.outcome)
         awk "BEGIN{exit !($RAW_ROUTING_CONFIDENCE > 1.0)}" 2>/dev/null && RAW_ROUTING_CONFIDENCE="1.0"
         # Three-branch float-handling for TOOL_CALLS_COMPLETED (mirrors SESSION_DURATION logic).
         # Float values (e.g. 5.0) are valid — strip fractional part and warn; anything else resets to 0.
+        # NOTE: derive_session_outcome (line 216) already consumed TOOL_CALLS_COMPLETED before this
+        # sanitization block. It handles the float case via its own isdigit() guard (falls back to 0
+        # with a warning). The sanitized value here is used exclusively for the raw outcome payload.
         if [[ "$TOOL_CALLS_COMPLETED" =~ ^[0-9]+$ ]]; then
             : # Already a strict integer — no change needed
         elif [[ "$TOOL_CALLS_COMPLETED" =~ ^[0-9]+\.[0-9]+$ ]]; then
@@ -333,7 +336,7 @@ print(result.outcome)
         # is unavailable (unlikely — PYTHON_CMD is required by this hook).
         RAW_EMITTED_AT=$("$PYTHON_CMD" -c 'from datetime import datetime, timezone; print(datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z")' 2>/dev/null \
             || date -u +"%Y-%m-%dT%H:%M:%SZ")
-        # SESSION_DURATION is pre-sanitized to integer in the outer shell (lines 109-125)
+        # SESSION_DURATION is pre-sanitized to integer in the outer shell (lines 109-126)
         # before this subshell forks — no re-check needed here.
         if ! RAW_OUTCOME_PAYLOAD=$(jq -n \
             --arg session_id "$SESSION_ID" \
