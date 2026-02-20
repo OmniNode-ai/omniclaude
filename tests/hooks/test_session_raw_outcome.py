@@ -177,6 +177,48 @@ class TestSessionRawOutcomeSchema:
         assert event.agent_selected == ""
         assert event.routing_confidence == 0.0
 
+    def test_routing_confidence_above_one_raises_validation_error(self) -> None:
+        """routing_confidence > 1.0 must be rejected (ge=0.0, le=1.0 constraint)."""
+        pytest.importorskip(
+            "tiktoken", reason="requires tiktoken for omniclaude.hooks import chain"
+        )
+        from pydantic import ValidationError
+
+        from omniclaude.hooks.schemas import ModelSessionRawOutcomePayload
+
+        now = datetime(2026, 2, 19, 12, 0, 0, tzinfo=UTC)
+        with pytest.raises(ValidationError):
+            ModelSessionRawOutcomePayload(
+                session_id="abc12345-1234-5678-abcd-1234567890ab",
+                injection_occurred=False,
+                patterns_injected_count=0,
+                tool_calls_count=0,
+                duration_ms=0,
+                routing_confidence=1.1,
+                emitted_at=now,
+            )
+
+    def test_routing_confidence_below_zero_raises_validation_error(self) -> None:
+        """routing_confidence < 0.0 must be rejected (ge=0.0, le=1.0 constraint)."""
+        pytest.importorskip(
+            "tiktoken", reason="requires tiktoken for omniclaude.hooks import chain"
+        )
+        from pydantic import ValidationError
+
+        from omniclaude.hooks.schemas import ModelSessionRawOutcomePayload
+
+        now = datetime(2026, 2, 19, 12, 0, 0, tzinfo=UTC)
+        with pytest.raises(ValidationError):
+            ModelSessionRawOutcomePayload(
+                session_id="abc12345-1234-5678-abcd-1234567890ab",
+                injection_occurred=False,
+                patterns_injected_count=0,
+                tool_calls_count=0,
+                duration_ms=0,
+                routing_confidence=-0.1,
+                emitted_at=now,
+            )
+
     def test_event_name_discriminator(self) -> None:
         """event_name must be 'routing.outcome.raw' for polymorphic deserialization."""
         pytest.importorskip(

@@ -325,7 +325,7 @@ print(result.outcome)
         # is unavailable (unlikely — PYTHON_CMD is required by this hook).
         RAW_EMITTED_AT=$("$PYTHON_CMD" -c 'from datetime import datetime, timezone; print(datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z")' 2>/dev/null \
             || date -u +"%Y-%m-%dT%H:%M:%SZ")
-        # SESSION_DURATION is pre-sanitized to integer in the outer shell (lines 110-125)
+        # SESSION_DURATION is pre-sanitized to integer in the outer shell (lines 109-125)
         # before this subshell forks — no re-check needed here.
         if ! RAW_OUTCOME_PAYLOAD=$(jq -n \
             --arg session_id "$SESSION_ID" \
