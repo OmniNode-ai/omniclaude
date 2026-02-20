@@ -34,10 +34,10 @@ class IntelligenceEventClient:
     TOPIC_COMPLETED = "onex.evt.omniintelligence.code-analysis-completed.v1"
     TOPIC_FAILED = "onex.evt.omniintelligence.code-analysis-failed.v1"
 
-    # Legacy topic — internal use only during dual-publish migration window.
-    # Not part of the public API; prefixed with underscore to signal internal-only access.
+    # Legacy topic — stable constant during dual-publish migration window (OMN-2368).
+    # Public so tests can pin the exact value and guard against silent renames.
     # TODO(OMN-2367): remove after migration complete
-    _TOPIC_REQUEST_LEGACY = "omninode.intelligence.code-analysis.requested.v1"
+    TOPIC_REQUEST_LEGACY = "omninode.intelligence.code-analysis.requested.v1"
 
     _INSTANCE_NAME = "intelligence"
 
@@ -211,10 +211,10 @@ class IntelligenceEventClient:
                 try:
                     legacy_payload = {
                         **payload,
-                        "event_type": self._TOPIC_REQUEST_LEGACY,
+                        "event_type": self.TOPIC_REQUEST_LEGACY,
                         "event_id": str(uuid4()),  # distinct id; avoids broker-side dedup conflicts
                     }
-                    await self._event_bus.publish(self._TOPIC_REQUEST_LEGACY, legacy_payload)
+                    await self._event_bus.publish(self.TOPIC_REQUEST_LEGACY, legacy_payload)
                 except Exception as legacy_err:
                     self.logger.warning(
                         f"Dual-publish to legacy topic failed (non-fatal): {legacy_err}"

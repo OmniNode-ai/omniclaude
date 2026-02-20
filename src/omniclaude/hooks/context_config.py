@@ -450,7 +450,7 @@ class ContextInjectionConfig(BaseSettings):
 
         Returns:
             PostgreSQL connection string in the format:
-            postgresql://user:password@host:port/dbname
+            postgresql://user:<password>@host:port/dbname
 
         Example:
             >>> config = ContextInjectionConfig(db_password=SecretStr("secret"))
