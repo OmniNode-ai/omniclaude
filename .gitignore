@@ -20,6 +20,8 @@ lib/
 !agents/lib/**
 !src/omniclaude/lib/
 !src/omniclaude/lib/**
+!src/omniclaude/hooks/lib/
+!src/omniclaude/hooks/lib/**
 !plugins/onex/hooks/lib/
 !plugins/onex/hooks/lib/**
 !plugins/onex/lib/
@@ -31,6 +33,8 @@ agents/lib/__pycache__/
 agents/lib/**/__pycache__/
 src/omniclaude/lib/__pycache__/
 src/omniclaude/lib/**/__pycache__/
+src/omniclaude/hooks/lib/__pycache__/
+src/omniclaude/hooks/lib/**/__pycache__/
 plugins/onex/hooks/lib/__pycache__/
 tests/lib/__pycache__/
 tests/lib/**/__pycache__/

@@ -634,41 +634,11 @@ class TestComplianceSubscriberDriftGuard:
     This test catches that drift early.
     """
 
-    @pytest.fixture(autouse=True)
-    def _scoped_hooks_lib_path(self):
-        """Temporarily add plugins/onex/hooks/lib to sys.path for this test only.
-
-        plugins/onex/hooks/lib has no __init__.py and no installed package path,
-        so a sys.path insertion is the only way to import its modules directly.
-        The insertion is scoped to each test method: sys.path is saved before
-        the test and fully restored after it, preventing contamination of other
-        tests in the session.
-        """
-        import pathlib
-        import sys
-
-        hooks_lib = str(
-            pathlib.Path(__file__).resolve().parent.parent.parent
-            / "plugins"
-            / "onex"
-            / "hooks"
-            / "lib"
-        )
-        original_path = sys.path[:]
-        if hooks_lib not in sys.path:
-            sys.path.insert(0, hooks_lib)
-        try:
-            yield
-        finally:
-            sys.path[:] = original_path
-            # Also remove the cached module so future imports use the restored path
-            sys.modules.pop("compliance_result_subscriber", None)
-
     def test_run_subscriber_is_not_a_coroutine(self) -> None:
         """run_subscriber must be a plain callable, not an async coroutine function."""
         import asyncio
 
-        from compliance_result_subscriber import run_subscriber  # type: ignore[import]
+        from omniclaude.hooks.lib.compliance_result_subscriber import run_subscriber
 
         assert not asyncio.iscoroutinefunction(run_subscriber), (
             "run_subscriber is now a coroutine — "
@@ -679,7 +649,7 @@ class TestComplianceSubscriberDriftGuard:
         """run_subscriber_background must also be a plain callable."""
         import asyncio
 
-        from compliance_result_subscriber import (  # type: ignore[import]
+        from omniclaude.hooks.lib.compliance_result_subscriber import (
             run_subscriber_background,
         )
 
