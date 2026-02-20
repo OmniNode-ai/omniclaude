@@ -331,15 +331,44 @@ class TestCompareResponses:
         assert result["quality_gate_passed"] is False
         assert "keyword_overlap" in (result["divergence_reason"] or "")
 
-    def test_structural_mismatch_fails_gate(self) -> None:
-        """One response has code block, other is prose → structural gate fails."""
-        local = "Here is the documentation for the function."
-        shadow = "```python\ndef process(): pass\n```\nDocumentation follows."
-        result = sv.compare_responses(local, shadow)
-        # Structural mismatch should be detected
+    def test_structural_mismatch_is_recorded_but_advisory(self) -> None:
+        """structural_match=False is recorded in divergence_reason but does not fail the gate.
+
+        Sub-case 1: Structural mismatch with length and keyword metrics that pass.
+          - local is prose, shadow has a code block → structural_match=False
+          - Both responses share enough content words to pass keyword_overlap
+          - Lengths are close enough to pass length_divergence
+          → quality_gate_passed=True (structural mismatch is advisory only)
+          → "structural_mismatch" appears in divergence_reason for observability
+
+        Sub-case 2: Structural mismatch combined with keyword/length failures.
+          - Completely different content forces keyword_overlap below threshold
+          → quality_gate_passed=False (failed on numeric metrics, not structure)
+        """
+        # Sub-case 1: structural mismatch alone does NOT fail the gate.
+        # Both responses convey the same content words; the shadow wraps them in a
+        # code fence.  Keyword overlap and length divergence both pass the thresholds;
+        # only the structural check differs.
+        shared_content = (
+            "process data validate input return result errors warnings summary report"
+        )
+        local_prose = shared_content
+        shadow_code = f"```\n{shared_content}\n```"
+        result = sv.compare_responses(local_prose, shadow_code)
         assert result["structural_match"] is False
-        # Gate fails when structural match fails (may also fail on other criteria)
-        assert result["quality_gate_passed"] is False
+        assert result["quality_gate_passed"] is True
+        assert "structural_mismatch" in (result["divergence_reason"] or "")
+
+        # Sub-case 2: structural mismatch AND numeric metric failures → gate fails.
+        # Completely disjoint vocabularies ensure keyword_overlap falls below threshold,
+        # while the code block structure differs between local (prose) and shadow (code).
+        local_unrelated = "banana mango pineapple tropical fruit smoothie delicious"
+        shadow_code_unrelated = (
+            "```python\n" + "import numpy\nimport scipy\nimport pandas\n" * 10 + "```\n"
+        )
+        result2 = sv.compare_responses(local_unrelated, shadow_code_unrelated)
+        assert result2["structural_match"] is False
+        assert result2["quality_gate_passed"] is False
 
     def test_response_lengths_captured(self) -> None:
         """local_response_length and shadow_response_length are populated correctly."""
@@ -502,6 +531,34 @@ class TestRunShadowValidation:
                 task_type="document",
                 emitted_at=None,  # type: ignore[arg-type]
             )
+
+    def test_raises_when_emitted_at_is_none_while_enabled(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """emitted_at=None raises ValueError even when ENABLE_SHADOW_VALIDATION=true.
+
+        This companion test ensures the emitted_at None-check precedes all other
+        checks (feature flag, sampling, API key validation). If someone reorders
+        the checks so the flag is evaluated first, this test will fail rather than
+        silently pass by returning False.
+        """
+        _enable_shadow(monkeypatch)
+        monkeypatch.setenv("SHADOW_CLAUDE_API_KEY", "test-api-key")
+        monkeypatch.setenv("SHADOW_MODEL", "claude-test-model")
+
+        with patch("threading.Thread.start", MagicMock()):
+            with pytest.raises(
+                ValueError, match="emitted_at must be provided explicitly"
+            ):
+                sv.run_shadow_validation(
+                    prompt="document this",
+                    local_response="response",
+                    local_model="qwen",
+                    session_id="sess-1",
+                    correlation_id=_FIXED_CORR_ID,
+                    task_type="document",
+                    emitted_at=None,  # type: ignore[arg-type]
+                )
 
     def test_returns_false_for_non_https_external_url(
         self, monkeypatch: pytest.MonkeyPatch

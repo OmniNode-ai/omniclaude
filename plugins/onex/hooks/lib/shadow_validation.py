@@ -260,7 +260,9 @@ def _should_sample(correlation_id: str, sample_rate: float) -> bool:
 
     Args:
         correlation_id: Unique identifier for this delegation invocation.
-        sample_rate: Fraction of tasks to sample (0.0-1.0).
+        sample_rate: Fraction of tasks to sample. Values <= 0.0 always skip;
+            values >= 1.0 always sample. Callers should use _get_sample_rate()
+            to pre-clamp the value to [0.0, 1.0].
 
     Returns:
         True when this task falls within the sample.
@@ -344,7 +346,7 @@ def compare_responses(
     - Gate PASSES when all of:
         - length_divergence_ratio <= _MAX_LENGTH_DIVERGENCE (0.70)
         - keyword_overlap_score >= _MIN_KEYWORD_OVERLAP (0.35)
-        - structural_match is True
+    - structural_match is recorded for observability but does NOT gate pass/fail
 
     Args:
         local_response: Text returned by the local (delegated) model.
@@ -372,7 +374,7 @@ def compare_responses(
     shadow_has_code = _has_code_block(shadow_response)
     structural_match = local_has_code == shadow_has_code
 
-    # Quality gate
+    # Quality gate — structural_match is observability-only, not a gate factor
     reasons: list[str] = []
     if length_divergence > _MAX_LENGTH_DIVERGENCE:
         reasons.append(
@@ -387,7 +389,9 @@ def compare_responses(
             f"structural_mismatch: local_code={local_has_code} shadow_code={shadow_has_code}"
         )
 
-    gate_passed = len(reasons) == 0
+    gate_passed = (
+        length_divergence <= _MAX_LENGTH_DIVERGENCE and overlap >= _MIN_KEYWORD_OVERLAP
+    )
     divergence_reason: str | None = "; ".join(reasons) if reasons else None
 
     return {
@@ -577,7 +581,9 @@ def _emit_shadow_comparison_event(
         )
 
     except Exception as exc:
-        logger.debug("Shadow comparison event emission failed (non-critical): %s", exc)
+        logger.warning(
+            "Shadow comparison event emission failed (non-critical): %s", exc
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -749,13 +755,13 @@ def run_shadow_validation(
             or "https://api.anthropic.com"
         )
 
-        # Security: Reject non-HTTPS base URLs unless they point to localhost
-        # (localhost is allowed for local testing/development environments).
+        # Security: Reject non-HTTPS base URLs unless they point to loopback.
+        # 0.0.0.0 is intentionally excluded: it is a wildcard bind address (all
+        # interfaces), not a loopback, and is externally routable on most OSes.
         _LOCAL_PREFIXES = (
             "http://localhost",
             "http://127.0.0.1",
             "http://[::1]",
-            "http://0.0.0.0",
         )
         if not base_url.startswith("https://") and not any(
             base_url.startswith(p) for p in _LOCAL_PREFIXES
@@ -780,25 +786,44 @@ def run_shadow_validation(
         except (ValueError, TypeError):
             max_tokens = _DEFAULT_SHADOW_MAX_TOKENS
 
+        # Capture all params in a closure to avoid storing api_key in
+        # thread.kwargs where it would be live for the entire thread lifetime
+        # and visible via thread introspection.
+        _prompt = prompt
+        _local_response = local_response
+        _local_model = local_model
+        _session_id = session_id
+        _correlation_id = correlation_id
+        _task_type = task_type
+        _sample_rate = sample_rate
+        _shadow_model = shadow_model
+        _base_url = base_url
+        _timeout_s = timeout_s
+        _max_tokens = max_tokens
+        _emitted_at = emitted_at
+        _api_key_local = api_key  # captured by closure, not stored in thread dict
+
+        def _worker() -> None:
+            _run_shadow_worker(
+                api_key=_api_key_local,
+                prompt=_prompt,
+                local_response=_local_response,
+                local_model=_local_model,
+                session_id=_session_id,
+                correlation_id=_correlation_id,
+                task_type=_task_type,
+                sample_rate=_sample_rate,
+                shadow_model=_shadow_model,
+                base_url=_base_url,
+                timeout_s=_timeout_s,
+                max_tokens=_max_tokens,
+                emitted_at=_emitted_at,
+            )
+
         thread = threading.Thread(
-            target=_run_shadow_worker,
-            kwargs={
-                "prompt": prompt,
-                "local_response": local_response,
-                "local_model": local_model,
-                "session_id": session_id,
-                "correlation_id": correlation_id,
-                "task_type": task_type,
-                "sample_rate": sample_rate,
-                "shadow_model": shadow_model,
-                "api_key": api_key,
-                "base_url": base_url,
-                "timeout_s": timeout_s,
-                "max_tokens": max_tokens,
-                "emitted_at": emitted_at,
-            },
-            daemon=True,  # Daemon threads do not prevent process exit
+            target=_worker,
             name=f"shadow-validation-{correlation_id[:8]}",
+            daemon=True,  # Daemon threads do not prevent process exit
         )
         thread.start()
         logger.debug(
