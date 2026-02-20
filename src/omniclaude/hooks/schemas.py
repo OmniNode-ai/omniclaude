@@ -2358,8 +2358,10 @@ class ModelDelegationShadowComparisonPayload(BaseModel):
     Attributes:
         session_id: Session identifier for correlation.
         correlation_id: Correlation ID for distributed tracing.
-        emitted_at: Timestamp when the event was emitted (UTC). Must be injected
-            explicitly (no default_factory).
+        emitted_at: Delegation initiation timestamp (UTC). Passed from
+            orchestrate_delegation; represents when the delegation started, not
+            when the comparison result was observed. Must be injected explicitly
+            (no default_factory).
         task_type: TaskIntent value (document, test, research).
         local_model: Model identifier used for the delegated (local) response.
         shadow_model: Model identifier used for the shadow (Claude) response.
@@ -2376,9 +2378,9 @@ class ModelDelegationShadowComparisonPayload(BaseModel):
         quality_gate_passed: True when all comparison metrics are within
             acceptable divergence thresholds.
         divergence_reason: Human-readable explanation of divergence. None when
-            all metrics pass (no divergence of any kind). May be set even when
+            all gate-controlling metrics pass. May be set even when
             quality_gate_passed=True (e.g., structural mismatch noted as
-            advisory).
+            advisory, since structural_match does not control the gate).
         shadow_latency_ms: Wall-clock time for the shadow Claude call in ms.
         sample_rate: The configured sampling rate (0.05 - 0.10) at which this
             shadow check was triggered.
@@ -2437,7 +2439,10 @@ class ModelDelegationShadowComparisonPayload(BaseModel):
     # Timestamps — MUST be explicitly injected (no default_factory for testability)
     emitted_at: TimezoneAwareDatetime = Field(
         ...,
-        description="Timestamp when the event was emitted (UTC)",
+        description=(
+            "Delegation initiation timestamp (UTC). Passed from orchestrate_delegation; "
+            "represents when the delegation started, not when the comparison result was observed."
+        ),
     )
 
     # Delegation context

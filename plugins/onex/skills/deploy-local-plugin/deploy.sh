@@ -297,6 +297,7 @@ if [[ "$EXECUTE" == "true" ]]; then
     echo "  Installing project from ${PROJECT_ROOT} (locked versions)..."
     LOCKED_REQS_FILE=$(mktemp /tmp/omniclaude-locked-reqs.XXXXXX)
     _uv_stderr="$(mktemp /tmp/omniclaude-uv-export-err.XXXXXX)"
+    trap 'rm -f "${LOCKED_REQS_FILE:-}" "${_uv_stderr:-}"' EXIT
     _USE_LOCKED=false
     if command -v uv &>/dev/null && [[ -f "${PROJECT_ROOT}/uv.lock" ]]; then
         if (cd "${PROJECT_ROOT}" && uv export --frozen --no-dev --no-hashes --format requirements-txt > "$LOCKED_REQS_FILE" 2>"$_uv_stderr"); then
