@@ -632,6 +632,33 @@ class TestRunShadowValidation:
         assert result is True
         assert len(started_threads) == 1
 
+    def test_returns_true_for_http_ipv6_loopback_url(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Non-HTTPS IPv6 loopback URL (http://[::1]) is accepted for local dev/testing."""
+        _enable_shadow(monkeypatch)
+        monkeypatch.setenv("SHADOW_CLAUDE_API_KEY", "test-api-key")
+        monkeypatch.setenv("SHADOW_CLAUDE_BASE_URL", "http://[::1]:8000")
+
+        started_threads: list[Any] = []
+
+        def _mock_start(self: Any) -> None:  # type: ignore[no-untyped-def]
+            started_threads.append(self)
+
+        with patch("threading.Thread.start", _mock_start):
+            result = sv.run_shadow_validation(
+                prompt="document this",
+                local_response="response",
+                local_model="qwen",
+                session_id="sess-1",
+                correlation_id=_FIXED_CORR_ID,
+                task_type="document",
+                emitted_at=_FIXED_EMITTED_AT,
+            )
+
+        assert result is True
+        assert len(started_threads) == 1
+
 
 # ---------------------------------------------------------------------------
 # Schema tests (ModelDelegationShadowComparisonPayload)
