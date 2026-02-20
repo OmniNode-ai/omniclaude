@@ -55,7 +55,7 @@ SESSION_REASON=$(echo "$INPUT" | jq -r '.reason // "other"' 2>/dev/null || echo 
 # Extract tool call count from session payload (if available)
 TOOL_CALLS_COMPLETED=$(echo "$INPUT" | jq -r '.tools_used_count // 0' 2>/dev/null || echo "0")
 if [[ "$TOOL_CALLS_COMPLETED" == "0" ]]; then
-    log "Phase 1: tools_used_count absent or zero — SUCCESS gate unreachable (see OMN-1892)"
+    log "Phase 1: tools_used_count absent or zero — SUCCESS gate unreachable (see OMN-1892); raw outcome still emitted via OMN-2356"
 fi
 
 # Validate reason is one of the allowed values
@@ -108,8 +108,20 @@ fi
 # on the synchronous path (preserves <50ms SessionEnd budget).
 DURATION_SECONDS="0"
 if [[ -n "$SESSION_DURATION" && "$SESSION_DURATION" != "0" ]]; then
-    # Sanitize: ensure SESSION_DURATION is strictly numeric before awk
-    [[ "$SESSION_DURATION" =~ ^[0-9]+$ ]] || SESSION_DURATION=0
+    # Sanitize: accept integer or float durationMs from Claude Code.
+    # Float values (e.g. 45200.5) are valid — truncate to integer to satisfy
+    # the schema's duration_ms: int declaration and pass them to awk.
+    if [[ "$SESSION_DURATION" =~ ^[0-9]+$ ]]; then
+        : # Already a strict integer — no change needed
+    elif [[ "$SESSION_DURATION" =~ ^[0-9]+\.[0-9]+$ ]]; then
+        # Float: truncate fractional part (e.g. 45200.5 → 45200)
+        _raw_duration="$SESSION_DURATION"
+        SESSION_DURATION="${SESSION_DURATION%%.*}"
+        log "WARNING: durationMs is a float (${_raw_duration}), truncating to integer (${SESSION_DURATION})"
+    else
+        log "WARNING: durationMs has unexpected format '${SESSION_DURATION}', resetting to 0"
+        SESSION_DURATION=0
+    fi
     DURATION_SECONDS=$(awk -v ms="$SESSION_DURATION" 'BEGIN{v=ms/1000; printf "%.3f", (v<0?0:v)}' 2>/dev/null || echo "0")
 fi
 
@@ -156,11 +168,24 @@ if [[ "$KAFKA_ENABLED" == "true" ]]; then
     # Consolidated into a single backgrounded subshell so the DERIVED_OUTCOME
     # Python computation (~30-50ms interpreter startup) stays off the sync path.
     (
+        # Define accumulator path up front so the trap below can reference it
+        # regardless of which exit path is taken.
+        SESSION_STATE_FILE="/tmp/omniclaude-session-${SESSION_ID}.json"  # noqa: S108  # nosec B108
+
         # Validate SESSION_ID once for all outcome/feedback work
         if [[ -z "$SESSION_ID" ]]; then
             log "WARNING: SESSION_ID is empty, skipping session.outcome and feedback"
             exit 0
         fi
+
+        # Ensure accumulator is always cleaned up — including early-exit paths.
+        # Registered AFTER the empty-SESSION_ID guard so SESSION_STATE_FILE has a
+        # proper session-specific path (not /tmp/omniclaude-session-.json, which could
+        # collide between concurrent sessions with empty IDs).
+        # NOTE: the trap DOES fire on UUID-format-invalid exit (line 191-194) — this is
+        # intentional; a file written under a non-UUID session ID is still cleaned up.
+        # The trap also fires on the normal completion path (after the file is read).
+        trap 'rm -f "$SESSION_STATE_FILE"' EXIT
 
         # Validate UUID format (8-4-4-4-12 structure, case-insensitive)
         if [[ ! "$SESSION_ID" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
@@ -241,66 +266,105 @@ print(result.outcome)
             emit_via_daemon "session.outcome" "$OUTCOME_PAYLOAD" 100
         fi
 
-        # --- Evaluate feedback guardrails ---
-        # ===================================================================
-        # PHASE 1 PLUMBING (OMN-1892): Guardrail logic is wired but inputs
-        # are hardcoded. Feedback will always be skipped (NO_INJECTION).
-        # Future tickets to wire real values:
-        #   - injection_occurred: Read from session injection marker
-        #   - utilization_score: Read from PostToolUse utilization metrics
-        #   - agent_match_score: Read from UserPromptSubmit routing decision
-        # ===================================================================
-        FEEDBACK_RESULT=$(HOOKS_LIB="$HOOKS_LIB" DERIVED_OUTCOME="$DERIVED_OUTCOME" \
-            "$PYTHON_CMD" -c "
-import os, sys, json
-sys.path.insert(0, os.environ['HOOKS_LIB'])
-from feedback_guardrails import should_reinforce_routing
-result = should_reinforce_routing(
-    injection_occurred=False,
-    utilization_score=0.0,
-    agent_match_score=0.0,
-    session_outcome=os.environ['DERIVED_OUTCOME'],
-)
-print(json.dumps({
-    'should_reinforce': result.should_reinforce,
-    'skip_reason': result.skip_reason,
-}))
-" 2>>"$LOG_FILE") || FEEDBACK_RESULT='{"should_reinforce":false,"skip_reason":"PYTHON_ERROR"}'
+        # --- Emit routing.outcome.raw event (OMN-2356) ---
+        # Replaces the no-op feedback guardrail loop that used hardcoded/zero values.
+        # Emits RAW OBSERVABLE FACTS only — no derived scores.
+        # utilization_score and agent_match_score are computed by omniintelligence's
+        # routing-feedback consumer using its own context (Invariant 5 compliance).
+        #
+        # Data sources:
+        #   injection_occurred / patterns_injected_count / agent_selected /
+        #   routing_confidence: read from session accumulator written by
+        #   user-prompt-submit.sh at /tmp/omniclaude-session-${SESSION_ID}.json
+        #
+        #   tool_calls_count: tools_used_count from Claude SessionEnd payload
+        #   duration_ms: durationMs from Claude SessionEnd payload
 
-        SHOULD_REINFORCE=$(echo "$FEEDBACK_RESULT" | jq -r '.should_reinforce' 2>>"$LOG_FILE") || SHOULD_REINFORCE="false"
-        SKIP_REASON=$(echo "$FEEDBACK_RESULT" | jq -r '.skip_reason // empty' 2>>"$LOG_FILE") || SKIP_REASON=""
+        RAW_INJECTION_OCCURRED="false"
+        RAW_PATTERNS_COUNT=0
+        RAW_AGENT_SELECTED=""
+        RAW_ROUTING_CONFIDENCE=0.0
 
-        if [[ "$SHOULD_REINFORCE" == "true" ]] && [[ "$KAFKA_ENABLED" == "true" ]]; then
-            if ! FEEDBACK_PAYLOAD=$(jq -n \
-                --arg session_id "$SESSION_ID" \
-                --arg outcome "$DERIVED_OUTCOME" \
-                --arg emitted_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-                '{session_id: $session_id, outcome: $outcome, emitted_at: $emitted_at}' 2>>"$LOG_FILE"); then
-                log "WARNING: Failed to construct routing.feedback payload (jq failed), skipping emission"
-                exit 0
-            fi
-
-            if [[ -n "$FEEDBACK_PAYLOAD" && "$FEEDBACK_PAYLOAD" != "null" ]]; then
-                emit_via_daemon "routing.feedback" "$FEEDBACK_PAYLOAD" 100
-            fi
-        elif [[ -n "$SKIP_REASON" ]] && [[ "$KAFKA_ENABLED" == "true" ]]; then
-            if ! SKIP_PAYLOAD=$(jq -n \
-                --arg session_id "$SESSION_ID" \
-                --arg skip_reason "$SKIP_REASON" \
-                --arg emitted_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-                '{session_id: $session_id, skip_reason: $skip_reason, emitted_at: $emitted_at}' 2>>"$LOG_FILE"); then
-                log "WARNING: Failed to construct routing.skipped payload (jq failed), skipping emission"
-                exit 0
-            fi
-
-            if [[ -z "$SKIP_PAYLOAD" || "$SKIP_PAYLOAD" == "null" ]]; then
-                log "WARNING: routing.skipped payload empty or null, skipping emission"
-            else
-                emit_via_daemon "routing.skipped" "$SKIP_PAYLOAD" 100
-            fi
+        if [[ -f "$SESSION_STATE_FILE" ]]; then
+            RAW_INJECTION_OCCURRED=$(jq -r '.injection_occurred // false' "$SESSION_STATE_FILE" 2>>"$LOG_FILE") || RAW_INJECTION_OCCURRED="false"
+            RAW_PATTERNS_COUNT=$(jq -r '.patterns_injected_count // 0' "$SESSION_STATE_FILE" 2>>"$LOG_FILE") || RAW_PATTERNS_COUNT=0
+            RAW_AGENT_SELECTED=$(jq -r '.agent_selected // ""' "$SESSION_STATE_FILE" 2>>"$LOG_FILE") || RAW_AGENT_SELECTED=""
+            RAW_ROUTING_CONFIDENCE=$(jq -r '.routing_confidence // 0.0' "$SESSION_STATE_FILE" 2>>"$LOG_FILE") || RAW_ROUTING_CONFIDENCE=0.0
+            log "Session accumulator read: injection=$RAW_INJECTION_OCCURRED patterns=$RAW_PATTERNS_COUNT agent=${RAW_AGENT_SELECTED:-none}"
+        else
+            log "Session accumulator not found (${SESSION_STATE_FILE}) — no UserPromptSubmit this session"
         fi
 
-        log "Feedback guardrail: should_reinforce=$SHOULD_REINFORCE skip_reason=$SKIP_REASON"
+        # Sanitize: ensure numeric fields are numeric
+        [[ "$RAW_PATTERNS_COUNT" =~ ^[0-9]+$ ]] || RAW_PATTERNS_COUNT=0
+        [[ "$RAW_ROUTING_CONFIDENCE" =~ ^[0-9]+(\.[0-9]+)?$ ]] || RAW_ROUTING_CONFIDENCE=0.0
+        # Slash-command sentinel: agent_selected="" + confidence=1.0 means routing was
+        # bypassed (not a real routing decision). Zero out confidence so omniintelligence
+        # consumers receive an unambiguous no-routing-decision signal (confidence=0.0,
+        # agent_selected="") instead of a misleading high-confidence empty-agent pair.
+        if [[ -z "$RAW_AGENT_SELECTED" && "$RAW_ROUTING_CONFIDENCE" == "1.0" ]]; then
+            log "Slash-command sentinel detected (agent_selected='', confidence=1.0) — zeroing routing_confidence"
+            RAW_ROUTING_CONFIDENCE="0.0"
+        fi
+        # Clamp to [0.0, 1.0] — le=1.0 constraint matches schema
+        awk "BEGIN{exit !($RAW_ROUTING_CONFIDENCE > 1.0)}" 2>/dev/null && RAW_ROUTING_CONFIDENCE="1.0"
+        # Three-branch float-handling for TOOL_CALLS_COMPLETED (mirrors SESSION_DURATION logic).
+        # Float values (e.g. 5.0) are valid — strip fractional part and warn; anything else resets to 0.
+        # NOTE: derive_session_outcome (line 216) already consumed TOOL_CALLS_COMPLETED before this
+        # sanitization block. It handles the float case via its own isdigit() guard (falls back to 0
+        # with a warning). The sanitized value here is used exclusively for the raw outcome payload.
+        if [[ "$TOOL_CALLS_COMPLETED" =~ ^[0-9]+$ ]]; then
+            : # Already a strict integer — no change needed
+        elif [[ "$TOOL_CALLS_COMPLETED" =~ ^[0-9]+\.[0-9]+$ ]]; then
+            _raw_tool_calls="$TOOL_CALLS_COMPLETED"
+            TOOL_CALLS_COMPLETED="${TOOL_CALLS_COMPLETED%%.*}"
+            log "WARNING: tools_used_count is a float (${_raw_tool_calls}), truncating to integer (${TOOL_CALLS_COMPLETED})"
+        else
+            log "WARNING: tools_used_count has unexpected format '${TOOL_CALLS_COMPLETED}', resetting to 0"
+            TOOL_CALLS_COMPLETED=0
+        fi
+        if [[ "$RAW_INJECTION_OCCURRED" == "null" ]]; then
+            log "WARNING: injection_occurred is null in accumulator — resetting to false"
+            RAW_INJECTION_OCCURRED="false"
+        fi
+        [[ "$RAW_INJECTION_OCCURRED" == "true" ]] || RAW_INJECTION_OCCURRED="false"
+
+        # Use Python for a portable ISO timestamp with millisecond precision.
+        # `date -u +"%Y-%m-%dT%H:%M:%S.%3NZ"` exits 0 on macOS but produces a
+        # literal ".3NZ" suffix instead of milliseconds, causing fromisoformat()
+        # validation to fail downstream. Fall back to second-precision if Python
+        # is unavailable (unlikely — PYTHON_CMD is required by this hook).
+        RAW_EMITTED_AT=$("$PYTHON_CMD" -c 'from datetime import datetime, timezone; print(datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z")' 2>/dev/null \
+            || date -u +"%Y-%m-%dT%H:%M:%SZ")
+        # SESSION_DURATION is pre-sanitized to integer in the outer shell (lines 109-126)
+        # before this subshell forks — no re-check needed here.
+        if ! RAW_OUTCOME_PAYLOAD=$(jq -n \
+            --arg session_id "$SESSION_ID" \
+            --argjson injection_occurred "$RAW_INJECTION_OCCURRED" \
+            --argjson patterns_injected_count "$RAW_PATTERNS_COUNT" \
+            --argjson tool_calls_count "$TOOL_CALLS_COMPLETED" \
+            --argjson duration_ms "$SESSION_DURATION" \
+            --arg agent_selected "$RAW_AGENT_SELECTED" \
+            --argjson routing_confidence "$RAW_ROUTING_CONFIDENCE" \
+            --arg emitted_at "$RAW_EMITTED_AT" \
+            '{
+                session_id: $session_id,
+                injection_occurred: $injection_occurred,
+                patterns_injected_count: $patterns_injected_count,
+                tool_calls_count: $tool_calls_count,
+                duration_ms: $duration_ms,
+                agent_selected: $agent_selected,
+                routing_confidence: $routing_confidence,
+                emitted_at: $emitted_at
+            }' 2>>"$LOG_FILE"); then
+            log "WARNING: Failed to construct routing.outcome.raw payload (jq failed), skipping emission"
+        elif [[ -z "$RAW_OUTCOME_PAYLOAD" || "$RAW_OUTCOME_PAYLOAD" == "null" ]]; then
+            log "WARNING: routing.outcome.raw payload empty or null, skipping emission"
+        else
+            emit_via_daemon "routing.outcome.raw" "$RAW_OUTCOME_PAYLOAD" 100
+            log "routing.outcome.raw emitted: injection=$RAW_INJECTION_OCCURRED patterns=$RAW_PATTERNS_COUNT tool_calls=$TOOL_CALLS_COMPLETED"
+        fi
+
     ) &
     EMIT_PIDS+=($!)
 

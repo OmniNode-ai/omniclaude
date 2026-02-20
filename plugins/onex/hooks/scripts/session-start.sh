@@ -634,6 +634,98 @@ else
 fi
 
 # -----------------------------
+# Pipeline State Cleanup
+# -----------------------------
+# Remove pipeline state dirs for branches merged into main.
+# Runs ASYNCHRONOUSLY (backgrounded) — never blocks the hook.
+
+_cleanup_merged_pipeline_states() {
+    local _log="${LOG_FILE:-/dev/null}"
+    local pipelines_dir
+    pipelines_dir=$(cd "$HOME/.claude/pipelines" 2>/dev/null && pwd -P || echo "$HOME/.claude/pipelines")
+
+    [[ -d "$pipelines_dir" ]] || return 0
+
+    local removed=0
+    for state_file in "$pipelines_dir"/*/state.yaml; do
+        [[ -f "$state_file" ]] || continue
+
+        # Read branch_name and repo_path in one Python call
+        local fields branch repo
+        fields=$("$PYTHON_CMD" - "$state_file" <<'PYEOF' 2>/dev/null
+import yaml, sys
+try:
+    with open(sys.argv[1], encoding='utf-8') as f:
+        d = yaml.safe_load(f) or {}
+    print(d.get('branch_name', ''))
+    print(d.get('repo_path', ''))
+except Exception:
+    print('')
+    print('')
+PYEOF
+) || fields=""
+        branch=$(echo "$fields" | sed -n '1p')
+        repo=$(echo "$fields" | sed -n '2p')
+
+        [[ -n "$branch" && -n "$repo" && -d "$repo" ]] || continue
+
+        # Check if branch is merged into main or master.
+        # git branch --merged outputs names with two leading spaces (e.g., "  feature-x")
+        # or "* current-branch" for the active branch. Use grep -qxF with the exact
+        # two-space prefix to avoid false positives from substring matches or the
+        # active-branch marker ("* main" matching when branch="main").
+        local merged=""
+        # GIT_TERMINAL_PROMPT=0 prevents interactive credential prompts from
+        # hanging this backgrounded subshell indefinitely on repos requiring auth.
+        if GIT_TERMINAL_PROMPT=0 git -C "$repo" rev-parse --git-dir >/dev/null 2>&1; then
+            if GIT_TERMINAL_PROMPT=0 git -C "$repo" branch --merged main 2>/dev/null | grep -qxF "  $branch"; then
+                merged="yes"
+            elif GIT_TERMINAL_PROMPT=0 git -C "$repo" branch --merged master 2>/dev/null | grep -qxF "  $branch"; then
+                merged="yes"
+            fi
+        fi
+
+        if [[ -n "$merged" ]]; then
+            local ticket_dir
+            ticket_dir="$(dirname "$state_file")"
+            # Canonicalize to resolve symlinks before the prefix guard, matching
+            # the worktree cleanup in session-end.sh which uses `pwd -P`.
+            # If the directory is already gone (race), skip it entirely.
+            ticket_dir="$(cd "$ticket_dir" 2>/dev/null && pwd -P || echo "")"
+            [[ -z "$ticket_dir" ]] && continue
+            # Defense-in-depth: confirm ticket_dir is a direct child of pipelines_dir
+            # before removing it.  A symlink under pipelines_dir pointing outside the
+            # tree would otherwise cause rm -rf to delete an unrelated target.
+            # Use a case-prefix check (the same pattern the worktree cleanup in
+            # session-end.sh uses) to guard against symlink traversal.
+            case "$ticket_dir" in
+                "${pipelines_dir}"/*)
+                    if rm -rf "$ticket_dir" 2>/dev/null; then
+                        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [pipeline-cleanup] Removed merged state: $(basename "$ticket_dir") (branch: $branch)" >> "$_log"
+                        ((removed++)) || true
+                    fi
+                    ;;
+                *)
+                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [pipeline-cleanup] SKIP: ticket_dir '${ticket_dir}' is outside pipelines_dir '${pipelines_dir}' — refusing to rm -rf" >> "$_log"
+                    ;;
+            esac
+        fi
+    done
+
+    [[ $removed -gt 0 ]] && echo "[$(date '+%Y-%m-%d %H:%M:%S')] [pipeline-cleanup] Cleaned $removed merged pipeline state dir(s)" >> "$_log" || true
+}
+
+PIPELINE_CLEANUP_ENABLED="${OMNICLAUDE_PIPELINE_CLEANUP_ENABLED:-true}"
+PIPELINE_CLEANUP_ENABLED=$(_normalize_bool "$PIPELINE_CLEANUP_ENABLED")
+
+if [[ "${PIPELINE_CLEANUP_ENABLED}" == "true" ]]; then
+    ( _cleanup_merged_pipeline_states ) &
+    log "Pipeline state cleanup started in background (PID: $!)"
+else
+    log "Pipeline state cleanup disabled (OMNICLAUDE_PIPELINE_CLEANUP_ENABLED=false)"
+fi
+
+# -----------------------------
 # Ticket Context Injection (OMN-1830)
 # -----------------------------
 # Inject active ticket context for session continuity.

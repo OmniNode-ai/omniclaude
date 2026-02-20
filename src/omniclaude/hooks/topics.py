@@ -89,6 +89,9 @@ class TopicBase(StrEnum):
     # ==========================================================================
     ROUTING_FEEDBACK = "onex.evt.omniclaude.routing-feedback.v1"
     ROUTING_FEEDBACK_SKIPPED = "onex.evt.omniclaude.routing-feedback-skipped.v1"
+    # Raw session outcome signals (OMN-2356) — replaces no-op derived feedback
+    # omniintelligence consumes this and computes derived scores server-side
+    ROUTING_OUTCOME_RAW = "onex.evt.omniclaude.routing-outcome-raw.v1"
 
     # ==========================================================================
     # Routing decision topics (PR-92)

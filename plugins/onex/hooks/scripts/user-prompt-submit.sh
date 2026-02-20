@@ -85,6 +85,11 @@ fi
 ) &
 
 SESSION_ID="$(printf %s "$INPUT" | jq -r '.sessionId // .session_id // ""' 2>/dev/null || echo "")"
+# NOTE: When sessionId is absent, SESSION_ID falls back to CORRELATION_ID.
+# The accumulator file is then written as /tmp/omniclaude-session-<correlation_id>.json.
+# session-end.sh derives SESSION_STATE_FILE from .sessionId, so the file names
+# will not match and the accumulator will be orphaned in /tmp.  This is a known
+# limitation — sessionId should always be present in normal Claude Code operation.
 [[ -z "$SESSION_ID" ]] && SESSION_ID="$CORRELATION_ID"
 
 if [[ "$KAFKA_ENABLED" == "true" ]] && [ "${SKIP_CLAUDE_HOOK_EVENT_EMIT:-0}" -ne 1 ]; then
@@ -139,6 +144,9 @@ WORKFLOW_DETECTED="false"
 if [[ "$PROMPT" =~ ^/[a-zA-Z_-] ]]; then
     SLASH_CMD="$(echo "$PROMPT" | grep -oE '^/[a-zA-Z_-]+' || echo "")"
     log "Slash command detected: ${SLASH_CMD} — skipping agent routing (slash commands manage their own dispatch)"
+    # Sentinel: selected_agent="" + confidence=1.0 means slash-command bypass,
+    # NOT a real routing decision. session-end.sh must interpret this pair as
+    # "no agent was selected by the router" (not as a high-confidence match).
     ROUTING_RESULT='{"selected_agent":"","confidence":1.0,"reasoning":"slash_command_bypass","method":"slash_command","domain":"","purpose":"","candidates":[]}'
     # Update tab activity for statusline (e.g. "/ticket-work" → "ticket-work")
     update_tab_activity "${SLASH_CMD#/}"
@@ -215,6 +223,7 @@ fi
 LEARNED_PATTERNS=""
 SESSION_ALREADY_INJECTED=false
 # Extraction event field defaults (overridden if injection succeeds)
+PATTERN_SUCCESS="false"
 PATTERN_COUNT=0
 COHORT="treatment"
 RETRIEVAL_MS=0
@@ -281,6 +290,58 @@ if [[ "$SESSION_ALREADY_INJECTED" == "false" ]] && [[ -n "$AGENT_NAME" ]] && [[ 
     fi
 elif [[ "$SESSION_ALREADY_INJECTED" == "true" ]]; then
     log "Using patterns from SessionStart injection (session ${SESSION_ID:0:8}...)"
+fi
+
+# -----------------------------
+# Session Accumulator: Write raw signal state for session-end feedback (OMN-2356)
+# session-end.sh reads this file to emit raw outcome signals to routing-feedback topic.
+# Kept minimal: only observable facts, no derived scores.
+# Written ONCE (first UserPromptSubmit) so the first-prompt routing and injection
+# outcome are preserved. Subsequent prompts skip the write when the file already
+# exists, preventing a later prompt (SESSION_ALREADY_INJECTED=true, PATTERN_SUCCESS
+# undefined) from overwriting injection_occurred=true with injection_occurred=false.
+# Uses atomic write (jq + redirect) — if jq fails the file is left unchanged.
+# -----------------------------
+if [[ -n "$SESSION_ID" ]]; then
+    _ACCUM_FILE="/tmp/omniclaude-session-${SESSION_ID}.json"  # noqa: S108  # nosec B108
+    if [[ ! -f "$_ACCUM_FILE" ]]; then
+        # Guard: PATTERN_COUNT must be numeric before passing to jq --argjson.
+        # A non-numeric string (e.g. from a malformed wrapper response) would
+        # cause jq to fail silently (|| true) and leave _ACCUM_FILE unwritten.
+        [[ "${PATTERN_COUNT:-0}" =~ ^[0-9]+$ ]] || PATTERN_COUNT=0
+        # Guard: CONFIDENCE must be numeric before passing to jq --argjson.
+        [[ "${CONFIDENCE:-0.5}" =~ ^[0-9]+(\.[0-9]+)?$ ]] || CONFIDENCE="0.5"
+        # Clamp to [0.0, 1.0] — le=1.0 constraint matches schema
+        awk "BEGIN{exit !($CONFIDENCE > 1.0)}" 2>/dev/null && CONFIDENCE="1.0"
+        _INJECT_OCCURRED="false"
+        [[ "${PATTERN_SUCCESS:-false}" == "true" ]] && [[ "${PATTERN_COUNT:-0}" != "0" ]] && _INJECT_OCCURRED="true"
+        # When SESSION_ALREADY_INJECTED=true (SessionStart performed injection),
+        # PATTERN_SUCCESS stays "false" for this prompt — override so injection_occurred
+        # is truthful. PATTERN_COUNT remains 0 (count unknown for SessionStart injection).
+        [[ "$SESSION_ALREADY_INJECTED" == "true" ]] && _INJECT_OCCURRED="true"
+        # Normalize sentinel to empty string — "NO_AGENT_DETECTED" is a jq fallback
+        # for malformed/partial routing JSON, not a real agent name.
+        _ACCUM_AGENT="${AGENT_NAME}"
+        [[ "$_ACCUM_AGENT" == "NO_AGENT_DETECTED" ]] && _ACCUM_AGENT=""
+        _ACCUM_JSON="$(jq -n \
+            --argjson injection_occurred "$_INJECT_OCCURRED" \
+            --argjson patterns_injected_count "${PATTERN_COUNT:-0}" \
+            --arg agent_selected "$_ACCUM_AGENT" \
+            --argjson routing_confidence "${CONFIDENCE:-0.5}" \
+            '{
+                injection_occurred: $injection_occurred,
+                patterns_injected_count: $patterns_injected_count,
+                agent_selected: $agent_selected,
+                routing_confidence: $routing_confidence
+            }' 2>/dev/null)" || true
+        if [[ -n "$_ACCUM_JSON" ]]; then
+            _ACCUM_TMP="$_ACCUM_FILE.tmp.$$"
+            printf '%s\n' "$_ACCUM_JSON" > "$_ACCUM_TMP" && mv "$_ACCUM_TMP" "$_ACCUM_FILE" || rm -f "$_ACCUM_TMP"
+            log "Session accumulator written: ${_ACCUM_FILE}"
+        fi
+    else
+        log "Session accumulator already exists, preserving first-prompt state: ${_ACCUM_FILE}"
+    fi
 fi
 
 # -----------------------------

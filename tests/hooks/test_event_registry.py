@@ -764,6 +764,8 @@ class TestEventRegistryIntegration:
             "llm.routing.fallback",
             # Enrichment observability (OMN-2274)
             "context.enrichment",
+            # Raw session outcome signals (OMN-2356)
+            "routing.outcome.raw",
         }
         assert set(EVENT_REGISTRY.keys()) == expected_types
 

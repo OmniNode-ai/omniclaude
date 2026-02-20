@@ -127,6 +127,7 @@ SUPPORTED_EVENT_TYPES = frozenset(
         "llm.routing.decision",  # OMN-2273 - LLM routing decision observability
         "llm.routing.fallback",  # OMN-2273 - LLM routing fallback observability
         "context.enrichment",  # OMN-2274 - Per-enrichment observability events
+        "routing.outcome.raw",  # OMN-2356 - Raw session outcome for feedback loop
     ]
 )
 
