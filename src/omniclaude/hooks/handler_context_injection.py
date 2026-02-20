@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 OmniNode Team
-# PATTERN SOURCE: omniintelligence HTTP API (escape hatch; long-term: event bus projection)
-# See: OMN-2059 completed DB split — tracked for migration to projection-based read post-demo
+# PATTERN SOURCE: in-memory projection cache (primary) → omniintelligence HTTP API (fallback)
+# See: OMN-2059 completed DB split — cache-first read replaces HTTP-only escape hatch (OMN-2425)
 """Handler for context injection - all business logic lives here.
 
 This handler performs:
-1. Load patterns from omniintelligence HTTP API (GET /api/v1/patterns)
+1. Load patterns from in-memory projection cache (primary) or omniintelligence HTTP API (fallback)
 2. Filtering/sorting/limiting of patterns
 3. Markdown formatting
 4. Event emission to Kafka
@@ -13,11 +13,13 @@ This handler performs:
 Following ONEX patterns from omnibase_infra: handlers own all business logic.
 No separate node is needed for simple file-read operations.
 
-Pattern source: omniintelligence HTTP API (escape hatch after OMN-2058 DB split).
-Long-term migration: event bus projection (post-demo, tracked in OMN-2059).
+Pattern source (OMN-2425): in-memory projection cache populated by background Kafka consumer
+subscribing to onex.evt.omniintelligence.pattern-projection.v1. Falls back to the
+omniintelligence HTTP API when the cache is cold or stale (OMN-2355 escape hatch retained).
 
 Part of OMN-1403: Context injection for session enrichment.
 Restored by OMN-2355: fix context injection injecting zero patterns.
+Cache-first read added by OMN-2425: consume pattern projection.
 """
 
 from __future__ import annotations
@@ -827,15 +829,97 @@ class HandlerContextInjection:
         self,
         domain: str | None = None,
     ) -> ModelLoadPatternsResult:
-        """Load patterns via omniintelligence HTTP API (OMN-2355).
+        """Load patterns from projection cache (primary) or HTTP API fallback (OMN-2425).
 
         DB access was disabled in OMN-2058 (DB-SPLIT-07: learned_patterns moved
-        to omniintelligence). This method now delegates to _load_patterns_from_api,
-        the approved escape hatch until event bus projections are available (OMN-2059).
+        to omniintelligence). This method now:
+
+        1. Tries the in-memory projection cache first (OMN-2425).
+        2. Falls back to the omniintelligence HTTP API when the cache is cold
+           or stale (OMN-2355 escape hatch retained for backward compatibility).
 
         Note: project_scope is not forwarded because the omniintelligence API
         does not expose a project_scope query param; scoping is handled server-side.
         """
+        # --- Cache-first read (OMN-2425) ---
+        # Start the background consumer on first call (no-op if already running
+        # or if KAFKA_BOOTSTRAP_SERVERS is unset).
+        try:
+            from plugins.onex.hooks.lib.pattern_cache import (
+                get_pattern_cache,
+                start_projection_consumer_if_configured,
+            )
+
+            start_projection_consumer_if_configured()
+
+            cache = get_pattern_cache()
+            if cache.is_warm() and not cache.is_stale():
+                domain_key = domain or "general"
+                cached_raw = cache.get(domain_key)
+                # Map raw projection dicts → ModelPatternRecord (same field mapping
+                # as _load_patterns_from_api to ensure consistency).
+                records: list[ModelPatternRecord] = []
+                excluded = 0
+                for raw_p in cached_raw:
+                    pattern_id = _safe_str(raw_p.get("id"))
+                    signature = _safe_str(raw_p.get("pattern_signature"))
+                    confidence_raw = raw_p.get("confidence")
+                    if not pattern_id or not signature or confidence_raw is None:
+                        excluded += 1
+                        continue
+                    try:
+                        confidence = float(confidence_raw)
+                    except (TypeError, ValueError):
+                        excluded += 1
+                        continue
+                    domain_id = _safe_str(raw_p.get("domain_id"), default="general")
+                    quality_score_raw = raw_p.get("quality_score")
+                    if quality_score_raw is None:
+                        success_rate = 0.0
+                    else:
+                        try:
+                            success_rate = float(quality_score_raw)
+                        except (TypeError, ValueError):
+                            success_rate = 0.0
+                    status = raw_p.get("status")
+                    lifecycle_state: str | None = (
+                        status if status in {"validated", "provisional"} else None
+                    )
+                    try:
+                        record = ModelPatternRecord(
+                            pattern_id=pattern_id,
+                            domain=domain_id,
+                            title=signature,
+                            description=signature,
+                            confidence=confidence,
+                            usage_count=0,
+                            success_rate=max(0.0, min(1.0, success_rate)),
+                            lifecycle_state=lifecycle_state,
+                        )
+                        records.append(record)
+                    except (ValueError, TypeError):
+                        excluded += 1
+                        continue
+
+                logger.info(
+                    "pattern_source=cache_hit domain=%r count=%d excluded=%d",
+                    domain_key,
+                    len(records),
+                    excluded,
+                )
+                return ModelLoadPatternsResult(
+                    patterns=records,
+                    source_files=[],
+                    warnings=[],
+                )
+
+            reason = "cold" if not cache.is_warm() else "stale"
+            logger.info("pattern_source=cache_miss reason=%s", reason)
+
+        except Exception as exc:
+            logger.warning("pattern_cache unavailable, falling back to API: %s", exc)
+
+        # --- HTTP API fallback (OMN-2355 escape hatch) ---
         cfg = self._config
         if cfg.api_enabled:
             return await self._load_patterns_from_api(domain=domain)
