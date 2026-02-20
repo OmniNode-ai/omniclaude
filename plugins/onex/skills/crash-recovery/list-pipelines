@@ -165,6 +165,8 @@ def main() -> None:
             continue
         entries.append(entry)
 
+    # total_found reflects all found entries before the --in-progress filter; the footer
+    # intentionally shows this to indicate how many more entries exist in total.
     total_found = len(entries)
 
     if not entries:
