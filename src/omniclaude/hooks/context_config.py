@@ -331,6 +331,37 @@ class ContextInjectionConfig(BaseSettings):
         ),
     )
 
+    # API-based pattern source (OMN-2355 / OMN-2059 escape hatch)
+    # PATTERN SOURCE: omniintelligence HTTP API (escape hatch; long-term: event bus projection)
+    # See: OMN-2059 completed DB split — tracked for migration to projection-based read post-demo
+    api_enabled: bool = Field(
+        default=True,
+        description=(
+            "Enable omniintelligence HTTP API as pattern source. "
+            "Active escape hatch after DB split (OMN-2058/OMN-2059). "
+            "Override via OMNICLAUDE_CONTEXT_API_ENABLED."
+        ),
+    )
+
+    api_url: str = Field(
+        default="http://localhost:8053",
+        description=(
+            "Base URL for omniintelligence HTTP API. "
+            "Default: INTELLIGENCE_SERVICE_URL env var or http://localhost:8053. "
+            "Override via OMNICLAUDE_CONTEXT_API_URL."
+        ),
+    )
+
+    api_timeout_ms: int = Field(
+        default=2000,
+        ge=100,
+        le=10000,
+        description=(
+            "Timeout for omniintelligence API calls in milliseconds. "
+            "Override via OMNICLAUDE_CONTEXT_API_TIMEOUT_MS."
+        ),
+    )
+
     # Injection limits configuration (OMN-1671)
     limits: InjectionLimitsConfig = Field(
         default_factory=InjectionLimitsConfig,
@@ -380,6 +411,28 @@ class ContextInjectionConfig(BaseSettings):
                 f"db_pool_min_size ({self.db_pool_min_size}) must be <= "
                 f"db_pool_max_size ({self.db_pool_max_size})"
             )
+        return self
+
+    @model_validator(mode="after")
+    def resolve_api_url_from_env(self) -> Self:
+        """Resolve api_url from INTELLIGENCE_SERVICE_URL if using default.
+
+        When api_url is at its built-in default (http://localhost:8053),
+        check if INTELLIGENCE_SERVICE_URL or INTELLIGENCE_SERVICE_PORT is set
+        and use that instead. This allows omniclaude to inherit the service
+        URL from the shared environment without requiring a separate
+        OMNICLAUDE_CONTEXT_API_URL override.
+
+        Priority:
+            1. OMNICLAUDE_CONTEXT_API_URL (handled by pydantic-settings above)
+            2. INTELLIGENCE_SERVICE_URL
+            3. Built-in default: http://localhost:8053
+        """
+        default_api_url = "http://localhost:8053"
+        if self.api_url == default_api_url:
+            intelligence_url = os.environ.get("INTELLIGENCE_SERVICE_URL", "").strip()
+            if intelligence_url:
+                object.__setattr__(self, "api_url", intelligence_url)
         return self
 
     def get_db_dsn(self) -> str:

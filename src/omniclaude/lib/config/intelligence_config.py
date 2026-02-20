@@ -41,15 +41,10 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from omniclaude.config import settings
 
 # Topic names (wire-ready, no environment prefix per OMN-1972)
-TOPIC_CODE_ANALYSIS_REQUESTED = (
-    "onex-intelligence.intelligence.code-analysis-requested.v1"
-)
-TOPIC_CODE_ANALYSIS_COMPLETED = (
-    "onex-intelligence.intelligence.code-analysis-completed.v1"
-)
-TOPIC_CODE_ANALYSIS_FAILED = (
-    "onex-intelligence.intelligence.code-analysis-failed.v1"
-)
+# Corrected to canonical onex.cmd/evt convention (OMN-2367)
+TOPIC_CODE_ANALYSIS_REQUESTED = "onex.cmd.omniintelligence.code-analysis.v1"
+TOPIC_CODE_ANALYSIS_COMPLETED = "onex.evt.omniintelligence.code-analysis-completed.v1"
+TOPIC_CODE_ANALYSIS_FAILED = "onex.evt.omniintelligence.code-analysis-failed.v1"
 
 
 class IntelligenceConfig(BaseModel):
@@ -212,10 +207,14 @@ class IntelligenceConfig(BaseModel):
         servers = [s.strip() for s in v.split(",")]
         for server in servers:
             if ":" not in server:
-                raise ValueError(f"Invalid server format '{server}'. Expected 'host:port'")
+                raise ValueError(
+                    f"Invalid server format '{server}'. Expected 'host:port'"
+                )
             host, port = server.rsplit(":", 1)
             if not host or not port:
-                raise ValueError(f"Invalid server format '{server}'. Expected 'host:port'")
+                raise ValueError(
+                    f"Invalid server format '{server}'. Expected 'host:port'"
+                )
             try:
                 port_int = int(port)
                 if port_int < 1 or port_int > 65535:
@@ -336,7 +335,10 @@ class IntelligenceConfig(BaseModel):
             ValueError: If configuration is inconsistent
         """
         # Check fallback configuration
-        if not self.enable_event_based_discovery and not self.enable_filesystem_fallback:
+        if (
+            not self.enable_event_based_discovery
+            and not self.enable_filesystem_fallback
+        ):
             raise ValueError(
                 "At least one intelligence source must be enabled: "
                 "enable_event_based_discovery or enable_filesystem_fallback"

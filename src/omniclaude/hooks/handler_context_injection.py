@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 OmniNode Team
+# PATTERN SOURCE: omniintelligence HTTP API (escape hatch; long-term: event bus projection)
+# See: OMN-2059 completed DB split — tracked for migration to projection-based read post-demo
 """Handler for context injection - all business logic lives here.
 
 This handler performs:
-1. Database query to load patterns
+1. Load patterns from omniintelligence HTTP API (GET /api/v1/patterns)
 2. Filtering/sorting/limiting of patterns
 3. Markdown formatting
 4. Event emission to Kafka
@@ -11,20 +13,28 @@ This handler performs:
 Following ONEX patterns from omnibase_infra: handlers own all business logic.
 No separate node is needed for simple file-read operations.
 
+Pattern source: omniintelligence HTTP API (escape hatch after OMN-2058 DB split).
+Long-term migration: event bus projection (post-demo, tracked in OMN-2059).
+
 Part of OMN-1403: Context injection for session enrichment.
+Restored by OMN-2355: fix context injection injecting zero patterns.
 """
 
 from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
 from omniclaude.hooks.cohort_assignment import (
@@ -493,6 +503,7 @@ class HandlerContextInjection:
             )
 
         # Step 2: Filter by domain (pre-filter before selection)
+        patterns_before_filter = len(patterns)
         if agent_domain:
             patterns = [
                 p for p in patterns if p.domain == agent_domain or p.domain == "general"
@@ -500,6 +511,16 @@ class HandlerContextInjection:
 
         # Step 3: Filter by confidence threshold (pre-filter)
         patterns = [p for p in patterns if p.confidence >= cfg.min_confidence]
+
+        # Warn when filters exclude all patterns that were available from the API
+        if patterns_before_filter > 0 and not patterns:
+            logger.warning(
+                "filter excluded all %d patterns: confidence_min=%.2f, domain_filter=%r. "
+                "No patterns will be injected. Adjust thresholds or domain to include patterns.",
+                patterns_before_filter,
+                cfg.min_confidence,
+                agent_domain or "<none>",
+            )
 
         # Step 4-5: Apply injection limits with new selector (OMN-1671)
         # This replaces simple sort/limit with:
@@ -569,27 +590,218 @@ class HandlerContextInjection:
     # Database Methods
     # =========================================================================
 
+    async def _load_patterns_from_api(
+        self,
+        domain: str | None = None,
+    ) -> ModelLoadPatternsResult:
+        """Load patterns from omniintelligence HTTP API (OMN-2355).
+
+        PATTERN SOURCE: omniintelligence HTTP API (escape hatch; long-term: event bus projection)
+        See: OMN-2059 completed DB split — tracked for migration to projection-based read post-demo
+
+        Calls GET /api/v1/patterns on the omniintelligence service and maps
+        the response fields to ModelPatternRecord. Patterns missing required
+        fields (id, pattern_signature, confidence) are excluded with a WARNING.
+
+        Required API response fields per pattern:
+            - id: Pattern UUID (maps to pattern_id)
+            - pattern_signature: Pattern text (maps to title + description)
+            - confidence: Confidence score 0.0-1.0
+
+        Optional API response fields:
+            - domain_id: Domain identifier (maps to domain, default "general")
+            - quality_score: Quality score (maps to success_rate, default 0.0)
+            - status: Lifecycle state "validated"/"provisional" (maps to lifecycle_state)
+
+        Args:
+            domain: Optional domain filter (passed as query param if provided).
+
+        Returns:
+            ModelLoadPatternsResult with loaded patterns or empty with warning on failure.
+        """
+        cfg = self._config
+        base_url = cfg.api_url.rstrip("/")
+        timeout_s = cfg.api_timeout_ms / 1000.0
+
+        # Build query params
+        params: dict[str, str] = {
+            "limit": "50",
+            "min_confidence": str(cfg.min_confidence),
+        }
+        if domain:
+            params["domain"] = domain
+
+        query_string = urllib.parse.urlencode(params)
+        url = f"{base_url}/api/v1/patterns?{query_string}"
+
+        try:
+            req = urllib.request.Request(url, method="GET")  # noqa: S310  # nosec B310
+            with urllib.request.urlopen(req, timeout=timeout_s) as response:  # noqa: S310  # nosec B310
+                raw = response.read().decode("utf-8")
+        except urllib.error.URLError as e:
+            logger.warning("omniintelligence API unavailable: %s (url=%s)", e, url)
+            return ModelLoadPatternsResult(
+                patterns=[],
+                source_files=[],
+                warnings=[f"omniintelligence_api_unavailable: {e}"],
+            )
+        except Exception as e:
+            logger.warning("omniintelligence API request failed: %s (url=%s)", e, url)
+            return ModelLoadPatternsResult(
+                patterns=[],
+                source_files=[],
+                warnings=[f"omniintelligence_api_request_failed: {e}"],
+            )
+
+        try:
+            page: dict[str, Any] = json.loads(raw)
+        except json.JSONDecodeError as e:
+            logger.warning("omniintelligence API returned invalid JSON: %s", e)
+            return ModelLoadPatternsResult(
+                patterns=[],
+                source_files=[],
+                warnings=[f"omniintelligence_api_invalid_json: {e}"],
+            )
+
+        raw_patterns = page.get("patterns", [])
+        if not isinstance(raw_patterns, list):
+            logger.warning(
+                "omniintelligence API response missing 'patterns' list; got %s",
+                type(raw_patterns).__name__,
+            )
+            return ModelLoadPatternsResult(
+                patterns=[],
+                source_files=[],
+                warnings=["omniintelligence_api_missing_patterns_list"],
+            )
+
+        records: list[ModelPatternRecord] = []
+        excluded = 0
+
+        for raw_p in raw_patterns:
+            if not isinstance(raw_p, dict):
+                excluded += 1
+                logger.warning(
+                    "omniintelligence API: skipping non-dict pattern entry: %s",
+                    type(raw_p).__name__,
+                )
+                continue
+
+            # Validate required fields
+            pattern_id = _safe_str(raw_p.get("id"))
+            signature = _safe_str(raw_p.get("pattern_signature"))
+            confidence_raw = raw_p.get("confidence")
+
+            missing = []
+            if not pattern_id:
+                missing.append("id")
+            if not signature:
+                missing.append("pattern_signature")
+            if confidence_raw is None:
+                missing.append("confidence")
+
+            if missing:
+                excluded += 1
+                logger.warning(
+                    "omniintelligence API: pattern excluded — missing required fields: %s "
+                    "(pattern_id=%r)",
+                    missing,
+                    pattern_id or "<unknown>",
+                )
+                continue
+
+            try:
+                # confidence_raw is not None here: we appended "confidence" to
+                # missing if it were None, and continued. mypy cannot infer this.
+                confidence = float(confidence_raw)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                excluded += 1
+                logger.warning(
+                    "omniintelligence API: pattern excluded — invalid confidence value: %r "
+                    "(pattern_id=%r)",
+                    confidence_raw,
+                    pattern_id,
+                )
+                continue
+
+            # Map optional fields
+            domain_id = (
+                _safe_str(raw_p.get("domain_id"), default="general") or "general"
+            )
+            quality_score_raw = raw_p.get("quality_score")
+            success_rate = (
+                float(quality_score_raw) if quality_score_raw is not None else 0.0
+            )
+            status = raw_p.get("status")
+            lifecycle_state: str | None = (
+                status if status in {"validated", "provisional"} else None
+            )
+
+            try:
+                record = ModelPatternRecord(
+                    pattern_id=pattern_id,
+                    domain=domain_id,
+                    title=signature,
+                    description=signature,
+                    confidence=confidence,
+                    usage_count=0,
+                    success_rate=max(0.0, min(1.0, success_rate)),
+                    lifecycle_state=lifecycle_state,
+                )
+                records.append(record)
+            except (ValueError, TypeError) as e:
+                excluded += 1
+                logger.warning(
+                    "omniintelligence API: pattern excluded — validation error: %s "
+                    "(pattern_id=%r)",
+                    e,
+                    pattern_id,
+                )
+                continue
+
+        if excluded > 0:
+            logger.warning(
+                "omniintelligence API: excluded %d of %d patterns due to missing/invalid fields",
+                excluded,
+                len(raw_patterns),
+            )
+
+        logger.debug(
+            "omniintelligence API: loaded %d patterns from %s",
+            len(records),
+            url,
+        )
+
+        source_path = Path(url)
+        return ModelLoadPatternsResult(
+            patterns=records,
+            source_files=[source_path] if records else [],
+            warnings=[],
+        )
+
     async def _load_patterns_from_database(
         self,
         domain: str | None = None,
         project_scope: str | None = None,
     ) -> ModelLoadPatternsResult:
-        """Load patterns from the database using contract-driven runtime.
+        """Load patterns via omniintelligence HTTP API (OMN-2355).
 
-        DISABLED (OMN-2058): learned_patterns table moved to omniintelligence
-        as part of DB-SPLIT-07. Direct DB reads are disabled pending API
-        integration (OMN-2059).
-
-        Returns empty result with structured warning.
+        DB access was disabled in OMN-2058 (DB-SPLIT-07: learned_patterns moved
+        to omniintelligence). This method now delegates to _load_patterns_from_api,
+        the approved escape hatch until event bus projections are available (OMN-2059).
         """
+        cfg = self._config
+        if cfg.api_enabled:
+            return await self._load_patterns_from_api(domain=domain)
+
         logger.info(
-            "patterns_read_disabled_pending_api: learned_patterns moved to "
-            "omniintelligence (OMN-2059). Returning empty patterns."
+            "patterns_read_disabled: api_enabled=False and DB split active (OMN-2058/OMN-2059). "
+            "Returning empty patterns."
         )
         return ModelLoadPatternsResult(
             patterns=[],
             source_files=[],
-            warnings=["patterns_read_disabled_pending_api (OMN-2059)"],
+            warnings=["patterns_read_disabled (api_enabled=False, OMN-2059)"],
         )
 
     def _format_source_attribution(self, source_files: list[Path]) -> str:

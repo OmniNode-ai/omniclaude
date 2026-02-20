@@ -345,9 +345,13 @@ class TestDynamicTopicNameBuilding:
 
         config = IntelligenceConfig(kafka_bootstrap_servers="localhost:9092")
 
-        # Topics should NOT have any environment prefix
+        # Topics should NOT have any environment prefix (OMN-1972)
+        # Request topic uses onex.cmd (no "requested" suffix per OMN-2367)
         assert not config.topic_code_analysis_requested.startswith("dev.")
-        assert "code-analysis-requested" in config.topic_code_analysis_requested
+        assert (
+            config.topic_code_analysis_requested
+            == "onex.cmd.omniintelligence.code-analysis.v1"
+        )
         assert not config.topic_code_analysis_completed.startswith("dev.")
         assert "code-analysis-completed" in config.topic_code_analysis_completed
         assert not config.topic_code_analysis_failed.startswith("dev.")
@@ -723,9 +727,13 @@ class TestFromEnvTopicConstruction:
 
             config = IntelligenceConfig.from_env()
 
-            # Topics should NOT have environment prefix
+            # Topics should NOT have environment prefix (OMN-1972)
+            # Request topic uses onex.cmd (no "requested" suffix per OMN-2367)
             assert not config.topic_code_analysis_requested.startswith("staging.")
-            assert "code-analysis-requested" in config.topic_code_analysis_requested
+            assert (
+                config.topic_code_analysis_requested
+                == "onex.cmd.omniintelligence.code-analysis.v1"
+            )
             assert "code-analysis-completed" in config.topic_code_analysis_completed
             assert "code-analysis-failed" in config.topic_code_analysis_failed
 
@@ -776,8 +784,11 @@ class TestKafkaEnvironmentValidation:
             from omniclaude.lib.config.intelligence_config import IntelligenceConfig
 
             config = IntelligenceConfig.from_env()
-            # Topics should still be populated from constants
-            assert "code-analysis-requested" in config.topic_code_analysis_requested
+            # Topics should still be populated from constants (OMN-2367 canonical values)
+            assert (
+                config.topic_code_analysis_requested
+                == "onex.cmd.omniintelligence.code-analysis.v1"
+            )
 
     def test_direct_instantiation_accepts_empty_environment(self) -> None:
         """Test that direct instantiation accepts empty kafka_environment (OMN-1972)."""
@@ -787,8 +798,11 @@ class TestKafkaEnvironmentValidation:
             kafka_bootstrap_servers="localhost:9092",
             kafka_environment="",
         )
-        # Topics should still be populated
-        assert "code-analysis-requested" in config.topic_code_analysis_requested
+        # Topics should still be populated (OMN-2367 canonical values)
+        assert (
+            config.topic_code_analysis_requested
+            == "onex.cmd.omniintelligence.code-analysis.v1"
+        )
 
     def test_kafka_environment_normalizes_uppercase(self) -> None:
         """Test that kafka_environment normalizes to lowercase."""
