@@ -258,10 +258,10 @@ class TestJaccardSimilarity:
         assert sv._jaccard_similarity(frozenset(), frozenset()) == pytest.approx(1.0)
 
     def test_partial_overlap(self) -> None:
-        """Sets with 2 common out of 4 total → 0.5."""
+        """Sets {a,b} and {a,c}: intersection=1, union=3 → Jaccard=1/3."""
         a = frozenset({"a", "b"})
         b = frozenset({"a", "c"})
-        # intersection=1, union=3 → 1/3
+        # intersection={a}=1, union={a,b,c}=3 → 1/3
         assert sv._jaccard_similarity(a, b) == pytest.approx(1 / 3)
 
 

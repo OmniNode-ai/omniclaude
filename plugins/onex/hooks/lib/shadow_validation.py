@@ -29,10 +29,9 @@ Feature flags:
     SHADOW_MAX_TOKENS=2048               (int, max tokens for shadow API call, default 2048)
 
 Design constraints:
-    - NEVER raises from run_shadow_validation()
+    - Does not raise except ValueError when emitted_at is None (by design —
+      callers must inject timestamps; no silent datetime.now() fallback allowed)
     - All I/O (Claude API call, event emit) is bounded and non-blocking
-    - emitted_at must be injected by callers; run_shadow_validation() raises
-      ValueError when emitted_at is None (no datetime.now() fallback allowed)
     - Module-level imports allow unit tests to patch them easily
 """
 
@@ -749,6 +748,17 @@ def run_shadow_validation(
             os.environ.get("SHADOW_CLAUDE_BASE_URL", "").strip()
             or "https://api.anthropic.com"
         )
+
+        # Security: Reject non-HTTPS base URLs unless they point to localhost
+        # (localhost is allowed for local testing/development environments).
+        if not base_url.startswith("https://") and not any(
+            base_url.startswith(p) for p in ("http://localhost", "http://127.0.0.1")
+        ):
+            logger.warning(
+                "SHADOW_CLAUDE_BASE_URL uses non-HTTPS scheme; shadow validation skipped "
+                "for security. Set SHADOW_CLAUDE_BASE_URL to an https:// URL."
+            )
+            return False
 
         try:
             timeout_s = float(
