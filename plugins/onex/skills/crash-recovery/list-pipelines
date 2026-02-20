@@ -18,7 +18,7 @@ except ImportError:
 
 
 def format_age(mtime: float) -> str:
-    delta = time.time() - mtime
+    delta = max(0.0, time.time() - mtime)
     if delta < 60:
         return f"{int(delta)}s ago"
     if delta < 3600:

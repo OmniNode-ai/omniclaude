@@ -300,6 +300,8 @@ if [[ -n "$SESSION_ID" ]]; then
         # A non-numeric string (e.g. from a malformed wrapper response) would
         # cause jq to fail silently (|| true) and leave _ACCUM_FILE unwritten.
         [[ "${PATTERN_COUNT:-0}" =~ ^[0-9]+$ ]] || PATTERN_COUNT=0
+        # Guard: CONFIDENCE must be numeric before passing to jq --argjson.
+        [[ "${CONFIDENCE:-0.5}" =~ ^[0-9]+(\.[0-9]+)?$ ]] || CONFIDENCE="0.5"
         _INJECT_OCCURRED="false"
         [[ "${PATTERN_SUCCESS:-false}" == "true" ]] && [[ "${PATTERN_COUNT:-0}" != "0" ]] && _INJECT_OCCURRED="true"
         _ACCUM_JSON="$(jq -n \
