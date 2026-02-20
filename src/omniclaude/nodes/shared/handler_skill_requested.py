@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable
-from typing import Any
 
 from .models.model_skill_request import ModelSkillRequest
 from .models.model_skill_result import ModelSkillResult, SkillResultStatus
@@ -173,7 +172,7 @@ async def handle_skill_requested(
     )
 
     try:
-        raw_output: Any = await task_dispatcher(prompt)
+        raw_output: str = await task_dispatcher(prompt)
     except Exception:
         logger.exception(
             "task_dispatcher raised for skill %r (correlation_id=%s)",
