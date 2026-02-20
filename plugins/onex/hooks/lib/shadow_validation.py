@@ -29,8 +29,10 @@ Feature flags:
     SHADOW_MAX_TOKENS=2048               (int, max tokens for shadow API call, default 2048)
 
 Design constraints:
-    - Does not raise except ValueError when emitted_at is None (by design —
-      callers must inject timestamps; no silent datetime.now() fallback allowed)
+    - Raises ValueError only when emitted_at is None (before any I/O). All other
+      errors are caught internally; the function never raises for infrastructure
+      or network failures. Callers must inject timestamps explicitly; no silent
+      datetime.now() fallback allowed.
     - All I/O (Claude API call, event emit) is bounded and non-blocking
     - Module-level imports allow unit tests to patch them easily
 """
@@ -349,7 +351,8 @@ def compare_responses(
     """Compare local model and shadow (Claude) responses.
 
     Computes three metrics:
-    1. Length divergence ratio: abs(local_len - shadow_len) / max(shadow_len, 1)
+    1. Length divergence ratio: abs(local_len - shadow_len) / max(shadow_len, 1),
+       capped at 10.0 (matching schema `le=10.0` constraint)
     2. Keyword overlap score: Jaccard similarity of significant word sets
     3. Structural match: both responses have (or both lack) code blocks
 
@@ -841,9 +844,9 @@ def run_shadow_validation(
         except (ValueError, TypeError):
             max_tokens = _DEFAULT_SHADOW_MAX_TOKENS
 
-        # Closure pattern: api_key is NOT stored in thread.kwargs (which is introspectable).
-        # It lives in the closure __closure__ cells — same lifetime, but not accessible
-        # via thread._kwargs introspection or exception tracebacks that serialize thread state.
+        # Closure pattern: api_key is NOT passed as a kwarg to threading.Thread.
+        # It lives in the closure — same lifetime, but not stored in the Thread object's
+        # public or inspectable args/kwargs and not accessible via standard thread object inspection.
         _prompt = prompt
         _local_response = local_response
         _local_model = local_model
