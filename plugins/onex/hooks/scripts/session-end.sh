@@ -302,7 +302,9 @@ print(result.outcome)
         # bypassed (not a real routing decision). Zero out confidence so omniintelligence
         # consumers receive an unambiguous no-routing-decision signal (confidence=0.0,
         # agent_selected="") instead of a misleading high-confidence empty-agent pair.
-        if [[ -z "$RAW_AGENT_SELECTED" && "$RAW_ROUTING_CONFIDENCE" == "1.0" ]]; then
+        # Use awk for numeric comparison: jq may emit integer 1 instead of float 1.0
+        # when the value is an exact integer, causing string equality "== 1.0" to miss it.
+        if [[ -z "$RAW_AGENT_SELECTED" ]] && [[ -n "$RAW_ROUTING_CONFIDENCE" ]] && awk "BEGIN{exit !($RAW_ROUTING_CONFIDENCE + 0 == 1)}"; then
             log "Slash-command sentinel detected (agent_selected='', confidence=1.0) — zeroing routing_confidence"
             RAW_ROUTING_CONFIDENCE="0.0"
         fi

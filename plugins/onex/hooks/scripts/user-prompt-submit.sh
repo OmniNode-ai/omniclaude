@@ -304,6 +304,9 @@ fi
 # -----------------------------
 if [[ -n "$SESSION_ID" ]]; then
     _ACCUM_FILE="/tmp/omniclaude-session-${SESSION_ID}.json"  # noqa: S108  # nosec B108
+    # Note: TOCTOU race between -f check and mv is intentional — second writer wins,
+    # first-prompt state may be lost, but this is acceptable since sessionId is unique
+    # per session and concurrent hooks are extremely unlikely.
     if [[ ! -f "$_ACCUM_FILE" ]]; then
         # Guard: PATTERN_COUNT must be numeric before passing to jq --argjson.
         # A non-numeric string (e.g. from a malformed wrapper response) would

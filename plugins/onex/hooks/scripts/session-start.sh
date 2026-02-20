@@ -669,6 +669,15 @@ PYEOF
 
         [[ -n "$branch" && -n "$repo" && -d "$repo" ]] || continue
 
+        # Never delete states for protected/default branches regardless of merged status.
+        # git branch --merged main always includes main itself in its output, so without
+        # this guard a state file with branch_name=main would be incorrectly deleted.
+        case "$branch" in
+            main|master|develop|dev)
+                continue
+                ;;
+        esac
+
         # Check if branch is merged into main or master.
         # git branch --merged outputs names with two leading spaces (e.g., "  feature-x")
         # or "* current-branch" for the active branch. Use grep -qxF with the exact

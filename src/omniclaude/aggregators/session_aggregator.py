@@ -423,6 +423,9 @@ class SessionAggregator:
         self._sessions_created: int = 0
         self._sessions_finalized: int = 0
 
+        # Rate-limiting state for finalized-session memory growth warnings
+        self._last_finalized_warning_at: datetime | None = None
+
         logger.info(
             "SessionAggregator initialized",
             extra={
@@ -526,6 +529,16 @@ class SessionAggregator:
             self._events_processed += 1
         else:
             self._events_rejected += 1
+
+        # Check for memory growth after SESSION_ENDED events (the only
+        # process_event path that transitions a session to a terminal state).
+        # Checking here, rather than on every event, ensures the warning fires
+        # precisely when the finalized count increases and avoids spurious
+        # re-checks on non-finalizing event types.
+        # Safe to call without lock: Python async is cooperative, no await points
+        # between lock release and this call; _sessions cannot be mutated between them.
+        if result and event.event_type == HookEventType.SESSION_ENDED:
+            self._maybe_warn_finalized_sessions()
 
         return result
 
@@ -662,6 +675,11 @@ class SessionAggregator:
         # Note: We only clean up the lock, not the state. This ensures events
         # for finalized sessions are rejected rather than creating orphans.
         await self._cleanup_session_lock_only(session_id)
+
+        # Check for memory growth after finalization (outside any lock).
+        # Safe to call without lock: Python async is cooperative, no await points
+        # between lock release and this call; _sessions cannot be mutated between them.
+        self._maybe_warn_finalized_sessions()
 
         return snapshot
 
@@ -1258,6 +1276,49 @@ class SessionAggregator:
     # =========================================================================
     # Private: Helper Methods
     # =========================================================================
+
+    def _maybe_warn_finalized_sessions(self) -> None:
+        """Emit a rate-limited warning when finalized sessions exceed the threshold.
+
+        Counts sessions in terminal states (ENDED, TIMED_OUT) and logs a warning
+        if the count exceeds ``config.finalized_session_warning_threshold``.
+        The warning is suppressed if one was already emitted within the configured
+        ``finalized_session_warning_interval_seconds`` window to avoid log spam.
+
+        This method does NOT acquire any locks; callers must ensure it is called
+        in a context where ``_sessions`` can be safely read (i.e. not in the
+        middle of a mutation that holds ``_locks_lock``).
+
+        Guidance included in the warning directs consumers to call
+        ``cleanup_finalized_sessions()`` to reclaim memory.
+        """
+        threshold = self._config.finalized_session_warning_threshold
+        finalized_count = sum(
+            1
+            for s in self._sessions.values()
+            if s.status in (EnumSessionStatus.ENDED, EnumSessionStatus.TIMED_OUT)
+        )
+
+        if finalized_count <= threshold:
+            return
+
+        now = datetime.now(UTC)
+        interval = self._config.finalized_session_warning_interval_seconds
+        if self._last_finalized_warning_at is not None:
+            elapsed = (now - self._last_finalized_warning_at).total_seconds()
+            if elapsed < interval:
+                return
+
+        self._last_finalized_warning_at = now
+        logger.warning(
+            "Finalized session count exceeds threshold; call "
+            "cleanup_finalized_sessions() to prevent unbounded memory growth",
+            extra={
+                "finalized_count": finalized_count,
+                "threshold": threshold,
+                "aggregator_id": self._aggregator_id,
+            },
+        )
 
     async def _get_session_lock(self, session_id: str) -> asyncio.Lock:
         """Get or create a lock for a specific session.
