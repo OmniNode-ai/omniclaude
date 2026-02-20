@@ -890,6 +890,10 @@ class TestIntelligenceEventClientDualPublish:
 
         assert len(published_payloads) == 1
         assert len(canonical_payloads) == 1
+        assert "event_id" in canonical_payloads[0], (
+            "capture_send did not capture payload kwarg — "
+            "verify send_request is called with payload= as a keyword argument"
+        )
         legacy_event_id = published_payloads[0]["event_id"]
         canonical_event_id = canonical_payloads[0]["event_id"]
         assert legacy_event_id != canonical_event_id
