@@ -313,6 +313,10 @@ print(result.outcome)
             log "WARNING: tools_used_count has unexpected format '${TOOL_CALLS_COMPLETED}', resetting to 0"
             TOOL_CALLS_COMPLETED=0
         fi
+        if [[ "$RAW_INJECTION_OCCURRED" == "null" ]]; then
+            log "WARNING: injection_occurred is null in accumulator — resetting to false"
+            RAW_INJECTION_OCCURRED="false"
+        fi
         [[ "$RAW_INJECTION_OCCURRED" == "true" ]] || RAW_INJECTION_OCCURRED="false"
 
         # Use Python for a portable ISO timestamp with millisecond precision.

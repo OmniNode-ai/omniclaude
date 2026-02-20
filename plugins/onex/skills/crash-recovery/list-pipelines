@@ -111,7 +111,7 @@ def main() -> None:
         type=int,
         default=10,
         metavar="N",
-        help="Maximum number of entries to show (default: 10, must be >= 1)",
+        help="Maximum results to display (default: 10, must be >= 1). With --in-progress, caps shown results after filtering.",
     )
     parser.add_argument(
         "--in-progress",
