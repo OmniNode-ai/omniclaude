@@ -144,7 +144,9 @@ def violations_to_advisories(
                 logger.warning(
                     "compliance violation payload uses 'message' field — expected 'description'; schema drift detected"
                 )
-            violation_message = str(_desc or _msg or "").strip()
+            violation_message = str(
+                _desc if _desc is not None else (_msg or "")
+            ).strip()
 
             # Validate confidence is a finite number in [0, 1]
             try:

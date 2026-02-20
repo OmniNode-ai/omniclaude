@@ -223,7 +223,7 @@ class TestViolationsToAdvisories:
                 "pattern_signature": "",
                 "domain_id": "",
                 "confidence": 0.7,
-                "message": "",
+                "description": "",
             }
         ]
         advisories = violations_to_advisories(violations)
@@ -238,7 +238,7 @@ class TestViolationsToAdvisories:
                 "pattern_signature": "Only-Sig",
                 "domain_id": "",
                 "confidence": 0.7,
-                "message": "",
+                "description": "",
             }
         ]
         advisories = violations_to_advisories(violations)
