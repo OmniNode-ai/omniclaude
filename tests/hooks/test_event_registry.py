@@ -766,6 +766,8 @@ class TestEventRegistryIntegration:
             "context.enrichment",
             # Raw session outcome signals (OMN-2356)
             "routing.outcome.raw",
+            # Shadow validation mode comparison results (OMN-2283)
+            "delegation.shadow.comparison",
         }
         assert set(EVENT_REGISTRY.keys()) == expected_types
 

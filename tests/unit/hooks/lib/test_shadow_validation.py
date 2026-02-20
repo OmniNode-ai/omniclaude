@@ -1176,11 +1176,6 @@ class TestEmitShadowComparisonEvent:
         The event_type passed to emit_event is the semantic name
         "delegation.shadow.comparison" (not the wire topic string), routing
         through the emit daemon's EVENT_REGISTRY for fan-out.
-
-        Note: "delegation.shadow.comparison" is NOT yet registered in
-        event_registry.py's EVENT_REGISTRY as of the time this test was written.
-        The entry should be added as a follow-up (the daemon will drop unknown
-        event types gracefully).
         """
         emitted_calls: list[dict[str, Any]] = []
 
