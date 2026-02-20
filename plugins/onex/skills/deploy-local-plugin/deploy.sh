@@ -276,10 +276,18 @@ if [[ "$EXECUTE" == "true" ]]; then
 
     # --- Create venv (clean state) ---
     VENV_DIR="${TARGET}/lib/.venv"
+    LOCKED_REQS_FILE=$(mktemp /tmp/omniclaude-locked-reqs.XXXXXX)
+    _uv_stderr="$(mktemp /tmp/omniclaude-uv-export-err.XXXXXX)"
+    # Register EXIT trap BEFORE setting _TRAP_REMOVE_VENV=true so that any
+    # SIGINT/SIGTERM between venv creation and successful completion is caught.
+    # _TRAP_REMOVE_VENV starts false (no venv yet); set true right after creation;
+    # reset to false after the smoke test passes so a successful deploy retains the venv.
+    _TRAP_REMOVE_VENV=false
+    trap '[[ "${_TRAP_REMOVE_VENV:-false}" == "true" ]] && rm -rf "${VENV_DIR:-}"; rm -f "${LOCKED_REQS_FILE:-}" "${_uv_stderr:-}"' EXIT
     rm -rf "$VENV_DIR"
     mkdir -p "${TARGET}/lib"
     "$PYTHON_BIN" -m venv "$VENV_DIR"
-    _TRAP_REMOVE_VENV=true  # Signal EXIT trap to clean up if interrupted hereafter
+    _TRAP_REMOVE_VENV=true  # Venv now exists; signal EXIT trap to clean up if interrupted hereafter
     echo -e "${GREEN}  Venv created at ${VENV_DIR}${NC}"
 
     # --- Bootstrap pip toolchain ---
@@ -296,14 +304,6 @@ if [[ "$EXECUTE" == "true" ]]; then
     # version drift between deploys (e.g. qdrant-client 1.17.0 introduced a
     # runtime TypeError with grpcio's EnumTypeWrapper that breaks the smoke test).
     echo "  Installing project from ${PROJECT_ROOT} (locked versions)..."
-    LOCKED_REQS_FILE=$(mktemp /tmp/omniclaude-locked-reqs.XXXXXX)
-    _uv_stderr="$(mktemp /tmp/omniclaude-uv-export-err.XXXXXX)"
-    # _TRAP_REMOVE_VENV: set to true once the venv directory is created so that
-    # an external interrupt (SIGINT/SIGTERM) between venv creation and successful
-    # completion causes the EXIT trap to clean it up automatically.  Reset to
-    # false after the smoke test passes so a successful deploy retains the venv.
-    _TRAP_REMOVE_VENV=false
-    trap '[[ "${_TRAP_REMOVE_VENV:-false}" == "true" ]] && rm -rf "${VENV_DIR:-}"; rm -f "${LOCKED_REQS_FILE:-}" "${_uv_stderr:-}"' EXIT
     _USE_LOCKED=false
     if command -v uv &>/dev/null && [[ -f "${PROJECT_ROOT}/uv.lock" ]]; then
         if (cd "${PROJECT_ROOT}" && uv export --frozen --no-dev --no-hashes --format requirements-txt > "$LOCKED_REQS_FILE" 2>"$_uv_stderr"); then

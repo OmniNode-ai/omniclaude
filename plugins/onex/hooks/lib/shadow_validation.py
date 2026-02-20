@@ -713,7 +713,10 @@ def run_shadow_validation(
     comparison event.  The local model response is returned to the user
     immediately; this function returns as soon as the thread is started.
 
-    This function NEVER raises.  All errors are caught and logged at DEBUG level.
+    Does not raise for infrastructure failures (feature flags, sampling, API
+    errors, emit failures).  Raises ValueError if emitted_at is None — this
+    is a programming error; callers must inject timestamps explicitly per repo
+    invariant (no silent datetime.now() fallback allowed).
 
     Args:
         prompt: The redacted user prompt (already secret-scrubbed by the

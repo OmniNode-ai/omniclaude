@@ -950,10 +950,18 @@ def orchestrate_delegation(
                     task_type=intent_value,
                     emitted_at=emitted_at,
                 )
+            except ValueError as _shadow_val_err:
+                # ValueError from shadow validation is a programming error
+                # (e.g. emitted_at is None) — log at WARNING, not DEBUG.
+                logger.warning(
+                    "Shadow validation rejected call (programming error): %s",
+                    _shadow_val_err,
+                )
             except Exception as _shadow_exc:
-                # Shadow validation must never fail delegation
+                # Other errors (network, import, etc.) are non-critical
                 logger.debug(
-                    "Shadow validation call raised unexpectedly (non-critical): %s",
+                    "Shadow validation call raised unexpectedly (non-critical): %s: %s",
+                    type(_shadow_exc).__name__,
                     _shadow_exc,
                 )
 
