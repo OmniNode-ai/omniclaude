@@ -126,6 +126,7 @@ class IntelligenceEventClient:
         source_path: str,
         language: str,
         timeout_ms: int | None = None,
+        emitted_at: datetime | None = None,
     ) -> list[dict[str, Any]]:
         if not self._started:
             raise OnexError(
@@ -146,6 +147,7 @@ class IntelligenceEventClient:
             language=language,
             options={"operation_type": "PATTERN_EXTRACTION", "include_patterns": True},
             timeout_ms=timeout_ms,
+            emitted_at=emitted_at,
         )
         return cast("list[dict[str, Any]]", result.get("patterns", []))
 
@@ -156,6 +158,7 @@ class IntelligenceEventClient:
         language: str,
         options: dict[str, Any] | None = None,
         timeout_ms: int | None = None,
+        emitted_at: datetime | None = None,
     ) -> dict[str, Any]:
         if not self._started or self._wiring is None:
             raise OnexError(
@@ -165,10 +168,13 @@ class IntelligenceEventClient:
             )
         timeout_seconds = (timeout_ms or self.request_timeout_ms) // 1000
         correlation_id = str(uuid4())
+        timestamp = (
+            emitted_at if emitted_at is not None else datetime.now(UTC)
+        ).isoformat()
         payload = {
             "event_type": self.TOPIC_REQUEST,
             "event_id": str(uuid4()),
-            "timestamp": datetime.now(UTC).isoformat(),
+            "timestamp": timestamp,
             "tenant_id": os.getenv("TENANT_ID", "default"),
             "namespace": "omninode",
             "source": "omniclaude",
