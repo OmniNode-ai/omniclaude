@@ -15,6 +15,7 @@ Part of OMN-2425: consume pattern projection and cache for context injection.
 
 from __future__ import annotations
 
+import os
 import time
 from unittest.mock import patch
 
@@ -183,8 +184,6 @@ class TestPatternCacheStaleness:
         self, cache: PatternProjectionCache
     ) -> None:
         """Stale threshold is read from PATTERN_CACHE_STALE_SECONDS env var."""
-        import os
-
         cache.update(
             "general", [{"id": "p1", "pattern_signature": "x", "confidence": 0.9}]
         )

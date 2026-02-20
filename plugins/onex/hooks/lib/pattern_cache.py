@@ -75,7 +75,7 @@ class PatternProjectionCache:
     Attributes:
         _lock: Reentrant lock protecting all mutable state.
         _data: Mapping of domain → list of pattern dicts.
-        _last_updated_at: Epoch timestamp of the most recent update, or None.
+        _last_updated_at: Monotonic clock value (time.monotonic()) of the most recent update, or None.
     """
 
     def __init__(self) -> None:
@@ -388,6 +388,8 @@ def start_projection_consumer_if_configured() -> None:
                     "pattern_cache: KAFKA_BOOTSTRAP_SERVERS not set; "
                     "projection consumer disabled"
                 )
+                # Mark as "started" (no-op) so subsequent calls skip the lock.
+                _consumer_started = True
                 return
 
             start_projection_consumer(bootstrap)

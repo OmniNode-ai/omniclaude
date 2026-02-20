@@ -14,6 +14,7 @@ Part of OMN-2425: consume pattern projection and cache for context injection.
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -261,7 +262,6 @@ class TestContextInjectionCacheMissStale:
         handler = _make_handler()
         # Populate the cache, then mark it stale by back-dating _last_updated_at
         stale_cache = _warm_cache()
-        import time
 
         with stale_cache._lock:
             stale_cache._last_updated_at = time.monotonic() - 999  # type: ignore[assignment]
@@ -307,7 +307,6 @@ class TestContextInjectionCacheMissStale:
         """Cache miss (stale) is logged with reason=stale."""
         handler = _make_handler()
         stale_cache = _warm_cache()
-        import time
 
         with stale_cache._lock:
             stale_cache._last_updated_at = time.monotonic() - 999  # type: ignore[assignment]
