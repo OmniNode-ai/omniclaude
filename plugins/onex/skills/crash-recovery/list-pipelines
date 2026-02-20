@@ -167,6 +167,10 @@ def main() -> None:
 
     total_found = len(entries)
 
+    if not entries:
+        print("No valid pipeline states found (all state files failed to parse).")
+        sys.exit(0)
+
     # Clamp args.count before filtering so the guard always runs against the
     # full entry list, not after --in-progress has already narrowed it.
     if args.count < 1:
@@ -220,6 +224,8 @@ def main() -> None:
             branch = shorten_branch(e["branch_name"], 30)
             age = e["age_human"]
             print(f"{ticket:<20} {title:<56} {phase:<22} {branch:<31} {age}")
+        if total_found > args.count:
+            print(f"\nShowing {args.count} of {total_found} pipelines.")
 
 
 if __name__ == "__main__":
