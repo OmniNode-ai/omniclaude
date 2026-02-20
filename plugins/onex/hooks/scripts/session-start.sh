@@ -675,10 +675,12 @@ PYEOF
         # two-space prefix to avoid false positives from substring matches or the
         # active-branch marker ("* main" matching when branch="main").
         local merged=""
-        if git -C "$repo" rev-parse --git-dir >/dev/null 2>&1; then
-            if git -C "$repo" branch --merged main 2>/dev/null | grep -qxF "  $branch"; then
+        # GIT_TERMINAL_PROMPT=0 prevents interactive credential prompts from
+        # hanging this backgrounded subshell indefinitely on repos requiring auth.
+        if GIT_TERMINAL_PROMPT=0 git -C "$repo" rev-parse --git-dir >/dev/null 2>&1; then
+            if GIT_TERMINAL_PROMPT=0 git -C "$repo" branch --merged main 2>/dev/null | grep -qxF "  $branch"; then
                 merged="yes"
-            elif git -C "$repo" branch --merged master 2>/dev/null | grep -qxF "  $branch"; then
+            elif GIT_TERMINAL_PROMPT=0 git -C "$repo" branch --merged master 2>/dev/null | grep -qxF "  $branch"; then
                 merged="yes"
             fi
         fi
