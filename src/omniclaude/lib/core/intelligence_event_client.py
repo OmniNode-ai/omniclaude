@@ -168,7 +168,9 @@ class IntelligenceEventClient:
             )
         timeout_seconds = (timeout_ms or self.request_timeout_ms) // 1000
         correlation_id = str(uuid4())
-        timestamp = (emitted_at if emitted_at is not None else datetime.now(UTC)).isoformat()
+        timestamp = (
+            emitted_at if emitted_at is not None else datetime.now(UTC)
+        ).isoformat()
         payload = {
             "event_type": self.TOPIC_REQUEST,
             "event_id": str(uuid4()),
