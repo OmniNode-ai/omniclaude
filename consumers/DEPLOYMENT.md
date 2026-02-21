@@ -44,7 +44,7 @@ POSTGRES_HOST=localhost
 POSTGRES_PORT=5436
 POSTGRES_DATABASE=omniclaude
 POSTGRES_USER=postgres
-POSTGRES_PASSWORD=omninode-bridge-postgres-dev-2024
+POSTGRES_PASSWORD=<your-postgres-password>
 BATCH_SIZE=100
 BATCH_TIMEOUT_MS=1000
 HEALTH_CHECK_PORT=8080
@@ -220,7 +220,7 @@ docker run -d \
   -e POSTGRES_PORT=5436 \
   -e POSTGRES_DATABASE=omniclaude \
   -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=omninode-bridge-postgres-dev-2024 \
+  -e POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
   --restart unless-stopped \
   agent-actions-consumer:latest
 ```

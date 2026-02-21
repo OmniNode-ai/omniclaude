@@ -25,7 +25,7 @@ cd consumers
 pip install -r requirements.txt
 
 # 2. Apply database migration (if not already done)
-PGPASSWORD="omninode-bridge-postgres-dev-2024" psql -h localhost -p 5436 -U postgres -d omniclaude -f ../migrations/005_create_agent_actions_table.sql
+PGPASSWORD="${POSTGRES_PASSWORD}" psql -h localhost -p 5436 -U postgres -d omniclaude -f ../migrations/005_create_agent_actions_table.sql
 
 # 3. Start consumer
 python agent_actions_consumer.py

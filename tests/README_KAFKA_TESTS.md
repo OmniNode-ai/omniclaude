@@ -242,7 +242,7 @@ KAFKA_BROKERS=localhost:29092
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5436
 POSTGRES_USER=postgres
-POSTGRES_PASSWORD=omninode-bridge-postgres-dev-2024
+POSTGRES_PASSWORD=<your-postgres-password>
 POSTGRES_DATABASE=omniclaude
 
 # Consumer

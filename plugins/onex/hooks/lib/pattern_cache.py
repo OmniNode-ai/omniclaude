@@ -314,6 +314,12 @@ def _run_projection_consumer(kafka_bootstrap_servers: str) -> None:
                 bootstrap_servers=kafka_bootstrap_servers,
                 auto_offset_reset="latest",
                 enable_auto_commit=True,
+                # Intentional: pid-based group_id means each process gets its own
+                # consumer group, starting from the latest offset (no replay of
+                # historical events). Projections emitted while this process is not
+                # running are permanently skipped — the 10-minute staleness fallback
+                # in the cache handles the cold-start case by falling back to a
+                # full database query instead of relying on projection events.
                 group_id=f"omniclaude-pattern-cache-{os.getpid()}",
                 value_deserializer=lambda v: v,  # raw bytes; we decode ourselves
                 consumer_timeout_ms=5000,  # poll loop timeout

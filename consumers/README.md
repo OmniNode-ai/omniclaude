@@ -90,7 +90,7 @@ export POSTGRES_HOST="localhost"
 export POSTGRES_PORT="5436"
 export POSTGRES_DATABASE="omniclaude"
 export POSTGRES_USER="postgres"
-export POSTGRES_PASSWORD="omninode-bridge-postgres-dev-2024"
+export POSTGRES_PASSWORD="<your-postgres-password>"
 
 # Consumer Tuning
 export BATCH_SIZE="100"

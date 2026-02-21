@@ -285,7 +285,7 @@ DB_CONFIG = {
     "port": 5436,
     "database": "omniclaude",
     "user": "postgres",
-    "password": "omninode-bridge-postgres-dev-2024",
+    "password": "<your-postgres-password>",  # Set via POSTGRES_PASSWORD env var
 }
 ```
 
