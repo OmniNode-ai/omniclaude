@@ -9,6 +9,7 @@ Verifies:
 4. get() returns correct patterns for domain
 5. Staleness: cache is stale after threshold exceeded
 6. get() returns empty list for unknown domain (not None)
+7. Consumer stops after exceeding _MAX_CONSUMER_RETRIES
 
 Part of OMN-2425: consume pattern projection and cache for context injection.
 """
@@ -16,8 +17,9 @@ Part of OMN-2425: consume pattern projection and cache for context injection.
 from __future__ import annotations
 
 import os
+import threading
 import time
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -164,26 +166,18 @@ class TestPatternCacheStaleness:
     ) -> None:
         """is_stale() returns True when the elapsed time exceeds the stale threshold.
 
-        We mock time.monotonic() to simulate time passage without actually waiting.
+        Warms the cache normally, then back-dates _last_updated_at to 601 seconds
+        ago so that the next call to is_stale() sees elapsed > 600s threshold.
+        No time.monotonic patching required — is_stale() reads the real clock at
+        call time and compares it against the back-dated timestamp.
         """
         cache.update(
             "general", [{"id": "p1", "pattern_signature": "x", "confidence": 0.9}]
         )
-        # Simulate 601 seconds elapsed (beyond the default 600s threshold).
-        # We patch only time.monotonic rather than the whole time module so that
-        # time.sleep (used by the retry loop in _run_projection_consumer) is not
-        # accidentally suppressed if it is ever called in a related code path.
-        fake_now = time.monotonic() + 601
-
-        with patch(
-            "plugins.onex.hooks.lib.pattern_cache.time.monotonic",
-            return_value=fake_now,
-        ):
-            # _get_stale_threshold uses os.environ, not time — no need to mock it
-            # Force the cache's _last_updated_at to be in the past
-            with cache._lock:
-                cache._last_updated_at = fake_now - 601  # type: ignore[assignment]
-            assert cache.is_stale() is True
+        # Place the last-updated timestamp 601 seconds in the past.
+        with cache._lock:
+            cache._last_updated_at = time.monotonic() - 601  # type: ignore[assignment]
+        assert cache.is_stale() is True
 
     def test_cache_staleness_configurable_via_env(
         self, cache: PatternProjectionCache
@@ -224,3 +218,62 @@ class TestPatternCacheClear:
         cache.clear()
         assert cache.is_warm() is False
         assert cache.get("general") == []
+
+
+# =============================================================================
+# Consumer retry-guard tests
+# =============================================================================
+
+
+class TestProjectionConsumerRetryGuard:
+    """Tests for the _MAX_CONSUMER_RETRIES guard in _run_projection_consumer."""
+
+    @pytest.mark.unit
+    def test_consumer_stops_at_max_retries(self) -> None:
+        """Consumer thread exits after exceeding _MAX_CONSUMER_RETRIES.
+
+        Patches _MAX_CONSUMER_RETRIES to 2 so the consumer gives up after
+        retry_count exceeds 2 (i.e. on the third failure).  KafkaConsumer is
+        patched to raise on every call so each loop iteration fails
+        immediately.  time.sleep is patched to avoid real delays.
+
+        The consumer function is run in a real thread so that thread-related
+        semantics (daemon flag, blocking join) are exercised realistically.
+        The thread must finish within a generous timeout — if the guard is
+        broken the thread would loop forever and the join would time out.
+        """
+        import plugins.onex.hooks.lib.pattern_cache as pc_module
+
+        # KafkaConsumer constructor raises on every call — simulates a
+        # permanently unavailable broker.  We use a plain Exception rather than
+        # KafkaError so the test does not depend on kafka-python being installed.
+        mock_consumer_cls = MagicMock(side_effect=Exception("broker unavailable"))
+
+        with (
+            patch.object(pc_module, "_MAX_CONSUMER_RETRIES", 2),
+            patch.object(pc_module, "_CONSUMER_RETRY_SLEEP_S", 0),
+            patch(
+                "time.sleep"
+            ),  # safety net in case the module uses time.sleep directly
+            patch.dict(
+                "sys.modules",
+                {
+                    "kafka": MagicMock(KafkaConsumer=mock_consumer_cls),
+                    "kafka.errors": MagicMock(KafkaError=Exception),
+                },
+            ),
+        ):
+            thread = threading.Thread(
+                target=pc_module._run_projection_consumer,
+                args=("localhost:9092",),
+                daemon=True,
+            )
+            thread.start()
+            # Allow up to 5 seconds — far more than the patched 0-second sleeps
+            # require.  If the guard is missing the thread never exits.
+            thread.join(timeout=5)
+
+        assert not thread.is_alive(), (
+            "Consumer thread is still running after exceeding _MAX_CONSUMER_RETRIES; "
+            "the retry guard may not be firing correctly"
+        )

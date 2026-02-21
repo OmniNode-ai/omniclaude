@@ -36,7 +36,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID, uuid4
 
 from omniclaude.hooks.cohort_assignment import (
@@ -603,6 +603,62 @@ class HandlerContextInjection:
     # Pattern Source Methods
     # =========================================================================
 
+    def _map_raw_pattern_dict(self, raw_p: dict[str, Any]) -> ModelPatternRecord | None:
+        """Map a raw pattern dict (from cache or API) to a ModelPatternRecord.
+
+        Performs field extraction, type coercion, and validation.  Returns
+        None for records that should be excluded (missing required fields,
+        invalid numeric values, or failed ModelPatternRecord validation).
+
+        Args:
+            raw_p: Raw pattern dictionary with keys: id, pattern_signature,
+                confidence, domain_id, quality_score, status.
+
+        Returns:
+            A ModelPatternRecord on success, or None if the record must be
+            excluded.
+        """
+        pattern_id = _safe_str(raw_p.get("id"))
+        signature = _safe_str(raw_p.get("pattern_signature"))
+        confidence_raw = raw_p.get("confidence")
+
+        if not pattern_id or not signature or confidence_raw is None:
+            return None
+
+        try:
+            confidence = float(confidence_raw)
+        except (TypeError, ValueError):
+            return None
+
+        domain_id = _safe_str(raw_p.get("domain_id"), default="general") or "general"
+        quality_score_raw = raw_p.get("quality_score")
+        if quality_score_raw is None:
+            success_rate = 0.0
+        else:
+            try:
+                success_rate = float(quality_score_raw)
+            except (TypeError, ValueError):
+                success_rate = 0.0
+
+        status = raw_p.get("status")
+        lifecycle_state: str | None = (
+            status if status in {"validated", "provisional"} else None
+        )
+
+        try:
+            return ModelPatternRecord(
+                pattern_id=pattern_id,
+                domain=domain_id,
+                title=signature,
+                description=signature,
+                confidence=confidence,
+                usage_count=0,
+                success_rate=max(0.0, min(1.0, success_rate)),
+                lifecycle_state=lifecycle_state,
+            )
+        except (ValueError, TypeError):
+            return None
+
     async def _load_patterns_from_api(
         self,
         domain: str | None = None,
@@ -728,87 +784,17 @@ class HandlerContextInjection:
                 )
                 continue
 
-            # Validate required fields
-            pattern_id = _safe_str(raw_p.get("id"))
-            signature = _safe_str(raw_p.get("pattern_signature"))
-            confidence_raw = raw_p.get("confidence")
-
-            missing = []
-            if not pattern_id:
-                missing.append("id")
-            if not signature:
-                missing.append("pattern_signature")
-            if confidence_raw is None:
-                missing.append("confidence")
-
-            if missing:
+            record = self._map_raw_pattern_dict(raw_p)
+            if record is None:
                 excluded += 1
                 logger.warning(
-                    "omniintelligence API: pattern excluded — missing required fields: %s "
-                    "(pattern_id=%r)",
-                    missing,
-                    pattern_id or "<unknown>",
+                    "omniintelligence API: pattern excluded — missing required fields "
+                    "or invalid values (pattern_id=%r)",
+                    _safe_str(raw_p.get("id")) or "<unknown>",
                 )
                 continue
 
-            try:
-                # confidence_raw is not None here: we appended "confidence" to
-                # missing if it were None, and continued. mypy cannot infer this.
-                confidence = float(confidence_raw)  # type: ignore[arg-type]  # None excluded above
-            except (TypeError, ValueError):
-                excluded += 1
-                logger.warning(
-                    "omniintelligence API: pattern excluded — invalid confidence value: %r "
-                    "(pattern_id=%r)",
-                    confidence_raw,
-                    pattern_id,
-                )
-                continue
-
-            # Map optional fields
-            domain_id = (
-                _safe_str(raw_p.get("domain_id"), default="general") or "general"
-            )
-            quality_score_raw = raw_p.get("quality_score")
-            if quality_score_raw is None:
-                success_rate = 0.0
-            else:
-                try:
-                    success_rate = float(quality_score_raw)
-                except (TypeError, ValueError):
-                    logger.warning(
-                        "omniintelligence API: invalid quality_score value %r for "
-                        "pattern_id=%r — defaulting success_rate to 0.0",
-                        quality_score_raw,
-                        pattern_id,
-                    )
-                    success_rate = 0.0
-            status = raw_p.get("status")
-            lifecycle_state: str | None = (
-                status if status in {"validated", "provisional"} else None
-            )
-
-            try:
-                record = ModelPatternRecord(
-                    pattern_id=pattern_id,
-                    domain=domain_id,
-                    title=signature,
-                    description=signature,
-                    confidence=confidence,
-                    usage_count=0,
-                    success_rate=max(0.0, min(1.0, success_rate)),
-                    lifecycle_state=lifecycle_state,
-                )
-                records.append(record)
-            except (ValueError, TypeError) as e:
-                excluded += 1
-                logger.warning(
-                    "omniintelligence API: pattern excluded — validation error: %s "
-                    "(pattern_id=%r)",
-                    e,
-                    pattern_id,
-                )
-                continue
+            records.append(record)
 
         if excluded > 0:
             logger.warning(
@@ -876,67 +862,44 @@ class HandlerContextInjection:
                 if cache_warm and not cache_stale:
                     domain_key = domain or "general"
                     cached_raw = cache.get(domain_key)
-                    # Map raw projection dicts → ModelPatternRecord (same field mapping
-                    # as _load_patterns_from_api to ensure consistency).
+                    # Map raw projection dicts → ModelPatternRecord via shared helper
+                    # (ensures field mapping stays consistent with _load_patterns_from_api).
                     records: list[ModelPatternRecord] = []
                     excluded = 0
                     for raw_p in cached_raw:
-                        pattern_id = _safe_str(raw_p.get("id"))
-                        signature = _safe_str(raw_p.get("pattern_signature"))
-                        confidence_raw = raw_p.get("confidence")
-                        if not pattern_id or not signature or confidence_raw is None:
+                        mapped = self._map_raw_pattern_dict(raw_p)
+                        if mapped is None:
                             excluded += 1
-                            continue
-                        try:
-                            confidence = float(confidence_raw)
-                        except (TypeError, ValueError):
-                            excluded += 1
-                            continue
-                        domain_id = _safe_str(raw_p.get("domain_id"), default="general")
-                        quality_score_raw = raw_p.get("quality_score")
-                        if quality_score_raw is None:
-                            success_rate = 0.0
                         else:
-                            try:
-                                success_rate = float(quality_score_raw)
-                            except (TypeError, ValueError):
-                                success_rate = 0.0
-                        status = raw_p.get("status")
-                        lifecycle_state: str | None = (
-                            status if status in {"validated", "provisional"} else None
-                        )
-                        try:
-                            record = ModelPatternRecord(
-                                pattern_id=pattern_id,
-                                domain=domain_id,
-                                title=signature,
-                                description=signature,
-                                confidence=confidence,
-                                usage_count=0,
-                                success_rate=max(0.0, min(1.0, success_rate)),
-                                lifecycle_state=lifecycle_state,
-                            )
-                            records.append(record)
-                        except (ValueError, TypeError):
-                            excluded += 1
-                            continue
+                            records.append(mapped)
 
+                    if records:
+                        logger.info(
+                            "pattern_source=cache_hit domain=%r count=%d excluded=%d",
+                            domain_key,
+                            len(records),
+                            excluded,
+                        )
+                        return ModelLoadPatternsResult(
+                            patterns=records,
+                            source_files=[],
+                            warnings=[],
+                        )
+
+                    # Cache is warm but returned no records for this domain —
+                    # fall through to the API so a domain-specific miss does not
+                    # silently suppress patterns available via HTTP.
                     logger.info(
-                        "pattern_source=cache_hit domain=%r count=%d excluded=%d",
+                        "pattern_source=cache_domain_miss domain=%r excluded=%d "
+                        "— falling through to API",
                         domain_key,
-                        len(records),
                         excluded,
                     )
-                    return ModelLoadPatternsResult(
-                        patterns=records,
-                        source_files=[],
-                        warnings=[],
-                    )
-
-                # Derive reason from the already-evaluated booleans — avoids a
-                # third lock acquisition on cache.is_warm() after the guard block.
-                reason = "cold" if not cache_warm else "stale"
-                logger.info("pattern_source=cache_miss reason=%s", reason)
+                else:
+                    # Derive reason from the already-evaluated booleans — avoids a
+                    # third lock acquisition on cache.is_warm() after the guard block.
+                    reason = "cold" if not cache_warm else "stale"
+                    logger.info("pattern_source=cache_miss reason=%s", reason)
 
             except Exception as exc:
                 logger.exception(

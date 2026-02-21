@@ -51,7 +51,14 @@ _CONSUMER_RETRY_SLEEP_S: int = 30
 
 
 def _get_stale_threshold() -> int:
-    """Read PATTERN_CACHE_STALE_SECONDS from env, returning default on parse failure."""
+    """Read PATTERN_CACHE_STALE_SECONDS from env, returning default on parse failure.
+
+    The environment variable is intentionally re-read on every call so that
+    operators can adjust the staleness threshold at runtime without restarting
+    the process.  If dynamic reconfiguration is not needed, this value could
+    instead be cached at module import time (or at PatternProjectionCache
+    construction) for a minor performance improvement.
+    """
     raw = os.environ.get("PATTERN_CACHE_STALE_SECONDS", "")
     if not raw:
         return _DEFAULT_STALE_SECONDS
@@ -136,6 +143,10 @@ class PatternProjectionCache:
         """Return True if the cache has not been updated within the stale threshold.
 
         Always returns True when the cache is cold (not yet populated).
+
+        Note: ``_get_stale_threshold()`` is intentionally re-read on every call
+        so the threshold can be changed at runtime via the environment variable
+        without restarting the process.
         """
         with self._lock:
             if self._last_updated_at is None:
@@ -303,7 +314,7 @@ def _run_projection_consumer(kafka_bootstrap_servers: str) -> None:
                 bootstrap_servers=kafka_bootstrap_servers,
                 auto_offset_reset="latest",
                 enable_auto_commit=True,
-                group_id="omniclaude-pattern-cache",
+                group_id=f"omniclaude-pattern-cache-{os.getpid()}",
                 value_deserializer=lambda v: v,  # raw bytes; we decode ourselves
                 consumer_timeout_ms=5000,  # poll loop timeout
             )
@@ -340,6 +351,16 @@ def _run_projection_consumer(kafka_bootstrap_servers: str) -> None:
                     consumer.close()
                 except Exception:
                     pass
+            if (
+                _MAX_CONSUMER_RETRIES is not None
+                and retry_count > _MAX_CONSUMER_RETRIES
+            ):
+                logger.error(
+                    "pattern_cache: projection consumer exceeded max retries "
+                    "(%d); giving up",
+                    _MAX_CONSUMER_RETRIES,
+                )
+                return
             time.sleep(_CONSUMER_RETRY_SLEEP_S)
         except Exception as exc:
             retry_count += 1
@@ -355,6 +376,16 @@ def _run_projection_consumer(kafka_bootstrap_servers: str) -> None:
                     consumer.close()
                 except Exception:
                     pass
+            if (
+                _MAX_CONSUMER_RETRIES is not None
+                and retry_count > _MAX_CONSUMER_RETRIES
+            ):
+                logger.error(
+                    "pattern_cache: projection consumer exceeded max retries "
+                    "(%d); giving up",
+                    _MAX_CONSUMER_RETRIES,
+                )
+                return
             time.sleep(_CONSUMER_RETRY_SLEEP_S)
 
 
