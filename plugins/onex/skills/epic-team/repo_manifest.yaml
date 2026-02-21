@@ -317,6 +317,12 @@ repos:
       - wbs
       - omninode_planning
       - node-planning
+      - omninode
+      - plan-orchestrator
+      - work-breakdown-node
+      - task-breakdown
+      - wbs-node
+      - node-impl
     precedence: 6
 
   - name: omninode_review
@@ -333,6 +339,12 @@ repos:
       - omninode_review
       - node-review
       - review-pipeline
+      - review
+      - pr
+      - quality
+      - assess
+      - assessment
+      - code-review
     precedence: 6
 
   - name: omnidash
