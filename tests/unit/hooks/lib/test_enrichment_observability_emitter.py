@@ -673,6 +673,36 @@ class TestWasDropped:
         assert len(payloads) == 1
         assert payloads[0]["was_dropped"] is False
 
+    def test_was_dropped_false_when_miss_outcome_not_in_kept_names(self) -> None:
+        """Edge case: was_dropped=False when success=True, tokens=0 (miss), not in kept_names.
+
+        The ``result_token_count > 0`` guard in ``emit_enrichment_events`` ensures that
+        a miss (success=True, tokens=0) is never flagged as dropped — there was no
+        meaningful content produced, so there was nothing to drop by the token cap.
+
+        The full condition: ``success and (name not in kept_names) and tokens > 0``
+        means a miss satisfies the first two terms but fails the third, yielding False.
+        """
+        payloads: list[dict[str, Any]] = []
+
+        def _capture(event_type: str, payload: dict[str, Any]) -> bool:
+            payloads.append(payload)
+            return True
+
+        # success=True, tokens=0 (miss outcome), and "code_analysis" is NOT in kept_names
+        results = [_FakeResult(name="code_analysis", success=True, tokens=0)]
+        with patch.object(eoe, "emit_event", _capture):
+            eoe.emit_enrichment_events(
+                session_id="sess",
+                correlation_id="corr",
+                results=results,
+                kept_names=set(),  # code_analysis intentionally absent
+            )
+
+        assert len(payloads) == 1
+        assert payloads[0]["outcome"] == "miss"
+        assert payloads[0]["was_dropped"] is False
+
 
 # ---------------------------------------------------------------------------
 # 6. tokens_saved / net_tokens_saved calculation

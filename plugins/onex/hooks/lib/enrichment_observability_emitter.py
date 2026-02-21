@@ -177,21 +177,22 @@ def build_enrichment_event_payload(
     was_dropped: bool,
     prompt_version: str,
     success: bool,
-    # OMN-2441: omnidash-compatible fields
-    tokens_before: int = 0,
-    repo: str | None = None,
-    agent_name: str | None = None,
     # Caller-injected timestamp (repository invariant: no datetime.now() defaults).
     # Required: callers must supply the timestamp so it is deterministic in tests.
     # emit_enrichment_events() captures datetime.now(UTC) once per batch and passes
     # it here; test callers pass a fixed datetime directly.
     emitted_at: datetime,
+    # OMN-2441: omnidash-compatible fields (optional)
+    tokens_before: int = 0,
+    repo: str | None = None,
+    agent_name: str | None = None,
 ) -> dict[str, Any]:
     """Build the payload dict for a single enrichment observability event.
 
-    Most arguments are required; ``tokens_before``, ``repo``, and ``agent_name``
-    have defaults and may be omitted by callers.  ``emitted_at`` is required
-    (repository invariant: no ``datetime.now()`` defaults inside builders).
+    Most arguments are required; ``emitted_at`` is required and must appear
+    before the optional parameters (repository invariant: no ``datetime.now()``
+    defaults inside builders).  ``tokens_before``, ``repo``, and ``agent_name``
+    have defaults and may be omitted by callers.
 
     The payload includes both the original internal field names (for backward
     compatibility with any existing consumers) and the omnidash-canonical field
@@ -458,10 +459,10 @@ def emit_enrichment_events(
             was_dropped=was_dropped,
             prompt_version=_extract_prompt_version(result),
             success=success,
+            emitted_at=now,
             tokens_before=tokens_before,
             repo=repo,
             agent_name=agent_name,
-            emitted_at=now,
         )
 
         try:
