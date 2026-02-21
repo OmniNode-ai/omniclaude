@@ -177,6 +177,15 @@ class TopicBase(StrEnum):
     # ==========================================================================
     INTENT_COMMIT_BOUND = "onex.evt.omniclaude.intent-commit-bound.v1"
 
+    # ==========================================================================
+    # Decision record topics (OMN-2465)
+    # Privacy split: evt carries summary only; cmd carries full payload
+    # ==========================================================================
+    # Observability topic — broad access, summary fields only (no rationale/snapshot)
+    DECISION_RECORDED_EVT = "onex.evt.omniintelligence.decision-recorded.v1"
+    # Restricted topic — full payload including agent_rationale and reproducibility_snapshot
+    DECISION_RECORDED_CMD = "onex.cmd.omniintelligence.decision-recorded.v1"
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).

@@ -94,6 +94,7 @@ class HookEventType(StrEnum):
     LATENCY_BREAKDOWN = "hook.latency.breakdown"
     MANIFEST_INJECTED = "hook.manifest.injected"
     STATIC_CONTEXT_EDIT_DETECTED = "hook.static.context.edit.detected"
+    DECISION_RECORDED = "hook.decision.recorded"
 
 
 class HookSource(StrEnum):
@@ -166,7 +167,7 @@ PROMPT_PREVIEW_MAX_LENGTH: int = 100
 # These patterns are intentionally simple to avoid false negatives
 #
 # KNOWN FALSE POSITIVES (intentionally not matched):
-#   - Short passwords: "password=short" (less than 8 chars) - not matched to reduce
+#   - Short passwords: "password=short" (less than 8 chars) - not matched to reduce  # pragma: allowlist secret
 #     false positives on common non-secret patterns like "password=placeholder"
 #   - URL parameters: "reset_password=true" - the boolean "true" is only 4 chars
 #     so it won't match the 8+ char requirement
@@ -229,7 +230,7 @@ _SECRET_PATTERNS: list[tuple[re.Pattern[str], str]] = [
         "-----BEGIN ***REDACTED*** PRIVATE KEY-----",
     ),
     # Bearer tokens
-    (re.compile(r"(Bearer\s+)[a-zA-Z0-9._-]{20,}", re.IGNORECASE), r"\1***REDACTED***"),
+    (re.compile(r"(Bearer\s+)[a-zA-Z0-9._-]{20,}", re.IGNORECASE), r"\1***REDACTED***"),  # pragma: allowlist secret
     # Password in URLs (postgres://user:password@host, mysql://user:password@host, mongodb://...)
     # This pattern intentionally covers all database connection string formats
     (re.compile(r"(://[^:]+:)[^@]+(@)"), r"\1***REDACTED***\2"),
@@ -385,7 +386,7 @@ def sanitize_text(text: str) -> str:
         Sanitized text with secrets redacted.
 
     Example:
-        >>> sanitize_text("Connect to postgres://user:mypassword@host:5432")
+        >>> sanitize_text("Connect to postgres://user:mypassword@host:5432")  # pragma: allowlist secret
         'Connect to postgres://user:***REDACTED***@host:5432'
     """
     sanitized = text
@@ -2566,6 +2567,113 @@ class ModelDelegationShadowComparisonPayload(BaseModel):
     )
 
 
+# =============================================================================
+# Decision Record Event (OMN-2465)
+# =============================================================================
+
+
+class ModelHookDecisionRecordedPayload(BaseModel):
+    """Event payload for the decision-recorded event envelope (evt topic, privacy-safe).
+
+    Emitted on ``onex.evt.omniintelligence.decision-recorded.v1`` (broad access).
+    Carries only summary fields — no agent_rationale, no reproducibility_snapshot.
+    Full payloads (including sensitive fields) are emitted exclusively on the
+    restricted ``onex.cmd.omniintelligence.decision-recorded.v1`` topic.
+
+    Privacy split (OMN-2465):
+        - **evt topic** (this model): decision_id, decision_type, selected_candidate,
+          candidates_count, has_rationale — safe for broad observability consumers.
+        - **cmd topic**: full DecisionRecord including agent_rationale and
+          reproducibility_snapshot — restricted to OmniIntelligence service only.
+
+    Attributes:
+        decision_id: Unique identifier for this routing/planning decision.
+        decision_type: Category of decision (e.g., "agent_routing", "plan_selection").
+        selected_candidate: Identifier of the chosen candidate (agent name, plan ID, etc.).
+        candidates_count: Total number of candidates that were evaluated.
+        has_rationale: True when agent_rationale was captured (full text on cmd topic only).
+        emitted_at: Timestamp when the event was emitted (UTC). Explicitly injected —
+            no datetime.now() defaults.
+        session_id: Optional session identifier for correlation with hook events.
+
+    Time Injection:
+        The ``emitted_at`` field has no default value. Callers must explicitly
+        inject the timestamp. This is intentional per repo invariant — deterministic
+        timestamps enable reproducible tests.
+
+    Privacy:
+        This model is safe for ``onex.evt.*`` topics. It MUST NOT contain
+        agent_rationale, reproducibility_snapshot, or any field from the full
+        DecisionRecord that may include prompt content or system internals.
+
+    Example:
+        >>> from datetime import UTC, datetime
+        >>> payload = ModelHookDecisionRecordedPayload(
+        ...     decision_id="dec-abc123",
+        ...     decision_type="agent_routing",
+        ...     selected_candidate="polymorphic-agent",
+        ...     candidates_count=5,
+        ...     has_rationale=True,
+        ...     emitted_at=datetime(2026, 2, 21, 12, 0, 0, tzinfo=UTC),
+        ...     session_id="session-xyz",
+        ... )
+    """
+
+    model_config = ConfigDict(
+        frozen=True,
+        extra="ignore",
+        from_attributes=True,
+    )
+
+    decision_id: str = Field(
+        ...,
+        min_length=1,
+        description="Unique identifier for this routing/planning decision",
+    )
+    decision_type: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Category of decision (e.g., 'agent_routing', 'plan_selection'). "
+            "Identifies the subsystem that produced the decision."
+        ),
+    )
+    selected_candidate: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "Identifier of the chosen candidate — agent name, plan ID, etc. "
+            "Safe for observability; does not include rationale text."
+        ),
+    )
+    candidates_count: int = Field(
+        ...,
+        ge=0,
+        description="Total number of candidates evaluated before the decision was made",
+    )
+    has_rationale: bool = Field(
+        ...,
+        description=(
+            "True when agent_rationale was captured in the full DecisionRecord. "
+            "The rationale text itself is NOT included here — only on the cmd topic."
+        ),
+    )
+
+    # Timestamps - MUST be explicitly injected (no default_factory for testability)
+    emitted_at: TimezoneAwareDatetime = Field(
+        ...,
+        description="Timestamp when the event was emitted (UTC). Must be explicitly injected.",
+    )
+
+    session_id: str | None = Field(
+        default=None,
+        description=(
+            "Optional session identifier for correlation with Claude Code hook events. "
+            "None when the decision originated outside a hook session."
+        ),
+    )
+
+
 __all__ = [
     # Constants
     "PROMPT_PREVIEW_MAX_LENGTH",
@@ -2605,6 +2713,8 @@ __all__ = [
     "ModelTaskDelegatedPayload",
     # Shadow validation (OMN-2283)
     "ModelDelegationShadowComparisonPayload",
+    # Decision record (OMN-2465)
+    "ModelHookDecisionRecordedPayload",
     # Envelope and types
     "ModelHookEventEnvelope",
     "ModelHookPayload",
