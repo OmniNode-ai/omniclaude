@@ -469,6 +469,7 @@ def enforce_patterns(
     domain: str | None = None,
     content_preview: str = "",
     content_sha256: str = "",
+    emitted_at: str | None = None,
 ) -> EnforcementResult:
     """Run pattern enforcement for a file modification.
 
@@ -484,6 +485,9 @@ def enforce_patterns(
         domain: Domain filter for patterns.
         content_preview: File content (up to 32KB) for compliance.
         content_sha256: SHA-256 hash of content_preview for idempotency.
+        emitted_at: ISO-8601 timestamp string for the pattern.enforcement
+            observability event. If None, the current UTC time is used.
+            Pass an explicit value in tests for deterministic timestamps.
 
     Returns:
         EnforcementResult with evaluation_submitted and metadata.
@@ -575,20 +579,21 @@ def enforce_patterns(
                 _save_cooldown(session_id, {**cooldown, **new_cooldown})
 
             # Step 4b: Emit observability events to onex.evt.omniclaude.pattern-enforcement.v1
-            # These populate the omnidash /enforcement dashboard (OMN-2442).
-            # Emitted when eligible patterns exist and budget is not exceeded (best-effort,
-            # fire-and-forget). Budget exhaustion suppresses both compliance.evaluate and
-            # this observability event.
+            # Intentionally emitted even when evaluation_submitted=False (e.g., daemon down).
+            # Rationale: pattern.enforcement records THAT patterns were evaluated against this file,
+            # not whether omniintelligence processed the results. Dashboard shows enforcement
+            # activity regardless of intelligence pipeline availability (best-effort, fire-and-forget).
+            # Violations are resolved asynchronously by the compliance-evaluated subscriber pipeline.
             from datetime import UTC, datetime  # noqa: PLC0415
 
-            emitted_at = datetime.now(UTC).isoformat()
+            _emitted_at = emitted_at or datetime.now(UTC).isoformat()
             _emit_pattern_enforcement_event(
                 session_id=session_id,
                 correlation_id=enforcement_correlation_id,
                 language=language or "unknown",
                 patterns=eligible_patterns,
                 file_path=file_path,
-                emitted_at=emitted_at,
+                emitted_at=_emitted_at,
             )
 
         return EnforcementResult(

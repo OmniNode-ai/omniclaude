@@ -1385,11 +1385,7 @@ class TestEmitPatternEnforcementEvent:
         """Returns 0 gracefully when emit_client_wrapper is unavailable."""
         import sys as _sys
 
-        original = _sys.modules.get("emit_client_wrapper")
-        try:
-            if "emit_client_wrapper" in _sys.modules:
-                del _sys.modules["emit_client_wrapper"]
-            # Force ImportError by removing from path temporarily
+        with patch.dict(_sys.modules, {"emit_client_wrapper": None}):
             count = _emit_pattern_enforcement_event(
                 session_id="sess-import-err",
                 correlation_id="corr-import-err",
@@ -1398,11 +1394,7 @@ class TestEmitPatternEnforcementEvent:
                 file_path="/file.py",
                 emitted_at="2026-01-01T00:00:00+00:00",
             )
-            # May succeed (module found on path) or return 0 (import error) — both acceptable
-            assert isinstance(count, int)
-        finally:
-            if original is not None:
-                _sys.modules["emit_client_wrapper"] = original
+        assert count == 0
 
     def test_empty_patterns_returns_zero(self) -> None:
         """Empty pattern list emits nothing."""
