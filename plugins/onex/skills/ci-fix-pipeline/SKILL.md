@@ -56,7 +56,7 @@ Invokes the `ci-failures` skill to fetch all GitHub Actions failures for the tar
 - **Scope**: small (≤`max_fix_files` files, single repo, no contract/node-wiring/infrastructure touches) vs large
 - **Cause**: compilation error, test failure, lint violation, type check failure, timeout, infrastructure, no-verify bypass
 
-Large-scope classification triggers ticket creation (Phase 2) rather than in-place fix.
+Large-scope classification triggers ticket creation rather than an in-place fix. Ticket creation happens inside Phase 2 (`fix_each_failure`) — large-scope failures exit the fix path early and dispatch a `create-ticket` agent instead. Readers of the pipeline flow should understand that `fix_each_failure` covers both paths: small-scope → fix, large-scope → defer to ticket.
 
 AUTO-ADVANCE to Phase 2.
 
@@ -68,7 +68,7 @@ For each classified failure:
 
 If `--dry-run` is set: logs all decisions, skips commits.
 
-AUTO-ADVANCE to Phase 3.
+AUTO-ADVANCE to Phase 3 **only if** all dispatched agents returned `fixed`, `skipped`, or `success` (large-scope ticket created). STOP if any agent returned `preflight_failed` or `failed`.
 
 ### Phase 3: local_review
 
@@ -98,7 +98,7 @@ Parse arguments from `$ARGUMENTS`:
 When `--skip-to` is provided, skip all earlier phases and begin execution at the named phase:
 
 - `--skip-to analyze` — start at Phase 1 (same as default)
-- `--skip-to fix` — skip Phase 1; go directly to Phase 2 using previously known failures (caller must provide context or the orchestrator must read a checkpoint)
+- `--skip-to fix` — skip Phase 1; go directly to Phase 2. No checkpoint mechanism exists, so the orchestrator must re-run Phase 1 to gather failure classification data before entering Phase 2. If the caller already has classified failures from a prior run, they may provide that context in the prompt.
 - `--skip-to local_review` — skip Phases 1 and 2; go directly to Phase 3
 - `--skip-to release_ready` — skip Phases 1–3; go directly to Phase 4
 
@@ -147,7 +147,7 @@ You do NOT analyze, fix, or review code yourself. All heavy work runs in separat
 **Rule: The orchestrator MUST NEVER call Edit(), Write(), or Bash(code-modifying commands) directly.**
 If code changes are needed, dispatch a polymorphic agent. If you find yourself wanting to make an edit, that is the signal to dispatch instead.
 
-**Correlation ID**: Before dispatching any phase, generate a `correlation_id` using the format `ci-fix-{pr_number_or_branch}-{short_timestamp}` (e.g., `ci-fix-42-20260221T1030`). Use this same ID for all commits and dispatches within one pipeline run. Pass it as a literal string in all dispatch prompts — do not use a placeholder.
+**Correlation ID**: Before dispatching any phase, generate a `correlation_id` using the format `ci-fix-{pr_number_or_branch}-{short_timestamp}` where `short_timestamp` includes seconds (e.g., `ci-fix-42-20260221T103045`). Use seconds resolution so that re-runs within the same minute produce distinct IDs and do not trigger the idempotency check (`grep [corr:{correlation_id}]`) prematurely. Use this same ID for all commits and dispatches within one pipeline run. Pass it as a literal string in all dispatch prompts — do not use a placeholder.
 
 ---
 
@@ -158,9 +158,23 @@ Task(
   subagent_type="onex:polymorphic-agent",
   description="ci-fix-pipeline: Phase 1 analyze CI failures for {pr_number_or_branch}",
   prompt="You are analyzing CI failures for PR/branch: {pr_number_or_branch}.
-    Invoke: Skill(skill=\"onex:ci-failures\", args=\"{pr_number_or_branch}\")
 
-    After the skill runs, classify each failure with:
+    Fetch CI failures by running the following bash commands directly:
+
+    If {pr_number_or_branch} is a PR number:
+      Run: gh run list --json databaseId,status,conclusion,headBranch --limit 10
+      Then for each failed run: gh run view <run_id> --log-failed
+
+    If {pr_number_or_branch} is a branch name:
+      Run: gh run list --branch {pr_number_or_branch} --json databaseId,status,conclusion --limit 10
+      Then for each failed run: gh run view <run_id> --log-failed
+
+    Also run: gh run list --json databaseId,headBranch,status,conclusion,name --limit 20
+    to list all recent runs and identify those for this PR/branch.
+
+    Collect all job failure output, step names, and error messages from the logs.
+
+    After collecting failures, classify each one with:
     - severity: CRITICAL | MAJOR | MINOR | NIT
     - scope: small | large
     - cause: one of (compilation_error | test_failure | lint_violation | type_check |
@@ -267,25 +281,41 @@ Task(
   subagent_type="onex:polymorphic-agent",
   description="ci-fix-pipeline: Phase 2 create ticket for large-scope {cause} failure in {job_name}",
   prompt="You are creating a Linear ticket for a CI failure that is too large to fix automatically.
-    Invoke: Skill(skill=\"onex:create-ticket\")
 
-    Failure context:
-    - PR/branch: {pr_number_or_branch}
-    - Job: {job_name}
-    - Step: {step_name}
-    - Severity: {severity}
-    - Cause: {cause}
-    - Error: {error_summary}
-    - Large-scope reason: {large_scope_reason}
-    - Files affected: {files_affected}
-    - Correlation ID: {correlation_id}
+    Use the mcp__linear__create_issue tool directly with these exact field values:
 
-    Ticket title: 'CI fix ({job_name}): {error_summary}'
-    Include in description:
-    - The full error details
-    - Why it was classified as large-scope
-    - The correlation ID
-    - Link to the failing PR/branch
+    title: 'CI fix ({job_name}): {error_summary}'
+    team: (look up the correct team ID for this repository using mcp__linear__list_teams)
+    description: |
+      ## CI Failure — Large-Scope Deferral
+
+      **PR/Branch**: {pr_number_or_branch}
+      **Job**: {job_name}
+      **Step**: {step_name}
+      **Severity**: {severity}
+      **Cause**: {cause}
+      **Correlation ID**: {correlation_id}
+
+      ## Error Details
+
+      {error_summary}
+
+      ## Why Large-Scope
+
+      {large_scope_reason}
+
+      ## Files Affected
+
+      {files_affected}
+
+      ## Next Steps
+
+      Manual investigation and fix required. This failure was deferred by the ci-fix-pipeline
+      because it exceeded the automated fix scope threshold.
+    priority: (map severity → priority: CRITICAL=1, MAJOR=2, MINOR=3, NIT=4)
+    labels: ['ci-failure', 'large-scope']
+
+    After creating the ticket, report its ID and URL.
 
     RESULT:
     status: success | failed
@@ -299,29 +329,37 @@ Task(
 - Collect all RESULT blocks from dispatched agents.
 - If any `preflight_failed`: STOP and report — do not proceed to Phase 3.
 - If all failures are `fixed` or `skipped` (large-scope → ticket created): AUTO-ADVANCE to Phase 3.
-- If any `failed` (not preflight): log warning, include in final summary, still advance to Phase 3.
+- If any `failed` (not preflight): STOP, set status=`fix_partially_failed`, and report clearly which failures were not resolved. Do NOT advance to Phase 3. Manual intervention is required before resuming the pipeline.
 
 ---
 
 ### Phase 3: local_review — dispatch to polymorphic agent
+
+Before dispatching Phase 3, determine the base branch:
+- If `{pr_number_or_branch}` is a PR number: run `gh pr view {pr_number_or_branch} --json baseRefName --jq '.baseRefName'` to get the base branch (e.g., `main`, `develop`). Use `origin/{base_branch}` as the `--since` argument.
+- If `{pr_number_or_branch}` is a branch name: default to `origin/main` as the `--since` argument.
 
 ```
 Task(
   subagent_type="onex:polymorphic-agent",
   description="ci-fix-pipeline: Phase 3 local-review after CI fixes",
   prompt="You are running local review after CI fixes were applied to PR/branch: {pr_number_or_branch}.
-    Invoke: Skill(skill=\"onex:local-review\", args=\"--since origin/main\")
+    Invoke: Skill(skill=\"onex:local-review\", args=\"--since {base_branch_ref}\")
 
-    Requirements:
-    - 0 blocking issues (no Critical, Major, or Minor) to pass
+    {base_branch_ref} is the resolved base branch reference (e.g., origin/main or origin/develop),
+    determined by the orchestrator before this dispatch.
+
+    The local-review skill is itself an orchestrator that handles dispatching review and fix agents.
+    Your role here is only to invoke it and return its result to the ci-fix-pipeline orchestrator.
+    Do NOT attempt to fix issues or re-run local-review yourself; return the result as-is.
+
+    Requirements for pass:
+    - 0 blocking issues (no Critical, Major, or Minor)
     - Nits are optional
-    - If blocking issues remain: fix them, commit, and re-run local-review
-    - Max iterations: 3
 
     RESULT:
-    status: passed | failed | max_iterations_reached
+    status: passed | failed
     output: |
-      Number of iterations completed: <N>
       Blocking issues found: <count>
       Issue descriptions: [<list>]
       Final state: clean | issues_remain
@@ -331,19 +369,25 @@ Task(
 
 **Orchestrator action after Phase 3:**
 - If `status: passed` and `blocking issues found: 0`: AUTO-ADVANCE to Phase 4.
-- If `status: failed` or `max_iterations_reached`: STOP and report — local review did not pass.
+- If `status: failed`: STOP and report — local review did not pass. Manual fix and re-run of Phase 3 is required.
 - If `status: passed` but `blocking issues found > 0`: STOP and report — review reported pass but issues remain (contradiction; investigate).
 
 ---
 
 ### Phase 4: release_ready — dispatch to polymorphic agent
 
+Before dispatching Phase 4, resolve `{pr_number_or_branch}` to a PR number:
+- If it is already a PR number (numeric): use it directly.
+- If it is a branch name: run `gh pr view --head {pr_number_or_branch} --json number --jq '.number'` to get the PR number. If no PR is found, STOP and report — `pr-release-ready` requires a PR number to operate.
+
+Pass the resolved PR number (not the branch name) to `pr-release-ready`.
+
 ```
 Task(
   subagent_type="onex:polymorphic-agent",
-  description="ci-fix-pipeline: Phase 4 pr-release-ready for {pr_number_or_branch}",
-  prompt="You are confirming release readiness for PR/branch: {pr_number_or_branch}.
-    Invoke: Skill(skill=\"onex:pr-release-ready\", args=\"{pr_number_or_branch}\")
+  description="ci-fix-pipeline: Phase 4 pr-release-ready for PR #{resolved_pr_number}",
+  prompt="You are confirming release readiness for PR #{resolved_pr_number} (original arg: {pr_number_or_branch}).
+    Invoke: Skill(skill=\"onex:pr-release-ready\", args=\"{resolved_pr_number}\")
 
     The goal is to confirm the PR is fully ready for merge after CI fixes were applied.
 
