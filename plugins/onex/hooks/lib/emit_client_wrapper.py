@@ -129,6 +129,7 @@ SUPPORTED_EVENT_TYPES = frozenset(
         "context.enrichment",  # OMN-2274 - Per-enrichment observability events
         "routing.outcome.raw",  # OMN-2356 - Raw session outcome for feedback loop
         "delegation.shadow.comparison",  # OMN-2283 - Shadow validation mode comparison results
+        "pattern.enforcement",  # OMN-2442 - Pattern enforcement evaluation for omnidash dashboard
     ]
 )
 

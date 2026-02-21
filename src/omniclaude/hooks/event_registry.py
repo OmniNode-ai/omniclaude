@@ -609,6 +609,38 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
         required_fields=["session_id", "correlation_id"],
     ),
     # =========================================================================
+    # Pattern Enforcement Observability (OMN-2442)
+    # =========================================================================
+    # Emitted by pattern_enforcement.py on each enforcement evaluation.
+    # Consumed by omnidash /enforcement dashboard via pattern_enforcement_events table.
+    # No payload transform — event is safe for observability (no file contents,
+    # only metadata: pattern_name, language, domain, outcome, confidence).
+    "pattern.enforcement": EventRegistration(
+        event_type="pattern.enforcement",
+        fan_out=[
+            FanOutRule(
+                topic_base=TopicBase.PATTERN_ENFORCEMENT,
+                transform=None,  # Passthrough — no sensitive content, only enforcement metadata
+                description=(
+                    "Pattern enforcement evaluation result for omnidash /enforcement dashboard. "
+                    "correlation_id matches the corresponding compliance.evaluate event when the "
+                    "daemon is up; in daemon-down cases the correlation_id is orphaned (no matching "
+                    "compliance.evaluate row) — omnidash LEFT JOINs should handle nulls."
+                ),
+            ),
+        ],
+        partition_key_field="session_id",
+        required_fields=[
+            "session_id",
+            "correlation_id",
+            "timestamp",
+            "language",
+            "domain",
+            "pattern_name",
+            "outcome",
+        ],
+    ),
+    # =========================================================================
     # Agent Status (OMN-1848 - agent lifecycle reporting)
     # =========================================================================
     # NOTE: agent_name and session_id may carry the sentinel value "unknown".

@@ -768,6 +768,8 @@ class TestEventRegistryIntegration:
             "routing.outcome.raw",
             # Shadow validation mode comparison results (OMN-2283)
             "delegation.shadow.comparison",
+            # Pattern enforcement observability (OMN-2442)
+            "pattern.enforcement",
         }
         assert set(EVENT_REGISTRY.keys()) == expected_types
 

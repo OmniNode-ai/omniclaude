@@ -322,6 +322,118 @@ def _is_eligible_pattern(pattern: dict[str, Any]) -> bool:
 # ---------------------------------------------------------------------------
 
 
+def _emit_pattern_enforcement_event(
+    *,
+    session_id: str,
+    correlation_id: str,
+    language: str,
+    patterns: list[dict[str, Any]],
+    file_path: str,
+    emitted_at: str,
+) -> int:
+    """Emit pattern.enforcement observability events to onex.evt.omniclaude.pattern-enforcement.v1.
+
+    Emits one event per eligible pattern evaluated. Each event maps to a row
+    in omnidash's pattern_enforcement_events table via the read-model consumer.
+
+    The outcome is always "hit" at emit time — the compliance pipeline sends
+    the full content to omniintelligence for detailed evaluation, and the
+    resulting advisory (if any violation) arrives asynchronously on the next
+    turn. We emit "hit" (meaning "pattern was applied / evaluated") to populate
+    the dashboard immediately; correction/violation outcomes are handled by the
+    compliance-evaluated subscriber pipeline.
+
+    Args:
+        session_id: Current session ID.
+        correlation_id: Unique ID for this enforcement evaluation batch.
+        language: Programming language of the evaluated file.
+        patterns: Eligible patterns that were included in the evaluation.
+        file_path: Path to the evaluated file (used to derive repo).
+        emitted_at: ISO-8601 timestamp string, injected by caller for deterministic testing.
+
+    Returns:
+        Number of events successfully emitted.
+    """
+    try:
+        from emit_client_wrapper import emit_event  # noqa: PLC0415
+
+        # Derive repo from file path by walking up the directory tree looking for a
+        # .git directory or pyproject.toml marker file.  The first ancestor directory
+        # that contains one of these markers is considered the repository root, and its
+        # name is used as the repo identifier.  This correctly handles nested source
+        # layouts (e.g. /workspace/omniclaude4/src/module.py → "omniclaude4") without
+        # relying on the penultimate path component, which gives misleading results
+        # ("src") for files more than one level below the repo root.
+        #
+        # Fallback: if no marker is found (e.g. the file is not inside a git repo,
+        # or the path is synthetic/test-only), the penultimate path component is used
+        # as before — this preserves the existing best-effort behaviour for shallow
+        # paths like /workspace/myrepo/file.py.
+        try:
+            _markers = {".git", "pyproject.toml"}
+            _candidate = Path(file_path).parent
+            repo = "unknown"
+            # Walk up until we find a marker or run out of path components.
+            while True:
+                if any((_candidate / m).exists() for m in _markers):
+                    repo = _candidate.name or "unknown"
+                    break
+                parent = _candidate.parent
+                if parent == _candidate:
+                    # Reached filesystem root without finding a marker — fall back
+                    # to the penultimate path component (legacy behaviour).
+                    parts = Path(file_path).parts
+                    repo = (
+                        parts[-2]
+                        if len(parts) >= 2
+                        else parts[-1]
+                        if parts
+                        else "unknown"
+                    )
+                    break
+                _candidate = parent
+        except Exception:
+            repo = "unknown"
+
+        emitted = 0
+
+        # Each emit_event() is a non-blocking Unix socket write to the local daemon
+        # (fire-and-forget, no Kafka ack wait). Budget impact: ~<1ms per pattern.
+        for pattern in patterns:
+            pattern_id = str(pattern.get("id", ""))
+            pattern_name = str(
+                pattern.get("pattern_signature", pattern.get("id", "unknown"))
+            )
+            domain = str(pattern.get("domain_id", "unknown"))
+            confidence = float(pattern.get("confidence", 0.0))
+            lifecycle_state = str(pattern.get("status", "validated"))
+
+            payload: dict[str, Any] = {
+                "timestamp": emitted_at,
+                "correlation_id": correlation_id,
+                "session_id": session_id,
+                "repo": repo,
+                "language": language,
+                "domain": domain,
+                "pattern_id": pattern_id,
+                "pattern_name": pattern_name,
+                "pattern_lifecycle_state": lifecycle_state,
+                "outcome": "hit",  # Evaluated by enforcement engine; violations resolved asynchronously
+                "confidence": confidence,
+            }
+
+            try:
+                success: bool = emit_event("pattern.enforcement", payload)
+                if success:
+                    emitted += 1
+            except Exception:
+                pass
+
+        return emitted
+    except Exception:
+        return 0
+
+
 def _emit_compliance_evaluate(
     *,
     file_path: str,
@@ -330,11 +442,15 @@ def _emit_compliance_evaluate(
     session_id: str,
     content_sha256: str,
     patterns: list[dict[str, Any]],
+    correlation_id: str | None = None,
 ) -> bool:
     """Emit compliance.evaluate event. Returns True if accepted by daemon.
 
     Correlation ID is unique per request (not session_id) so that multiple
     compliance evaluations within one session are individually traceable.
+    If correlation_id is provided, it is used as-is so that this event shares
+    the same ID as the corresponding pattern.enforcement observability events,
+    enabling omnidash to JOIN the two event streams.
     session_id is passed separately for routing and projection lookups.
 
     Content safety: non-empty and UTF-8 safe within the 32KB cap.
@@ -355,7 +471,9 @@ def _emit_compliance_evaluate(
             )
 
         payload: dict[str, Any] = {
-            "correlation_id": str(_uuid.uuid4()),  # unique per request, not session
+            "correlation_id": correlation_id
+            if correlation_id is not None
+            else str(_uuid.uuid4()),  # unique per request, not session
             "session_id": session_id,  # separate field for routing/projection
             "source_path": file_path,
             "content": content,
@@ -390,6 +508,7 @@ def enforce_patterns(
     domain: str | None = None,
     content_preview: str = "",
     content_sha256: str = "",
+    emitted_at: str,
 ) -> EnforcementResult:
     """Run pattern enforcement for a file modification.
 
@@ -405,11 +524,26 @@ def enforce_patterns(
         domain: Domain filter for patterns.
         content_preview: File content (up to 32KB) for compliance.
         content_sha256: SHA-256 hash of content_preview for idempotency.
+        emitted_at: ISO-8601 timestamp for observability events. Must be provided
+            explicitly by the caller — do not rely on datetime.now() defaults.
+            This is a required field to ensure deterministic, testable behaviour.
 
     Returns:
         EnforcementResult with evaluation_submitted and metadata.
         advisories is always empty — results arrive asynchronously.
     """
+    # The `emitted_at: str` annotation makes mypy flag the truthiness check as a
+    # comparison-overlap (a non-empty str is always truthy from the type system's
+    # perspective).  The runtime guard is intentionally retained because callers
+    # that bypass type checking (e.g. dynamic invocation, untyped tests, or future
+    # callers that pass `emitted_at=""` explicitly) would otherwise silently emit
+    # events with an empty timestamp field.  The suppression keeps the safety net
+    # without polluting call sites.
+    if not emitted_at:  # type: ignore[comparison-overlap]
+        raise ValueError(
+            "emitted_at must be a non-empty ISO timestamp string; do not rely on datetime.now() defaults"
+        )
+
     start = time.monotonic()
 
     def _elapsed_ms() -> float:
@@ -480,6 +614,7 @@ def enforce_patterns(
         # Step 4: Emit single compliance.evaluate event with all eligible patterns
         evaluation_submitted = False
         if eligible_patterns and not _budget_exceeded():
+            enforcement_correlation_id = str(_uuid.uuid4())
             evaluation_submitted = _emit_compliance_evaluate(
                 file_path=file_path,
                 content=content_preview,
@@ -487,12 +622,42 @@ def enforce_patterns(
                 session_id=session_id,
                 content_sha256=content_sha256,
                 patterns=eligible_patterns,
+                correlation_id=enforcement_correlation_id,
             )
             if evaluation_submitted:
                 # Update cooldown for all submitted patterns with current timestamp
                 now = time.time()
                 new_cooldown = {str(p.get("id", "")): now for p in eligible_patterns}
                 _save_cooldown(session_id, {**cooldown, **new_cooldown})
+
+            # Step 4b: Emit observability events to onex.evt.omniclaude.pattern-enforcement.v1
+            # These populate the omnidash /enforcement dashboard (OMN-2442).
+            # Emitted regardless of whether _emit_compliance_evaluate succeeded (e.g., daemon
+            # down). Rationale: pattern.enforcement records that patterns were evaluated against
+            # this file, not whether omniintelligence processed the results.
+            # NOTE: This entire block (including Step 4b) is guarded by
+            # `if eligible_patterns and not _budget_exceeded()` above. If the time budget is
+            # exhausted before reaching this point, neither the compliance.evaluate event nor
+            # these observability events are emitted. The comment "regardless of whether
+            # _emit_compliance_evaluate succeeded" refers only to the _emit_compliance_evaluate
+            # return value (True/False), not to budget exhaustion, which suppresses both.
+            # Violations are resolved asynchronously by the compliance-evaluated subscriber pipeline.
+            # The return value (number of events successfully emitted) is intentionally
+            # discarded here.  EnforcementResult is a TypedDict whose schema is consumed
+            # by the omnidash read-model consumer and the CLI stdout contract — adding an
+            # `events_emitted` field would require a coordinated downstream schema change.
+            # Observability event failures are already silent by design (fire-and-forget
+            # via the Unix-socket daemon); the count is only meaningful for unit-test
+            # assertions, where callers inspect the return value of
+            # _emit_pattern_enforcement_event directly.
+            _emit_pattern_enforcement_event(
+                session_id=session_id,
+                correlation_id=enforcement_correlation_id,
+                language=language or "unknown",
+                patterns=eligible_patterns,
+                file_path=file_path,
+                emitted_at=emitted_at,
+            )
 
         return EnforcementResult(
             enforced=True,
@@ -531,6 +696,9 @@ def main() -> None:
     content_sha256. Writes EnforcementResult JSON to stdout. Always exits 0.
     """
     try:
+        from datetime import UTC  # noqa: PLC0415
+        from datetime import datetime as _datetime
+
         if not is_enforcement_enabled():
             json.dump(
                 EnforcementResult(
@@ -566,6 +734,7 @@ def main() -> None:
 
         params = json.loads(raw)
         session_id = params.get("session_id", "") or os.urandom(8).hex()
+
         result = enforce_patterns(
             file_path=params.get("file_path", ""),
             session_id=session_id,
@@ -573,6 +742,7 @@ def main() -> None:
             domain=params.get("domain"),
             content_preview=params.get("content_preview", ""),
             content_sha256=params.get("content_sha256", ""),
+            emitted_at=_datetime.now(UTC).isoformat(),
         )
         json.dump(result, sys.stdout)
 
