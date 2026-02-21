@@ -98,7 +98,7 @@ Parse arguments from `$ARGUMENTS`:
 When `--skip-to` is provided, skip all earlier phases and begin execution at the named phase:
 
 - `--skip-to analyze` — start at Phase 1 (same as default)
-- `--skip-to fix` — skip Phase 1; go directly to Phase 2. No checkpoint mechanism exists, so the orchestrator must re-run Phase 1 to gather failure classification data before entering Phase 2. If the caller already has classified failures from a prior run, they may provide that context in the prompt.
+- `--skip-to fix` — re-run Phase 1 silently to gather failure classification data, then proceed directly to Phase 2 without pausing for orchestrator review. Phase 1 is not skipped; the skip means the orchestrator does not stop between Phase 1 and Phase 2 even if it would otherwise wait for confirmation. If the caller provides pre-classified failure context in the prompt, the orchestrator may use that in place of a fresh Phase 1 run.
 - `--skip-to local_review` — skip Phases 1 and 2; go directly to Phase 3
 - `--skip-to release_ready` — skip Phases 1–3; go directly to Phase 4
 
@@ -162,7 +162,11 @@ Task(
     Fetch CI failures by running the following bash commands directly:
 
     If {pr_number_or_branch} is a PR number:
-      Run: gh run list --json databaseId,status,conclusion,headBranch --limit 10
+      First resolve the PR number to its head branch:
+        Run: gh pr view {pr_number_or_branch} --json headRefName --jq '.headRefName'
+        This returns the head branch name (e.g., jonahgabriel/omn-1234-fix). Call it {headBranch}.
+      Then list runs filtered to that branch:
+        Run: gh run list --branch {headBranch} --json databaseId,status,conclusion,headBranch --limit 10
       Then for each failed run: gh run view <run_id> --log-failed
 
     If {pr_number_or_branch} is a branch name:
@@ -241,7 +245,7 @@ Task(
        - If unrelated uncommitted changes exist: STOP, do not proceed, report in RESULT.
     2. Run: gh auth status
        - If not authenticated: STOP, do not proceed, report in RESULT.
-    3. Run: git log --oneline -20 | grep -E '\[corr:{correlation_id}\]'
+    3. Run: git log --oneline -20 | grep -F "[corr:{correlation_id}]"
        - If corr commits already exist for this failure: log 'already fixed' and STOP (idempotent).
     4. If on main or master: create a new branch before any changes.
 
@@ -328,7 +332,7 @@ Task(
 **Orchestrator action after Phase 2:**
 - Collect all RESULT blocks from dispatched agents.
 - If any `preflight_failed`: STOP and report — do not proceed to Phase 3.
-- If all failures are `fixed` or `skipped` (large-scope → ticket created): AUTO-ADVANCE to Phase 3.
+- If all failures are `fixed`, `skipped`, or `success` (large-scope → ticket created): AUTO-ADVANCE to Phase 3.
 - If any `failed` (not preflight): STOP, set status=`fix_partially_failed`, and report clearly which failures were not resolved. Do NOT advance to Phase 3. Manual intervention is required before resuming the pipeline.
 
 ---
@@ -376,11 +380,24 @@ Task(
 
 ### Phase 4: release_ready — dispatch to polymorphic agent
 
-Before dispatching Phase 4, resolve `{pr_number_or_branch}` to a PR number:
-- If it is already a PR number (numeric): use it directly.
-- If it is a branch name: run `gh pr view --head {pr_number_or_branch} --json number --jq '.number'` to get the PR number. If no PR is found, STOP and report — `pr-release-ready` requires a PR number to operate.
+Before dispatching Phase 4, resolve `{pr_number_or_branch}` to a PR number using the following steps:
 
-Pass the resolved PR number (not the branch name) to `pr-release-ready`.
+```
+# Variable capture — run this before dispatching Phase 4
+if {pr_number_or_branch} is numeric:
+    resolved_pr_number = {pr_number_or_branch}
+else:
+    # Run: gh pr view --head {pr_number_or_branch} --json number --jq '.number'
+    # Extract the `.number` field from the JSON output (an integer).
+    # Assign it to resolved_pr_number.
+    # Example: gh pr view --head jonahgabriel/omn-1234-fix --json number --jq '.number'
+    #          → 42
+    #          resolved_pr_number = 42
+    # If the command returns empty output or an error: STOP and report —
+    # pr-release-ready requires a PR number to operate.
+```
+
+Pass `resolved_pr_number` (the resolved integer, not the branch name) to `pr-release-ready`.
 
 ```
 Task(
