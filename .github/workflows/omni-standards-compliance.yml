@@ -87,7 +87,7 @@ jobs:
             # Extract the name value after "name:" inside agent_identity block.
             # Skip the agent_identity: line itself, capture the first indented name: field,
             # and exit as soon as a non-indented line is encountered (closes the block).
-            agent_name=$(awk '/^agent_identity:/{found=1; next} found && /^  name:/{sub(/^[[:space:]]*name:[[:space:]]*/, ""); gsub(/"/, ""); print; exit} found && /^[^ ]/{exit}' "$yaml_file" \
+            agent_name=$(awk '/^agent_identity:/{found=1; next} found && /^[[:space:]]+name:/{sub(/^[[:space:]]*name:[[:space:]]*/, ""); gsub(/"/, ""); print; exit} found && /^[^[:space:]]/{exit}' "$yaml_file" \
               | tr -d "'")
 
             if [ -z "$agent_name" ]; then
@@ -133,7 +133,7 @@ jobs:
           echo "OK: hooks.json found"
 
           # Validate JSON syntax
-          if ! python3 -c "import json, sys; json.load(open('$HOOKS_JSON'))" 2>/dev/null; then
+          if ! python3 -m json.tool "$HOOKS_JSON" > /dev/null; then
             echo "ERROR: hooks.json is not valid JSON"
             exit 1
           fi
