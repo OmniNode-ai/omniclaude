@@ -104,13 +104,22 @@ def _parse_result_block(output: str) -> tuple[SkillResultStatus, str | None]:
         logger.warning("No RESULT: block found in Polly output; returning PARTIAL")
         return SkillResultStatus.PARTIAL, "No RESULT: block in output"
 
-    # Extract the text after the marker
+    # Extract the text after the marker and scope to the first paragraph only.
+    # Stop collecting lines as soon as we hit a blank line after at least one
+    # non-blank line has been added — this prevents later status:/error: lines
+    # (e.g. from verbose Polly output) from overwriting the values parsed from
+    # the actual RESULT block.
     block_text = output[marker_idx + len(_RESULT_BLOCK_MARKER) :]
+    block_lines: list[str] = []
+    for line in block_text.splitlines():
+        if block_lines and line.strip() == "":
+            break
+        block_lines.append(line)
 
     status: SkillResultStatus = SkillResultStatus.PARTIAL
     error: str | None = None
 
-    for line in block_text.splitlines():
+    for line in block_lines:
         stripped = line.strip().lower()
 
         if stripped.startswith(_STATUS_KEY):

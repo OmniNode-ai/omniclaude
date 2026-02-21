@@ -2,7 +2,7 @@
 # Copyright (c) 2025 OmniNode Team
 """Unit tests for handler_skill_requested.py.
 
-Covers (10 required tests):
+Covers (13 tests):
 - test_build_args_string_bare_flag_for_empty_value
 - test_build_args_string_bare_flag_for_true_value
 - test_build_args_string_key_value_pair
@@ -11,6 +11,11 @@ Covers (10 required tests):
 - test_handle_skill_requested_dispatches_polly_with_skill_path
 - test_handle_skill_requested_returns_failure_on_exception
 - test_handle_skill_requested_parses_result_block
+- test_handle_skill_requested_partial_when_no_result_block
+- test_handle_skill_requested_failed_status_from_result_block
+- test_handle_skill_requested_includes_args_in_prompt
+- test_handle_skill_requested_partial_for_unrecognized_status
+- test_trailing_status_and_error_after_blank_line_are_ignored
 """
 
 from __future__ import annotations
@@ -204,3 +209,33 @@ class TestHandleSkillRequested:
         result = await handle_skill_requested(request, task_dispatcher=dispatcher)
 
         assert result.status == SkillResultStatus.PARTIAL
+
+    @pytest.mark.asyncio
+    async def test_trailing_status_and_error_after_blank_line_are_ignored(
+        self,
+    ) -> None:
+        """status:/error: lines after a blank line must not overwrite the RESULT block.
+
+        Verbose Polly output sometimes re-states status information after the
+        RESULT block.  The parser must stop at the first blank line so those
+        trailing lines do not corrupt the parsed values.
+        """
+        request = _make_request()
+        # RESULT block says success / no error.
+        # After a blank line there are rogue status: failed / error: trailing
+        # lines that should be completely ignored.
+        polly_output = (
+            "I ran the skill.\n"
+            "RESULT:\n"
+            "status: success\n"
+            "error:\n"
+            "\n"
+            "status: failed\n"
+            "error: trailing noise from verbose output\n"
+        )
+        dispatcher = AsyncMock(return_value=polly_output)
+
+        result = await handle_skill_requested(request, task_dispatcher=dispatcher)
+
+        assert result.status == SkillResultStatus.SUCCESS
+        assert result.error is None

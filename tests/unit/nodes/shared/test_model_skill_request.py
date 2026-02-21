@@ -64,7 +64,7 @@ class TestModelSkillRequestValidation:
     def test_model_is_frozen(self) -> None:
         """ModelSkillRequest instances are immutable."""
         req = _valid_request()
-        with pytest.raises(Exception):  # ValidationError or AttributeError
+        with pytest.raises(ValidationError):
             req.skill_name = "changed"  # type: ignore[misc]
 
     def test_extra_fields_forbidden(self) -> None:
