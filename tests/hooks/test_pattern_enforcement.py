@@ -997,13 +997,19 @@ class TestEnforcePatternsEmit:
             captured_cids.append(cid)
             return True
 
+        # Patch _emit_pattern_enforcement_event to prevent filesystem side-effects
+        # (repo-walk via Path.exists()) and keep this test focused solely on the
+        # correlation_id uniqueness assertion.
         with (
             patch("pattern_enforcement.query_patterns", return_value=patterns),
             patch(
                 "pattern_enforcement._emit_compliance_evaluate",
                 side_effect=capture_compliance_evaluate,
             ),
-            patch("emit_client_wrapper.emit_event", return_value=True),
+            patch(
+                "pattern_enforcement._emit_pattern_enforcement_event",
+                return_value=1,
+            ),
         ):
             enforce_patterns(
                 file_path="/test/file.py",

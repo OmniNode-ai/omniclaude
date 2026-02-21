@@ -532,6 +532,13 @@ def enforce_patterns(
         EnforcementResult with evaluation_submitted and metadata.
         advisories is always empty — results arrive asynchronously.
     """
+    # The `emitted_at: str` annotation makes mypy flag the truthiness check as a
+    # comparison-overlap (a non-empty str is always truthy from the type system's
+    # perspective).  The runtime guard is intentionally retained because callers
+    # that bypass type checking (e.g. dynamic invocation, untyped tests, or future
+    # callers that pass `emitted_at=""` explicitly) would otherwise silently emit
+    # events with an empty timestamp field.  The suppression keeps the safety net
+    # without polluting call sites.
     if not emitted_at:  # type: ignore[comparison-overlap]
         raise ValueError(
             "emitted_at must be a non-empty ISO timestamp string; do not rely on datetime.now() defaults"
@@ -625,10 +632,15 @@ def enforce_patterns(
 
             # Step 4b: Emit observability events to onex.evt.omniclaude.pattern-enforcement.v1
             # These populate the omnidash /enforcement dashboard (OMN-2442).
-            # Emitted for all eligible_patterns regardless of whether _emit_compliance_evaluate
-            # succeeded (e.g., daemon down). Rationale: pattern.enforcement records that patterns
-            # were evaluated against this file, not whether omniintelligence processed the results.
-            # Budget exhaustion or empty eligible_patterns suppresses this block entirely.
+            # Emitted regardless of whether _emit_compliance_evaluate succeeded (e.g., daemon
+            # down). Rationale: pattern.enforcement records that patterns were evaluated against
+            # this file, not whether omniintelligence processed the results.
+            # NOTE: This entire block (including Step 4b) is guarded by
+            # `if eligible_patterns and not _budget_exceeded()` above. If the time budget is
+            # exhausted before reaching this point, neither the compliance.evaluate event nor
+            # these observability events are emitted. The comment "regardless of whether
+            # _emit_compliance_evaluate succeeded" refers only to the _emit_compliance_evaluate
+            # return value (True/False), not to budget exhaustion, which suppresses both.
             # Violations are resolved asynchronously by the compliance-evaluated subscriber pipeline.
             # The return value (number of events successfully emitted) is intentionally
             # discarded here.  EnforcementResult is a TypedDict whose schema is consumed
@@ -684,6 +696,9 @@ def main() -> None:
     content_sha256. Writes EnforcementResult JSON to stdout. Always exits 0.
     """
     try:
+        from datetime import UTC  # noqa: PLC0415
+        from datetime import datetime as _datetime
+
         if not is_enforcement_enabled():
             json.dump(
                 EnforcementResult(
@@ -719,8 +734,6 @@ def main() -> None:
 
         params = json.loads(raw)
         session_id = params.get("session_id", "") or os.urandom(8).hex()
-        from datetime import UTC  # noqa: PLC0415
-        from datetime import datetime as _datetime
 
         result = enforce_patterns(
             file_path=params.get("file_path", ""),
