@@ -33,7 +33,7 @@ Decompose a Linear epic into per-repo workstreams and autonomously drive them to
 # Resume after session disconnect
 /epic-team OMN-2000 --resume
 
-# Force restart (archive existing state; hard-stops if workers active)
+# Force restart (archive existing state; pauses if workers active — use --force-kill to hard-stop)
 /epic-team OMN-2000 --force
 
 # Force restart even with active workers (dangerous)
