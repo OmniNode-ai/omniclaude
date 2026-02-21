@@ -54,6 +54,9 @@ Design notes:
 - Backward-compatible fields (enrichment_type, model_used, result_token_count,
   tokens_saved, relevance_score) are retained alongside the new canonical names
   so existing consumers are not broken.
+  TODO(OMN-2441-followup): Remove legacy fields once omnidash consumers migrate
+  to the canonical schema (channel, model_name, tokens_after, net_tokens_saved,
+  similarity_score).  Track migration progress against OMN-2441.
 """
 
 from __future__ import annotations
@@ -219,10 +222,23 @@ def build_enrichment_event_payload(
         emitted_at: UTC timestamp for the event.  Required (repository invariant:
             no ``datetime.now()`` defaults inside builders).  Callers capture
             the timestamp once and pass it explicitly for deterministic testing.
+            Must be timezone-aware; naive datetimes raise ``ValueError`` because
+            omnidash consumers require an explicit UTC offset in the ISO-8601
+            string (e.g. ``datetime.now(UTC)``, not ``datetime.now()``).
 
     Returns:
         Dict suitable for emission via emit_client_wrapper.emit_event().
     """
+    # Guard: reject naive datetimes. A naive emitted_at produces a timestamp
+    # string without a UTC offset (e.g. "2024-01-01T12:00:00" instead of
+    # "2024-01-01T12:00:00+00:00"), which omnidash consumers reject.
+    # Callers must pass a timezone-aware datetime (e.g. datetime.now(UTC)).
+    if emitted_at.tzinfo is None:
+        raise ValueError(
+            "emitted_at must be timezone-aware (e.g. datetime.now(UTC)); "
+            "naive datetimes produce invalid timestamps for omnidash consumers."
+        )
+
     # Derive the outcome from result state using the explicit success flag so
     # that a legitimate "miss" (success=True, tokens=0) is not misclassified
     # as "error" (success=False).

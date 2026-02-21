@@ -252,6 +252,62 @@ class TestBuildEnrichmentEventPayload:
         ts = payload.get("timestamp")
         assert ts == fixed_dt.isoformat()
 
+    def test_missing_emitted_at_raises_type_error(self) -> None:
+        """build_enrichment_event_payload must raise TypeError when emitted_at is omitted.
+
+        This test acts as automated enforcement of the repository invariant that
+        callers must supply ``emitted_at`` explicitly.  If the signature ever
+        acquires a default value for ``emitted_at``, this test will fail and
+        serve as the detection mechanism.
+
+        Required call pattern (enforced here):
+            build_enrichment_event_payload(..., emitted_at=datetime.now(UTC))
+        """
+        with pytest.raises(TypeError):
+            eoe.build_enrichment_event_payload(  # type: ignore[call-arg]
+                session_id="s",
+                correlation_id="c",
+                enrichment_type="summarization",
+                model_used="",
+                latency_ms=0.0,
+                result_token_count=0,
+                relevance_score=None,
+                fallback_used=False,
+                net_tokens_saved=0,
+                was_dropped=False,
+                prompt_version="",
+                success=True,
+                # emitted_at intentionally omitted
+            )
+
+    def test_naive_datetime_emitted_at_raises(self) -> None:
+        """build_enrichment_event_payload must raise ValueError for naive datetimes.
+
+        A naive datetime (no tzinfo) produces a timestamp string without a UTC
+        offset (e.g. "2024-01-01T12:00:00"), which omnidash consumers reject.
+        The builder must guard against this at the call site, not silently
+        produce an invalid timestamp.
+        """
+        naive_dt = datetime(2024, 1, 1, 12, 0, 0)  # no tzinfo
+        assert naive_dt.tzinfo is None, "pre-condition: dt must be naive"
+
+        with pytest.raises(ValueError, match="timezone-aware"):
+            eoe.build_enrichment_event_payload(
+                session_id="s",
+                correlation_id="c",
+                enrichment_type="summarization",
+                model_used="",
+                latency_ms=0.0,
+                result_token_count=0,
+                relevance_score=None,
+                fallback_used=False,
+                net_tokens_saved=0,
+                was_dropped=False,
+                prompt_version="",
+                success=True,
+                emitted_at=naive_dt,
+            )
+
     def test_cache_hit_always_false(self) -> None:
         """cache_hit must be False (not tracked yet)."""
         payload = eoe.build_enrichment_event_payload(
