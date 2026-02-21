@@ -166,6 +166,12 @@ class TopicBase(StrEnum):
     # ==========================================================================
     DELEGATION_SHADOW_COMPARISON = "onex.evt.omniclaude.delegation-shadow-comparison.v1"
 
+    # ==========================================================================
+    # Pattern enforcement observability topics (OMN-2442)
+    # Consumed by omnidash /enforcement dashboard
+    # ==========================================================================
+    PATTERN_ENFORCEMENT = "onex.evt.omniclaude.pattern-enforcement.v1"
+
 
 def _validate_topic_segment(segment: str, name: str) -> str:
     """Validate a single topic segment (prefix or base segment).

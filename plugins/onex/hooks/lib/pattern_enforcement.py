@@ -322,6 +322,85 @@ def _is_eligible_pattern(pattern: dict[str, Any]) -> bool:
 # ---------------------------------------------------------------------------
 
 
+def _emit_pattern_enforcement_event(
+    *,
+    session_id: str,
+    correlation_id: str,
+    language: str,
+    patterns: list[dict[str, Any]],
+    file_path: str,
+) -> int:
+    """Emit pattern.enforcement observability events to onex.evt.omniclaude.pattern-enforcement.v1.
+
+    Emits one event per eligible pattern evaluated. Each event maps to a row
+    in omnidash's pattern_enforcement_events table via the read-model consumer.
+
+    The outcome is always "hit" at emit time — the compliance pipeline sends
+    the full content to omniintelligence for detailed evaluation, and the
+    resulting advisory (if any violation) arrives asynchronously on the next
+    turn. We emit "hit" (meaning "pattern was applied / evaluated") to populate
+    the dashboard immediately; correction/violation outcomes are handled by the
+    compliance-evaluated subscriber pipeline.
+
+    Args:
+        session_id: Current session ID.
+        correlation_id: Unique ID for this enforcement evaluation batch.
+        language: Programming language of the evaluated file.
+        patterns: Eligible patterns that were included in the evaluation.
+        file_path: Path to the evaluated file (used to derive repo).
+
+    Returns:
+        Number of events successfully emitted.
+    """
+    try:
+        from datetime import UTC, datetime  # noqa: PLC0415
+
+        from emit_client_wrapper import emit_event  # noqa: PLC0415
+
+        # Derive repo from file path (best-effort, uses last two path components)
+        try:
+            parts = Path(file_path).parts
+            repo = parts[-2] if len(parts) >= 2 else parts[-1] if parts else "unknown"
+        except Exception:
+            repo = "unknown"
+
+        timestamp = datetime.now(UTC).isoformat()
+        emitted = 0
+
+        for pattern in patterns:
+            pattern_id = str(pattern.get("id", ""))
+            pattern_name = str(
+                pattern.get("pattern_signature", pattern.get("id", "unknown"))
+            )
+            domain = str(pattern.get("domain_id", "unknown"))
+            confidence = float(pattern.get("confidence", 0.0))
+            lifecycle_state = str(pattern.get("status", "validated"))
+
+            payload: dict[str, Any] = {
+                "timestamp": timestamp,
+                "correlation_id": correlation_id,
+                "session_id": session_id,
+                "repo": repo,
+                "language": language,
+                "domain": domain,
+                "pattern_name": pattern_name,
+                "pattern_lifecycle_state": lifecycle_state,
+                "outcome": "hit",  # Evaluated by enforcement engine; violations resolved asynchronously
+                "confidence": confidence,
+            }
+
+            try:
+                success: bool = emit_event("pattern.enforcement", payload)
+                if success:
+                    emitted += 1
+            except Exception:
+                pass
+
+        return emitted
+    except Exception:
+        return 0
+
+
 def _emit_compliance_evaluate(
     *,
     file_path: str,
@@ -479,6 +558,7 @@ def enforce_patterns(
 
         # Step 4: Emit single compliance.evaluate event with all eligible patterns
         evaluation_submitted = False
+        enforcement_correlation_id = str(_uuid.uuid4())
         if eligible_patterns and not _budget_exceeded():
             evaluation_submitted = _emit_compliance_evaluate(
                 file_path=file_path,
@@ -493,6 +573,17 @@ def enforce_patterns(
                 now = time.time()
                 new_cooldown = {str(p.get("id", "")): now for p in eligible_patterns}
                 _save_cooldown(session_id, {**cooldown, **new_cooldown})
+
+            # Step 4b: Emit observability events to onex.evt.omniclaude.pattern-enforcement.v1
+            # These populate the omnidash /enforcement dashboard (OMN-2442).
+            # Emitted regardless of evaluation_submitted (best-effort, fire-and-forget).
+            _emit_pattern_enforcement_event(
+                session_id=session_id,
+                correlation_id=enforcement_correlation_id,
+                language=language or "unknown",
+                patterns=eligible_patterns,
+                file_path=file_path,
+            )
 
         return EnforcementResult(
             enforced=True,

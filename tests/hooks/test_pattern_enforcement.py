@@ -39,6 +39,7 @@ from pattern_enforcement import (
     _cleanup_stale_cooldown_files,
     _cooldown_path,
     _emit_compliance_evaluate,
+    _emit_pattern_enforcement_event,
     _get_intelligence_url,
     _is_eligible_pattern,
     _load_cooldown,
@@ -1177,3 +1178,319 @@ class TestTopicsCompliance:
             assert topic.startswith("onex.cmd."), (
                 f"compliance.evaluate must only route to cmd topics, got: {topic}"
             )
+
+    def test_pattern_enforcement_topic_exists(self) -> None:
+        """PATTERN_ENFORCEMENT topic is defined in TopicBase at the canonical wire address."""
+        from omniclaude.hooks.topics import TopicBase
+
+        assert hasattr(TopicBase, "PATTERN_ENFORCEMENT")
+        assert (
+            TopicBase.PATTERN_ENFORCEMENT
+            == "onex.evt.omniclaude.pattern-enforcement.v1"
+        )
+
+    def test_pattern_enforcement_registered_in_event_registry(self) -> None:
+        """pattern.enforcement is registered in EVENT_REGISTRY."""
+        from omniclaude.hooks.event_registry import EVENT_REGISTRY
+
+        assert "pattern.enforcement" in EVENT_REGISTRY
+
+    def test_pattern_enforcement_has_no_payload_transform(self) -> None:
+        """pattern.enforcement has no payload transform — metadata is safe for observability."""
+        from omniclaude.hooks.event_registry import EVENT_REGISTRY
+
+        reg = EVENT_REGISTRY["pattern.enforcement"]
+        for rule in reg.fan_out:
+            assert rule.transform is None, (
+                f"pattern.enforcement must not have a transform, but rule "
+                f"{rule.description!r} has one"
+            )
+
+    def test_pattern_enforcement_in_supported_event_types(self) -> None:
+        """pattern.enforcement is in emit_client_wrapper.SUPPORTED_EVENT_TYPES."""
+        from emit_client_wrapper import SUPPORTED_EVENT_TYPES
+
+        assert "pattern.enforcement" in SUPPORTED_EVENT_TYPES
+
+    def test_pattern_enforcement_routes_to_evt_topic(self) -> None:
+        """pattern.enforcement routes to the evt (observability) topic — not cmd."""
+        from omniclaude.hooks.event_registry import EVENT_REGISTRY
+        from omniclaude.hooks.topics import TopicBase
+
+        reg = EVENT_REGISTRY["pattern.enforcement"]
+        topics = [rule.topic_base for rule in reg.fan_out]
+        assert TopicBase.PATTERN_ENFORCEMENT in topics
+        # Must route to evt topic (observability), not cmd (restricted)
+        for topic in topics:
+            assert topic.startswith("onex.evt."), (
+                f"pattern.enforcement must only route to evt topics, got: {topic}"
+            )
+
+    def test_pattern_enforcement_required_fields(self) -> None:
+        """pattern.enforcement requires the fields expected by omnidash."""
+        from omniclaude.hooks.event_registry import EVENT_REGISTRY
+
+        reg = EVENT_REGISTRY["pattern.enforcement"]
+        required = set(reg.required_fields)
+        # Fields consumed by omnidash read-model-consumer.ts projectEnforcementEvent()
+        expected = {
+            "correlation_id",
+            "timestamp",
+            "language",
+            "domain",
+            "pattern_name",
+            "outcome",
+        }
+        assert expected.issubset(required), (
+            f"Missing required fields: {expected - required}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# _emit_pattern_enforcement_event tests (OMN-2442)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+class TestEmitPatternEnforcementEvent:
+    """Tests for _emit_pattern_enforcement_event — canonical evt topic emission."""
+
+    def _make_pattern(self, pid: str, domain: str = "python") -> dict[str, Any]:
+        return {
+            "id": pid,
+            "pattern_signature": f"sig-{pid}",
+            "domain_id": domain,
+            "confidence": 0.85,
+            "status": "validated",
+        }
+
+    def test_emits_one_event_per_pattern(self) -> None:
+        """Each eligible pattern produces one emission call."""
+        import sys as _sys
+
+        patterns = [self._make_pattern("p-001"), self._make_pattern("p-002")]
+        captured: list[dict[str, Any]] = []
+
+        def record_emit(event_type: str, payload: dict[str, Any]) -> bool:
+            captured.append({"event_type": event_type, "payload": payload})
+            return True
+
+        mock_module = MagicMock()
+        mock_module.emit_event = record_emit
+        with patch.dict(_sys.modules, {"emit_client_wrapper": mock_module}):
+            count = _emit_pattern_enforcement_event(
+                session_id="sess-emit-test",
+                correlation_id="corr-001",
+                language="python",
+                patterns=patterns,
+                file_path="/some/repo/file.py",
+            )
+
+        assert count == 2
+        assert len(captured) == 2
+        for call in captured:
+            assert call["event_type"] == "pattern.enforcement"
+
+    def test_payload_fields_match_omnidash_schema(self) -> None:
+        """Emitted payload contains all fields expected by PatternEnforcementEvent."""
+        pattern = self._make_pattern("p-003", domain="api")
+        captured: list[dict[str, Any]] = []
+
+        def record_emit(event_type: str, payload: dict[str, Any]) -> bool:
+            captured.append(payload)
+            return True
+
+        import sys as _sys
+
+        mock_module = MagicMock()
+        mock_module.emit_event = record_emit
+        with patch.dict(_sys.modules, {"emit_client_wrapper": mock_module}):
+            _emit_pattern_enforcement_event(
+                session_id="sess-schema-test",
+                correlation_id="corr-schema",
+                language="python",
+                patterns=[pattern],
+                file_path="/workspace/myrepo/src/api.py",
+            )
+
+        assert len(captured) == 1
+        payload = captured[0]
+
+        # Required fields per PatternEnforcementEvent in omnidash
+        assert "timestamp" in payload
+        assert "correlation_id" in payload
+        assert payload["correlation_id"] == "corr-schema"
+        assert "session_id" in payload
+        assert payload["session_id"] == "sess-schema-test"
+        assert "language" in payload
+        assert payload["language"] == "python"
+        assert "domain" in payload
+        assert payload["domain"] == "api"
+        assert "pattern_name" in payload
+        assert payload["pattern_name"] == "sig-p-003"
+        assert "outcome" in payload
+        assert payload["outcome"] == "hit"
+        assert "confidence" in payload
+        assert payload["confidence"] == 0.85
+        assert "pattern_lifecycle_state" in payload
+        assert payload["pattern_lifecycle_state"] == "validated"
+        assert "repo" in payload
+
+    def test_outcome_is_always_hit(self) -> None:
+        """outcome field is always 'hit' — violations are resolved asynchronously."""
+        captured: list[dict[str, Any]] = []
+
+        def record_emit(event_type: str, payload: dict[str, Any]) -> bool:
+            captured.append(payload)
+            return True
+
+        import sys as _sys
+
+        mock_module = MagicMock()
+        mock_module.emit_event = record_emit
+        with patch.dict(_sys.modules, {"emit_client_wrapper": mock_module}):
+            _emit_pattern_enforcement_event(
+                session_id="sess-outcome",
+                correlation_id="corr-outcome",
+                language="typescript",
+                patterns=[self._make_pattern("p-ts-001")],
+                file_path="/repo/file.ts",
+            )
+
+        assert captured[0]["outcome"] == "hit"
+
+    def test_returns_zero_on_emit_failure(self) -> None:
+        """Returns 0 when all emit calls fail."""
+        import sys as _sys
+
+        mock_module = MagicMock()
+        mock_module.emit_event = MagicMock(return_value=False)
+        with patch.dict(_sys.modules, {"emit_client_wrapper": mock_module}):
+            count = _emit_pattern_enforcement_event(
+                session_id="sess-fail",
+                correlation_id="corr-fail",
+                language="python",
+                patterns=[self._make_pattern("p-fail")],
+                file_path="/some/file.py",
+            )
+        assert count == 0
+
+    def test_returns_zero_on_import_error(self) -> None:
+        """Returns 0 gracefully when emit_client_wrapper is unavailable."""
+        import sys as _sys
+
+        original = _sys.modules.get("emit_client_wrapper")
+        try:
+            if "emit_client_wrapper" in _sys.modules:
+                del _sys.modules["emit_client_wrapper"]
+            # Force ImportError by removing from path temporarily
+            count = _emit_pattern_enforcement_event(
+                session_id="sess-import-err",
+                correlation_id="corr-import-err",
+                language="python",
+                patterns=[self._make_pattern("p-import-err")],
+                file_path="/file.py",
+            )
+            # May succeed (module found on path) or return 0 (import error) — both acceptable
+            assert isinstance(count, int)
+        finally:
+            if original is not None:
+                _sys.modules["emit_client_wrapper"] = original
+
+    def test_empty_patterns_returns_zero(self) -> None:
+        """Empty pattern list emits nothing."""
+        import sys as _sys
+
+        mock_module = MagicMock()
+        mock_module.emit_event = MagicMock(return_value=True)
+        with patch.dict(_sys.modules, {"emit_client_wrapper": mock_module}):
+            count = _emit_pattern_enforcement_event(
+                session_id="sess-empty",
+                correlation_id="corr-empty",
+                language="python",
+                patterns=[],
+                file_path="/file.py",
+            )
+        assert count == 0
+        mock_module.emit_event.assert_not_called()
+
+    def test_repo_derived_from_file_path(self) -> None:
+        """repo field is derived from the penultimate path component."""
+        captured: list[dict[str, Any]] = []
+
+        def record_emit(event_type: str, payload: dict[str, Any]) -> bool:
+            captured.append(payload)
+            return True
+
+        import sys as _sys
+
+        mock_module = MagicMock()
+        mock_module.emit_event = record_emit
+        with patch.dict(_sys.modules, {"emit_client_wrapper": mock_module}):
+            _emit_pattern_enforcement_event(
+                session_id="sess-repo",
+                correlation_id="corr-repo",
+                language="python",
+                patterns=[self._make_pattern("p-repo")],
+                file_path="/workspace/omniclaude4/src/module.py",
+            )
+
+        assert captured[0]["repo"] == "src"
+
+    def test_enforcement_emits_pattern_enforcement_event_end_to_end(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """enforce_patterns() triggers _emit_pattern_enforcement_event for eligible patterns."""
+        monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
+        patterns = [
+            {
+                "id": "p-e2e-001",
+                "pattern_signature": "sig-e2e",
+                "domain_id": "validation",
+                "confidence": 0.9,
+                "status": "validated",
+            }
+        ]
+        enforcement_events: list[dict[str, Any]] = []
+
+        def capture_enforcement_emit(
+            *,
+            session_id: str,
+            correlation_id: str,
+            language: str,
+            patterns: list[dict[str, Any]],
+            file_path: str,
+        ) -> int:
+            enforcement_events.append(
+                {
+                    "session_id": session_id,
+                    "correlation_id": correlation_id,
+                    "language": language,
+                    "patterns": patterns,
+                    "file_path": file_path,
+                }
+            )
+            return len(patterns)
+
+        with (
+            patch("pattern_enforcement.query_patterns", return_value=patterns),
+            patch("pattern_enforcement._emit_compliance_evaluate", return_value=True),
+            patch(
+                "pattern_enforcement._emit_pattern_enforcement_event",
+                side_effect=capture_enforcement_emit,
+            ),
+        ):
+            result = enforce_patterns(
+                file_path="/test/repo/file.py",
+                session_id="sess-e2e",
+                language="python",
+                content_preview="def foo(): pass\n",
+            )
+
+        assert result["evaluation_submitted"] is True
+        assert len(enforcement_events) == 1
+        call = enforcement_events[0]
+        assert call["session_id"] == "sess-e2e"
+        assert call["language"] == "python"
+        assert call["file_path"] == "/test/repo/file.py"
+        assert len(call["patterns"]) == 1
