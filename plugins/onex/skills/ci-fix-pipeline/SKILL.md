@@ -66,8 +66,6 @@ For each classified failure:
 - **Small scope** → dispatches fix to a polymorphic agent (Polly), mirroring exact CI commands from `.github/workflows/ci.yml`
 - **Large scope** → dispatches `create-ticket` to Polly with full context; marks failure as deferred
 
-If `--dry-run` is set: logs all decisions, skips commits.
-
 AUTO-ADVANCE to Phase 3 **only if** all dispatched agents returned `fixed`, `skipped`, or `success` (large-scope ticket created). STOP if any agent returned `preflight_failed` or `failed`.
 
 ### Phase 3: local_review
@@ -95,10 +93,10 @@ Parse arguments from `$ARGUMENTS`:
 
 ### `--skip-to` handling
 
-When `--skip-to` is provided, skip all earlier phases and begin execution at the named phase:
+When `--skip-to` is provided, begin execution at the named phase. Note that Phase 1 data (failure classification) is required by Phase 2 and later phases, so `--skip-to fix` does NOT skip Phase 1 — it re-runs Phase 1 silently and immediately advances to Phase 2. Only `--skip-to local_review` and `--skip-to release_ready` genuinely bypass earlier phases.
 
 - `--skip-to analyze` — start at Phase 1 (same as default)
-- `--skip-to fix` — run Phase 1 silently and immediately advance to Phase 2 without any inter-phase pause. This is equivalent to the default auto-advance behavior: the pipeline already auto-advances from Phase 1 to Phase 2 with no confirmation gate between them, so `--skip-to fix` is a no-op today. It exists as a forward-compatibility hook in case a confirmation gate is added between Phase 1 and Phase 2 in the future. If the caller provides pre-classified failure context in the prompt, the orchestrator may use that in place of a fresh Phase 1 run.
+- `--skip-to fix` — re-run Phase 1 silently (required to produce failure classification data), then immediately advance to Phase 2 without any inter-phase pause. This is equivalent to the default auto-advance behavior: the pipeline already auto-advances from Phase 1 to Phase 2 with no confirmation gate between them, so `--skip-to fix` is a no-op today. It exists as a forward-compatibility hook in case a confirmation gate is added between Phase 1 and Phase 2 in the future. If the caller provides pre-classified failure context in the prompt, the orchestrator may use that in place of a fresh Phase 1 run.
 - `--skip-to local_review` — skip Phases 1 and 2; go directly to Phase 3
 - `--skip-to release_ready` — skip Phases 1–3; go directly to Phase 4
 
@@ -147,7 +145,7 @@ You do NOT analyze, fix, or review code yourself. All heavy work runs in separat
 **Rule: The orchestrator MUST NEVER call Edit(), Write(), or Bash(code-modifying commands) directly.**
 If code changes are needed, dispatch a polymorphic agent. If you find yourself wanting to make an edit, that is the signal to dispatch instead.
 
-**Correlation ID**: Before dispatching any phase, generate a `correlation_id` using the format `ci-fix-{pr_number_or_branch}-{short_timestamp}` where `short_timestamp` includes seconds (e.g., `ci-fix-42-20260221T103045`). Use seconds resolution so that re-runs within the same minute produce distinct IDs and do not trigger the idempotency check (`grep [corr:{correlation_id}]`) prematurely. **Sanitize `pr_number_or_branch` before embedding it in the correlation_id**: replace every `/` with `-` so that branch names like `jonahgabriel/omn-1234-fix` become `jonahgabriel-omn-1234-fix` and the resulting ID contains no path separators (e.g., `ci-fix-jonahgabriel-omn-1234-fix-20260221T103045`). Use this same ID for all commits and dispatches within one pipeline run. Pass it as a literal string in all dispatch prompts — do not use a placeholder.
+**Correlation ID**: Before dispatching any phase, generate a `correlation_id` using the format `ci-fix-{pr_number_or_branch}-{short_timestamp}` where `short_timestamp` includes seconds (e.g., `ci-fix-42-20260221T103045`). Use seconds resolution so that re-runs within the same minute produce distinct IDs and do not trigger the idempotency check (`grep [corr:{correlation_id}]`) prematurely. **Sanitize `pr_number_or_branch` before embedding it in the correlation_id**: replace every `/` with `-` so that branch names like `jonahgabriel/omn-1234-fix` become `jonahgabriel-omn-1234-fix` and the resulting ID contains no path separators (e.g., `ci-fix-jonahgabriel-omn-1234-fix-20260221T103045`). **Truncate the branch-name portion to at most 30 characters** after sanitization to prevent the correlation_id from pushing commit subject lines past 72 characters (e.g., `jonahgabriel-omn-1234-fix-my-` if the sanitized branch exceeds 30 chars). Use this same ID for all commits and dispatches within one pipeline run. Pass it as a literal string in all dispatch prompts — do not use a placeholder.
 
 ---
 
@@ -332,8 +330,8 @@ Task(
 ```
 
 **Orchestrator action after Phase 2:**
-- Collect all RESULT blocks from dispatched agents.
-- If any `preflight_failed`: STOP and report — do not proceed to Phase 3.
+- Wait for ALL parallel agents to complete before evaluating results. Do NOT abort early when the first `preflight_failed` is seen — collect every agent's RESULT first, then evaluate.
+- If any agent returned `preflight_failed`: STOP and report all preflight failures after aggregating all results — do not proceed to Phase 3.
 - If all failures are `fixed`, `skipped`, `large_scope`, or `success` (large-scope → ticket created): AUTO-ADVANCE to Phase 3. `large_scope` returned mid-fix (agent determined during fixing that scope exceeded threshold) is treated identically to a Phase 1 large-scope classification: a ticket was created, the failure is deferred, and the pipeline continues.
 - If any `failed` (not preflight): STOP, set status=`fix_partially_failed`, and report clearly which failures were not resolved. Do NOT advance to Phase 3. Manual intervention is required before resuming the pipeline.
 
@@ -407,12 +405,12 @@ Task(
   subagent_type="onex:polymorphic-agent",
   description="ci-fix-pipeline: Phase 4 pr-release-ready for PR #{resolved_pr_number}",
   prompt="You are confirming release readiness for PR #{resolved_pr_number} (original arg: {pr_number_or_branch}).
-    Invoke: Skill(skill=\"onex:pr-release-ready\", args=\"<resolved_pr_number>\")
+    Invoke: Skill(skill=\"onex:pr-release-ready\", args=\"{resolved_pr_number}\")
 
-    IMPORTANT: Replace <resolved_pr_number> in the args string above with the actual integer PR
+    IMPORTANT: Replace {resolved_pr_number} in the args string above with the actual integer PR
     number (e.g., 42) before creating this Task. The orchestrator must substitute the real integer
-    value — never pass a template placeholder like '{resolved_pr_number}' or '<resolved_pr_number>'
-    literally. For example, if the PR number is 42, the args value is the string \"42\".
+    value — never pass a template placeholder like '{resolved_pr_number}' literally.
+    For example, if the PR number is 42, the args value is the string \"42\".
     This substitution applies to BOTH the prompt body AND the description field of the Task
     (which also contains '{resolved_pr_number}'). Replace it in both locations before the Task
     is created.
