@@ -1606,6 +1606,10 @@ class TestEmitPatternEnforcementEvent:
         assert call["language"] == "python"
         assert call["file_path"] == "/test/repo/file.py"
         assert len(call["patterns"]) == 1
+        assert call["emitted_at"] == "2026-01-01T00:00:00+00:00", (
+            f"emitted_at must be forwarded unchanged to _emit_pattern_enforcement_event, "
+            f"got {call['emitted_at']!r}"
+        )
 
         # Verify shared correlation_id: both events must carry the same ID for omnidash JOINs
         assert len(compliance_calls) == 1

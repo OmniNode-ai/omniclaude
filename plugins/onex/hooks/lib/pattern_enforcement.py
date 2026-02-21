@@ -532,9 +532,9 @@ def enforce_patterns(
         EnforcementResult with evaluation_submitted and metadata.
         advisories is always empty — results arrive asynchronously.
     """
-    if emitted_at is None:  # type: ignore[comparison-overlap]
+    if not emitted_at:  # type: ignore[comparison-overlap]
         raise ValueError(
-            "emitted_at must be provided explicitly; do not rely on datetime.now() defaults"
+            "emitted_at must be a non-empty ISO timestamp string; do not rely on datetime.now() defaults"
         )
 
     start = time.monotonic()
@@ -630,7 +630,6 @@ def enforce_patterns(
             # were evaluated against this file, not whether omniintelligence processed the results.
             # Budget exhaustion or empty eligible_patterns suppresses this block entirely.
             # Violations are resolved asynchronously by the compliance-evaluated subscriber pipeline.
-            _emitted_at = emitted_at
             # The return value (number of events successfully emitted) is intentionally
             # discarded here.  EnforcementResult is a TypedDict whose schema is consumed
             # by the omnidash read-model consumer and the CLI stdout contract — adding an
@@ -645,7 +644,7 @@ def enforce_patterns(
                 language=language or "unknown",
                 patterns=eligible_patterns,
                 file_path=file_path,
-                emitted_at=_emitted_at,
+                emitted_at=emitted_at,
             )
 
         return EnforcementResult(
