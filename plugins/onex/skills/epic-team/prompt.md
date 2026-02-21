@@ -56,7 +56,7 @@ BASE_FILTER = {
     ]
 }
 # Example with additional filters:
-WORKER_FILTER = {**BASE_FILTER, "owner": f"worker-{repo}", "status": "in_progress"}
+WORKER_FILTER = {**BASE_FILTER, "owner": f"worker-{repo}", "status": "todo"}
 ```
 
 ### Termination Authority
@@ -127,6 +127,20 @@ goto Phase4_MonitoringLoop()
 ### Duplicate Guard
 
 ```python
+def revoke_run(run_id):
+    """Write run_id to revoked_runs.yaml. Workers check this on startup."""
+    revoked = load_yaml(REVOKED_FILE) or {"revoked": []}
+    if run_id not in revoked["revoked"]:
+        revoked["revoked"].append(run_id)
+    write_yaml(REVOKED_FILE, revoked)
+
+def archive_state(path):
+    import time
+    ts = int(time.time())
+    rename(path, f"{path}.bak.{ts}")
+```
+
+```python
 state = load_yaml(STATE_FILE)  # None if not found
 
 if state is not None:
@@ -156,20 +170,6 @@ if state is not None:
             exit(0)
         # --force on done run: continue to start fresh (archive and proceed)
         archive_state(STATE_FILE)
-```
-
-```python
-def revoke_run(run_id):
-    """Write run_id to revoked_runs.yaml. Workers check this on startup."""
-    revoked = load_yaml(REVOKED_FILE) or {"revoked": []}
-    if run_id not in revoked["revoked"]:
-        revoked["revoked"].append(run_id)
-    write_yaml(REVOKED_FILE, revoked)
-
-def archive_state(path):
-    import time
-    ts = int(time.time())
-    rename(path, f"{path}.bak.{ts}")
 ```
 
 ### Working Directory Guard
@@ -222,6 +222,7 @@ state = {
     "end_time": None,
     "assignments": {},
     "cross_repo_splits": [],
+    "tickets": [t.__dict__ for t in tickets],  # persisted for Phase 2 use on resume
     "ticket_scores": {},
     "ticket_status_map": {},
     "pr_urls": {},
@@ -251,7 +252,7 @@ if manifest is None:
 
 # 2. Decompose epic
 from plugins.onex.skills.epic_team.epic_decomposer import decompose_epic, validate_decomposition
-result = decompose_epic(tickets=state_tickets, manifest_path=MANIFEST_PATH)
+result = decompose_epic(tickets=state["tickets"], manifest_path=MANIFEST_PATH)
 
 # 3. Validate
 errors = validate_decomposition(result)
@@ -326,53 +327,90 @@ state["team_name"] = team_name
 write_yaml(STATE_FILE, state)
 print(f"Team created and persisted: {team_name}")
 
-# 3. Create tasks for each ticket
+# 3. Create tasks — two-pass strategy to enforce cross-repo part ordering.
+#
+# Pass 1: Create all non-split tasks AND all Part 1 split tasks.
+#         After Pass 1, persist cross_repo_splits (with part1_task_id populated)
+#         to state.yaml before touching Part 2 tasks.
+# Pass 2: Create all Part 2 split tasks, using part1_task_id from state.yaml
+#         as the addBlockedBy dependency.
+#
+# This ordering is mandatory. If Part 2 tasks were created before their
+# corresponding Part 1 task, split["part1_task_id"] would be missing (KeyError).
+
 assignments = state["assignments"]
 cross_repo_splits = state["cross_repo_splits"]
-cross_repo_by_ticket = {s["ticket_id"]: s for s in cross_repo_splits}
+# Build a lookup keyed by (ticket_id, part) to avoid ambiguity
+cross_repo_by_ticket_part = {(s["ticket_id"], s["part"]): s for s in cross_repo_splits}
 
+def make_task_kwargs(repo, ticket_id, split, part):
+    ticket = get_ticket(ticket_id)  # from tickets persisted to state.yaml in Phase 1
+    score = state["ticket_scores"].get(ticket_id, {})
+    is_triage = score.get("triage", False)
+    triage_tag = "[triage:true]" if is_triage else ""
+
+    if part == 1:
+        part_tag = f"[origin:{split['origin_repo']}][part:1-of-2]"
+    elif part == 2:
+        part_tag = f"[part:2-of-2]"
+    else:
+        part_tag = ""
+
+    description = (
+        f"[epic:{epic_id}][run:{run_id}][repo:{repo}]"
+        f"[lease:{run_id[:8]}:{repo}]"
+        f"{triage_tag}{part_tag} {ticket.title} — {ticket.url}"
+    )
+    subject = f"TRIAGE-{ticket_id} [{repo}]" if is_triage else f"{ticket_id} [{repo}]"
+    return {"subject": subject, "description": description, "owner": f"worker-{repo}"}
+
+# --- Pass 1: non-split tasks + Part 1 split tasks ---
 for repo, ticket_ids in assignments.items():
     for ticket_id in ticket_ids:
-        ticket = get_ticket(ticket_id)  # from fetched tickets in Phase 1
-        score = state["ticket_scores"].get(ticket_id, {})
-        is_triage = score.get("triage", False)
-        triage_tag = "[triage:true]" if is_triage else ""
+        split_part2 = cross_repo_by_ticket_part.get((ticket_id, 2))
+        split_part1 = cross_repo_by_ticket_part.get((ticket_id, 1))
 
-        split = cross_repo_by_ticket.get(ticket_id)
-        if split and split["part"] == 1:
-            part_tag = f"[origin:{split['origin_repo']}][part:1-of-2]"
-        elif split and split["part"] == 2:
-            part_tag = f"[part:2-of-2]"
-        else:
-            part_tag = ""
+        if split_part2:
+            # This assignment entry is a Part 2 split — skip in Pass 1
+            continue
 
-        description = (
-            f"[epic:{epic_id}][run:{run_id}][repo:{repo}]"
-            f"[lease:{run_id[:8]}:{repo}]"
-            f"{triage_tag}{part_tag} {ticket.title} — {ticket.url}"
-        )
-
-        if is_triage:
-            subject = f"TRIAGE-{ticket_id} [{repo}]"
-        else:
-            subject = f"{ticket_id} [{repo}]"
-
-        kwargs = {
-            "subject": subject,
-            "description": description,
-            "owner": f"worker-{repo}",
-        }
-
-        # Cross-repo part 2: block on part 1
-        if split and split["part"] == 2:
-            part1_task_id = split["part1_task_id"]  # stored when part 1 was created
-            kwargs["addBlockedBy"] = [part1_task_id]
-
+        split = split_part1  # None for non-split tickets
+        part = 1 if split_part1 else None
+        kwargs = make_task_kwargs(repo, ticket_id, split, part)
         task = TaskCreate(**kwargs)
 
-        # Store part1 task_id for part2 blocking
-        if split and split["part"] == 1:
-            cross_repo_by_ticket[ticket_id]["part1_task_id"] = task.id
+        # Store part1_task_id in the split descriptor for Pass 2 use
+        if split_part1:
+            split_part1["part1_task_id"] = task.id
+            print(f"  [pass-1] Part 1 task created: {task.id} for {ticket_id} [{repo}]")
+        else:
+            print(f"  [pass-1] Task created: {task.id} for {ticket_id} [{repo}]")
+
+# Persist cross_repo_splits with part1_task_id populated BEFORE Pass 2
+state["cross_repo_splits"] = list(cross_repo_by_ticket_part.values())
+write_yaml(STATE_FILE, state)
+print("  [pass-1] cross_repo_splits (with part1_task_id) persisted to state.yaml.")
+
+# --- Pass 2: Part 2 split tasks (part1_task_id now available from state.yaml) ---
+for repo, ticket_ids in assignments.items():
+    for ticket_id in ticket_ids:
+        split_part2 = cross_repo_by_ticket_part.get((ticket_id, 2))
+        if not split_part2:
+            continue
+
+        # Resolve part1_task_id from the persisted Part 1 split descriptor
+        split_part1 = cross_repo_by_ticket_part.get((ticket_id, 1))
+        part1_task_id = split_part1["part1_task_id"] if split_part1 else split_part2.get("part1_task_id")
+        if not part1_task_id:
+            raise RuntimeError(
+                f"Cannot create Part 2 task for {ticket_id}: part1_task_id not found. "
+                "This is a bug — Part 1 must be created and persisted before Part 2."
+            )
+
+        kwargs = make_task_kwargs(repo, ticket_id, split_part2, 2)
+        kwargs["addBlockedBy"] = [part1_task_id]
+        task = TaskCreate(**kwargs)
+        print(f"  [pass-2] Part 2 task created: {task.id} for {ticket_id} [{repo}] (blocked by {part1_task_id})")
 
 print(f"All tasks created for team {team_name}.")
 
@@ -393,7 +431,9 @@ except Exception as e:
 if slack_thread_ts is not None:
     state["slack_thread_ts"] = slack_thread_ts
 # Never: state["slack_thread_ts"] = slack_thread_ts  (if it could be None and existing is set)
-state["slack_ts_candidates"] = []
+# Only initialize slack_ts_candidates if not already present (preserve on re-entry/resume)
+if "slack_ts_candidates" not in state:
+    state["slack_ts_candidates"] = []
 write_yaml(STATE_FILE, state)
 
 # 5. Spawn workers
@@ -855,6 +895,12 @@ slack_last_error: null             # Last Slack error string (for debugging)
 # --- Timing ---
 start_time: "2026-01-01T00:00:00Z"  # ISO 8601 UTC
 end_time: null                       # ISO 8601 UTC (null until phase=done)
+
+# --- Intake ---
+tickets:                           # Raw ticket data from Phase 1 (persisted for Phase 2 on resume)
+  - id: "OMN-1001"
+    title: "Ticket title"
+    url: "https://linear.app/..."
 
 # --- Decomposition ---
 assignments:                       # Map of repo -> [ticket_id, ...]
