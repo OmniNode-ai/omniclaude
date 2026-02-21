@@ -91,7 +91,7 @@ pip install kafka-python aiokafka
 KAFKA_BOOTSTRAP_SERVERS=192.168.86.200:29092
 POSTGRES_HOST=192.168.86.200
 POSTGRES_PORT=5436
-POSTGRES_DATABASE=omninode_bridge
+POSTGRES_DATABASE=omniclaude
 ```
 
 ## Test Your Integration

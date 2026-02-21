@@ -325,7 +325,7 @@ OMNICLAUDE_PATH="${HOME}/Code/omniclaude"  # If different from PROJECT_ROOT
 # PostgreSQL (source .env before use)
 POSTGRES_HOST=192.168.86.200           # Or your PostgreSQL host
 POSTGRES_PORT=5436                     # Or your PostgreSQL port
-POSTGRES_DATABASE=omninode_bridge      # Or your database name
+POSTGRES_DATABASE=omniclaude           # Or your database name
 POSTGRES_PASSWORD=<set_in_env>         # Required - never commit
 
 # Kafka/Redpanda

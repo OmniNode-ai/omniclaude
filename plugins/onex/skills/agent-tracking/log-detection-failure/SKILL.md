@@ -99,7 +99,7 @@ Skills are version-controlled in the repository and symlinked to `${CLAUDE_PLUGI
 ## Required Environment
 
 - PostgreSQL connection via `${CLAUDE_PLUGIN_ROOT}/skills/_shared/db_helper.py`
-- Database: `omninode_bridge` on localhost:5436
+- Database: `omniclaude` on localhost:5436
 - Credentials: Set in db_helper.py
 
 ## Output

@@ -472,7 +472,7 @@ pip install kafka-python aiokafka
 
 **Infrastructure** (on 192.168.86.200):
 - Kafka/Redpanda: Port 29092 (external) / 9092 (internal)
-- PostgreSQL: Port 5436 (omninode_bridge database)
+- PostgreSQL: Port 5436 (omniclaude database)
 
 **Environment Variables**:
 ```bash
@@ -482,7 +482,7 @@ KAFKA_BOOTSTRAP_SERVERS=omninode-bridge-redpanda:9092  # For Docker services
 
 POSTGRES_HOST=192.168.86.200
 POSTGRES_PORT=5436
-POSTGRES_DATABASE=omninode_bridge
+POSTGRES_DATABASE=omniclaude
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=<set_in_env>
 ```

@@ -63,7 +63,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-infrastructure/execute.
   "postgres": {
     "status": "connected",
     "host": "192.168.86.200:5436",
-    "database": "omninode_bridge",
+    "database": "omniclaude",
     "tables": 34,
     "error": null
   },
@@ -89,7 +89,7 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-infrastructure/execute.
   "postgres": {
     "status": "connected",
     "host": "192.168.86.200:5436",
-    "database": "omninode_bridge",
+    "database": "omniclaude",
     "tables": 34,
     "connections": 8,
     "error": null
@@ -160,4 +160,4 @@ python3 ${CLAUDE_PLUGIN_ROOT}/skills/system-status/check-infrastructure/execute.
 
 **Permission errors (PostgreSQL)**:
 - Verify `POSTGRES_PASSWORD` is set: `echo ${POSTGRES_PASSWORD:+SET}`
-- Test connection: `psql -h 192.168.86.200 -p 5436 -U postgres -d omninode_bridge -c "SELECT 1"`
+- Test connection: `psql -h 192.168.86.200 -p 5436 -U postgres -d omniclaude -c "SELECT 1"`
