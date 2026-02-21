@@ -243,8 +243,8 @@ Task(
        - If unrelated uncommitted changes exist: STOP, do not proceed, report in RESULT.
     2. Run: gh auth status
        - If not authenticated: STOP, do not proceed, report in RESULT.
-    3. Run: git log --oneline -100 | grep -F "[corr:${correlation_id}:${failure_index}]"
-       where ${correlation_id} and ${failure_index} are substituted as literal strings before the command runs (not shell variables). Always quote the grep pattern as shown — if the pattern is unquoted and correlation_id contains shell-special characters (e.g., slashes), the command will fail silently and the idempotency check will be bypassed. Note: the correlation_id passed here must already be the sanitized form (all `/` replaced with `-`) as produced by the orchestrator.
+    3. Run: git log --oneline -100 | grep -F "[corr:{correlation_id}:{failure_index}]"
+       The orchestrator substitutes the actual values of {correlation_id} and {failure_index} into this command string before including it in the dispatch prompt — you receive an already-substituted command, not a template. Always quote the grep pattern with -F as shown — if the pattern is unquoted and correlation_id contains shell-special characters (e.g., slashes), the command will fail silently and the idempotency check will be bypassed. Note: the correlation_id passed here must already be the sanitized form (all `/` replaced with `-`) as produced by the orchestrator.
        - If corr commits already exist for this failure: log 'already fixed' and STOP (idempotent).
        - WARNING: On branches with more than 100 commits the -100 window may not cover the full history. If this branch has more than 100 commits, log a warning: 'idempotency not guaranteed — branch exceeds 100-commit window'. Do not abort; continue with the fix attempt.
        Note: {failure_index} is the 0-based position of this failure in the failures list, passed to you in this prompt. This makes the idempotency check per-failure so parallel agents fixing different failures do not interfere with each other.
@@ -325,7 +325,17 @@ Task(
       Manual investigation and fix required. This failure was deferred by the ci-fix-pipeline
       because it exceeded the automated fix scope threshold.
     priority: (map severity → priority: CRITICAL=1, MAJOR=2, MINOR=3, NIT=4)
-    labels: ['ci-failure', 'large-scope']
+    labels: (optional — see label resolution step below)
+
+    Label resolution (required before calling mcp__linear__create_issue):
+    1. Call mcp__linear__list_issue_labels to retrieve all labels in the workspace.
+    2. For each desired label ('ci-failure', 'large-scope'):
+       a. If the label already exists in the list: include it in the labels field.
+       b. If the label does NOT exist: call mcp__linear__create_issue_label to create it,
+          then include it in the labels field. If creation fails (e.g., permission error),
+          log a warning and omit that label — do NOT abort ticket creation over a missing label.
+    3. If BOTH labels are unavailable and cannot be created: omit the labels field entirely
+       and proceed with ticket creation without labels.
 
     After creating the ticket, report its ID and URL.
 
@@ -340,7 +350,7 @@ Task(
 **Orchestrator action after Phase 2:**
 - Wait for ALL parallel agents to complete before evaluating results. Do NOT abort early when the first `preflight_failed` is seen — collect every agent's RESULT first, then evaluate.
 - If any agent returned `preflight_failed`: STOP and report all preflight failures after aggregating all results — do not proceed to Phase 3.
-- If any small-scope fix agent returned `large_scope` mid-fix (i.e., the agent determined during fixing that the actual scope exceeded the threshold): dispatch a large-scope ticket-creation agent for each such failure using the same large-scope ticket dispatch template defined above in this phase. These ticket-creation dispatches MUST be sent as parallel `Task()` invocations in a single message. Wait for all ticket-creation agents to complete before evaluating the AUTO-ADVANCE condition. Only after all mid-fix `large_scope` tickets are created may the orchestrator treat those failures as `success` (ticket created) and advance.
+- If any small-scope fix agent returned `large_scope` mid-fix (i.e., the agent determined during fixing that the actual scope exceeded the threshold): dispatch a large-scope ticket-creation agent for each such failure using the same large-scope ticket dispatch template defined above in this phase. These ticket-creation dispatches MUST be sent as parallel `Task()` invocations in a single message. Wait for all ticket-creation agents to complete before evaluating the AUTO-ADVANCE condition. If any secondary ticket-creation agent returns `failed`: STOP with status `ticket_creation_failed`, report which failures had no ticket created. Do NOT advance to Phase 3. Only after all mid-fix `large_scope` tickets are confirmed `success` may the orchestrator treat those failures as `success` (ticket created) and advance.
 - If all failures are `fixed`, `skipped`, `large_scope` (ticket now created per the step above), or `success` (large-scope → ticket created): AUTO-ADVANCE to Phase 3.
 - If any `failed` (not preflight): STOP, set status=`fix_partially_failed`, and report clearly which failures were not resolved. Do NOT advance to Phase 3. Manual intervention is required before resuming the pipeline.
 
@@ -373,7 +383,7 @@ Task(
     RESULT:
     status: passed | failed
     output: |
-      Blocking issues found: <count>
+      blocking issues found: <count>
       Issue descriptions: [<list>]
       Final state: clean | issues_remain
     error: <error message if status is failed, else null>"
@@ -393,7 +403,7 @@ Run: git push origin HEAD
 ```
 
 - If the push succeeds: AUTO-ADVANCE to Phase 4.
-- If the push fails (e.g., diverged remote, rejected, authentication error): STOP immediately and report the push failure. Include the full error output and instruct the user to manually rebase and push (`git fetch origin && git rebase origin/{base_branch} && git push origin HEAD`) before re-running the pipeline from Phase 4 (`--skip-to release_ready`). Do NOT advance to Phase 4 until the push succeeds.
+- If the push fails (e.g., diverged remote, rejected, authentication error): STOP immediately and report the push failure. Include the full error output and instruct the user to manually rebase and push (`git fetch origin && git rebase origin/<base_branch> && git push origin HEAD`) before re-running the pipeline from Phase 4 (`--skip-to release_ready`). Do NOT advance to Phase 4 until the push succeeds. **NOTE to orchestrator**: substitute the actual resolved base branch name (e.g., `main`, `develop`) in place of `<base_branch>` in the recovery message before reporting it to the user — never leave `<base_branch>` as a literal placeholder in user-facing output.
 
 ---
 
