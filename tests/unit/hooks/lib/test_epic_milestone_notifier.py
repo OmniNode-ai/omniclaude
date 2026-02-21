@@ -11,7 +11,6 @@ because pytest-asyncio is not installed.
 from __future__ import annotations
 
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -50,13 +49,6 @@ NEW_THREAD_TS = "1700000001.654321"
 # =============================================================================
 # Helpers / mock builder
 # =============================================================================
-
-
-@dataclass
-class _MockNotifyResult:
-    success: bool = True
-    thread_ts: str | None = None
-    error: str | None = None
 
 
 def _make_mock_notifier(
@@ -223,6 +215,28 @@ class TestNotifyTicketFailed:
                 thread_ts=THREAD_TS,
             )
         assert result == NEW_THREAD_TS
+
+    def test_block_kind_failed_exception_forwarded(self) -> None:
+        """notify_ticket_failed must pass block_kind='failed_exception' to notify_blocked.
+
+        This value drives severity selection in PipelineSlackNotifier.notify_blocked:
+        block_kind == 'failed_exception' → severity ERROR (vs WARNING for others).
+        """
+        mock = MagicMock()
+        captured: dict[str, Any] = {}
+
+        async def _blocked(**kwargs: Any) -> str | None:
+            captured.update(kwargs)
+            return NEW_THREAD_TS
+
+        mock.notify_blocked = _blocked
+
+        with patch("epic_milestone_notifier._make_notifier", return_value=mock):
+            notify_ticket_failed(
+                EPIC_ID, RUN_ID, TICKET_ID, REPO, reason="Agent raised"
+            )
+
+        assert captured.get("block_kind") == "failed_exception"
 
 
 # =============================================================================

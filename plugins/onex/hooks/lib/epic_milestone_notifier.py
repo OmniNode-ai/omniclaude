@@ -106,12 +106,13 @@ def _run(coro: Any) -> Any:  # type: ignore[return]
     - Already inside an event loop → ThreadPoolExecutor to avoid nesting
     """
     try:
-        loop = asyncio.get_running_loop()
+        # Raises RuntimeError if no loop is running — that's the signal we need.
+        asyncio.get_running_loop()
         import concurrent.futures
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
             future = pool.submit(asyncio.run, coro)
-            return future.result(timeout=15)
+            return future.result(timeout=5)
     except RuntimeError:
         return asyncio.run(coro)
 
@@ -184,10 +185,6 @@ def notify_ticket_completed(
     logger.info(message)
 
     notifier = _make_notifier(epic_id, run_id, handler=_handler)
-
-    details: dict[str, str] = {"Ticket": ticket_id, "Repo": repo}
-    if pr_url:
-        details["PR"] = pr_url
 
     try:
         result_ts: str | None = _run(
@@ -300,12 +297,6 @@ def notify_epic_done(
     logger.info("\n".join(lines))
 
     notifier = _make_notifier(epic_id, run_id, handler=_handler)
-
-    details: dict[str, str] = {
-        "Completed": str(len(completed)),
-        "Failed": str(len(failed)),
-        "PRs": str(len(prs)),
-    }
 
     try:
         result_ts = _run(
