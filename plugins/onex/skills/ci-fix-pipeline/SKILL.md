@@ -89,7 +89,7 @@ Parse arguments from `$ARGUMENTS`:
 | `pr_number_or_branch` | required | PR number (e.g., 42) or branch name (e.g., jonahgabriel/omn-1234-fix) |
 | `--dry-run` | false | Analyze and pre-flight only; no commits or fixes applied |
 | `--max-fix-files <n>` | 10 | Override scope threshold; failures touching more files create a ticket instead |
-| `--skip-to <phase>` | none | Resume from a specific phase: `analyze \| fix (no-op) \| local_review \| release_ready` — `fix` re-runs from Phase 1 and behaves identically to the default auto-advance |
+| `--skip-to <phase>` | none | Resume from a specific phase: `analyze \| fix \| local_review \| release_ready` — `fix` re-runs Phase 1 silently (required for failure classification data) then immediately advances to Phase 2 |
 
 ### `--skip-to` handling
 
@@ -403,7 +403,7 @@ Task(
 - If `status: passed` but parsed count > 0: STOP and report — review reported pass but issues remain (contradiction; investigate).
 - If `status` is any value other than `passed` or `failed`: treat it as `failed` (conservative default). STOP and log: "Phase 3 agent returned unexpected status: <actual-status-value-from-agent-response>. Treating as failed." (substitute the actual status string the agent returned in place of `<actual-status-value-from-agent-response>`).
 
-**Push step (required before Phase 4):** After Phase 3 passes, dispatch a Polly agent to push all commits to the remote branch. **Skip this push step if `--skip-to local_review` or `--skip-to release_ready` was used** — in those cases Phase 2 did not run and no new fix commits were made during this pipeline run, so there is nothing from this run to push. Proceed directly to Phase 4.
+**Push step (required before Phase 4):** After Phase 3 passes, dispatch a Polly agent to push all commits to the remote branch. **Skip this push step if `--skip-to release_ready` was used** — in that case Phases 1–3 were all skipped, so no commits were made during this pipeline run and there is nothing to push. If `--skip-to local_review` was used, Phase 3 still ran and may have applied fix commits; do NOT skip the push step in that case — push any commits that Phase 3 produced before advancing to Phase 4.
 
 ```
 Task(
