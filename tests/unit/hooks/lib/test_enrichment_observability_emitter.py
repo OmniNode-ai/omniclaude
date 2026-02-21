@@ -673,6 +673,40 @@ class TestWasDropped:
         assert len(payloads) == 1
         assert payloads[0]["was_dropped"] is False
 
+    def test_was_dropped_true_when_inflated_not_in_kept_names(self) -> None:
+        """Inflated summarization result absent from kept_names produces was_dropped=True.
+
+        An inflated result (tokens_after > tokens_before > 0, summarization channel,
+        success=True) is a produced enrichment — it ran successfully but its output
+        grew the prompt instead of compressing it.  If such a result is absent from
+        kept_enrichment_names, the token-cap drop logic still applies, so was_dropped
+        must be True.
+
+        This combination is reachable in production (summarization inflates AND the
+        result is excluded by the token-cap policy) but had no test coverage.
+        """
+        payloads: list[dict[str, Any]] = []
+
+        def _capture(event_type: str, payload: dict[str, Any]) -> bool:
+            payloads.append(payload)
+            return True
+
+        # tokens=500 > original_prompt_token_count=200 → outcome='inflated'
+        # kept_names intentionally excludes "summarization" → was_dropped=True
+        results = [_FakeResult(name="summarization", success=True, tokens=500)]
+        with patch.object(eoe, "emit_event", _capture):
+            eoe.emit_enrichment_events(
+                session_id="sess",
+                correlation_id="corr",
+                results=results,
+                kept_names=set(),  # "summarization" intentionally absent
+                original_prompt_token_count=200,
+            )
+
+        assert len(payloads) == 1
+        assert payloads[0]["outcome"] == "inflated"
+        assert payloads[0]["was_dropped"] is True
+
     def test_was_dropped_false_when_miss_outcome_not_in_kept_names(self) -> None:
         """Edge case: was_dropped=False when success=True, tokens=0 (miss), not in kept_names.
 
