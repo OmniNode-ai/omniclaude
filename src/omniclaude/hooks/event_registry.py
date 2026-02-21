@@ -507,7 +507,11 @@ EVENT_REGISTRY: dict[str, EventRegistration] = {
             ),
         ],
         partition_key_field="session_id",
-        # OMN-2441: 'channel' replaces 'enrichment_type' — payloads without 'channel' are intentionally rejected
+        # OMN-2441: 'channel' replaces 'enrichment_type' — payloads without 'channel' are intentionally rejected.
+        # Audited: no caller invokes validate_payload("context.enrichment", ...) with the old
+        # 'enrichment_type' field — the only call site is embedded_publisher.py which forwards
+        # the payload as-is from enrichment_observability_emitter.py (which already emits
+        # 'channel').  No callers need updating.
         required_fields=["session_id", "channel"],
     ),
     # =========================================================================

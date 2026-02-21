@@ -366,6 +366,9 @@ def emit_enrichment_events(
     # Timestamp determinism is therefore only guaranteed when testing
     # build_enrichment_event_payload directly (where callers pass a fixed
     # emitted_at); tests of emit_enrichment_events will see a live clock value.
+    # Consequence for omnidash consumers: all channels in a single batch share
+    # the same timestamp (set once here), not the per-call values passed to
+    # build_enrichment_event_payload in unit tests.
     now = datetime.now(UTC)
     repo = _derive_repo(project_path)
     emitted = 0

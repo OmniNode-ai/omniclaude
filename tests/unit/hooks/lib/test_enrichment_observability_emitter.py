@@ -567,6 +567,34 @@ class TestWasDropped:
         assert len(payloads) == 1
         assert payloads[0]["was_dropped"] is False
 
+    def test_failed_result_not_dropped_when_also_absent_from_kept_names(self) -> None:
+        """Edge case: was_dropped=False for a failed enrichment absent from kept_names.
+
+        The condition ``was_dropped = success and (enrichment_type not in kept_names)``
+        means failure (success=False) always yields was_dropped=False regardless of
+        whether the enrichment appears in kept_names.  This test makes the edge case
+        explicit: a failure that is NOT in kept_names must still produce was_dropped=False
+        (it failed — it was never a candidate for the token-cap drop policy).
+        """
+        payloads: list[dict[str, Any]] = []
+
+        def _capture(event_type: str, payload: dict[str, Any]) -> bool:
+            payloads.append(payload)
+            return True
+
+        # success=False, and "similarity" is intentionally absent from kept_names
+        results = [_FakeResult(name="similarity", success=False, tokens=0)]
+        with patch.object(eoe, "emit_event", _capture):
+            eoe.emit_enrichment_events(
+                session_id="sess",
+                correlation_id="corr",
+                results=results,
+                kept_names=set(),  # similarity not in kept_names
+            )
+
+        assert len(payloads) == 1
+        assert payloads[0]["was_dropped"] is False
+
 
 # ---------------------------------------------------------------------------
 # 6. tokens_saved / net_tokens_saved calculation
