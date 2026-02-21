@@ -98,7 +98,7 @@ Parse arguments from `$ARGUMENTS`:
 When `--skip-to` is provided, skip all earlier phases and begin execution at the named phase:
 
 - `--skip-to analyze` — start at Phase 1 (same as default)
-- `--skip-to fix` — re-run Phase 1 silently to gather failure classification data, then proceed directly to Phase 2 without pausing for orchestrator review. Phase 1 is not skipped; the skip means the orchestrator does not stop between Phase 1 and Phase 2 even if it would otherwise wait for confirmation. If the caller provides pre-classified failure context in the prompt, the orchestrator may use that in place of a fresh Phase 1 run.
+- `--skip-to fix` — run Phase 1 silently and immediately advance to Phase 2 without any inter-phase pause. This is equivalent to the default auto-advance behavior: the pipeline already auto-advances from Phase 1 to Phase 2 with no confirmation gate between them, so `--skip-to fix` is a no-op today. It exists as a forward-compatibility hook in case a confirmation gate is added between Phase 1 and Phase 2 in the future. If the caller provides pre-classified failure context in the prompt, the orchestrator may use that in place of a fresh Phase 1 run.
 - `--skip-to local_review` — skip Phases 1 and 2; go directly to Phase 3
 - `--skip-to release_ready` — skip Phases 1–3; go directly to Phase 4
 
@@ -133,7 +133,7 @@ These rules are enforced unconditionally, regardless of any flag or argument:
 3. **NEVER run destructive git commands:** `git reset --hard`, `git clean -f`, `git checkout .`, `git restore .`
 4. **Pre-flight check**: run `git status` before any changes. If there are unrelated uncommitted changes, STOP and report — do not proceed.
 5. **Authentication check**: run `gh auth status` before Phase 2. If not authenticated, STOP and report.
-6. **Correlation tagging**: every commit must include `[corr:{correlation_id}]` in the commit message. Before starting, check git log for existing `[corr:{correlation_id}]` commits to detect re-runs and avoid duplicate work.
+6. **Correlation tagging**: every commit must include `[corr:{correlation_id}:{failure_index}]` in the commit message, where `failure_index` is the 0-based position of that failure in the failures list. Before starting, check git log for existing `[corr:{correlation_id}:{failure_index}]` commits to detect re-runs and avoid duplicate work. Using a per-failure tag ensures parallel agents fixing different failures do not falsely detect each other's commits as "already fixed".
 7. **Branch guard**: if currently on main or master, create a new branch before making any changes.
 8. **Dry-run isolation**: `--dry-run` must produce zero side effects — no commits, no pushes, no ticket creation, no Linear status changes.
 
@@ -192,9 +192,6 @@ Task(
     - touches contract.yaml, node wiring files, or shared infrastructure
     - fix requires an architectural decision
 
-    Also check: does git log contain '--no-verify' in any recent commit?
-    If yes, classify as CRITICAL no_verify_bypass regardless of other failures.
-
     RESULT:
     status: success | partial | failed
     output: |
@@ -232,21 +229,24 @@ Task(
 
 For each **small-scope** failure, dispatch one Polly. For each **large-scope** failure, dispatch one Polly with `create-ticket` invocation.
 
+**IMPORTANT — parallel dispatch required**: All small-scope fix Task calls and all large-scope ticket Task calls MUST be sent as parallel `Task()` invocations in a single message. Do NOT dispatch them sequentially (one at a time, waiting for each to finish before starting the next). Sending all dispatches in a single message is required by ONEX parallel execution standards and minimizes wall-clock time.
+
 **Small-scope fix dispatch:**
 
 ```
 Task(
   subagent_type="onex:polymorphic-agent",
   description="ci-fix-pipeline: Phase 2 fix {cause} failure in {job_name}/{step_name}",
-  prompt="You are fixing a CI failure for PR/branch: {pr_number_or_branch}.
+  prompt="You are fixing CI failure #{failure_index} (0-based index in the failures list) for PR/branch: {pr_number_or_branch}.
 
     Pre-flight (MANDATORY before any changes):
     1. Run: git status
        - If unrelated uncommitted changes exist: STOP, do not proceed, report in RESULT.
     2. Run: gh auth status
        - If not authenticated: STOP, do not proceed, report in RESULT.
-    3. Run: git log --oneline -20 | grep -F "[corr:{correlation_id}]"
+    3. Run: git log --oneline -20 | grep -F "[corr:{correlation_id}:{failure_index}]"
        - If corr commits already exist for this failure: log 'already fixed' and STOP (idempotent).
+       Note: {failure_index} is the 0-based position of this failure in the failures list, passed to you in this prompt. This makes the idempotency check per-failure so parallel agents fixing different failures do not interfere with each other.
     4. If on main or master: create a new branch before any changes.
 
     Failure to fix:
@@ -266,7 +266,7 @@ Task(
     in RESULT so the orchestrator can create a ticket instead.
 
     After confirming the fix passes locally:
-    - Commit with message: 'fix({cause}): {error_summary} [corr:{correlation_id}]'
+    - Commit with message: 'fix({cause}): {error_summary} [corr:{correlation_id}:{failure_index}]'
     - NEVER use --no-verify when committing.
     - If a pre-commit hook fails: fix the hook failure first, then commit again.
 
@@ -372,9 +372,10 @@ Task(
 ```
 
 **Orchestrator action after Phase 3:**
-- If `status: passed` and `blocking issues found: 0`: AUTO-ADVANCE to Phase 4.
+- Parse `blocking issues found: <count>` from the output to extract the integer count. If parsing fails or the field is absent, treat the result conservatively: assume blocking issues exist, STOP, and report that Phase 3 result could not be parsed — do not advance to Phase 4.
+- If `status: passed` and parsed count is 0: AUTO-ADVANCE to Phase 4.
 - If `status: failed`: STOP and report — local review did not pass. Manual fix and re-run of Phase 3 is required.
-- If `status: passed` but `blocking issues found > 0`: STOP and report — review reported pass but issues remain (contradiction; investigate).
+- If `status: passed` but parsed count > 0: STOP and report — review reported pass but issues remain (contradiction; investigate).
 
 ---
 
@@ -387,10 +388,10 @@ Before dispatching Phase 4, resolve `{pr_number_or_branch}` to a PR number using
 if {pr_number_or_branch} is numeric:
     resolved_pr_number = {pr_number_or_branch}
 else:
-    # Run: gh pr view --head {pr_number_or_branch} --json number --jq '.number'
-    # Extract the `.number` field from the JSON output (an integer).
+    # Run: gh pr list --head {pr_number_or_branch} --json number --jq '.[0].number'
+    # Extract the first result's `.number` field (an integer).
     # Assign it to resolved_pr_number.
-    # Example: gh pr view --head jonahgabriel/omn-1234-fix --json number --jq '.number'
+    # Example: gh pr list --head jonahgabriel/omn-1234-fix --json number --jq '.[0].number'
     #          → 42
     #          resolved_pr_number = 42
     # If the command returns empty output or an error: STOP and report —
@@ -404,7 +405,12 @@ Task(
   subagent_type="onex:polymorphic-agent",
   description="ci-fix-pipeline: Phase 4 pr-release-ready for PR #{resolved_pr_number}",
   prompt="You are confirming release readiness for PR #{resolved_pr_number} (original arg: {pr_number_or_branch}).
-    Invoke: Skill(skill=\"onex:pr-release-ready\", args=\"{resolved_pr_number}\")
+    Invoke: Skill(skill=\"onex:pr-release-ready\", args=\"<resolved_pr_number>\")
+
+    IMPORTANT: Replace <resolved_pr_number> in the args string above with the actual integer PR
+    number (e.g., 42) before creating this Task. The orchestrator must substitute the real integer
+    value — never pass a template placeholder like '{resolved_pr_number}' or '<resolved_pr_number>'
+    literally. For example, if the PR number is 42, the args value is the string \"42\".
 
     The goal is to confirm the PR is fully ready for merge after CI fixes were applied.
 
