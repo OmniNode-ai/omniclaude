@@ -8,10 +8,12 @@ name: Omni* Ecosystem Standards Compliance
 #
 # Jobs:
 #   structure-validation    - verify key omniclaude directories exist
-#   onex-validation         - run scripts/validate_onex.py against src/
 #   agent-yaml-compliance   - validate agent YAMLs have schema_version + correct naming
 #   ecosystem-validation    - verify CLAUDE.md, hooks.json, hooks.json schema validity
 #   legacy-compatibility-check - check for forbidden legacy patterns
+#
+# Note: ONEX architecture validation (scripts/validate_onex.py) is already run
+# by the onex-validation job in ci.yml and is not duplicated here.
 
 on:
   push:
@@ -21,7 +23,6 @@ on:
   workflow_dispatch:
 
 env:
-  PYTHON_VERSION: '3.12'
   REPO_NAME: 'omniclaude'
 
 jobs:
@@ -57,35 +58,6 @@ jobs:
           fi
 
           echo "All required omniclaude directories present."
-
-  onex-validation:
-    name: ONEX Architecture Validation
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-        with:
-          version: "0.6.1"
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Load cached venv
-        uses: actions/cache@v4
-        with:
-          path: .venv
-          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
-
-      - name: Install dependencies
-        run: uv sync --frozen
-
-      - name: Run ONEX validator
-        run: uv run python scripts/validate_onex.py src/
 
   agent-yaml-compliance:
     name: Agent YAML Compliance
@@ -170,24 +142,30 @@ jobs:
           with open('plugins/onex/hooks/hooks.json') as f:
               data = json.load(f)
 
-          hooks = data.get('hooks', [])
-          if not hooks:
+          # hooks is a dict keyed by hook type (SessionStart, UserPromptSubmit, etc.)
+          # Each value is a list of matcher objects, each containing a 'hooks' list
+          hooks_by_type = data.get('hooks', {})
+          if not hooks_by_type:
               print('WARNING: hooks.json contains no hooks entries')
               sys.exit(0)
 
           required_fields = {'type', 'command'}
           errors = []
-          for i, hook in enumerate(hooks):
-              missing = required_fields - set(hook.keys())
-              if missing:
-                  errors.append(f'Hook [{i}] missing fields: {missing}')
+          total = 0
+          for hook_type, matchers in hooks_by_type.items():
+              for j, matcher in enumerate(matchers):
+                  for k, hook in enumerate(matcher.get('hooks', [])):
+                      total += 1
+                      missing = required_fields - set(hook.keys())
+                      if missing:
+                          errors.append(f'{hook_type}[{j}].hooks[{k}] missing fields: {missing}')
 
           if errors:
               for e in errors:
                   print(f'ERROR: {e}')
               sys.exit(1)
 
-          print(f'OK: hooks.json schema valid ({len(hooks)} hooks)')
+          print(f'OK: hooks.json schema valid ({total} hook entries across {len(hooks_by_type)} hook types)')
           "
 
   legacy-compatibility-check:
@@ -212,7 +190,7 @@ jobs:
           # Check for scattered model files outside canonical locations
           scattered=$(find . \
             \( -path "./.venv" -o -path "./.git" \) -prune -o \
-            \( -name "*/api/models.py" -o -name "*/validation/models.py" \) \
+            \( -path "*/api/models.py" -o -path "*/validation/models.py" \) \
             -print 2>/dev/null | head -5)
           if [ -n "$scattered" ]; then
             echo "WARNING: Scattered model files found — consider consolidating into src/${{ env.REPO_NAME }}/models/"
