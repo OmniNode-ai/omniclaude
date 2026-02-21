@@ -3,10 +3,11 @@
 Builds and emits ``onex.evt.omniclaude.context-enrichment.v1`` events per
 enrichment channel after the enrichment pipeline completes.
 
-Event fields emitted (OMN-2441: aligned with omnidash ContextEnrichmentEvent schema):
+Canonical fields emitted (omnidash ContextEnrichmentEvent schema, OMN-2441):
+    session_id          -- Claude Code session identifier
+    emitted_at          -- ISO-8601 UTC timestamp injected by the caller
     timestamp           -- ISO-8601 UTC timestamp of the event
     correlation_id      -- trace correlation ID propagated from the hook
-    session_id          -- Claude Code session identifier
     channel             -- enrichment channel: "summarization", "code_analysis", "similarity"
     model_name          -- model identifier (from handler, or "" if unknown)
     cache_hit           -- always False (cache tracking not yet implemented)
@@ -19,9 +20,16 @@ Event fields emitted (OMN-2441: aligned with omnidash ContextEnrichmentEvent sch
     quality_score       -- always None (quality tracking not yet implemented)
     repo                -- repository name derived from project_path
     agent_name          -- agent that triggered the enrichment
-    fallback_used       -- True when handler fell back to a simpler strategy
-    was_dropped         -- True when the enrichment was produced but dropped by the token cap
-    prompt_version      -- optional prompt template version string
+
+Legacy/backward-compat fields (retained for consumer migration, see TODO(OMN-2441-followup)):
+    enrichment_type     -- duplicate of ``channel`` under the old field name
+    model_used          -- duplicate of ``model_name`` under the old field name
+    result_token_count  -- duplicate of ``tokens_after`` under the old field name
+    relevance_score     -- duplicate of ``similarity_score`` under the old field name
+    tokens_saved        -- duplicate of ``net_tokens_saved`` under the old field name
+    fallback_used       -- True when handler fell back to a simpler strategy (not in omnidash schema)
+    was_dropped         -- True when the enrichment was produced but dropped by the token cap (not in omnidash schema)
+    prompt_version      -- optional prompt template version string (not in omnidash schema)
 
 Usage::
 
@@ -277,7 +285,16 @@ def build_enrichment_event_payload(
         "agent_name": agent_name,
         # ---------------------------------------------------------------
         # Backward-compat fields retained for consumer migration only.
-        # Tracked for removal in a follow-up to OMN-2441.
+        # TODO(OMN-2441-followup): Remove once omnidash consumers migrate to
+        # the canonical schema above.  The following fields are intentionally
+        # omitted from the canonical ContextEnrichmentEvent schema and are
+        # present here for legacy consumers only:
+        #   - fallback_used: internal handler detail, not part of omnidash schema
+        #   - was_dropped: token-cap policy detail, not part of omnidash schema
+        #   - prompt_version: handler-internal versioning, not part of omnidash schema
+        # The remaining fields below (enrichment_type, model_used,
+        # result_token_count, relevance_score, tokens_saved) are duplicates of
+        # canonical fields under old names; remove after consumers migrate.
         # ---------------------------------------------------------------
         "enrichment_type": enrichment_type,
         "model_used": model_used,
