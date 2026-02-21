@@ -219,7 +219,7 @@ Task(
 - If `status: failed`, STOP and report the error.
 - If `total_failures: 0`, log "No CI failures found — pipeline complete." and STOP.
 - If `--dry-run`, log the classified failure list and STOP (do not advance).
-- If `status: partial` (some failures classified, some not): dispatch Phase 2 agents **only** for the fully-classified failures. Log a warning listing each unclassified failure (job name and available error excerpt) and mark them as `unresolved` in the final summary. Do NOT dispatch fix or ticket agents for unclassified failures.
+- If `status: partial` (some failures classified, some not): dispatch Phase 2 agents **only** for the fully-classified failures. Log a warning: "{total_failures - (small_scope_count + large_scope_count)} failure(s) could not be classified and were skipped — re-check Phase 1 output or re-run with additional context." Mark them as `unresolved` in the final summary. Do NOT dispatch fix or ticket agents for unclassified failures.
 - Otherwise, AUTO-ADVANCE to Phase 2.
 
 ---
