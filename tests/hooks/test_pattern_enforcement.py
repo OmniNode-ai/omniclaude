@@ -987,23 +987,23 @@ class TestEnforcePatternsEmit:
         """Two enforcement calls for different sessions produce different correlation_ids."""
         monkeypatch.setattr("pattern_enforcement._COOLDOWN_DIR", tmp_path)
         patterns = [self._make_pattern("p-001")]
-        correlation_ids: list[str] = []
+        captured_cids: list[str] = []
 
-        def capture_emit(
-            file_path: str,
-            content: str,
-            language: str,
-            session_id: str,
-            content_sha256: str,
-            patterns: list[dict[str, Any]],
-            correlation_id: str | None = None,
-        ) -> bool:
-            # correlation_id is passed from enforce_patterns via enforcement_correlation_id
+        def capture_compliance_evaluate(**kwargs: Any) -> bool:
+            cid = kwargs.get("correlation_id")
+            assert cid is not None, (
+                "_emit_compliance_evaluate must receive a correlation_id"
+            )
+            captured_cids.append(cid)
             return True
 
         with (
             patch("pattern_enforcement.query_patterns", return_value=patterns),
-            patch("emit_client_wrapper.emit_event", return_value=True) as mock_emit,
+            patch(
+                "pattern_enforcement._emit_compliance_evaluate",
+                side_effect=capture_compliance_evaluate,
+            ),
+            patch("emit_client_wrapper.emit_event", return_value=True),
         ):
             enforce_patterns(
                 file_path="/test/file.py",
@@ -1012,17 +1012,6 @@ class TestEnforcePatternsEmit:
                 content_preview="def foo(): pass\n",
                 emitted_at="2025-01-01T00:00:00+00:00",
             )
-            first_cid = (
-                mock_emit.call_args[0][1]["correlation_id"]
-                if mock_emit.called
-                else None
-            )
-
-        # Reset and do second call with different session
-        with (
-            patch("pattern_enforcement.query_patterns", return_value=patterns),
-            patch("emit_client_wrapper.emit_event", return_value=True) as mock_emit,
-        ):
             enforce_patterns(
                 file_path="/test/file.py",
                 session_id="sess-cid-B",
@@ -1030,14 +1019,17 @@ class TestEnforcePatternsEmit:
                 content_preview="def bar(): pass\n",
                 emitted_at="2025-01-01T00:00:00+00:00",
             )
-            second_cid = (
-                mock_emit.call_args[0][1]["correlation_id"]
-                if mock_emit.called
-                else None
-            )
 
-        if first_cid and second_cid:
-            assert first_cid != second_cid
+        assert len(captured_cids) == 2, (
+            f"Expected 2 compliance.evaluate calls, got {len(captured_cids)}"
+        )
+        first_cid, second_cid = captured_cids
+        assert first_cid is not None
+        assert second_cid is not None
+        assert first_cid != second_cid, (
+            f"Two separate enforce_patterns calls must produce distinct correlation_ids, "
+            f"got {first_cid!r} for both"
+        )
 
 
 # ---------------------------------------------------------------------------
