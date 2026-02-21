@@ -1,0 +1,263 @@
+# SPDX-FileCopyrightText: 2025 OmniNode.ai Inc.
+# SPDX-License-Identifier: MIT
+---
+name: Omni* Ecosystem Standards Compliance
+
+# Validates omniclaude-specific structural and ecosystem standards.
+# Part of OMN-2456 (M5 standards compliance gate).
+#
+# Jobs:
+#   structure-validation    - verify key omniclaude directories exist
+#   agent-yaml-compliance   - validate agent YAMLs have schema_version + correct naming
+#   ecosystem-validation    - verify CLAUDE.md, hooks.json, hooks.json schema validity
+#   legacy-compatibility-check - check for forbidden legacy patterns
+#
+# Note: ONEX architecture validation (scripts/validate_onex.py) is already run
+# by the onex-validation job in ci.yml and is not duplicated here.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+env:
+  REPO_NAME: 'omniclaude'
+
+jobs:
+  structure-validation:
+    name: Repository Structure Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate omniclaude directory structure
+        run: |
+          MISSING=0
+
+          for dir in \
+            src/omniclaude \
+            plugins/onex \
+            plugins/onex/hooks \
+            plugins/onex/agents/configs \
+            plugins/onex/commands \
+            plugins/onex/skills; do
+            if [ ! -d "$dir" ]; then
+              echo "ERROR: Required directory missing: $dir"
+              MISSING=1
+            else
+              echo "OK: $dir"
+            fi
+          done
+
+          if [ $MISSING -ne 0 ]; then
+            echo "Structure validation failed — required directories are missing."
+            exit 1
+          fi
+
+          echo "All required omniclaude directories present."
+
+  agent-yaml-compliance:
+    name: Agent YAML Compliance
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate agent YAML schema_version fields
+        run: |
+          ERRORS=0
+          CONFIGS_DIR="plugins/onex/agents/configs"
+
+          for yaml_file in "$CONFIGS_DIR"/*.yaml; do
+            [ -f "$yaml_file" ] || continue
+            basename=$(basename "$yaml_file")
+
+            # Check that schema_version key is present
+            if ! grep -q 'schema_version:' "$yaml_file"; then
+              echo "ERROR: Missing schema_version in $basename"
+              ERRORS=1
+            fi
+
+            # Check agent_identity.name starts with "agent-"
+            # Extract the name value after "name:" inside agent_identity block.
+            # Skip the agent_identity: line itself, capture the first indented name: field,
+            # and exit as soon as a non-indented line is encountered (closes the block).
+            agent_name=$(awk '/^agent_identity:/{found=1; next} found && /^[[:space:]]+name:/{sub(/^[[:space:]]*name:[[:space:]]*/, ""); gsub(/"/, ""); print; exit} found && /^[^[:space:]]/{exit}' "$yaml_file" \
+              | tr -d "'")
+
+            if [ -z "$agent_name" ]; then
+              echo "ERROR: agent_identity.name not found or empty in $basename"
+              ERRORS=1
+            elif ! echo "$agent_name" | grep -q '^agent-'; then
+              echo "ERROR: agent_identity.name does not start with 'agent-' in $basename (found: $agent_name)"
+              ERRORS=1
+            fi
+          done
+
+          if [ $ERRORS -ne 0 ]; then
+            echo "Agent YAML compliance check failed."
+            exit 1
+          fi
+
+          echo "All agent YAMLs pass compliance checks."
+
+  ecosystem-validation:
+    name: Ecosystem Integration Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate CLAUDE.md exists
+        run: |
+          if [ ! -f "CLAUDE.md" ]; then
+            echo "ERROR: CLAUDE.md is required — omniclaude project instructions are missing."
+            exit 1
+          fi
+          echo "OK: CLAUDE.md found"
+
+      - name: Validate hooks.json exists and is valid JSON
+        run: |
+          HOOKS_JSON="plugins/onex/hooks/hooks.json"
+
+          if [ ! -f "$HOOKS_JSON" ]; then
+            echo "ERROR: $HOOKS_JSON not found"
+            exit 1
+          fi
+          echo "OK: hooks.json found"
+
+          # Validate JSON syntax
+          if ! python3 -m json.tool "$HOOKS_JSON" > /dev/null; then
+            echo "ERROR: hooks.json is not valid JSON"
+            exit 1
+          fi
+          echo "OK: hooks.json is valid JSON"
+
+      - name: Validate hooks.json schema fields
+        run: |
+          python3 -c "
+          import json, sys
+
+          with open('plugins/onex/hooks/hooks.json') as f:
+              data = json.load(f)
+
+          # hooks is a dict keyed by hook type (SessionStart, UserPromptSubmit, etc.)
+          # Each value is a list of matcher objects, each containing a 'hooks' list
+          hooks_by_type = data.get('hooks', {})
+          if not hooks_by_type:
+              print('WARNING: hooks.json contains no hooks entries')
+              sys.exit(0)
+
+          required_fields = {'type', 'command'}
+          errors = []
+          total = 0
+          for hook_type, matchers in hooks_by_type.items():
+              for j, matcher in enumerate(matchers):
+                  for k, hook in enumerate(matcher.get('hooks', [])):
+                      total += 1
+                      missing = required_fields - set(hook.keys())
+                      if missing:
+                          errors.append(f'{hook_type}[{j}].hooks[{k}] missing fields: {missing}')
+
+          if errors:
+              for e in errors:
+                  print(f'ERROR: {e}')
+              sys.exit(1)
+
+          print(f'OK: hooks.json schema valid ({total} hook entries across {len(hooks_by_type)} hook types)')
+          "
+
+  legacy-compatibility-check:
+    name: Legacy Compatibility Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for forbidden legacy patterns
+        run: |
+          ERRORS=0
+
+          # Check for /model/ directory alongside /models/ (ambiguous dual layout)
+          if [ -d "src/${{ env.REPO_NAME }}/model" ] && [ -d "src/${{ env.REPO_NAME }}/models" ]; then
+            echo "ERROR: Both src/${{ env.REPO_NAME }}/model/ and src/${{ env.REPO_NAME }}/models/ exist — remove /model/"
+            ERRORS=1
+          elif [ -d "src/${{ env.REPO_NAME }}/model" ]; then
+            echo "WARNING: src/${{ env.REPO_NAME }}/model/ found — prefer /models/ for consistency"
+          fi
+
+          # Check for scattered model files outside canonical locations
+          scattered=$(find . \
+            \( -path "*/.venv" -o -path "*/.git" \) -prune -o \
+            \( -path "*/api/models.py" -o -path "*/validation/models.py" \) \
+            -print 2>/dev/null | head -5)
+          if [ -n "$scattered" ]; then
+            echo "WARNING: Scattered model files found — consider consolidating into src/${{ env.REPO_NAME }}/models/"
+            echo "$scattered"
+          fi
+
+          # Check that no Poetry lock file has crept in (omniclaude uses uv)
+          if [ -f "poetry.lock" ]; then
+            echo "ERROR: poetry.lock found — omniclaude uses uv, not Poetry"
+            ERRORS=1
+          fi
+
+          if [ $ERRORS -ne 0 ]; then
+            echo "Legacy compatibility check failed."
+            exit 1
+          fi
+
+          echo "Legacy compatibility check passed."
+
+  # ============================================================================
+  # GATE AGGREGATOR
+  # Gate name is API-stable per CI/CD Standards (Invariant 1).
+  # Do NOT rename without following the Branch Protection Migration Safety
+  # procedure in docs/standards/CI_CD_STANDARDS.md.
+  # ============================================================================
+
+  omni-standards-gate:
+    name: Omni Standards Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs:
+      - structure-validation
+      - agent-yaml-compliance
+      - ecosystem-validation
+      - legacy-compatibility-check
+    if: always()
+    steps:
+      - name: Check standards results
+        run: |
+          echo "=== Omni Standards Gate ==="
+          FAILED=false
+
+          for check in \
+            "structure-validation=${{ needs.structure-validation.result }}" \
+            "agent-yaml-compliance=${{ needs.agent-yaml-compliance.result }}" \
+            "ecosystem-validation=${{ needs.ecosystem-validation.result }}" \
+            "legacy-compatibility-check=${{ needs.legacy-compatibility-check.result }}"; do
+            NAME="${check%%=*}"
+            RESULT="${check##*=}"
+            if [ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]; then
+              echo "::error::$NAME failed (result: $RESULT)"
+              FAILED=true
+            else
+              echo "$NAME: $RESULT"
+            fi
+          done
+
+          if [ "$FAILED" = "true" ]; then
+            echo ""
+            echo "Omni Standards Gate FAILED"
+            exit 1
+          fi
+          echo ""
+          echo "Omni Standards Gate PASSED"

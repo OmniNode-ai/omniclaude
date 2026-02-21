@@ -34,6 +34,14 @@ gates:
     rationale: >
       Aggregates security scanning: Bandit SAST and secret detection.
 
+  - name: "Omni Standards Gate"
+    workflow: omni-standards-compliance.yml
+    rationale: >
+      Aggregates omniclaude-specific structural and ecosystem standards:
+      repository structure validation, agent YAML compliance (schema_version +
+      agent- naming prefix), ecosystem integration validation (CLAUDE.md,
+      hooks.json), and legacy compatibility checks.
+
 # =============================================================================
 # CHECKS: Documentary listing (NO operational effect)
 # Branch protection MUST NOT reference check names from this section.
@@ -124,6 +132,31 @@ checks:
     workflow: ci.yml
     gate: "Tests Gate"
     rationale: "DB schema consistency checks"
+
+  # Tier A-Runtime (omni-standards-compliance.yml)
+  - name: "Repository Structure Validation"
+    tier: A-Runtime
+    workflow: omni-standards-compliance.yml
+    gate: "Omni Standards Gate"
+    rationale: "Required omniclaude directories (src/omniclaude, plugins/onex, etc.) are present"
+
+  - name: "Agent YAML Compliance"
+    tier: A-Runtime
+    workflow: omni-standards-compliance.yml
+    gate: "Omni Standards Gate"
+    rationale: "Agent YAMLs have schema_version field and agent_identity.name starts with 'agent-'"
+
+  - name: "Ecosystem Integration Validation"
+    tier: A-Runtime
+    workflow: omni-standards-compliance.yml
+    gate: "Omni Standards Gate"
+    rationale: "CLAUDE.md exists; hooks.json is valid JSON with correct schema fields"
+
+  - name: "Legacy Compatibility Check"
+    tier: A-Runtime
+    workflow: omni-standards-compliance.yml
+    gate: "Omni Standards Gate"
+    rationale: "Forbidden legacy patterns absent (dual model dirs, poetry.lock)"
 
   # Tier C (profile / informational)
   - name: "Merge Test Coverage"
