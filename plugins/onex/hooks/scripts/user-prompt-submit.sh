@@ -526,6 +526,10 @@ if [[ "$INFERENCE_PIPELINE_ENABLED" == "true" ]] && [[ "$ENRICHMENT_FLAG_ENABLED
     [[ "$AGENT_NAME_FOR_ENRICHMENT" == "null" ]] && AGENT_NAME_FOR_ENRICHMENT=""
     # Shell normalizes NO_AGENT_DETECTED/null → ""; Python normalizes "" → None via `or None`.
     # Both guards are required: removing either breaks the contract.
+    # SENTINEL LIST IS EXHAUSTIVE: the two values above ("NO_AGENT_DETECTED" and "null")
+    # cover all sentinel values currently emitted by the routing layer.  If routing ever
+    # emits a new sentinel value (e.g. a new fallback string), it MUST be added here with
+    # its own guard before the ENRICHMENT_INPUT block below.
     ENRICHMENT_INPUT=$(jq -n \
         --arg prompt "$PROMPT" \
         --arg session_id "$SESSION_ID" \

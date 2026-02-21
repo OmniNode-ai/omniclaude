@@ -105,10 +105,17 @@ def _derive_outcome(
     that can reduce tokens).  For similarity and code_analysis, a higher
     token_after is the expected behaviour (they add context, not compress it).
 
+    Note: the ``inflated`` outcome is only reachable when ``channel`` is
+    ``"summarization"``; ``tokens_before`` has no effect for other channels.
+    A caller passing ``tokens_before=500`` for ``"code_analysis"`` would never
+    receive ``"inflated"`` even if ``tokens_after=600`` — the inflation check is
+    unconditionally gated on ``channel == "summarization"``.
+
     Args:
         success: Whether the enrichment handler reported success.
         tokens_after: Token count of the enrichment output (0 on failure/miss).
-        tokens_before: Original prompt token count (pre-enrichment).
+        tokens_before: Original prompt token count (pre-enrichment).  Only
+            consulted when ``channel == "summarization"``; ignored otherwise.
         channel: Enrichment channel name.
 
     Returns:
