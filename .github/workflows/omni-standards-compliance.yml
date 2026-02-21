@@ -29,6 +29,7 @@ jobs:
   structure-validation:
     name: Repository Structure Validation
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -62,6 +63,7 @@ jobs:
   agent-yaml-compliance:
     name: Agent YAML Compliance
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -82,11 +84,10 @@ jobs:
             fi
 
             # Check agent_identity.name starts with "agent-"
-            # Extract the name value after "name:" inside agent_identity block
-            agent_name=$(awk '/^agent_identity:/,/^[^ ]/' "$yaml_file" \
-              | grep '^\s*name:' \
-              | head -1 \
-              | sed 's/.*name:\s*//' \
+            # Extract the name value after "name:" inside agent_identity block.
+            # Skip the agent_identity: line itself, capture the first indented name: field,
+            # and exit as soon as a non-indented line is encountered (closes the block).
+            agent_name=$(awk '/^agent_identity:/{found=1; next} found && /^  name:/{print $2; exit} found && /^[^ ]/{exit}' "$yaml_file" \
               | tr -d '"'"'" )
 
             if [ -n "$agent_name" ] && ! echo "$agent_name" | grep -q '^agent-'; then
@@ -105,6 +106,7 @@ jobs:
   ecosystem-validation:
     name: Ecosystem Integration Validation
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -171,6 +173,7 @@ jobs:
   legacy-compatibility-check:
     name: Legacy Compatibility Check
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -209,3 +212,49 @@ jobs:
           fi
 
           echo "Legacy compatibility check passed."
+
+  # ============================================================================
+  # GATE AGGREGATOR
+  # Gate name is API-stable per CI/CD Standards (Invariant 1).
+  # Do NOT rename without following the Branch Protection Migration Safety
+  # procedure in docs/standards/CI_CD_STANDARDS.md.
+  # ============================================================================
+
+  omni-standards-gate:
+    name: Omni Standards Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs:
+      - structure-validation
+      - agent-yaml-compliance
+      - ecosystem-validation
+      - legacy-compatibility-check
+    if: always()
+    steps:
+      - name: Check standards results
+        run: |
+          echo "=== Omni Standards Gate ==="
+          FAILED=false
+
+          for check in \
+            "structure-validation=${{ needs.structure-validation.result }}" \
+            "agent-yaml-compliance=${{ needs.agent-yaml-compliance.result }}" \
+            "ecosystem-validation=${{ needs.ecosystem-validation.result }}" \
+            "legacy-compatibility-check=${{ needs.legacy-compatibility-check.result }}"; do
+            NAME="${check%%=*}"
+            RESULT="${check##*=}"
+            if [ "$RESULT" != "success" ] && [ "$RESULT" != "skipped" ]; then
+              echo "::error::$NAME failed (result: $RESULT)"
+              FAILED=true
+            else
+              echo "$NAME: $RESULT"
+            fi
+          done
+
+          if [ "$FAILED" = "true" ]; then
+            echo ""
+            echo "Omni Standards Gate FAILED"
+            exit 1
+          fi
+          echo ""
+          echo "Omni Standards Gate PASSED"
